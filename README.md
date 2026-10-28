@@ -19,8 +19,9 @@
 
 ---
 
-<!-- Screenshot: the editor with a centity open (node tree, 3D viewport, inspector, animation timeline)
-and the dev server console, as docs/public/screenshots/editor.png, shown here. -->
+<p align="center">
+  <img src="docs/public/screenshots/editor.png" alt="The NetherForge editor: a centity open in the 3D viewport with its node tree, inspector and walk animation's timeline, the project's resources, and the dev server's console">
+</p>
 
 NetherForge is a desktop editor plus the Paper plugin that runs what you make
 with it. You build **centities** (entities made of block, item and text
