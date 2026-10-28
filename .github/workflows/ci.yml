@@ -1,9 +1,10 @@
 name: CI
 
+# Not on pushes to main: main only takes squash merges of PRs that passed on a branch up to date with
+# it (the ruleset), so the merged commit's tree is the one CI checked. Nightly runs on main every day
+# (every scenario, every OS, and warm caches for PRs), and a release runs all of this on its tag.
 on:
   pull_request:
-  push:
-    branches: [main]
   # The release workflow runs these same checks on the tagged commit before it builds anything.
   workflow_call:
 
@@ -12,7 +13,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  # A newer push to a PR supersedes the older run; every commit on main and every tag gets a full one.
+  # A newer push to a PR supersedes the older run; a release's run on its tag always finishes.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -99,8 +100,8 @@ jobs:
             apps/plugin/integration/build/integration/${{ matrix.minecraft }}/server/versions
           key: paper-jars-${{ runner.os }}-${{ matrix.minecraft }}-${{ steps.paper.outputs.pin }}
       # A PR runs every scenario on the newest version and only the version-sensitive ones on the
-      # others (the `pr` scope, which works out the newest from the adapters itself); main and
-      # releases run them all. Quarantined tests are left out of both (nightly runs them).
+      # others (the `pr` scope, which works out the newest from the adapters itself); releases (and
+      # nightly) run them all. Quarantined tests are left out of both (nightly runs them).
       - name: The scenarios against this version's adapter
         env:
           MINECRAFT: ${{ matrix.minecraft }}
