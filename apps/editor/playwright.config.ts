@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
+import { availableParallelism } from 'node:os'
 
 /**
  * Editor UI flows against the production web build with the in-memory
@@ -23,10 +24,12 @@ export default defineConfig({
   testDir: 'e2e',
   testMatch: '**/*.spec.ts',
   fullyParallel: true,
-  // GitHub's Windows runners draw WebGL in software, and two browsers drawing at once starve
-  // each other: 3D flows stall for tens of seconds and time out. One worker runs them all in
-  // well under a minute each (Linux and macOS keep Playwright's default).
-  workers: process.env.CI && process.platform === 'win32' ? 1 : undefined,
+  // Headless Chromium draws WebGL in software (always on CI's runners), and every 3D view
+  // redraws each frame, so browsers drawing at once starve each other: a flow that takes 3 s on
+  // its own took 22 s beside one other on a Linux runner, and timed out at Playwright's default
+  // of half the cores on an 18-core machine (68 tests: 4-11 timeouts a run; 4 workers: none, in
+  // half the time). CI runs one at a time; a machine of your own, at most four.
+  workers: process.env.CI ? 1 : Math.max(1, Math.min(4, Math.floor(availableParallelism() / 2))),
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
