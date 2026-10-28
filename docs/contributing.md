@@ -6,13 +6,13 @@ Minecraft versions.
 
 Everything is in one repository on [GitHub](https://github.com/jayson-clark/netherforge):
 
-| Folder      | What it is                                                                                                |
-| ----------- | --------------------------------------------------------------------------------------------------------- |
-| `apps/`     | What we ship: the desktop editor (Tauri 2) and the Paper plugin (a runtime plus one adapter per version). |
-| `packages/` | Shared libraries: `format` (the file format, Kotlin Multiplatform) and `api` (the Lua API spec).          |
-| `docs/`     | This site, including the [file-format spec](format/index.md) and the [API reference](reference/index.md). |
-| `examples/` | Sample projects, which are also the test fixtures.                                                        |
-| `tools/`    | Build, test, lint and release scripts, and the Gradle build.                                              |
+| Folder      | What it is                                                                                                                                                                                                                                   |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/`     | What we ship: the desktop editor (Tauri 2), the Paper plugin (a runtime plus one adapter per version), the Velocity proxy plugin and the `netherforge` command.                                                                              |
+| `packages/` | Shared libraries: `format` (the file format, Kotlin Multiplatform), `api` (the Lua API spec), `network` (a server network's protocol), and what the editor and the command share: models, structures, the terrain preview and project setup. |
+| `docs/`     | This site, including the [file-format spec](format/index.md) and the [API reference](reference/index.md).                                                                                                                                    |
+| `examples/` | Sample projects, which are also the test fixtures.                                                                                                                                                                                           |
+| `tools/`    | Build, test, lint and release scripts, and the Gradle build.                                                                                                                                                                                 |
 
 ## Where to start
 

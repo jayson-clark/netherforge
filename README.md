@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>A game-engine-style editor for Minecraft server content.</strong><br>
-  Animated, scripted entities, Lua modules, menus, dialogs and resource packs,<br>
+  Scripted entities, menus, items, worlds and whole server networks,<br>
   running on a real Paper server and hot-reloaded on every save.
 </p>
 
@@ -19,17 +19,17 @@
 
 ---
 
-> **Screenshot placeholder:** the editor with a centity open (node tree, 3D
-> viewport, inspector, animation timeline) and the dev server console. Add it
-> as `docs/public/screenshots/editor.png` and replace this note.
+<p align="center">
+  <img src="docs/public/screenshots/editor.png" alt="The NetherForge editor: a centity open in the 3D viewport with its node tree, inspector and walk animation's timeline, the project's resources, and the dev server's console">
+</p>
 
 NetherForge is a desktop editor plus the Paper plugin that runs what you make
-with it. You build **centities** (composed entities made of block, item and
-text displays that animate, can be clicked and run Lua), server-wide Lua
-**modules**, **menus**, **dialogs** and **resource packs**. Press
-**Start server** and the editor runs a local Paper server with your project
-loaded; save a file and it's reloaded in-game within a second, without a
-restart.
+with it. You build **centities** (entities made of block, item and text
+displays that animate, collide, can be clicked and run Lua), server-wide Lua
+**modules**, **menus**, **dialogs**, **items** and **blocks**, **worlds**,
+and **resource packs**. Press **Start server** and the editor runs a local
+Paper server with your project loaded; save a file and it's reloaded in game
+within a second, without a restart.
 
 ## Features
 
@@ -40,26 +40,50 @@ restart.
 - **Real Minecraft is the preview.** The editor finds or downloads Java,
   downloads Paper for your project's Minecraft version, installs the plugin
   and streams the console. There's no simulator to drift from the game.
-- **Hot reload per resource.** Saving a centity, menu or dialog (its JSON or
-  its one script) reloads just that resource, and a centity's live instances
-  move onto the new definition in place; saving a module restarts it and
-  whatever required it. Problems and script errors come back with the file and line.
-- **A 3D centity editor**: node tree, inspector, viewport with gizmos, an
-  animation timeline, and hitboxes fitted to block models.
-- **Lua 5.4, sandboxed**, with an instruction budget per call and `require`
-  limited to your modules. Events on the things they're about
-  (`this:on("click", ...)`), tasks that wait (`nf.wait`, `dialog:ask`),
-  saved data, typed commands, and the world, entities, players and real
-  inventories. Completions in the editor, and in VS Code or Neovim through
-  generated LuaLS stubs.
+- **Hot reload per resource.** Saving a file reloads just what changed, and a
+  centity's live instances move onto the new definition in place; saving a
+  module restarts it and whatever required it. Problems and script errors
+  come back with the file and line.
+- **An editor for every kind of content**:
+  - **Centities**: node tree, inspector, 3D viewport with gizmos, an animation
+    timeline, hitboxes fitted to block models, and rigid-body physics.
+  - **Menus and dialogs**: chest windows with skinned backgrounds, and dialog
+    screens with questions and buttons.
+  - **Items and gameplay**: items, blocks, recipes, loot tables, buffs,
+    advancements and mining rules for the game's own blocks.
+  - **Effects**: particle effects on a timeline, cutscenes that move the
+    camera, and screens, fonts and videos drawn on maps.
+  - **Worlds**: terrain with a live map preview, biomes, skies, dimension
+    types, datapacks, saved maps and structures.
+  - **Resource packs**: pictures, glyphs for text, item and block looks,
+    tooltips and sounds, built into one pack and sent to players.
+- **Lua 5.4, sandboxed**, with an instruction budget per call and memory and
+  time limits. Events on the things they're about (`this:on("click", ...)`),
+  tasks that wait (`nf.wait`, `dialog:ask`), typed commands, schedules, saved
+  data and SQL databases, the world, entities, players and real inventories,
+  HTTP and web routes, WebAssembly, Vault and PlaceholderAPI. Completions and
+  docs as you type, a debugger, a profiler, and tests that run on a real
+  server with fake players.
+- **Packages and workspaces.** Use another project as a package, from a folder
+  or a git repository, pinned by a lock file. A workspace keeps several
+  projects together.
+- **Server networks.** A Velocity plugin links a network's servers: channels,
+  requests, shared maps, who's online where, and sending players between
+  servers. The editor runs a whole dev network.
+- **Coding agents and CI.** Every project comes with `AGENTS.md` and docs for
+  agents, the editor serves an MCP server that can reload, read the console
+  and play the game with fake players, and the `netherforge` command checks,
+  formats and tests a project anywhere.
 - **Deploying is pointing a server at the folder.** Put the plugin jar in
   `plugins/`, set `project:` in its `config.yml`, and `git pull` +
   `/nf reload` to update.
+- **Minecraft 1.21.11 and every 26.x**, on Paper, with one plugin jar per
+  version.
 - **macOS, Windows and Linux**, tested equally.
 - **No Minecraft assets shipped.** The editor reads textures and models from
   your own Minecraft install; the plugin asks the server.
-- **Open source**, Apache-2.0: the editor, the file-format library and the
-  plugin.
+- **Open source**, Apache-2.0: the editor, the file-format library, the plugin
+  and the command.
 
 ## Download
 
@@ -71,6 +95,7 @@ Get the latest release from the [releases page](../../releases/latest):
 | Windows | `NetherForge_<version>_x64-setup.exe` or `.msi` |
 | Linux   | `.AppImage`, `.deb` or `.rpm`                   |
 | Server  | `NetherForge-<version>-paper-<minecraft>.jar`   |
+| Proxy   | `NetherForge-<version>-velocity.jar`            |
 
 The `netherforge` command is on npm as
 [`@netherforge/cli`](https://www.npmjs.com/package/@netherforge/cli):
@@ -101,8 +126,10 @@ The docs live in [`docs/`](docs/) and are published as a site by
 [`docs.yml`](.github/workflows/docs.yml):
 
 - [Guides](docs/guide/index.md): getting started, centities and animation,
-  scripting, modules, menus, dialogs, resource packs, physics, the dev
-  loop, git, deploying, other editors, coding agents.
+  physics, particles, cutscenes, screens, menus, dialogs, items, blocks,
+  resource packs, world generation, scripting, web services, WebAssembly,
+  server networks, testing and debugging, packages and workspaces, git,
+  deploying, other editors and coding agents.
 - [File format](docs/format/project.md): the specification of everything in a
   project.
 - [Lua API reference](docs/reference/index.md): generated from the API spec in

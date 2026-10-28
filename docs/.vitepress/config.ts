@@ -170,6 +170,7 @@ const guide: DefaultTheme.SidebarItem[] = [
     items: [
       { text: 'Hot reload and the dev loop', link: '/guide/dev-loop' },
       { text: 'Starting from a template', link: '/guide/templates' },
+      { text: 'Packages and workspaces', link: '/guide/packages' },
       { text: 'Using git with a project', link: '/guide/git' },
       { text: 'Editing outside the editor', link: '/guide/external-editors' },
       { text: 'Using coding agents', link: '/guide/agents' },
