@@ -47,11 +47,20 @@ nf.commands.register("it-mobs", function()
       pig:remove()
     end
   end)
-  -- A mob finds a path only once the game has seen it on the ground: a tick after it spawned.
-  nf.after(5, function()
+  -- A mob finds a path only once the game has seen it on the ground: a tick after it spawned, or
+  -- longer while its chunk, force-loaded just before, isn't ticking yet (the scenario's first
+  -- step, as the server starts, on a slow runner). Waited for, up to 10 s.
+  local waited = 0
+  local function set_off()
+    if not pig:is_on_ground() and waited < 200 then
+      waited = waited + 1
+      nf.after(1, set_off)
+      return
+    end
     local off = go()
     log("walking", off, pig:has_path(), pig:path_target() ~= nil)
-  end)
+  end
+  nf.after(1, set_off)
 end)
 
 local function has_goal(mob, key)
