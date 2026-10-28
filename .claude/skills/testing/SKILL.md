@@ -389,8 +389,8 @@ test` and the editor's Tests panel run them with `:plugin:test-runner`
    lua-language-server there (scripts are highlighted only), so Lua language
    features are tested against the real server in vitest, above.
    - **Workers**: one on CI, at most four elsewhere (`playwright.config.ts`).
-     Headless Chromium draws WebGL in software and every 3D view redraws each
-     frame, so browsers drawing at once starve each other: a 3 s flow took
+     Headless Chromium draws WebGL in software, so browsers drawing at once
+     starve each other (less since 3D views draw on demand, but they still do): a 3 s flow took
      22 s beside one other on a Linux runner. A flow that times out only with
      more workers is this, not a slow test: don't raise its timeout.
    - **Screenshots** of the pixel-exact previews (a menu's window with its

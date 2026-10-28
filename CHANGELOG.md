@@ -9,6 +9,13 @@ release is cut.
 
 ## [Unreleased]
 
+### Changed
+
+- **3D views draw only when something changes.** A centity, particle effect,
+  cutscene, structure or map that's on screen and standing still no longer
+  redraws 60 times a second, so the editor uses far less CPU and GPU (and
+  battery) while you work in it.
+
 ## [0.1.0-rc.1] - 2026-10-28
 
 The first public release, as a release candidate.

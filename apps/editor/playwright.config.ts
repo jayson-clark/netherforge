@@ -24,8 +24,8 @@ export default defineConfig({
   testDir: 'e2e',
   testMatch: '**/*.spec.ts',
   fullyParallel: true,
-  // Headless Chromium draws WebGL in software (always on CI's runners), and every 3D view
-  // redraws each frame, so browsers drawing at once starve each other: a flow that takes 3 s on
+  // Headless Chromium draws WebGL in software (always on CI's runners), so browsers drawing at
+  // once starve each other: a flow that takes 3 s on
   // its own took 22 s beside one other on a Linux runner, and timed out at Playwright's default
   // of half the cores on an 18-core machine (68 tests: 4-11 timeouts a run; 4 workers: none, in
   // half the time). CI runs one at a time; a machine of your own, at most four.
