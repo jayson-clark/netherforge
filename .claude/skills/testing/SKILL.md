@@ -603,8 +603,11 @@ pnpm test:screenshots     # the previews' pictures (Docker); --update rewrites t
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every PR and every push to `main`, and the
-release workflow calls it on the tagged commit (see the release skill):
+`.github/workflows/ci.yml` runs on every PR, and the release workflow calls it
+on the tagged commit (see the release skill). Not on pushes to `main`: the
+`main` ruleset takes only squash merges of PRs whose `CI passed` was green on a
+branch up to date with `main`, so what lands is what CI checked; `nightly.yml`
+covers `main` every day (and keeps the caches PRs read warm):
 
 | Job         | Runner                 | What                                                                                                                                                                                                                                                 |
 | ----------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -622,8 +625,8 @@ release workflow calls it on the tagged commit (see the release skill):
 | editor      | ubuntu, macOS, Windows                                | `pnpm test:e2e`, the bundle, and the packaged-app smoke test (not on macOS).                                                                      |
 | report      | ubuntu                                                | A failure of either opens an issue labelled `nightly`.                                                                                            |
 
-A newer push to a PR cancels its older run; runs on `main` and tags always
-finish. Every job has `timeout-minutes`. A failed integration job keeps each
+A newer push to a PR cancels its older run; a release's run on its tag always
+finishes. Every job has `timeout-minutes`. A failed integration job keeps each
 scenario's server log (`build/integration/<minecraft>/server/*.log` and
 `logs/`), the JUnit XML and the HTML report as the artifact
 `integration-<minecraft>[-<os>]`; a failed e2e run keeps Playwright's
