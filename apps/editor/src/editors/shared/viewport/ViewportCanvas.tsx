@@ -83,8 +83,10 @@ export function ViewportCanvas({ store }: { store: ViewportStore }) {
 
   return (
     <Canvas
-      // Nothing to draw while no viewport is on screen.
-      frameloop={active === null ? 'never' : 'always'}
+      // Drawn only when something changes (r3f asks for a frame when an object's props or its own
+      // store change, the controls when they move; what changes outside React calls `invalidate`),
+      // not 60 times a second while the picture stands still. Nothing while no viewport is on screen.
+      frameloop={active === null ? 'never' : 'demand'}
       gl={{ antialias: true, preserveDrawingBuffer: false }}
       onPointerMissed={() => {
         if (drag.releasing()) return
@@ -198,20 +200,26 @@ function SceneRoot({
   const size = useThree((s) => s.size)
   const setEvents = useThree((s) => s.setEvents)
   const gl = useThree((s) => s.gl)
+  // The canvas draws on demand: what this changes on the camera or the canvas itself, outside
+  // React's props (coming on screen, the lens, a placed camera), asks for a frame.
+  const invalidate = useThree((s) => s.invalidate)
   const controls = useRef<Controls>(null)
   /** The pose last put on the camera or read from it: a view equal to it is shown already. */
   const shown = useRef<CameraPose | null>(null)
   const grid = spec.grid ?? null
 
-  // A hidden scene isn't hit by the pointer.
-  useLayoutEffect(() => setEvents({ enabled: active }), [active, setEvents])
+  // A hidden scene isn't hit by the pointer; the one coming on screen is drawn.
+  useLayoutEffect(() => {
+    setEvents({ enabled: active })
+    if (active) invalidate()
+  }, [active, setEvents, invalidate])
 
   const { fov, near, far } = spec
   const { width, height } = size
-  useLayoutEffect(
-    () => lens(camera, { fov, near, far }, { width, height }),
-    [camera, fov, near, far, width, height],
-  )
+  useLayoutEffect(() => {
+    lens(camera, { fov, near, far }, { width, height })
+    invalidate()
+  }, [camera, fov, near, far, width, height, invalidate])
 
   // The view's camera (home, without one) onto the camera, unless it's what's shown already.
   const wanted = spec.camera ?? spec.home
@@ -222,7 +230,8 @@ function SceneRoot({
     if (samePose(shown.current, pose)) return
     shown.current = pose
     place(camera, controls.current, pose)
-  }, [camera, px, py, pz, tx, ty, tz])
+    invalidate()
+  }, [camera, px, py, pz, tx, ty, tz, invalidate])
 
   // Where the user leaves the camera goes into the document's view: when a drag ends, and
   // again once it has settled (damping, the wheel).
@@ -260,6 +269,21 @@ function SceneRoot({
       if (renderers.get(sceneKey) === draw) renderers.delete(sceneKey)
     }
   }, [gl, scene, camera, sceneKey, renderers])
+
+  // Damping eases the camera a frame at a time, and the controls ask for the next frame only while
+  // it moves more than three.js's least step. What's left after that would move it on whichever
+  // frame came next (a tab switch, a hover), so it's spent on the frame the easing stops, before
+  // that frame is drawn: the picture left standing is where the camera stays.
+  const easing = useRef({ now: false, before: false })
+  useFrame(() => {
+    const { now, before } = easing.current
+    easing.current = { now: false, before: now }
+    const orbit = controls.current
+    if (!before || now || !active || dragging.current || !orbit) return
+    orbit.enableDamping = false
+    orbit.update()
+    orbit.enableDamping = true
+  })
 
   // The active scene is the canvas's picture (a positive priority: r3f draws nothing itself).
   useFrame(() => {
@@ -304,6 +328,7 @@ function SceneRoot({
           keep()
         }}
         onChange={() => {
+          easing.current.now = true
           // Mid-drag the camera isn't anywhere yet; after it, damping may still move it.
           if (active && !dragging.current) moved()
         }}

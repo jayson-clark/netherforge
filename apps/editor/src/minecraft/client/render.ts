@@ -3,6 +3,7 @@
  * viewport re-renders on every edit, and re-baking an unchanged block each
  * time would be waste.
  */
+import { invalidate } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { ClientAssets } from './assets'
 import {
@@ -197,11 +198,14 @@ export function loadTexture(assets: ClientAssets, textureId: string): THREE.Text
         loaded.offset.set(0, 1 - 1 / frames)
         loaded.needsUpdate = true
       }
+      // The viewport draws on demand: what's showing this texture is drawn again with it.
+      invalidate()
     },
     undefined,
     () => {
       texture.image = missingTexture().image as HTMLImageElement
       texture.needsUpdate = true
+      invalidate()
     },
   )
   pixelated(texture)

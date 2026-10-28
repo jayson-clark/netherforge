@@ -6,7 +6,7 @@
  * The selected emitter's shape is outlined at the playhead.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { Line } from '@react-three/drei'
 import * as THREE from 'three'
 import type { EmitterDef, ParticleEffectFile, SpawnData } from '@/core/format'
@@ -163,6 +163,10 @@ function SpriteBatch({ sprites, assets }: { sprites: Sprite[]; assets: ClientAss
   const map = assets && textureId ? loadTexture(assets, textureId) : softDot()
   // Room to grow without remounting on every new sprite.
   const capacity = Math.max(64, 2 ** Math.ceil(Math.log2(sprites.length)))
+
+  // The viewport draws on demand, and new sprites (the playhead moved) change no prop of the mesh.
+  const invalidate = useThree((s) => s.invalidate)
+  useEffect(() => invalidate(), [sprites, invalidate])
 
   useFrame(({ camera }) => {
     const target = mesh.current
