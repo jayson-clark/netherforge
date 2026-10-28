@@ -215,6 +215,8 @@ export function projectSlice({ backend, get, set }: SliceArgs): ProjectState & P
     },
 
     async openProject(root) {
+      // One validation once it has everything, not one per file it writes as it opens.
+      get().holdValidation(true)
       try {
         const project = await backend.openProject(root)
         unlistenFs?.()
@@ -270,10 +272,13 @@ export function projectSlice({ backend, get, set }: SliceArgs): ProjectState & P
         }
         await get().refreshGameData()
         await get().refreshPackages()
+        get().holdValidation(false)
         await get().validateNow()
       } catch (error) {
         get().notify('error', `Couldn't open ${root}: ${errorText(error)}`)
         throw error
+      } finally {
+        get().holdValidation(false)
       }
     },
 

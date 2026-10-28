@@ -16,6 +16,7 @@ import {
   type ProjectValidation,
 } from '@/core/format'
 import type { ProjectInfo } from '@/core/backend/types'
+import { TOKEN_FILES } from '@/core/mcp/config'
 import { readsText } from '@/core/paths'
 import { validationWorker, type ValidationClient } from '@/core/validation/client'
 import { ChangeTracker, type CheckRequest } from '@/core/validation/requests'
@@ -42,6 +43,8 @@ function modelText(model: unknown): string {
 /**
  * Every project file as format reads it: the open documents' current
  * models and texts, the rest from disk, and null for what format doesn't read (images).
+ * The editor's own files for coding agents (`.mcp.json`, `opencode.json`) aren't the
+ * project's, so they're left out: rewriting one changes nothing format sees.
  */
 export function projectInput(
   state: Pick<Workspace, 'files' | 'docs' | 'diskTexts'>,
@@ -49,6 +52,7 @@ export function projectInput(
   const { files, docs, diskTexts } = state
   const input: Record<string, string | null> = {}
   for (const path of files) {
+    if ((TOKEN_FILES as readonly string[]).includes(path)) continue
     if (!readsText(path)) {
       input[path] = null
       continue
@@ -89,6 +93,11 @@ export interface ValidationActions {
   validateSoon(): void
   /** Drops a validation that was asked for and hasn't run or answered (the project is closing). */
   cancelValidation(): void
+  /**
+   * While [held], [validateSoon] asks for nothing: a project opening validates once, when it has
+   * everything (its packages, the game data), not when the files it writes as it opens are noticed.
+   */
+  holdValidation(held: boolean): void
   /** Tells validation the resource packs' pictures' sizes (by project path); it runs again when they changed. */
   setImageSizes(sizes: ImageSizes): void
   /** Validates another project once in the same worker (one of the workspace's), leaving the open one's as it is. */
@@ -112,6 +121,7 @@ export function validationSlice(
   let holding: ProjectInfo | null = null
   /** Bumped by a cancel, so an answer to an earlier request is dropped. */
   let generation = 0
+  let held = false
 
   return {
     ...VALIDATION_INITIAL,
@@ -164,6 +174,7 @@ export function validationSlice(
     },
 
     validateSoon() {
+      if (held) return
       if (timer !== null) clearTimeout(timer)
       timer = setTimeout(() => {
         timer = null
@@ -187,6 +198,13 @@ export function validationSlice(
       timer = null
       generation += 1
       holding = null
+    },
+
+    holdValidation(hold) {
+      held = hold
+      if (!hold || timer === null) return
+      clearTimeout(timer)
+      timer = null
     },
   }
 }

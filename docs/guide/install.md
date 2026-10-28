@@ -10,7 +10,8 @@ Download the editor for your operating system from the
 | **Linux**   | `.AppImage` (any distribution), `.deb` (Debian, Ubuntu) or `.rpm` (Fedora)  |
 
 Each release also carries the Paper plugin jars (`NetherForge-<version>-paper-<minecraft>.jar`)
-for [deploying to a server](deploying.md); the editor already contains them.
+for [deploying to a server](deploying.md), which the editor already contains, and the
+Velocity plugin (`NetherForge-<version>-velocity.jar`) for a [server network](network.md)'s proxy.
 
 ## What else you need
 

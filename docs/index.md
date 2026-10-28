@@ -4,7 +4,7 @@ layout: home
 hero:
   name: NetherForge
   text: An editor for Minecraft server content
-  tagline: Build animated, scripted entities, Lua modules, menus, dialogs and resource packs. Run them on a real Paper server and see every save in-game, without a restart.
+  tagline: Build scripted entities, menus, items, worlds and whole server networks. Run them on a real Paper server and see every save in game, without a restart.
   image:
     src: /logo.svg
     alt: NetherForge
@@ -23,13 +23,19 @@ features:
   - title: Centities
     details: Entities you build from blocks, items and text in a 3D viewport, then animate, script, click, walk and simulate with physics. Players need no mods to see them.
   - title: Menus, dialogs and items
-    details: Chest menus with skinned backgrounds, dialog screens with questions and buttons, and items, blocks, recipes and loot tables of your own.
+    details: Chest menus with skinned backgrounds, dialog screens with questions and buttons, and items, blocks, recipes, loot tables, buffs and advancements of your own.
+  - title: Worlds
+    details: Terrain, biomes, skies and dimension types for generated worlds, with a live map preview; saved maps and structures to place; cutscenes, and screens and videos on maps.
   - title: Real Minecraft is the preview
     details: The editor runs a Paper server for your project's Minecraft version. Join it, and every save shows up in game in about a second, without a restart.
   - title: Lua scripting
-    details: Lua 5.4 with an API for players, worlds, entities, commands, timers, saved data and more, with completions and docs as you type, a debugger and tests.
+    details: Lua 5.4 with an API for players, worlds, entities, commands, schedules, saved data, databases and web services, with completions as you type, a debugger, a profiler and tests.
+  - title: Packages and networks
+    details: Share code between projects as packages from a folder or git, and run a network of servers behind a proxy, with channels, shared data and players sent between them.
   - title: Your project is a folder
-    details: Every resource is a plain file. Version it with git, review it in pull requests, edit it in any editor or with a coding agent.
+    details: Every resource is a plain file. Version it with git, review it in pull requests, and edit it in any editor.
+  - title: Coding agents and CI
+    details: The editor's MCP server lets an agent inspect and test the running game, and the netherforge command checks, formats and tests a project from a terminal or CI.
   - title: Open source
     details: The editor (macOS, Windows, Linux), the file format and the Paper plugin are all Apache-2.0.
 ---
