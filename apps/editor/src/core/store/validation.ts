@@ -93,6 +93,11 @@ export interface ValidationActions {
   validateSoon(): void
   /** Drops a validation that was asked for and hasn't run or answered (the project is closing). */
   cancelValidation(): void
+  /**
+   * While [held], [validateSoon] asks for nothing: a project opening validates once, when it has
+   * everything (its packages, the game data), not when the files it writes as it opens are noticed.
+   */
+  holdValidation(held: boolean): void
   /** Tells validation the resource packs' pictures' sizes (by project path); it runs again when they changed. */
   setImageSizes(sizes: ImageSizes): void
   /** Validates another project once in the same worker (one of the workspace's), leaving the open one's as it is. */
@@ -116,6 +121,7 @@ export function validationSlice(
   let holding: ProjectInfo | null = null
   /** Bumped by a cancel, so an answer to an earlier request is dropped. */
   let generation = 0
+  let held = false
 
   return {
     ...VALIDATION_INITIAL,
@@ -168,6 +174,7 @@ export function validationSlice(
     },
 
     validateSoon() {
+      if (held) return
       if (timer !== null) clearTimeout(timer)
       timer = setTimeout(() => {
         timer = null
@@ -191,6 +198,13 @@ export function validationSlice(
       timer = null
       generation += 1
       holding = null
+    },
+
+    holdValidation(hold) {
+      held = hold
+      if (!hold || timer === null) return
+      clearTimeout(timer)
+      timer = null
     },
   }
 }

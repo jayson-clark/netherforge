@@ -4,7 +4,7 @@ import { TOKEN_FILES } from '@/core/mcp/config'
 import { validationWorker, type ValidationClient } from '@/core/validation/client'
 import type { ValidationRequest } from '@/core/validation/requests'
 import { EXAMPLE_ROOT } from '@/testing/fixtures'
-import { openExampleWorkspace } from '@/testing/workspace'
+import { exampleWorkspace, openExampleWorkspace } from '@/testing/workspace'
 import { VALIDATE_DELAY_MS } from './validation'
 import type { MemoryBackend } from '@/testing/backend/memory'
 import type { WorkspaceStore } from './workspace'
@@ -102,5 +102,24 @@ describe('validation in the worker', () => {
     await ws().openProject(EXAMPLE_ROOT)
     expect(sent.at(-1)!.reset).toBe(true)
     expect(validated.at(-1)!.length).toBeGreaterThan(10)
+  })
+
+  it('validates a project as it opens once its packages are read, however long that takes', async () => {
+    sent = []
+    validated = []
+    const slow = exampleWorkspace({ validation: watchedWorker })
+    // Reading a package takes longer than the files opening writes take to be noticed (a slow machine).
+    const files = slow.backend.packageFiles.bind(slow.backend)
+    slow.backend.packageFiles = async (location) => {
+      await new Promise((resolve) => setTimeout(resolve, VALIDATE_DELAY_MS * 3))
+      return files(location)
+    }
+    await slow.ws().openProject(EXAMPLE_ROOT)
+    await new Promise((resolve) => setTimeout(resolve, VALIDATE_DELAY_MS * 2))
+    // The first validation has the package; none before it went without.
+    expect(Object.keys(sent[0]!.packages?.folders ?? {})).toEqual(['../library'])
+    expect(validated[0]).toContain('library:netherforge.json')
+    expect(validated.slice(1).flat()).toEqual([])
+    expect(slow.ws().problems).toEqual([])
   })
 })
