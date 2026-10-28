@@ -1,6 +1,6 @@
 {
   "name": "@netherforge/cli",
-  "version": "0.1.0",
+  "version": "0.1.0-rc.1",
   "private": true,
   "type": "module",
   "description": "The netherforge command: validate and canonically format a project from a terminal, CI or a coding agent",

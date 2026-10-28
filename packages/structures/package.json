@@ -1,6 +1,6 @@
 {
   "name": "@netherforge/structures",
-  "version": "0.1.0",
+  "version": "0.1.0-rc.1",
   "private": true,
   "type": "module",
   "description": "Minecraft's structure files and what's built from them, shared by the editor and the netherforge command: NBT read and written, structures and their block states, schematics imported, builds cut into parts, and pictures of a structure or a build (from above, isometric, a slice)",

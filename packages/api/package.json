@@ -1,6 +1,6 @@
 {
   "name": "@netherforge/api",
-  "version": "0.1.0",
+  "version": "0.1.0-rc.1",
   "private": true,
   "type": "module",
   "description": "The NetherForge Lua API spec: the single source for completions, LuaLS stubs and the API reference",
