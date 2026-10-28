@@ -1,6 +1,6 @@
 {
   "name": "@netherforge/project-support",
-  "version": "0.1.0",
+  "version": "0.1.0-rc.1",
   "private": true,
   "type": "module",
   "description": "What NetherForge writes into a project's .netherforge/ for the tools around it (lua-language-server's library, the JSON Schemas, the docs for agents), shared by the editor and `netherforge setup`",

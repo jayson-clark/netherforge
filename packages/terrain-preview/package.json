@@ -1,6 +1,6 @@
 {
   "name": "@netherforge/terrain-preview",
-  "version": "0.1.0",
+  "version": "0.1.0-rc.1",
   "private": true,
   "type": "module",
   "description": "What the terrain preview draws, shared by the editor and `netherforge preview`: colours and pixels from format's numbers, the project structures a generator's decorations place (read by @netherforge/structures), and Lua for terrain scripts in a browser or in Node",

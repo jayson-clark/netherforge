@@ -1,6 +1,6 @@
 {
   "name": "@netherforge/models",
-  "version": "0.1.0",
+  "version": "0.1.0-rc.1",
   "private": true,
   "type": "module",
   "description": "Minecraft's block and item models as geometry, and drawn to pictures without a browser: shared by the editor's viewport and the netherforge command's render and gallery",

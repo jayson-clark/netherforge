@@ -1,0 +1,70 @@
+name: Bug report
+description: Something in NetherForge doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting it. For a security problem, don't open an issue: see [SECURITY.md](https://github.com/jayson-clark/netherforge/blob/main/.github/SECURITY.md).
+  - type: dropdown
+    id: part
+    attributes:
+      label: Where is it?
+      options:
+        - The editor
+        - The Paper plugin (on a server)
+        - The Velocity plugin (a network's proxy)
+        - The netherforge command (@netherforge/cli)
+        - The Lua API
+        - The project format or validation
+        - The docs
+        - Somewhere else
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      description: The steps, from a new project or the showcase if you can. A small project that shows it (a repository, or the files) helps most.
+      placeholder: |
+        1. Create a project…
+        2. Add…
+        3. Save, and…
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: NetherForge version
+      description: The editor's welcome screen, `/version NetherForge` on the server, or `netherforge --version`.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: minecraft
+    attributes:
+      label: Minecraft version
+      description: The project's `minecraft` in netherforge.json, and the server's Paper build if it's about a server.
+      placeholder: 26.3 (Paper build 181)
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      multiple: true
+      options:
+        - macOS
+        - Windows
+        - Linux
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and errors
+      description: The problem's text, a script error with its traceback, or the server log around it (`logs/latest.log`). Leave out tokens and anything private.
+      render: text

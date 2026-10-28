@@ -19,6 +19,7 @@ the `netherforge` command to npm (`@netherforge/cli`).
 | `tools/release.mjs`             | Sets every version (`<version>`), checks they agree (`--check [tag]`), prints notes (`--notes`). |
 | `CHANGELOG.md`                  | Keep a Changelog. A release needs a `## [<version>]` section.                                    |
 | `.github/workflows/release.yml` | Tag → draft release with every artifact.                                                         |
+| `.github/workflows/tag.yml`     | A merged release PR (VERSION changed) → its tag, then release.yml on it.                         |
 | `.github/workflows/npm.yml`     | Release published → `@netherforge/cli` on npm.                                                   |
 | `tools/npm-package.mjs`         | Stages the npm package from the built command: its own package.json, README, licence.            |
 | `tools/npm-check.mjs`           | Tries the built command: `--version`, `check` on the showcase, `setup` on a fresh copy of it.    |
@@ -61,11 +62,15 @@ skill).
 2. **Bump.** `node tools/release.mjs 1.2.3` (refuses without the changelog
    entry), then `pnpm lint && pnpm test`.
 3. **Commit** (`Release 1.2.3`), merge to `main` through a PR as usual.
-4. **Tag** the merged commit and push the tag:
-   `git tag v1.2.3 && git push origin v1.2.3`.
-5. **Watch** the Release workflow. Its first job is the whole CI workflow on
-   the tagged commit; nothing is drafted or built unless it passes. Each
-   editor job's summary says what was signed; the last job lists every asset.
+4. **Merging tags it.** `tag.yml` runs on every push to `main` that changes
+   `VERSION`: it checks the versions and the changelog entry, tags the merge
+   commit `v1.2.3` (unless that tag exists) and calls `release.yml` on it. A
+   tag its token pushes would start no workflow, hence the call. Pushing a tag
+   by hand (`git tag v1.2.3 && git push origin v1.2.3`) still runs a release.
+5. **Watch** the Release workflow (under Tag release, for a merge). Its first
+   job is the whole CI workflow on the tagged commit; nothing is drafted or
+   built unless it passes. Each editor job's summary says what was signed; the
+   last job lists every asset.
 6. **Verify** the draft (below), edit the notes if needed, and **Publish**.
    Only then does `releases/latest` (and so the updater and the docs'
    download links) point at it, and npm.yml publishes `@netherforge/cli`.

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem
+    url: https://github.com/jayson-clark/netherforge/security/advisories/new
+    about: Privately, so it can be fixed before it's public. See SECURITY.md.
+  - name: Documentation
+    url: https://github.com/jayson-clark/netherforge/blob/main/docs/guide/index.md
+    about: Guides, the file format and the Lua API reference.

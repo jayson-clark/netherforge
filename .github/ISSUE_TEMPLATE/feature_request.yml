@@ -1,0 +1,36 @@
+name: Feature request
+description: Something NetherForge could do, or do better.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you're trying to do
+      description: The thing you want to make or the problem you hit, in terms of your server or project. What you've tried, and where it falls short.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: How you'd like it to work. A sketch of the Lua you'd write, the file you'd edit or the button you'd press is welcome.
+    validations:
+      required: true
+  - type: dropdown
+    id: part
+    attributes:
+      label: Where would it go?
+      multiple: true
+      options:
+        - The editor
+        - The Paper plugin
+        - The Velocity plugin
+        - The netherforge command
+        - The Lua API
+        - The project format
+        - The docs
+  - type: textarea
+    id: else
+    attributes:
+      label: Anything else
+      description: Other ways around it you know of, plugins or games that do it well, or Minecraft versions it depends on.

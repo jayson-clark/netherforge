@@ -9,7 +9,9 @@ release is cut.
 
 ## [Unreleased]
 
-The first public release.
+## [0.1.0-rc.1] - 2026-10-28
+
+The first public release, as a release candidate.
 
 - **The editor** (macOS, Windows, Linux): every kind of project file has its
   own editor, from 3D centities, menus and dialogs to terrains, screens and
