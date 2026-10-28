@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { ResourcePackFile } from '@/core/format'
+import { TOKEN_FILES } from '@/core/mcp/config'
 import { validationWorker, type ValidationClient } from '@/core/validation/client'
 import type { ValidationRequest } from '@/core/validation/requests'
 import { EXAMPLE_ROOT } from '@/testing/fixtures'
@@ -41,19 +42,28 @@ beforeEach(async () => {
 
 describe('validation in the worker', () => {
   it('validates every file once, then only the file an edit changed, with the checks across files', async () => {
-    const json = ws().files.filter((path) => path.endsWith('.json'))
-    // Once: the editor's own files for agents, which opening writes, aren't the project's to
-    // validate, even when their change is noticed after the validation started (a slow machine).
-    await backend.writeText('.mcp.json', await backend.readText('.mcp.json'))
-    await new Promise((resolve) => setTimeout(resolve, VALIDATE_DELAY_MS * 2))
-    expect(validated).toHaveLength(1)
+    const json = ws().files.filter(
+      (path) => path.endsWith('.json') && !(TOKEN_FILES as readonly string[]).includes(path),
+    )
+    const settle = () => new Promise((resolve) => setTimeout(resolve, VALIDATE_DELAY_MS * 2))
+    await settle()
+    // Every file once. What opening writes, noticed late on a slow machine, may start another
+    // round, but one that validates nothing again.
+    expect(validated.slice(1).flat()).toEqual([])
     expect(validated[0]).toEqual(expect.arrayContaining([PACK, ITEM]))
     expect(validated[0]!.length).toBeGreaterThan(10)
     // The package the project depends on, kept apart at its package paths.
     expect(validated[0]).toContain('library:netherforge.json')
     expect(Object.keys(sent[0]!.packages?.folders ?? {})).toEqual(['../library'])
     expect(Object.keys(sent[0]!.files)).toEqual(expect.arrayContaining(json))
+    expect(Object.keys(sent[0]!.files)).not.toContain('.mcp.json')
     expect(ws().problems).toEqual([])
+
+    // The editor's own files for agents aren't the project's: a change to one asks for nothing.
+    const requests = sent.length
+    await backend.writeText('.mcp.json', await backend.readText('.mcp.json'))
+    await settle()
+    expect(sent).toHaveLength(requests)
 
     // The item names the pack's `ruby` model: take it out of the pack, unsaved.
     await ws().openFile(PACK)

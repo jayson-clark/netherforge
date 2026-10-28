@@ -16,6 +16,7 @@ import {
   type ProjectValidation,
 } from '@/core/format'
 import type { ProjectInfo } from '@/core/backend/types'
+import { TOKEN_FILES } from '@/core/mcp/config'
 import { readsText } from '@/core/paths'
 import { validationWorker, type ValidationClient } from '@/core/validation/client'
 import { ChangeTracker, type CheckRequest } from '@/core/validation/requests'
@@ -42,6 +43,8 @@ function modelText(model: unknown): string {
 /**
  * Every project file as format reads it: the open documents' current
  * models and texts, the rest from disk, and null for what format doesn't read (images).
+ * The editor's own files for coding agents (`.mcp.json`, `opencode.json`) aren't the
+ * project's, so they're left out: rewriting one changes nothing format sees.
  */
 export function projectInput(
   state: Pick<Workspace, 'files' | 'docs' | 'diskTexts'>,
@@ -49,6 +52,7 @@ export function projectInput(
   const { files, docs, diskTexts } = state
   const input: Record<string, string | null> = {}
   for (const path of files) {
+    if ((TOKEN_FILES as readonly string[]).includes(path)) continue
     if (!readsText(path)) {
       input[path] = null
       continue
