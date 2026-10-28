@@ -388,6 +388,11 @@ test` and the editor's Tests panel run them with `:plugin:test-runner`
    wait (`expect.poll` with a timeout, never a loop on `waitForTimeout`). There's no
    lua-language-server there (scripts are highlighted only), so Lua language
    features are tested against the real server in vitest, above.
+   - **Workers**: one on CI, at most four elsewhere (`playwright.config.ts`).
+     Headless Chromium draws WebGL in software and every 3D view redraws each
+     frame, so browsers drawing at once starve each other: a 3 s flow took
+     22 s beside one other on a Linux runner. A flow that times out only with
+     more workers is this, not a slow test: don't raise its timeout.
    - **Screenshots** of the pixel-exact previews (a menu's window with its
      skin, a skin over its window, a dialog, text with a glyph, a tooltip):
      `e2e/screenshots/`, the `screenshots` project, compared pixel for pixel

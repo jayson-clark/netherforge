@@ -334,14 +334,19 @@ class PaperGameEventsTest : PlatformContract() {
             // A cactus: it grows by random ticks whatever the light and water.
             set(x0 + 1, ground, z0 + 3, "minecraft:sand")
             set(x0 + 1, ground + 1, z0 + 3, "minecraft:cactus[age=15]")
-            set(x0 + 1, ground + 1, z0 + 5, "minecraft:ice")
-            set(x0 + 2, ground + 1, z0 + 5, "minecraft:sea_lantern")
+            // Walled in, the lantern on the fourth side: its meltwater would flow over the dirt, and grass doesn't spread
+            // under water (the ice melting first was this test's flake). Not beside the cactus, which a solid block breaks.
+            set(x0 + 1, ground + 1, z0 + 6, "minecraft:ice")
+            set(x0 + 2, ground + 1, z0 + 6, "minecraft:sea_lantern")
+            set(x0, ground + 1, z0 + 6, "minecraft:stone")
+            set(x0 + 1, ground + 1, z0 + 5, "minecraft:stone")
+            set(x0 + 1, ground + 1, z0 + 7, "minecraft:stone")
             set(x0 + 1, ground + 1, z0 + 8, "minecraft:oak_leaves[persistent=false]")
         }
         rule(GameRules.RANDOM_TICK_SPEED, FAST_RANDOM_TICKS)
         expect<GameEvent.BlockChange>("blockSpread", ticks = RANDOM_TICK_PATIENCE) { it.block.x == x0 + 1 && it.block.z == z0 + 1 }
         expect<GameEvent.BlockChange>("blockGrow", ticks = RANDOM_TICK_PATIENCE) { it.block.x == x0 + 1 && it.block.z == z0 + 3 }
-        expect<GameEvent.BlockChange>("blockFade", ticks = RANDOM_TICK_PATIENCE) { it.block.x == x0 + 1 && it.block.z == z0 + 5 }
+        expect<GameEvent.BlockChange>("blockFade", ticks = RANDOM_TICK_PATIENCE) { it.block.x == x0 + 1 && it.block.z == z0 + 6 }
         expect<GameEvent.Block>("leavesDecay", ticks = RANDOM_TICK_PATIENCE) { it.block.x == x0 + 1 && it.block.z == z0 + 8 }
     }
 

@@ -11,6 +11,14 @@ nf.commands.register("it-entities", function()
     data = { home = base, kills = 2 },
   })
   watching:cancel()
+  -- A spawned baby zombie is sometimes a chicken jockey: riding, it'd stand above the raycast
+  -- below and the chicken would be hit instead. Off the chicken and back where it was spawned.
+  local mount = zombie:vehicle()
+  if mount then
+    mount:remove_passenger(zombie)
+    mount:remove()
+    zombie:teleport(base)
+  end
   zombie:set_ai(false)
   zombie:set_invulnerable(false)
   local added = zombie:add_effect("minecraft:slowness", 200, { amplifier = 1 })
