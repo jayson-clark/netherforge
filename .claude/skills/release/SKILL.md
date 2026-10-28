@@ -261,11 +261,10 @@ the new pubkey signed with the old key, then switch.
 Both sides are in place (the editor side is described in the
 tauri-backend and editor-ui skills). What it consists of, for reference:
 
-> **Before the first release:** `plugins.updater.pubkey` in
-> `apps/editor/src-tauri/tauri.conf.json` is an empty placeholder. Paste the
-> public key (below) there. An empty key builds and runs fine (it's only
-> used to verify a downloaded update), but every install would fail
-> verification until it's set.
+> `plugins.updater.pubkey` in `apps/editor/src-tauri/tauri.conf.json` is the
+> public half of the maintainer's key (key id `A05DFBA4403412FF`); the private
+> half is the `TAURI_SIGNING_PRIVATE_KEY` secret. Change it only by rotating
+> (above).
 
 1. **Rust** (`apps/editor/src-tauri/Cargo.toml`), desktop-only dependencies:
 

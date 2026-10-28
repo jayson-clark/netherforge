@@ -92,8 +92,7 @@ before that fix, or one whose whitelist someone filled in. Run `whitelist off`
   `resource_packs/ui/textures/`. With the server running, saving hot-reloads them; a
   script shows them (`nf.menus.shared("shop")`, `nf.dialogs.get("welcome"):open_for(player)`).
 - **Updates**: a quiet check runs at start; Settings → Updates checks on
-  demand. Until a signed release with `latest.json` exists (and the pubkey
-  is set, see the release skill) it reports an error there and nothing at
+  demand. Until a signed release with `latest.json` exists it reports an error there and nothing at
   start. The e2e build (`pnpm exec vite build --mode e2e && pnpm exec vite
 preview` in `apps/editor/`) opened with `?update=9.9.9` shows the update
   prompt on the memory backend. There is no other browser mode: `pnpm dev`

@@ -50,7 +50,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEwNURGQkE0NDAzNDEyRkYKUldUL0VqUkFwUHRkb0hEcXcreXV3d2o4Y09DWGdWRDBBaWphY1BZK3UyRTlSUUJtQ1NpNlNKSlgK",
       "endpoints": [
         "https://github.com/jayson-clark/netherforge/releases/latest/download/latest.json"
       ],

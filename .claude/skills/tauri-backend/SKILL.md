@@ -630,10 +630,8 @@ registered in `lib.rs`; their permissions (`updater:default`,
 `process:allow-restart`) are plugin permissions in the capability, beside
 `commands`.
 `tauri.conf.json` has `plugins.updater` with the GitHub `latest.json`
-endpoint and an empty `pubkey`: that's fine for building and running (the
-key is only used to verify a downloaded update), but it must be filled before
-the first release; with the signing key set and no pubkey, the release
-workflow fails (see the release skill). The UI calls the
+endpoint and the `pubkey` every downloaded update is verified with (the
+release skill has the key and rotating it). The UI calls the
 plugins' JS API behind `Backend.checkForUpdate`/`installUpdate`.
 
 ## Videos (`video/`)
