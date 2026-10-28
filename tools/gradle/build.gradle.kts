@@ -9,6 +9,9 @@ plugins {
 /** The repository root. This build's root is tools/gradle, so never resolve repo files against rootProject. */
 val repoRoot: File = rootDir.resolve("../..").canonicalFile
 
+/** `VERSION`, read through a provider so the configuration cache sees it change (a plain read isn't tracked: a bump kept building the old version). */
+val netherforgeVersion: String = providers.fileContents(layout.projectDirectory.file("../../VERSION")).asText.get().trim()
+
 /*
  * Dependency locking and verification: every configuration's resolved versions are
  * pinned in each project's gradle.lockfile (the plugins in buildscript-gradle.lockfile),
@@ -22,7 +25,7 @@ buildscript {
 allprojects {
     extra["repoRoot"] = repoRoot
     group = "dev.netherforge"
-    version = repoRoot.resolve("VERSION").readText().trim()
+    version = netherforgeVersion
 
     apply(plugin = "org.jlleitschuh.gradle.ktlint")
     configure<org.jlleitschuh.gradle.ktlint.KtlintExtension> {
