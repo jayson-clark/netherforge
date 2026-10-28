@@ -1,4 +1,6 @@
-# Cuts a release from a version tag (v1.2.3, or v1.2.3-rc.1 for a prerelease).
+# Cuts a release from a version tag (v1.2.3, or v1.2.3-rc.1 for a prerelease). Merging a
+# release PR (one that changes VERSION) tags it and calls this (tag.yml); a tag pushed by
+# hand runs it too.
 #
 # 0. ci:      the whole CI workflow (ci.yml) on the tagged commit; nothing is built or
 #             drafted unless it passes.
@@ -24,17 +26,24 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # From tag.yml, which tags a merged release PR: a tag its token pushes starts no workflow.
+  workflow_call:
+    inputs:
+      tag:
+        description: The release's tag (v1.2.3), on the commit the caller runs on
+        required: true
+        type: string
 
 # Read-only by default; the jobs that create the release or upload to it ask for more.
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
-  TAG: ${{ github.ref_name }}
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   ci:

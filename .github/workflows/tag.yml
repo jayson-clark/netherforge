@@ -1,0 +1,65 @@
+# Tags a merged release PR and cuts its release. A release PR is the one that changes
+# VERSION (node tools/release.mjs 1.2.3, with its CHANGELOG.md section); when it lands on
+# main, this tags the merge commit v<VERSION> and runs release.yml on it, which drafts the
+# release for a person to publish. A version that's tagged already is left alone.
+#
+# release.yml is called rather than left to the tag: a tag pushed with this workflow's
+# token starts no other workflow.
+
+name: Tag release
+
+on:
+  push:
+    branches: [main]
+    paths: [VERSION]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tag-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag v<VERSION>
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          # Plain node scripts: without this, setup-node tries to cache pnpm's store, which isn't installed.
+          package-manager-cache: false
+      - name: Tag the merge commit
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(tr -d '[:space:]' < VERSION)"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" > /dev/null 2>&1; then
+            echo "$tag is tagged already: nothing to do."
+            exit 0
+          fi
+          node tools/release.mjs --check "$tag"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" > /dev/null
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Tagged $GITHUB_SHA $tag." >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: Release
+    needs: tag
+    if: needs.tag.outputs.tag != ''
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+    secrets: inherit
+    permissions:
+      contents: write
