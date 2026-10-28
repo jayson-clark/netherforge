@@ -167,3 +167,20 @@ jobs:
       - uses: ./.github/actions/setup
       - run: pnpm build
       - run: pnpm --filter @netherforge/editor exec tauri build --debug --no-bundle
+
+  # The one check branch protection requires: it passes only when every job above did, so
+  # adding a job or a Minecraft version to the matrix never needs the protection rule changed.
+  passed:
+    name: CI passed
+    if: always()
+    needs: [check, adapters, integration, e2e, tauri-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          for result in $RESULTS; do [ "$result" = success ] || exit 1; done

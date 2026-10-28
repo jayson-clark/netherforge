@@ -612,6 +612,7 @@ release workflow calls it on the tagged commit (see the release skill):
 | integration | ubuntu                 | One job per Paper adapter (listed from `apps/plugin/paper-*`), each `integrationTest-<minecraft>`, its Paper and Mojang jars cached per version and pinned build. PRs in the `pr` scope, `main` and releases `full`. Test counts in the job summary. |
 | e2e         | ubuntu                 | `pnpm test:e2e` (Chromium), then `pnpm test:screenshots` (the previews' pictures, in the Playwright container).                                                                                                                                      |
 | tauri-build | ubuntu                 | `tauri build --debug --no-bundle`.                                                                                                                                                                                                                   |
+| passed      | ubuntu                 | "CI passed": fails unless every job above passed. The one check `main`'s branch protection requires, so new jobs and versions need no rule change.                                                                                                   |
 
 `nightly.yml`:
 
