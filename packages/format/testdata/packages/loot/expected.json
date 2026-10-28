@@ -1,0 +1,79 @@
+[
+  {
+    "severity": "error",
+    "file": "lib:loot/hidden.json",
+    "message": "\"loop\" includes this table again (through its entries), so a roll would never end",
+    "path": "$.pools.main.entries[1].table",
+    "code": "loot.cycle",
+    "related": [
+      {
+        "file": "lib:loot/loop.json"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "lib:loot/loop.json",
+    "message": "\"hidden\" includes this table again (through its entries), so a roll would never end",
+    "path": "$.pools.main.entries[0].table",
+    "code": "loot.cycle",
+    "related": [
+      {
+        "file": "lib:loot/hidden.json"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "loot/mine.json",
+    "message": "Package \"lib\" doesn't export its loot table \"hidden\", so only it can use it (its netherforge.json's exports)",
+    "path": "$.pools.main.entries[1].table",
+    "code": "reference.not-exported",
+    "related": [
+      {
+        "file": "lib:netherforge.json",
+        "path": "$.exports"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "loot/mine.json",
+    "message": "There's no loot table \"ghost\" in \"lib\"",
+    "path": "$.pools.main.entries[2].table",
+    "code": "reference.loot-table"
+  },
+  {
+    "severity": "error",
+    "file": "loot/mine.json",
+    "message": "Package \"lib\" doesn't export its item \"secret\", so only it can use it (its netherforge.json's exports)",
+    "path": "$.pools.main.entries[4].item.item",
+    "code": "reference.not-exported",
+    "related": [
+      {
+        "file": "lib:netherforge.json",
+        "path": "$.exports"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "loot/mine.json",
+    "message": "Package \"lib\" doesn't export its item \"secret\", so only it can use it (its netherforge.json's exports)",
+    "path": "$.pools.main.entries[5].conditions[0].tool.item",
+    "code": "reference.not-exported",
+    "related": [
+      {
+        "file": "lib:netherforge.json",
+        "path": "$.exports"
+      }
+    ]
+  },
+  {
+    "severity": "warning",
+    "file": "netherforge.json",
+    "message": "There's no netherforge.lock pinning the packages this project depends on; the editor writes it, or run netherforge lock",
+    "path": "$.dependencies",
+    "code": "lock.missing"
+  }
+]

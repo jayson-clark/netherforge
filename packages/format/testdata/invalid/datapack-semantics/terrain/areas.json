@@ -1,0 +1,7 @@
+{
+  "biomes": {
+    "deep": { "biome": "caves/deep", "temperature": { "max": 0 } },
+    "grove": { "biome": "grove", "temperature": { "min": 0 } },
+    "none": { "biome": "nowhere", "humidity": { "min": 0.5 } }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@netherforge/format",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The NetherForge project format, compiled from Kotlin: parsing, canonical writing, validation, compilers",
+  "exports": {
+    ".": {
+      "types": "./build/dist/js/productionLibrary/netherforge-format.d.mts",
+      "import": "./build/dist/js/productionLibrary/netherforge-format.mjs"
+    },
+    "./types": "./build/generated-contract/types.ts",
+    "./schema/*": "./build/generated-contract/schema/*",
+    "./constants": "./build/generated-contract/constants.ts"
+  },
+  "dependencies": {
+    "wasmoon": "catalog:"
+  },
+  "scripts": {
+    "build": "node ../../tools/gradle.mjs :format:jsLibrary",
+    "dev": "node ../../tools/gradle.mjs -t --quiet :format:jsLibrary"
+  }
+}

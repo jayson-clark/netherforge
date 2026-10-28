@@ -1,0 +1,78 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "name": "Training dummy",
+  "nodes": {
+    "body": {
+      "parent": "root",
+      "transform": {
+        "translation": [-0.3, 0.6, -0.2],
+        "scale": [0.6, 0.9, 0.4]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:hay_block"
+      },
+      "hitbox": {}
+    },
+    "head": {
+      "parent": "root",
+      "transform": {
+        "translation": [-0.25, 1.5, -0.25],
+        "scale": [0.5, 0.5, 0.5]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:carved_pumpkin"
+      },
+      "hitbox": {}
+    },
+    "post": {
+      "parent": "root",
+      "transform": {
+        "translation": [-0.06, 0, -0.06],
+        "scale": [0.12, 0.6, 0.12]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:oak_fence"
+      }
+    },
+    "root": {}
+  },
+  "animations": {
+    "wobble": {
+      "loop": "once",
+      "tracks": {
+        "root": {
+          "rotation": [
+            {
+              "time": 0,
+              "value": [0, 0, 0]
+            },
+            {
+              "time": 0.15,
+              "value": [-12, 0, 0],
+              "easing": "ease_out"
+            },
+            {
+              "time": 0.5,
+              "value": [0, 0, 0],
+              "easing": "ease_in_out"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "health": {
+    "max": 20,
+    "removeOnDeath": false,
+    "bar": {
+      "segments": 10,
+      "showTicks": 0
+    }
+  },
+  "script": {
+    "file": "script.lua"
+  }
+}

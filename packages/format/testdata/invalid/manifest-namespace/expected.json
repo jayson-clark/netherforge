@@ -1,0 +1,9 @@
+[
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"Shop-1\" isn't a usable namespace (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+    "path": "$.namespace",
+    "code": "project.namespace"
+  }
+]

@@ -1,0 +1,9 @@
+{
+  "$schema": "../../.netherforge/schema/resource_pack.schema.json",
+  "name": "Library gems",
+  "items": {
+    "gem": {
+      "texture": "item/gem.png"
+    }
+  }
+}

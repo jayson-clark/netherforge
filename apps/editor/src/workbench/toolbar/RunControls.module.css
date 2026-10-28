@@ -1,0 +1,45 @@
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+}
+.phase {
+  font-size: var(--font-size-sm);
+  color: var(--muted);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.running {
+  color: var(--ok);
+}
+.crashed {
+  color: var(--error);
+}
+.preparing,
+.starting {
+  color: var(--warning);
+}
+.message {
+  color: var(--error);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.progress {
+  width: 80px;
+}
+.light {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #4a505c;
+  display: inline-block;
+}
+.on {
+  background: var(--ok);
+  box-shadow: 0 0 6px var(--ok);
+}

@@ -1,0 +1,59 @@
+{
+  "//": "How wide a bitmap glyph is in text: format's PackFonts.bitmapAdvance and the editor's fonts.rs both follow this table.",
+  "cases": [
+    {
+      "opaqueWidth": 0,
+      "imageHeight": 8,
+      "drawnHeight": 8,
+      "advance": 1
+    },
+    {
+      "opaqueWidth": 5,
+      "imageHeight": 8,
+      "drawnHeight": 8,
+      "advance": 6
+    },
+    {
+      "opaqueWidth": 7,
+      "imageHeight": 8,
+      "drawnHeight": 8,
+      "advance": 8
+    },
+    {
+      "opaqueWidth": 5,
+      "imageHeight": 16,
+      "drawnHeight": 8,
+      "advance": 4
+    },
+    {
+      "opaqueWidth": 3,
+      "imageHeight": 2,
+      "drawnHeight": 1,
+      "advance": 3
+    },
+    {
+      "opaqueWidth": 1,
+      "imageHeight": 2,
+      "drawnHeight": 1,
+      "advance": 2
+    },
+    {
+      "opaqueWidth": 176,
+      "imageHeight": 168,
+      "drawnHeight": 256,
+      "advance": 269
+    },
+    {
+      "opaqueWidth": 16,
+      "imageHeight": 16,
+      "drawnHeight": 9,
+      "advance": 10
+    },
+    {
+      "opaqueWidth": 9,
+      "imageHeight": 16,
+      "drawnHeight": 8,
+      "advance": 6
+    }
+  ]
+}

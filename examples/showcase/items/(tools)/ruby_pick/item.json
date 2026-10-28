@@ -1,0 +1,10 @@
+{
+  "$schema": "../../../.netherforge/schema/item.schema.json",
+  "kind": "minecraft:iron_pickaxe",
+  "name": "<red>Ruby pick",
+  "lore": [
+    "<gray>In adventure mode: mines ruby ore and planks, goes on anything"
+  ],
+  "canBreak": ["ruby_ore", "#minecraft:planks"],
+  "canPlaceOn": ["*"]
+}

@@ -1,0 +1,55 @@
+.spacer {
+  flex: 1;
+}
+.divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 4px;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  min-height: 30px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.panelHeader {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 8px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  min-height: 26px;
+}
+.panelTitle {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.panelActions {
+  display: flex;
+  gap: 1px;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: normal;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}

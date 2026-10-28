@@ -1,0 +1,16 @@
+{
+  "$schema": "../.netherforge/schema/recipe.schema.json",
+  "type": "shaped",
+  "pattern": [" G ", "GSG", " G "],
+  "key": {
+    "G": "minecraft:glass",
+    "S": {
+      "item": "shard"
+    }
+  },
+  "result": {
+    "item": "crystal_glass",
+    "count": 4
+  },
+  "category": "building"
+}

@@ -1,0 +1,206 @@
+[
+  {
+    "function": "nf.db",
+    "requires": "db"
+  },
+  {
+    "function": "nf.server.set_max_players",
+    "requires": "moderation"
+  },
+  {
+    "function": "nf.server.set_motd",
+    "requires": "moderation"
+  },
+  {
+    "function": "nf.server.set_whitelist_enabled",
+    "requires": "moderation"
+  },
+  {
+    "function": "nf.bots.join",
+    "requires": "bots"
+  },
+  {
+    "function": "nf.bots.all",
+    "requires": "bots"
+  },
+  {
+    "function": "nf.economy.balance",
+    "requires": "plugin:vault"
+  },
+  {
+    "function": "nf.economy.deposit",
+    "requires": "plugin:vault"
+  },
+  {
+    "function": "nf.economy.withdraw",
+    "requires": "plugin:vault"
+  },
+  {
+    "function": "nf.placeholders.parse",
+    "requires": "plugin:placeholderapi"
+  },
+  {
+    "function": "nf.placeholders.register",
+    "requires": "plugin:placeholderapi"
+  },
+  {
+    "function": "nf.http.request",
+    "requires": "http"
+  },
+  {
+    "function": "nf.http.stream",
+    "requires": "http"
+  },
+  {
+    "function": "nf.http.websocket",
+    "requires": "http"
+  },
+  {
+    "function": "nf.web.route",
+    "requires": "web"
+  },
+  {
+    "function": "nf.web.url",
+    "requires": "web"
+  },
+  {
+    "function": "nf.web.oauth",
+    "requires": "web"
+  },
+  {
+    "function": "nf.wasm.functions",
+    "requires": "wasm"
+  },
+  {
+    "function": "nf.wasm.instantiate",
+    "requires": "wasm"
+  },
+  {
+    "function": "nf.wasm.run",
+    "requires": "wasm"
+  },
+  {
+    "function": "nf.wasm.start",
+    "requires": "wasm"
+  },
+  {
+    "function": "nf.network.server_name",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.is_connected",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.servers",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.players",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.find_player",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.channel",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.map",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.send_player",
+    "requires": "network"
+  },
+  {
+    "function": "Player:ban",
+    "requires": "moderation"
+  },
+  {
+    "function": "Player:unban",
+    "requires": "moderation"
+  },
+  {
+    "function": "Player:set_whitelisted",
+    "requires": "moderation"
+  },
+  {
+    "function": "Bot:leave",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:walk_to",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:stop",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:look_at",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:jump",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:set_sneaking",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:set_sprinting",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:chat",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:attack",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:interact",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:use_item",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:release_item",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:swing",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:use_block",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:break_block",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:swap_hands",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:drop_item",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:click_slot",
+    "requires": "bots"
+  },
+  {
+    "function": "Bot:respawn",
+    "requires": "bots"
+  }
+]

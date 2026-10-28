@@ -1,0 +1,9 @@
+[
+  {
+    "severity": "error",
+    "file": "menus/m/menu.json",
+    "message": "map is a map's number, 0 or more, not -1",
+    "path": "$.slots[\"0\"].item.map",
+    "code": "item.map"
+  }
+]

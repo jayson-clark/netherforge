@@ -1,0 +1,4 @@
+{
+  "$schema": "../.netherforge/schema/terrain.schema.json",
+  "biomes": { "steep": { "biome": "minecraft:plains", "terrain": { "density": {} } } }
+}

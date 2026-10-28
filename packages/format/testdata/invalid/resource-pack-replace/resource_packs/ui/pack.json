@@ -1,0 +1,6 @@
+{
+  "description": "Replaces a sprite and a texture the game doesn't have, one with a name that isn't a path, and models the same",
+  "hud": { "replace": { "hud/hotbar": "gui/box.png", "hud/nothing": "gui/box.png" } },
+  "textures": { "gui/container/nothing": "gui/box.png", "../gui/inventory": "gui/box.png" },
+  "models": { "block/nothing": "shape.json", "../block/stone": "shape.json", "block/stone": "missing.json" }
+}

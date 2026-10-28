@@ -1,0 +1,9 @@
+[
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "https://example.com/lib.git at aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa hashes to sha256:763efc8a8be3a04d0cbe42735a46c68cdd038f707a9ba7ea1e4ac2f53cc16744, not the sha256:0000000000000000000000000000000000000000000000000000000000000000 netherforge.lock pins, so it isn't loaded: either its copy in the cache was changed (delete it, and it's fetched again) or the lock was (netherforge lock --update resolves it afresh)",
+    "path": "$.dependencies.lib",
+    "code": "package.hash"
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "type": "multi_action",
+  "title": "Grid",
+  "columns": 0,
+  "inputs": [
+    { "type": "text", "key": "note", "lines": 0 },
+    { "type": "single_option", "key": "pick", "options": [] }
+  ],
+  "buttons": [{ "key": "Bad Key!" }, { "key": "go" }, { "key": "go" }]
+}

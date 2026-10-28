@@ -1,0 +1,413 @@
+{
+  "credit": "The owl's head, eyes open (they glow): it turns about the neck at the model's middle",
+  "textures": {
+    "feathers": "owl/feathers",
+    "face": "owl/face",
+    "eye": "owl/eye",
+    "beak": "owl/beak",
+    "particle": "owl/feathers"
+  },
+  "elements": [
+    {
+      "from": [
+        2.5,
+        8,
+        3
+      ],
+      "to": [
+        13.5,
+        17.5,
+        13
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            11.0,
+            9.5
+          ],
+          "texture": "#feathers"
+        },
+        "south": {
+          "uv": [
+            0,
+            0,
+            11.0,
+            9.5
+          ],
+          "texture": "#face"
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            10,
+            9.5
+          ],
+          "texture": "#feathers"
+        },
+        "west": {
+          "uv": [
+            0,
+            0,
+            10,
+            9.5
+          ],
+          "texture": "#feathers"
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            11.0,
+            10
+          ],
+          "texture": "#feathers"
+        },
+        "down": {
+          "uv": [
+            0,
+            0,
+            11.0,
+            10
+          ],
+          "texture": "#feathers"
+        }
+      }
+    },
+    {
+      "from": [
+        3,
+        17.5,
+        7
+      ],
+      "to": [
+        5.5,
+        20.5,
+        9.5
+      ],
+      "rotation": {
+        "angle": 22.5,
+        "axis": "z",
+        "origin": [
+          4,
+          17.5,
+          8
+        ]
+      },
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            2.5,
+            3.0
+          ],
+          "texture": "#feathers"
+        },
+        "south": {
+          "uv": [
+            0,
+            0,
+            2.5,
+            3.0
+          ],
+          "texture": "#feathers"
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            2.5,
+            3.0
+          ],
+          "texture": "#feathers"
+        },
+        "west": {
+          "uv": [
+            0,
+            0,
+            2.5,
+            3.0
+          ],
+          "texture": "#feathers"
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            2.5,
+            2.5
+          ],
+          "texture": "#feathers"
+        },
+        "down": {
+          "uv": [
+            0,
+            0,
+            2.5,
+            2.5
+          ],
+          "texture": "#feathers"
+        }
+      }
+    },
+    {
+      "from": [
+        10.5,
+        17.5,
+        7
+      ],
+      "to": [
+        13,
+        20.5,
+        9.5
+      ],
+      "rotation": {
+        "angle": -22.5,
+        "axis": "z",
+        "origin": [
+          12,
+          17.5,
+          8
+        ]
+      },
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            2.5,
+            3.0
+          ],
+          "texture": "#feathers"
+        },
+        "south": {
+          "uv": [
+            0,
+            0,
+            2.5,
+            3.0
+          ],
+          "texture": "#feathers"
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            2.5,
+            3.0
+          ],
+          "texture": "#feathers"
+        },
+        "west": {
+          "uv": [
+            0,
+            0,
+            2.5,
+            3.0
+          ],
+          "texture": "#feathers"
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            2.5,
+            2.5
+          ],
+          "texture": "#feathers"
+        },
+        "down": {
+          "uv": [
+            0,
+            0,
+            2.5,
+            2.5
+          ],
+          "texture": "#feathers"
+        }
+      }
+    },
+    {
+      "from": [
+        3.5,
+        11.5,
+        13
+      ],
+      "to": [
+        7,
+        15,
+        13.5
+      ],
+      "light_emission": 15,
+      "faces": {
+        "south": {
+          "uv": [
+            0,
+            0,
+            3.5,
+            3.5
+          ],
+          "texture": "#eye"
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            0.5,
+            3.5
+          ],
+          "texture": "#eye"
+        },
+        "west": {
+          "uv": [
+            0,
+            0,
+            0.5,
+            3.5
+          ],
+          "texture": "#eye"
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            3.5,
+            0.5
+          ],
+          "texture": "#eye"
+        },
+        "down": {
+          "uv": [
+            0,
+            0,
+            3.5,
+            0.5
+          ],
+          "texture": "#eye"
+        }
+      }
+    },
+    {
+      "from": [
+        9,
+        11.5,
+        13
+      ],
+      "to": [
+        12.5,
+        15,
+        13.5
+      ],
+      "light_emission": 15,
+      "faces": {
+        "south": {
+          "uv": [
+            0,
+            0,
+            3.5,
+            3.5
+          ],
+          "texture": "#eye"
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            0.5,
+            3.5
+          ],
+          "texture": "#eye"
+        },
+        "west": {
+          "uv": [
+            0,
+            0,
+            0.5,
+            3.5
+          ],
+          "texture": "#eye"
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            3.5,
+            0.5
+          ],
+          "texture": "#eye"
+        },
+        "down": {
+          "uv": [
+            0,
+            0,
+            3.5,
+            0.5
+          ],
+          "texture": "#eye"
+        }
+      }
+    },
+    {
+      "from": [
+        7,
+        9.5,
+        13
+      ],
+      "to": [
+        9,
+        12.5,
+        14.5
+      ],
+      "faces": {
+        "south": {
+          "uv": [
+            0,
+            0,
+            2,
+            3.0
+          ],
+          "texture": "#beak"
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            1.5,
+            3.0
+          ],
+          "texture": "#beak"
+        },
+        "west": {
+          "uv": [
+            0,
+            0,
+            1.5,
+            3.0
+          ],
+          "texture": "#beak"
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            2,
+            1.5
+          ],
+          "texture": "#beak"
+        },
+        "down": {
+          "uv": [
+            0,
+            0,
+            2,
+            1.5
+          ],
+          "texture": "#beak"
+        }
+      }
+    }
+  ]
+}

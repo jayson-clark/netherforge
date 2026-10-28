@@ -1,0 +1,16 @@
+{
+  "$schema": ".netherforge/schema/netherforge.schema.json",
+  "formatVersion": 1,
+  "name": "Shop template",
+  "namespace": "template_shop",
+  "version": "0.1.0",
+  "minecraft": "26.3",
+  "requires": {
+    "db": true
+  },
+  "exports": {
+    "items": ["lucky_charm"],
+    "menus": ["shop"],
+    "modules": ["shop"]
+  }
+}

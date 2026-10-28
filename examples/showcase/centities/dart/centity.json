@@ -1,0 +1,15 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "name": "Dart",
+  "nodes": {
+    "nose": {
+      "display": {
+        "type": "model",
+        "model": "ui/dart"
+      }
+    }
+  },
+  "script": {
+    "file": "script.lua"
+  }
+}

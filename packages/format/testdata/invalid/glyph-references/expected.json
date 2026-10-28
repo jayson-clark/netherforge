@@ -1,0 +1,68 @@
+[
+  {
+    "severity": "error",
+    "file": "centities/sign/centity.json",
+    "message": "<glyph:ui/star>: Resource pack \"ui\" has no glyph \"star\" (it has: coin)",
+    "path": "$.nodes.root.display.text",
+    "code": "reference.resource-pack-key",
+    "related": [
+      {
+        "file": "resource_packs/ui/pack.json",
+        "path": "$.glyphs"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/hello/dialog.json",
+    "message": "<glyph:coin>: \"coin\" isn't a reference to a glyph: write <pack>/<key>, or <namespace>:<pack>/<key> for another package's",
+    "path": "$.title",
+    "code": "reference.syntax"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/hello/dialog.json",
+    "message": "<glyph:ui/gem>: Resource pack \"ui\" has no glyph \"gem\" (it has: coin)",
+    "path": "$.body[0].text",
+    "code": "reference.resource-pack-key",
+    "related": [
+      {
+        "file": "resource_packs/ui/pack.json",
+        "path": "$.glyphs"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/hello/dialog.json",
+    "message": "<glyph:ui/gem>: Resource pack \"ui\" has no glyph \"gem\" (it has: coin)",
+    "path": "$.buttons[0].tooltip",
+    "code": "reference.resource-pack-key",
+    "related": [
+      {
+        "file": "resource_packs/ui/pack.json",
+        "path": "$.glyphs"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "menus/menu/menu.json",
+    "message": "<glyph:ui/nope>: Resource pack \"ui\" has no glyph \"nope\" (it has: coin)",
+    "path": "$.title",
+    "code": "reference.resource-pack-key",
+    "related": [
+      {
+        "file": "resource_packs/ui/pack.json",
+        "path": "$.glyphs"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "menus/menu/menu.json",
+    "message": "<glyph:shop:ui/coin>: \"shop\" is neither this project's namespace (\"case\") nor a package's it depends on",
+    "path": "$.slots[\"0\"].item.lore[1]",
+    "code": "reference.namespace"
+  }
+]

@@ -1,0 +1,119 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "name": "Floating lamp",
+  "nodes": {
+    "float": {
+      "transform": {
+        "translation": [0, 0.75, 0]
+      }
+    },
+    "label": {
+      "parent": "float",
+      "transform": {
+        "translation": [0, 0.85, 0]
+      },
+      "display": {
+        "type": "text",
+        "text": "<yellow>Lamp",
+        "billboard": "center"
+      }
+    },
+    "light": {
+      "parent": "float",
+      "transform": {
+        "translation": [-0.25, 0, -0.25],
+        "scale": [0.5, 0.5, 0.5]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:sea_lantern"
+      },
+      "hitbox": {}
+    }
+  },
+  "animations": {
+    "bob": {
+      "loop": "loop",
+      "autoplay": true,
+      "tracks": {
+        "float": {
+          "translation": [
+            {
+              "time": 0,
+              "value": [0, 0.75, 0],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 1,
+              "value": [0, 1, 0],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 2,
+              "value": [0, 0.75, 0]
+            }
+          ],
+          "rotation": [
+            {
+              "time": 0,
+              "value": [0, 0, 0]
+            },
+            {
+              "time": 0.5,
+              "value": [0, 45, 0]
+            },
+            {
+              "time": 1,
+              "value": [0, 90, 0]
+            },
+            {
+              "time": 1.5,
+              "value": [0, 135, 0]
+            },
+            {
+              "time": 2,
+              "value": [0, 180, 0]
+            }
+          ]
+        }
+      }
+    },
+    "squash": {
+      "loop": "once",
+      "blend": "additive",
+      "tracks": {
+        "float": {
+          "scale": [
+            {
+              "time": 0,
+              "value": [1, 1, 1],
+              "easing": "ease_out"
+            },
+            {
+              "time": 0.1,
+              "value": [1.35, 0.65, 1.35],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 0.25,
+              "value": [0.85, 1.2, 0.85],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 0.4,
+              "value": [1.05, 0.95, 1.05],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 0.5,
+              "value": [1, 1, 1]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "script": {
+    "file": "script.lua"
+  }
+}

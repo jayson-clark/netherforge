@@ -1,0 +1,149 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "name": "Shrine keeper",
+  "nodes": {
+    "face": {
+      "parent": "hood",
+      "transform": {
+        "translation": [0.15, 0.15, 0.97],
+        "scale": [0.7, 0.6, 0.05]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:black_concrete"
+      }
+    },
+    "hood": {
+      "parent": "root",
+      "transform": {
+        "translation": [-0.22, 1.25, -0.22],
+        "scale": [0.44, 0.44, 0.44]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:light_gray_wool"
+      },
+      "hitbox": {}
+    },
+    "lantern": {
+      "parent": "lantern_pivot",
+      "transform": {
+        "translation": [-0.15, -0.36, -0.15],
+        "scale": [0.3, 0.3, 0.3]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:soul_lantern[hanging=true]"
+      }
+    },
+    "lantern_pivot": {
+      "parent": "root",
+      "transform": {
+        "translation": [0.42, 1.75, 0.09]
+      }
+    },
+    "name": {
+      "parent": "root",
+      "transform": {
+        "translation": [0, 2.05, 0]
+      },
+      "display": {
+        "type": "text",
+        "text": "<light_purple>Shrine keeper\n<gray>right-click me",
+        "billboard": "center"
+      }
+    },
+    "robe": {
+      "parent": "root",
+      "transform": {
+        "translation": [-0.3, 0, -0.2],
+        "scale": [0.6, 1.25, 0.4]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:purple_wool"
+      },
+      "hitbox": {}
+    },
+    "root": {},
+    "staff": {
+      "parent": "root",
+      "transform": {
+        "translation": [0.38, 0, 0.05],
+        "scale": [0.08, 1.75, 0.08]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:stripped_dark_oak_log"
+      }
+    }
+  },
+  "animations": {
+    "bow": {
+      "loop": "once",
+      "tracks": {
+        "hood": {
+          "translation": [
+            {
+              "time": 0,
+              "value": [-0.22, 1.25, -0.22],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 0.4,
+              "value": [-0.22, 1.12, -0.1],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 1,
+              "value": [-0.22, 1.25, -0.22]
+            }
+          ],
+          "rotation": [
+            {
+              "time": 0,
+              "value": [0, 0, 0],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 0.4,
+              "value": [20, 0, 0],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 1,
+              "value": [0, 0, 0]
+            }
+          ]
+        }
+      }
+    },
+    "idle": {
+      "loop": "loop",
+      "autoplay": true,
+      "tracks": {
+        "lantern_pivot": {
+          "rotation": [
+            {
+              "time": 0,
+              "value": [0, 0, -8],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 2,
+              "value": [0, 0, 8],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 4,
+              "value": [0, 0, -8]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "script": {
+    "file": "script.lua"
+  }
+}

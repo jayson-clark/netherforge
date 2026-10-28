@@ -1,0 +1,79 @@
+[
+  {
+    "severity": "error",
+    "file": "screen_fonts/chars/font.json",
+    "message": "Every row of chars is as long as the first (2 characters), but this one has 1",
+    "path": "$.chars[1]",
+    "code": "screen_font.chars"
+  },
+  {
+    "severity": "error",
+    "file": "screen_fonts/default/font.json",
+    "message": "\"default\" is the game's own map font: call this one something else",
+    "path": "$",
+    "code": "screen_font.id"
+  },
+  {
+    "severity": "error",
+    "file": "screen_fonts/field/font.json",
+    "message": "file is a bitmap or TrueType font's: a pixels font draws its glyphs",
+    "path": "$.file",
+    "code": "screen_font.field"
+  },
+  {
+    "severity": "error",
+    "file": "screen_fonts/field/font.json",
+    "message": "size is a TrueType font's",
+    "path": "$.size",
+    "code": "screen_font.field"
+  },
+  {
+    "severity": "error",
+    "file": "screen_fonts/glyph/font.json",
+    "message": "\"AB\" isn't one character",
+    "path": "$.glyphs.AB",
+    "code": "screen_font.glyph"
+  },
+  {
+    "severity": "error",
+    "file": "screen_fonts/glyph/font.json",
+    "message": "Every character is as tall (1 row), but this one has 2",
+    "path": "$.glyphs.C",
+    "code": "screen_font.glyph"
+  },
+  {
+    "severity": "error",
+    "file": "screen_fonts/glyph/font.json",
+    "message": "A row is # for a pixel and . for none, not \"#x\"",
+    "path": "$.glyphs.D[0]",
+    "code": "screen_font.glyph"
+  },
+  {
+    "severity": "error",
+    "file": "screen_fonts/kind/font.json",
+    "message": "A TrueType font's file is a .ttf or .otf file in its folder",
+    "path": "$.file",
+    "code": "screen_font.file"
+  },
+  {
+    "severity": "error",
+    "file": "screen_fonts/nofile/font.json",
+    "message": "\"letters.png\" isn't in the font's folder",
+    "path": "$.file",
+    "code": "screen_font.missing"
+  },
+  {
+    "severity": "error",
+    "file": "screen_fonts/size/font.json",
+    "message": "size is 4 to 128 pixels, not 200",
+    "path": "$.size",
+    "code": "screen_font.size"
+  },
+  {
+    "severity": "error",
+    "file": "screen_fonts/size/font.json",
+    "message": "spacing is 0 to 16 pixels, not 40",
+    "path": "$.spacing",
+    "code": "screen_font.size"
+  }
+]

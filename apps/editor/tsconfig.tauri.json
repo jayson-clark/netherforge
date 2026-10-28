@@ -1,0 +1,10 @@
+{
+  "//": "Tests of the app's Tauri side that also drive the Rust backend as a process: browser code (DOM) and Node's APIs together. Only `*.tauri.test.ts`.",
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "types": ["vite/client", "node"],
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tauri.tsbuildinfo"
+  },
+  "include": ["src/**/*.tauri.test.ts"],
+  "exclude": []
+}

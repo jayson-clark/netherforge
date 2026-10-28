@@ -1,0 +1,57 @@
+[
+  {
+    "severity": "error",
+    "file": "game_blocks/bricks.json",
+    "message": "minecraft:deepslate_bricks is in blocks already, as \"minecraft:deepslate_bricks\": each block has one set of rules",
+    "path": "$.blocks[1]",
+    "code": "game_block.twice"
+  },
+  {
+    "severity": "error",
+    "file": "game_blocks/bricks.json",
+    "message": "\"Not An Id\" isn't one of the game's blocks: an id like \"minecraft:stone\", or a tag like \"#minecraft:logs\"",
+    "path": "$.blocks[2]",
+    "code": "game_block.blocks"
+  },
+  {
+    "severity": "error",
+    "file": "game_blocks/bricks.json",
+    "message": "hardness is how long it takes to mine: 0 or more, or -1 for a block nobody can break",
+    "path": "$.hardness",
+    "code": "game_block.hardness"
+  },
+  {
+    "severity": "error",
+    "file": "game_blocks/bricks.json",
+    "message": "There's no loot table \"missing\" (loot/missing.json)",
+    "path": "$.drops",
+    "code": "reference.loot-table"
+  },
+  {
+    "severity": "error",
+    "file": "game_blocks/empty.json",
+    "message": "blocks lists none of the game's blocks, so these rules are for nothing",
+    "path": "$.blocks",
+    "code": "game_block.blocks"
+  },
+  {
+    "severity": "warning",
+    "file": "game_blocks/stone.json",
+    "message": "requiresTool: false can't make the game's own drops fall for the wrong tool: the game keeps its rule for its loot. Name drops of the project's to drop them for any tool",
+    "path": "$.requiresTool",
+    "code": "game_block.requires-tool"
+  },
+  {
+    "severity": "error",
+    "file": "game_blocks/stone.json",
+    "message": "minecraft:deepslate_bricks already has the rules of game block \"bricks\": each block has one set of rules",
+    "path": "$.blocks[1]",
+    "code": "game_block.twice",
+    "related": [
+      {
+        "file": "game_blocks/bricks.json",
+        "path": "$.blocks"
+      }
+    ]
+  }
+]

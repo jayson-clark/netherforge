@@ -1,0 +1,16 @@
+{
+  "$schema": "../.netherforge/schema/advancement.schema.json",
+  "display": {
+    "icon": {
+      "kind": "minecraft:compass"
+    },
+    "title": "<gold>Adventurer",
+    "description": "Join the server",
+    "background": "minecraft:block/stone_bricks",
+    "toast": false,
+    "announce": false
+  },
+  "criteria": {
+    "joined": {}
+  }
+}

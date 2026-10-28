@@ -1,0 +1,79 @@
+{
+  "$schema": ".netherforge/schema/netherforge.schema.json",
+  "formatVersion": 1,
+  "name": "NetherForge Showcase",
+  "namespace": "showcase",
+  "version": "0.1.0",
+  "minecraft": "26.3",
+  "managedWorlds": ["lobby"],
+  "worlds": {
+    "hills": {
+      "terrain": "ruby_hills",
+      "seed": 42,
+      "dimensionType": "deep"
+    },
+    "lobby": {
+      "spawnLimits": {
+        "monster": 0
+      }
+    },
+    "sky": {
+      "spawnLimits": {
+        "monster": 0
+      },
+      "terrain": "sky_islands",
+      "seed": 7031,
+      "dimensionType": "sky"
+    },
+    "world": {
+      "spawnLimits": {
+        "monster": 0,
+        "animal": 0
+      },
+      "terrain": "plaza"
+    }
+  },
+  "requires": {
+    "db": true,
+    "web": true,
+    "bots": true,
+    "wasm": true
+  },
+  "allow": {
+    "permissions": ["showcase"]
+  },
+  "dependencies": {
+    "library": {
+      "path": "../library"
+    }
+  },
+  "settings": {
+    "expo": {
+      "type": "boolean",
+      "description": "Whether the main world is the expo: its booths built along the avenue, a tour guide for everyone who joins, and the tour's boss bar and sidebar. Turn it off on a server whose main world isn't the expo's plaza (terrain/plaza.json), and the expo stays out of the way.",
+      "default": true
+    },
+    "greeting": {
+      "type": "string",
+      "description": "What the greeter says to everyone who joins, before their name.",
+      "default": "Welcome"
+    },
+    "show_welcome": {
+      "type": "boolean",
+      "description": "Whether a player's first join opens the welcome dialog.",
+      "default": true
+    },
+    "tour_bossbar": {
+      "type": "boolean",
+      "description": "Whether the expo shows a boss bar naming the booth a player stands in, and how much of the tour they've seen.",
+      "default": true
+    },
+    "treasure_rolls": {
+      "type": "integer",
+      "description": "How many times /treasure rolls the treasure loot table.",
+      "default": 1,
+      "min": 1,
+      "max": 5
+    }
+  }
+}

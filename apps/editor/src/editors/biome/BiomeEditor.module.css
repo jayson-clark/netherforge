@@ -1,0 +1,40 @@
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.listHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.entryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.feature {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.feature > :first-child {
+  flex: 1;
+  min-width: 0;
+}

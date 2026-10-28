@@ -1,0 +1,35 @@
+[
+  {
+    "severity": "error",
+    "file": "biomes/meadow.json",
+    "message": "There's no placed feature \"nothing\" in \"lib\"'s datapacks",
+    "path": "$.features.vegetal_decoration[1]",
+    "code": "reference.placed-feature"
+  },
+  {
+    "severity": "error",
+    "file": "lib:datapacks/caves/data/minecraft/worldgen/noise_settings/overworld.json",
+    "message": "A datapack here writes only its own namespace, \"lib\", not \"minecraft\"",
+    "code": "datapack.namespace"
+  },
+  {
+    "severity": "warning",
+    "file": "netherforge.json",
+    "message": "There's no netherforge.lock pinning the packages this project depends on; the editor writes it, or run netherforge lock",
+    "path": "$.dependencies",
+    "code": "lock.missing"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/caves.json",
+    "message": "Package \"lib\" doesn't export its biome \"secret\", so only it can use it (its netherforge.json's exports)",
+    "path": "$.biomes.secret.biome",
+    "code": "reference.not-exported",
+    "related": [
+      {
+        "file": "lib:netherforge.json",
+        "path": "$.exports"
+      }
+    ]
+  }
+]

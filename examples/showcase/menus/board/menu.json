@@ -1,0 +1,10 @@
+{
+  "$schema": "../../.netherforge/schema/menu.schema.json",
+  "name": "Community board",
+  "rows": 1,
+  "title": "<dark_gray>Community board",
+  "shared": true,
+  "script": {
+    "file": "script.lua"
+  }
+}

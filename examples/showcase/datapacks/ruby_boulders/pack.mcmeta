@@ -1,0 +1,27 @@
+{
+  "$schema": "../../.netherforge/schema/datapack.schema.json",
+  "pack": {
+    "description": "Boulders of red terracotta, for the ruby grove",
+    "min_format": 94,
+    "max_format": 121
+  },
+  "overlays": {
+    "entries": [
+      {
+        "min_format": 94,
+        "max_format": 94,
+        "directory": "mc1_21"
+      },
+      {
+        "min_format": 101,
+        "max_format": 107,
+        "directory": "mc26_1"
+      },
+      {
+        "min_format": 121,
+        "max_format": 121,
+        "directory": "mc26_3"
+      }
+    ]
+  }
+}

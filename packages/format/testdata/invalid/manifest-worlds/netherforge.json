@@ -1,0 +1,13 @@
+{
+  "$schema": ".netherforge/schema/netherforge.schema.json",
+  "formatVersion": 1,
+  "name": "Worlds",
+  "namespace": "case",
+  "version": "1.0.0",
+  "minecraft": "26.3",
+  "worlds": {
+    "../escape": { "spawnLimits": { "monster": 10 } },
+    "realm": { "terrain": "no_such_generator", "seed": 5, "gameRules": { "Bad Rule": true, "keep_inventory": "yes" } },
+    "arena": { "spawnLimits": { "animal": 5, "monster": -1 }, "spawnIntervals": { "axolotl": -20 } }
+  }
+}

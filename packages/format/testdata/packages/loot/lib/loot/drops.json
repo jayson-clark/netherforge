@@ -1,0 +1,10 @@
+{
+  "pools": {
+    "main": {
+      "entries": [
+        { "type": "item", "item": { "item": "secret" } },
+        { "type": "table", "table": "hidden", "conditions": [{ "type": "tool", "tool": { "item": "secret" } }] }
+      ]
+    }
+  }
+}

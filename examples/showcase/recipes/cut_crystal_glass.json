@@ -1,0 +1,9 @@
+{
+  "$schema": "../.netherforge/schema/recipe.schema.json",
+  "type": "stonecutting",
+  "ingredient": "minecraft:amethyst_block",
+  "result": {
+    "item": "crystal_glass",
+    "count": 2
+  }
+}

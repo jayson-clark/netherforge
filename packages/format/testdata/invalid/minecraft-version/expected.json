@@ -1,0 +1,16 @@
+[
+  {
+    "severity": "error",
+    "file": "fonts/default.json",
+    "message": "\"latest\" isn't a Minecraft version",
+    "path": "$.minecraft",
+    "code": "font.minecraft"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"twenty six\" isn't a Minecraft version",
+    "path": "$.minecraft",
+    "code": "project.minecraft"
+  }
+]

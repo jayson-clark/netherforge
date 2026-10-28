@@ -1,0 +1,25 @@
+{
+  "$schema": "../.netherforge/schema/loot_table.schema.json",
+  "pools": {
+    "rubble": {
+      "entries": [
+        {
+          "type": "item",
+          "item": {
+            "kind": "minecraft:cobbled_deepslate"
+          },
+          "count": {
+            "min": 1,
+            "max": 2
+          }
+        },
+        {
+          "type": "item",
+          "item": {
+            "item": "shard"
+          }
+        }
+      ]
+    }
+  }
+}

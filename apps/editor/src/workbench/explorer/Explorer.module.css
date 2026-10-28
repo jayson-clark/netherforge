@@ -1,0 +1,235 @@
+.explorer {
+  display: grid;
+  grid-template-columns: 180px 1px 1fr;
+  height: 100%;
+  min-height: 0;
+}
+.folders {
+  overflow: auto;
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+}
+.folderList {
+  display: flex;
+  flex-direction: column;
+  outline: none;
+}
+.folder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  color: var(--text);
+  min-height: var(--row-height);
+  cursor: pointer;
+  outline: none;
+}
+.folder[data-hovered] {
+  background: var(--bg-hover);
+}
+.folder[data-selected] {
+  background: var(--bg-selected);
+}
+.folder[data-focus-visible] {
+  outline: 1px solid var(--info);
+  outline-offset: -1px;
+}
+/* A group of kinds (Gameplay, World…), and the dependencies after them, under a small heading. */
+.section + .section {
+  margin-top: 8px;
+}
+.sectionTitle {
+  padding: 4px 10px 2px;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.folderTitle {
+  flex: 1;
+}
+.folderCount {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+}
+/* Under the kinds and the dependencies: adding a template, and the project's settings. */
+.folderActions {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.rule {
+  background: var(--border);
+}
+.content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.search {
+  width: 200px;
+}
+.title {
+  font-weight: 600;
+}
+/* The kind's title, then the group folders down to the open one. */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  color: var(--muted);
+}
+.crumbButton {
+  padding: 1px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.crumbButton:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.crumb .title {
+  padding: 1px 4px;
+  color: var(--text);
+}
+/* A group (tile or breadcrumb) a dragged resource would move into. */
+.dropTarget,
+.tile.dropTarget,
+.row.dropTarget {
+  background: var(--bg-selected-dim);
+  border-color: var(--accent);
+}
+.size {
+  width: 80px;
+}
+.items {
+  flex: 1;
+  overflow: auto;
+  outline: none;
+  padding: 10px;
+  align-content: start;
+}
+.grid {
+  display: grid;
+  gap: 6px;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+}
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  cursor: pointer;
+  min-width: 0;
+}
+.tile:hover {
+  background: var(--bg-hover);
+}
+.tile[aria-selected='true'] {
+  background: var(--bg-selected-dim);
+  border-color: var(--accent-dim);
+}
+.items:focus-visible .cursor {
+  outline: 1px solid var(--info);
+}
+.picture {
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+}
+.label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+.subtitle {
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+}
+.markers {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 10px;
+  min-height: 26px;
+  cursor: pointer;
+}
+.row:hover {
+  background: var(--bg-hover);
+}
+.row[aria-selected='true'] {
+  background: var(--bg-selected-dim);
+}
+.row .picture {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+.row .label {
+  flex: 1;
+  text-align: left;
+}
+.newTile {
+  color: var(--muted);
+  border: 1px dashed var(--border);
+}
+.newTile:hover {
+  color: var(--text);
+}
+.empty {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--muted);
+  text-align: center;
+}
+.renameTile {
+  flex: none;
+  width: 100%;
+}
+.renameTile input {
+  width: 100%;
+  text-align: center;
+}
+.groupTitle {
+  padding: 8px 10px 2px;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

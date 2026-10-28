@@ -1,0 +1,18 @@
+{
+  "pools": {
+    "Bad Name": {
+      "rolls": { "min": 3, "max": 1 },
+      "conditions": [{ "type": "chance", "chance": 1.5 }],
+      "entries": [
+        { "type": "item", "item": { "kind": "minecraft:stick", "count": 2 }, "count": { "min": 0, "max": 5000 }, "weight": 0 },
+        { "type": "item", "item": { "item": "nope" } },
+        { "type": "table", "table": "nothing" },
+        { "type": "vanilla", "table": "chests/no_namespace" },
+        { "type": "empty", "conditions": [{ "type": "tool", "tool": "minecraft:air" }, { "type": "enchantment", "enchantment": "Not An Id", "level": 0 }] }
+      ]
+    },
+    "empty": {
+      "rolls": -1
+    }
+  }
+}

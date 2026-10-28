@@ -1,0 +1,58 @@
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+/* Drawn as buttons, the picked one pressed in. */
+.tab {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+  cursor: pointer;
+  outline: none;
+}
+.tab[data-hovered] {
+  background: var(--bg-hover);
+}
+.tab[data-selected] {
+  background: var(--bg-selected);
+  border-color: var(--accent-dim);
+}
+.tab[data-focus-visible] {
+  outline: 1px solid var(--info);
+}
+.search {
+  width: 100%;
+  margin-bottom: 8px;
+}
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 4px;
+  max-height: 50vh;
+  overflow: auto;
+}
+.choice {
+  width: 100%;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+.choiceName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.free {
+  display: flex;
+  flex-direction: column;
+}
+.freeRow {
+  display: flex;
+  gap: 6px;
+}
+.freeRow input {
+  flex: 1;
+}

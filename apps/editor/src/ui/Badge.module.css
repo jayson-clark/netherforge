@@ -1,0 +1,33 @@
+.badge {
+  font-size: 9px;
+  text-transform: uppercase;
+  background: var(--bg-hover);
+  border-radius: 3px;
+  padding: 0 4px;
+  color: var(--muted);
+  margin-left: 4px;
+}
+.count {
+  background: var(--bg-hover);
+  border-radius: 8px;
+  padding: 0 5px;
+  font-size: var(--font-size-xs);
+  line-height: 15px;
+  min-width: 15px;
+  text-align: center;
+}
+.error {
+  background: var(--error);
+  color: #fff;
+}
+.warning {
+  background: var(--warning);
+  color: #000;
+}
+.dirty {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text);
+  flex: none;
+}

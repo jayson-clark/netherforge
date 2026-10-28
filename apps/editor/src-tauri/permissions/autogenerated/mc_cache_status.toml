@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mc-cache-status"
+description = "Enables the mc_cache_status command without any pre-configured scope."
+commands.allow = ["mc_cache_status"]
+
+[[permission]]
+identifier = "deny-mc-cache-status"
+description = "Denies the mc_cache_status command without any pre-configured scope."
+commands.deny = ["mc_cache_status"]

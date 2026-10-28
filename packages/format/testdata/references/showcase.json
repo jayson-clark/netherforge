@@ -1,0 +1,1304 @@
+[
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.skins.altar.texture",
+    "kind": "texture",
+    "text": "gui/altar.png",
+    "target": "resource_packs/ui/textures/gui/altar.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.skins.shop.texture",
+    "kind": "texture",
+    "text": "gui/shop.png",
+    "target": "resource_packs/ui/textures/gui/shop.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.glyphs.coin.texture",
+    "kind": "texture",
+    "text": "glyph/coin.png",
+    "target": "resource_packs/ui/textures/glyph/coin.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.glyphs.spark.texture",
+    "kind": "texture",
+    "text": "glyph/spark.png",
+    "target": "resource_packs/ui/textures/glyph/spark.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.glyphs.wisp.texture",
+    "kind": "texture",
+    "text": "glyph/wisp.png",
+    "target": "resource_packs/ui/textures/glyph/wisp.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.candy.texture",
+    "kind": "texture",
+    "text": "item/candy.png",
+    "target": "resource_packs/ui/textures/item/candy.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.circlet.texture",
+    "kind": "texture",
+    "text": "item/circlet.png",
+    "target": "resource_packs/ui/textures/item/circlet.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.crown.texture",
+    "kind": "texture",
+    "text": "item/crown.png",
+    "target": "resource_packs/ui/textures/item/crown.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.crystal.model",
+    "kind": "model",
+    "text": "crystal.json",
+    "target": "resource_packs/ui/models/crystal.json"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.crystal_glass.block",
+    "kind": "block_model",
+    "text": "ui/crystal_glass",
+    "target": "showcase:ui/crystal_glass"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.crystal_lit.model",
+    "kind": "model",
+    "text": "crystal_lit.json",
+    "target": "resource_packs/ui/models/crystal_lit.json"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.dart.model",
+    "kind": "model",
+    "text": "dart.json",
+    "target": "resource_packs/ui/models/dart.json"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.glow_lamp.block",
+    "kind": "block_model",
+    "text": "ui/glow_lamp",
+    "target": "showcase:ui/glow_lamp"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.glow_pickaxe.texture",
+    "kind": "texture",
+    "text": "item/glow_pickaxe.png",
+    "target": "resource_packs/ui/textures/item/glow_pickaxe.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.lantern.texture",
+    "kind": "texture",
+    "text": "item/lantern.png",
+    "target": "resource_packs/ui/textures/item/lantern.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.owl_body.model",
+    "kind": "model",
+    "text": "owl_body.json",
+    "target": "resource_packs/ui/models/owl_body.json"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.owl_head.model",
+    "kind": "model",
+    "text": "owl_head.json",
+    "target": "resource_packs/ui/models/owl_head.json"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.owl_head_blink.model",
+    "kind": "model",
+    "text": "owl_head_blink.json",
+    "target": "resource_packs/ui/models/owl_head_blink.json"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.owl_wing.model",
+    "kind": "model",
+    "text": "owl_wing.json",
+    "target": "resource_packs/ui/models/owl_wing.json"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.ruby.texture",
+    "kind": "texture",
+    "text": "item/ruby.png",
+    "target": "resource_packs/ui/textures/item/ruby.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.ruby_ore.block",
+    "kind": "block_model",
+    "text": "ui/ruby_ore",
+    "target": "showcase:ui/ruby_ore"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.items.shard.texture",
+    "kind": "texture",
+    "text": "item/shard.png",
+    "target": "resource_packs/ui/textures/item/shard.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.tooltips.fancy.background",
+    "kind": "texture",
+    "text": "tooltip/background.png",
+    "target": "resource_packs/ui/textures/tooltip/background.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.tooltips.fancy.frame",
+    "kind": "texture",
+    "text": "tooltip/frame.png",
+    "target": "resource_packs/ui/textures/tooltip/frame.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.tooltips.glow.background",
+    "kind": "texture",
+    "text": "tooltip/glow_background.png",
+    "target": "resource_packs/ui/textures/tooltip/glow_background.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.tooltips.glow.frame",
+    "kind": "texture",
+    "text": "tooltip/glow_frame.png",
+    "target": "resource_packs/ui/textures/tooltip/glow_frame.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.equipment.circlet.humanoid",
+    "kind": "texture",
+    "text": "equipment/circlet.png",
+    "target": "resource_packs/ui/textures/equipment/circlet.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.equipment.ruby.humanoid",
+    "kind": "texture",
+    "text": "armor/ruby.png",
+    "target": "resource_packs/ui/textures/armor/ruby.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.equipment.ruby.humanoidLeggings",
+    "kind": "texture",
+    "text": "armor/ruby_leggings.png",
+    "target": "resource_packs/ui/textures/armor/ruby_leggings.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.blocks.crystal_glass.texture",
+    "kind": "texture",
+    "text": "block/crystal_glass.png",
+    "target": "resource_packs/ui/textures/block/crystal_glass.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.blocks.glow_lamp.top",
+    "kind": "texture",
+    "text": "block/glow_lamp_top.png",
+    "target": "resource_packs/ui/textures/block/glow_lamp_top.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.blocks.glow_lamp.bottom",
+    "kind": "texture",
+    "text": "block/glow_lamp_top.png",
+    "target": "resource_packs/ui/textures/block/glow_lamp_top.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.blocks.glow_lamp.side",
+    "kind": "texture",
+    "text": "block/glow_lamp_side.png",
+    "target": "resource_packs/ui/textures/block/glow_lamp_side.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.blocks.ruby_crystal.model",
+    "kind": "model",
+    "text": "crystal.json",
+    "target": "resource_packs/ui/models/crystal.json"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.blocks.ruby_ore.texture",
+    "kind": "texture",
+    "text": "block/ruby_ore.png",
+    "target": "resource_packs/ui/textures/block/ruby_ore.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.sounds[\"minecraft:block.deepslate_bricks.break\"].files[0]",
+    "kind": "sound_file",
+    "text": "crystal_break.ogg",
+    "target": "resource_packs/ui/sounds/crystal_break.ogg"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.hud.bars.treasure.full",
+    "kind": "texture",
+    "text": "hud/treasure_full.png",
+    "target": "resource_packs/ui/textures/hud/treasure_full.png"
+  },
+  {
+    "file": "resource_packs/ui/pack.json",
+    "path": "$.hud.bars.treasure.empty",
+    "kind": "texture",
+    "text": "hud/treasure_empty.png",
+    "target": "resource_packs/ui/textures/hud/treasure_empty.png"
+  },
+  {
+    "file": "structures/ruined_shrine.json",
+    "path": "$.biomes[0]",
+    "kind": "biome",
+    "text": "ruby_grove",
+    "target": "showcase:ruby_grove"
+  },
+  {
+    "file": "items/candy/item.json",
+    "path": "$.itemModel",
+    "kind": "item_model",
+    "text": "ui/candy",
+    "target": "showcase:ui/candy"
+  },
+  {
+    "file": "items/candy/item.json",
+    "path": "$.tooltipStyle",
+    "kind": "tooltip",
+    "text": "ui/glow",
+    "target": "showcase:ui/glow"
+  },
+  {
+    "file": "items/candy/item.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "items/candy/script.lua"
+  },
+  {
+    "file": "items/circlet/item.json",
+    "path": "$.itemModel",
+    "kind": "item_model",
+    "text": "ui/circlet",
+    "target": "showcase:ui/circlet"
+  },
+  {
+    "file": "items/circlet/item.json",
+    "path": "$.tooltipStyle",
+    "kind": "tooltip",
+    "text": "ui/glow",
+    "target": "showcase:ui/glow"
+  },
+  {
+    "file": "items/circlet/item.json",
+    "path": "$.equipment.asset",
+    "kind": "equipment",
+    "text": "ui/circlet",
+    "target": "showcase:ui/circlet"
+  },
+  {
+    "file": "items/crown/item.json",
+    "path": "$.itemModel",
+    "kind": "item_model",
+    "text": "ui/crown",
+    "target": "showcase:ui/crown"
+  },
+  {
+    "file": "items/crown/item.json",
+    "path": "$.equipment.asset",
+    "kind": "equipment",
+    "text": "ui/ruby",
+    "target": "showcase:ui/ruby"
+  },
+  {
+    "file": "items/crystal_glass/item.json",
+    "path": "$.itemModel",
+    "kind": "item_model",
+    "text": "ui/crystal_glass",
+    "target": "showcase:ui/crystal_glass"
+  },
+  {
+    "file": "items/crystal_glass/item.json",
+    "path": "$.block",
+    "kind": "block",
+    "text": "crystal_glass",
+    "target": "showcase:crystal_glass"
+  },
+  {
+    "file": "items/glow_lamp/item.json",
+    "path": "$.itemModel",
+    "kind": "item_model",
+    "text": "ui/glow_lamp",
+    "target": "showcase:ui/glow_lamp"
+  },
+  {
+    "file": "items/glow_lamp/item.json",
+    "path": "$.block",
+    "kind": "block",
+    "text": "glow_lamp",
+    "target": "showcase:glow_lamp"
+  },
+  {
+    "file": "items/(tools)/glow_pickaxe/item.json",
+    "path": "$.itemModel",
+    "kind": "item_model",
+    "text": "ui/glow_pickaxe",
+    "target": "showcase:ui/glow_pickaxe"
+  },
+  {
+    "file": "items/(tools)/glow_pickaxe/item.json",
+    "path": "$.tooltipStyle",
+    "kind": "tooltip",
+    "text": "ui/glow",
+    "target": "showcase:ui/glow"
+  },
+  {
+    "file": "items/guide/item.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "items/guide/script.lua"
+  },
+  {
+    "file": "items/lantern/item.json",
+    "path": "$.itemModel",
+    "kind": "item_model",
+    "text": "ui/lantern",
+    "target": "showcase:ui/lantern"
+  },
+  {
+    "file": "items/lantern/item.json",
+    "path": "$.tooltipStyle",
+    "kind": "tooltip",
+    "text": "ui/glow",
+    "target": "showcase:ui/glow"
+  },
+  {
+    "file": "items/lantern/item.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "items/lantern/script.lua"
+  },
+  {
+    "file": "items/ruby/item.json",
+    "path": "$.itemModel",
+    "kind": "item_model",
+    "text": "ui/ruby",
+    "target": "showcase:ui/ruby"
+  },
+  {
+    "file": "items/ruby/item.json",
+    "path": "$.tooltipStyle",
+    "kind": "tooltip",
+    "text": "ui/fancy",
+    "target": "showcase:ui/fancy"
+  },
+  {
+    "file": "items/ruby/item.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "items/ruby/script.lua"
+  },
+  {
+    "file": "items/ruby_ore/item.json",
+    "path": "$.itemModel",
+    "kind": "item_model",
+    "text": "ui/ruby_ore",
+    "target": "showcase:ui/ruby_ore"
+  },
+  {
+    "file": "items/ruby_ore/item.json",
+    "path": "$.block",
+    "kind": "block",
+    "text": "ruby_ore",
+    "target": "showcase:ruby_ore"
+  },
+  {
+    "file": "items/(tools)/ruby_pick/item.json",
+    "path": "$.canBreak[0]",
+    "kind": "adventure_block",
+    "text": "ruby_ore",
+    "target": "showcase:ruby_ore"
+  },
+  {
+    "file": "items/(tools)/ruby_pick/item.json",
+    "path": "$.canBreak[1]",
+    "kind": "adventure_block",
+    "text": "#minecraft:planks"
+  },
+  {
+    "file": "items/(tools)/ruby_pick/item.json",
+    "path": "$.canPlaceOn[0]",
+    "kind": "adventure_block",
+    "text": "*"
+  },
+  {
+    "file": "items/(tools)/ruby_wand/item.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "items/(tools)/ruby_wand/script.lua"
+  },
+  {
+    "file": "items/shard/item.json",
+    "path": "$.itemModel",
+    "kind": "item_model",
+    "text": "ui/shard",
+    "target": "showcase:ui/shard"
+  },
+  {
+    "file": "items/shard/item.json",
+    "path": "$.tooltipStyle",
+    "kind": "tooltip",
+    "text": "ui/glow",
+    "target": "showcase:ui/glow"
+  },
+  {
+    "file": "recipes/candy.json",
+    "path": "$.ingredient.item",
+    "kind": "item",
+    "text": "shard",
+    "target": "showcase:shard"
+  },
+  {
+    "file": "recipes/candy.json",
+    "path": "$.result.item",
+    "kind": "item",
+    "text": "candy",
+    "target": "showcase:candy"
+  },
+  {
+    "file": "recipes/crystal_glass.json",
+    "path": "$.key.S.item",
+    "kind": "item",
+    "text": "shard",
+    "target": "showcase:shard"
+  },
+  {
+    "file": "recipes/crystal_glass.json",
+    "path": "$.result.item",
+    "kind": "item",
+    "text": "crystal_glass",
+    "target": "showcase:crystal_glass"
+  },
+  {
+    "file": "recipes/cut_crystal_glass.json",
+    "path": "$.result.item",
+    "kind": "item",
+    "text": "crystal_glass",
+    "target": "showcase:crystal_glass"
+  },
+  {
+    "file": "recipes/glow_lamp.json",
+    "path": "$.ingredients[0].item",
+    "kind": "item",
+    "text": "crystal_glass",
+    "target": "showcase:crystal_glass"
+  },
+  {
+    "file": "recipes/glow_lamp.json",
+    "path": "$.ingredients[1].item",
+    "kind": "item",
+    "text": "shard",
+    "target": "showcase:shard"
+  },
+  {
+    "file": "recipes/glow_lamp.json",
+    "path": "$.ingredients[2].item",
+    "kind": "item",
+    "text": "shard",
+    "target": "showcase:shard"
+  },
+  {
+    "file": "recipes/glow_lamp.json",
+    "path": "$.result.item",
+    "kind": "item",
+    "text": "glow_lamp",
+    "target": "showcase:glow_lamp"
+  },
+  {
+    "file": "recipes/glow_pickaxe.json",
+    "path": "$.addition.item",
+    "kind": "item",
+    "text": "shard",
+    "target": "showcase:shard"
+  },
+  {
+    "file": "recipes/glow_pickaxe.json",
+    "path": "$.result.item",
+    "kind": "item",
+    "text": "glow_pickaxe",
+    "target": "showcase:glow_pickaxe"
+  },
+  {
+    "file": "recipes/glow_shard.json",
+    "path": "$.result.item",
+    "kind": "item",
+    "text": "shard",
+    "target": "showcase:shard"
+  },
+  {
+    "file": "recipes/ruby.json",
+    "path": "$.result.item",
+    "kind": "item",
+    "text": "ruby",
+    "target": "showcase:ruby"
+  },
+  {
+    "file": "recipes/ruby_dust.json",
+    "path": "$.ingredient.item",
+    "kind": "item",
+    "text": "ruby",
+    "target": "showcase:ruby"
+  },
+  {
+    "file": "recipes/ruby_sword.json",
+    "path": "$.key.R.item",
+    "kind": "item",
+    "text": "ruby",
+    "target": "showcase:ruby"
+  },
+  {
+    "file": "loot/crystal_glass.json",
+    "path": "$.pools.main.entries[0].item.item",
+    "kind": "item",
+    "text": "crystal_glass",
+    "target": "showcase:crystal_glass"
+  },
+  {
+    "file": "loot/deepslate_rubble.json",
+    "path": "$.pools.rubble.entries[1].item.item",
+    "kind": "item",
+    "text": "shard",
+    "target": "showcase:shard"
+  },
+  {
+    "file": "loot/glow_lamp.json",
+    "path": "$.pools.main.entries[0].item.item",
+    "kind": "item",
+    "text": "glow_lamp",
+    "target": "showcase:glow_lamp"
+  },
+  {
+    "file": "loot/junk.json",
+    "path": "$.pools.main.entries[2].conditions[1].tool.item",
+    "kind": "item",
+    "text": "ruby",
+    "target": "showcase:ruby"
+  },
+  {
+    "file": "loot/ruby_crystal.json",
+    "path": "$.pools.main.entries[0].item.item",
+    "kind": "item",
+    "text": "ruby",
+    "target": "showcase:ruby"
+  },
+  {
+    "file": "loot/ruby_ore.json",
+    "path": "$.pools.main.entries[0].item.item",
+    "kind": "item",
+    "text": "ruby",
+    "target": "showcase:ruby"
+  },
+  {
+    "file": "loot/shrine_chest.json",
+    "path": "$.pools.keepsakes.entries[0].table",
+    "kind": "loot_table",
+    "text": "library:gems",
+    "target": "library:gems"
+  },
+  {
+    "file": "loot/shrine_chest.json",
+    "path": "$.pools.offerings.entries[0].item.item",
+    "kind": "item",
+    "text": "shard",
+    "target": "showcase:shard"
+  },
+  {
+    "file": "loot/shrine_chest.json",
+    "path": "$.pools.offerings.entries[1].item.item",
+    "kind": "item",
+    "text": "crystal_glass",
+    "target": "showcase:crystal_glass"
+  },
+  {
+    "file": "loot/shrine_chest.json",
+    "path": "$.pools.offerings.entries[2].item.item",
+    "kind": "item",
+    "text": "candy",
+    "target": "showcase:candy"
+  },
+  {
+    "file": "loot/treasure.json",
+    "path": "$.pools.extra.entries[0].table",
+    "kind": "loot_table",
+    "text": "junk",
+    "target": "showcase:junk"
+  },
+  {
+    "file": "loot/treasure.json",
+    "path": "$.pools.extra.entries[1].table",
+    "kind": "loot_table",
+    "text": "library:gems",
+    "target": "library:gems"
+  },
+  {
+    "file": "loot/treasure.json",
+    "path": "$.pools.gems.entries[0].item.item",
+    "kind": "item",
+    "text": "ruby",
+    "target": "showcase:ruby"
+  },
+  {
+    "file": "loot/treasure.json",
+    "path": "$.pools.gems.entries[1].item.item",
+    "kind": "item",
+    "text": "library:gem",
+    "target": "library:gem"
+  },
+  {
+    "file": "buffs/frail.json",
+    "path": "$.blockedBy[0]",
+    "kind": "buff",
+    "text": "ironskin",
+    "target": "showcase:ironskin"
+  },
+  {
+    "file": "buffs/ironskin.json",
+    "path": "$.cures[0]",
+    "kind": "buff",
+    "text": "frail",
+    "target": "showcase:frail"
+  },
+  {
+    "file": "blocks/crystal_glass/block.json",
+    "path": "$.model",
+    "kind": "block_model",
+    "text": "ui/crystal_glass",
+    "target": "showcase:ui/crystal_glass"
+  },
+  {
+    "file": "blocks/crystal_glass/block.json",
+    "path": "$.drops",
+    "kind": "loot_table",
+    "text": "crystal_glass",
+    "target": "showcase:crystal_glass"
+  },
+  {
+    "file": "blocks/crystal_glass/block.json",
+    "path": "$.sounds.place",
+    "kind": "sound",
+    "text": "ui/crystal_place",
+    "target": "showcase:ui/crystal_place"
+  },
+  {
+    "file": "blocks/crystal_glass/block.json",
+    "path": "$.sounds.break",
+    "kind": "sound",
+    "text": "ui/crystal_break",
+    "target": "showcase:ui/crystal_break"
+  },
+  {
+    "file": "blocks/floating_lamp/block.json",
+    "path": "$.centity",
+    "kind": "centity",
+    "text": "lamp",
+    "target": "showcase:lamp"
+  },
+  {
+    "file": "blocks/glow_lamp/block.json",
+    "path": "$.model",
+    "kind": "block_model",
+    "text": "ui/glow_lamp",
+    "target": "showcase:ui/glow_lamp"
+  },
+  {
+    "file": "blocks/glow_lamp/block.json",
+    "path": "$.drops",
+    "kind": "loot_table",
+    "text": "glow_lamp",
+    "target": "showcase:glow_lamp"
+  },
+  {
+    "file": "blocks/glow_lamp/block.json",
+    "path": "$.sounds.place",
+    "kind": "sound",
+    "text": "ui/crystal_place",
+    "target": "showcase:ui/crystal_place"
+  },
+  {
+    "file": "blocks/glow_lamp/block.json",
+    "path": "$.sounds.break",
+    "kind": "sound",
+    "text": "ui/crystal_break",
+    "target": "showcase:ui/crystal_break"
+  },
+  {
+    "file": "blocks/glow_lamp/block.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "blocks/glow_lamp/script.lua"
+  },
+  {
+    "file": "blocks/ruby_crystal/block.json",
+    "path": "$.model",
+    "kind": "block_model",
+    "text": "ui/ruby_crystal",
+    "target": "showcase:ui/ruby_crystal"
+  },
+  {
+    "file": "blocks/ruby_crystal/block.json",
+    "path": "$.drops",
+    "kind": "loot_table",
+    "text": "ruby_crystal",
+    "target": "showcase:ruby_crystal"
+  },
+  {
+    "file": "blocks/ruby_ore/block.json",
+    "path": "$.model",
+    "kind": "block_model",
+    "text": "ui/ruby_ore",
+    "target": "showcase:ui/ruby_ore"
+  },
+  {
+    "file": "blocks/ruby_ore/block.json",
+    "path": "$.drops",
+    "kind": "loot_table",
+    "text": "ruby_ore",
+    "target": "showcase:ruby_ore"
+  },
+  {
+    "file": "blocks/ruby_ore/block.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "blocks/ruby_ore/script.lua"
+  },
+  {
+    "file": "game_blocks/deepslate_bricks.json",
+    "path": "$.drops",
+    "kind": "loot_table",
+    "text": "deepslate_rubble",
+    "target": "showcase:deepslate_rubble"
+  },
+  {
+    "file": "biomes/glow_grove.json",
+    "path": "$.features.vegetal_decoration[0]",
+    "kind": "placed_feature",
+    "text": "minecraft:patch_tall_grass_2",
+    "target": "minecraft:patch_tall_grass_2"
+  },
+  {
+    "file": "biomes/glow_grove.json",
+    "path": "$.features.vegetal_decoration[1]",
+    "kind": "placed_feature",
+    "text": "minecraft:patch_grass_meadow",
+    "target": "minecraft:patch_grass_meadow"
+  },
+  {
+    "file": "biomes/ruby_grove.json",
+    "path": "$.features.local_modifications[0]",
+    "kind": "placed_feature",
+    "text": "ruby_boulders",
+    "target": "showcase:ruby_boulders"
+  },
+  {
+    "file": "biomes/ruby_grove.json",
+    "path": "$.features.vegetal_decoration[0]",
+    "kind": "placed_feature",
+    "text": "minecraft:patch_grass_plain",
+    "target": "minecraft:patch_grass_plain"
+  },
+  {
+    "file": "biomes/ruby_grove.json",
+    "path": "$.features.vegetal_decoration[1]",
+    "kind": "placed_feature",
+    "text": "minecraft:flower_cherry",
+    "target": "minecraft:flower_cherry"
+  },
+  {
+    "file": "biomes/ruby_grove.json",
+    "path": "$.features.vegetal_decoration[2]",
+    "kind": "placed_feature",
+    "text": "minecraft:trees_cherry",
+    "target": "minecraft:trees_cherry"
+  },
+  {
+    "file": "terrain/ruby_hills.json",
+    "path": "$.ores.ruby.customBlock",
+    "kind": "block",
+    "text": "ruby_ore",
+    "target": "showcase:ruby_ore"
+  },
+  {
+    "file": "terrain/ruby_hills.json",
+    "path": "$.decorations.oaks.structure",
+    "kind": "structure",
+    "text": "oak_tree",
+    "target": "showcase:oak_tree"
+  },
+  {
+    "file": "terrain/ruby_hills.json",
+    "path": "$.decorations.ruby_crystals.customBlock",
+    "kind": "block",
+    "text": "ruby_ore",
+    "target": "showcase:ruby_ore"
+  },
+  {
+    "file": "terrain/ruby_hills.json",
+    "path": "$.biomes.grove.biome",
+    "kind": "biome",
+    "text": "ruby_grove",
+    "target": "showcase:ruby_grove"
+  },
+  {
+    "file": "terrain/ruby_hills.json",
+    "path": "$.biomes.plains.biome",
+    "kind": "biome",
+    "text": "minecraft:plains",
+    "target": "minecraft:plains"
+  },
+  {
+    "file": "terrain/ruby_hills.json",
+    "path": "$.biomes.snowy.biome",
+    "kind": "biome",
+    "text": "minecraft:snowy_plains",
+    "target": "minecraft:snowy_plains"
+  },
+  {
+    "file": "terrain/sky_islands.json",
+    "path": "$.ores.ruby.customBlock",
+    "kind": "block",
+    "text": "ruby_ore",
+    "target": "showcase:ruby_ore"
+  },
+  {
+    "file": "terrain/sky_islands.json",
+    "path": "$.decorations.spires.structure",
+    "kind": "structure",
+    "text": "crystal_spire",
+    "target": "showcase:crystal_spire"
+  },
+  {
+    "file": "terrain/sky_islands.json",
+    "path": "$.biomes.isles.biome",
+    "kind": "biome",
+    "text": "glow_grove",
+    "target": "showcase:glow_grove"
+  },
+  {
+    "file": "advancements/diamonds.json",
+    "path": "$.parent",
+    "kind": "advancement",
+    "text": "adventurer",
+    "target": "showcase:adventurer"
+  },
+  {
+    "file": "advancements/gem_hoarder.json",
+    "path": "$.parent",
+    "kind": "advancement",
+    "text": "library:gem_collector",
+    "target": "library:gem_collector"
+  },
+  {
+    "file": "advancements/gem_hoarder.json",
+    "path": "$.display.icon.item",
+    "kind": "item",
+    "text": "library:gem",
+    "target": "library:gem"
+  },
+  {
+    "file": "advancements/tour.json",
+    "path": "$.parent",
+    "kind": "advancement",
+    "text": "adventurer",
+    "target": "showcase:adventurer"
+  },
+  {
+    "file": "advancements/tour.json",
+    "path": "$.display.icon.item",
+    "kind": "item",
+    "text": "guide",
+    "target": "showcase:guide"
+  },
+  {
+    "file": "advancements/treasure_hunter.json",
+    "path": "$.parent",
+    "kind": "advancement",
+    "text": "adventurer",
+    "target": "showcase:adventurer"
+  },
+  {
+    "file": "advancements/treasure_hunter.json",
+    "path": "$.display.icon.item",
+    "kind": "item",
+    "text": "ruby",
+    "target": "showcase:ruby"
+  },
+  {
+    "file": "advancements/treasure_hunter.json",
+    "path": "$.display.description",
+    "kind": "glyph",
+    "text": "ui/coin",
+    "target": "showcase:ui/coin",
+    "start": 9,
+    "end": 24
+  },
+  {
+    "file": "menus/altar/menu.json",
+    "path": "$.skin",
+    "kind": "skin",
+    "text": "ui/altar",
+    "target": "showcase:ui/altar"
+  },
+  {
+    "file": "menus/altar/menu.json",
+    "path": "$.slots[\"22\"].item.item",
+    "kind": "item",
+    "text": "shard",
+    "target": "showcase:shard"
+  },
+  {
+    "file": "menus/altar/menu.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "menus/altar/script.lua"
+  },
+  {
+    "file": "menus/backpack/menu.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "menus/backpack/script.lua"
+  },
+  {
+    "file": "menus/board/menu.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "menus/board/script.lua"
+  },
+  {
+    "file": "menus/shop/menu.json",
+    "path": "$.skin",
+    "kind": "skin",
+    "text": "ui/shop",
+    "target": "showcase:ui/shop"
+  },
+  {
+    "file": "menus/shop/menu.json",
+    "path": "$.slots[\"11\"].item.lore[0]",
+    "kind": "glyph",
+    "text": "ui/coin",
+    "target": "showcase:ui/coin",
+    "start": 6,
+    "end": 21
+  },
+  {
+    "file": "menus/shop/menu.json",
+    "path": "$.slots[\"12\"].item.item",
+    "kind": "item",
+    "text": "library:gem",
+    "target": "library:gem"
+  },
+  {
+    "file": "menus/shop/menu.json",
+    "path": "$.slots[\"12\"].item.lore[0]",
+    "kind": "glyph",
+    "text": "ui/coin",
+    "target": "showcase:ui/coin",
+    "start": 6,
+    "end": 21
+  },
+  {
+    "file": "menus/shop/menu.json",
+    "path": "$.slots[\"13\"].item.item",
+    "kind": "item",
+    "text": "ruby",
+    "target": "showcase:ruby"
+  },
+  {
+    "file": "menus/shop/menu.json",
+    "path": "$.slots[\"13\"].item.lore[0]",
+    "kind": "glyph",
+    "text": "ui/coin",
+    "target": "showcase:ui/coin",
+    "start": 6,
+    "end": 21
+  },
+  {
+    "file": "menus/shop/menu.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "menus/shop/script.lua"
+  },
+  {
+    "file": "dialogs/guestbook/dialog.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "dialogs/guestbook/script.lua"
+  },
+  {
+    "file": "dialogs/portal/dialog.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "dialogs/portal/script.lua"
+  },
+  {
+    "file": "dialogs/survey/dialog.json",
+    "path": "$.title",
+    "kind": "glyph",
+    "text": "ui/coin",
+    "target": "showcase:ui/coin",
+    "start": 6,
+    "end": 21
+  },
+  {
+    "file": "dialogs/survey/dialog.json",
+    "path": "$.body[1].item.item",
+    "kind": "item",
+    "text": "ruby",
+    "target": "showcase:ruby"
+  },
+  {
+    "file": "dialogs/survey/dialog.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "dialogs/survey/script.lua"
+  },
+  {
+    "file": "dialogs/welcome/dialog.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "dialogs/welcome/script.lua"
+  },
+  {
+    "file": "screens/cinema/screen.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "screens/cinema/script.lua"
+  },
+  {
+    "file": "screens/controls/screen.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "screens/controls/script.lua"
+  },
+  {
+    "file": "screens/lobby_board/screen.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "screens/lobby_board/script.lua"
+  },
+  {
+    "file": "centities/bouncer/centity.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "centities/bouncer/script.lua"
+  },
+  {
+    "file": "centities/crate/centity.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "centities/crate/script.lua"
+  },
+  {
+    "file": "centities/crystal/centity.json",
+    "path": "$.nodes.gem.display.model",
+    "kind": "item_model",
+    "text": "ui/crystal",
+    "target": "showcase:ui/crystal"
+  },
+  {
+    "file": "centities/crystal/centity.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "centities/crystal/script.lua"
+  },
+  {
+    "file": "centities/dart/centity.json",
+    "path": "$.nodes.nose.display.model",
+    "kind": "item_model",
+    "text": "ui/dart",
+    "target": "showcase:ui/dart"
+  },
+  {
+    "file": "centities/dart/centity.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "centities/dart/script.lua"
+  },
+  {
+    "file": "centities/door/centity.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "centities/door/script.lua"
+  },
+  {
+    "file": "centities/dummy/centity.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "centities/dummy/script.lua"
+  },
+  {
+    "file": "centities/lamp/centity.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "centities/lamp/script.lua"
+  },
+  {
+    "file": "centities/owl/centity.json",
+    "path": "$.nodes.body.display.model",
+    "kind": "item_model",
+    "text": "ui/owl_body",
+    "target": "showcase:ui/owl_body"
+  },
+  {
+    "file": "centities/owl/centity.json",
+    "path": "$.nodes.head.display.model",
+    "kind": "item_model",
+    "text": "ui/owl_head",
+    "target": "showcase:ui/owl_head"
+  },
+  {
+    "file": "centities/owl/centity.json",
+    "path": "$.nodes.wing_l.display.model",
+    "kind": "item_model",
+    "text": "ui/owl_wing",
+    "target": "showcase:ui/owl_wing"
+  },
+  {
+    "file": "centities/owl/centity.json",
+    "path": "$.nodes.wing_r.display.model",
+    "kind": "item_model",
+    "text": "ui/owl_wing",
+    "target": "showcase:ui/owl_wing"
+  },
+  {
+    "file": "centities/owl/centity.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "centities/owl/script.lua"
+  },
+  {
+    "file": "centities/pool/centity.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "centities/pool/script.lua"
+  },
+  {
+    "file": "centities/runner/centity.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "centities/runner/script.lua"
+  },
+  {
+    "file": "centities/shrine_keeper/centity.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "centities/shrine_keeper/script.lua"
+  },
+  {
+    "file": "centities/tortoise/centity.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "centities/tortoise/script.lua"
+  },
+  {
+    "file": "centities/tortoise/centity.json",
+    "path": "$.spawning.biomes[0]",
+    "kind": "biome",
+    "text": "ruby_grove",
+    "target": "showcase:ruby_grove"
+  },
+  {
+    "file": "centities/tower/centity.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "centities/tower/script.lua"
+  },
+  {
+    "file": "centities/wisp/centity.json",
+    "path": "$.spawning.biomes[0]",
+    "kind": "biome",
+    "text": "#minecraft:is_end"
+  },
+  {
+    "file": "netherforge.json",
+    "path": "$.worlds.hills.terrain",
+    "kind": "terrain",
+    "text": "ruby_hills",
+    "target": "showcase:ruby_hills"
+  },
+  {
+    "file": "netherforge.json",
+    "path": "$.worlds.hills.dimensionType",
+    "kind": "dimension_type",
+    "text": "deep",
+    "target": "showcase:deep"
+  },
+  {
+    "file": "netherforge.json",
+    "path": "$.worlds.sky.terrain",
+    "kind": "terrain",
+    "text": "sky_islands",
+    "target": "showcase:sky_islands"
+  },
+  {
+    "file": "netherforge.json",
+    "path": "$.worlds.sky.dimensionType",
+    "kind": "dimension_type",
+    "text": "sky",
+    "target": "showcase:sky"
+  },
+  {
+    "file": "netherforge.json",
+    "path": "$.worlds.world.terrain",
+    "kind": "terrain",
+    "text": "plaza",
+    "target": "showcase:plaza"
+  }
+]

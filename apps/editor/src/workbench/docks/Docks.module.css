@@ -1,0 +1,38 @@
+.dock {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+/* Holds the editors' inspector element while the panel shows. */
+.host {
+  flex: none;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.target {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.empty {
+  padding: 16px 12px;
+  color: var(--muted);
+}
+/* Only when the editor put nothing in the panel. */
+.host:has(> .target:not(:empty)) + .empty {
+  display: none;
+}
+.host:has(> .target:not(:empty)) {
+  flex: 1;
+}

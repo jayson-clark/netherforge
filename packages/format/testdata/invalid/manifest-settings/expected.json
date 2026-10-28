@@ -1,0 +1,58 @@
+[
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"Max-Players\" isn't a setting name (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+    "path": "$.settings[\"Max-Players\"]",
+    "code": "project.setting-name"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "Setting \"backwards\"'s min is more than its max",
+    "path": "$.settings.backwards.min",
+    "code": "project.setting-range"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "Setting \"nothing\" has no choices",
+    "path": "$.settings.nothing.choices",
+    "code": "project.setting-choices"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "Setting \"out_of_range\"'s default: 2.5 isn't a number of at most 1",
+    "path": "$.settings.out_of_range.default",
+    "code": "project.setting-default"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "Setting \"repeated\" offers \"a\" twice",
+    "path": "$.settings.repeated.choices[2]",
+    "code": "project.setting-choices"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "Setting \"repeated\"'s choice 4 is empty",
+    "path": "$.settings.repeated.choices[3]",
+    "code": "project.setting-choices"
+  },
+  {
+    "severity": "warning",
+    "file": "netherforge.json",
+    "message": "Setting \"silent\" has no description: whoever runs the project reads it beside the value",
+    "path": "$.settings.silent.description",
+    "code": "project.setting-description"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "Setting \"unchosen\"'s default: \"huge\" isn't one of small, large",
+    "path": "$.settings.unchosen.default",
+    "code": "project.setting-default"
+  }
+]

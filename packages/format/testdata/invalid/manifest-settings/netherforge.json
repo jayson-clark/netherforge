@@ -1,0 +1,51 @@
+{
+  "$schema": ".netherforge/schema/netherforge.schema.json",
+  "formatVersion": 1,
+  "name": "Settings",
+  "namespace": "case",
+  "version": "1.0.0",
+  "minecraft": "26.3",
+  "settings": {
+    "Max-Players": {
+      "type": "integer",
+      "description": "Not an id.",
+      "default": 4
+    },
+    "backwards": {
+      "type": "integer",
+      "description": "Min above max.",
+      "default": 4,
+      "min": 10,
+      "max": 2
+    },
+    "nothing": {
+      "type": "choice",
+      "description": "No choices.",
+      "default": "a",
+      "choices": []
+    },
+    "out_of_range": {
+      "type": "number",
+      "description": "A default past its max.",
+      "default": 2.5,
+      "max": 1
+    },
+    "repeated": {
+      "type": "choice",
+      "description": "The same choice twice, and an empty one.",
+      "default": "a",
+      "choices": ["a", "b", "a", " "]
+    },
+    "silent": {
+      "type": "boolean",
+      "description": " ",
+      "default": false
+    },
+    "unchosen": {
+      "type": "choice",
+      "description": "A default that isn't a choice.",
+      "default": "huge",
+      "choices": ["small", "large"]
+    }
+  }
+}

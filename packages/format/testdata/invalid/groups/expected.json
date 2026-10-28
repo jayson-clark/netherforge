@@ -1,0 +1,26 @@
+[
+  {
+    "severity": "error",
+    "file": "items/(Weapons)",
+    "message": "\"(Weapons)\" isn't a usable group name (an id in parentheses, like (weapons)), so everything in it is ignored",
+    "code": "project.group"
+  },
+  {
+    "severity": "error",
+    "file": "items/(gems)/ruby",
+    "message": "Another item is \"ruby\" too (items/ruby): an id is the project's whole, whatever group folder it's in, so this one is ignored",
+    "code": "project.duplicate-id",
+    "related": [
+      {
+        "file": "items/ruby"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "recipes/(smelting)/ruby.json",
+    "message": "There's no item \"wand\" (items/wand/item.json)",
+    "path": "$.ingredients[1].item",
+    "code": "reference.item"
+  }
+]

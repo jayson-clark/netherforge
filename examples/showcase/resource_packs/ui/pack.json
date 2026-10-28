@@ -1,0 +1,163 @@
+{
+  "$schema": "../../.netherforge/schema/resource_pack.schema.json",
+  "name": "Showcase UI",
+  "description": "Every look and sound the showcase has: items, blocks, menus, glyphs, tooltips, armour and the HUD",
+  "skins": {
+    "altar": {
+      "texture": "gui/altar.png",
+      "height": 168,
+      "ascent": 13,
+      "type": "chest",
+      "rows": 3
+    },
+    "shop": {
+      "texture": "gui/shop.png",
+      "height": 168,
+      "ascent": 13,
+      "type": "chest",
+      "rows": 3
+    }
+  },
+  "glyphs": {
+    "coin": {
+      "texture": "glyph/coin.png"
+    },
+    "spark": {
+      "texture": "glyph/spark.png"
+    },
+    "wisp": {
+      "texture": "glyph/wisp.png"
+    }
+  },
+  "items": {
+    "candy": {
+      "texture": "item/candy.png"
+    },
+    "circlet": {
+      "texture": "item/circlet.png"
+    },
+    "crown": {
+      "texture": "item/crown.png"
+    },
+    "crystal": {
+      "model": "crystal.json"
+    },
+    "crystal_glass": {
+      "block": "ui/crystal_glass"
+    },
+    "crystal_lit": {
+      "model": "crystal_lit.json"
+    },
+    "dart": {
+      "model": "dart.json"
+    },
+    "glow_lamp": {
+      "block": "ui/glow_lamp"
+    },
+    "glow_pickaxe": {
+      "texture": "item/glow_pickaxe.png",
+      "parent": "minecraft:item/handheld"
+    },
+    "lantern": {
+      "texture": "item/lantern.png"
+    },
+    "owl_body": {
+      "model": "owl_body.json"
+    },
+    "owl_head": {
+      "model": "owl_head.json"
+    },
+    "owl_head_blink": {
+      "model": "owl_head_blink.json"
+    },
+    "owl_wing": {
+      "model": "owl_wing.json"
+    },
+    "ruby": {
+      "texture": "item/ruby.png"
+    },
+    "ruby_ore": {
+      "block": "ui/ruby_ore"
+    },
+    "shard": {
+      "texture": "item/shard.png"
+    }
+  },
+  "tooltips": {
+    "fancy": {
+      "background": "tooltip/background.png",
+      "frame": "tooltip/frame.png"
+    },
+    "glow": {
+      "background": "tooltip/glow_background.png",
+      "frame": "tooltip/glow_frame.png"
+    }
+  },
+  "equipment": {
+    "circlet": {
+      "humanoid": "equipment/circlet.png"
+    },
+    "ruby": {
+      "humanoid": "armor/ruby.png",
+      "humanoidLeggings": "armor/ruby_leggings.png"
+    }
+  },
+  "blocks": {
+    "crystal_glass": {
+      "texture": "block/crystal_glass.png"
+    },
+    "glow_lamp": {
+      "top": "block/glow_lamp_top.png",
+      "bottom": "block/glow_lamp_top.png",
+      "side": "block/glow_lamp_side.png"
+    },
+    "ruby_crystal": {
+      "model": "crystal.json"
+    },
+    "ruby_ore": {
+      "texture": "block/ruby_ore.png"
+    }
+  },
+  "sounds": {
+    "chime": {
+      "volume": 0.8,
+      "pitch": 1.1,
+      "subtitle": "Chime rings"
+    },
+    "crystal_break": {
+      "subtitle": "Crystal shatters"
+    },
+    "crystal_place": {
+      "subtitle": "Crystal settles"
+    },
+    "hum": {
+      "volume": 0.7,
+      "subtitle": "Altar hums"
+    },
+    "infuse": {
+      "subtitle": "Glow infuses"
+    },
+    "minecraft:block.deepslate_bricks.break": {
+      "files": ["crystal_break.ogg"],
+      "pitch": 0.7,
+      "subtitle": "subtitles.block.generic.break"
+    }
+  },
+  "hud": {
+    "bars": {
+      "treasure": {
+        "full": "hud/treasure_full.png",
+        "empty": "hud/treasure_empty.png",
+        "segments": 3,
+        "x": -91,
+        "y": 52,
+        "gap": 1
+      }
+    },
+    "texts": {
+      "treasure_label": {
+        "x": -91
+      }
+    }
+  }
+}

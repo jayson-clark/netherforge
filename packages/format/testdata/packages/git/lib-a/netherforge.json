@@ -1,0 +1,1 @@
+{"formatVersion": 1, "name": "Lib", "namespace": "lib", "version": "1.0.0", "minecraft": "26.3", "dependencies": {"near": {"path": "../near"}, "deep": {"git": "https://example.com/deep.git"}}}

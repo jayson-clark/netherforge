@@ -1,0 +1,41 @@
+# Gradle and Kotlin
+build/
+.gradle/
+.kotlin/
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+docs/.vitepress/cache/
+
+# Rust / Tauri
+target/
+apps/editor/src-tauri/gen/
+
+# Test output
+test-results/
+playwright-report/
+coverage/
+
+# What the editor generates into a project (schemas, agent docs, thumbnails), wherever an example lives
+.netherforge/
+
+# Local
+*.log
+.DS_Store
+.env
+.env.*
+.idea/
+.claude/worktrees/
+.claude/settings.local.json
+
+# Extra outputs of `tauri icon` we don't ship
+apps/editor/src-tauri/icons/Square*Logo.png
+apps/editor/src-tauri/icons/StoreLogo.png
+apps/editor/src-tauri/icons/android/
+apps/editor/src-tauri/icons/ios/
+
+# lua-language-server, fetched by tools/luals.mjs
+apps/editor/src-tauri/lua-language-server/

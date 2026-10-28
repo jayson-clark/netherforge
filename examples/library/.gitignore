@@ -1,0 +1,8 @@
+.netherforge/
+# Connects coding agents to this computer's editor, with its token: Settings → Agents adds it.
+.mcp.json
+# The editor writes the default font's advances from an imported client: Minecraft data, kept out of the repo.
+fonts/default.json
+
+# Bundles `netherforge build` writes, for a production server: built again from the project, never committed.
+/build/

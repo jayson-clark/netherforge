@@ -1,0 +1,81 @@
+# Publishes `@netherforge/cli` (the `netherforge` command) to npm when a release is
+# published, so npm gets a version only once a person has reviewed and published its
+# draft (release.yml). A prerelease (v1.2.3-rc.1) goes out under the `next` dist-tag,
+# so `npx @netherforge/cli` stays on the newest real release. Run it by hand
+# (workflow_dispatch) to publish a release whose run failed; a version npm already has
+# is skipped.
+#
+# Authentication: npm's trusted publishing (OpenID Connect from this workflow, set up
+# on npmjs.com for the package), which also signs provenance. An NPM_TOKEN secret, when
+# set, is used instead: the package's first publish needs one, since trusted publishing
+# is configured on a package that exists. See .claude/skills/release/SKILL.md.
+
+name: npm
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release's tag (v1.2.3)
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish @netherforge/cli
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # Trusted publishing and provenance.
+      id-token: write
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          rust: 'false'
+      - name: Versions agree with the tag
+        run: node tools/release.mjs --check "$TAG"
+      - name: Build and try it
+        run: |
+          node tools/gradle.mjs :format:jsLibrary
+          pnpm --filter @netherforge/cli build
+          node tools/npm-check.mjs
+      - name: Stage the package
+        run: node tools/npm-package.mjs "$RUNNER_TEMP/npm"
+      # Trusted publishing needs npm 11.5.1 or newer; Node 22 comes with 10.
+      - name: npm for trusted publishing
+        run: npm install --global npm@11
+      - name: Publish
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          version="${TAG#v}"
+          if npm view "@netherforge/cli@$version" version > /dev/null 2>&1; then
+            echo "@netherforge/cli@$version is on npm already: nothing to do."
+            exit 0
+          fi
+          tag=latest
+          case "$version" in *-*) tag=next ;; esac
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$HOME/.npmrc"
+          fi
+          npm publish "$RUNNER_TEMP/npm" --access public --provenance --tag "$tag"
+          {
+            echo "### @netherforge/cli $version"
+            echo
+            echo "Published under \`$tag\`: \`npx @netherforge/cli@$version\`."
+          } >> "$GITHUB_STEP_SUMMARY"

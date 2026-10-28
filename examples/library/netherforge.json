@@ -1,0 +1,25 @@
+{
+  "$schema": ".netherforge/schema/netherforge.schema.json",
+  "formatVersion": 1,
+  "name": "Library example",
+  "namespace": "library",
+  "version": "0.1.0",
+  "minecraft": "26.3",
+  "requires": {
+    "http": ["api.example.com"]
+  },
+  "exports": {
+    "advancements": ["gem_collector"],
+    "items": ["gem"],
+    "loot": ["gems"],
+    "modules": ["greetings"]
+  },
+  "settings": {
+    "style": {
+      "type": "choice",
+      "description": "How the library's greetings sound.",
+      "default": "formal",
+      "choices": ["formal", "casual"]
+    }
+  }
+}

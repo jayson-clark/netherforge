@@ -1,0 +1,8 @@
+{
+  "slots": {
+    "0": { "item": { "item": "lib:coin" } },
+    "1": { "item": { "item": "lib:secret" } },
+    "2": { "item": { "item": "lib:ghost" } },
+    "3": { "item": { "item": "elsewhere:coin" } }
+  }
+}

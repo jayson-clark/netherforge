@@ -1,0 +1,12 @@
+{
+  "$schema": "../.netherforge/schema/terrain.schema.json",
+  "biomes": {
+    "steep": { "biome": "minecraft:plains", "terrain": { "density": { "noises": { "lean": { "squash": 0 } }, "scale": 20 } } }
+  },
+  "terrain": {
+    "density": {
+      "islands": { "biomes": ["nowhere"], "thickness": 1, "threshold": 1, "y": 5000 },
+      "noises": { "overhangs": { "amplitude": 9000, "squash": -1 } }
+    }
+  }
+}

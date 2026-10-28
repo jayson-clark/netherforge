@@ -1,0 +1,68 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "name": "Ruby crystal",
+  "nodes": {
+    "gem": {
+      "transform": {
+        "translation": [0, 1, 0]
+      },
+      "display": {
+        "type": "model",
+        "model": "ui/crystal"
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.4, -0.5, -0.4],
+            "max": [0.4, 0.5, 0.4]
+          }
+        ]
+      }
+    },
+    "pedestal": {
+      "transform": {
+        "translation": [-0.375, 0, -0.375],
+        "scale": [0.75, 0.5, 0.75]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:polished_blackstone"
+      }
+    }
+  },
+  "animations": {
+    "spin": {
+      "loop": "loop",
+      "autoplay": true,
+      "tracks": {
+        "gem": {
+          "rotation": [
+            {
+              "time": 0,
+              "value": [0, 0, 0]
+            },
+            {
+              "time": 1,
+              "value": [0, 90, 0]
+            },
+            {
+              "time": 2,
+              "value": [0, 180, 0]
+            },
+            {
+              "time": 3,
+              "value": [0, 270, 0]
+            },
+            {
+              "time": 4,
+              "value": [0, 360, 0]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "script": {
+    "file": "script.lua"
+  }
+}

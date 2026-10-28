@@ -1,0 +1,60 @@
+.dock {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-panel);
+}
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 6px 10px;
+  border-bottom: 1px solid var(--border);
+  min-height: 34px;
+}
+.picture {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.pictureIcon {
+  place-self: center;
+  color: var(--muted);
+}
+.name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+}
+.id {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kind {
+  font-size: var(--font-size-xs);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.body {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+.empty {
+  padding: 16px 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}

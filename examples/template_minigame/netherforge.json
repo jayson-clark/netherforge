@@ -1,0 +1,11 @@
+{
+  "$schema": ".netherforge/schema/netherforge.schema.json",
+  "formatVersion": 1,
+  "name": "Minigame template",
+  "namespace": "template_minigame",
+  "version": "0.1.0",
+  "minecraft": "26.3",
+  "exports": {
+    "modules": ["minigame"]
+  }
+}

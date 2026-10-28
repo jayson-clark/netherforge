@@ -1,0 +1,17 @@
+{
+  "formatVersion": 1,
+  "name": "App",
+  "namespace": "app",
+  "version": "1.0.0",
+  "minecraft": "26.3",
+  "dependencies": {
+    "a": { "path": "../a" },
+    "app": { "path": "../a" },
+    "b": { "path": "./../b" },
+    "bad": { "path": "C:\\packages\\bad" },
+    "d": { "path": "../d" },
+    "gone": { "path": "../nowhere" },
+    "minecraft": { "path": "../a" },
+    "other": { "path": "../other" }
+  }
+}

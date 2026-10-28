@@ -1,0 +1,25 @@
+{
+  "name": "@netherforge/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The NetherForge Lua API spec: the single source for completions, LuaLS stubs and the API reference",
+  "exports": {
+    ".": "./src/index.ts",
+    "./names": "./src/names.ts",
+    "./requirements": "./src/requirements.ts"
+  },
+  "scripts": {
+    "generate": "node --experimental-strip-types scripts/generate.ts",
+    "lint": "tsc --noEmit -p . && eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@netherforge/format": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.3"
+  }
+}

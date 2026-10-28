@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "resolveJsonModule": true,
+    "paths": { "@/*": ["./src/*"] },
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo"
+  },
+  "include": ["vite.config.ts", "playwright.config.ts", "e2e", "src/**/*.node.test.ts"]
+}

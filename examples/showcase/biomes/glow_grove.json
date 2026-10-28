@@ -1,0 +1,48 @@
+{
+  "$schema": "../.netherforge/schema/biome.schema.json",
+  "climate": {
+    "temperature": 0.5,
+    "downfall": 0.9
+  },
+  "colors": {
+    "sky": "#6a4fb3",
+    "fog": "#9a7fd6",
+    "water": "#8a6bdf",
+    "waterFog": "#2a1650",
+    "grass": "#9d7bd8",
+    "foliage": "#b48ae8"
+  },
+  "particle": {
+    "particle": "minecraft:glow",
+    "probability": 0.004
+  },
+  "sounds": {
+    "additions": {
+      "sound": "minecraft:block.amethyst_block.chime",
+      "chance": 0.01
+    },
+    "music": {
+      "sound": "minecraft:music.overworld.deep_dark",
+      "minDelay": 6000,
+      "maxDelay": 12000
+    }
+  },
+  "spawns": {
+    "ambient": [
+      {
+        "entity": "minecraft:bat",
+        "weight": 10,
+        "group": {
+          "min": 1,
+          "max": 3
+        }
+      }
+    ]
+  },
+  "features": {
+    "vegetal_decoration": [
+      "minecraft:patch_tall_grass_2",
+      "minecraft:patch_grass_meadow"
+    ]
+  }
+}

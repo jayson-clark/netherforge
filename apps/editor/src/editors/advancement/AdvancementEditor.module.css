@@ -1,0 +1,132 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(640px, 100%);
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.shown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+}
+
+.card[data-frame='goal'] .frame {
+  border-radius: 50%;
+}
+
+.card[data-frame='challenge'] .frame {
+  border-color: var(--accent);
+  transform: rotate(0deg);
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+.frame {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--border);
+  background: var(--bg-hover);
+}
+
+.words {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.title {
+  font-weight: 600;
+}
+
+.criteria {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+}
+
+.entry:hover {
+  background: var(--bg-hover);
+}
+
+.selected {
+  background: var(--bg-selected);
+  border-color: var(--accent-dim);
+}
+
+.entryError {
+  outline: 2px solid var(--error);
+}
+
+.entryMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 6px 8px;
+  text-align: left;
+  color: var(--text);
+}
+
+.entryLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fieldProblems {
+  font-size: var(--font-size-sm);
+}
+
+.error {
+  color: var(--error);
+}
+
+.warning {
+  color: var(--warning);
+}

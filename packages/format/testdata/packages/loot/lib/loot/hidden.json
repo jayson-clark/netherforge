@@ -1,0 +1,1 @@
+{ "pools": { "main": { "entries": [{ "type": "item", "item": { "item": "coin" } }, { "type": "table", "table": "loop" }] } } }

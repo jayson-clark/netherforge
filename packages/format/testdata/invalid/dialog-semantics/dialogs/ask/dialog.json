@@ -1,0 +1,19 @@
+{
+  "type": "confirmation",
+  "title": "Sure?",
+  "columns": 3,
+  "body": [
+    { "type": "message", "text": " ", "key": "intro" },
+    { "type": "item", "item": { "kind": "minecraft:diamond" }, "key": "intro" },
+    { "type": "message", "text": "x", "key": "bad key!" }
+  ],
+  "inputs": [
+    { "type": "text", "key": "name", "maxLength": 0 },
+    { "type": "boolean", "key": "name" },
+    { "type": "single_option", "key": "pick", "options": [{ "id": "a", "initial": true }, { "id": "a", "initial": true }] },
+    { "type": "number_range", "key": "amount", "start": 10, "end": 1, "step": -1, "initial": 50 },
+    { "type": "text", "key": "bad key!" }
+  ],
+  "buttons": [{ "key": "yes" }, { "key": "no" }, { "key": "maybe" }],
+  "dialogs": ["menu"]
+}

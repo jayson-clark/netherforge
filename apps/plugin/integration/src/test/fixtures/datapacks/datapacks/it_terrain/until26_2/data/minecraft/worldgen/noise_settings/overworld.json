@@ -1,0 +1,41 @@
+{
+  "sea_level": -64,
+  "disable_mob_generation": true,
+  "aquifers_enabled": false,
+  "ore_veins_enabled": false,
+  "legacy_random_source": false,
+  "default_block": {
+    "Name": "minecraft:smooth_basalt"
+  },
+  "default_fluid": {
+    "Name": "minecraft:air"
+  },
+  "noise": {
+    "min_y": -64,
+    "height": 384,
+    "size_horizontal": 1,
+    "size_vertical": 2
+  },
+  "noise_router": {
+    "barrier": 0.0,
+    "fluid_level_floodedness": 0.0,
+    "fluid_level_spread": 0.0,
+    "lava": 0.0,
+    "temperature": 0.0,
+    "vegetation": 0.0,
+    "continents": 0.0,
+    "erosion": 0.0,
+    "depth": 0.0,
+    "ridges": 0.0,
+    "preliminary_surface_level": 0.0,
+    "final_density": "showcase:it_shelf",
+    "vein_toggle": 0.0,
+    "vein_ridged": 0.0,
+    "vein_gap": 0.0
+  },
+  "spawn_target": [],
+  "surface_rule": {
+    "type": "minecraft:sequence",
+    "sequence": []
+  }
+}

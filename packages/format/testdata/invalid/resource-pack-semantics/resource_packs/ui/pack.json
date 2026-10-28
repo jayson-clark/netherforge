@@ -1,0 +1,13 @@
+{
+  "skins": { "big": { "texture": "a.png", "height": 10, "ascent": 20, "offset": 5000 }, "Bad-Key": { "texture": "missing.png" } },
+  "glyphs": { "coin": { "texture": "a.jpg", "height": 0 } },
+  "items": {
+    "gem": { "texture": "a.png", "guiTexture": "../a.png" },
+    "bare": {},
+    "both": { "texture": "a.png", "block": "ui/stone" },
+    "held": { "block": "ui/stone", "parent": "minecraft:item/handheld" }
+  },
+  "blocks": { "stone": { "texture": "a.png" } },
+  "tooltips": { "plain": {} },
+  "equipment": { "bare": {}, "ruby": { "humanoid": "a.png", "humanoidLeggings": "missing.png", "wings": "a.jpg" } }
+}

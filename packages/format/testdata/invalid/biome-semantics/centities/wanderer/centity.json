@@ -1,0 +1,10 @@
+{
+  "nodes": {
+    "root": {
+      "display": { "type": "block", "block": "minecraft:stone" }
+    }
+  },
+  "spawning": {
+    "biomes": ["meadow", "#minecraft:is_forest", "minecraft:plains", "swamp"]
+  }
+}

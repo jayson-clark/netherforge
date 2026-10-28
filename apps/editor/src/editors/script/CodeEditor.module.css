@@ -1,0 +1,41 @@
+.editor {
+  flex: 1;
+  min-height: 0;
+}
+.diff {
+  height: 60vh;
+}
+
+/* The debugger's marks (Monaco takes these class names for its decorations). */
+.breakpoint,
+.breakpointOff,
+.stoppedArrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.breakpoint::before,
+.breakpointOff::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.breakpoint::before {
+  background: var(--error);
+}
+.breakpointOff::before {
+  border: 1.5px solid var(--muted);
+}
+.stoppedArrow::after {
+  content: '';
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 8px solid var(--warning);
+}
+.stoppedLine {
+  background: var(--warning-bg);
+  box-shadow: inset 2px 0 0 var(--warning);
+}

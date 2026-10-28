@@ -1,0 +1,71 @@
+[
+  {
+    "severity": "error",
+    "file": "a:netherforge.json",
+    "message": "\"a\" depends on \"app\", the project that uses it: a package can't depend on what depends on it",
+    "path": "$.dependencies.app",
+    "code": "package.cycle"
+  },
+  {
+    "severity": "error",
+    "file": "b:netherforge.json",
+    "message": "Two packages are called \"d\": ../d2 (2.0.0, which \"b\" depends on) and ../d (1.0.0, which \"app\" depends on). A server runs one package of each namespace.",
+    "path": "$.dependencies.d",
+    "code": "package.conflict",
+    "related": [
+      {
+        "file": "netherforge.json",
+        "path": "$.dependencies.d"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "b:netherforge.json",
+    "message": "Packages depend on each other in a loop: \"a\" → \"b\" → \"a\"",
+    "path": "$.dependencies.a",
+    "code": "package.cycle"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"app\" is this project's own namespace",
+    "path": "$.dependencies.app",
+    "code": "package.name"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"C:\\packages\\bad\" isn't a folder relative to this project's, with / between its parts (like ../economy)",
+    "path": "$.dependencies.bad.path",
+    "code": "package.path"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "There's no project at ../nowhere (no netherforge.json there)",
+    "path": "$.dependencies.gone",
+    "code": "package.missing"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"minecraft\" is reserved (for the game, the server or NetherForge), so no package has it",
+    "path": "$.dependencies.minecraft",
+    "code": "package.name"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "The project at ../other is \"elsewhere\", not \"other\": a dependency is named by the namespace of what it points at",
+    "path": "$.dependencies.other",
+    "code": "package.namespace"
+  },
+  {
+    "severity": "warning",
+    "file": "netherforge.json",
+    "message": "There's no netherforge.lock pinning the packages this project depends on; the editor writes it, or run netherforge lock",
+    "path": "$.dependencies",
+    "code": "lock.missing"
+  }
+]

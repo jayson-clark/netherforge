@@ -1,0 +1,65 @@
+[
+  {
+    "severity": "error",
+    "file": "screens/big/screen.json",
+    "message": "width is 1 to 16 maps, not 17",
+    "path": "$.width",
+    "code": "screen.size"
+  },
+  {
+    "severity": "error",
+    "file": "screens/big/screen.json",
+    "message": "height is 1 to 16 maps, not 0",
+    "path": "$.height",
+    "code": "screen.size"
+  },
+  {
+    "severity": "error",
+    "file": "screens/colors/screen.json",
+    "message": "\"red\" isn't a colour written #rrggbb, like \"#202030\"",
+    "path": "$.background",
+    "code": "screen.color"
+  },
+  {
+    "severity": "error",
+    "file": "screens/far/screen.json",
+    "message": "range is 1 to 256 blocks, not 999",
+    "path": "$.range",
+    "code": "screen.range"
+  },
+  {
+    "severity": "error",
+    "file": "screens/far/screen.json",
+    "message": "clickRange is 0 to 64 blocks, not 100",
+    "path": "$.clickRange",
+    "code": "screen.range"
+  },
+  {
+    "severity": "warning",
+    "file": "screens/second/screen.json",
+    "message": "It hangs where screen \"first\" does, in world",
+    "path": "$.place",
+    "code": "screen.place"
+  },
+  {
+    "severity": "error",
+    "file": "screens/video/screen.json",
+    "message": "volume is 0 to 1, not 2",
+    "path": "$.video.volume",
+    "code": "screen.volume"
+  },
+  {
+    "severity": "error",
+    "file": "screens/video/screen.json",
+    "message": "There's no video \"nope\" (videos/nope/video.json)",
+    "path": "$.video.video",
+    "code": "reference.video"
+  },
+  {
+    "severity": "error",
+    "file": "screens/world/screen.json",
+    "message": "\"Not A World!\" isn't a world name",
+    "path": "$.place.world",
+    "code": "screen.world"
+  }
+]

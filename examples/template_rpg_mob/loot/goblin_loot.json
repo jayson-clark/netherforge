@@ -1,0 +1,31 @@
+{
+  "$schema": "../.netherforge/schema/loot_table.schema.json",
+  "pools": {
+    "drops": {
+      "entries": [
+        {
+          "type": "item",
+          "item": {
+            "item": "goblin_ear"
+          },
+          "weight": 3
+        },
+        {
+          "type": "item",
+          "item": {
+            "kind": "minecraft:gold_nugget"
+          },
+          "count": {
+            "min": 1,
+            "max": 3
+          },
+          "weight": 2
+        },
+        {
+          "type": "empty",
+          "weight": 1
+        }
+      ]
+    }
+  }
+}

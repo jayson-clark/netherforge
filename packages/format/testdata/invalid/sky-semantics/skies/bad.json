@@ -1,0 +1,5 @@
+{
+  "$schema": "../.netherforge/schema/sky.schema.json",
+  "sky": "red",
+  "fade": 9
+}

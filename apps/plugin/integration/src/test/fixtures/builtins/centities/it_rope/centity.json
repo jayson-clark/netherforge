@@ -1,0 +1,16 @@
+{
+  "nodes": {
+    "rig": { "display": { "type": "block", "block": "minecraft:slime_block" } },
+    "chain": {
+      "display": { "type": "item", "item": "minecraft:iron_chain" },
+      "rope": { "links": 8, "linkLength": 0.5 }
+    }
+  },
+  "animations": {
+    "squash": {
+      "loop": "hold",
+      "blend": "additive",
+      "tracks": { "rig": { "scale": [{ "time": 0, "value": [1.5, 0.5, 1.5] }] } }
+    }
+  }
+}

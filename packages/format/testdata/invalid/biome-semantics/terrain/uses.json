@@ -1,0 +1,9 @@
+{
+  "biomes": {
+    "a": { "biome": "meadow" },
+    "b": { "biome": "plains" },
+    "c": { "biome": "#minecraft:is_forest" },
+    "d": { "biome": "minecraft:plains" },
+    "e": { "biome": "elsewhere:grove" }
+  }
+}

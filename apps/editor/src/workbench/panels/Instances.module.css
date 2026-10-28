@@ -1,0 +1,12 @@
+.instances {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.uuid {
+  user-select: text;
+  -webkit-user-select: text;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--font-size-sm);
+}

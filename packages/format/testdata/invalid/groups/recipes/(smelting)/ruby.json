@@ -1,0 +1,5 @@
+{
+  "type": "shapeless",
+  "ingredients": [{ "item": "ruby" }, { "item": "wand" }],
+  "result": { "item": "ruby", "count": 2 }
+}

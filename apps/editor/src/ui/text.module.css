@@ -1,0 +1,23 @@
+.muted {
+  color: var(--muted);
+}
+.empty {
+  color: var(--muted);
+  padding: 12px;
+  margin: 0;
+}
+.hint {
+  color: var(--muted);
+  margin: 4px 0;
+  font-size: var(--font-size-sm);
+}
+.warning {
+  color: var(--warning);
+}
+.error {
+  color: var(--error);
+}
+.mono {
+  font-family: var(--mono);
+  font-size: var(--font-size-sm);
+}

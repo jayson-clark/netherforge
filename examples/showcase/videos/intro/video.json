@@ -1,0 +1,8 @@
+{
+  "$schema": "../../.netherforge/schema/video.schema.json",
+  "source": "intro.mp4",
+  "width": 4,
+  "height": 3,
+  "fps": 10,
+  "audio": false
+}

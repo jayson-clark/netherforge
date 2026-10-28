@@ -1,0 +1,37 @@
+[
+  {
+    "severity": "error",
+    "file": "skies/bad.json",
+    "message": "\"red\" isn't a colour written #rrggbb, like \"#5a0a0a\"",
+    "path": "$.sky",
+    "code": "sky.color"
+  },
+  {
+    "severity": "error",
+    "file": "skies/bad.json",
+    "message": "fade is 1 to 8 steps, not 9",
+    "path": "$.fade",
+    "code": "sky.fade"
+  },
+  {
+    "severity": "error",
+    "file": "skies/clouds.json",
+    "message": "\"#5a0a0a0\" isn't a colour written #rrggbb or #aarrggbb, like \"#5a0a0a\" or \"#cc5a0a0a\"",
+    "path": "$.clouds",
+    "code": "sky.color"
+  },
+  {
+    "severity": "error",
+    "file": "skies/empty.json",
+    "message": "A sky gives at least one colour: sky, fog, clouds, water, waterFog or light",
+    "path": "$",
+    "code": "sky.empty"
+  },
+  {
+    "severity": "warning",
+    "file": "skies/nothing_held.json",
+    "message": "darkens is false, but the sky gives no sky or fog colour to hold at night",
+    "path": "$.darkens",
+    "code": "sky.night"
+  }
+]

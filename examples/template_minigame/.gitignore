@@ -1,0 +1,3 @@
+.netherforge/
+# The editor writes the default font's advances from an imported client: Minecraft data, kept out of the repo.
+fonts/default.json

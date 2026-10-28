@@ -1,0 +1,10 @@
+{
+  "$schema": "../../.netherforge/schema/item.schema.json",
+  "kind": "minecraft:rabbit_foot",
+  "name": "<green>Lucky charm",
+  "lore": ["<gray>Right-click for a little luck"],
+  "rarity": "uncommon",
+  "script": {
+    "file": "script.lua"
+  }
+}

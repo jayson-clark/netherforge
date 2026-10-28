@@ -1,0 +1,37 @@
+name: Setup
+description: JDK 25, Node + pnpm, Rust, Tauri's Linux dependencies, and caches
+inputs:
+  rust:
+    description: Rust and Tauri's Linux dependencies, for jobs that build the editor's backend. Off for the rest.
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+      with:
+        distribution: temurin
+        java-version: '25'
+    - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+    - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+    - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      with:
+        node-version: 22
+        cache: pnpm
+    # No releases to pin: a master commit, with the toolchain named explicitly.
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master, 2026-10-01
+      if: inputs.rust == 'true'
+      with:
+        toolchain: stable
+        components: rustfmt, clippy
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      if: inputs.rust == 'true'
+      with:
+        workspaces: apps/editor/src-tauri
+    - name: Tauri dependencies (Linux)
+      if: inputs.rust == 'true' && runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libssl-dev libayatana-appindicator3-dev librsvg2-dev
+    - run: pnpm install --frozen-lockfile
+      shell: bash

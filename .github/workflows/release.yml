@@ -1,0 +1,352 @@
+# Cuts a release from a version tag (v1.2.3, or v1.2.3-rc.1 for a prerelease).
+#
+# 0. ci:      the whole CI workflow (ci.yml) on the tagged commit; nothing is built or
+#             drafted unless it passes.
+# 1. prepare: checks every version agrees with the tag and CHANGELOG.md has an
+#    entry, then creates a *draft* GitHub release with that entry as its notes.
+# 2. plugin:  builds the Paper plugin jars (one per supported Minecraft version), the
+#    Velocity plugin (a network's hub) and the script test runner, and attaches them.
+# 3. cli:     builds the `netherforge` command and stages its npm package, as a check:
+#    npm.yml publishes `@netherforge/cli` once the release is published. (The LuaLS
+#    stubs and JSON Schemas aren't attached: `netherforge setup` writes them.)
+# 4. editor:  bundles the editor on macOS (universal), Windows and Linux with
+#    tauri-action and attaches the installers, plus the updater's latest.json
+#    when an updater signing key is configured. Each carries the pinned
+#    lua-language-server for its OS (tools/luals.mjs, checksummed).
+# 5. checksums: SHA256SUMS.txt over every asset.
+#
+# Signing is optional: every secret that's missing degrades to an unsigned (or
+# ad-hoc signed) build instead of failing. See tools/release-signing.mjs and
+# .claude/skills/release/SKILL.md. A person reviews the draft and publishes it.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# Read-only by default; the jobs that create the release or upload to it ask for more.
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.ref_name }}
+
+jobs:
+  ci:
+    name: CI on the tagged commit
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  prepare:
+    name: Check versions, draft the release
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      release-id: ${{ steps.release.outputs.id }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          # This job runs plain node scripts. Without this, setup-node sees package.json's
+          # packageManager and tries to cache pnpm's store, failing because pnpm isn't installed.
+          package-manager-cache: false
+      - name: Versions agree with the tag
+        run: node tools/release.mjs --check "$TAG"
+      - id: version
+        run: echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+      - name: Create the draft release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq "map(select(.tag_name == \"$TAG\")) | first | .id // empty")
+          if [ -z "$id" ]; then
+            node tools/release.mjs --notes "$VERSION" > "$RUNNER_TEMP/notes.md"
+            prerelease=false
+            case "$VERSION" in *-*) prerelease=true ;; esac
+            # The id from the answer itself: listing releases straight after creating a draft
+            # can miss it, and the editor jobs then upload nowhere.
+            id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$TAG" -f name="NetherForge $VERSION" -F body=@"$RUNNER_TEMP/notes.md" \
+              -F draft=true -F prerelease="$prerelease" --jq .id)
+          else
+            # A re-run: keep adding to the release that's there, but never to a published one.
+            draft=$(gh api "repos/$GITHUB_REPOSITORY/releases/$id" --jq .draft)
+            if [ "$draft" != "true" ]; then
+              echo "::error::Release $TAG is already published; tag a new version instead."
+              exit 1
+            fi
+          fi
+          if ! [[ "$id" =~ ^[0-9]+$ ]]; then
+            echo "::error::Couldn't find the release's id (got '$id')"
+            exit 1
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+  plugin:
+    name: Plugin jars
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+      - name: Build
+        run: node tools/gradle.mjs assemble
+      - name: Collect assets
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/assets" "$RUNNER_TEMP/jars"
+          cp apps/plugin/paper-*/build/libs/NetherForge-*-paper-*.jar "$RUNNER_TEMP/assets/"
+          # The proxy plugin: a network's hub, for server owners (and the editor's dev networks).
+          cp apps/proxy/velocity/build/libs/NetherForge-*-velocity.jar "$RUNNER_TEMP/assets/"
+          # The script test runner, which `netherforge test` downloads from here when the editor hasn't put one in place.
+          cp apps/plugin/test-runner/build/libs/NetherForgeTest-*.jar "$RUNNER_TEMP/assets/"
+          # The editor bundles the plugin jars, the proxy plugin (its dev networks) and the test runner.
+          cp apps/plugin/paper-*/build/libs/NetherForge-*-paper-*.jar apps/proxy/velocity/build/libs/NetherForge-*-velocity.jar apps/plugin/test-runner/build/libs/NetherForgeTest-*.jar "$RUNNER_TEMP/jars/"
+          ls -l "$RUNNER_TEMP/assets"
+          ls -l "$RUNNER_TEMP/jars"
+          # Every jar must carry the release's version.
+          for jar in "$RUNNER_TEMP"/jars/*.jar; do
+            case "$(basename "$jar")" in
+              "NetherForgeTest-$VERSION.jar") ;;
+              "NetherForge-$VERSION-paper-"*.jar) ;;
+              "NetherForge-$VERSION-velocity.jar") ;;
+              *) echo "::error::$jar doesn't carry version $VERSION"; exit 1 ;;
+            esac
+          done
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" "$RUNNER_TEMP"/assets/* --clobber
+      # The editors bundle these very jars, so an installer carries exactly the
+      # plugin attached to the release, not a rebuild of it.
+      - name: Hand the jars to the editor builds
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugin-jars
+          path: ${{ runner.temp }}/jars/*.jar
+          if-no-files-found: error
+
+  cli:
+    name: netherforge command (npm package)
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          rust: 'false'
+      - name: Build and try it
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          node tools/gradle.mjs :format:jsLibrary
+          pnpm --filter @netherforge/cli build
+          node tools/npm-check.mjs
+      # What npm.yml publishes once the release is published: staged and packed here, so a
+      # release whose package wouldn't pack is caught before anyone publishes it.
+      - name: Stage and pack the npm package
+        run: |
+          node tools/npm-package.mjs "$RUNNER_TEMP/npm"
+          npm pack --dry-run "$RUNNER_TEMP/npm"
+
+  editor:
+    name: Editor (${{ matrix.name }})
+    needs: [prepare, plugin]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS universal
+            os: macos-latest
+            args: --target universal-apple-darwin
+            luals: darwin-universal
+          - name: Windows x64
+            os: windows-latest
+            args: ''
+            luals: win32-x64
+          # The oldest supported Ubuntu, so the AppImage and .deb run on older glibc too.
+          - name: Linux x64
+            os: ubuntu-22.04
+            args: ''
+            luals: linux-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    env:
+      HAS_WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+      HAS_APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Rust targets for a universal macOS build
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Build the format library and the netherforge command
+        shell: bash
+        run: |
+          node tools/gradle.mjs :format:jsLibrary
+          # The editor writes the command into every project it opens.
+          pnpm --filter @netherforge/cli build
+      - name: The release's plugin jars
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: plugin-jars
+          path: ${{ runner.temp }}/plugin-jars
+      - name: Put the jars where the bundle takes them from
+        shell: bash
+        run: |
+          # NetherForge[Bots]-<version>-paper-<minecraft>.jar → apps/plugin/paper-<minecraft>/build/libs/
+          for jar in "$RUNNER_TEMP"/plugin-jars/*.jar; do
+            name=$(basename "$jar")
+            # The script test runner has no Minecraft version: it goes where the bundle takes it from.
+            case "$name" in
+              NetherForgeTest-*)
+                mkdir -p apps/plugin/test-runner/build/libs
+                cp "$jar" apps/plugin/test-runner/build/libs/
+                continue ;;
+              *-velocity.jar)
+                mkdir -p apps/proxy/velocity/build/libs
+                cp "$jar" apps/proxy/velocity/build/libs/
+                continue ;;
+            esac
+            minecraft=${name##*-paper-}
+            minecraft=${minecraft%.jar}
+            mkdir -p "apps/plugin/paper-$minecraft/build/libs"
+            cp "$jar" "apps/plugin/paper-$minecraft/build/libs/"
+          done
+          ls -l apps/plugin/paper-*/build/libs apps/proxy/velocity/build/libs apps/plugin/test-runner/build/libs
+      - name: lua-language-server for the bundle
+        run: node tools/luals.mjs --target ${{ matrix.luals }}
+      # Tauri signs the app and its sidecars, not executables among its
+      # resources, and notarization refuses an unsigned one. Without a
+      # certificate it stays ad hoc signed (tools/luals.mjs), like the app.
+      - name: Sign lua-language-server with the Developer ID
+        if: runner.os == 'macOS' && env.HAS_APPLE_CERTIFICATE == 'true'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          keychain="$RUNNER_TEMP/luals.keychain-db"
+          password=$(openssl rand -hex 16)
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/luals.p12"
+          security create-keychain -p "$password" "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/luals.p12" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -k "$password" "$keychain" > /dev/null
+          rm "$RUNNER_TEMP/luals.p12"
+          identity="$APPLE_SIGNING_IDENTITY"
+          if [ -z "$identity" ]; then
+            identity=$(security find-identity -v -p codesigning "$keychain" | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')
+          fi
+          codesign --force --options runtime --timestamp --keychain "$keychain" --sign "$identity" \
+            apps/editor/src-tauri/lua-language-server/bin/lua-language-server
+          codesign --verify --verbose apps/editor/src-tauri/lua-language-server/bin/lua-language-server
+          security delete-keychain "$keychain"
+      - name: Import the Windows code-signing certificate
+        if: runner.os == 'Windows' && env.HAS_WINDOWS_CERTIFICATE == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'certificate.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $password = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          Remove-Item $pfx
+          "WINDOWS_CERTIFICATE_THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Signing
+        id: signing
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+        run: node tools/release-signing.mjs
+      - name: Bundle and attach
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          releaseId: ${{ needs.prepare.outputs.release-id }}
+          projectPath: apps/editor
+          tauriScript: pnpm tauri
+          args: --config src-tauri/tauri.bundle.conf.json --config ${{ steps.signing.outputs.config }} ${{ matrix.args }}
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
+
+  checksums:
+    name: Checksums
+    needs: [prepare, plugin, cli, editor]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: SHA256SUMS.txt over every asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir assets && cd assets
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --skip-existing
+          rm -f SHA256SUMS.txt
+          sha256sum -- * > "$RUNNER_TEMP/SHA256SUMS.txt"
+          cat "$RUNNER_TEMP/SHA256SUMS.txt"
+          gh release upload "$TAG" "$RUNNER_TEMP/SHA256SUMS.txt" --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Summary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "### Draft release ${TAG}"
+            echo
+            echo "Review the assets, try the installers, then publish:"
+            echo "${{ github.server_url }}/${{ github.repository }}/releases"
+            echo
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[] | "- \(.name) (\(.size) bytes)"'
+          } >> "$GITHUB_STEP_SUMMARY"

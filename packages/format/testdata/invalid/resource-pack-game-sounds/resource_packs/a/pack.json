@@ -1,0 +1,4 @@
+{
+  "description": "Replaces one of the game's sound events, as pack b does too",
+  "sounds": { "minecraft:block.stone.break": { "files": ["break.ogg"] } }
+}

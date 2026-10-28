@@ -1,0 +1,62 @@
+[package]
+name = "netherforge"
+version = "0.1.0"
+description = "NetherForge editor"
+license = "Apache-2.0"
+edition = "2024"
+rust-version = "1.90"
+
+[lib]
+name = "netherforge_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5", features = [] }
+
+[dependencies]
+# `specta`: commands and payloads are typed for the UI by tauri-specta (`commands::bindings`).
+tauri = { version = "2.12", features = ["specta"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1.53", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
+notify = "8.2"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "system-proxy", "stream"] }
+futures-util = "0.3"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+sha2 = "0.10"
+hex = "0.4"
+zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+tar = "0.4"
+flate2 = "1.1"
+dirs = "7"
+dunce = "1"
+walkdir = "2.5"
+percent-encoding = "2.3"
+png = "0.18"
+getrandom = "0.4"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+strip-ansi-escapes = "0.2"
+# Pinned exactly, as tauri-specta asks while specta 2 is a release candidate.
+tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
+specta = { version = "=2.0.0-rc.25", features = ["derive"] }
+specta-typescript = "0.0.12"
+serde_norway = "0.9"
+
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+
+[dev-dependencies]
+tauri = { version = "2.12", features = ["specta", "test"] }
+tempfile = "3.27"
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true

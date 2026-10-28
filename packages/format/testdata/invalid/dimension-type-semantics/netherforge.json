@@ -1,0 +1,17 @@
+{
+  "$schema": ".netherforge/schema/netherforge.schema.json",
+  "formatVersion": 1,
+  "name": "Dimensions",
+  "namespace": "case",
+  "version": "1.0.0",
+  "minecraft": "26.3",
+  "worlds": {
+    "below": {
+      "terrain": "hills",
+      "dimensionType": "shallow"
+    },
+    "lost": {
+      "dimensionType": "no_such_dimension"
+    }
+  }
+}

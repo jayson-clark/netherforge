@@ -1,0 +1,32 @@
+[
+  {
+    "severity": "error",
+    "file": "centities/Bad-Name",
+    "message": "\"Bad-Name\" isn't a usable id (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+    "code": "project.id"
+  },
+  {
+    "severity": "warning",
+    "file": "centities/nofile",
+    "message": "Folder has no centity.json, so it's ignored",
+    "code": "project.missing-file"
+  },
+  {
+    "severity": "warning",
+    "file": "modules/empty",
+    "message": "Module \"empty\" has no .lua files",
+    "code": "module.empty"
+  },
+  {
+    "severity": "warning",
+    "file": "modules/tools",
+    "message": "Module \"tools\" has no init.lua and no script requires it, so it never runs",
+    "code": "module.no-init"
+  },
+  {
+    "severity": "error",
+    "file": "modules/tools/my-util.lua",
+    "message": "Module files must be named with letters, digits and _ so require() can reach them",
+    "code": "module.file-name"
+  }
+]

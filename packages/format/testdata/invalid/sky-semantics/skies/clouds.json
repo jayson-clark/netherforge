@@ -1,0 +1,4 @@
+{
+  "$schema": "../.netherforge/schema/sky.schema.json",
+  "clouds": "#5a0a0a0"
+}

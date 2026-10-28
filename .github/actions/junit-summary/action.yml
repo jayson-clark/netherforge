@@ -1,0 +1,44 @@
+name: JUnit summary
+description: Adds the test counts of a folder of JUnit XML reports, and the failed tests, to the job's summary
+inputs:
+  title:
+    description: The summary's heading
+    required: true
+  path:
+    description: A folder of JUnit XML reports, searched recursively
+    required: true
+runs:
+  using: composite
+  steps:
+    # Python is on every runner, so this reads the same on Linux, macOS and Windows.
+    - shell: python
+      env:
+        TITLE: ${{ inputs.title }}
+        REPORTS: ${{ inputs.path }}
+      run: |
+        import glob, os, xml.etree.ElementTree as ET
+
+        counts = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0}
+        failed = []
+        for path in sorted(glob.glob(os.path.join(os.environ["REPORTS"], "**", "*.xml"), recursive=True)):
+            root = ET.parse(path).getroot()
+            for suite in [root] if root.tag == "testsuite" else root.iter("testsuite"):
+                for key in counts:
+                    counts[key] += int(suite.get(key, 0))
+                for case in suite.iter("testcase"):
+                    if case.find("failure") is not None or case.find("error") is not None:
+                        failed.append(f"{case.get('classname', '').split('.')[-1]} > {case.get('name')}")
+        passed = counts["tests"] - counts["failures"] - counts["errors"] - counts["skipped"]
+        lines = [f"### {os.environ['TITLE']}", ""]
+        if counts["tests"] == 0:
+            lines.append("No tests ran.")
+        else:
+            lines += [
+                "| Tests | Passed | Failed | Errors | Skipped |",
+                "| ---: | ---: | ---: | ---: | ---: |",
+                f"| {counts['tests']} | {passed} | {counts['failures']} | {counts['errors']} | {counts['skipped']} |",
+            ]
+        if failed:
+            lines += ["", "Failed:", ""] + [f"- {name}" for name in failed[:50]]
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+            summary.write("\n".join(lines) + "\n\n")

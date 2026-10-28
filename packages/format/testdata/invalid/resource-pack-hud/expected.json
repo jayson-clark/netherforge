@@ -1,0 +1,30 @@
+[
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "y is from 0 (the bottom of the screen) to 65: the action bar can't draw higher",
+    "path": "$.hud.bars.mana.y",
+    "code": "resource_pack.hud"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "A bar has 1 to 64 segments",
+    "path": "$.hud.bars.mana.segments",
+    "code": "resource_pack.hud"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "\"mana\" names another of this pack's HUD elements too: scripts name them by key",
+    "path": "$.hud.texts.mana",
+    "code": "resource_pack.hud"
+  },
+  {
+    "severity": "warning",
+    "file": "resource_packs/ui/pack.json",
+    "message": "Hiding the game's HUD takes the names of its sprites, which the editor writes into client/vanilla.json from your Minecraft: open the project in the editor with Minecraft 26.3 imported (import it again if it was imported before the editor listed sprites). Until then nothing is hidden",
+    "path": "$.hud.hide",
+    "code": "resource_pack.hud-hide"
+  }
+]

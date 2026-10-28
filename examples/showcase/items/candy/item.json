@@ -1,0 +1,18 @@
+{
+  "$schema": "../../.netherforge/schema/item.schema.json",
+  "kind": "minecraft:glowstone_dust",
+  "name": "<aqua>Starlight candy",
+  "lore": ["<gray>Eat it to see in the dark"],
+  "itemModel": "ui/candy",
+  "tooltipStyle": "ui/glow",
+  "rarity": "rare",
+  "food": {
+    "nutrition": 1,
+    "saturation": 0.5,
+    "canAlwaysEat": true,
+    "eatSeconds": 1
+  },
+  "script": {
+    "file": "script.lua"
+  }
+}

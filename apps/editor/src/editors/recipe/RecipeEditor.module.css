@@ -1,0 +1,148 @@
+/* A station drawn in the game's window style. */
+.typeField {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.station {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 18px 24px;
+  background: #c6c6c6;
+  border: 3px solid;
+  border-color: #fff #555 #555 #fff;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px #000;
+  color: #373737;
+}
+.row {
+  display: flex;
+  gap: 12px;
+}
+.column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.slotBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.slotLabel {
+  font-size: var(--font-size-sm);
+  color: #404040;
+}
+.arrow,
+.fire {
+  display: inline-flex;
+  color: #8b8b8b;
+}
+.fire {
+  color: #b5651d;
+}
+.caption {
+  margin: 0;
+}
+.grid {
+  display: grid;
+  gap: 0;
+}
+.gridError {
+  outline: 2px solid var(--error);
+  outline-offset: 2px;
+}
+.slot {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: #8b8b8b;
+  box-shadow:
+    inset 3px 3px 0 #373737,
+    inset -3px -3px 0 #fff;
+}
+/* A class the pointer sets rather than :hover, which WebKit keeps on a drag's source after the drop. */
+.hovered:not(:disabled) {
+  background: #a5a5a5;
+}
+.slot:disabled {
+  opacity: 0.55;
+}
+.over {
+  outline: 2px dashed var(--info);
+  outline-offset: -2px;
+}
+.slotError {
+  outline: 2px solid var(--error);
+  outline-offset: -2px;
+}
+.tag {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: #fff;
+  background: #3f4a64;
+  border-radius: 2px;
+  padding: 1px 2px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.problems {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 560px;
+}
+.problems li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.error {
+  color: var(--error);
+}
+.warning {
+  color: var(--warning);
+}
+.fieldProblems {
+  padding: 0 8px 4px 108px;
+  font-size: var(--font-size-sm);
+}
+.materials {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.material {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.materialCount {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.materialCount input {
+  width: 4em;
+}

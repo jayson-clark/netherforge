@@ -1,0 +1,204 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "name": "Clockwork owl",
+  "nodes": {
+    "bar": {
+      "parent": "root",
+      "transform": {
+        "translation": [-0.4, 1, -0.09375],
+        "scale": [0.8, 0.125, 0.1875]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:stripped_dark_oak_log[axis=x]"
+      }
+    },
+    "base": {
+      "parent": "root",
+      "transform": {
+        "translation": [-0.375, 0, -0.375],
+        "scale": [0.75, 0.125, 0.75]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:dark_oak_planks"
+      }
+    },
+    "body": {
+      "parent": "owl",
+      "transform": {
+        "translation": [0, 0.5, 0]
+      },
+      "display": {
+        "type": "model",
+        "model": "ui/owl_body"
+      }
+    },
+    "head": {
+      "parent": "body",
+      "transform": {
+        "translation": [0, 0.3125, 0]
+      },
+      "display": {
+        "type": "model",
+        "model": "ui/owl_head"
+      }
+    },
+    "owl": {
+      "parent": "root",
+      "transform": {
+        "translation": [0, 1.125, 0]
+      }
+    },
+    "post": {
+      "parent": "root",
+      "transform": {
+        "translation": [-0.09375, 0.125, -0.09375],
+        "scale": [0.1875, 0.875, 0.1875]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:stripped_dark_oak_log"
+      }
+    },
+    "root": {
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.45, 0, -0.45],
+            "max": [0.45, 2.8, 0.45]
+          }
+        ]
+      }
+    },
+    "wing_l": {
+      "parent": "body",
+      "transform": {
+        "translation": [-0.38, 0.1875, 0]
+      },
+      "display": {
+        "type": "model",
+        "model": "ui/owl_wing"
+      }
+    },
+    "wing_r": {
+      "parent": "body",
+      "transform": {
+        "translation": [0.38, 0.1875, 0]
+      },
+      "display": {
+        "type": "model",
+        "model": "ui/owl_wing"
+      }
+    }
+  },
+  "animations": {
+    "breathe": {
+      "loop": "loop",
+      "autoplay": true,
+      "blend": "additive",
+      "tracks": {
+        "body": {
+          "scale": [
+            {
+              "time": 0,
+              "value": [1, 1, 1],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 1.5,
+              "value": [1.03, 1.04, 1.03],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 3,
+              "value": [1, 1, 1]
+            }
+          ]
+        }
+      }
+    },
+    "flap": {
+      "loop": "once",
+      "tracks": {
+        "owl": {
+          "translation": [
+            {
+              "time": 0,
+              "value": [0, 0, 0],
+              "easing": "ease_out"
+            },
+            {
+              "time": 0.3,
+              "value": [0, 0.35, 0],
+              "easing": "ease_in"
+            },
+            {
+              "time": 0.6,
+              "value": [0, 0, 0]
+            }
+          ]
+        },
+        "wing_l": {
+          "rotation": [
+            {
+              "time": 0,
+              "value": [0, 0, 0],
+              "easing": "ease_out"
+            },
+            {
+              "time": 0.15,
+              "value": [0, 0, -80],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 0.3,
+              "value": [0, 0, -15],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 0.45,
+              "value": [0, 0, -80],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 0.75,
+              "value": [0, 0, 0]
+            }
+          ]
+        },
+        "wing_r": {
+          "rotation": [
+            {
+              "time": 0,
+              "value": [0, 0, 0],
+              "easing": "ease_out"
+            },
+            {
+              "time": 0.15,
+              "value": [0, 0, 80],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 0.3,
+              "value": [0, 0, 15],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 0.45,
+              "value": [0, 0, 80],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 0.75,
+              "value": [0, 0, 0]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "script": {
+    "file": "script.lua"
+  }
+}

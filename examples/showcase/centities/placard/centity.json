@@ -1,0 +1,16 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "name": "Placard",
+  "nodes": {
+    "text": {
+      "display": {
+        "type": "text",
+        "text": "<gray>…",
+        "billboard": "fixed",
+        "alignment": "left",
+        "background": "#c0101018",
+        "lineWidth": 240
+      }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "kind": "minecraft:stick",
+  "hold": { "animation": "spear" },
+  "useEffects": { "canSprint": false }
+}

@@ -1,0 +1,9 @@
+[
+  {
+    "file": "netherforge.json",
+    "path": "$.worlds.world.terrain",
+    "kind": "terrain",
+    "text": "meadow",
+    "target": "network_demo:meadow"
+  }
+]

@@ -1,0 +1,9 @@
+[
+  {
+    "severity": "warning",
+    "file": "netherforge.lock",
+    "message": "netherforge.lock is out of date for \"ghost\", \"lib\"; the editor rewrites it, or run netherforge lock",
+    "path": "$.packages",
+    "code": "lock.stale"
+  }
+]

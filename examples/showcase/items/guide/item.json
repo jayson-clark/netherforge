@@ -1,0 +1,14 @@
+{
+  "$schema": "../../.netherforge/schema/item.schema.json",
+  "kind": "minecraft:compass",
+  "name": "<gold>Tour guide",
+  "lore": [
+    "<gray>Right-click: every booth of the expo,",
+    "<gray>and the way back from any world"
+  ],
+  "glint": true,
+  "maxStackSize": 1,
+  "script": {
+    "file": "script.lua"
+  }
+}

@@ -1,0 +1,31 @@
+name: NetherForge
+version: '${version}'
+main: dev.netherforge.plugin.paper.NetherForgePlugin
+# Enabled before the worlds load, so the server can ask it for its main world's generator (bukkit.yml's
+# worlds.<name>.generator: NetherForge); the runtime itself starts once the server has loaded.
+load: STARTUP
+# Builds the start-up datapack (the project's advancements) before the worlds load.
+bootstrapper: dev.netherforge.plugin.paper.NetherForgeBootstrap
+# Puts SQLite's driver on the classpath when the server doesn't bundle it, and remote databases' pool and PostgreSQL's driver.
+loader: dev.netherforge.plugin.paper.NetherForgeLoader
+api-version: '${minecraft}'
+# Scripts run on the main thread in one Lua state; the plugin refuses to enable on Folia.
+folia-supported: false
+# Vault and PlaceholderAPI are optional (nf.economy, nf.placeholders): when they're installed they're enabled before the
+# runtime starts (at the server's load), so a script's body can register placeholders; an economy plugin may still register
+# with Vault later, which is looked up at each call.
+dependencies:
+  server:
+    Vault:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    PlaceholderAPI:
+      load: BEFORE
+      required: false
+      join-classpath: true
+description: Runs a NetherForge project (centities, modules, menus, dialogs and resource packs) and hot-reloads it from the NetherForge editor.
+permissions:
+  netherforge.admin:
+    description: Use /netherforge (alias /nf) to spawn, list, find, kill and reload centities.
+    default: op

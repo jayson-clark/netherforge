@@ -1,0 +1,14 @@
+{
+  "$schema": "../.netherforge/schema/advancement.schema.json",
+  "display": {
+    "icon": {
+      "item": "gem"
+    },
+    "title": "<light_purple>Gem Collector",
+    "description": "Hold one of the library's gems",
+    "background": "minecraft:block/amethyst_block"
+  },
+  "criteria": {
+    "held": {}
+  }
+}

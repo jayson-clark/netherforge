@@ -1,0 +1,14 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "nodes": {
+    "root": {
+      "display": { "type": "block", "block": "minecraft:stone" }
+    }
+  },
+  "spawning": {
+    "time": { "min": 22000, "max": 24000 },
+    "moonPhase": ["new_moon", "full_moon"],
+    "weather": ["rain"],
+    "when": "Blood Moon"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": ".netherforge/schema/lock.schema.json",
+  "packages": {
+    "library": {
+      "version": "0.1.0",
+      "source": {
+        "type": "path",
+        "path": "../library"
+      },
+      "hash": "sha256:3112622c43db1f4ec95a9cbf64564696502fda4ca0c28112412d866a236b13cc"
+    }
+  }
+}

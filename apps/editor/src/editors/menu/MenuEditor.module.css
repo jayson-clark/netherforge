@@ -1,0 +1,37 @@
+.slot {
+  position: absolute;
+  z-index: 4;
+  padding: 0;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/*
+ * Hover is a class the pointer events set, not :hover: WebKit keeps :hover on
+ * a drag's source after the drop until the pointer comes back.
+ */
+.hovered {
+  background: rgba(255, 255, 255, 0.35);
+}
+.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.over {
+  outline: 2px dashed var(--info);
+  outline-offset: -2px;
+}
+.outside {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+.outside li {
+  display: flex;
+  align-items: center;
+}

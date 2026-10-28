@@ -1,0 +1,58 @@
+[
+  {
+    "severity": "error",
+    "file": "items/knife/item.json",
+    "message": "\"tridnet\" isn't a use animation: did you mean \"trident\"?",
+    "path": "$.hold.animation",
+    "code": "item.hold-animation"
+  },
+  {
+    "severity": "error",
+    "file": "items/pick/item.json",
+    "message": "\"minecraft:Bad\" isn't a block: write a project block (ruby_ore), the game's (minecraft:stone), a #tag of blocks, or * for any block",
+    "path": "$.canBreak[7]",
+    "code": "item.block"
+  },
+  {
+    "severity": "error",
+    "file": "items/pick/item.json",
+    "message": "\"#Bad Tag\" isn't a block: write a project block (ruby_ore), the game's (minecraft:stone), a #tag of blocks, or * for any block",
+    "path": "$.canBreak[8]",
+    "code": "item.block"
+  },
+  {
+    "severity": "error",
+    "file": "items/pick/item.json",
+    "message": "\"tool\" isn't a tooltip line hiddenTooltipComponents can hide: the item docs list the ones there are",
+    "path": "$.hiddenTooltipComponents[3]",
+    "code": "item.tooltip-component"
+  },
+  {
+    "severity": "error",
+    "file": "items/pick/item.json",
+    "message": "There's no block \"stone\" (blocks/stone/block.json); the game's are written \"minecraft:stone\"",
+    "path": "$.canBreak[5]",
+    "code": "reference.block"
+  },
+  {
+    "severity": "error",
+    "file": "items/pick/item.json",
+    "message": "There's no block tag \"#case:hard\" (data/case/tags/block/hard.json in one of datapacks/)",
+    "path": "$.canBreak[6]",
+    "code": "reference.block"
+  },
+  {
+    "severity": "error",
+    "file": "items/pick/item.json",
+    "message": "\"other\" is neither this project's namespace (\"case\") nor a package's it depends on",
+    "path": "$.canPlaceOn[1]",
+    "code": "reference.namespace"
+  },
+  {
+    "severity": "error",
+    "file": "items/pick/item.json",
+    "message": "\"other\" is neither this project's namespace (\"case\") nor a package's it depends on",
+    "path": "$.canPlaceOn[2]",
+    "code": "reference.namespace"
+  }
+]

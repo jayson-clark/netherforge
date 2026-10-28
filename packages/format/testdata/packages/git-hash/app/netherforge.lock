@@ -1,0 +1,13 @@
+{
+  "packages": {
+    "lib": {
+      "version": "1.0.0",
+      "source": {
+        "type": "git",
+        "url": "https://example.com/lib.git",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  }
+}

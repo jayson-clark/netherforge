@@ -1,0 +1,19 @@
+{
+  "$schema": "../.netherforge/schema/dimension_type.schema.json",
+  "minY": -70,
+  "height": 10,
+  "logicalHeight": 500,
+  "ambientLight": 2,
+  "colors": {
+    "sky": "blue",
+    "clouds": "#12345"
+  },
+  "cloudHeight": 5000,
+  "monsterSpawnLight": {
+    "min": 9,
+    "max": 3
+  },
+  "monsterSpawnBlockLight": 20,
+  "infiniburn": "stone",
+  "coordinateScale": 0
+}

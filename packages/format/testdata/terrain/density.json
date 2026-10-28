@@ -1,0 +1,37 @@
+{
+  "$schema": "../.netherforge/schema/terrain.schema.json",
+  "biomes": {
+    "cliffs": {
+      "biome": "minecraft:windswept_hills",
+      "temperature": { "max": 0 },
+      "terrain": {
+        "base": 84,
+        "density": {
+          "noises": { "arches": { "amplitude": 14, "noise": { "frequency": 0.025, "octaves": 2 }, "squash": 0.6 } },
+          "scale": 1.5
+        }
+      }
+    },
+    "sky": { "biome": "minecraft:plains", "temperature": { "min": 0 }, "terrain": { "base": 56, "scale": 0.5 } }
+  },
+  "caves": { "caverns": { "threshold": 0.45 } },
+  "climate": { "jitter": { "amplitude": 12 }, "temperature": { "frequency": 0.004 } },
+  "decorations": {
+    "flowers": { "block": "minecraft:poppy", "count": 24, "on": ["minecraft:grass_block"] },
+    "pickles": { "block": "minecraft:sea_pickle", "count": 4, "placement": "underwater" }
+  },
+  "floor": { "block": "minecraft:bedrock", "thickness": 3 },
+  "layers": [{ "block": "minecraft:grass_block" }, { "block": "minecraft:dirt", "thickness": 3 }],
+  "ores": { "coal": { "block": "minecraft:coal_ore", "maxY": 120, "minY": 0, "size": 10, "veins": 12 } },
+  "terrain": {
+    "base": 70,
+    "blend": 24,
+    "density": {
+      "islands": { "biomes": ["sky"], "threshold": 0.35, "thickness": 28, "y": 150 },
+      "noises": { "overhangs": { "amplitude": 10, "noise": { "frequency": 0.03, "octaves": 2 }, "squash": 2 } }
+    },
+    "noises": { "hills": { "amplitude": 16, "noise": { "frequency": 0.006, "octaves": 3 } } },
+    "seaLevel": 62
+  },
+  "underwater": [{ "block": "minecraft:sand", "thickness": 2 }]
+}

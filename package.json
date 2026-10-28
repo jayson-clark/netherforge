@@ -1,0 +1,52 @@
+{
+  "name": "netherforge",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @netherforge/editor dev",
+    "build": "node tools/check.mjs build",
+    "test": "node tools/check.mjs test",
+    "test:integration": "node tools/gradle.mjs integrationTest",
+    "test:e2e": "pnpm --filter @netherforge/editor test:e2e",
+    "test:screenshots": "node tools/screenshots.mjs",
+    "lint": "node tools/check.mjs lint",
+    "format": "node tools/check.mjs format",
+    "generate": "node tools/check.mjs generate",
+    "docs:dev": "pnpm --filter @netherforge/docs dev",
+    "docs:build": "pnpm --filter @netherforge/docs build",
+    "docs:preview": "pnpm --filter @netherforge/docs preview",
+    "release": "node tools/release.mjs",
+    "deps:lock": "node tools/gradle-lock.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@johnnymorganz/stylua-bin": "^2.5.2",
+    "eslint": "^10.11.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.6",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.0"
+  },
+  "prettier": {
+    "semi": false,
+    "singleQuote": true,
+    "tabWidth": 2,
+    "printWidth": 100
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "@johnnymorganz/stylua-bin"
+    ],
+    "patchedDependencies": {
+      "nbtify@2.2.0": "patches/nbtify@2.2.0.patch",
+      "@react-three/fiber@9.8.1": "patches/@react-three__fiber@9.8.1.patch"
+    }
+  }
+}

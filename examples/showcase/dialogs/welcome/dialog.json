@@ -1,0 +1,31 @@
+{
+  "$schema": "../../.netherforge/schema/dialog.schema.json",
+  "name": "Welcome",
+  "type": "notice",
+  "title": "<gold>Welcome!",
+  "body": [
+    {
+      "type": "message",
+      "text": "Tell us what to call you.",
+      "key": "prompt"
+    }
+  ],
+  "inputs": [
+    {
+      "type": "text",
+      "key": "nickname",
+      "label": "Nickname",
+      "maxLength": 16
+    }
+  ],
+  "buttons": [
+    {
+      "key": "done",
+      "label": "Done"
+    }
+  ],
+  "script": {
+    "file": "script.lua"
+  },
+  "pauseMenu": true
+}

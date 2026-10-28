@@ -1,0 +1,23 @@
+{
+  "$schema": "../.netherforge/schema/terrain.schema.json",
+  "terrain": {
+    "base": 64,
+    "seaLevel": -64
+  },
+  "layers": [
+    {
+      "block": "minecraft:grass_block"
+    },
+    {
+      "block": "minecraft:dirt",
+      "thickness": 3
+    }
+  ],
+  "stone": {
+    "block": "minecraft:stone"
+  },
+  "floor": {
+    "block": "minecraft:bedrock",
+    "thickness": 1
+  }
+}

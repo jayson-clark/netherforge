@@ -1,0 +1,23 @@
+{
+  "$schema": "../.netherforge/schema/terrain.schema.json",
+  "biomes": {
+    "cold": { "biome": "minecraft:snowy_plains", "temperature": { "max": 0 } },
+    "warm": { "biome": "minecraft:plains", "temperature": { "min": 0 } }
+  },
+  "caves": { "caverns": { "maxY": 40 } },
+  "climate": { "temperature": { "frequency": 0.004 } },
+  "layers": [{ "block": "minecraft:grass_block" }, { "block": "minecraft:dirt", "thickness": 3 }],
+  "script": {
+    "blocks": ["minecraft:cobblestone", "minecraft:mossy_cobblestone", "minecraft:glowstone"],
+    "budget": 200000,
+    "noises": {
+      "ridges": { "fractal": "ridged", "frequency": 0.01, "octaves": 3 },
+      "rocks": { "frequency": 0.08, "type": "value" }
+    }
+  },
+  "terrain": {
+    "base": 66,
+    "noises": { "hills": { "amplitude": 10, "noise": { "frequency": 0.005, "octaves": 2 } } },
+    "seaLevel": 62
+  }
+}

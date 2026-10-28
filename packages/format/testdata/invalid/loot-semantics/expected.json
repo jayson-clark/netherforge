@@ -1,0 +1,142 @@
+[
+  {
+    "severity": "error",
+    "file": "loot/bad.json",
+    "message": "\"Bad Name\" isn't a usable pool name (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+    "path": "$.pools[\"Bad Name\"]",
+    "code": "loot.pool-name"
+  },
+  {
+    "severity": "error",
+    "file": "loot/bad.json",
+    "message": "rolls max can't be below min",
+    "path": "$.pools[\"Bad Name\"].rolls",
+    "code": "loot.range"
+  },
+  {
+    "severity": "error",
+    "file": "loot/bad.json",
+    "message": "A chance is from 0 to 1",
+    "path": "$.pools[\"Bad Name\"].conditions[0].chance",
+    "code": "loot.chance"
+  },
+  {
+    "severity": "error",
+    "file": "loot/bad.json",
+    "message": "weight must be at least 1",
+    "path": "$.pools[\"Bad Name\"].entries[0].weight",
+    "code": "loot.weight"
+  },
+  {
+    "severity": "error",
+    "file": "loot/bad.json",
+    "message": "Say how many with the entry's count, which can be a range",
+    "path": "$.pools[\"Bad Name\"].entries[0].item.count",
+    "code": "loot.item-count"
+  },
+  {
+    "severity": "error",
+    "file": "loot/bad.json",
+    "message": "count can be at most 1000",
+    "path": "$.pools[\"Bad Name\"].entries[0].count",
+    "code": "loot.range"
+  },
+  {
+    "severity": "error",
+    "file": "loot/bad.json",
+    "message": "\"chests/no_namespace\" isn't a game loot table's id, like \"minecraft:chests/simple_dungeon\"",
+    "path": "$.pools[\"Bad Name\"].entries[3].table",
+    "code": "loot.vanilla"
+  },
+  {
+    "severity": "error",
+    "file": "loot/bad.json",
+    "message": "An ingredient can't be air",
+    "path": "$.pools[\"Bad Name\"].entries[4].conditions[0].tool",
+    "code": "loot.tool"
+  },
+  {
+    "severity": "error",
+    "file": "loot/bad.json",
+    "message": "\"Not An Id\" isn't an enchantment id",
+    "path": "$.pools[\"Bad Name\"].entries[4].conditions[1].enchantment",
+    "code": "loot.enchantment"
+  },
+  {
+    "severity": "error",
+    "file": "loot/bad.json",
+    "message": "level must be at least 1",
+    "path": "$.pools[\"Bad Name\"].entries[4].conditions[1].level",
+    "code": "loot.enchantment"
+  },
+  {
+    "severity": "error",
+    "file": "loot/bad.json",
+    "message": "rolls can't be negative",
+    "path": "$.pools.empty.rolls",
+    "code": "loot.range"
+  },
+  {
+    "severity": "warning",
+    "file": "loot/bad.json",
+    "message": "Pool \"empty\" has no entries, so it gives nothing",
+    "path": "$.pools.empty",
+    "code": "loot.no-entries"
+  },
+  {
+    "severity": "error",
+    "file": "loot/bad.json",
+    "message": "There's no item \"nope\" (items/nope/item.json)",
+    "path": "$.pools[\"Bad Name\"].entries[1].item.item",
+    "code": "reference.item"
+  },
+  {
+    "severity": "error",
+    "file": "loot/bad.json",
+    "message": "There's no loot table \"nothing\" (loot/nothing.json)",
+    "path": "$.pools[\"Bad Name\"].entries[2].table",
+    "code": "reference.loot-table"
+  },
+  {
+    "severity": "error",
+    "file": "loot/fraction.json",
+    "message": "A range is a whole number (2) or { \"min\": 1, \"max\": 3 }",
+    "code": "parse"
+  },
+  {
+    "severity": "error",
+    "file": "loot/loop_a.json",
+    "message": "\"loop_b\" includes this table again (through its entries), so a roll would never end",
+    "path": "$.pools.main.entries[0].table",
+    "code": "loot.cycle",
+    "related": [
+      {
+        "file": "loot/loop_b.json"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "loot/loop_b.json",
+    "message": "\"case:loop_a\" includes this table again (through its entries), so a roll would never end",
+    "path": "$.pools.main.entries[0].table",
+    "code": "loot.cycle",
+    "related": [
+      {
+        "file": "loot/loop_a.json"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "loot/self.json",
+    "message": "\"self\" includes this table again, so a roll would never end",
+    "path": "$.pools.main.entries[0].table",
+    "code": "loot.cycle",
+    "related": [
+      {
+        "file": "loot/self.json"
+      }
+    ]
+  }
+]

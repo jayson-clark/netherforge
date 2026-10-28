@@ -1,0 +1,26 @@
+.callout {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.ok {
+  border-color: var(--ok-border);
+  background: var(--ok-bg);
+}
+.warning {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: #3a2d12;
+  color: #f3d58c;
+}

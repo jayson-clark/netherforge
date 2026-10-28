@@ -1,0 +1,45 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["before 6am on monday"],
+  "customManagers": [
+    {
+      "description": "Each Paper adapter's build (apps/plugin/paper-<minecraft>/build.gradle.kts), within its own Minecraft version",
+      "customType": "regex",
+      "managerFilePatterns": ["/^apps/plugin/paper-[0-9.]+/build\\.gradle\\.kts$/"],
+      "matchStrings": ["paper = \"(?<currentValue>[^\"]+\\.build\\.[0-9]+-[a-z]+)\""],
+      "depNameTemplate": "io.papermc.paper:paper-api",
+      "datasourceTemplate": "maven",
+      "registryUrlTemplate": "https://repo.papermc.io/repository/maven-public/",
+      "versioningTemplate": "regex:^(?<compatibility>\\d+\\.\\d+(\\.\\d+)?)\\.build\\.(?<major>\\d+)-[a-z]+$"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "A new build of an adapter's own Minecraft version: its own PR, so the integration run says whether the adapter holds",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["io.papermc.paper:paper-api"],
+      "groupName": "Paper builds",
+      "schedule": ["at any time"]
+    },
+    {
+      "matchManagers": ["npm"],
+      "groupName": "npm dependencies"
+    },
+    {
+      "matchManagers": ["cargo"],
+      "groupName": "Rust dependencies"
+    },
+    {
+      "description": "paper-api in the catalog is the oldest supported Minecraft's, which paper-common compiles against: moved by hand with OLDEST_SUPPORTED",
+      "matchManagers": ["gradle"],
+      "matchPackageNames": ["io.papermc.paper:paper-api"],
+      "enabled": false
+    },
+    {
+      "matchManagers": ["gradle", "gradle-wrapper"],
+      "excludePackageNames": ["io.papermc.paper:paper-api"],
+      "groupName": "Gradle dependencies"
+    }
+  ]
+}

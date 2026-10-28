@@ -1,0 +1,106 @@
+[
+  {
+    "severity": "error",
+    "file": "cutscenes/Upper.json",
+    "message": "\"Upper\" isn't a usable id (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+    "code": "project.id"
+  },
+  {
+    "severity": "error",
+    "file": "cutscenes/empty.json",
+    "message": "The keys all sit at time 0, so the cutscene is no time long: set `length`, or key later times",
+    "path": "$.length",
+    "code": "cutscene.length"
+  },
+  {
+    "severity": "error",
+    "file": "cutscenes/empty.json",
+    "message": "The camera has no position keys, so it has nowhere to be",
+    "path": "$.camera.position",
+    "code": "cutscene.track-empty"
+  },
+  {
+    "severity": "error",
+    "file": "cutscenes/empty.json",
+    "message": "The camera has no rotation keys, so it has no way to look",
+    "path": "$.camera.rotation",
+    "code": "cutscene.track-empty"
+  },
+  {
+    "severity": "error",
+    "file": "cutscenes/keys.json",
+    "message": "Another key is already at 0 seconds",
+    "path": "$.camera.position[1].time",
+    "code": "cutscene.key-duplicate"
+  },
+  {
+    "severity": "error",
+    "file": "cutscenes/keys.json",
+    "message": "A key's time must be from 0 to the cutscene's length (4 seconds), not 5",
+    "path": "$.camera.position[2].time",
+    "code": "cutscene.key-time"
+  },
+  {
+    "severity": "error",
+    "file": "cutscenes/keys.json",
+    "message": "A key's time must be from 0 to the cutscene's length (4 seconds), not -1",
+    "path": "$.camera.rotation[0].time",
+    "code": "cutscene.key-time"
+  },
+  {
+    "severity": "error",
+    "file": "cutscenes/keys.json",
+    "message": "A camera position may be at most 30000000 blocks from the origin",
+    "path": "$.camera.position[2].value",
+    "code": "cutscene.position"
+  },
+  {
+    "severity": "error",
+    "file": "cutscenes/keys.json",
+    "message": "pitch must be from -90 to 90 degrees, not 95",
+    "path": "$.camera.rotation[0].pitch",
+    "code": "cutscene.pitch"
+  },
+  {
+    "severity": "error",
+    "file": "cutscenes/keys.json",
+    "message": "A cue needs an `event`, `text`, or both",
+    "path": "$.cues[0]",
+    "code": "cutscene.cue-empty"
+  },
+  {
+    "severity": "error",
+    "file": "cutscenes/keys.json",
+    "message": "\"Bad Name\" isn't a usable event name (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+    "path": "$.cues[1].event",
+    "code": "cutscene.cue-event"
+  },
+  {
+    "severity": "error",
+    "file": "cutscenes/keys.json",
+    "message": "`duration` is how long `text` stays, and this cue has none",
+    "path": "$.cues[2].duration",
+    "code": "cutscene.cue-duration"
+  },
+  {
+    "severity": "error",
+    "file": "cutscenes/keys.json",
+    "message": "duration must be more than 0 seconds",
+    "path": "$.cues[3].duration",
+    "code": "cutscene.cue-duration"
+  },
+  {
+    "severity": "error",
+    "file": "cutscenes/keys.json",
+    "message": "A cue's time must be from 0 to the cutscene's length (4 seconds)",
+    "path": "$.cues[4].time",
+    "code": "cutscene.key-time"
+  },
+  {
+    "severity": "error",
+    "file": "cutscenes/long.json",
+    "message": "length must be more than 0 and at most 3600 seconds",
+    "path": "$.length",
+    "code": "cutscene.length"
+  }
+]

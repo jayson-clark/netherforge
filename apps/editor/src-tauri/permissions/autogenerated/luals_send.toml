@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-luals-send"
+description = "Enables the luals_send command without any pre-configured scope."
+commands.allow = ["luals_send"]
+
+[[permission]]
+identifier = "deny-luals-send"
+description = "Denies the luals_send command without any pre-configured scope."
+commands.deny = ["luals_send"]

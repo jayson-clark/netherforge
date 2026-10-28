@@ -1,0 +1,119 @@
+[
+  {
+    "severity": "error",
+    "file": "dimension_types/bad.json",
+    "message": "minY must be a multiple of 16, not -70",
+    "path": "$.minY",
+    "code": "dimension-type.height"
+  },
+  {
+    "severity": "error",
+    "file": "dimension_types/bad.json",
+    "message": "height must be a multiple of 16, at least 16, not 10",
+    "path": "$.height",
+    "code": "dimension-type.height"
+  },
+  {
+    "severity": "error",
+    "file": "dimension_types/bad.json",
+    "message": "logicalHeight is from 0 to the height (10), not 500",
+    "path": "$.logicalHeight",
+    "code": "dimension-type.logical-height"
+  },
+  {
+    "severity": "error",
+    "file": "dimension_types/bad.json",
+    "message": "ambientLight is from 0 to 1",
+    "path": "$.ambientLight",
+    "code": "dimension-type.light"
+  },
+  {
+    "severity": "error",
+    "file": "dimension_types/bad.json",
+    "message": "min (9) is above max (3)",
+    "path": "$.monsterSpawnLight.min",
+    "code": "dimension-type.light"
+  },
+  {
+    "severity": "error",
+    "file": "dimension_types/bad.json",
+    "message": "a light level is from 0 to 15, not 20",
+    "path": "$.monsterSpawnBlockLight",
+    "code": "dimension-type.light"
+  },
+  {
+    "severity": "error",
+    "file": "dimension_types/bad.json",
+    "message": "\"blue\" isn't a colour written #rrggbb",
+    "path": "$.colors.sky",
+    "code": "dimension-type.color"
+  },
+  {
+    "severity": "error",
+    "file": "dimension_types/bad.json",
+    "message": "\"#12345\" isn't a colour written #rrggbb or #aarrggbb",
+    "path": "$.colors.clouds",
+    "code": "dimension-type.color"
+  },
+  {
+    "severity": "error",
+    "file": "dimension_types/bad.json",
+    "message": "cloudHeight is from -2032 to 2032",
+    "path": "$.cloudHeight",
+    "code": "dimension-type.number"
+  },
+  {
+    "severity": "error",
+    "file": "dimension_types/bad.json",
+    "message": "coordinateScale is from 0.00001 to 30000000",
+    "path": "$.coordinateScale",
+    "code": "dimension-type.number"
+  },
+  {
+    "severity": "error",
+    "file": "dimension_types/bad.json",
+    "message": "\"stone\" isn't a block tag, written #namespace:path",
+    "path": "$.infiniburn",
+    "code": "dimension-type.infiniburn"
+  },
+  {
+    "severity": "error",
+    "file": "dimension_types/high.json",
+    "message": "minY + height is 2064: the top of a world can be at most 2032",
+    "path": "$.height",
+    "code": "dimension-type.height"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "There's no dimension type \"no_such_dimension\" (dimension_types/no_such_dimension.json)",
+    "path": "$.worlds.lost.dimensionType",
+    "code": "reference.dimension-type"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "World \"below\" is from y 0 to 127 (dimension type \"shallow\"), but in terrain \"hills\", ores.deep.minY: minY must be from 0 to 127",
+    "path": "$.worlds.below.terrain",
+    "code": "project.world-height",
+    "related": [
+      {
+        "file": "terrain/hills.json",
+        "path": "$.ores.deep.minY"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "World \"below\" is from y 0 to 127 (dimension type \"shallow\"), but in terrain \"hills\", ores.sky.maxY: maxY must be from 0 to 127",
+    "path": "$.worlds.below.terrain",
+    "code": "project.world-height",
+    "related": [
+      {
+        "file": "terrain/hills.json",
+        "path": "$.ores.sky.maxY"
+      }
+    ]
+  }
+]

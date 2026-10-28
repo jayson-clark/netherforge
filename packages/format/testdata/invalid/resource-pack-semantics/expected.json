@@ -1,0 +1,113 @@
+[
+  {
+    "severity": "error",
+    "file": "resource_packs/Bad",
+    "message": "\"Bad\" isn't a usable id (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+    "code": "project.id"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "ascent can't exceed height; Minecraft refuses to load it",
+    "path": "$.skins.big.ascent",
+    "code": "resource_pack.ascent"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "offset must be within ±2047",
+    "path": "$.skins.big.offset",
+    "code": "resource_pack.offset"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "\"Bad-Key\" isn't a usable key (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+    "path": "$.skins[\"Bad-Key\"]",
+    "code": "resource_pack.key"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "textures/missing.png doesn't exist",
+    "path": "$.skins[\"Bad-Key\"].texture",
+    "code": "resource_pack.texture-missing"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "\"a.jpg\" must be a .png path of letters, digits, _, - and . inside this resource pack's textures/ folder",
+    "path": "$.glyphs.coin.texture",
+    "code": "resource_pack.texture-path"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "height must be positive",
+    "path": "$.glyphs.coin.height",
+    "code": "resource_pack.height"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "ascent can't exceed height; Minecraft refuses to load it",
+    "path": "$.glyphs.coin.ascent",
+    "code": "resource_pack.ascent"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "\"../a.png\" must be a .png path of letters, digits, _, - and . inside this resource pack's textures/ folder",
+    "path": "$.items.gem.guiTexture",
+    "code": "resource_pack.texture-path"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "Give this item a texture, a block it's drawn as, or a model",
+    "path": "$.items.bare",
+    "code": "resource_pack.item-look"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "An item is drawn as one of a texture, a block and a model: it has texture and block",
+    "path": "$.items.both.block",
+    "code": "resource_pack.item-look"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "Only a texture is held as `parent` says: a block or model is held as it is, so drop `parent`",
+    "path": "$.items.held.parent",
+    "code": "resource_pack.item-look"
+  },
+  {
+    "severity": "warning",
+    "file": "resource_packs/ui/pack.json",
+    "message": "This tooltip has neither a background nor a frame, so it looks like vanilla",
+    "path": "$.tooltips.plain",
+    "code": "resource_pack.tooltip-empty"
+  },
+  {
+    "severity": "warning",
+    "file": "resource_packs/ui/pack.json",
+    "message": "This equipment look has no layer, so nothing is drawn when it's worn",
+    "path": "$.equipment.bare",
+    "code": "resource_pack.equipment-empty"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "textures/missing.png doesn't exist",
+    "path": "$.equipment.ruby.humanoidLeggings",
+    "code": "resource_pack.texture-missing"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "\"a.jpg\" must be a .png path of letters, digits, _, - and . inside this resource pack's textures/ folder",
+    "path": "$.equipment.ruby.wings",
+    "code": "resource_pack.texture-path"
+  }
+]

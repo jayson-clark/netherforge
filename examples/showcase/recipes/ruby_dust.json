@@ -1,0 +1,12 @@
+{
+  "$schema": "../.netherforge/schema/recipe.schema.json",
+  "type": "furnace",
+  "ingredient": {
+    "item": "ruby"
+  },
+  "result": {
+    "kind": "minecraft:redstone",
+    "count": 4
+  },
+  "experience": 0.5
+}

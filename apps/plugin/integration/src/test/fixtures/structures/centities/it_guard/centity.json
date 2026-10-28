@@ -1,0 +1,12 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "nodes": {
+    "root": {
+      "display": {
+        "type": "block",
+        "block": "minecraft:gold_block"
+      },
+      "hitbox": {}
+    }
+  }
+}

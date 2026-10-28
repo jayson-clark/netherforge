@@ -1,0 +1,51 @@
+[
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"-x\" isn't the name of a branch, a tag or a full commit",
+    "path": "$.dependencies.badrev.rev",
+    "code": "package.git-rev"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"http://example.com/x.git\" isn't a repository NetherForge fetches from: https://…, ssh://…, user@host:path or file://…",
+    "path": "$.dependencies.badurl.git",
+    "code": "package.git-url"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "This dependency has both a \"path\" and a \"git\" repository: give it one",
+    "path": "$.dependencies.both",
+    "code": "package.source"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "Couldn't fetch git@example.com:acme/gone.git: there's no repository at git@example.com:acme/gone.git",
+    "path": "$.dependencies.gone",
+    "code": "package.git"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "https://example.com/lib.git at aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa hashes to sha256:ca222c94b3ddce7526a51f20613833c0b8155857a50d7d298ab99e113ce81ebe, not the sha256:1590262bc4e3dbc84872fd5343cde9eca8c50f50cbe9ee4fff3bb2f43b6170d6 netherforge.lock pins, so it isn't loaded: either its copy in the cache was changed (delete it, and it's fetched again) or the lock was (netherforge lock --update resolves it afresh)",
+    "path": "$.dependencies.lib",
+    "code": "package.hash"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "This dependency says nowhere to find it: give it a \"path\" or a \"git\" repository",
+    "path": "$.dependencies.none",
+    "code": "package.source"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"rev\" goes with a \"git\" repository, not a \"path\"",
+    "path": "$.dependencies.pathrev",
+    "code": "package.source"
+  }
+]

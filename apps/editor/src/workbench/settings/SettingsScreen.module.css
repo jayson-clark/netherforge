@@ -1,0 +1,66 @@
+/* A readable column, however wide the editor area is. */
+.body {
+  max-width: 760px;
+}
+.title {
+  font-size: calc(var(--font-size) + 3px);
+  margin: 4px 0 12px;
+}
+.body h3 {
+  font-size: var(--font-size);
+  margin: 16px 0 6px;
+}
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.installs {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.installPath {
+  color: var(--muted);
+}
+.progress {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+.target td {
+  background: #12282d;
+}
+.after {
+  margin-top: 10px;
+}
+.notes {
+  width: 100%;
+  white-space: pre-wrap;
+  max-height: 160px;
+  overflow: auto;
+  font-family: var(--mono);
+}
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.setting {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) 1fr;
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: center;
+}
+.settingValue {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settingHint {
+  grid-column: 2;
+  margin: 0;
+}

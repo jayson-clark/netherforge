@@ -1,0 +1,8 @@
+{
+  "textures": { "0": "gem", "far": "otherpack:item/wing" },
+  "elements": [
+    { "from": [-20, 0, 0], "to": [8, 8, 8], "faces": { "north": { "texture": "#1" } } },
+    { "from": [0, 0, 0], "to": [8, 8, 8], "rotation": { "axis": "w", "angle": 10, "origin": [0, 0, 0] }, "faces": { "up": { "texture": "#0" } } }
+  ],
+  "display": { "fixed": { "scale": [6, 6, 6] } }
+}

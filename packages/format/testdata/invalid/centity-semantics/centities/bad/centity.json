@@ -1,0 +1,17 @@
+{
+  "script": { "file": "missing.lua" },
+  "nodes": {
+    "root": { "display": { "type": "block", "block": "Not A Block" } },
+    "orphan": { "parent": "nowhere" },
+    "a": { "parent": "b" },
+    "b": { "parent": "a" },
+    "bad name!": {},
+    "box": { "hitbox": { "shape": "collision", "boxes": [{ "min": [0, 0, 0], "max": [0, 1, 1] }] } },
+    "label": { "display": { "type": "text", "text": "hi", "background": "red" } },
+    "body": { "physics": { "bounciness": 2, "blocks": false, "entities": false } }
+  },
+  "animations": {
+    "wave": { "length": 0.5, "tracks": { "root": { "rotation": [{ "time": 1, "value": [0, 1, 0] }] }, "ghost": { "scale": [] } } },
+    "empty": {}
+  }
+}

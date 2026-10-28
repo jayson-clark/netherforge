@@ -1,0 +1,28 @@
+{
+  "name": "@netherforge/structures",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Minecraft's structure files and what's built from them, shared by the editor and the netherforge command: NBT read and written, structures and their block states, schematics imported, builds cut into parts, and pictures of a structure or a build (from above, isometric, a slice)",
+  "exports": {
+    "./color": "./src/color.ts",
+    "./nbt": "./src/nbt.ts",
+    "./structure": "./src/structure.ts",
+    "./schematic": "./src/schematic.ts",
+    "./parts": "./src/parts.ts",
+    "./picture": "./src/picture.ts"
+  },
+  "scripts": {
+    "lint": "tsc --noEmit -p . && eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@netherforge/format": "workspace:*",
+    "nbtify": "2.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.3"
+  }
+}

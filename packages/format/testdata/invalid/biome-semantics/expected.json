@@ -1,0 +1,203 @@
+[
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "temperature is -2 to 2",
+    "path": "$.climate.temperature",
+    "code": "biome.climate"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "downfall is 0 to 1",
+    "path": "$.climate.downfall",
+    "code": "biome.climate"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "\"blue\" isn't a colour written #rrggbb, like \"#3f76e4\"",
+    "path": "$.colors.sky",
+    "code": "biome.color"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "\"#12345\" isn't a colour written #rrggbb, like \"#3f76e4\"",
+    "path": "$.colors.water",
+    "code": "biome.color"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "\"Not A Particle\" isn't a particle id, like \"minecraft:…\"",
+    "path": "$.particle.particle",
+    "code": "biome.particle"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "probability is more than 0 and at most 1",
+    "path": "$.particle.probability",
+    "code": "biome.particle"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "\"not a sound!\" isn't a sound event id, like \"minecraft:…\"",
+    "path": "$.sounds.ambient",
+    "code": "biome.sound"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "tickDelay is at least 1",
+    "path": "$.sounds.mood.tickDelay",
+    "code": "biome.sound"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "blockSearchExtent can't be negative",
+    "path": "$.sounds.mood.blockSearchExtent",
+    "code": "biome.sound"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "offset can't be negative",
+    "path": "$.sounds.mood.offset",
+    "code": "biome.sound"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "chance is 0 to 1",
+    "path": "$.sounds.additions.chance",
+    "code": "biome.sound"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "maxDelay is below minDelay",
+    "path": "$.sounds.music.maxDelay",
+    "code": "biome.sound"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "weight is at least 1",
+    "path": "$.spawns.monster[0].weight",
+    "code": "biome.spawn"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "\"Not An Entity\" isn't an entity type id, like \"minecraft:…\"",
+    "path": "$.spawns.monster[1].entity",
+    "code": "biome.spawn"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "The group's min is above its max",
+    "path": "$.spawns.monster[1].group",
+    "code": "biome.spawn"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "A group is at least 1",
+    "path": "$.spawns.monster[2].group",
+    "code": "biome.spawn"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "\"Bad Id\" isn't an entity type id, like \"minecraft:…\"",
+    "path": "$.spawnCosts[\"Bad Id\"]",
+    "code": "biome.spawn-cost"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "A spawn cost's charge and energyBudget are each more than 0",
+    "path": "$.spawnCosts[\"Bad Id\"]",
+    "code": "biome.spawn-cost"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "\"minecraft:trees_plains\" is already in vegetal_decoration",
+    "path": "$.features.vegetal_decoration[1]",
+    "code": "biome.feature"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/bad.json",
+    "message": "\"Not A Feature\" isn't a reference to a placed feature: write <id>, or <namespace>:<id> for another package's, or minecraft:<id> for the game's",
+    "path": "$.features.vegetal_decoration[2]",
+    "code": "reference.syntax"
+  },
+  {
+    "severity": "error",
+    "file": "biomes/meadow.json",
+    "message": "\"minecraft:flower_plains\" comes before \"minecraft:trees_plains\" here, but after it in biome \"orchard\": the game can't place both in one world, so list them in the same order",
+    "path": "$.features.vegetal_decoration",
+    "code": "biome.feature-order",
+    "related": [
+      {
+        "file": "biomes/orchard.json",
+        "path": "$.features.vegetal_decoration"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "biomes/orchard.json",
+    "message": "\"minecraft:trees_plains\" comes before \"minecraft:flower_plains\" here, but after it in biome \"meadow\": the game can't place both in one world, so list them in the same order",
+    "path": "$.features.vegetal_decoration",
+    "code": "biome.feature-order",
+    "related": [
+      {
+        "file": "biomes/meadow.json",
+        "path": "$.features.vegetal_decoration"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "centities/wanderer/centity.json",
+    "message": "There's no biome \"swamp\" (biomes/swamp.json, or data/case/worldgen/biome/swamp.json in one of datapacks/); the game's are written \"minecraft:swamp\"",
+    "path": "$.spawning.biomes[3]",
+    "code": "reference.biome"
+  },
+  {
+    "severity": "error",
+    "file": "structures/hut.json",
+    "message": "There's no biome \"desert\" (biomes/desert.json, or data/case/worldgen/biome/desert.json in one of datapacks/); the game's are written \"minecraft:desert\"",
+    "path": "$.biomes[2]",
+    "code": "reference.biome"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/uses.json",
+    "message": "An area is one biome, not a tag: \"#minecraft:is_forest\"",
+    "path": "$.biomes.c.biome",
+    "code": "terrain.biome"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/uses.json",
+    "message": "There's no biome \"plains\" (biomes/plains.json, or data/case/worldgen/biome/plains.json in one of datapacks/); the game's are written \"minecraft:plains\"",
+    "path": "$.biomes.b.biome",
+    "code": "reference.biome"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/uses.json",
+    "message": "\"elsewhere\" is neither this project's namespace (\"case\") nor a package's it depends on",
+    "path": "$.biomes.e.biome",
+    "code": "reference.namespace"
+  }
+]

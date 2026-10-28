@@ -1,0 +1,11 @@
+{
+  "$schema": "../../.netherforge/schema/item.schema.json",
+  "kind": "minecraft:paper",
+  "name": "<red>Ruby crown",
+  "itemModel": "ui/crown",
+  "equipment": {
+    "asset": "ui/ruby",
+    "slot": "head"
+  },
+  "maxStackSize": 1
+}

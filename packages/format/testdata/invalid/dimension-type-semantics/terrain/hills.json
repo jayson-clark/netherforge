@@ -1,0 +1,19 @@
+{
+  "$schema": "../.netherforge/schema/terrain.schema.json",
+  "terrain": {
+    "base": 66,
+    "seaLevel": 62
+  },
+  "ores": {
+    "deep": {
+      "block": "minecraft:iron_ore",
+      "minY": -48,
+      "maxY": 32
+    },
+    "sky": {
+      "block": "minecraft:gold_ore",
+      "minY": 100,
+      "maxY": 200
+    }
+  }
+}

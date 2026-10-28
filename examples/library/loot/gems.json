@@ -1,0 +1,23 @@
+{
+  "$schema": "../.netherforge/schema/loot_table.schema.json",
+  "pools": {
+    "main": {
+      "rolls": {
+        "min": 1,
+        "max": 2
+      },
+      "entries": [
+        {
+          "type": "item",
+          "item": {
+            "item": "gem"
+          },
+          "count": {
+            "min": 1,
+            "max": 2
+          }
+        }
+      ]
+    }
+  }
+}

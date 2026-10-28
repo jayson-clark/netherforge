@@ -1,0 +1,56 @@
+{
+  "$schema": "../.netherforge/schema/loot_table.schema.json",
+  "pools": {
+    "keepsakes": {
+      "rolls": 2,
+      "entries": [
+        {
+          "type": "table",
+          "table": "library:gems",
+          "weight": 3
+        },
+        {
+          "type": "empty",
+          "weight": 1
+        }
+      ]
+    },
+    "offerings": {
+      "rolls": {
+        "min": 2,
+        "max": 4
+      },
+      "entries": [
+        {
+          "type": "item",
+          "item": {
+            "item": "shard"
+          },
+          "count": {
+            "min": 1,
+            "max": 3
+          },
+          "weight": 5
+        },
+        {
+          "type": "item",
+          "item": {
+            "item": "crystal_glass"
+          },
+          "count": {
+            "min": 2,
+            "max": 4
+          },
+          "weight": 3
+        },
+        {
+          "type": "item",
+          "item": {
+            "item": "candy"
+          },
+          "weight": 2
+        }
+      ]
+    }
+  }
+}

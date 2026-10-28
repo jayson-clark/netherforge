@@ -1,0 +1,7 @@
+{
+  "$schema": "../.netherforge/schema/structure_generation.schema.json",
+  "biomes": ["ruby_grove"],
+  "spacing": 18,
+  "separation": 6,
+  "terrainAdaptation": "beard_thin"
+}

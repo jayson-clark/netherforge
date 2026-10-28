@@ -1,0 +1,9 @@
+{
+  "id": "netherforge",
+  "name": "NetherForge",
+  "version": "${version}",
+  "description": "The hub of a NetherForge network: messages, requests, shared maps, presence and sending players between servers",
+  "authors": ["NetherForge"],
+  "dependencies": [],
+  "main": "dev.netherforge.proxy.NetherForgeProxy"
+}

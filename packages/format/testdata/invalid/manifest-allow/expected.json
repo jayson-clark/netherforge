@@ -1,0 +1,30 @@
+[
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"Shop.VIP\" isn't a permission node (lowercase letters, digits, _ and -, in parts separated by dots (like shop.vip), at most 255 characters)",
+    "path": "$.allow.permissions[0]",
+    "code": "project.permission-node"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"minecraft.*\" isn't a permission node (lowercase letters, digits, _ and -, in parts separated by dots (like shop.vip), at most 255 characters)",
+    "path": "$.allow.permissions[1]",
+    "code": "project.permission-node"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"shop..vip\" isn't a permission node (lowercase letters, digits, _ and -, in parts separated by dots (like shop.vip), at most 255 characters)",
+    "path": "$.allow.permissions[3]",
+    "code": "project.permission-node"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\" isn't a permission node (lowercase letters, digits, _ and -, in parts separated by dots (like shop.vip), at most 255 characters)",
+    "path": "$.allow.permissions[4]",
+    "code": "project.permission-node"
+  }
+]

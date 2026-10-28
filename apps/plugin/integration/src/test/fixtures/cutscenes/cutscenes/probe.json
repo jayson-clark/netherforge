@@ -1,0 +1,36 @@
+{
+  "$schema": "../.netherforge/schema/cutscene.schema.json",
+  "length": 6,
+  "camera": {
+    "position": [
+      {
+        "time": 0,
+        "value": [0, 0, 0]
+      },
+      {
+        "time": 6,
+        "value": [48, 0, 0]
+      }
+    ],
+    "rotation": [
+      {
+        "time": 0,
+        "yaw": 0,
+        "pitch": 0
+      },
+      {
+        "time": 6,
+        "yaw": 90,
+        "pitch": 30
+      }
+    ]
+  },
+  "cues": [
+    {
+      "time": 2,
+      "event": "middle",
+      "text": "<gold>Halfway there",
+      "duration": 1
+    }
+  ]
+}

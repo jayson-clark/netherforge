@@ -1,0 +1,25 @@
+{
+  "$schema": "../../.netherforge/schema/item.schema.json",
+  "kind": "minecraft:paper",
+  "name": "<light_purple>Glow circlet",
+  "lore": [
+    "<gray>Worn on the head: +2 armour,",
+    "<gray>drawn by the pack's equipment look"
+  ],
+  "itemModel": "ui/circlet",
+  "tooltipStyle": "ui/glow",
+  "equipment": {
+    "asset": "ui/circlet",
+    "slot": "head"
+  },
+  "maxStackSize": 1,
+  "rarity": "epic",
+  "attributeModifiers": [
+    {
+      "attribute": "minecraft:armor",
+      "amount": 2,
+      "operation": "add_value",
+      "slot": "head"
+    }
+  ]
+}

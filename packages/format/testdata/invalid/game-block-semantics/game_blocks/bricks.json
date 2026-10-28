@@ -1,0 +1,7 @@
+{
+  "blocks": ["minecraft:deepslate_bricks", "deepslate_bricks", "Not An Id"],
+  "hardness": -2,
+  "tool": "pickaxe",
+  "requiresTool": true,
+  "drops": "missing"
+}

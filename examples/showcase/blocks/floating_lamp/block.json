@@ -1,0 +1,5 @@
+{
+  "$schema": "../../.netherforge/schema/block.schema.json",
+  "hardness": 1,
+  "centity": "lamp"
+}

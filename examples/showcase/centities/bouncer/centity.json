@@ -1,0 +1,26 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "name": "Bouncer",
+  "nodes": {
+    "ball": {
+      "transform": {
+        "translation": [-0.3, 0, -0.3],
+        "scale": [0.6, 0.6, 0.6]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:magenta_glazed_terracotta"
+      },
+      "hitbox": {}
+    }
+  },
+  "body": {
+    "width": 0.6,
+    "height": 0.6,
+    "stepHeight": 0,
+    "bounce": 0.6
+  },
+  "script": {
+    "file": "script.lua"
+  }
+}

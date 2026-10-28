@@ -1,0 +1,26 @@
+{
+  "name": "@netherforge/models",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Minecraft's block and item models as geometry, and drawn to pictures without a browser: shared by the editor's viewport and the netherforge command's render and gallery",
+  "exports": {
+    "./model": "./src/model.ts",
+    "./geometry": "./src/geometry.ts",
+    "./raster": "./src/raster.ts",
+    "./icons": "./src/icons.ts"
+  },
+  "scripts": {
+    "lint": "tsc --noEmit -p . && eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/three": "^0.186.0",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.3"
+  }
+}

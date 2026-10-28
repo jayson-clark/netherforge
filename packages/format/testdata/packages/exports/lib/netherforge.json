@@ -1,0 +1,8 @@
+{
+  "formatVersion": 1,
+  "name": "Lib",
+  "namespace": "lib",
+  "version": "2.0.0",
+  "minecraft": "26.3",
+  "exports": { "items": ["coin", "ghost"], "widgets": ["coin"] }
+}

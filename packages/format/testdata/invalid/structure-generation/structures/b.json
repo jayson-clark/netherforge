@@ -1,0 +1,1 @@
+{ "biomes": [], "depth": 21, "salt": -1, "pools": { "start": { "elements": [{ "structure": "b" }] }, "empty": { "elements": [] }, "ghosts": { "elements": [{ "structure": "nope", "weight": 200 }] } } }

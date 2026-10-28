@@ -1,0 +1,6 @@
+{
+  "title": "<glyph:ui/coin> Bank <glyph:ui/nope>",
+  "slots": {
+    "0": { "item": { "kind": "minecraft:paper", "name": "<glyph:'case:ui/coin'>", "lore": ["ok", "<glyph:shop:ui/coin> 2"] } }
+  }
+}

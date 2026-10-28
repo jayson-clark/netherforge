@@ -1,0 +1,150 @@
+[
+  {
+    "severity": "error",
+    "file": "advancements/bad.json",
+    "message": "An icon is a game item (kind) or a project item (item), not both",
+    "path": "$.display.icon.kind",
+    "code": "advancement.icon"
+  },
+  {
+    "severity": "warning",
+    "file": "advancements/bad.json",
+    "message": "Only a tree's root (no parent) shows its background",
+    "path": "$.display.background",
+    "code": "advancement.background"
+  },
+  {
+    "severity": "warning",
+    "file": "advancements/bad.json",
+    "message": "\"Not A Texture\" isn't a texture's id, like \"minecraft:block/stone\"",
+    "path": "$.display.background",
+    "code": "advancement.background"
+  },
+  {
+    "severity": "error",
+    "file": "advancements/bad.json",
+    "message": "\"Bad Name\" isn't a usable criterion name (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+    "path": "$.criteria[\"Bad Name\"]",
+    "code": "advancement.criterion-name"
+  },
+  {
+    "severity": "error",
+    "file": "advancements/bad.json",
+    "message": "conditions are a trigger's: without a trigger only a script meets the criterion",
+    "path": "$.criteria.loose.conditions",
+    "code": "advancement.trigger"
+  },
+  {
+    "severity": "error",
+    "file": "advancements/bad.json",
+    "message": "\"not a trigger\" isn't a trigger's id, like \"minecraft:inventory_changed\"",
+    "path": "$.criteria.odd.trigger",
+    "code": "advancement.trigger"
+  },
+  {
+    "severity": "error",
+    "file": "advancements/bad.json",
+    "message": "A group needs at least one criterion",
+    "path": "$.requirements[0]",
+    "code": "advancement.requirements"
+  },
+  {
+    "severity": "error",
+    "file": "advancements/bad.json",
+    "message": "There's no criterion \"ghost\" in criteria",
+    "path": "$.requirements[1][0]",
+    "code": "advancement.requirements"
+  },
+  {
+    "severity": "error",
+    "file": "advancements/bad.json",
+    "message": "Criterion \"Bad Name\" is in no group, and the game refuses an advancement whose requirements leave one out",
+    "path": "$.requirements",
+    "code": "advancement.requirements"
+  },
+  {
+    "severity": "error",
+    "file": "advancements/bad.json",
+    "message": "Criterion \"loose\" is in no group, and the game refuses an advancement whose requirements leave one out",
+    "path": "$.requirements",
+    "code": "advancement.requirements"
+  },
+  {
+    "severity": "error",
+    "file": "advancements/bad.json",
+    "message": "experience can't be negative",
+    "path": "$.experience",
+    "code": "advancement.experience"
+  },
+  {
+    "severity": "error",
+    "file": "advancements/bad.json",
+    "message": "There's no advancement \"missing\" (advancements/missing.json)",
+    "path": "$.parent",
+    "code": "reference.advancement"
+  },
+  {
+    "severity": "error",
+    "file": "advancements/bad.json",
+    "message": "There's no item \"nothing_here\" (items/nothing_here/item.json)",
+    "path": "$.display.icon.item",
+    "code": "reference.item"
+  },
+  {
+    "severity": "error",
+    "file": "advancements/loop_a.json",
+    "message": "\"loop_b\" leads back to this advancement through its parents, so it would hang from itself",
+    "path": "$.parent",
+    "code": "advancement.cycle",
+    "related": [
+      {
+        "file": "advancements/loop_b.json"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "advancements/loop_b.json",
+    "message": "\"loop_a\" leads back to this advancement through its parents, so it would hang from itself",
+    "path": "$.parent",
+    "code": "advancement.cycle",
+    "related": [
+      {
+        "file": "advancements/loop_a.json"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "advancements/root.json",
+    "message": "An icon needs a kind, like \"minecraft:diamond\", or an item: one of the project's own",
+    "path": "$.display.icon",
+    "code": "advancement.icon"
+  },
+  {
+    "severity": "warning",
+    "file": "advancements/root.json",
+    "message": "A tree's root is its tab: without a background, the tab shows the missing texture",
+    "path": "$.display",
+    "code": "advancement.background"
+  },
+  {
+    "severity": "error",
+    "file": "advancements/root.json",
+    "message": "An advancement needs at least one criterion, or nothing can complete it",
+    "path": "$.criteria",
+    "code": "advancement.criteria"
+  },
+  {
+    "severity": "error",
+    "file": "advancements/self.json",
+    "message": "\"self\" leads back to this advancement, so it would hang from itself",
+    "path": "$.parent",
+    "code": "advancement.cycle",
+    "related": [
+      {
+        "file": "advancements/self.json"
+      }
+    ]
+  }
+]

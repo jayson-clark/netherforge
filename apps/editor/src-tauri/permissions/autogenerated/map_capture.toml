@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-map-capture"
+description = "Enables the map_capture command without any pre-configured scope."
+commands.allow = ["map_capture"]
+
+[[permission]]
+identifier = "deny-map-capture"
+description = "Denies the map_capture command without any pre-configured scope."
+commands.deny = ["map_capture"]

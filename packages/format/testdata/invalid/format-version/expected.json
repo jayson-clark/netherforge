@@ -1,0 +1,9 @@
+[
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "This project uses format 2; this NetherForge reads format 1. Update NetherForge.",
+    "path": "$.formatVersion",
+    "code": "project.format-version"
+  }
+]

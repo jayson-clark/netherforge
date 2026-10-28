@@ -1,0 +1,23 @@
+[
+  {
+    "file": "items/lucky_charm/item.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "items/lucky_charm/script.lua"
+  },
+  {
+    "file": "menus/shop/menu.json",
+    "path": "$.slots[\"13\"].item.item",
+    "kind": "item",
+    "text": "lucky_charm",
+    "target": "template_shop:lucky_charm"
+  },
+  {
+    "file": "menus/shop/menu.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "menus/shop/script.lua"
+  }
+]

@@ -1,0 +1,165 @@
+.area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+/* A split's child (the library sizes it). */
+.cell {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.row {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--border);
+  min-height: 28px;
+}
+.tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  border-bottom: 2px solid transparent;
+  padding: 4px 8px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  outline: none;
+}
+.tab[data-hovered] {
+  color: var(--text);
+}
+.tab[data-selected] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.tab[data-focus-visible] {
+  outline: 1px solid var(--info);
+  outline-offset: -1px;
+}
+.dragging {
+  opacity: 0.5;
+}
+/* Where a dragged tab would land: a bar at the gap. */
+.dropBefore::before,
+.dropAfter::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+.dropBefore::before {
+  left: -2px;
+}
+.dropAfter::after {
+  right: -2px;
+}
+.end {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  outline: none;
+}
+/* Over the panel while a tab is dragged: takes the drop, shows where the panel would go. */
+.drop {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+}
+.preview {
+  position: absolute;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  transition: inset 80ms ease-out;
+}
+.center {
+  inset: 4px;
+}
+.left {
+  inset: 4px 50% 4px 4px;
+}
+.right {
+  inset: 4px 4px 4px 50%;
+}
+.top {
+  inset: 4px 4px 50% 4px;
+}
+.bottom {
+  inset: 50% 4px 4px 4px;
+}
+/* A dock that's empty or hidden, while a tab is dragged: a strip at its edge of the window. */
+.areaDrop {
+  position: absolute;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  font-size: var(--font-size-sm);
+  color: var(--muted);
+  background: color-mix(in srgb, var(--bg-raised) 85%, transparent);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  margin: 4px;
+}
+.hovered {
+  color: var(--text);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-raised));
+}
+.area_left,
+.area_right {
+  top: 0;
+  bottom: 0;
+  width: 56px;
+  writing-mode: vertical-rl;
+}
+.area_left {
+  left: 0;
+}
+.area_right {
+  right: 0;
+}
+.area_bottom {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 48px;
+}

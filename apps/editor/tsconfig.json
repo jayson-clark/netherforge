@@ -1,0 +1,17 @@
+{
+  "//": "The app (browser) and the Node-side files (configs, Playwright) are type-checked apart, so app code can't lean on Node's globals.",
+  "//paths": "Playwright reads this file for the e2e specs, which import app modules that use the @/ alias.",
+  "compilerOptions": { "paths": { "@/*": ["./src/*"] } },
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.app.json"
+    },
+    {
+      "path": "./tsconfig.node.json"
+    },
+    {
+      "path": "./tsconfig.tauri.json"
+    }
+  ]
+}

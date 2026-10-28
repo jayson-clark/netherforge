@@ -1,0 +1,10 @@
+{
+  "$schema": "../../.netherforge/schema/block.schema.json",
+  "model": "ui/crystal_glass",
+  "hardness": 0.5,
+  "drops": "crystal_glass",
+  "sounds": {
+    "place": "ui/crystal_place",
+    "break": "ui/crystal_break"
+  }
+}

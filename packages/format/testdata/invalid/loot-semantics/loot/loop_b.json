@@ -1,0 +1,1 @@
+{ "pools": { "main": { "entries": [{ "type": "table", "table": "case:loop_a" }, { "type": "empty", "weight": 5 }] } } }

@@ -1,0 +1,32 @@
+{
+  "name": "@netherforge/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The netherforge command: validate and canonically format a project from a terminal, CI or a coding agent",
+  "bin": {
+    "netherforge": "./dist/netherforge.mjs"
+  },
+  "scripts": {
+    "build": "vite build",
+    "lint": "tsc --noEmit -p . && eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@netherforge/format": "workspace:*",
+    "@netherforge/models": "workspace:*",
+    "@netherforge/project-support": "workspace:*",
+    "@netherforge/structures": "workspace:*",
+    "@netherforge/terrain-preview": "workspace:*",
+    "fast-png": "^8.0.0",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/three": "^0.186.0",
+    "nbtify": "2.2.0",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  }
+}

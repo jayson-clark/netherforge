@@ -1,0 +1,10 @@
+{
+  "https://example.com/lib.git": {
+    "refs": {
+      "HEAD": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "commits": {
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": "lib"
+    }
+  }
+}

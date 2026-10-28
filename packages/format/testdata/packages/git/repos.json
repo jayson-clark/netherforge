@@ -1,0 +1,19 @@
+{
+  "https://example.com/lib.git": {
+    "refs": {
+      "v1": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "commits": {
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": "lib-a",
+      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": "lib-b"
+    }
+  },
+  "https://example.com/deep.git": {
+    "refs": {
+      "HEAD": "cccccccccccccccccccccccccccccccccccccccc"
+    },
+    "commits": {
+      "cccccccccccccccccccccccccccccccccccccccc": "deep"
+    }
+  }
+}

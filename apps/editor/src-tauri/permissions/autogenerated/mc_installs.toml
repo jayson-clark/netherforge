@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mc-installs"
+description = "Enables the mc_installs command without any pre-configured scope."
+commands.allow = ["mc_installs"]
+
+[[permission]]
+identifier = "deny-mc-installs"
+description = "Denies the mc_installs command without any pre-configured scope."
+commands.deny = ["mc_installs"]

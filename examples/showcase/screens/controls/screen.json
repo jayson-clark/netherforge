@@ -1,0 +1,10 @@
+{
+  "$schema": "../../.netherforge/schema/screen.schema.json",
+  "width": 2,
+  "height": 2,
+  "background": "#14141e",
+  "range": 48,
+  "script": {
+    "file": "script.lua"
+  }
+}

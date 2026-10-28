@@ -1,0 +1,24 @@
+{
+  "terrain": { "blend": -1 },
+  "stone": { "block": "minecraft:stone", "customBlock": "plain" },
+  "floor": { "customBlock": "lamp" },
+  "layers": [{ "thickness": 2 }, { "customBlock": "lamp" }],
+  "caves": { "c": { "biomes": ["hills", "nowhere"] } },
+  "ores": { "o": { "block": "minecraft:iron_ore", "biomes": ["nowhere"] } },
+  "decorations": {
+    "flowers": { "block": "minecraft:poppy", "count": 300, "chance": -0.5, "biomes": ["nowhere"], "on": ["Grass"] },
+    "lamps": { "customBlock": "lamp" },
+    "nothing": {},
+    "pile": { "block": "minecraft:stone", "structure": "rock" },
+    "trees": { "structure": "missing_tree", "placement": "caveCeiling", "minY": 10, "maxY": 5 },
+    "patchy": { "block": "minecraft:poppy", "threshold": 0.5, "rotate": true }
+  },
+  "climate": { "jitter": { "amplitude": -4 } },
+  "biomes": {
+    "hills": {
+      "biome": "minecraft:plains",
+      "terrain": { "base": 3000, "scale": -1, "noises": { "peaks": { "noise": { "frequency": 2 }, "amplitude": 9000 } } },
+      "underwater": [{ "customBlock": "lamp" }]
+    }
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "pack": { "min_format": 94, "max_format": 121 },
+  "overlays": { "entries": [{ "min_format": 94, "max_format": 107, "directory": "older" }] }
+}

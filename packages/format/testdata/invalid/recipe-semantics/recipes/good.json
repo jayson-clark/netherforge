@@ -1,0 +1,1 @@
+{ "type": "shaped", "pattern": ["GG", "GG"], "key": { "G": { "item": "gem" } }, "result": { "item": "gem", "count": 2 } }

@@ -1,0 +1,101 @@
+# Builds the docs site (docs/, VitePress) on every PR and push to main that
+# touches it, so a broken build (dead links fail it) fails CI, and deploys it
+# to GitHub Pages from main once the repository has Pages set up.
+#
+# One-time setup: Settings → Pages → Source: "GitHub Actions". Until then
+# main still builds the docs and says (a notice) that it didn't deploy them.
+
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # Whether Pages is set up, and configure-pages reads the site's base path and URL.
+      pages: read
+    outputs:
+      deploy: ${{ steps.site.outputs.enabled == 'true' }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @netherforge/docs
+      # Only main deploys, and only to a repository with Pages: the API answers 404 without it.
+      - name: Is GitHub Pages set up?
+        id: site
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if gh api "repos/$REPOSITORY/pages" --silent 2> error.txt; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          elif grep -q "HTTP 404" error.txt; then
+            echo "::notice::GitHub Pages isn't set up for $REPOSITORY (Settings → Pages → Source: GitHub Actions): the docs were built, not deployed."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            cat error.txt
+            exit 1
+          fi
+      - id: pages
+        if: steps.site.outputs.enabled == 'true'
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - name: Build
+        run: pnpm docs:build
+        env:
+          # A project site is served under /<repo>/; the docs need to know (/ when not deploying).
+          DOCS_BASE: ${{ steps.pages.outputs.base_path }}/
+          DOCS_REPO: ${{ github.repository }}
+          # llms.txt links pages by absolute URL.
+          DOCS_URL: ${{ steps.pages.outputs.base_url }}/
+      - if: steps.site.outputs.enabled == 'true'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: docs/.vitepress/dist
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    # One deployment at a time, never cancelled half-way.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

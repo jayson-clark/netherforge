@@ -1,0 +1,310 @@
+[
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "\"Not A Block\" isn't a block state",
+    "path": "$.nodes.root.display.block",
+    "code": "centity.block-state"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "Node \"orphan\" has unknown parent \"nowhere\"",
+    "path": "$.nodes.orphan.parent",
+    "code": "centity.unknown-parent"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "\"bad name!\" isn't a usable node name (letters, digits, _ and -, at most 64 characters)",
+    "path": "$.nodes[\"bad name!\"]",
+    "code": "centity.node-name"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "A hitbox has either boxes or shape: \"collision\", not both",
+    "path": "$.nodes.box.hitbox",
+    "code": "centity.hitbox-both"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "shape: \"collision\" needs a block display on the same node",
+    "path": "$.nodes.box.hitbox.shape",
+    "code": "centity.hitbox-collision"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "Each box's max must be greater than its min on every axis",
+    "path": "$.nodes.box.hitbox.boxes[0]",
+    "code": "centity.hitbox-size"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "background must be #AARRGGBB",
+    "path": "$.nodes.label.display.background",
+    "code": "centity.background"
+  },
+  {
+    "severity": "warning",
+    "file": "centities/bad/centity.json",
+    "message": "bounciness is clamped to between 0 and 1",
+    "path": "$.nodes.body.physics.bounciness",
+    "code": "centity.physics-range"
+  },
+  {
+    "severity": "warning",
+    "file": "centities/bad/centity.json",
+    "message": "It collides with neither blocks nor centities, so nothing will stop it falling",
+    "path": "$.nodes.body.physics",
+    "code": "centity.physics-falls"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "Node \"a\" is part of a parent cycle",
+    "path": "$.nodes.a.parent",
+    "code": "centity.cycle"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "Node \"b\" is part of a parent cycle",
+    "path": "$.nodes.b.parent",
+    "code": "centity.cycle"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "Animation \"wave\" drives unknown node \"ghost\"",
+    "path": "$.animations.wave.tracks.ghost",
+    "code": "centity.animation-node"
+  },
+  {
+    "severity": "warning",
+    "file": "centities/bad/centity.json",
+    "message": "Keyframes after 0.5s never play",
+    "path": "$.animations.wave.length",
+    "code": "centity.keys-past-length"
+  },
+  {
+    "severity": "warning",
+    "file": "centities/bad/centity.json",
+    "message": "Animation \"empty\" has no tracks",
+    "path": "$.animations.empty.tracks",
+    "code": "centity.animation-empty"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "Script file \"missing.lua\" doesn't exist",
+    "path": "$.script.file",
+    "code": "script.missing"
+  },
+  {
+    "severity": "error",
+    "file": "centities/empty/centity.json",
+    "message": "A centity needs at least one node",
+    "path": "$.nodes",
+    "code": "centity.no-nodes"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rope/centity.json",
+    "message": "links must be 1 to 64",
+    "path": "$.nodes.chain.rope.links",
+    "code": "centity.rope"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rope/centity.json",
+    "message": "linkLength must be more than 0 and at most 8 blocks",
+    "path": "$.nodes.chain.rope.linkLength",
+    "code": "centity.rope"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rope/centity.json",
+    "message": "a rope needs a display: what each link draws",
+    "path": "$.nodes.chain.rope",
+    "code": "centity.rope"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rope/centity.json",
+    "message": "a rope can't have a hitbox or physics: it's laid by the server",
+    "path": "$.nodes.string.rope",
+    "code": "centity.rope"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rope/centity.json",
+    "message": "A hitbox has either boxes or shape: \"collision\", not both",
+    "path": "$.nodes.string.hitbox",
+    "code": "centity.hitbox-both"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rope/centity.json",
+    "message": "shape: \"collision\" needs a block display on the same node",
+    "path": "$.nodes.string.hitbox.shape",
+    "code": "centity.hitbox-collision"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rules/centity.json",
+    "message": "Node \"root\" is its own parent",
+    "path": "$.nodes.root.parent",
+    "code": "centity.self-parent"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rules/centity.json",
+    "message": "\"Not An Item\" isn't an item id",
+    "path": "$.nodes.held.display.item",
+    "code": "centity.item-id"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rules/centity.json",
+    "message": "lineWidth must be positive",
+    "path": "$.nodes.sign.display.lineWidth",
+    "code": "centity.line-width"
+  },
+  {
+    "severity": "warning",
+    "file": "centities/rules/centity.json",
+    "message": "This hitbox has no boxes, so nothing can click it",
+    "path": "$.nodes.button.hitbox.boxes",
+    "code": "centity.hitbox-empty"
+  },
+  {
+    "severity": "warning",
+    "file": "centities/rules/centity.json",
+    "message": "Hitbox was fitted to \"minecraft:chest\" but the display is now \"minecraft:barrel\"; fit it again",
+    "path": "$.nodes.crate.hitbox.fittedTo",
+    "code": "centity.hitbox-stale"
+  },
+  {
+    "severity": "warning",
+    "file": "centities/rules/centity.json",
+    "message": "With maxSpeed 0 it can never move",
+    "path": "$.nodes.rock.physics.maxSpeed",
+    "code": "centity.physics-stuck"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rules/centity.json",
+    "message": "The collider's max must be greater than its min on every axis",
+    "path": "$.nodes.rock.physics.collider",
+    "code": "centity.physics-collider"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rules/centity.json",
+    "message": "mass must be positive",
+    "path": "$.nodes.rock.physics.mass",
+    "code": "centity.physics-mass"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rules/centity.json",
+    "message": "\"Bad Name!\" isn't a usable animation name (letters, digits, _ and -, at most 64 characters)",
+    "path": "$.animations[\"Bad Name!\"]",
+    "code": "centity.animation-name"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rules/centity.json",
+    "message": "length must be positive",
+    "path": "$.animations.never.length",
+    "code": "centity.animation-length"
+  },
+  {
+    "severity": "warning",
+    "file": "centities/rules/centity.json",
+    "message": "Track root.scale in \"hollow\" has no keyframes",
+    "path": "$.animations.hollow.tracks.root.scale",
+    "code": "centity.track-empty"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rules/centity.json",
+    "message": "Keyframes can't be before 0",
+    "path": "$.animations.early.tracks.root.rotation",
+    "code": "centity.key-time"
+  },
+  {
+    "severity": "warning",
+    "file": "centities/rules/centity.json",
+    "message": "A budget below 500 is raised to 500",
+    "path": "$.script.budget",
+    "code": "script.budget"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rules/centity.json",
+    "message": "width must be more than 0 and at most 16 blocks",
+    "path": "$.body.width",
+    "code": "centity.body-size"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rules/centity.json",
+    "message": "height must be more than 0 and at most 32 blocks",
+    "path": "$.body.height",
+    "code": "centity.body-size"
+  },
+  {
+    "severity": "warning",
+    "file": "centities/rules/centity.json",
+    "message": "drag is clamped to between 0 and 1",
+    "path": "$.body.drag",
+    "code": "centity.body-range"
+  },
+  {
+    "severity": "warning",
+    "file": "centities/rules/centity.json",
+    "message": "A negative stepHeight is treated as zero",
+    "path": "$.body.stepHeight",
+    "code": "centity.body-range"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rules/centity.json",
+    "message": "max must be more than 0",
+    "path": "$.health.max",
+    "code": "centity.health"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rules/centity.json",
+    "message": "segments must be 1 to 40",
+    "path": "$.health.bar.segments",
+    "code": "centity.health"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rules/centity.json",
+    "message": "showTicks can't be below 0",
+    "path": "$.health.bar.showTicks",
+    "code": "centity.health"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rules/centity.json",
+    "message": "glyph can't be empty",
+    "path": "$.health.bar.glyph",
+    "code": "centity.health"
+  },
+  {
+    "severity": "error",
+    "file": "centities/rules/centity.json",
+    "message": "The node \"health_bar\" draws the health bar, so it must be a text display",
+    "path": "$.nodes.health_bar.display",
+    "code": "centity.health"
+  }
+]

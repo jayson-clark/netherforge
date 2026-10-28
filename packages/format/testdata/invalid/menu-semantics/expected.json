@@ -1,0 +1,113 @@
+[
+  {
+    "severity": "error",
+    "file": "menus/hopper/menu.json",
+    "message": "A hopper is always 5 slots; rows only applies to a chest",
+    "path": "$.rows",
+    "code": "menu.rows-fixed"
+  },
+  {
+    "severity": "error",
+    "file": "menus/menu/menu.json",
+    "message": "A chest has 1 to 6 rows",
+    "path": "$.rows",
+    "code": "menu.rows"
+  },
+  {
+    "severity": "error",
+    "file": "menus/menu/menu.json",
+    "message": "Script \"../escape.lua\" must be a .lua file inside this resource's folder",
+    "path": "$.script.file",
+    "code": "script.path"
+  },
+  {
+    "severity": "error",
+    "file": "menus/menu/menu.json",
+    "message": "Slots are keyed by index: \"0\", \"13\", …",
+    "path": "$.slots[\"01\"]",
+    "code": "menu.slot-key"
+  },
+  {
+    "severity": "error",
+    "file": "menus/menu/menu.json",
+    "message": "This menu has 54 slots (0–53)",
+    "path": "$.slots[\"200\"]",
+    "code": "menu.slot-range"
+  },
+  {
+    "severity": "warning",
+    "file": "menus/menu/menu.json",
+    "message": "Slot 5 has no item",
+    "path": "$.slots[\"5\"]",
+    "code": "menu.slot-empty"
+  },
+  {
+    "severity": "error",
+    "file": "menus/menu/menu.json",
+    "message": "\"Not An Item\" isn't an item id",
+    "path": "$.slots[\"6\"].item.kind",
+    "code": "item.kind"
+  },
+  {
+    "severity": "error",
+    "file": "menus/menu/menu.json",
+    "message": "count must be between 1 and 99",
+    "path": "$.slots[\"6\"].item.count",
+    "code": "item.count"
+  },
+  {
+    "severity": "error",
+    "file": "menus/menu/menu.json",
+    "message": "damage can't be negative",
+    "path": "$.slots[\"6\"].item.damage",
+    "code": "item.damage"
+  },
+  {
+    "severity": "error",
+    "file": "menus/menu/menu.json",
+    "message": "Enchantment levels are 1 to 255",
+    "path": "$.slots[\"6\"].item.enchantments[\"minecraft:sharpness\"]",
+    "code": "item.enchantment-level"
+  },
+  {
+    "severity": "error",
+    "file": "menus/menu/menu.json",
+    "message": "color must be #RRGGBB",
+    "path": "$.slots[\"6\"].item.color",
+    "code": "item.color"
+  },
+  {
+    "severity": "error",
+    "file": "menus/menu/menu.json",
+    "message": "\"nopack\" isn't a reference to a skin: write <pack>/<key>, or <namespace>:<pack>/<key> for another package's",
+    "path": "$.skin",
+    "code": "reference.syntax"
+  },
+  {
+    "severity": "error",
+    "file": "menus/menu/menu.json",
+    "message": "\"ruby\" isn't a reference to an item model: write <pack>/<key>, or <namespace>:<pack>/<key> for another package's",
+    "path": "$.slots[\"6\"].item.itemModel",
+    "code": "reference.syntax"
+  },
+  {
+    "severity": "error",
+    "file": "menus/menu/menu.json",
+    "message": "\"ghost\" is neither this project's namespace (\"case\") nor a package's it depends on",
+    "path": "$.slots[\"7\"].item.itemModel",
+    "code": "reference.namespace"
+  },
+  {
+    "severity": "error",
+    "file": "menus/menu/menu.json",
+    "message": "Resource pack \"ui\" has no tooltip \"missing\" (it has: fancy)",
+    "path": "$.slots[\"7\"].item.tooltipStyle",
+    "code": "reference.resource-pack-key",
+    "related": [
+      {
+        "file": "resource_packs/ui/pack.json",
+        "path": "$.tooltips"
+      }
+    ]
+  }
+]

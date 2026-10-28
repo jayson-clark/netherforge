@@ -1,0 +1,72 @@
+{"jsonrpc":"2.0","id":0,"method":"hello","params":{"token":"t0k3n","protocol":1,"pluginVersion":"0.1.0","minecraft":"26.3","project":"/home/me/projects/basic"}}
+{"jsonrpc":"2.0","id":0,"result":{"protocol":1}}
+{"jsonrpc":"2.0","method":"problems","params":{"problems":[{"severity":"warning","file":"modules/tools","message":"Module \"tools\" has no init.lua and no script requires it, so it never runs","code":"module.no-init"}]}}
+{"jsonrpc":"2.0","method":"status","params":{"players":[],"instances":0}}
+{"jsonrpc":"2.0","id":"backend:1","method":"export_game_data"}
+{"jsonrpc":"2.0","id":1,"method":"reload","params":{"paths":["centities/tower/script.lua","centities/tower/centity.json"]}}
+{"jsonrpc":"2.0","id":1,"result":{"resources":[{"package":"basic","kind":"centity","id":"tower","ok":true,"reattached":2}]}}
+{"jsonrpc":"2.0","id":2,"method":"spawn","params":{"centity":"tower","player":"Steve"}}
+{"jsonrpc":"2.0","id":2,"result":{"uuid":"6f1c2a0e-4b7d-4c43-9a51-0d2f6f6a4f10","centity":"tower","world":"world","x":10.5,"y":64,"z":-3.25}}
+{"jsonrpc":"2.0","method":"console","params":{"items":[{"type":"log","level":"info","message":"hello from tower","source":{"file":"centities/tower/script.lua","line":3}},{"type":"script_error","message":"attempt to index a nil value (global 'torch')","source":{"file":"centities/tower/script.lua","line":7},"traceback":"stack traceback:\n\troot.lua:7: in function 'on_click'"},{"type":"log","level":"warn","message":"centity:tower has errors; it keeps running the last good version"}]}}
+{"jsonrpc":"2.0","method":"status","params":{"players":["Steve"],"instances":2}}
+{"jsonrpc":"2.0","id":3,"method":"instances"}
+{"jsonrpc":"2.0","id":4,"method":"command","params":{"line":"time set day"}}
+{"jsonrpc":"2.0","id":4,"error":{"code":-32000,"message":"the server didn't run \"time set day\""}}
+{"jsonrpc":"2.0","id":5,"method":"reload","params":{"paths":["resource_packs/ui/textures/gui/shop.png"]}}
+{"jsonrpc":"2.0","id":5,"result":{"resources":[{"package":"basic","kind":"resource_pack","id":"ui","ok":true,"reattached":1,"pack":{"sha1":"2fd4e1c67a2d28fced849ee1bb76e7391b93eb12","url":"http://127.0.0.1:52011/2fd4e1c67a2d28fced849ee1bb76e7391b93eb12.zip","bytes":20480}}]}}
+{"jsonrpc":"2.0","id":6,"method":"reload","params":{"paths":["netherforge.json"]}}
+{"jsonrpc":"2.0","id":6,"result":{"resources":[{"package":"basic","ok":true,"reattached":2}]}}
+{"jsonrpc":"2.0","id":7,"method":"play_particle_effect","params":{"effect":"sparkle","player":"Steve","loop":true}}
+{"jsonrpc":"2.0","id":7,"result":null}
+{"jsonrpc":"2.0","id":8,"method":"stop_particle_effects"}
+{"jsonrpc":"2.0","id":8,"result":null}
+{"jsonrpc":"2.0","id":9,"method":"bots/join","params":{"name":"Tester","at":{"x":0.5,"y":64.5,"z":0.5,"world":"world"},"resourcePack":"decline"}}
+{"jsonrpc":"2.0","id":9,"result":{"name":"Tester","uuid":"0f1b0c7e-6a43-3d1f-9a8c-2b5e8f1a0c11","world":"world","x":0.5,"y":64,"z":0.5,"events":3}}
+{"jsonrpc":"2.0","id":10,"method":"bots/act","params":{"name":"Tester","action":{"type":"walk_to","x":4.5,"z":0.5,"sprint":true}}}
+{"jsonrpc":"2.0","id":10,"result":{"world":"world","x":4.5,"y":64,"z":0.5,"since":3}}
+{"jsonrpc":"2.0","id":11,"method":"bots/act","params":{"name":"Tester","action":{"type":"interact","centity":"6f1c2a0e-4b7d-4c43-9a51-0d2f6f6a4f10","node":"lid"}}}
+{"jsonrpc":"2.0","id":11,"error":{"code":-32000,"message":"the centity is 5.2 blocks away; a player reaches 3"}}
+{"jsonrpc":"2.0","id":12,"method":"bots/act","params":{"name":"Tester","action":{"type":"dialog_button","button":"Buy","inputs":{"amount":3,"gift":true}}}}
+{"jsonrpc":"2.0","id":13,"method":"bots/act","params":{"name":"Tester","action":{"type":"jump"}}}
+{"jsonrpc":"2.0","id":14,"method":"bots/state","params":{"name":"Tester"}}
+{"jsonrpc":"2.0","id":14,"result":{"name":"Tester","uuid":"0f1b0c7e-6a43-3d1f-9a8c-2b5e8f1a0c11","world":"world","x":4.5,"y":64,"z":0.5,"yaw":-90,"pitch":0,"onGround":true,"health":20,"food":20,"gameMode":"survival","dead":false,"sneaking":false,"sprinting":false,"selectedSlot":0,"inventory":[{"slot":0,"item":"minecraft:stone","count":3,"name":"Stone"}],"menu":{"type":"minecraft:generic_9x1","title":"Shop","size":9,"items":[{"slot":4,"item":"minecraft:diamond","count":1,"name":"Buy","lore":["10 coins"]}]},"bossBars":[{"name":"Wave 2","progress":0.5,"color":"red","overlay":"progress"}],"sidebar":{"title":"Coins","lines":["Gold: 10"]},"resourcePacks":[{"id":"3b1f0b3e-5c49-4f0e-9a4e-0d7c9d8f2e10","url":"http://127.0.0.1:52011/pack.zip","hash":"2fd4e1c67a2d28fced849ee1bb76e7391b93eb12","status":"declined"}],"entities":[{"uuid":"6f1c2a0e-4b7d-4c43-9a51-0d2f6f6a4f10","type":"minecraft:interaction","x":6,"y":64,"z":0.5,"distance":1.5}],"events":5}}
+{"jsonrpc":"2.0","id":15,"method":"bots/events","params":{"name":"Tester","since":3}}
+{"jsonrpc":"2.0","id":15,"result":{"events":[{"type":"chat","seq":3,"text":"Welcome, Tester"},{"type":"dialog","seq":4,"dialog":{"type":"notice","title":"Hello","body":["Read me"],"buttons":["OK"]}}],"next":5}}
+{"jsonrpc":"2.0","id":16,"method":"bots/list"}
+{"jsonrpc":"2.0","id":16,"result":[]}
+{"jsonrpc":"2.0","id":17,"method":"bots/leave","params":{"name":"Tester"}}
+{"jsonrpc":"2.0","id":17,"result":null}
+{"jsonrpc":"2.0","id":18,"method":"player_position","params":{}}
+{"jsonrpc":"2.0","id":18,"result":{"player":"Steve","world":"world","x":10,"y":64,"z":-4}}
+{"jsonrpc":"2.0","id":19,"method":"worlds"}
+{"jsonrpc":"2.0","id":19,"result":[{"name":"world","environment":"normal","main":true},{"name":"arena_1","environment":"normal","main":false}]}
+{"jsonrpc":"2.0","id":20,"method":"save_structure","params":{"world":"world","from":{"x":10,"y":64,"z":-4},"to":{"x":8,"y":66,"z":-2},"entities":true}}
+{"jsonrpc":"2.0","id":20,"result":{"nbt":"H4sIAAAAAAAA/wMAAAAAAAAAAAA=","size":{"x":3,"y":3,"z":3}}}
+{"jsonrpc":"2.0","id":21,"method":"save_world","params":{"world":"arena_1"}}
+{"jsonrpc":"2.0","id":21,"result":{"level":"world/level.dat","dimension":"world/dimensions/minecraft/arena_1","main":false,"spawn":{"x":0,"y":65,"z":0,"yaw":0,"pitch":0}}}
+{"jsonrpc":"2.0","id":22,"method":"ping"}
+{"jsonrpc":"2.0","id":22,"result":null}
+{"jsonrpc":"2.0","id":28,"method":"settings"}
+{"jsonrpc":"2.0","id":28,"result":{"packages":[{"namespace":"basic","name":"Basic example","file":"plugins/NetherForge/settings/basic.json","settings":{"greeting":{"definition":{"type":"string","description":"What the greeter says.","default":"Welcome"},"value":"Welcome"},"rounds":{"definition":{"type":"integer","description":"Rounds a game lasts.","default":3,"min":1,"max":10},"value":3,"problem":"12 isn't a whole number from 1 to 10"}}}]}}
+{"jsonrpc":"2.0","id":29,"method":"set_setting","params":{"namespace":"basic","setting":"greeting","value":"Hi"}}
+{"jsonrpc":"2.0","method":"settings_changed","params":{"packages":[{"namespace":"basic","name":"Basic example","file":"plugins/NetherForge/settings/basic.json","settings":{"greeting":{"definition":{"type":"string","description":"What the greeter says.","default":"Welcome"},"value":"Hi","set":true}}}]}}
+{"jsonrpc":"2.0","id":29,"result":{"packages":[{"namespace":"basic","name":"Basic example","file":"plugins/NetherForge/settings/basic.json","settings":{"greeting":{"definition":{"type":"string","description":"What the greeter says.","default":"Welcome"},"value":"Hi","set":true}}}]}}
+{"jsonrpc":"2.0","id":30,"method":"set_setting","params":{"namespace":"basic","setting":"rounds","value":"many"}}
+{"jsonrpc":"2.0","id":30,"error":{"code":-32000,"message":"rounds: \"many\" isn't a whole number from 1 to 10"}}
+{"jsonrpc":"2.0","id":27,"method":"profiler_subscribe","params":{"on":true}}
+{"jsonrpc":"2.0","id":27,"result":null}
+{"jsonrpc":"2.0","id":28,"method":"reload","params":{"paths":["advancements/treasure_hunter.json"]}}
+{"jsonrpc":"2.0","id":28,"result":{"resources":[{"package":"basic","kind":"advancement","id":"treasure_hunter","ok":true}],"restart":true}}
+{"jsonrpc":"2.0","method":"profiler","params":{"items":[{"ticks":[{"tick":40,"nanos":412000,"phases":{"timers":12000,"events":90000,"world":250000,"effects":20000,"upkeep":10000,"accounts":28000,"save":2000},"scripts":301000,"top":[{"scope":"centity tower 6f1c2a0e","nanos":180000,"calls":2,"max":180000}]}],"scopes":[{"scope":"centity tower 6f1c2a0e","nanos":3600000,"calls":40,"max":180000}],"handlers":[{"script":"centity tower","kind":"tick","source":{"file":"centities/tower/script.lua","line":7},"calls":40,"nanos":3600000,"max":240000,"scopes":2},{"script":"module shop","kind":"command","calls":1,"nanos":51000,"max":51000}]}]}}
+{"jsonrpc":"2.0","id":23,"method":"debugger/attach","params":{}}
+{"jsonrpc":"2.0","id":23,"error":{"code":-32601,"message":"Unknown method \"debugger/attach\""}}
+{"jsonrpc":"2.0","id":24,"method":"spawn","params":{"player":"Steve"}}
+{"jsonrpc":"2.0","id":24,"error":{"code":-32602,"message":"Invalid params for spawn: Field 'centity' is required"}}
+[{"jsonrpc":"2.0","id":25,"method":"instances"},{"jsonrpc":"2.0","id":26,"method":"worlds"}]
+[{"jsonrpc":"2.0","id":25,"result":[]},{"jsonrpc":"2.0","id":26,"result":[{"name":"world","environment":"normal","main":true}]}]
+{"jsonrpc":"2.0","id":0,"method":"hello","params":{"token":"t0k3n","protocol":2,"pluginVersion":"0.2.0","minecraft":"26.3","project":"/home/me/projects/basic"}}
+{"jsonrpc":"2.0","id":0,"error":{"code":-32001,"message":"This server's NetherForge plugin speaks dev bridge protocol 2 and the editor speaks 1, so the editor can't talk to it. Use the plugin that came with this editor."}}
+{"jsonrpc":"2.0","method":"dap","params":{"seq":1,"type":"request","command":"initialize","arguments":{"clientID":"netherforge","adapterID":"netherforge","linesStartAt1":true,"columnsStartAt1":true,"pathFormat":"path"}}}
+{"jsonrpc":"2.0","method":"dap","params":{"seq":1,"type":"response","request_seq":1,"success":true,"command":"initialize","body":{"supportsConfigurationDoneRequest":true,"exceptionBreakpointFilters":[{"filter":"errors","label":"Script errors","default":false}]}}}
+{"jsonrpc":"2.0","method":"dap","params":{"seq":2,"type":"request","command":"setBreakpoints","arguments":{"source":{"path":"centities/tower/script.lua"},"breakpoints":[{"line":7}]}}}
+{"jsonrpc":"2.0","method":"dap","params":{"seq":3,"type":"event","event":"stopped","body":{"reason":"breakpoint","threadId":1,"allThreadsStopped":true}}}

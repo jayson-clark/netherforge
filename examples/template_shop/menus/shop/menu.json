@@ -1,0 +1,29 @@
+{
+  "$schema": "../../.netherforge/schema/menu.schema.json",
+  "name": "Shop",
+  "rows": 3,
+  "title": "<dark_gray>Shop",
+  "slots": {
+    "11": {
+      "item": {
+        "kind": "minecraft:bread",
+        "count": 4,
+        "name": "<yellow>Bread"
+      }
+    },
+    "13": {
+      "item": {
+        "item": "lucky_charm"
+      }
+    },
+    "15": {
+      "item": {
+        "kind": "minecraft:barrier",
+        "name": "<red>Close"
+      }
+    }
+  },
+  "script": {
+    "file": "script.lua"
+  }
+}

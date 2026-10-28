@@ -1,0 +1,18 @@
+{
+  "length": 4,
+  "camera": {
+    "position": [
+      { "time": 0, "value": [0, 0, 0] },
+      { "time": 0, "value": [1, 1, 1] },
+      { "time": 5, "value": [200000000, 0, 0] }
+    ],
+    "rotation": [{ "time": -1, "yaw": 0, "pitch": 95 }]
+  },
+  "cues": [
+    { "time": 1 },
+    { "time": 2, "event": "Bad Name" },
+    { "time": 3, "event": "ok", "duration": 2 },
+    { "time": 3.5, "text": "late", "duration": 0 },
+    { "time": 9, "text": "too late" }
+  ]
+}

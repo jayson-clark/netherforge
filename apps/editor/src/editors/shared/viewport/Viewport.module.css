@@ -1,0 +1,69 @@
+.viewport {
+  position: relative;
+  flex: 1;
+  min-height: 160px;
+}
+.viewport canvas {
+  display: block;
+}
+.toolbar {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  gap: 2px;
+  background: rgba(24, 27, 33, 0.85);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px;
+  z-index: 1;
+}
+.toolbar button {
+  border: none;
+  background: transparent;
+  padding: 2px 8px;
+  font-size: var(--font-size-sm);
+  border-radius: 3px;
+}
+.toolbar button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.toolbar button[aria-pressed='true'] {
+  background: var(--bg-selected);
+}
+.note {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  background: rgba(24, 27, 33, 0.9);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+}
+.warning {
+  bottom: 40px;
+  color: var(--warning);
+}
+.fallback {
+  flex: 1;
+  padding: 20px;
+  color: var(--muted);
+}
+/* The element the shared canvas is moved into (ViewportHost), under the toolbar and notes. */
+.slot {
+  position: absolute;
+  inset: 0;
+}
+.holder {
+  width: 100%;
+  height: 100%;
+}
+.corner {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+}

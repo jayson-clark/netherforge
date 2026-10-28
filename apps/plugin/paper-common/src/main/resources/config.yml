@@ -1,0 +1,192 @@
+# The NetherForge project this server runs: the folder holding netherforge.json,
+# absolute or relative to the server's folder. Point it at a git checkout and
+# `git pull` to deploy; `/nf reload` picks up the change without a restart.
+# A project with dependencies runs as a bundle instead: the folder
+# `netherforge build` wrote, holding netherforge-bundle.json.
+#
+# The NetherForge editor's dev server ignores this: the editor starts it with
+# -Dnetherforge.project=<folder> instead.
+project: ''
+
+# How players get the project's resource pack (everything under resource_packs/). The
+# plugin builds it, and by default serves it itself over HTTP and sends it to
+# players as they join. The editor's dev server ignores this section and
+# serves it on localhost.
+resource-pack:
+  enabled: true
+  # Where the built-in server listens.
+  bind: 0.0.0.0
+  port: 8163
+  # The address players download from, if not http://<server-ip>:<port>
+  # (localhost when server-ip is empty or 0.0.0.0)
+  # (a public host name, or a reverse proxy in front of the port above).
+  public-url: ''
+  # Serve it yourself instead: the plugin writes plugins/NetherForge/resource-pack.zip
+  # whenever it changes, and sends players this URL with the zip's hash.
+  external-url: ''
+  # Disconnect players who decline it.
+  required: false
+  # MiniMessage shown on the download prompt.
+  prompt: ''
+
+# When the plugin warns that a script is slowing the server down: in the
+# console and in the editor's problems, naming where it's slow. A script is
+# slow when its code took more than warn-ms milliseconds a tick on average over
+# the last warn-ticks ticks (at most 100). 0 turns the warning off. `/nf scripts`
+# lists every script's cost either way. Dev servers read this section too.
+performance:
+  warn-ms: 10
+  warn-ticks: 20
+
+# The time zone nf.schedule's times of day are in ("18:00" daily, "sat" weekly,
+# cron expressions), and the one nf.time writes and reads clock times in unless
+# a call gives its own: a name like Europe/Paris or America/New_York, or an offset
+# like +02:00. Empty is this server's own zone. Daylight saving follows the
+# zone's rules. Read when the server starts; dev servers read it too.
+schedules:
+  time-zone: ''
+
+# Web routes scripts answer (nf.web: webhooks, "log in with..." callbacks, small
+# pages), each package under its own /<namespace>/ path. Off until you turn them
+# on. They're served on the resource pack's port (resource-pack.bind and .port),
+# usually behind a reverse proxy that adds HTTPS: set public-url to the address
+# the world reaches them at (https://play.example.com), which scripts build
+# links with. trust-proxy-headers takes the client's address from
+# X-Forwarded-For: turn it on only behind your own proxy. Requests over the
+# limits are refused before any script sees them (413, 429, 503); a script that
+# doesn't answer in time is 504. Read when the server starts; dev servers read it too.
+web:
+  enabled: false
+  public-url: ''
+  trust-proxy-headers: false
+  max-body-bytes: 65536
+  max-response-bytes: 1048576
+  requests-per-minute-per-ip: 60
+  max-pending: 64
+  handler-timeout-seconds: 10
+
+# Bots: fake players scripts join and drive (nf.bots), for packages that declare
+# "requires": { "bots": true }. They're players to the server and to other plugins:
+# on the player list, counted in the player count, heard joining and quitting. Each
+# is a new player every time it joins, never saved, marked as an NPC (the "NPC"
+# metadata plugins check to leave fake players alone), and loads only the chunks
+# right around it. Off until you turn them on; max is how many may be online at
+# once across every package. Read when the server starts; dev servers always allow them.
+bots:
+  enabled: false
+  max: 20
+
+# How fast world:place_gradually and world:fill_gradually go. Every placement and
+# fill going at once shares blocks-per-tick blocks a tick, in turn, so two scripts
+# can't double the load; a package may have max-jobs-per-package going at once,
+# past which a new one fails. Lower blocks-per-tick if big builds make ticks long.
+# Read when the server starts; dev servers read it too.
+structures:
+  blocks-per-tick: 8192
+  max-jobs-per-package: 4
+
+# Screens (walls of maps scripts draw on and play videos on) are sent to each
+# player a change at a time. bytes-per-tick is the most of their pixels a player
+# is sent each tick (a whole map is 16384): what doesn't fit waits, merged with
+# what changes meanwhile, so a big video skips frames for a slow connection
+# rather than falling behind. Read when the server starts; dev servers read it too.
+screens:
+  bytes-per-tick: 65536
+
+# What nf.http.request (a script's web requests, to the hosts its package
+# declares in netherforge.json) may reach and do. Requests reach public addresses
+# only: a name that leads to loopback, a private, link-local, shared (CGNAT) or
+# unique-local address, and a redirect that leads there, is refused. Turn
+# allow-private-addresses on only for a service of your own on this machine or
+# network. Sizes are in bytes; the timeout covers a request with its redirects;
+# the rate is per package. Read when the server starts; dev servers read it too.
+http:
+  allow-private-addresses: false
+  max-request-bytes: 1048576
+  max-response-bytes: 4194304
+  timeout-seconds: 15
+  requests-per-minute: 60
+  # Streams and WebSockets scripts hold open (nf.http.stream, nf.http.websocket),
+  # to the same hosts and addresses; opening one counts as a request. A connection
+  # past a limit ends with reason "limit". bytes-per-minute counts what a package's
+  # connections send and receive; idle-seconds ends one with nothing moving; while
+  # scripts haven't taken max-queued-messages, the server stops reading (nothing is
+  # dropped), and it hands scripts messages-per-tick a tick per connection.
+  connections:
+    max-per-package: 4
+    max-total: 32
+    max-message-bytes: 1048576
+    bytes-per-minute: 16777216
+    idle-seconds: 300
+    max-queued-messages: 1000
+    messages-per-tick: 100
+
+# How WebAssembly modules (nf.wasm, a package's wasm/<id>/, for packages that
+# declare "requires": { "wasm": true }) run. They run off the main thread with no
+# access to the server, the network or files but their own data. `threads` runs
+# every call, run and compile, each using at most one core; a started program holds
+# a thread of its own while it runs, at most max-processes-total. An instance or
+# program may use max-memory-mb of memory, and all of them together
+# max-memory-total-mb (each counted at the most it may grow to). A call or run is
+# stopped after max-call-seconds. A program's output waits for scripts, at most
+# max-queued-lines lines (it's paused past that), handed over lines-per-tick a tick.
+# compile: false runs every module in the interpreter, many times slower, for a
+# JVM where making classes is a problem. Read when the server starts; dev servers
+# read it too.
+wasm:
+  threads: 2
+  compile: true
+  max-module-mb: 64
+  max-memory-mb: 256
+  max-memory-total-mb: 1024
+  max-call-seconds: 10
+  max-queued-calls-per-package: 64
+  max-instances-per-package: 8
+  max-processes-per-package: 2
+  max-processes-total: 4
+  max-output-bytes: 1048576
+  max-line-bytes: 65536
+  max-queued-lines: 1000
+  lines-per-tick: 100
+
+# A network of servers behind one proxy (nf.network), for packages that declare
+# "requires": { "network": true }: messages and requests between servers, shared
+# maps, who's online where, and sending players between servers. The proxy
+# (Velocity) runs NetherForge's proxy plugin, the network's hub; its
+# plugins/netherforge/hub.properties has the port and the secret. Set hub to the
+# proxy's address and that port, server-name to this server's name in
+# velocity.toml's [servers], and secret to the hub's. What each package may send
+# a minute (messages, requests, map writes, players sent) is
+# messages-per-minute; a request waits request-timeout-seconds for its answer.
+# What arrives is handed to scripts messages-per-tick a tick, at most
+# max-queued-messages waiting (the server stops reading from the hub past
+# that). Read when the server starts. A dev server not in a network is one of
+# its own, named "dev".
+network:
+  enabled: false
+  hub: 127.0.0.1:25590
+  server-name: ''
+  secret: ''
+  messages-per-minute: 1200
+  request-timeout-seconds: 10
+  messages-per-tick: 1000
+  max-queued-messages: 10000
+
+# MySQL and PostgreSQL servers that scripts may use, each under a name:
+# nf.db("network"). A script names a connection and never sees its host or
+# password. A connection opens only to the packages (by namespace) listed under
+# its `packages`; a package must also declare "requires": { "db": true } in its
+# netherforge.json. MySQL's driver is the server's own; PostgreSQL's and the
+# connection pool are fetched when the plugin loads. Read when the server
+# starts; dev servers read it too. Nothing is set up by default:
+# databases:
+#   network:
+#     type: mysql          # mysql (MariaDB works too) or postgres
+#     host: localhost
+#     port: 3306           # default: 3306 for mysql, 5432 for postgres
+#     database: netherforge
+#     username: netherforge
+#     password: ''
+#     pool-size: 4         # most statements running at once (1 to 32)
+#     packages: [shop]     # who may open it; empty lets no package in
+#     properties: {}       # extra driver properties, like sslMode: REQUIRED

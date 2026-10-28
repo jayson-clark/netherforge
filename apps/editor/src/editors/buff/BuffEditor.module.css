@@ -1,0 +1,25 @@
+.badge {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+  padding: 14px 18px;
+  border: 3px solid;
+  border-radius: 8px;
+  background: var(--panel-bg, rgb(0 0 0 / 0.35));
+}
+
+.name {
+  font-size: 1.2em;
+  font-weight: 600;
+}
+
+.kind {
+  opacity: 0.7;
+  font-size: 0.9em;
+}
+
+.stats {
+  margin: 0;
+  padding-left: 18px;
+}

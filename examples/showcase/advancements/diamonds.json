@@ -1,0 +1,30 @@
+{
+  "$schema": "../.netherforge/schema/advancement.schema.json",
+  "parent": "adventurer",
+  "display": {
+    "icon": {
+      "kind": "minecraft:diamond",
+      "glint": true
+    },
+    "title": "<aqua>Shiny!",
+    "description": "Find a diamond, or have one handed to you",
+    "frame": "challenge",
+    "hidden": true
+  },
+  "criteria": {
+    "found": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "minecraft:diamond"
+          }
+        ]
+      }
+    },
+    "given": {}
+  },
+  "requirements": [
+    ["found", "given"]
+  ]
+}

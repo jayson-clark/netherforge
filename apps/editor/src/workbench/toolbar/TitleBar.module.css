@@ -1,0 +1,33 @@
+.controls {
+  display: flex;
+  align-self: stretch;
+  margin-left: 8px;
+}
+.controls button {
+  width: 46px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  display: grid;
+  place-items: center;
+}
+.controls button:hover {
+  background: var(--bg-hover);
+}
+.controls .close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+.bare {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  display: flex;
+}
+.drag {
+  flex: 1;
+  align-self: stretch;
+}

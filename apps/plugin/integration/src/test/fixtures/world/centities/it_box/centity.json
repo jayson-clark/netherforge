@@ -1,0 +1,8 @@
+{
+  "nodes": {
+    "root": {
+      "display": { "type": "block", "block": "minecraft:stone" },
+      "hitbox": { "raycast": true }
+    }
+  }
+}

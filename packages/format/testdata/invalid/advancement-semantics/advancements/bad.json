@@ -1,0 +1,15 @@
+{
+  "parent": "missing",
+  "display": {
+    "icon": { "kind": "minecraft:diamond", "item": "nothing_here" },
+    "title": "Bad",
+    "background": "Not A Texture"
+  },
+  "criteria": {
+    "Bad Name": {},
+    "loose": { "conditions": { "items": [] } },
+    "odd": { "trigger": "not a trigger" }
+  },
+  "requirements": [[], ["ghost", "odd"]],
+  "experience": -1
+}

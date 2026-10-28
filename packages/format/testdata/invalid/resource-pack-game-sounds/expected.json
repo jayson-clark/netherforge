@@ -1,0 +1,30 @@
+[
+  {
+    "severity": "error",
+    "file": "resource_packs/b/pack.json",
+    "message": "Replacing the game's minecraft:block.stone.place takes files to play instead: \"files\": [\"block/break_1.ogg\"]",
+    "path": "$.sounds[\"minecraft:block.stone.place\"]",
+    "code": "resource_pack.sound-replace"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/b/pack.json",
+    "message": "\"minecraft:Stone Break\" isn't one of the game's sound events: they're written like \"minecraft:block.stone.break\"",
+    "path": "$.sounds[\"minecraft:Stone Break\"]",
+    "code": "resource_pack.sound-key"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/b/pack.json",
+    "message": "\"acme:block.stone.break\" isn't a usable sound key (path segments of lowercase letters, digits and _, joined by /); the game's own sound events are replaced by their name in the minecraft namespace",
+    "path": "$.sounds[\"acme:block.stone.break\"]",
+    "code": "resource_pack.sound-key"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/b/pack.json",
+    "message": "Another resource pack replaces minecraft:block.stone.break too; only one can",
+    "path": "$.sounds[\"minecraft:block.stone.break\"]",
+    "code": "resource_pack.sound-event"
+  }
+]

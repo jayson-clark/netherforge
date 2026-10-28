@@ -1,0 +1,8 @@
+{
+  "type": "shaped",
+  "pattern": ["AB", "ABC", "    ", "A"],
+  "key": { "A": "minecraft:stick", "Z": "#minecraft:planks", "long": "minecraft:air" },
+  "ingredients": ["minecraft:stick"],
+  "result": { "kind": "minecraft:stick" },
+  "category": "food"
+}

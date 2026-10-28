@@ -1,0 +1,20 @@
+.sprite {
+  isolation: isolate;
+  position: relative;
+  display: grid;
+}
+.sprite > * {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+}
+.sprite img {
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+.tint {
+  image-rendering: pixelated;
+}
+.multiply {
+  mix-blend-mode: multiply;
+}

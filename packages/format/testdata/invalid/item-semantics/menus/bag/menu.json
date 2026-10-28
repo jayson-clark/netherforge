@@ -1,0 +1,32 @@
+{
+  "$schema": "../../.netherforge/schema/menu.schema.json",
+  "rows": 1,
+  "slots": {
+    "0": { "item": { "kind": "minecraft:paper", "maxStackSize": 100 } },
+    "1": { "item": { "kind": "minecraft:paper", "maxStackSize": 4, "damage": 2 } },
+    "2": { "item": { "kind": "minecraft:paper", "count": 8, "maxStackSize": 4 } },
+    "3": {
+      "item": {
+        "kind": "minecraft:paper",
+        "attributeModifiers": [
+          { "attribute": "Attack Damage", "amount": 1, "operation": "add_value" },
+          { "id": "a:b", "attribute": "minecraft:armor", "amount": 1, "operation": "add_value" },
+          { "id": "a:b", "attribute": "minecraft:armor", "amount": 2, "operation": "add_multiplied_base", "slot": "head" }
+        ]
+      }
+    },
+    "4": { "item": { "kind": "minecraft:paper", "canBreak": ["not a block"], "canPlaceOn": ["minecraft:stone"], "hiddenTooltipComponents": ["painting_variant"] } },
+    "5": { "item": { "kind": "minecraft:paper", "food": { "nutrition": -1, "saturation": 1, "eatSeconds": 0 } } },
+    "6": { "item": { "kind": "minecraft:paper", "cooldown": { "seconds": 0, "group": "Not An Id" } } },
+    "7": { "item": { "kind": "minecraft:paper", "rarity": "epic", "food": { "nutrition": 2, "saturation": 0.5, "canAlwaysEat": true }, "cooldown": { "seconds": 1 } } },
+    "8": {
+      "item": {
+        "kind": "minecraft:paper",
+        "enchantments": { "Not An Enchantment": 1 },
+        "hold": true,
+        "food": { "nutrition": 1, "saturation": 0 },
+        "useEffects": { "speedMultiplier": 1.5, "canSprint": true }
+      }
+    }
+  }
+}

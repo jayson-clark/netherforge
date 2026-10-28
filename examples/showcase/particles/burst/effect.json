@@ -1,0 +1,68 @@
+{
+  "$schema": "../../.netherforge/schema/particle_effect.schema.json",
+  "duration": 40,
+  "emitters": {
+    "gather": {
+      "particle": "minecraft:enchant",
+      "end": 20,
+      "rate": 8,
+      "shape": {
+        "type": "sphere",
+        "radius": 1.6,
+        "surface": true
+      },
+      "motion": "inward",
+      "speed": 0.6
+    },
+    "ring": {
+      "particle": "minecraft:dust",
+      "start": 18,
+      "end": 34,
+      "burst": 40,
+      "every": 4,
+      "shape": {
+        "type": "ring"
+      },
+      "distribution": "even",
+      "spin": 6,
+      "offset": [0, 0.2, 0],
+      "size": 1.2,
+      "curves": {
+        "radius": [
+          {
+            "time": 18,
+            "value": 0.3
+          },
+          {
+            "time": 34,
+            "value": 2.5,
+            "easing": "ease_out"
+          }
+        ],
+        "color": [
+          {
+            "time": 18,
+            "color": "#f2d4ff"
+          },
+          {
+            "time": 34,
+            "color": "#8a3cff",
+            "easing": "ease_in"
+          }
+        ]
+      }
+    },
+    "rise": {
+      "particle": "minecraft:end_rod",
+      "start": 20,
+      "burst": 16,
+      "shape": {
+        "type": "disc",
+        "radius": 0.4
+      },
+      "motion": "direction",
+      "direction": [0, 1, 0],
+      "speed": 0.25
+    }
+  }
+}

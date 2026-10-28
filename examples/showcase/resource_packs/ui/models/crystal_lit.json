@@ -1,0 +1,281 @@
+{
+  "credit": "The ruby crystal, glowing: its shards a little taller, drawn at full light",
+  "textures": {
+    "0": "block/ruby_ore",
+    "particle": "block/ruby_ore"
+  },
+  "elements": [
+    {
+      "from": [
+        6,
+        0,
+        6
+      ],
+      "to": [
+        10,
+        16,
+        10
+      ],
+      "rotation": {
+        "angle": 0,
+        "axis": "y",
+        "origin": [
+          8,
+          0,
+          8
+        ]
+      },
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            4,
+            14
+          ],
+          "texture": "#0"
+        },
+        "east": {
+          "uv": [
+            4,
+            0,
+            8,
+            14
+          ],
+          "texture": "#0"
+        },
+        "south": {
+          "uv": [
+            8,
+            0,
+            12,
+            14
+          ],
+          "texture": "#0"
+        },
+        "west": {
+          "uv": [
+            12,
+            0,
+            16,
+            14
+          ],
+          "texture": "#0"
+        },
+        "up": {
+          "uv": [
+            0,
+            12,
+            4,
+            16
+          ],
+          "texture": "#0"
+        },
+        "down": {
+          "uv": [
+            4,
+            12,
+            8,
+            16
+          ],
+          "texture": "#0"
+        }
+      },
+      "light_emission": 15
+    },
+    {
+      "from": [
+        2,
+        0,
+        7
+      ],
+      "to": [
+        5,
+        10,
+        10
+      ],
+      "rotation": {
+        "x": 0,
+        "y": 30,
+        "z": 25,
+        "origin": [
+          4,
+          0,
+          8
+        ]
+      },
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            3,
+            8
+          ],
+          "texture": "#0"
+        },
+        "east": {
+          "uv": [
+            3,
+            0,
+            6,
+            8
+          ],
+          "texture": "#0"
+        },
+        "south": {
+          "uv": [
+            6,
+            0,
+            9,
+            8
+          ],
+          "texture": "#0"
+        },
+        "west": {
+          "uv": [
+            9,
+            0,
+            12,
+            8
+          ],
+          "texture": "#0"
+        },
+        "up": {
+          "uv": [
+            12,
+            0,
+            15,
+            3
+          ],
+          "texture": "#0"
+        }
+      },
+      "light_emission": 15
+    },
+    {
+      "from": [
+        11,
+        0,
+        6
+      ],
+      "to": [
+        14,
+        12,
+        9
+      ],
+      "rotation": {
+        "angle": -22.5,
+        "axis": "z",
+        "origin": [
+          12,
+          0,
+          8
+        ]
+      },
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            3,
+            10
+          ],
+          "texture": "#0"
+        },
+        "east": {
+          "uv": [
+            3,
+            0,
+            6,
+            10
+          ],
+          "texture": "#0"
+        },
+        "south": {
+          "uv": [
+            6,
+            0,
+            9,
+            10
+          ],
+          "texture": "#0"
+        },
+        "west": {
+          "uv": [
+            9,
+            0,
+            12,
+            10
+          ],
+          "texture": "#0"
+        },
+        "up": {
+          "uv": [
+            12,
+            0,
+            15,
+            3
+          ],
+          "texture": "#0"
+        }
+      },
+      "light_emission": 15
+    }
+  ],
+  "display": {
+    "thirdperson_righthand": {
+      "rotation": [
+        0,
+        45,
+        0
+      ],
+      "translation": [
+        0,
+        2,
+        0
+      ],
+      "scale": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    "firstperson_righthand": {
+      "rotation": [
+        0,
+        45,
+        0
+      ],
+      "scale": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    "gui": {
+      "rotation": [
+        30,
+        225,
+        0
+      ],
+      "translation": [
+        0,
+        -1,
+        0
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    "fixed": {
+      "scale": [
+        0.6,
+        0.6,
+        0.6
+      ]
+    }
+  }
+}

@@ -1,0 +1,37 @@
+[
+  {
+    "severity": "error",
+    "file": "videos/fps/video.json",
+    "message": "fps is 1 to 20, not 30",
+    "path": "$.fps",
+    "code": "video.fps"
+  },
+  {
+    "severity": "warning",
+    "file": "videos/noaudio/video.json",
+    "message": "audio is on, but there's no audio.ogg: convert it again in the editor, or set audio to false",
+    "path": "$.audio",
+    "code": "video.audio-missing"
+  },
+  {
+    "severity": "error",
+    "file": "videos/range/video.json",
+    "message": "start is a time in seconds, 0 or more, not -1",
+    "path": "$.start",
+    "code": "video.range"
+  },
+  {
+    "severity": "error",
+    "file": "videos/source/video.json",
+    "message": "source is the video file in the video's folder, like \"source.mp4\"",
+    "path": "$.source",
+    "code": "video.source"
+  },
+  {
+    "severity": "warning",
+    "file": "videos/unconverted/video.json",
+    "message": "The video hasn't been converted for screens, so it can't play: convert it in the editor",
+    "path": "$",
+    "code": "video.not-converted"
+  }
+]

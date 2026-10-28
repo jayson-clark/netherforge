@@ -1,0 +1,10 @@
+{
+  "$schema": "../.netherforge/schema/buff.schema.json",
+  "name": "<gray>Ironskin",
+  "color": "#8a8a98",
+  "stats": {
+    "defense": 8
+  },
+  "cures": ["frail"],
+  "maxTicks": 6000
+}

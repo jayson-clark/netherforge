@@ -1,0 +1,21 @@
+{
+  "$schema": ".netherforge/schema/netherforge.schema.json",
+  "formatVersion": 1,
+  "name": "Network demo",
+  "namespace": "network_demo",
+  "version": "0.1.0",
+  "minecraft": "26.3",
+  "worlds": {
+    "world": {
+      "spawnLimits": {
+        "monster": 0,
+        "animal": 0
+      },
+      "terrain": "meadow"
+    }
+  },
+  "requires": {
+    "bots": true,
+    "network": true
+  }
+}

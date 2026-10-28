@@ -1,0 +1,30 @@
+{
+  "terrain": {
+    "base": 99999,
+    "seaLevel": 5000000,
+    "fluid": "not a state",
+    "noises": {
+      "Bad Name": { "noise": { "frequency": -1, "octaves": 20, "lacunarity": 9, "gain": 3 }, "amplitude": 1e9 },
+      "ok": { "noise": { "frequency": 0.5, "octaves": 3 }, "amplitude": 10 }
+    }
+  },
+  "layers": [{ "block": "minecraft:stone", "thickness": 0 }, { "block": "[]" }],
+  "underwater": [{ "block": "minecraft:sand", "thickness": 999 }],
+  "stone": { "block": "no way" },
+  "floor": { "thickness": 0 },
+  "caves": {
+    "a": { "threshold": 7, "minY": 10, "maxY": 0, "depth": -1 },
+    "b": { "type": "spaghetti", "threshold": 0, "noise": { "gain": 0.5 } }
+  },
+  "climate": { "temperature": { "octaves": 0 } },
+  "ores": {
+    "none": {},
+    "both": { "block": "minecraft:stone", "customBlock": "lamp" },
+    "big": { "block": "minecraft:stone", "size": 100, "veins": 999, "minY": 50, "maxY": 0, "replace": ["Not An Id"] },
+    "lamp": { "customBlock": "lamp" },
+    "missing": { "customBlock": "nothing" }
+  },
+  "biomes": {
+    "a": { "biome": "Not A Biome", "temperature": { "min": 2, "max": -2 }, "layers": [{ "block": "" }] }
+  }
+}

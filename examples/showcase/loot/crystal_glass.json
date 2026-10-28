@@ -1,0 +1,15 @@
+{
+  "$schema": "../.netherforge/schema/loot_table.schema.json",
+  "pools": {
+    "main": {
+      "entries": [
+        {
+          "type": "item",
+          "item": {
+            "item": "crystal_glass"
+          }
+        }
+      ]
+    }
+  }
+}

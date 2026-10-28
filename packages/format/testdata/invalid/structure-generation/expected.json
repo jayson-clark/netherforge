@@ -1,0 +1,80 @@
+[
+  {
+    "severity": "error",
+    "file": "structures/a.json",
+    "message": "A tag (#…) stands alone in biomes: list biome ids, or name one tag",
+    "path": "$.biomes",
+    "code": "structure.biomes"
+  },
+  {
+    "severity": "error",
+    "file": "structures/a.json",
+    "message": "separation (4) must be below spacing (4): it's the gap kept inside each square",
+    "path": "$.separation",
+    "code": "structure.spread"
+  },
+  {
+    "severity": "error",
+    "file": "structures/b.json",
+    "message": "A structure generates in at least one biome, or in a tag's: biomes is empty",
+    "path": "$.biomes",
+    "code": "structure.biomes"
+  },
+  {
+    "severity": "error",
+    "file": "structures/b.json",
+    "message": "salt can't be negative",
+    "path": "$.salt",
+    "code": "structure.spread"
+  },
+  {
+    "severity": "error",
+    "file": "structures/b.json",
+    "message": "depth is from 1 to 20, not 21",
+    "path": "$.depth",
+    "code": "structure.range"
+  },
+  {
+    "severity": "error",
+    "file": "structures/b.json",
+    "message": "\"start\" is the pool the structure's own template starts from: name this one something else",
+    "path": "$.pools.start",
+    "code": "structure.pool"
+  },
+  {
+    "severity": "error",
+    "file": "structures/b.json",
+    "message": "A pool picks from at least one structure",
+    "path": "$.pools.empty.elements",
+    "code": "structure.pool"
+  },
+  {
+    "severity": "error",
+    "file": "structures/b.json",
+    "message": "weight is from 1 to 150, not 200",
+    "path": "$.pools.ghosts.elements[0].weight",
+    "code": "structure.range"
+  },
+  {
+    "severity": "error",
+    "file": "structures/b.json",
+    "message": "There's no structure \"nope\" (structures/nope.nbt) in the project to pick from",
+    "path": "$.pools.ghosts.elements[0].structure",
+    "code": "structure.pool-element"
+  },
+  {
+    "severity": "error",
+    "file": "structures/broken.json",
+    "message": "Unknown key \"bogus\"",
+    "path": "$",
+    "line": 1,
+    "column": 36,
+    "code": "parse"
+  },
+  {
+    "severity": "warning",
+    "file": "structures/orphan.json",
+    "message": "There's no structures/orphan.nbt beside this, so it's ignored",
+    "code": "project.missing-file"
+  }
+]

@@ -1,0 +1,2871 @@
+{
+  "$comment": "The backend contract: what MemoryBackend and the Rust backend must both do, in the UI's terms (Backend calls, subscriptions, events). Run on MemoryBackend by contract.test.ts and on the real TauriBackend over the Rust commands by contract.tauri.test.ts. contractRunner.ts documents the step kinds, the matchers and the $variables.",
+  "project": {
+    "netherforge.json": "{ \"name\": \"Contract\", \"namespace\": \"contract\", \"minecraft\": \"26.3\" }\n",
+    "modules/shop/init.lua": "return {}\n",
+    "B.txt": "upper\n",
+    "a.txt": "lower\n",
+    "_under.txt": "under\n",
+    ".git/config": "[core]\n",
+    ".netherforge/schema/centity.json": "{}\n"
+  },
+  "packages": {
+    "lib": {
+      "netherforge.json": "{ \"namespace\": \"lib\" }\n",
+      "items/gem/item.json": "{}\n",
+      "items/gem/script.lua": "-- gem\n",
+      ".git/HEAD": "ref\n"
+    },
+    "notapackage": {
+      "readme.txt": "hi\n"
+    },
+    "lobby": {
+      "netherforge.json": "{ \"name\": \"Lobby\", \"namespace\": \"lobby\", \"minecraft\": \"26.3\" }\n",
+      "modules/chat/init.lua": "return {}\n"
+    }
+  },
+  "repositories": {
+    "lib": {
+      "netherforge.json": "{ \"namespace\": \"lib\" }\n",
+      "items/gem/item.json": "{}\n"
+    }
+  },
+  "cases": [
+    {
+      "name": "a package beside the project is listed with digests, read and copied in, never over anything",
+      "steps": [
+        {
+          "call": "packageFiles",
+          "args": ["../lib"],
+          "ok": {
+            "root": "$any",
+            "files": [
+              {
+                "path": "items/gem/item.json",
+                "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+              },
+              {
+                "path": "items/gem/script.lua",
+                "sha256": "$any"
+              },
+              {
+                "path": "netherforge.json",
+                "sha256": "$any"
+              }
+            ]
+          }
+        },
+        {
+          "call": "packageReadText",
+          "args": ["./../lib", "items/gem/script.lua"],
+          "ok": "-- gem\n"
+        },
+        {
+          "call": "packageReadText",
+          "args": ["../lib", "../project/a.txt"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "packageFiles",
+          "args": ["../missing"],
+          "error": "notFound"
+        },
+        {
+          "call": "packageFiles",
+          "args": ["../notapackage"],
+          "error": "notFound"
+        },
+        {
+          "call": "packageFiles",
+          "args": ["/lib"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "packageFiles",
+          "args": ["..\\lib"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "packageCopy",
+          "args": ["../lib", "items/gem", "items/shiny"],
+          "ok": null
+        },
+        {
+          "call": "readText",
+          "args": ["items/shiny/script.lua"],
+          "ok": "-- gem\n"
+        },
+        {
+          "call": "packageCopy",
+          "args": ["../lib", "items/gem", "items/shiny"],
+          "error": "alreadyExists"
+        },
+        {
+          "call": "packageCopy",
+          "args": ["../lib", "items/gem", ".git/hooks"],
+          "error": "readOnly"
+        },
+        {
+          "call": "packageCopy",
+          "args": ["../lib", "items/none", "items/none"],
+          "error": "notFound"
+        }
+      ]
+    },
+    {
+      "name": "a git package is fetched into the package cache and read at git:<commit>, a pinned one without the network",
+      "steps": [
+        {
+          "call": "trustProject",
+          "args": [true],
+          "ok": {
+            "trusted": true
+          }
+        },
+        {
+          "call": "packageFetchGit",
+          "args": ["$GIT/lib", "v1", null],
+          "ok": "$any",
+          "save": "commit"
+        },
+        {
+          "call": "packageFiles",
+          "args": ["git:$commit"],
+          "ok": {
+            "root": "$any",
+            "files": [
+              {
+                "path": "items/gem/item.json",
+                "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+              },
+              {
+                "path": "netherforge.json",
+                "sha256": "$any"
+              }
+            ]
+          }
+        },
+        {
+          "call": "packageReadText",
+          "args": ["git:$commit", "items/gem/item.json"],
+          "ok": "{}\n"
+        },
+        {
+          "call": "packageFetchGit",
+          "args": ["$GIT/lib", null, null],
+          "ok": "$commit"
+        },
+        {
+          "call": "packageFetchGit",
+          "args": ["$GIT/gone", "v1", "$commit"],
+          "ok": "$commit"
+        },
+        {
+          "call": "packageFetchGit",
+          "args": ["$GIT/lib", "nope", null],
+          "error": "network"
+        },
+        {
+          "call": "packageFetchGit",
+          "args": ["$GIT/lib", null, "ffffffffffffffffffffffffffffffffffffffff"],
+          "error": "notFound"
+        },
+        {
+          "call": "packageFetchGit",
+          "args": ["http://example.com/lib.git", null, null],
+          "error": "invalid"
+        },
+        {
+          "call": "packageFetchGit",
+          "args": ["ext::sh -c touch% pwned", null, null],
+          "error": "invalid"
+        },
+        {
+          "call": "packageFetchGit",
+          "args": ["$GIT/lib", "-x", null],
+          "error": "invalid"
+        },
+        {
+          "call": "packageFetchGit",
+          "args": ["$GIT/lib", null, "abc"],
+          "error": "invalid"
+        },
+        {
+          "call": "packageFiles",
+          "args": ["git:abc"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "packageFiles",
+          "args": ["git:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"],
+          "error": "notFound"
+        }
+      ]
+    },
+    {
+      "name": "an untrusted project edits, but nothing runs or reaches out for it until it's trusted",
+      "steps": [
+        {
+          "call": "writeText",
+          "args": ["a.txt", "edited\n"],
+          "ok": null
+        },
+        {
+          "call": "startServer",
+          "error": "untrusted"
+        },
+        {
+          "call": "runTests",
+          "error": "untrusted"
+        },
+        {
+          "call": "lualsStart",
+          "error": "untrusted"
+        },
+        {
+          "call": "packageFetchGit",
+          "args": ["$GIT/lib", "v1", null],
+          "error": "untrusted"
+        },
+        {
+          "call": "packageFetchGit",
+          "args": ["http://example.com/lib.git", null, null],
+          "error": "invalid"
+        },
+        {
+          "call": "trustProject",
+          "args": [true],
+          "ok": {
+            "root": "$ROOT",
+            "name": "Contract",
+            "trusted": true
+          }
+        },
+        {
+          "call": "openProject",
+          "args": ["$ROOT"],
+          "ok": {
+            "trusted": true
+          }
+        },
+        {
+          "call": "startServer",
+          "error": "eulaRequired"
+        },
+        {
+          "call": "packageFetchGit",
+          "args": ["$GIT/lib", "v1", null],
+          "ok": "$any",
+          "save": "commit"
+        },
+        {
+          "call": "trustProject",
+          "args": [false],
+          "ok": {
+            "trusted": false
+          }
+        },
+        {
+          "call": "startServer",
+          "error": "untrusted"
+        },
+        {
+          "call": "runTests",
+          "args": ["greets"],
+          "error": "untrusted"
+        },
+        {
+          "call": "packageFetchGit",
+          "args": ["$GIT/lib", "v1", "$commit"],
+          "ok": "$commit"
+        },
+        {
+          "call": "closeProject",
+          "ok": null
+        },
+        {
+          "call": "trustProject",
+          "args": [true],
+          "error": "noProject"
+        },
+        {
+          "call": "openProject",
+          "args": ["$ROOT"],
+          "ok": {
+            "trusted": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "file commands need an open project",
+      "open": false,
+      "steps": [
+        {
+          "call": "listFiles",
+          "error": "noProject"
+        },
+        {
+          "call": "readText",
+          "args": ["a.txt"],
+          "error": "noProject"
+        },
+        {
+          "call": "writeText",
+          "args": ["a.txt", "x"],
+          "error": "noProject"
+        },
+        {
+          "call": "runTests",
+          "error": "noProject"
+        }
+      ]
+    },
+    {
+      "name": "opening a project names it from its manifest and remembers it",
+      "open": false,
+      "steps": [
+        {
+          "call": "openProject",
+          "args": ["$ROOT/modules"],
+          "error": "invalid"
+        },
+        {
+          "call": "openProject",
+          "args": ["$ROOT"],
+          "ok": {
+            "root": "$ROOT",
+            "name": "Contract",
+            "trusted": false
+          }
+        },
+        {
+          "call": "recentProjects",
+          "ok": [
+            {
+              "root": "$ROOT",
+              "name": "Contract",
+              "openedAt": "$any"
+            }
+          ]
+        },
+        {
+          "call": "closeProject",
+          "ok": null
+        },
+        {
+          "call": "listFiles",
+          "error": "noProject"
+        }
+      ]
+    },
+    {
+      "name": "listing is sorted byte-wise and hides .git and .netherforge",
+      "steps": [
+        {
+          "call": "listFiles",
+          "ok": [
+            {
+              "path": "B.txt",
+              "size": 6,
+              "modified": "$any"
+            },
+            {
+              "path": "_under.txt",
+              "size": 6,
+              "modified": "$any"
+            },
+            {
+              "path": "a.txt",
+              "size": 6,
+              "modified": "$any"
+            },
+            {
+              "path": "modules/shop/init.lua",
+              "size": 10,
+              "modified": "$any"
+            },
+            {
+              "path": "netherforge.json",
+              "size": "$any",
+              "modified": "$any"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "text round-trips and writes make their folders",
+      "steps": [
+        {
+          "call": "writeText",
+          "args": ["deep/er/note.md", "hi\n"],
+          "ok": null
+        },
+        {
+          "call": "readText",
+          "args": ["deep/er/note.md"],
+          "ok": "hi\n"
+        },
+        {
+          "call": "writeText",
+          "args": ["a.txt", "again"],
+          "ok": null
+        },
+        {
+          "call": "readText",
+          "args": ["a.txt"],
+          "ok": "again"
+        }
+      ]
+    },
+    {
+      "name": "reading what isn't there or isn't text",
+      "steps": [
+        {
+          "call": "readText",
+          "args": ["missing.txt"],
+          "error": "notFound"
+        },
+        {
+          "call": "writeBytes",
+          "args": ["img.png", [137, 80, 78, 71, 255, 0]],
+          "ok": null
+        },
+        {
+          "call": "readText",
+          "args": ["img.png"],
+          "error": "invalid"
+        }
+      ]
+    },
+    {
+      "name": "paths that aren't project paths are refused",
+      "steps": [
+        {
+          "call": "readText",
+          "args": [""],
+          "error": "invalidPath"
+        },
+        {
+          "call": "readText",
+          "args": ["../outside.txt"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "readText",
+          "args": ["/etc/hosts"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "readText",
+          "args": ["a//b.txt"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "readText",
+          "args": ["./a.txt"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "writeText",
+          "args": ["a\\b.txt", "x"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "deletePath",
+          "args": ["modules/../a.txt"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "readText",
+          "args": ["a.txt:stream"],
+          "error": "invalidPath"
+        }
+      ]
+    },
+    {
+      "name": "names Windows would change or reserve are refused on every OS",
+      "steps": [
+        {
+          "call": "writeText",
+          "args": ["notes.", "x"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "writeText",
+          "args": ["dir./a.txt", "x"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "writeText",
+          "args": ["a.txt ", "x"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "writeText",
+          "args": ["con", "x"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "writeText",
+          "args": ["sub/CON.txt", "x"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "writeText",
+          "args": ["Nul.tar.gz", "x"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "writeText",
+          "args": ["x/com1", "x"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "writeText",
+          "args": ["x/LPT9.lua", "x"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "writeText",
+          "args": ["aux /x", "x"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "renamePath",
+          "args": ["a.txt", "prn.txt"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "writeText",
+          "args": ["console.txt", "ok"],
+          "ok": null
+        },
+        {
+          "call": "writeText",
+          "args": ["com10.txt", "ok"],
+          "ok": null
+        },
+        {
+          "call": "writeText",
+          "args": ["a..b", "ok"],
+          "ok": null
+        }
+      ]
+    },
+    {
+      "name": ".git and most of .netherforge are read-only",
+      "steps": [
+        {
+          "call": "writeText",
+          "args": [".git/config", "x"],
+          "error": "readOnly"
+        },
+        {
+          "call": "writeText",
+          "args": ["sub/.git/hooks/x", "x"],
+          "error": "readOnly"
+        },
+        {
+          "call": "writeText",
+          "args": [".netherforge/server/paper.jar", "x"],
+          "error": "readOnly"
+        },
+        {
+          "call": "deletePath",
+          "args": [".netherforge"],
+          "error": "readOnly"
+        },
+        {
+          "call": "writeText",
+          "args": [".netherforge/schema/menu.json", "{}"],
+          "ok": null
+        },
+        {
+          "call": "readText",
+          "args": [".netherforge/schema/menu.json"],
+          "ok": "{}"
+        },
+        {
+          "call": "renamePath",
+          "args": ["a.txt", ".git/a.txt"],
+          "error": "readOnly"
+        }
+      ]
+    },
+    {
+      "name": ".git and .netherforge are matched without regard to case, trailing dots or spaces",
+      "steps": [
+        {
+          "call": "writeText",
+          "args": [".GIT/hooks/pre-commit", "x"],
+          "error": "readOnly"
+        },
+        {
+          "call": "writeText",
+          "args": ["sub/.Git/config", "x"],
+          "error": "readOnly"
+        },
+        {
+          "call": "writeText",
+          "args": [".git./hooks/x", "x"],
+          "error": "readOnly"
+        },
+        {
+          "call": "writeText",
+          "args": [".git /hooks/x", "x"],
+          "error": "readOnly"
+        },
+        {
+          "call": "writeText",
+          "args": [".NetherForge/server/plugins/evil.jar", "x"],
+          "error": "readOnly"
+        },
+        {
+          "call": "deletePath",
+          "args": [".NETHERFORGE"],
+          "error": "readOnly"
+        },
+        {
+          "call": "renamePath",
+          "args": ["a.txt", ".GIT/a.txt"],
+          "error": "readOnly"
+        },
+        {
+          "call": "writeText",
+          "args": [".gitignore", "x"],
+          "ok": null
+        },
+        {
+          "call": "writeText",
+          "args": [".git-keep/x", "x"],
+          "ok": null
+        }
+      ]
+    },
+    {
+      "name": "deleting files and folders",
+      "steps": [
+        {
+          "call": "deletePath",
+          "args": ["missing"],
+          "error": "notFound"
+        },
+        {
+          "call": "deletePath",
+          "args": ["modules"],
+          "ok": null
+        },
+        {
+          "call": "readText",
+          "args": ["modules/shop/init.lua"],
+          "error": "notFound"
+        },
+        {
+          "call": "deletePath",
+          "args": ["a.txt"],
+          "ok": null
+        },
+        {
+          "call": "readText",
+          "args": ["a.txt"],
+          "error": "notFound"
+        }
+      ]
+    },
+    {
+      "name": "renaming files and folders",
+      "steps": [
+        {
+          "call": "renamePath",
+          "args": ["missing.txt", "b.txt"],
+          "error": "notFound"
+        },
+        {
+          "call": "renamePath",
+          "args": ["a.txt", "B.txt"],
+          "error": "alreadyExists"
+        },
+        {
+          "call": "renamePath",
+          "args": ["a.txt", "new/place.txt"],
+          "ok": null
+        },
+        {
+          "call": "readText",
+          "args": ["new/place.txt"],
+          "ok": "lower\n"
+        },
+        {
+          "call": "renamePath",
+          "args": ["modules/shop", "modules/store"],
+          "ok": null
+        },
+        {
+          "call": "readText",
+          "args": ["modules/store/init.lua"],
+          "ok": "return {}\n"
+        },
+        {
+          "call": "readText",
+          "args": ["modules/shop/init.lua"],
+          "error": "notFound"
+        }
+      ]
+    },
+    {
+      "name": "creating a project",
+      "open": false,
+      "steps": [
+        {
+          "call": "createProject",
+          "args": [
+            "$ROOT",
+            {
+              "netherforge.json": "{}"
+            }
+          ],
+          "error": "alreadyExists"
+        },
+        {
+          "call": "createProject",
+          "args": [
+            "$ROOT/new",
+            {
+              "a.txt": "x"
+            }
+          ],
+          "error": "invalid"
+        },
+        {
+          "call": "createProject",
+          "args": [
+            "$ROOT/new",
+            {
+              "netherforge.json": "{ \"name\": \"Fresh\" }",
+              "scripts/a.lua": "-- a\n"
+            }
+          ],
+          "ok": {
+            "root": "$ROOT/new",
+            "name": "Fresh",
+            "trusted": true
+          }
+        },
+        {
+          "call": "readText",
+          "args": ["scripts/a.lua"],
+          "ok": "-- a\n"
+        }
+      ]
+    },
+    {
+      "name": "settings start at their defaults and are checked",
+      "steps": [
+        {
+          "call": "getSettings",
+          "ok": {
+            "serverJvmArgs": [],
+            "serverMemoryMb": 2048,
+            "serverPort": 25565,
+            "mcpEnabled": true,
+            "mcpPort": 47615,
+            "ffmpegPath": ""
+          }
+        },
+        {
+          "call": "setSettings",
+          "args": [
+            {
+              "serverJvmArgs": ["-Xss4m"],
+              "serverMemoryMb": 4096,
+              "serverPort": 25570,
+              "mcpEnabled": false,
+              "mcpPort": 47615,
+              "ffmpegPath": ""
+            }
+          ],
+          "ok": null
+        },
+        {
+          "call": "getSettings",
+          "ok": {
+            "serverJvmArgs": ["-Xss4m"],
+            "serverMemoryMb": 4096,
+            "serverPort": 25570,
+            "mcpEnabled": false,
+            "mcpPort": 47615,
+            "ffmpegPath": ""
+          }
+        },
+        {
+          "call": "setSettings",
+          "args": [
+            {
+              "serverJvmArgs": [],
+              "serverMemoryMb": 100,
+              "serverPort": 25565,
+              "mcpEnabled": false,
+              "mcpPort": 47615,
+              "ffmpegPath": ""
+            }
+          ],
+          "error": "invalid"
+        },
+        {
+          "call": "setSettings",
+          "args": [
+            {
+              "serverJvmArgs": [],
+              "serverMemoryMb": 2048,
+              "serverPort": 25565,
+              "mcpEnabled": true,
+              "mcpPort": 25565,
+              "ffmpegPath": ""
+            }
+          ],
+          "error": "invalid"
+        }
+      ]
+    },
+    {
+      "name": "JVM arguments outside the allowlist are refused with their own code",
+      "steps": [
+        {
+          "call": "setSettings",
+          "args": [
+            {
+              "serverJvmArgs": [
+                "-Xmx6G",
+                "-XX:+UseG1GC",
+                "-XX:MaxGCPauseMillis=200",
+                "-Dpaper.x=1"
+              ],
+              "serverMemoryMb": 2048,
+              "serverPort": 25565,
+              "mcpEnabled": false,
+              "mcpPort": 47615,
+              "ffmpegPath": ""
+            }
+          ],
+          "ok": null
+        },
+        {
+          "call": "setSettings",
+          "args": [
+            {
+              "serverJvmArgs": ["-Xmx6G", "-javaagent:/tmp/evil.jar"],
+              "serverMemoryMb": 2048,
+              "serverPort": 25565,
+              "mcpEnabled": false,
+              "mcpPort": 47615,
+              "ffmpegPath": ""
+            }
+          ],
+          "error": "jvmArgument"
+        },
+        {
+          "call": "setSettings",
+          "args": [
+            {
+              "serverJvmArgs": ["-XX:OnOutOfMemoryError=rm -rf ~"],
+              "serverMemoryMb": 2048,
+              "serverPort": 25565,
+              "mcpEnabled": false,
+              "mcpPort": 47615,
+              "ffmpegPath": ""
+            }
+          ],
+          "error": "jvmArgument"
+        },
+        {
+          "call": "setSettings",
+          "args": [
+            {
+              "serverJvmArgs": ["-Djava.class.path=/tmp/x"],
+              "serverMemoryMb": 2048,
+              "serverPort": 25565,
+              "mcpEnabled": false,
+              "mcpPort": 47615,
+              "ffmpegPath": ""
+            }
+          ],
+          "error": "jvmArgument"
+        },
+        {
+          "call": "setSettings",
+          "args": [
+            {
+              "serverJvmArgs": ["-Dnetherforge.bridge.port=1"],
+              "serverMemoryMb": 2048,
+              "serverPort": 25565,
+              "mcpEnabled": false,
+              "mcpPort": 47615,
+              "ffmpegPath": ""
+            }
+          ],
+          "error": "jvmArgument"
+        },
+        {
+          "call": "setSettings",
+          "args": [
+            {
+              "serverJvmArgs": ["  "],
+              "serverMemoryMb": 2048,
+              "serverPort": 25565,
+              "mcpEnabled": false,
+              "mcpPort": 47615,
+              "ffmpegPath": ""
+            }
+          ],
+          "error": "jvmArgument"
+        },
+        {
+          "call": "getSettings",
+          "ok": {
+            "serverJvmArgs": ["-Xmx6G", "-XX:+UseG1GC", "-XX:MaxGCPauseMillis=200", "-Dpaper.x=1"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "the EULA is accepted once, and starting needs it",
+      "steps": [
+        {
+          "call": "trustProject",
+          "args": [true],
+          "ok": {
+            "trusted": true
+          }
+        },
+        {
+          "call": "eulaStatus",
+          "ok": {
+            "accepted": false,
+            "url": "https://aka.ms/MinecraftEULA"
+          }
+        },
+        {
+          "call": "startServer",
+          "error": "eulaRequired"
+        },
+        {
+          "call": "acceptEula",
+          "ok": null
+        },
+        {
+          "call": "eulaStatus",
+          "ok": {
+            "accepted": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "a stopped server takes no requests",
+      "steps": [
+        {
+          "call": "serverState",
+          "ok": {
+            "phase": "stopped",
+            "minecraft": "26.3",
+            "port": null,
+            "bridgeConnected": false,
+            "message": null
+          }
+        },
+        {
+          "call": "serverCommand",
+          "args": ["say hi"],
+          "error": "notConnected"
+        },
+        {
+          "call": "bridgeRequest",
+          "args": ["instances"],
+          "error": "notConnected"
+        },
+        {
+          "call": "dapSend",
+          "args": [
+            {
+              "seq": 1,
+              "type": "request",
+              "command": "initialize"
+            }
+          ],
+          "error": "notConnected"
+        },
+        {
+          "call": "stopServer",
+          "ok": null
+        },
+        {
+          "call": "captureMap",
+          "args": [
+            {
+              "level": "world/level.dat",
+              "dimension": "world"
+            },
+            "arena",
+            false
+          ],
+          "error": "notFound"
+        }
+      ]
+    },
+    {
+      "name": "nothing is cached for a version yet",
+      "steps": [
+        {
+          "call": "cacheStatus",
+          "args": ["26.3"],
+          "ok": {
+            "version": "26.3",
+            "client": false,
+            "server": false
+          }
+        },
+        {
+          "call": "cacheStatus",
+          "args": ["../26.3"],
+          "error": "invalid"
+        },
+        {
+          "call": "gameData",
+          "args": ["26.3"],
+          "ok": null
+        },
+        {
+          "call": "glyphAdvances",
+          "args": ["26.3"],
+          "ok": null
+        }
+      ]
+    },
+    {
+      "name": "a language server that isn't running takes no messages",
+      "steps": [
+        {
+          "call": "lualsSend",
+          "args": [7, "{}"],
+          "error": "unavailable"
+        },
+        {
+          "call": "lualsStop",
+          "ok": null
+        },
+        {
+          "call": "trustProject",
+          "args": [true],
+          "ok": {
+            "trusted": true
+          }
+        },
+        {
+          "call": "lualsStart",
+          "error": "unavailable"
+        }
+      ]
+    },
+    {
+      "name": "the app says what it is",
+      "open": false,
+      "steps": [
+        {
+          "call": "appInfo",
+          "ok": {
+            "version": "$any",
+            "minecraftVersions": ["26.3"],
+            "os": {
+              "$oneOf": ["macos", "windows", "linux"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "files are served at their URLs, hidden ones never",
+      "steps": [
+        {
+          "call": "projectFileUrl",
+          "args": ["a.txt"],
+          "fetch": {
+            "status": 200,
+            "text": "lower\n"
+          }
+        },
+        {
+          "call": "projectFileUrl",
+          "args": ["a.txt", 3],
+          "fetch": {
+            "status": 200,
+            "text": "lower\n"
+          }
+        },
+        {
+          "call": "projectFileUrl",
+          "args": ["modules/shop/init.lua"],
+          "fetch": {
+            "status": 200,
+            "text": "return {}\n"
+          }
+        },
+        {
+          "call": "projectFileUrl",
+          "args": ["missing.txt"],
+          "fetch": {
+            "status": 404
+          }
+        },
+        {
+          "call": "projectFileUrl",
+          "args": [".git/config"],
+          "fetch": {
+            "status": 404
+          }
+        },
+        {
+          "call": "projectFileUrl",
+          "args": [".netherforge/schema/centity.json"],
+          "fetch": {
+            "status": 404
+          }
+        },
+        {
+          "call": "packageFileUrl",
+          "args": ["../lib", "items/gem/script.lua"],
+          "fetch": {
+            "status": 200,
+            "text": "-- gem\n"
+          }
+        },
+        {
+          "call": "packageFileUrl",
+          "args": ["../lib", ".git/HEAD"],
+          "fetch": {
+            "status": 404
+          }
+        },
+        {
+          "call": "packageFileUrl",
+          "args": ["../missing", "a.txt"],
+          "fetch": {
+            "status": 404
+          }
+        }
+      ]
+    },
+    {
+      "name": "a client jar is imported into the cache, reported and served",
+      "setup": {
+        "client": {
+          "version": "26.3",
+          "files": {
+            "assets/minecraft/textures/block/stone.png": "stone"
+          }
+        }
+      },
+      "steps": [
+        {
+          "listen": "onImportProgress"
+        },
+        {
+          "listen": "onCacheChanged"
+        },
+        {
+          "call": "cacheStatus",
+          "args": ["26.3"],
+          "ok": {
+            "version": "26.3",
+            "client": false,
+            "server": false
+          }
+        },
+        {
+          "call": "assetUrl",
+          "args": ["26.3", "assets/minecraft/textures/block/stone.png"],
+          "fetch": {
+            "status": 404
+          }
+        },
+        {
+          "call": "importClient",
+          "args": ["../26.3", "$CLIENT_JAR"],
+          "error": "invalid"
+        },
+        {
+          "call": "importClient",
+          "args": ["26.3", "$CLIENT_JAR"],
+          "ok": null
+        },
+        {
+          "expect": "onImportProgress",
+          "event": {
+            "version": "26.3",
+            "total": "$any"
+          }
+        },
+        {
+          "expect": "onCacheChanged",
+          "event": {
+            "version": "26.3",
+            "client": true,
+            "server": false
+          }
+        },
+        {
+          "call": "cacheStatus",
+          "args": ["26.3"],
+          "ok": {
+            "client": true
+          }
+        },
+        {
+          "call": "assetUrl",
+          "args": ["26.3", "assets/minecraft/textures/block/stone.png"],
+          "fetch": {
+            "status": 200,
+            "text": "stone"
+          }
+        }
+      ]
+    },
+    {
+      "name": "the game data a dev server exported is read back from the cache",
+      "setup": {
+        "gameData": {
+          "26.3": {
+            "schema": 3,
+            "minecraft": "26.3"
+          }
+        }
+      },
+      "steps": [
+        {
+          "call": "cacheStatus",
+          "args": ["26.3"],
+          "ok": {
+            "version": "26.3",
+            "client": false,
+            "server": true
+          }
+        },
+        {
+          "call": "gameData",
+          "args": ["26.3"],
+          "ok": {
+            "schema": 3,
+            "minecraft": "26.3"
+          }
+        },
+        {
+          "call": "gameData",
+          "args": ["26.2"],
+          "ok": null
+        },
+        {
+          "call": "gameData",
+          "args": ["latest"],
+          "error": "invalid"
+        }
+      ]
+    },
+    {
+      "name": "Minecraft installs are found in the player's home",
+      "open": false,
+      "setup": {
+        "installs": {
+          "files": [".minecraft/versions/26.3/26.3.jar"],
+          "found": [
+            {
+              "launcher": "vanilla",
+              "path": "$any",
+              "versions": [
+                {
+                  "version": "26.3",
+                  "jar": "$any"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "call": "findInstalls",
+          "ok": [
+            {
+              "launcher": "vanilla",
+              "path": "$any",
+              "versions": [
+                {
+                  "version": "26.3",
+                  "jar": "$any"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "script tests run on the cached game data and report each test",
+      "setup": {
+        "gameData": {
+          "26.3": {
+            "schema": 3,
+            "minecraft": "26.3"
+          }
+        },
+        "testReport": {
+          "results": [
+            {
+              "file": "tests/greeter_test.lua",
+              "name": "greets",
+              "status": "passed",
+              "durationMillis": 3,
+              "message": null,
+              "source": null,
+              "traceback": null,
+              "logs": []
+            },
+            {
+              "file": "tests/greeter_test.lua",
+              "name": "waves",
+              "status": "failed",
+              "durationMillis": 1,
+              "message": "expected a wave",
+              "source": {
+                "file": "tests/greeter_test.lua",
+                "line": 7
+              },
+              "traceback": null,
+              "logs": ["tests/greeter_test.lua:6: hello"]
+            }
+          ],
+          "passed": 1,
+          "failed": 1,
+          "errored": 0,
+          "durationMillis": 40,
+          "error": null,
+          "problems": []
+        }
+      },
+      "steps": [
+        {
+          "call": "trustProject",
+          "args": [true],
+          "ok": {
+            "trusted": true
+          }
+        },
+        {
+          "call": "runTests",
+          "ok": {
+            "passed": 1,
+            "failed": 1,
+            "errored": 0,
+            "error": null,
+            "results": [
+              {
+                "name": "greets",
+                "status": "passed"
+              },
+              {
+                "name": "waves",
+                "status": "failed",
+                "message": "expected a wave",
+                "source": {
+                  "file": "tests/greeter_test.lua",
+                  "line": 7
+                },
+                "logs": ["tests/greeter_test.lua:6: hello"]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "script tests don't run without the game data or a runner",
+      "steps": [
+        {
+          "call": "trustProject",
+          "args": [true],
+          "ok": {
+            "trusted": true
+          }
+        },
+        {
+          "call": "runTests",
+          "error": "unavailable"
+        }
+      ]
+    },
+    {
+      "name": "the dev server starts, its plugin connects, it takes commands and stops",
+      "steps": [
+        {
+          "call": "trustProject",
+          "args": [true],
+          "ok": {
+            "trusted": true
+          }
+        },
+        {
+          "call": "acceptEula",
+          "ok": null
+        },
+        {
+          "call": "setSettings",
+          "args": [
+            {
+              "serverJvmArgs": [],
+              "serverMemoryMb": 2048,
+              "serverPort": "$PORT",
+              "mcpEnabled": false,
+              "mcpPort": 47615,
+              "ffmpegPath": ""
+            }
+          ],
+          "ok": null
+        },
+        {
+          "listen": "onServerState"
+        },
+        {
+          "listen": "onServerOutput"
+        },
+        {
+          "listen": "onPrepareProgress"
+        },
+        {
+          "listen": "onBridgeEvent",
+          "args": ["console"],
+          "as": "console"
+        },
+        {
+          "call": "startServer",
+          "ok": null
+        },
+        {
+          "expect": "onPrepareProgress",
+          "event": {
+            "step": "plugin"
+          }
+        },
+        {
+          "expect": "onServerState",
+          "event": {
+            "phase": "running",
+            "port": "$PORT"
+          }
+        },
+        {
+          "expect": "onServerState",
+          "event": {
+            "phase": "running",
+            "bridgeConnected": true
+          }
+        },
+        {
+          "expect": "console",
+          "event": {
+            "items": [
+              {
+                "message": "NetherForge loaded the project"
+              }
+            ]
+          }
+        },
+        {
+          "call": "serverState",
+          "ok": {
+            "phase": "running",
+            "minecraft": "26.3",
+            "port": "$PORT",
+            "bridgeConnected": true,
+            "message": null
+          }
+        },
+        {
+          "call": "startServer",
+          "error": "busy"
+        },
+        {
+          "call": "bridgeRequest",
+          "args": ["ping"],
+          "ok": null
+        },
+        {
+          "call": "dapSend",
+          "args": [
+            {
+              "seq": 1,
+              "type": "request",
+              "command": "initialize"
+            }
+          ],
+          "ok": null
+        },
+        {
+          "call": "serverCommand",
+          "args": ["say hi"],
+          "ok": null
+        },
+        {
+          "expect": "onServerOutput",
+          "event": {
+            "stream": "stdout",
+            "line": "> say hi"
+          }
+        },
+        {
+          "call": "stopServer",
+          "ok": null
+        },
+        {
+          "expect": "onServerState",
+          "event": {
+            "phase": "stopped"
+          }
+        },
+        {
+          "call": "serverState",
+          "ok": {
+            "phase": "stopped",
+            "port": null,
+            "bridgeConnected": false,
+            "message": null
+          }
+        },
+        {
+          "call": "serverCommand",
+          "args": ["say hi"],
+          "error": "notConnected"
+        }
+      ]
+    },
+    {
+      "name": "changes on disk are reported, whoever makes them",
+      "steps": [
+        {
+          "listen": "onFilesChanged"
+        },
+        {
+          "outside": "write",
+          "path": "a.txt",
+          "text": "changed\n"
+        },
+        {
+          "expect": "onFilesChanged",
+          "event": {
+            "paths": {
+              "$includes": ["a.txt"]
+            },
+            "rescan": false
+          }
+        },
+        {
+          "call": "readText",
+          "args": ["a.txt"],
+          "ok": "changed\n"
+        },
+        {
+          "outside": "write",
+          "path": "modules/shop/extra.lua",
+          "text": "-- extra\n"
+        },
+        {
+          "expect": "onFilesChanged",
+          "event": {
+            "paths": {
+              "$includes": ["modules/shop/extra.lua"]
+            }
+          }
+        },
+        {
+          "outside": "rename",
+          "from": "a.txt",
+          "to": "c.txt"
+        },
+        {
+          "expect": "onFilesChanged",
+          "event": {
+            "paths": {
+              "$includes": ["a.txt"]
+            }
+          }
+        },
+        {
+          "expect": "onFilesChanged",
+          "event": {
+            "paths": {
+              "$includes": ["c.txt"]
+            }
+          }
+        },
+        {
+          "call": "readText",
+          "args": ["c.txt"],
+          "ok": "changed\n"
+        },
+        {
+          "outside": "delete",
+          "path": "B.txt"
+        },
+        {
+          "expect": "onFilesChanged",
+          "event": {
+            "paths": {
+              "$includes": ["B.txt"]
+            }
+          }
+        },
+        {
+          "call": "readText",
+          "args": ["B.txt"],
+          "error": "notFound"
+        },
+        {
+          "call": "writeText",
+          "args": ["modules/shop/init.lua", "return 1\n"],
+          "ok": null
+        },
+        {
+          "expect": "onFilesChanged",
+          "event": {
+            "paths": {
+              "$includes": ["modules/shop/init.lua"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "agents reach the UI's MCP server only while the project is trusted",
+      "steps": [
+        {
+          "call": "setSettings",
+          "args": [
+            {
+              "serverJvmArgs": [],
+              "serverMemoryMb": 2048,
+              "serverPort": 25565,
+              "mcpEnabled": false,
+              "mcpPort": "$MCP_PORT",
+              "ffmpegPath": ""
+            }
+          ],
+          "ok": null
+        },
+        {
+          "call": "mcpStatus",
+          "ok": {
+            "enabled": false,
+            "port": "$MCP_PORT",
+            "url": null,
+            "error": null,
+            "token": "$any"
+          }
+        },
+        {
+          "call": "setSettings",
+          "args": [
+            {
+              "serverJvmArgs": [],
+              "serverMemoryMb": 2048,
+              "serverPort": 25565,
+              "mcpEnabled": true,
+              "mcpPort": "$MCP_PORT",
+              "ffmpegPath": ""
+            }
+          ],
+          "ok": null
+        },
+        {
+          "call": "mcpStatus",
+          "ok": {
+            "enabled": true,
+            "url": "http://127.0.0.1:$MCP_PORT/mcp",
+            "error": null
+          }
+        },
+        {
+          "agent": {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/list",
+            "params": {}
+          },
+          "reply": {
+            "result": {
+              "tools": []
+            }
+          },
+          "ok": {
+            "error": {
+              "code": -32001
+            }
+          }
+        },
+        {
+          "call": "trustProject",
+          "args": [true],
+          "ok": {
+            "trusted": true
+          }
+        },
+        {
+          "agent": {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/list",
+            "params": {}
+          },
+          "reply": {
+            "result": {
+              "tools": []
+            }
+          },
+          "ok": {
+            "result": {
+              "tools": []
+            }
+          }
+        },
+        {
+          "call": "mcpSend",
+          "args": [
+            {
+              "jsonrpc": "2.0",
+              "method": "notifications/message"
+            }
+          ],
+          "ok": null
+        }
+      ]
+    },
+    {
+      "name": "a world the dev server saved is copied into the project as a map, without the server's own files",
+      "setup": {
+        "serverFiles": {
+          "world/level.dat": "level",
+          "world/region/r.0.0.mca": "region",
+          "world/session.lock": "lock",
+          "world/playerdata/someone.dat": "player"
+        }
+      },
+      "steps": [
+        {
+          "listen": "onCaptureProgress"
+        },
+        {
+          "call": "captureMap",
+          "args": [
+            {
+              "level": "world/level.dat",
+              "dimension": "world"
+            },
+            "../x",
+            false
+          ],
+          "error": "invalidPath"
+        },
+        {
+          "call": "captureMap",
+          "args": [
+            {
+              "level": "world/level.dat",
+              "dimension": "world"
+            },
+            "a/b",
+            false
+          ],
+          "error": "invalid"
+        },
+        {
+          "call": "captureMap",
+          "args": [
+            {
+              "level": "world/level.dat",
+              "dimension": "world"
+            },
+            ".hidden",
+            false
+          ],
+          "error": "invalid"
+        },
+        {
+          "call": "captureMap",
+          "args": [
+            {
+              "level": "world/level.dat",
+              "dimension": "world"
+            },
+            "arena",
+            false
+          ],
+          "ok": null
+        },
+        {
+          "expect": "onCaptureProgress",
+          "event": {
+            "done": "$any",
+            "total": "$any"
+          }
+        },
+        {
+          "call": "readText",
+          "args": ["maps/arena/level.dat"],
+          "ok": "level"
+        },
+        {
+          "call": "readText",
+          "args": ["maps/arena/dimensions/minecraft/overworld/region/r.0.0.mca"],
+          "ok": "region"
+        },
+        {
+          "call": "readText",
+          "args": ["maps/arena/dimensions/minecraft/overworld/session.lock"],
+          "error": "notFound"
+        },
+        {
+          "call": "readText",
+          "args": ["maps/arena/dimensions/minecraft/overworld/playerdata/someone.dat"],
+          "error": "notFound"
+        },
+        {
+          "call": "captureMap",
+          "args": [
+            {
+              "level": "world/level.dat",
+              "dimension": "world"
+            },
+            "arena",
+            false
+          ],
+          "error": "alreadyExists"
+        },
+        {
+          "call": "captureMap",
+          "args": [
+            {
+              "level": "world/level.dat",
+              "dimension": "world"
+            },
+            "arena",
+            true
+          ],
+          "ok": null
+        },
+        {
+          "call": "captureMap",
+          "args": [
+            {
+              "level": "nether/level.dat",
+              "dimension": "nether"
+            },
+            "other",
+            false
+          ],
+          "error": "notFound"
+        },
+        {
+          "call": "captureMap",
+          "args": [
+            {
+              "level": "world/level.dat",
+              "dimension": "world"
+            },
+            "(arenas)/(pvp)/duel",
+            false
+          ],
+          "ok": null
+        },
+        {
+          "expect": "onCaptureProgress",
+          "event": {
+            "done": "$any",
+            "total": "$any"
+          }
+        },
+        {
+          "call": "readText",
+          "args": ["maps/(arenas)/(pvp)/duel/level.dat"],
+          "ok": "level"
+        },
+        {
+          "call": "captureMap",
+          "args": [
+            {
+              "level": "world/level.dat",
+              "dimension": "world"
+            },
+            "(Arenas)/duel",
+            false
+          ],
+          "error": "invalid"
+        }
+      ]
+    },
+    {
+      "name": "a video's converted frames are read back, and converting needs trust, ffmpeg and the game's map colours",
+      "steps": [
+        {
+          "call": "writeText",
+          "args": [
+            "videos/clip/video.json",
+            "{ \"source\": \"source.mp4\", \"width\": 2, \"height\": 1 }\n"
+          ],
+          "ok": null
+        },
+        {
+          "call": "writeText",
+          "args": ["videos/clip/source.mp4", "a video\n"],
+          "ok": null
+        },
+        {
+          "call": "videoInfo",
+          "args": ["videos/clip"],
+          "ok": {
+            "converted": false,
+            "columns": 0,
+            "rows": 0,
+            "fps": 0,
+            "frames": 0,
+            "audio": false,
+            "bytes": 0,
+            "sourcePresent": true,
+            "sourceChanged": null
+          }
+        },
+        {
+          "call": "videoInfo",
+          "args": ["videos/none"],
+          "error": "notFound"
+        },
+        {
+          "call": "videoInfo",
+          "args": ["menus/clip"],
+          "error": "invalid"
+        },
+        {
+          "call": "videoInfo",
+          "args": ["../clip"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "convertVideo",
+          "args": ["videos/clip"],
+          "error": "untrusted"
+        },
+        {
+          "call": "trustProject",
+          "args": [true],
+          "ok": {
+            "trusted": true
+          }
+        },
+        {
+          "call": "convertVideo",
+          "args": ["videos/clip"],
+          "error": "unavailable"
+        }
+      ]
+    },
+    {
+      "name": "a dev network's layout is kept per project, checked, and its servers' folders trusted from a trusted project",
+      "steps": [
+        {
+          "call": "networkLayout",
+          "ok": {
+            "enabled": false,
+            "name": "main",
+            "servers": []
+          }
+        },
+        {
+          "call": "networkSetLayout",
+          "args": [
+            {
+              "enabled": true,
+              "name": "Main",
+              "servers": []
+            }
+          ],
+          "error": "invalid"
+        },
+        {
+          "call": "networkSetLayout",
+          "args": [
+            {
+              "enabled": true,
+              "name": "main",
+              "servers": [
+                {
+                  "name": "main",
+                  "project": "."
+                }
+              ]
+            }
+          ],
+          "error": "invalid"
+        },
+        {
+          "call": "networkSetLayout",
+          "args": [
+            {
+              "enabled": true,
+              "name": "proxy",
+              "servers": []
+            }
+          ],
+          "error": "invalid"
+        },
+        {
+          "call": "networkSetLayout",
+          "args": [
+            {
+              "enabled": true,
+              "name": "main",
+              "servers": [
+                {
+                  "name": "lobby",
+                  "project": " "
+                }
+              ]
+            }
+          ],
+          "error": "invalid"
+        },
+        {
+          "call": "networkSetLayout",
+          "args": [
+            {
+              "enabled": true,
+              "name": "main",
+              "servers": [
+                {
+                  "name": "lobby",
+                  "project": "../lobby"
+                },
+                {
+                  "name": "gone",
+                  "project": "../missing"
+                },
+                {
+                  "name": "plain",
+                  "project": "../notapackage"
+                }
+              ]
+            }
+          ],
+          "ok": null
+        },
+        {
+          "call": "networkLayout",
+          "ok": {
+            "enabled": true,
+            "name": "main",
+            "servers": [
+              {
+                "name": "lobby",
+                "project": "../lobby"
+              },
+              {
+                "name": "gone",
+                "project": "../missing"
+              },
+              {
+                "name": "plain",
+                "project": "../notapackage"
+              }
+            ]
+          }
+        },
+        {
+          "call": "networkCheck",
+          "ok": [
+            {
+              "name": "lobby",
+              "root": "$any",
+              "projectName": "Lobby",
+              "minecraft": "26.3",
+              "trusted": false,
+              "problem": null
+            },
+            {
+              "name": "gone",
+              "root": null,
+              "projectName": null,
+              "minecraft": null,
+              "trusted": false,
+              "problem": "$any"
+            },
+            {
+              "name": "plain",
+              "root": null,
+              "trusted": false,
+              "problem": "$any"
+            }
+          ]
+        },
+        {
+          "call": "networkTrust",
+          "args": ["lobby"],
+          "error": "untrusted"
+        },
+        {
+          "call": "startServer",
+          "error": "untrusted"
+        },
+        {
+          "call": "trustProject",
+          "args": [true],
+          "ok": {
+            "trusted": true
+          }
+        },
+        {
+          "call": "startServer",
+          "error": "notFound"
+        },
+        {
+          "call": "networkTrust",
+          "args": ["gone"],
+          "error": "notFound"
+        },
+        {
+          "call": "networkTrust",
+          "args": ["nobody"],
+          "error": "notFound"
+        },
+        {
+          "call": "networkSetLayout",
+          "args": [
+            {
+              "enabled": true,
+              "name": "main",
+              "servers": [
+                {
+                  "name": "lobby",
+                  "project": "../lobby"
+                }
+              ]
+            }
+          ],
+          "ok": null
+        },
+        {
+          "call": "startServer",
+          "error": "untrusted"
+        },
+        {
+          "call": "networkTrust",
+          "args": ["lobby"],
+          "ok": null
+        },
+        {
+          "call": "networkCheck",
+          "ok": [
+            {
+              "name": "lobby",
+              "trusted": true,
+              "problem": null
+            }
+          ]
+        },
+        {
+          "call": "startServer",
+          "error": "eulaRequired"
+        },
+        {
+          "call": "networkMembers",
+          "ok": []
+        },
+        {
+          "call": "networkCommand",
+          "args": ["lobby", "say hi"],
+          "error": "notFound"
+        }
+      ]
+    },
+    {
+      "name": "a dev network starts its proxy and other servers with the project's, takes their commands and stops with it",
+      "steps": [
+        {
+          "call": "trustProject",
+          "args": [true],
+          "ok": {
+            "trusted": true
+          }
+        },
+        {
+          "call": "acceptEula",
+          "ok": null
+        },
+        {
+          "call": "setSettings",
+          "args": [
+            {
+              "serverJvmArgs": [],
+              "serverMemoryMb": 2048,
+              "serverPort": "$PORT",
+              "mcpEnabled": false,
+              "mcpPort": 47615,
+              "ffmpegPath": ""
+            }
+          ],
+          "ok": null
+        },
+        {
+          "call": "networkSetLayout",
+          "args": [
+            {
+              "enabled": true,
+              "name": "main",
+              "servers": [
+                {
+                  "name": "lobby",
+                  "project": "../lobby"
+                }
+              ]
+            }
+          ],
+          "ok": null
+        },
+        {
+          "call": "networkTrust",
+          "args": ["lobby"],
+          "ok": null
+        },
+        {
+          "listen": "onServerState"
+        },
+        {
+          "listen": "onNetworkMembers"
+        },
+        {
+          "listen": "onNetworkMember"
+        },
+        {
+          "listen": "onNetworkOutput"
+        },
+        {
+          "call": "startServer",
+          "ok": null
+        },
+        {
+          "expect": "onNetworkMembers",
+          "event": {
+            "members": [
+              {
+                "name": "proxy",
+                "kind": "proxy",
+                "project": null
+              },
+              {
+                "name": "lobby",
+                "kind": "server",
+                "project": "$any"
+              }
+            ]
+          }
+        },
+        {
+          "expect": "onServerState",
+          "event": {
+            "phase": "running",
+            "port": "$PORT",
+            "bridgeConnected": true
+          }
+        },
+        {
+          "expect": "onNetworkMember",
+          "event": {
+            "name": "proxy",
+            "state": {
+              "phase": "running",
+              "port": "$PORT"
+            }
+          }
+        },
+        {
+          "expect": "onNetworkMember",
+          "event": {
+            "name": "lobby",
+            "state": {
+              "phase": "running",
+              "minecraft": "26.3",
+              "bridgeConnected": true
+            }
+          }
+        },
+        {
+          "call": "networkMembers",
+          "ok": [
+            {
+              "name": "proxy",
+              "state": {
+                "phase": "running"
+              }
+            },
+            {
+              "name": "lobby",
+              "state": {
+                "phase": "running"
+              }
+            }
+          ]
+        },
+        {
+          "call": "networkCommand",
+          "args": ["lobby", "say hi"],
+          "ok": null
+        },
+        {
+          "expect": "onNetworkOutput",
+          "event": {
+            "name": "lobby",
+            "stream": "stdout",
+            "line": "> say hi"
+          }
+        },
+        {
+          "call": "networkCommand",
+          "args": ["proxy", "glist"],
+          "ok": null
+        },
+        {
+          "expect": "onNetworkOutput",
+          "event": {
+            "name": "proxy",
+            "line": "> glist"
+          }
+        },
+        {
+          "call": "stopServer",
+          "ok": null
+        },
+        {
+          "expect": "onServerState",
+          "event": {
+            "phase": "stopped"
+          }
+        },
+        {
+          "expect": "onNetworkMember",
+          "event": {
+            "name": "lobby",
+            "state": {
+              "phase": "stopped"
+            }
+          }
+        },
+        {
+          "expect": "onNetworkMember",
+          "event": {
+            "name": "proxy",
+            "state": {
+              "phase": "stopped"
+            }
+          }
+        },
+        {
+          "call": "networkCommand",
+          "args": ["lobby", "say hi"],
+          "error": "notConnected"
+        },
+        {
+          "call": "networkSetLayout",
+          "args": [
+            {
+              "enabled": false,
+              "name": "main",
+              "servers": [
+                {
+                  "name": "lobby",
+                  "project": "../lobby"
+                }
+              ]
+            }
+          ],
+          "ok": null
+        },
+        {
+          "call": "startServer",
+          "ok": null
+        },
+        {
+          "expect": "onNetworkMembers",
+          "event": {
+            "members": []
+          }
+        },
+        {
+          "expect": "onServerState",
+          "event": {
+            "phase": "running",
+            "port": "$PORT"
+          }
+        },
+        {
+          "call": "stopServer",
+          "ok": null
+        },
+        {
+          "expect": "onServerState",
+          "event": {
+            "phase": "stopped"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a project in a workspace knows it: its members, its network, and trusting it once trusts them all",
+      "setup": {
+        "workspace": "{\"name\": \"Contract net\", \"projects\": [\"project\", \"lobby\", \"lib\", \"notapackage\"], \"network\": {\"arrival\": \"main\", \"servers\": {\"main\": \"project\", \"lobby\": \"lobby\"}}}"
+      },
+      "steps": [
+        {
+          "call": "openProject",
+          "args": ["$ROOT"],
+          "ok": {
+            "trusted": false,
+            "workspace": {
+              "name": "Contract net",
+              "trusted": false,
+              "members": [
+                {
+                  "path": "project",
+                  "name": "Contract",
+                  "package": false
+                },
+                {
+                  "path": "lobby",
+                  "name": "Lobby",
+                  "package": false
+                },
+                {
+                  "path": "lib",
+                  "name": "lib",
+                  "package": false
+                }
+              ],
+              "network": {
+                "arrival": "main",
+                "servers": [
+                  {
+                    "name": "lobby",
+                    "project": "lobby"
+                  },
+                  {
+                    "name": "main",
+                    "project": "project"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "call": "openProject",
+          "args": ["$ROOT/.."],
+          "ok": {
+            "name": "Contract",
+            "workspace": {
+              "name": "Contract net"
+            }
+          }
+        },
+        {
+          "call": "workspaceRead",
+          "ok": "{\"name\": \"Contract net\", \"projects\": [\"project\", \"lobby\", \"lib\", \"notapackage\"], \"network\": {\"arrival\": \"main\", \"servers\": {\"main\": \"project\", \"lobby\": \"lobby\"}}}"
+        },
+        {
+          "call": "workspaceWriteSchema",
+          "args": ["{}\n"],
+          "ok": null
+        },
+        {
+          "call": "startServer",
+          "error": "untrusted"
+        },
+        {
+          "call": "workspaceTrust",
+          "args": [true],
+          "ok": {
+            "trusted": true,
+            "workspace": {
+              "trusted": true
+            }
+          }
+        },
+        {
+          "call": "openProject",
+          "args": ["$ROOT/../lobby"],
+          "ok": {
+            "name": "Lobby",
+            "trusted": true,
+            "workspace": {
+              "name": "Contract net"
+            }
+          }
+        },
+        {
+          "call": "workspaceMemberFiles",
+          "args": ["lib"],
+          "ok": {
+            "root": "$any",
+            "files": {
+              "$includes": [
+                {
+                  "path": "items/gem/item.json"
+                },
+                {
+                  "path": "netherforge.json"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "call": "workspaceMemberReadText",
+          "args": ["lib", "items/gem/item.json"],
+          "ok": "{}\n"
+        },
+        {
+          "call": "workspaceMemberWriteText",
+          "args": ["lib", "items/gem/item.json", "{ }\n"],
+          "ok": null
+        },
+        {
+          "call": "workspaceMemberReadText",
+          "args": ["lib", "items/gem/item.json"],
+          "ok": "{ }\n"
+        },
+        {
+          "call": "workspaceMemberFiles",
+          "args": ["nope"],
+          "error": "notFound"
+        },
+        {
+          "call": "workspaceMemberReadText",
+          "args": ["lib", "../project/netherforge.json"],
+          "error": "invalidPath"
+        },
+        {
+          "call": "workspaceMemberWriteText",
+          "args": ["lib", ".git/hooks/x", "boom"],
+          "error": "readOnly"
+        },
+        {
+          "call": "workspaceNetworkEnabled",
+          "ok": false
+        },
+        {
+          "call": "workspaceSetNetworkEnabled",
+          "args": [true],
+          "ok": null
+        },
+        {
+          "call": "workspaceNetworkEnabled",
+          "ok": true
+        },
+        {
+          "call": "workspaceCreateMember",
+          "args": [
+            "packages/fresh",
+            {
+              "netherforge.json": "{\"formatVersion\": 1, \"name\": \"Fresh\", \"namespace\": \"fresh\", \"version\": \"0.1.0\"}"
+            }
+          ],
+          "ok": {
+            "name": "Contract net"
+          }
+        },
+        {
+          "call": "workspaceCreateMember",
+          "args": [
+            "packages/fresh",
+            {
+              "netherforge.json": "{\"formatVersion\": 1, \"name\": \"Fresh\", \"namespace\": \"fresh\", \"version\": \"0.1.0\"}"
+            }
+          ],
+          "error": "alreadyExists"
+        },
+        {
+          "call": "workspaceCreateMember",
+          "args": [
+            ".git/fresh",
+            {
+              "netherforge.json": "{\"formatVersion\": 1, \"name\": \"Fresh\", \"namespace\": \"fresh\", \"version\": \"0.1.0\"}"
+            }
+          ],
+          "error": "readOnly"
+        },
+        {
+          "call": "workspaceCreateMember",
+          "args": [
+            "../outside",
+            {
+              "netherforge.json": "{\"formatVersion\": 1, \"name\": \"Fresh\", \"namespace\": \"fresh\", \"version\": \"0.1.0\"}"
+            }
+          ],
+          "error": "invalidPath"
+        },
+        {
+          "call": "workspaceWrite",
+          "args": [
+            "{\"name\":\"Contract net\",\"projects\":[\"project\",\"lobby\",\"packages/*\"]}\n"
+          ],
+          "ok": {
+            "members": {
+              "$includes": [
+                {
+                  "path": "packages/fresh",
+                  "name": "Fresh"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "call": "workspaceWrite",
+          "args": ["{\"name\":\"Renamed\",\"projects\":[\"lobby\"]}\n"],
+          "ok": {
+            "name": "Renamed",
+            "members": [
+              {
+                "path": "lobby"
+              }
+            ],
+            "network": null
+          }
+        },
+        {
+          "call": "workspaceInfo",
+          "ok": {
+            "name": "Renamed"
+          }
+        },
+        {
+          "call": "workspaceTrust",
+          "args": [false],
+          "ok": {
+            "trusted": false,
+            "workspace": {
+              "trusted": false
+            }
+          }
+        },
+        {
+          "call": "startServer",
+          "error": "untrusted"
+        }
+      ]
+    },
+    {
+      "name": "a workspace's dev network runs every server, the editor attached to the open project's, and stays up across projects",
+      "setup": {
+        "workspace": "{\"name\": \"Contract net\", \"projects\": [\"project\", \"lobby\", \"lib\", \"notapackage\"], \"network\": {\"arrival\": \"main\", \"servers\": {\"main\": \"project\", \"lobby\": \"lobby\"}}}"
+      },
+      "steps": [
+        {
+          "call": "workspaceTrust",
+          "args": [true],
+          "ok": {
+            "trusted": true
+          }
+        },
+        {
+          "call": "acceptEula",
+          "ok": null
+        },
+        {
+          "call": "setSettings",
+          "args": [
+            {
+              "serverJvmArgs": [],
+              "serverMemoryMb": 2048,
+              "serverPort": "$PORT",
+              "mcpEnabled": false,
+              "mcpPort": 47615,
+              "ffmpegPath": ""
+            }
+          ],
+          "ok": null
+        },
+        {
+          "call": "workspaceSetNetworkEnabled",
+          "args": [true],
+          "ok": null
+        },
+        {
+          "listen": "onServerState"
+        },
+        {
+          "listen": "onServerOutput"
+        },
+        {
+          "listen": "onNetworkMembers"
+        },
+        {
+          "call": "startServer",
+          "ok": null
+        },
+        {
+          "expect": "onNetworkMembers",
+          "event": {
+            "members": [
+              {
+                "name": "proxy",
+                "kind": "proxy",
+                "attached": false
+              },
+              {
+                "name": "main",
+                "kind": "server",
+                "attached": true
+              },
+              {
+                "name": "lobby",
+                "kind": "server",
+                "attached": false
+              }
+            ]
+          }
+        },
+        {
+          "expect": "onServerState",
+          "event": {
+            "phase": "running",
+            "bridgeConnected": true
+          }
+        },
+        {
+          "call": "serverState",
+          "ok": {
+            "phase": "running",
+            "bridgeConnected": true
+          }
+        },
+        {
+          "call": "startServer",
+          "error": "busy"
+        },
+        {
+          "call": "serverCommand",
+          "args": ["say hi"],
+          "ok": null
+        },
+        {
+          "expect": "onServerOutput",
+          "event": {
+            "line": "> say hi"
+          }
+        },
+        {
+          "call": "openProject",
+          "args": ["$ROOT/../lobby"],
+          "ok": {
+            "name": "Lobby"
+          }
+        },
+        {
+          "expect": "onNetworkMembers",
+          "event": {
+            "members": [
+              {
+                "name": "proxy",
+                "attached": false
+              },
+              {
+                "name": "main",
+                "attached": false,
+                "state": {
+                  "phase": "running"
+                }
+              },
+              {
+                "name": "lobby",
+                "attached": true,
+                "state": {
+                  "phase": "running"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "call": "serverState",
+          "ok": {
+            "phase": "running"
+          }
+        },
+        {
+          "call": "openProject",
+          "args": ["$ROOT/../lib"],
+          "ok": {
+            "name": "$any"
+          }
+        },
+        {
+          "expect": "onServerState",
+          "event": {
+            "phase": "stopped",
+            "message": "No server of the dev network runs this project"
+          }
+        },
+        {
+          "call": "openProject",
+          "args": ["$ROOT"],
+          "ok": {
+            "name": "Contract"
+          }
+        },
+        {
+          "expect": "onServerState",
+          "event": {
+            "phase": "running"
+          }
+        },
+        {
+          "call": "stopServer",
+          "ok": null
+        },
+        {
+          "expect": "onServerState",
+          "event": {
+            "phase": "stopped"
+          }
+        },
+        {
+          "call": "networkMembers",
+          "ok": [
+            {
+              "name": "proxy",
+              "state": {
+                "phase": "stopped"
+              }
+            },
+            {
+              "name": "main",
+              "state": {
+                "phase": "stopped"
+              }
+            },
+            {
+              "name": "lobby",
+              "state": {
+                "phase": "stopped"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

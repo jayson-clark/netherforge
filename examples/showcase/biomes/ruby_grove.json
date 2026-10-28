@@ -1,0 +1,70 @@
+{
+  "$schema": "../.netherforge/schema/biome.schema.json",
+  "climate": {
+    "temperature": 0.7,
+    "downfall": 0.8
+  },
+  "colors": {
+    "sky": "#f2a7c3",
+    "fog": "#f7d3e0",
+    "water": "#d94f7a",
+    "waterFog": "#5a1028",
+    "grass": "#c2406a",
+    "foliage": "#e0587f"
+  },
+  "particle": {
+    "particle": "minecraft:cherry_leaves",
+    "probability": 0.01
+  },
+  "sounds": {
+    "music": {
+      "sound": "minecraft:music.overworld.cherry_grove"
+    }
+  },
+  "spawns": {
+    "monster": [
+      {
+        "entity": "minecraft:zombie",
+        "weight": 100,
+        "group": {
+          "min": 2,
+          "max": 4
+        }
+      },
+      {
+        "entity": "minecraft:skeleton",
+        "weight": 80,
+        "group": {
+          "min": 2,
+          "max": 4
+        }
+      }
+    ],
+    "animal": [
+      {
+        "entity": "minecraft:sheep",
+        "weight": 12,
+        "group": {
+          "min": 2,
+          "max": 4
+        }
+      },
+      {
+        "entity": "minecraft:rabbit",
+        "weight": 4,
+        "group": {
+          "min": 2,
+          "max": 3
+        }
+      }
+    ]
+  },
+  "features": {
+    "local_modifications": ["ruby_boulders"],
+    "vegetal_decoration": [
+      "minecraft:patch_grass_plain",
+      "minecraft:flower_cherry",
+      "minecraft:trees_cherry"
+    ]
+  }
+}

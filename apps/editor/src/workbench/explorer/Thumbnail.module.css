@@ -1,0 +1,29 @@
+.thumb {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.icon {
+  color: var(--muted);
+}
+/* The kinds' tones (`KindTone`). */
+.blue {
+  color: #8ab4f8;
+}
+.purple {
+  color: #c792ea;
+}
+.amber {
+  color: #e2c08d;
+}
+.green {
+  color: #7fd6a1;
+}
+.orange {
+  color: #ffb86c;
+}
+.cyan {
+  color: #2fc4d4;
+}

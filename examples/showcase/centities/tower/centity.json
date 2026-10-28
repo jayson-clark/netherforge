@@ -1,0 +1,112 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "name": "Stone tower",
+  "nodes": {
+    "base": {
+      "transform": {
+        "translation": [-0.5, 0, -0.5]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:stone_bricks"
+      },
+      "hitbox": {}
+    },
+    "cap": {
+      "parent": "turret",
+      "transform": {
+        "translation": [-0.5, 0, -0.5]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:oak_stairs[facing=east]"
+      },
+      "hitbox": {
+        "shape": "collision"
+      }
+    },
+    "flag": {
+      "parent": "turret",
+      "transform": {
+        "translation": [0, 1.2, 0],
+        "scale": [0.5, 0.5, 0.5]
+      },
+      "display": {
+        "type": "item",
+        "item": "minecraft:red_banner",
+        "itemTransform": "fixed"
+      }
+    },
+    "keep": {
+      "transform": {
+        "translation": [-0.5, 1, -0.5]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:chiseled_stone_bricks"
+      },
+      "hitbox": {}
+    },
+    "turret": {
+      "transform": {
+        "translation": [0, 2, 0]
+      }
+    }
+  },
+  "animations": {
+    "flutter": {
+      "loop": "loop",
+      "autoplay": true,
+      "tracks": {
+        "flag": {
+          "rotation": [
+            {
+              "time": 0,
+              "value": [0, -12, 0],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 0.8,
+              "value": [0, 12, 0],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 1.6,
+              "value": [0, -12, 0]
+            }
+          ]
+        }
+      }
+    },
+    "spin": {
+      "loop": "once",
+      "tracks": {
+        "turret": {
+          "rotation": [
+            {
+              "time": 0,
+              "value": [0, 0, 0],
+              "easing": "ease_in"
+            },
+            {
+              "time": 0.6,
+              "value": [0, 120, 0]
+            },
+            {
+              "time": 0.9,
+              "value": [0, 240, 0],
+              "easing": "ease_out"
+            },
+            {
+              "time": 1.5,
+              "value": [0, 360, 0]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "script": {
+    "file": "script.lua"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "nodes": {
+    "chain": { "rope": { "links": 0, "linkLength": 9 } },
+    "string": {
+      "display": { "type": "item", "item": "minecraft:stick" },
+      "hitbox": { "shape": "collision", "boxes": [{ "min": [0, 0, 0], "max": [1, 1, 1] }] },
+      "rope": { "links": 4 }
+    }
+  }
+}

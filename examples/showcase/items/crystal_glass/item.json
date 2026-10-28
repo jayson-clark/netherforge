@@ -1,0 +1,8 @@
+{
+  "$schema": "../../.netherforge/schema/item.schema.json",
+  "kind": "minecraft:paper",
+  "name": "<light_purple>Crystal glass",
+  "lore": ["<gray>Glass with light running through it"],
+  "itemModel": "ui/crystal_glass",
+  "block": "crystal_glass"
+}

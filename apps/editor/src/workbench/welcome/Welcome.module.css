@@ -1,0 +1,331 @@
+.welcome {
+  height: 100%;
+  display: grid;
+  /* The title bar is fixed, so the card alone is laid out, in the middle. */
+  place-items: center;
+  background:
+    radial-gradient(ellipse 60% 50% at 25% 15%, rgba(47, 196, 212, 0.1), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 85% 90%, rgba(139, 156, 255, 0.06), transparent 70%),
+    var(--bg);
+  overflow: auto;
+}
+.card {
+  width: min(860px, calc(100vw - 48px));
+  margin: 24px 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.narrow {
+  width: min(620px, calc(100vw - 48px));
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  min-height: 360px;
+}
+@media (max-width: 720px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  padding: 32px;
+}
+.title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.tagline {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.makes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+}
+.makes li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+}
+.error {
+  margin-top: 16px;
+}
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 24px;
+}
+.action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  text-align: left;
+  transition:
+    background 80ms,
+    border-color 80ms;
+}
+.action:hover {
+  background: var(--bg-hover);
+}
+.actionIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--bg-input);
+  color: var(--text);
+}
+.primary {
+  border-color: var(--accent-dim);
+}
+.primary .actionIcon {
+  background: var(--accent-dim);
+  color: #e6fbfd;
+}
+.primary:hover {
+  border-color: var(--accent);
+}
+.actionText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.actionTitle {
+  font-weight: 600;
+  font-size: 13px;
+}
+.actionHint {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+}
+.version {
+  margin: auto 0 0;
+  padding-top: 24px;
+  font-size: var(--font-size-sm);
+  color: var(--muted);
+}
+
+.recentPane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 24px 16px 16px;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+}
+@media (max-width: 720px) {
+  .recentPane {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+}
+.heading {
+  margin: 8px 8px 10px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.recent {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow: auto;
+  max-height: 440px;
+}
+.recentButton {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px;
+  text-align: left;
+}
+.recentButton:hover {
+  background: var(--bg-hover);
+}
+.recentIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: var(--bg-raised);
+  color: var(--accent);
+}
+.recentText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.recentName {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recentRoot {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recentGo {
+  color: var(--muted);
+  opacity: 0;
+}
+.recentButton:hover .recentGo {
+  opacity: 1;
+}
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  text-align: center;
+}
+.empty p {
+  margin: 0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 20px 28px 24px;
+}
+.formHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px -8px;
+}
+.formTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+}
+.formRow {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 12px;
+}
+.formField {
+  display: flex;
+  flex-direction: column;
+}
+.form input,
+.form select {
+  height: 30px;
+  padding: 4px 9px;
+  font-size: 13px;
+}
+.templates {
+  display: flex;
+  flex-direction: column;
+}
+.groupLabel {
+  color: var(--muted);
+  margin: 8px 0 4px;
+  font-size: var(--font-size-sm);
+}
+.templateGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.template {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  cursor: pointer;
+}
+.template[data-hovered] {
+  background: var(--bg-hover);
+}
+.template[data-selected] {
+  border-color: var(--accent);
+  background: var(--bg-selected-dim);
+}
+.template[data-focus-visible] {
+  outline: 1px solid var(--info);
+}
+.templateTitle {
+  font-weight: 600;
+}
+.templateSummary {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+.folderPick {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 4px 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--muted);
+}
+.folderPick code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.folderPick code.unset {
+  color: var(--muted);
+  font-family: var(--font);
+}

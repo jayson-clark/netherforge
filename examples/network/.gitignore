@@ -1,0 +1,6 @@
+.netherforge/
+# The editor writes the default font's advances from an imported client: Minecraft data, kept out of the repo.
+fonts/default.json
+# Connects coding agents to this computer's editor, with its token: not for sharing.
+.mcp.json
+opencode.json

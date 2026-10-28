@@ -1,0 +1,44 @@
+[
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"../escape\" isn't a world name (letters, digits, _, - and ., starting with a letter, digit or _, at most 64 characters)",
+    "path": "$.worlds[\"../escape\"]",
+    "code": "project.world-name"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"Bad Rule\" isn't a game rule's id (keep_inventory)",
+    "path": "$.worlds.realm.gameRules[\"Bad Rule\"]",
+    "code": "project.world-rule"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "keep_inventory is true, false or a whole number, as the rule takes",
+    "path": "$.worlds.realm.gameRules.keep_inventory",
+    "code": "project.world-rule"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "spawnLimits.monster is -1: a whole number, 0 or more",
+    "path": "$.worlds.arena.spawnLimits.monster",
+    "code": "project.world-spawn"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "spawnIntervals.axolotl is -20: a whole number, 0 or more",
+    "path": "$.worlds.arena.spawnIntervals.axolotl",
+    "code": "project.world-spawn"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "There's no terrain \"no_such_generator\" (terrain/no_such_generator.json)",
+    "path": "$.worlds.realm.terrain",
+    "code": "reference.terrain"
+  }
+]

@@ -1,0 +1,5 @@
+{
+  "$schema": "../.netherforge/schema/sky.schema.json",
+  "water": "#8a1010",
+  "darkens": false
+}

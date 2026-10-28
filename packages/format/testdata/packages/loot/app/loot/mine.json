@@ -1,0 +1,14 @@
+{
+  "pools": {
+    "main": {
+      "entries": [
+        { "type": "table", "table": "lib:drops" },
+        { "type": "table", "table": "lib:hidden" },
+        { "type": "table", "table": "lib:ghost" },
+        { "type": "item", "item": { "item": "lib:coin" } },
+        { "type": "item", "item": { "item": "lib:secret" } },
+        { "type": "empty", "conditions": [{ "type": "tool", "tool": { "item": "lib:secret" } }] }
+      ]
+    }
+  }
+}

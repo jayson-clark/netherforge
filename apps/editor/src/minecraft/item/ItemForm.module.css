@@ -1,0 +1,35 @@
+.form {
+  display: contents;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.enchantment {
+  display: grid;
+  grid-template-columns: 1fr 56px auto;
+  gap: 4px;
+}
+.modifier {
+  display: grid;
+  grid-template-columns: 1fr 56px 1fr 72px auto;
+  gap: 4px;
+}
+.modifier select,
+.modifier input {
+  min-width: 0;
+}
+.colorField {
+  display: flex;
+  gap: 4px;
+}
+.colorField input {
+  flex: 1;
+  min-width: 0;
+}
+.colorField input[type='color'] {
+  flex: none;
+  width: 32px;
+  padding: 0;
+}

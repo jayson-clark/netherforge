@@ -1,0 +1,86 @@
+[
+  {
+    "severity": "warning",
+    "file": "blocks/crystal/block.json",
+    "message": "A note block is an opaque cube, so the blocks beside it don't draw the faces that touch it: unless this model fills the whole block, those faces show through. A shape that isn't a cube wants \"carrier\": \"leaves\" (solid) or \"tripwire\" (no collision)",
+    "path": "$.model",
+    "code": "block.carrier"
+  },
+  {
+    "severity": "warning",
+    "file": "blocks/rose/block.json",
+    "message": "Tripwire breaks at once whatever the block's hardness: a tripwire block can't take longer to mine",
+    "path": "$.hardness",
+    "code": "block.carrier"
+  },
+  {
+    "severity": "warning",
+    "file": "blocks/rose/block.json",
+    "message": "Drawing tripwire blocks takes the game's own look of tripwire, which the editor writes into client/vanilla.json from your Minecraft: open the project in the editor with Minecraft 26.3 imported. Until then these blocks look like string",
+    "path": "$.carrier",
+    "code": "block.vanilla-looks"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/mobs/models/wing.json",
+    "message": "\"otherpack:item/wing\" is in no namespace the client has: name this pack's textures by their path under textures/ (\"item/wing\" for textures/item/wing.png), the game's with minecraft:",
+    "path": "$.textures.far",
+    "code": "resource_pack.model-texture"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/mobs/models/wing.json",
+    "message": "from is outside -16 to 32, which the game refuses to load (the whole model then draws as missing): scale the model down in its display, or split it into parts",
+    "path": "$.elements[0].from",
+    "code": "resource_pack.model-bounds"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/mobs/models/wing.json",
+    "message": "\"#1\" is a texture this model doesn't give: add \"1\" to its textures",
+    "path": "$.elements[0].faces.north.texture",
+    "code": "resource_pack.model-texture"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/mobs/models/wing.json",
+    "message": "A rotation is { \"origin\": [x, y, z], \"axis\": \"x\", \"y\" or \"z\", \"angle\": degrees } or { \"origin\", \"x\", \"y\", \"z\" } in degrees",
+    "path": "$.elements[1].rotation",
+    "code": "resource_pack.model"
+  },
+  {
+    "severity": "warning",
+    "file": "resource_packs/mobs/models/wing.json",
+    "message": "The game clamps a display's scale to ±4, so it won't be what this says: scale the centity node (or the model's elements) instead",
+    "path": "$.display.fixed.scale",
+    "code": "resource_pack.model-display"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/mobs/pack.json",
+    "message": "models/gone.json doesn't exist",
+    "path": "$.items.gone.model",
+    "code": "resource_pack.model-file"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/mobs/pack.json",
+    "message": "\"../wing.json\" must be a .json path of letters, digits, _, - and . inside this resource pack's models/ folder",
+    "path": "$.items.path.model",
+    "code": "resource_pack.model-file"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/mobs/pack.json",
+    "message": "An item is drawn as one of a texture, a block and a model: it has texture and model",
+    "path": "$.items.both.model",
+    "code": "resource_pack.item-look"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/mobs/pack.json",
+    "message": "A block look is a model or textures, not both: the model's own textures are what it's drawn with",
+    "path": "$.blocks.mixed.model",
+    "code": "resource_pack.block-faces"
+  }
+]

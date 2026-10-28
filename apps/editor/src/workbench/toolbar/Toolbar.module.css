@@ -1,0 +1,82 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+/* The toolbar is the title bar (TitleBar.tsx). */
+.overlay,
+.custom {
+  height: 40px;
+}
+/* Room for the traffic lights (trafficLightPosition in tauri.macos.conf.json). */
+.overlay {
+  padding-left: 84px;
+}
+.custom {
+  padding-right: 0;
+}
+.project {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  margin-right: 10px;
+  white-space: nowrap;
+}
+.switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  margin-right: 10px;
+  white-space: nowrap;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 2px 6px;
+  color: var(--text);
+}
+.switcher:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+.workspaceName {
+  color: var(--muted);
+  font-weight: 500;
+}
+.group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+.drag {
+  flex: 1;
+  align-self: stretch;
+  min-width: 12px;
+}
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(360px, 32vw);
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--muted);
+  text-align: left;
+}
+.search:hover {
+  border-color: #3a404c;
+  color: var(--text);
+}
+.search > span {
+  flex: 1;
+}
+.search kbd {
+  font-size: var(--font-size-xs);
+}

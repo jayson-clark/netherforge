@@ -1,0 +1,1 @@
+{ "textures": { "0": "gem" }, "elements": [{ "from": [6, 0, 6], "to": [10, 12, 10], "faces": { "up": { "texture": "#0" } } }] }

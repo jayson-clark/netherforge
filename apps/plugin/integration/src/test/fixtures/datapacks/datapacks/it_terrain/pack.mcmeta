@@ -1,0 +1,22 @@
+{
+  "$schema": "../../.netherforge/schema/datapack.schema.json",
+  "pack": {
+    "description": "A shelf of smooth basalt at y 64 in place of the overworld's terrain",
+    "min_format": 94,
+    "max_format": 121
+  },
+  "overlays": {
+    "entries": [
+      {
+        "min_format": 94,
+        "max_format": 107,
+        "directory": "until26_2"
+      },
+      {
+        "min_format": 121,
+        "max_format": 121,
+        "directory": "mc26_3"
+      }
+    ]
+  }
+}

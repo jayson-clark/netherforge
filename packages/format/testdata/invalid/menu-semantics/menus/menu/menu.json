@@ -1,0 +1,12 @@
+{
+  "rows": 7,
+  "skin": "nopack",
+  "script": { "file": "../escape.lua" },
+  "slots": {
+    "01": { "item": { "kind": "minecraft:stone" } },
+    "200": { "item": { "kind": "minecraft:stone" } },
+    "5": {},
+    "6": { "item": { "kind": "Not An Item", "count": 0, "damage": -1, "color": "red", "enchantments": { "minecraft:sharpness": 0 }, "itemModel": "ruby" } },
+    "7": { "item": { "kind": "minecraft:paper", "itemModel": "ghost:ui/ruby", "tooltipStyle": "ui/missing" } }
+  }
+}

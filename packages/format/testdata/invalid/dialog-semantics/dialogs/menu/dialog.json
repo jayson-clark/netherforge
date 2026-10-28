@@ -1,0 +1,1 @@
+{ "type": "dialog_list", "title": "Menu", "dialogs": ["ask", "ghost"] }

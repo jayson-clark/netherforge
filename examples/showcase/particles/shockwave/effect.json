@@ -1,0 +1,80 @@
+{
+  "$schema": "../../.netherforge/schema/particle_effect.schema.json",
+  "duration": 30,
+  "emitters": {
+    "debris": {
+      "particle": "minecraft:block",
+      "burst": 20,
+      "shape": {
+        "type": "disc",
+        "radius": 1.5
+      },
+      "spread": [0.1, 0.3, 0.1],
+      "speed": 0.2,
+      "blockState": "minecraft:stone"
+    },
+    "flash": {
+      "particle": "minecraft:flash",
+      "burst": 1
+    },
+    "ring": {
+      "particle": "minecraft:dust",
+      "end": 20,
+      "burst": 48,
+      "every": 5,
+      "shape": {
+        "type": "ring"
+      },
+      "distribution": "even",
+      "offset": [0, 0.1, 0],
+      "size": 1.5,
+      "curves": {
+        "radius": [
+          {
+            "time": 0,
+            "value": 0.5
+          },
+          {
+            "time": 20,
+            "value": 4,
+            "easing": "ease_out"
+          }
+        ],
+        "color": [
+          {
+            "time": 0,
+            "color": "#ffd34d"
+          },
+          {
+            "time": 20,
+            "color": "#ff3b1f",
+            "easing": "ease_in"
+          }
+        ]
+      }
+    },
+    "sparks": {
+      "particle": "minecraft:end_rod",
+      "start": 2,
+      "rate": 3,
+      "shape": {
+        "type": "sphere",
+        "radius": 0.3
+      },
+      "motion": "outward",
+      "speed": 0.15,
+      "curves": {
+        "rate": [
+          {
+            "time": 2,
+            "value": 6
+          },
+          {
+            "time": 30,
+            "value": 0
+          }
+        ]
+      }
+    }
+  }
+}

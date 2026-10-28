@@ -1,0 +1,5 @@
+{
+  "$schema": "../.netherforge/schema/dimension_type.schema.json",
+  "minY": 2000,
+  "height": 64
+}

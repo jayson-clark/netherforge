@@ -1,0 +1,13 @@
+{
+  "$schema": "../.netherforge/schema/game_block.schema.json",
+  "blocks": [
+    "minecraft:deepslate_bricks",
+    "minecraft:deepslate_brick_stairs",
+    "minecraft:deepslate_brick_slab",
+    "minecraft:deepslate_brick_wall"
+  ],
+  "hardness": 6,
+  "tool": "pickaxe",
+  "requiresTool": true,
+  "drops": "deepslate_rubble"
+}

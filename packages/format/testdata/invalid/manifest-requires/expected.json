@@ -1,0 +1,37 @@
+[
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"*.com\" isn't a host (a host name in lowercase, like discord.com, or *. and one with a dot in it for any name under it, like *.example.com)",
+    "path": "$.requires.http[0]",
+    "code": "project.requires-host"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"Discord.com\" isn't a host (a host name in lowercase, like discord.com, or *. and one with a dot in it for any name under it, like *.example.com)",
+    "path": "$.requires.http[2]",
+    "code": "project.requires-host"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"https://x.dev\" is a URL: list its host alone, \"x.dev\", which covers http, https, ws and wss",
+    "path": "$.requires.http[4]",
+    "code": "project.requires-host"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"PlaceholderAPI\" isn't a plugin's name (the plugin's name in lowercase: letters, digits, _ and -, at most 64 characters)",
+    "path": "$.requires.plugins[0]",
+    "code": "project.requires-plugin"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"with space\" isn't a plugin's name (the plugin's name in lowercase: letters, digits, _ and -, at most 64 characters)",
+    "path": "$.requires.plugins[2]",
+    "code": "project.requires-plugin"
+  }
+]

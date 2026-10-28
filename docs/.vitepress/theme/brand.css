@@ -1,0 +1,18 @@
+/* Soul-fire teal, matching the logo and the editor's accent. */
+:root {
+  --vp-c-brand-1: #0e7884;
+  --vp-c-brand-2: #12909e;
+  --vp-c-brand-3: #13838f;
+  --vp-c-brand-soft: rgba(31, 168, 184, 0.14);
+  --vp-button-brand-hover-bg: #0e7884;
+  --vp-button-brand-active-bg: #0b636d;
+}
+
+.dark {
+  --vp-c-brand-1: #36d6e7;
+  --vp-c-brand-2: #2bbccc;
+  --vp-c-brand-3: #146673;
+  --vp-c-brand-soft: rgba(54, 214, 231, 0.16);
+  --vp-button-brand-hover-bg: #1a7f8c;
+  --vp-button-brand-active-bg: #125a64;
+}

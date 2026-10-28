@@ -1,0 +1,38 @@
+{
+  "$schema": "../../.netherforge/schema/menu.schema.json",
+  "name": "Village shop",
+  "rows": 3,
+  "title": "<dark_gray>Village shop",
+  "skin": "ui/shop",
+  "slots": {
+    "11": {
+      "item": {
+        "kind": "minecraft:bread",
+        "count": 4,
+        "name": "<yellow>Bread",
+        "lore": ["<gray><glyph:ui/coin> 2"]
+      }
+    },
+    "12": {
+      "item": {
+        "item": "library:gem",
+        "lore": ["<gray><glyph:ui/coin> 20"]
+      }
+    },
+    "13": {
+      "item": {
+        "item": "ruby",
+        "lore": ["<gray><glyph:ui/coin> 50"]
+      }
+    },
+    "15": {
+      "item": {
+        "kind": "minecraft:barrier",
+        "name": "<red>Close"
+      }
+    }
+  },
+  "script": {
+    "file": "script.lua"
+  }
+}

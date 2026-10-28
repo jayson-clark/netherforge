@@ -1,0 +1,79 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "name": "Goblin",
+  "nodes": {
+    "body": {
+      "parent": "root",
+      "transform": {
+        "translation": [-0.3, 0, -0.3],
+        "scale": [0.6, 0.7, 0.6]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:green_concrete"
+      },
+      "hitbox": {}
+    },
+    "head": {
+      "parent": "root",
+      "transform": {
+        "translation": [-0.25, 0.7, -0.25],
+        "scale": [0.5, 0.5, 0.5]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:lime_concrete"
+      }
+    },
+    "label": {
+      "parent": "root",
+      "transform": {
+        "translation": [0, 1.4, 0]
+      },
+      "display": {
+        "type": "text",
+        "text": "<green>Goblin"
+      }
+    },
+    "root": {}
+  },
+  "animations": {
+    "hurt": {
+      "loop": "once",
+      "tracks": {
+        "head": {
+          "translation": [
+            {
+              "time": 0,
+              "value": [-0.25, 0.7, -0.25]
+            },
+            {
+              "time": 0.1,
+              "value": [-0.25, 0.8, -0.25]
+            },
+            {
+              "time": 0.3,
+              "value": [-0.25, 0.7, -0.25]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "script": {
+    "file": "script.lua"
+  },
+  "spawning": {
+    "biomes": ["#minecraft:is_forest", "minecraft:plains"],
+    "height": {
+      "min": 40
+    },
+    "weight": 10,
+    "group": {
+      "min": 1,
+      "max": 2
+    },
+    "cap": 3,
+    "despawnDistance": 64
+  }
+}

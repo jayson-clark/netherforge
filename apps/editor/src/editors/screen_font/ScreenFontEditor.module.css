@@ -1,0 +1,64 @@
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.grid {
+  display: grid;
+  gap: 1px;
+  padding: 1px;
+  background: var(--border);
+}
+
+.pixel {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: var(--bg-input);
+  cursor: pointer;
+}
+
+.ink {
+  background: var(--text);
+}
+
+.picture img {
+  max-width: 100%;
+  image-rendering: pixelated;
+  background: repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50% / 16px 16px;
+}
+
+.sample {
+  display: flex;
+  flex-wrap: wrap;
+  max-width: 600px;
+  padding: 12px;
+  border-radius: 6px;
+  background: #101018;
+  fill: #fff;
+}
+
+.glyphs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 12px;
+}
+
+.glyph {
+  min-width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-input);
+  font-family: var(--mono);
+  cursor: pointer;
+}
+
+.picked {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}

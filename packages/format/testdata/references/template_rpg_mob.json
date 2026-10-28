@@ -1,0 +1,29 @@
+[
+  {
+    "file": "loot/goblin_loot.json",
+    "path": "$.pools.drops.entries[0].item.item",
+    "kind": "item",
+    "text": "goblin_ear",
+    "target": "template_rpg_mob:goblin_ear"
+  },
+  {
+    "file": "centities/goblin/centity.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "centities/goblin/script.lua"
+  },
+  {
+    "file": "centities/goblin/centity.json",
+    "path": "$.spawning.biomes[0]",
+    "kind": "biome",
+    "text": "#minecraft:is_forest"
+  },
+  {
+    "file": "centities/goblin/centity.json",
+    "path": "$.spawning.biomes[1]",
+    "kind": "biome",
+    "text": "minecraft:plains",
+    "target": "minecraft:plains"
+  }
+]

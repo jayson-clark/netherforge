@@ -1,0 +1,16 @@
+[
+  {
+    "severity": "error",
+    "file": "lib:netherforge.json",
+    "message": "A package fetched from git can't depend on the folder \"../near\": it isn't there for whoever fetches the package. Depend on it by git too",
+    "path": "$.dependencies.near.path",
+    "code": "package.git-path"
+  },
+  {
+    "severity": "warning",
+    "file": "netherforge.json",
+    "message": "There's no netherforge.lock pinning the packages this project depends on; the editor writes it, or run netherforge lock",
+    "path": "$.dependencies",
+    "code": "lock.missing"
+  }
+]

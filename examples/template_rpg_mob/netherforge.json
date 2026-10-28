@@ -1,0 +1,17 @@
+{
+  "$schema": ".netherforge/schema/netherforge.schema.json",
+  "formatVersion": 1,
+  "name": "RPG mob template",
+  "namespace": "template_rpg_mob",
+  "version": "0.1.0",
+  "minecraft": "26.3",
+  "requires": {
+    "db": true
+  },
+  "exports": {
+    "centities": ["goblin"],
+    "items": ["goblin_ear"],
+    "loot": ["goblin_loot"],
+    "modules": ["slayers"]
+  }
+}

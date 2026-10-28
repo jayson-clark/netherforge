@@ -1,0 +1,245 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "name": "Tortoise",
+  "nodes": {
+    "head": {
+      "parent": "root",
+      "transform": {
+        "translation": [-0.15, 0.25, 0.5],
+        "scale": [0.3, 0.28, 0.32]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:green_terracotta"
+      }
+    },
+    "label": {
+      "parent": "root",
+      "transform": {
+        "translation": [0, 1.2, 0]
+      },
+      "display": {
+        "type": "text",
+        "text": "<green>Tortoise",
+        "billboard": "center"
+      }
+    },
+    "leg_back_left": {
+      "parent": "root",
+      "transform": {
+        "translation": [0.2, 0, -0.45],
+        "scale": [0.2, 0.25, 0.2]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:green_terracotta"
+      }
+    },
+    "leg_back_right": {
+      "parent": "root",
+      "transform": {
+        "translation": [-0.4, 0, -0.45],
+        "scale": [0.2, 0.25, 0.2]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:green_terracotta"
+      }
+    },
+    "leg_front_left": {
+      "parent": "root",
+      "transform": {
+        "translation": [0.2, 0, 0.25],
+        "scale": [0.2, 0.25, 0.2]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:green_terracotta"
+      }
+    },
+    "leg_front_right": {
+      "parent": "root",
+      "transform": {
+        "translation": [-0.4, 0, 0.25],
+        "scale": [0.2, 0.25, 0.2]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:green_terracotta"
+      }
+    },
+    "root": {},
+    "shell": {
+      "parent": "root",
+      "transform": {
+        "translation": [-0.45, 0.2, -0.55],
+        "scale": [0.9, 0.45, 1.1]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:moss_block"
+      },
+      "hitbox": {}
+    },
+    "shell_top": {
+      "parent": "root",
+      "transform": {
+        "translation": [-0.35, 0.65, -0.45],
+        "scale": [0.7, 0.2, 0.9]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:mossy_cobblestone"
+      }
+    }
+  },
+  "animations": {
+    "idle": {
+      "loop": "loop",
+      "autoplay": true,
+      "tracks": {
+        "head": {
+          "translation": [
+            {
+              "time": 0,
+              "value": [-0.15, 0.25, 0.5],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 2,
+              "value": [-0.15, 0.3, 0.55],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 4,
+              "value": [-0.15, 0.25, 0.5]
+            }
+          ]
+        }
+      }
+    },
+    "munch": {
+      "loop": "once",
+      "tracks": {
+        "head": {
+          "translation": [
+            {
+              "time": 0,
+              "value": [-0.15, 0.25, 0.5]
+            },
+            {
+              "time": 0.25,
+              "value": [-0.15, 0.15, 0.62],
+              "easing": "ease_out"
+            },
+            {
+              "time": 0.5,
+              "value": [-0.15, 0.25, 0.5]
+            },
+            {
+              "time": 0.75,
+              "value": [-0.15, 0.15, 0.62],
+              "easing": "ease_out"
+            },
+            {
+              "time": 1,
+              "value": [-0.15, 0.25, 0.5]
+            }
+          ]
+        }
+      }
+    },
+    "walk": {
+      "length": 1,
+      "loop": "loop",
+      "tracks": {
+        "leg_back_left": {
+          "translation": [
+            {
+              "time": 0,
+              "value": [0.2, 0, -0.45]
+            },
+            {
+              "time": 0.5,
+              "value": [0.2, 0.08, -0.4],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 1,
+              "value": [0.2, 0, -0.45]
+            }
+          ]
+        },
+        "leg_back_right": {
+          "translation": [
+            {
+              "time": 0,
+              "value": [-0.4, 0.08, -0.4],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 0.5,
+              "value": [-0.4, 0, -0.45]
+            },
+            {
+              "time": 1,
+              "value": [-0.4, 0.08, -0.4]
+            }
+          ]
+        },
+        "leg_front_left": {
+          "translation": [
+            {
+              "time": 0,
+              "value": [0.2, 0.08, 0.3],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 0.5,
+              "value": [0.2, 0, 0.25]
+            },
+            {
+              "time": 1,
+              "value": [0.2, 0.08, 0.3]
+            }
+          ]
+        },
+        "leg_front_right": {
+          "translation": [
+            {
+              "time": 0,
+              "value": [-0.4, 0, 0.25]
+            },
+            {
+              "time": 0.5,
+              "value": [-0.4, 0.08, 0.3],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 1,
+              "value": [-0.4, 0, 0.25]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "script": {
+    "file": "script.lua"
+  },
+  "spawning": {
+    "worlds": ["hills"],
+    "biomes": ["ruby_grove"],
+    "light": {
+      "min": 8
+    },
+    "blocks": ["minecraft:grass_block"],
+    "weight": 8,
+    "group": {
+      "min": 1,
+      "max": 2
+    },
+    "cap": 3,
+    "despawnDistance": 96
+  }
+}

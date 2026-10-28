@@ -1,0 +1,9 @@
+{
+  "slots": {
+    "0": { "item": { "item": "gem", "count": 3 } },
+    "1": { "item": { "item": "ghost" } },
+    "2": { "item": { "kind": "minecraft:diamond", "item": "gem" } },
+    "3": { "item": { "item": "Bad Id" } },
+    "4": { "item": { "name": "nothing" } }
+  }
+}

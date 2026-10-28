@@ -1,0 +1,26 @@
+[
+  {
+    "severity": "error",
+    "file": "builds/arena/0_0_0.nbt",
+    "message": "structures/arena.nbt has the id \"arena\" too, and scripts name structures and builds alike: rename one",
+    "code": "build.id-taken"
+  },
+  {
+    "severity": "error",
+    "file": "builds/city/0_0_0.nbt",
+    "message": "The build's parts make a 2 × 1 × 2 grid, but 1_0_0.nbt, 0_0_1.nbt aren't there",
+    "code": "build.part-missing"
+  },
+  {
+    "severity": "warning",
+    "file": "builds/city/notes.txt",
+    "message": "notes.txt isn't a part of the build: parts are <x>_<y>_<z>.nbt, their place in the grid (0_0_0.nbt, 1_0_0.nbt…)",
+    "code": "build.part-name"
+  },
+  {
+    "severity": "error",
+    "file": "builds/huge/0_0_0.nbt",
+    "message": "The build has 23 parts along x; a build has at most 22 along each (1056 blocks)",
+    "code": "build.size"
+  }
+]

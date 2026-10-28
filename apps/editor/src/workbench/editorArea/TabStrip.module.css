@@ -1,0 +1,107 @@
+.strip {
+  display: flex;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  min-height: 30px;
+  flex: none;
+}
+.strip::-webkit-scrollbar {
+  height: 3px;
+}
+.tabs {
+  display: flex;
+  flex: 1;
+}
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 0 10px;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* A resource's thumbnail, in the room of an icon and a bit. */
+.picture {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+}
+.tab {
+  outline: none;
+}
+.tab[data-hovered] {
+  color: var(--text);
+}
+.tab[data-focus-visible] {
+  outline: 1px solid var(--info);
+  outline-offset: -1px;
+}
+.tab[data-selected] {
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+.dragging {
+  opacity: 0.5;
+}
+/* Where a dragged tab would land. */
+.dropBefore {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.dropAfter {
+  box-shadow: inset -2px 0 0 var(--accent);
+}
+.tab[data-selected].dropBefore {
+  box-shadow:
+    inset 0 2px 0 var(--accent),
+    inset 2px 0 0 var(--accent);
+}
+.tab[data-selected].dropAfter {
+  box-shadow:
+    inset 0 2px 0 var(--accent),
+    inset -2px 0 0 var(--accent);
+}
+.close {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  padding: 0;
+  opacity: 0;
+}
+.tab[data-hovered] .close,
+.tab[data-selected] .close,
+.close:focus-visible {
+  opacity: 0.7;
+}
+.close:hover {
+  opacity: 1;
+  background: var(--bg-hover);
+}
+/* An unsaved tab shows its dot where the close button is, until hovered. */
+.dirty .close {
+  opacity: 1;
+}
+.dirtyDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text);
+}
+.dirty[data-hovered] .dirtyDot {
+  display: none;
+}
+.closeIcon {
+  display: none;
+}
+.tab:not(.dirty) .closeIcon,
+.dirty[data-hovered] .closeIcon {
+  display: block;
+}

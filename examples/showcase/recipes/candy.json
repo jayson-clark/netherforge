@@ -1,0 +1,11 @@
+{
+  "$schema": "../.netherforge/schema/recipe.schema.json",
+  "type": "smoking",
+  "ingredient": {
+    "item": "shard"
+  },
+  "result": {
+    "item": "candy"
+  },
+  "experience": 0.2
+}

@@ -1,0 +1,6 @@
+{
+  "biomes": {
+    "glow": { "biome": "lib:glow", "temperature": { "max": 0 } },
+    "secret": { "biome": "lib:secret", "temperature": { "min": 0 } }
+  }
+}

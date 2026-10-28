@@ -1,0 +1,16 @@
+{
+  "$schema": "../../.netherforge/schema/screen.schema.json",
+  "width": 3,
+  "height": 2,
+  "background": "#101018",
+  "place": {
+    "world": "world",
+    "x": 8,
+    "y": 67,
+    "z": -6,
+    "facing": "south"
+  },
+  "script": {
+    "file": "script.lua"
+  }
+}

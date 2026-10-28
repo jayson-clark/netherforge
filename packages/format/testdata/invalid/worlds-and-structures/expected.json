@@ -1,0 +1,45 @@
+[
+  {
+    "severity": "error",
+    "file": "maps/Arena2",
+    "message": "\"Arena2\" isn't a usable id (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+    "code": "project.id"
+  },
+  {
+    "severity": "warning",
+    "file": "maps/no_level",
+    "message": "Folder has no level.dat, so it's ignored",
+    "code": "project.missing-file"
+  },
+  {
+    "severity": "warning",
+    "file": "maps/notes.txt",
+    "message": "Only maps/<id>/level.dat goes in maps/, so this file is ignored",
+    "code": "project.stray-file"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"../escape\" isn't a world name (letters, digits, _, - and ., starting with a letter, digit or _, at most 64 characters)",
+    "path": "$.managedWorlds[1]",
+    "code": "project.world-name"
+  },
+  {
+    "severity": "error",
+    "file": "structures/Bad-Name.nbt",
+    "message": "\"Bad-Name\" isn't a usable id (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+    "code": "project.id"
+  },
+  {
+    "severity": "warning",
+    "file": "structures/nested/inner.nbt",
+    "message": "Only structures/<id>.nbt (and <id>.json beside it) goes in structures/, so this file is ignored",
+    "code": "project.stray-file"
+  },
+  {
+    "severity": "warning",
+    "file": "structures/readme.txt",
+    "message": "Only structures/<id>.nbt (and <id>.json beside it) goes in structures/, so this file is ignored",
+    "code": "project.stray-file"
+  }
+]

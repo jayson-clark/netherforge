@@ -1,0 +1,67 @@
+/* The biome's colours as a landscape: sky over fog, a hill of grass with a tree of leaves, a pool of water. */
+.scene {
+  position: relative;
+  width: min(420px, 90%);
+  aspect-ratio: 4 / 3;
+  margin: 48px auto;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.sky {
+  position: absolute;
+  inset: 0;
+}
+
+/* A colour the file leaves out: the world's or the climate's, which the editor can't know. */
+.unset {
+  background: repeating-linear-gradient(45deg, var(--bg-raised) 0 6px, transparent 6px 12px);
+}
+
+.hill {
+  position: absolute;
+  left: -10%;
+  right: 25%;
+  bottom: -30%;
+  height: 70%;
+  border-radius: 50% 50% 0 0;
+}
+
+.trunk {
+  position: absolute;
+  left: 30%;
+  bottom: 30%;
+  width: 4%;
+  height: 22%;
+  background: #6b4f2a;
+}
+
+.leaves {
+  position: absolute;
+  left: 22%;
+  bottom: 46%;
+  width: 20%;
+  height: 22%;
+  border-radius: 40%;
+}
+
+.water {
+  position: absolute;
+  right: -5%;
+  bottom: -5%;
+  width: 45%;
+  height: 25%;
+  border-radius: 50% 0 0 0;
+  opacity: 0.85;
+}
+
+/* A thumbnail's: the size its box gives it. */
+.small {
+  width: 100%;
+  margin: 0;
+  border: none;
+}
+.small .unset {
+  background: repeating-linear-gradient(45deg, var(--bg-raised) 0 3px, transparent 3px 6px);
+}

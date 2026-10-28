@@ -1,0 +1,10 @@
+.radius {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+}
+.radius input {
+  width: 110px;
+}

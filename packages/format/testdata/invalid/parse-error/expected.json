@@ -1,0 +1,11 @@
+[
+  {
+    "severity": "error",
+    "file": "centities/a/centity.json",
+    "message": "Unknown key \"colour\"",
+    "path": "$.nodes.root",
+    "line": 3,
+    "column": 16,
+    "code": "parse"
+  }
+]

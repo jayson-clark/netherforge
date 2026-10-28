@@ -1,0 +1,292 @@
+.seed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+/* Everything under the bar: the map over the slice, split, filling the editor. */
+.body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.split {
+  flex: 1;
+  min-height: 0;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---- the map ---- */
+
+.mapPanel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.map {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #0e1014;
+  overflow: hidden;
+  cursor: crosshair;
+  touch-action: none;
+  outline: none;
+}
+
+.map:active {
+  cursor: grabbing;
+}
+
+.map:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent-dim);
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+.mapTools {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgb(20 22 28 / 85%);
+}
+
+.mapTools button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg, #ddd);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.mapTools button:last-child {
+  border-bottom: 0;
+}
+
+.mapTools button:hover {
+  background: rgb(255 255 255 / 8%);
+}
+
+.scale {
+  position: absolute;
+  left: 8px;
+  bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: #eee;
+  text-shadow:
+    0 0 2px #000,
+    0 0 2px #000;
+  pointer-events: none;
+}
+
+.scale span {
+  display: block;
+  height: 4px;
+  border: 1px solid #fff;
+  border-top: 0;
+  box-shadow: 0 1px 2px #000;
+}
+
+.readout {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: 0;
+  padding: 4px 10px;
+  min-height: 1.4em;
+  font-variant-numeric: tabular-nums;
+  color: #ddd;
+  background: rgb(14 16 20 / 75%);
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.legends {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  max-width: min(420px, calc(100% - 60px));
+  max-height: calc(100% - 80px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: rgb(20 22 28 / 85%);
+  font-size: 12px;
+  cursor: default;
+}
+
+.legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.legend li,
+.blockLegend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--border);
+  display: inline-block;
+  flex: none;
+}
+
+/* ---- the slice ---- */
+
+.slicePanel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sliceHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.grow {
+  flex: 1;
+}
+
+.sliceBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.sliceArea {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px;
+  display: flex;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.slice {
+  position: relative;
+  flex: none;
+  margin: auto;
+  border: 1px solid var(--border);
+  background: #0e1014;
+  cursor: crosshair;
+}
+
+.slice .canvas {
+  position: static;
+}
+
+.sea {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px dotted rgb(120 170 255 / 80%);
+  pointer-events: none;
+}
+
+.sliceSide {
+  width: 240px;
+  flex: none;
+  border-left: 1px solid var(--border);
+  padding: 6px 10px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sliceReadout {
+  margin: 0;
+  min-height: 2.8em;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.blockLegend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.failed {
+  border: 1px solid var(--danger, #c55);
+  padding: 8px 12px;
+  margin: 8px;
+}
+
+.alerts {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  width: min(520px, calc(100% - 120px));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.alerts > * {
+  pointer-events: auto;
+  margin: 0;
+  background: rgb(30 18 20 / 92%);
+}

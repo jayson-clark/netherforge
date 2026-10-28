@@ -1,0 +1,64 @@
+[
+  {
+    "severity": "error",
+    "file": "lib:items/broken/item.json",
+    "message": "color must be #RRGGBB",
+    "path": "$.color",
+    "code": "item.color"
+  },
+  {
+    "severity": "error",
+    "file": "lib:items/broken/item.json",
+    "message": "<glyph:ui/nope>: There's no resource pack \"ui\"",
+    "path": "$.name",
+    "code": "reference.resource-pack"
+  },
+  {
+    "severity": "error",
+    "file": "lib:netherforge.json",
+    "message": "There's no item \"ghost\" (items/ghost) to export",
+    "path": "$.exports.items[1]",
+    "code": "package.export-missing"
+  },
+  {
+    "severity": "error",
+    "file": "lib:netherforge.json",
+    "message": "\"widgets\" isn't a kind of resource: export from resource_packs, particles, cutscenes, screen_fonts, videos, wasm, modules, structures, builds, maps, items, recipes, loot, buffs, blocks, datapacks, biomes, skies, dimension_types, terrain, advancements, menus, dialogs, screens, centities",
+    "path": "$.exports.widgets",
+    "code": "package.export-kind"
+  },
+  {
+    "severity": "error",
+    "file": "menus/shop/menu.json",
+    "message": "Package \"lib\" doesn't export its item \"secret\", so only it can use it (its netherforge.json's exports)",
+    "path": "$.slots[\"1\"].item.item",
+    "code": "reference.not-exported",
+    "related": [
+      {
+        "file": "lib:netherforge.json",
+        "path": "$.exports"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "menus/shop/menu.json",
+    "message": "There's no item \"ghost\" in \"lib\"",
+    "path": "$.slots[\"2\"].item.item",
+    "code": "reference.item"
+  },
+  {
+    "severity": "error",
+    "file": "menus/shop/menu.json",
+    "message": "\"elsewhere\" is neither this project's namespace (\"app\") nor a package's it depends on",
+    "path": "$.slots[\"3\"].item.item",
+    "code": "reference.namespace"
+  },
+  {
+    "severity": "warning",
+    "file": "netherforge.json",
+    "message": "There's no netherforge.lock pinning the packages this project depends on; the editor writes it, or run netherforge lock",
+    "path": "$.dependencies",
+    "code": "lock.missing"
+  }
+]

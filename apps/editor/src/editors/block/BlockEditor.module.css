@@ -1,0 +1,50 @@
+.showcase {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 48px 0;
+}
+
+/* A cube turned to show its top and two sides: the three faces the pack's model draws there. */
+.cube {
+  --edge: 160px;
+  position: relative;
+  width: var(--edge);
+  height: var(--edge);
+  transform-style: preserve-3d;
+  transform: rotateX(-30deg) rotateY(-45deg);
+  margin: 40px;
+}
+
+.face {
+  position: absolute;
+  inset: 0;
+  width: var(--edge);
+  height: var(--edge);
+  image-rendering: pixelated;
+  backface-visibility: hidden;
+}
+
+.up {
+  transform: rotateX(90deg) translateZ(calc(var(--edge) / 2));
+}
+.down {
+  transform: rotateX(-90deg) translateZ(calc(var(--edge) / 2));
+}
+.north {
+  transform: rotateY(180deg) translateZ(calc(var(--edge) / 2));
+}
+.south {
+  transform: translateZ(calc(var(--edge) / 2));
+}
+.east {
+  transform: rotateY(90deg) translateZ(calc(var(--edge) / 2));
+}
+.west {
+  transform: rotateY(-90deg) translateZ(calc(var(--edge) / 2));
+}
+
+.plain {
+  padding: 24px;
+}

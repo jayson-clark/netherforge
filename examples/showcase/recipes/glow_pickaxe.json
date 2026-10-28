@@ -1,0 +1,12 @@
+{
+  "$schema": "../.netherforge/schema/recipe.schema.json",
+  "type": "smithing_transform",
+  "template": "minecraft:amethyst_shard",
+  "base": "minecraft:iron_pickaxe",
+  "addition": {
+    "item": "shard"
+  },
+  "result": {
+    "item": "glow_pickaxe"
+  }
+}

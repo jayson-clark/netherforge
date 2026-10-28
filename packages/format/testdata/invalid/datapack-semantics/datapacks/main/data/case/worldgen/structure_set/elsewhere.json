@@ -1,0 +1,4 @@
+{
+  "structures": [{ "structure": "stranger:hut", "weight": 1 }, { "structure": "Not An Id", "weight": 1 }],
+  "placement": { "type": "minecraft:random_spread", "salt": 1, "separation": 4, "spacing": 8 }
+}

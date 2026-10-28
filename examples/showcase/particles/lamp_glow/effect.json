@@ -1,0 +1,28 @@
+{
+  "$schema": "../../.netherforge/schema/particle_effect.schema.json",
+  "duration": 20,
+  "emitters": {
+    "glimmer": {
+      "particle": "minecraft:dust",
+      "burst": 3,
+      "every": 10,
+      "shape": {
+        "type": "box",
+        "size": [0.8, 0.3, 0.8]
+      },
+      "color": "#c58cff",
+      "size": 0.6
+    },
+    "spark": {
+      "particle": "minecraft:glow",
+      "burst": 1,
+      "shape": {
+        "type": "disc",
+        "radius": 0.3
+      },
+      "motion": "direction",
+      "direction": [0, 1, 0],
+      "speed": 0.03
+    }
+  }
+}

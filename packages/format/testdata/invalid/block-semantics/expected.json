@@ -1,0 +1,118 @@
+[
+  {
+    "severity": "error",
+    "file": "blocks/hard/block.json",
+    "message": "hardness is how long it takes to mine: 0 or more, or -1 for a block nobody can break",
+    "path": "$.hardness",
+    "code": "block.hardness"
+  },
+  {
+    "severity": "error",
+    "file": "blocks/hard/block.json",
+    "message": "tick is a whole number of ticks from 1 to 72000",
+    "path": "$.tick",
+    "code": "block.tick"
+  },
+  {
+    "severity": "warning",
+    "file": "blocks/hard/block.json",
+    "message": "requiresTool means nothing without a tool: no tool is the right one, so nothing would ever drop",
+    "path": "$.requiresTool",
+    "code": "block.requires-tool"
+  },
+  {
+    "severity": "error",
+    "file": "blocks/hard/block.json",
+    "message": "sound is the game's kind of block it sounds like, like \"stone\" or \"wood\"",
+    "path": "$.sound",
+    "code": "block.sound"
+  },
+  {
+    "severity": "error",
+    "file": "blocks/hard/block.json",
+    "message": "Script file \"missing.lua\" doesn't exist",
+    "path": "$.script.file",
+    "code": "script.missing"
+  },
+  {
+    "severity": "error",
+    "file": "blocks/lost/block.json",
+    "message": "tick is a whole number of ticks from 1 to 72000",
+    "path": "$.tick",
+    "code": "block.tick"
+  },
+  {
+    "severity": "error",
+    "file": "blocks/lost/block.json",
+    "message": "A falling block is drawn by the game alone, so a block a centity is drawn over can't fall",
+    "path": "$.falls",
+    "code": "block.falls"
+  },
+  {
+    "severity": "error",
+    "file": "blocks/lost/block.json",
+    "message": "Resource pack \"ui\" has no block model \"nowhere\" (it has: Bad Key, half, ore)",
+    "path": "$.model",
+    "code": "reference.resource-pack-key",
+    "related": [
+      {
+        "file": "resource_packs/ui/pack.json",
+        "path": "$.blocks"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "blocks/lost/block.json",
+    "message": "There's no loot table \"nothing\" (loot/nothing.json)",
+    "path": "$.drops",
+    "code": "reference.loot-table"
+  },
+  {
+    "severity": "error",
+    "file": "blocks/lost/block.json",
+    "message": "Resource pack \"ui\" has no sound \"thud\"",
+    "path": "$.sounds.place",
+    "code": "reference.resource-pack-key",
+    "related": [
+      {
+        "file": "resource_packs/ui/pack.json"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "blocks/lost/block.json",
+    "message": "There's no resource pack \"gone\"",
+    "path": "$.sounds.break",
+    "code": "reference.resource-pack"
+  },
+  {
+    "severity": "error",
+    "file": "blocks/lost/block.json",
+    "message": "There's no centity \"ghost\" (centities/ghost/centity.json)",
+    "path": "$.centity",
+    "code": "reference.centity"
+  },
+  {
+    "severity": "error",
+    "file": "blocks/syntax/block.json",
+    "message": "\"ui:ore\" isn't a reference to a block model: write <pack>/<key>, or <namespace>:<pack>/<key> for another package's",
+    "path": "$.model",
+    "code": "reference.syntax"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "This block look has no texture for its down, north, south, west, east faces: give it a texture, or a texture for each face",
+    "path": "$.blocks.half",
+    "code": "resource_pack.block-faces"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "\"Bad Key\" isn't a usable key (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+    "path": "$.blocks[\"Bad Key\"]",
+    "code": "resource_pack.key"
+  }
+]

@@ -1,0 +1,23 @@
+{
+  "script": { "file": "main.lua", "budget": 10 },
+  "body": { "width": 0, "height": 40, "drag": 2, "stepHeight": -1 },
+  "health": { "max": 0, "bar": { "segments": 50, "showTicks": -1, "glyph": "" } },
+  "nodes": {
+    "root": { "parent": "root" },
+    "health_bar": { "display": { "type": "block", "block": "minecraft:stone" } },
+    "held": { "display": { "type": "item", "item": "Not An Item" } },
+    "sign": { "display": { "type": "text", "text": "hi", "lineWidth": 0 } },
+    "button": { "hitbox": { "boxes": [] } },
+    "crate": {
+      "display": { "type": "block", "block": "minecraft:barrel" },
+      "hitbox": { "boxes": [{ "min": [0, 0, 0], "max": [1, 1, 1] }], "fittedTo": "minecraft:chest" }
+    },
+    "rock": { "physics": { "mass": 0, "maxSpeed": 0, "collider": { "min": [0, 0, 0], "max": [1, 0, 1] } } }
+  },
+  "animations": {
+    "Bad Name!": { "tracks": { "root": { "translation": [{ "time": 0, "value": [0, 0, 0] }] } } },
+    "never": { "length": 0, "tracks": { "root": { "translation": [{ "time": 0, "value": [0, 0, 0] }] } } },
+    "hollow": { "tracks": { "root": { "scale": [] } } },
+    "early": { "tracks": { "root": { "rotation": [{ "time": -1, "value": [0, 0, 0] }] } } }
+  }
+}

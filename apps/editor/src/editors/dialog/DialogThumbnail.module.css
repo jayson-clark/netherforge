@@ -1,0 +1,7 @@
+/* The game dims the world behind a dialog. */
+.screen {
+  display: block;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: rgba(0, 0, 0, 0.75);
+}

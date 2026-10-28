@@ -1,0 +1,86 @@
+[
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "\"not a world\" isn't a usable world name (letters, digits, _, - and ., starting with a letter, digit or _, at most 64 characters)",
+    "path": "$.spawning.worlds[1]",
+    "code": "centity.spawning-world"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "\"#Not A Tag\" isn't a biome tag",
+    "path": "$.spawning.biomes[1]",
+    "code": "centity.spawning-biome"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "\"#\" isn't a block tag",
+    "path": "$.spawning.blocks[0]",
+    "code": "centity.spawning-block"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "A light level is from 0 to 15",
+    "path": "$.spawning.light.max",
+    "code": "centity.spawning-range"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "min is above max",
+    "path": "$.spawning.height",
+    "code": "centity.spawning-range"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "A group has at least one",
+    "path": "$.spawning.group.min",
+    "code": "centity.spawning-number"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "weight must be positive",
+    "path": "$.spawning.weight",
+    "code": "centity.spawning-number"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "cap must be positive",
+    "path": "$.spawning.cap",
+    "code": "centity.spawning-number"
+  },
+  {
+    "severity": "warning",
+    "file": "centities/bad/centity.json",
+    "message": "The spawner places centities up to 48 blocks from a player, so a despawnDistance of 10 removes them as they appear",
+    "path": "$.spawning.despawnDistance",
+    "code": "centity.spawning-despawn"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad/centity.json",
+    "message": "\"Not A Biome\" isn't a reference to a biome: write <id>, or <namespace>:<id> for another package's, or minecraft:<id> for the game's",
+    "path": "$.spawning.biomes[0]",
+    "code": "reference.syntax"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad_time/centity.json",
+    "message": "A time of day is a tick from 0 to 23999 (a min above the max runs through midnight)",
+    "path": "$.spawning.time.max",
+    "code": "centity.spawning-time"
+  },
+  {
+    "severity": "error",
+    "file": "centities/bad_time/centity.json",
+    "message": "\"Blood Moon\" isn't a condition's name: lowercase letters, digits and _, starting with a letter or digit, at most 64 characters, or `ns:name` for a package's",
+    "path": "$.spawning.when",
+    "code": "centity.spawning-when"
+  }
+]

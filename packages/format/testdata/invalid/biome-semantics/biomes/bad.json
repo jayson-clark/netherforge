@@ -1,0 +1,22 @@
+{
+  "climate": { "temperature": 3, "downfall": 1.5 },
+  "colors": { "sky": "blue", "water": "#12345", "grass": "#00ff00" },
+  "particle": { "particle": "Not A Particle", "probability": 0 },
+  "sounds": {
+    "ambient": "not a sound!",
+    "mood": { "sound": "minecraft:ambient.cave", "tickDelay": 0, "blockSearchExtent": -1, "offset": -2 },
+    "additions": { "sound": "minecraft:ambient.cave", "chance": 2 },
+    "music": { "sound": "minecraft:music.game", "minDelay": 500, "maxDelay": 100 }
+  },
+  "spawns": {
+    "monster": [
+      { "entity": "minecraft:zombie", "weight": 0 },
+      { "entity": "Not An Entity", "group": { "min": 5, "max": 2 } },
+      { "entity": "minecraft:skeleton", "group": { "min": 0 } }
+    ]
+  },
+  "spawnCosts": { "Bad Id": { "charge": 0, "energyBudget": 0.1 } },
+  "features": {
+    "vegetal_decoration": ["minecraft:trees_plains", "minecraft:trees_plains", "Not A Feature"]
+  }
+}

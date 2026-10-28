@@ -1,0 +1,131 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "name": "Swinging door",
+  "nodes": {
+    "hinge": {
+      "transform": {
+        "translation": [-0.5, 0, 0]
+      }
+    },
+    "knob_back": {
+      "parent": "hinge",
+      "transform": {
+        "translation": [0.8, 0.95, -0.15625],
+        "scale": [0.0625, 0.0625, 0.0625]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:gold_block"
+      }
+    },
+    "knob_front": {
+      "parent": "hinge",
+      "transform": {
+        "translation": [0.8, 0.95, 0.09375],
+        "scale": [0.0625, 0.0625, 0.0625]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:gold_block"
+      }
+    },
+    "lintel": {
+      "transform": {
+        "translation": [-0.75, 2, -0.125],
+        "scale": [1.5, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:stripped_dark_oak_log[axis=x]"
+      }
+    },
+    "panel": {
+      "parent": "hinge",
+      "transform": {
+        "translation": [0, 0, -0.09375],
+        "scale": [1, 2, 0.1875]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:spruce_planks"
+      },
+      "hitbox": {}
+    },
+    "post_l": {
+      "transform": {
+        "translation": [-0.75, 0, -0.125],
+        "scale": [0.25, 2, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:stripped_dark_oak_log"
+      }
+    },
+    "post_r": {
+      "transform": {
+        "translation": [0.5, 0, -0.125],
+        "scale": [0.25, 2, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:stripped_dark_oak_log"
+      }
+    }
+  },
+  "animations": {
+    "close": {
+      "loop": "once",
+      "tracks": {
+        "hinge": {
+          "rotation": [
+            {
+              "time": 0,
+              "value": [0, 95, 0],
+              "easing": "ease_in"
+            },
+            {
+              "time": 0.55,
+              "value": [0, 0, 0],
+              "easing": "ease_out"
+            },
+            {
+              "time": 0.65,
+              "value": [0, 4, 0],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 0.8,
+              "value": [0, 0, 0]
+            }
+          ]
+        }
+      }
+    },
+    "open": {
+      "loop": "hold",
+      "tracks": {
+        "hinge": {
+          "rotation": [
+            {
+              "time": 0,
+              "value": [0, 0, 0],
+              "easing": "ease_out"
+            },
+            {
+              "time": 0.6,
+              "value": [0, 100, 0],
+              "easing": "ease_in_out"
+            },
+            {
+              "time": 0.8,
+              "value": [0, 95, 0]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "script": {
+    "file": "script.lua"
+  }
+}

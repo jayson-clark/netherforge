@@ -1,0 +1,77 @@
+{
+  "$schema": "../../.netherforge/schema/dialog.schema.json",
+  "name": "Survey",
+  "type": "multi_action",
+  "title": "<gold><glyph:ui/coin> Visitor survey",
+  "columns": 2,
+  "body": [
+    {
+      "type": "message",
+      "text": "<gray>A multi-action dialog: inputs of every kind, and a row of buttons.",
+      "width": 280,
+      "key": "intro"
+    },
+    {
+      "type": "item",
+      "item": {
+        "item": "ruby"
+      },
+      "description": "<gray>An item can sit in a dialog's body too."
+    }
+  ],
+  "inputs": [
+    {
+      "type": "single_option",
+      "key": "favourite",
+      "label": "Favourite booth",
+      "width": 200,
+      "options": [
+        {
+          "id": "centities",
+          "label": "Centities",
+          "initial": true
+        },
+        {
+          "id": "physics",
+          "label": "Physics"
+        },
+        {
+          "id": "screens",
+          "label": "Screens"
+        },
+        {
+          "id": "worlds",
+          "label": "Worlds"
+        }
+      ]
+    },
+    {
+      "type": "number_range",
+      "key": "rating",
+      "label": "Rating",
+      "start": 1,
+      "end": 10,
+      "step": 1,
+      "initial": 8
+    },
+    {
+      "type": "boolean",
+      "key": "again",
+      "label": "I'd come back"
+    }
+  ],
+  "buttons": [
+    {
+      "key": "send",
+      "label": "<green>Send",
+      "tooltip": "Your answers arrive in the script as typed values"
+    },
+    {
+      "key": "skip",
+      "label": "Skip"
+    }
+  ],
+  "script": {
+    "file": "script.lua"
+  }
+}

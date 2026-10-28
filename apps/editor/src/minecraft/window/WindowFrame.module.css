@@ -1,0 +1,56 @@
+/* A vanilla container window, drawn in GUI pixels times the scale. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  /* Safe: a window wider than its panel overflows to the right, where it scrolls, not off the left edge. */
+  align-items: safe center;
+  gap: 8px;
+}
+.frame {
+  position: relative;
+  overflow: visible;
+  flex: none;
+}
+.panel {
+  position: absolute;
+  inset: 0;
+  background: #c6c6c6;
+  border-style: solid;
+  border-color: #fff #555 #555 #fff;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px #000;
+}
+.slot {
+  position: absolute;
+  background: #8b8b8b;
+  box-shadow:
+    inset 2px 2px 0 #373737,
+    inset -2px -2px 0 #fff;
+}
+.skin {
+  position: absolute;
+  image-rendering: pixelated;
+  pointer-events: none;
+  max-width: none;
+}
+.outline {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.outlineEdge {
+  position: absolute;
+  inset: 0;
+  outline: 1px dashed rgba(139, 156, 255, 0.9);
+}
+.outlineSlot {
+  position: absolute;
+  outline: 1px dashed rgba(139, 156, 255, 0.7);
+}
+.title {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  white-space: nowrap;
+}

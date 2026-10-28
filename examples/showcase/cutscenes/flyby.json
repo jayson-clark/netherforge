@@ -1,0 +1,52 @@
+{
+  "$schema": "../.netherforge/schema/cutscene.schema.json",
+  "length": 6,
+  "skippable": true,
+  "camera": {
+    "position": [
+      {
+        "time": 0,
+        "value": [0, 6, -12]
+      },
+      {
+        "time": 3,
+        "value": [10, 8, 0],
+        "easing": "ease_in_out"
+      },
+      {
+        "time": 6,
+        "value": [0, 10, 12],
+        "easing": "ease_out"
+      }
+    ],
+    "rotation": [
+      {
+        "time": 0,
+        "yaw": 0,
+        "pitch": 25
+      },
+      {
+        "time": 3,
+        "yaw": 90,
+        "pitch": 20,
+        "easing": "ease_in_out"
+      },
+      {
+        "time": 6,
+        "yaw": 180,
+        "pitch": 30
+      }
+    ]
+  },
+  "cues": [
+    {
+      "time": 0.5,
+      "text": "<gold>The village at dawn",
+      "duration": 2
+    },
+    {
+      "time": 3,
+      "event": "turn"
+    }
+  ]
+}

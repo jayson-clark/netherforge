@@ -1,0 +1,37 @@
+[
+  {
+    "file": "resource_packs/gems/pack.json",
+    "path": "$.items.gem.texture",
+    "kind": "texture",
+    "text": "item/gem.png",
+    "target": "resource_packs/gems/textures/item/gem.png"
+  },
+  {
+    "file": "items/gem/item.json",
+    "path": "$.itemModel",
+    "kind": "item_model",
+    "text": "gems/gem",
+    "target": "library:gems/gem"
+  },
+  {
+    "file": "items/gem/item.json",
+    "path": "$.script.file",
+    "kind": "script",
+    "text": "script.lua",
+    "target": "items/gem/script.lua"
+  },
+  {
+    "file": "loot/gems.json",
+    "path": "$.pools.main.entries[0].item.item",
+    "kind": "item",
+    "text": "gem",
+    "target": "library:gem"
+  },
+  {
+    "file": "advancements/gem_collector.json",
+    "path": "$.display.icon.item",
+    "kind": "item",
+    "text": "gem",
+    "target": "library:gem"
+  }
+]

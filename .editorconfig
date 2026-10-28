@@ -1,0 +1,24 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{lua,md,yml,yaml,json}]
+indent_size = 2
+
+[*.{kt,kts}]
+ktlint_code_style = intellij_idea
+max_line_length = 140
+ij_kotlin_allow_trailing_comma = false
+ij_kotlin_allow_trailing_comma_on_call_site = false
+
+[*.rs]
+indent_size = 4
+
+[{gradlew,gradlew.bat}]
+end_of_line = unset

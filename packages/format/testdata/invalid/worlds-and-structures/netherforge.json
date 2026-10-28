@@ -1,0 +1,9 @@
+{
+  "$schema": ".netherforge/schema/netherforge.schema.json",
+  "formatVersion": 1,
+  "name": "Worlds",
+  "namespace": "case",
+  "version": "1.0.0",
+  "minecraft": "26.3",
+  "managedWorlds": ["lobby", "../escape", "world_nether"]
+}

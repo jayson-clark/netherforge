@@ -1,0 +1,9 @@
+{
+  "sounds": {
+    "Bad Key": {},
+    "missing": {},
+    "multi": { "files": ["ok.ogg", "../x.ogg", "gone.ogg"], "volume": 0, "pitch": -1 },
+    "none": { "files": [] },
+    "menu/open": { "subtitle": "Menu opens" }
+  }
+}

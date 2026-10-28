@@ -1,0 +1,7 @@
+{
+  "$schema": "../../.netherforge/schema/item.schema.json",
+  "kind": "minecraft:rotten_flesh",
+  "name": "<green>Goblin ear",
+  "lore": ["<gray>Proof of a kill"],
+  "rarity": "uncommon"
+}

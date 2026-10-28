@@ -1,0 +1,6 @@
+{
+  "packages": {
+    "ghost": { "version": "1.0.0", "source": { "type": "registry", "url": "https://packages.example" }, "hash": "sha256:00" },
+    "lib": { "version": "0.9.0", "source": { "type": "git", "url": "https://example.com/lib.git", "commit": "abc" }, "hash": "sha256:00" }
+  }
+}

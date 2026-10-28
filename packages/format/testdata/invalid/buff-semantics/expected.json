@@ -1,0 +1,30 @@
+[
+  {
+    "severity": "error",
+    "file": "buffs/bad.json",
+    "message": "color must be #rrggbb",
+    "path": "$.color",
+    "code": "buff.color"
+  },
+  {
+    "severity": "error",
+    "file": "buffs/bad.json",
+    "message": "\"Bad Name\" isn't a stat name: lowercase letters, digits and _",
+    "path": "$.stats",
+    "code": "buff.stat"
+  },
+  {
+    "severity": "error",
+    "file": "buffs/bad.json",
+    "message": "maxTicks must be at least 1",
+    "path": "$.maxTicks",
+    "code": "buff.ticks"
+  },
+  {
+    "severity": "error",
+    "file": "buffs/bad.json",
+    "message": "There's no buff \"nope\" (buffs/nope.json)",
+    "path": "$.cures[0]",
+    "code": "reference.buff"
+  }
+]

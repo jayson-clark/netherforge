@@ -1,0 +1,196 @@
+/* The keyframe timeline under a preview (Timeline.tsx). */
+.timeline {
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  height: 190px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.toolbar input:not([type='checkbox']) {
+  width: 52px;
+}
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+}
+.time {
+  font-family: var(--mono);
+  min-width: 48px;
+}
+.body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 150px 1fr 230px;
+  min-height: 0;
+  overflow: auto;
+}
+.bodyNoEditor {
+  grid-template-columns: 150px 1fr;
+}
+.labels {
+  border-right: 1px solid var(--border);
+}
+.rulerSpacer {
+  height: 18px;
+  border-bottom: 1px solid var(--border);
+}
+.label {
+  height: 22px;
+  line-height: 22px;
+  padding: 0 6px;
+  font-family: var(--mono);
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.labelEmpty {
+  color: var(--muted);
+  font-family: var(--font);
+}
+.labelButton {
+  display: block;
+  width: 100%;
+  border: none;
+  background: none;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.labelSelected {
+  color: var(--accent);
+}
+.nested {
+  padding-left: 18px;
+  color: var(--muted);
+}
+.area {
+  position: relative;
+  margin: 0 10px;
+}
+
+/* The ruler is the playhead's slider: press or drag on it to seek. */
+.ruler {
+  height: 18px;
+  border-bottom: 1px solid var(--border);
+}
+.rulerTrack {
+  position: relative;
+  height: 100%;
+  cursor: ew-resize;
+}
+.mark {
+  position: absolute;
+  top: 2px;
+  font-size: 9px;
+  color: var(--muted);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.thumb {
+  top: 0;
+  width: 9px;
+  height: 9px;
+  background: var(--accent);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  outline: none;
+}
+.thumb[data-focus-visible] {
+  box-shadow: 0 0 0 2px var(--focus, var(--accent));
+  clip-path: none;
+  border-radius: 2px;
+}
+.playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.track {
+  position: relative;
+  height: 22px;
+  border-bottom: 1px solid #20242c;
+}
+.nestedTrack {
+  background: #161920;
+}
+
+/* A key: a diamond (linear), a square (step), a circle (any other easing). */
+.key {
+  position: absolute;
+  top: 5px;
+  width: 11px;
+  height: 11px;
+  transform: translateX(-50%) rotate(45deg);
+  background: #d9b56a;
+  border: 1px solid #000;
+  border-radius: 1px;
+  cursor: grab;
+  touch-action: none;
+}
+.key[data-easing='step'] {
+  transform: translateX(-50%);
+}
+.key:not([data-easing='linear']):not([data-easing='step']) {
+  transform: translateX(-50%);
+  border-radius: 50%;
+}
+.key[data-selected] {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px #fff4;
+}
+.key:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* The selected key's fields, beside the tracks. */
+.keyEditor {
+  border-left: 1px solid var(--border);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.keyEditor input:not([type='checkbox']) {
+  width: 60px;
+}
+.keyTitle {
+  font-family: var(--mono);
+  color: var(--muted);
+}
+
+/* A particle emitter's row: when it emits, and its bursts. */
+.emitterWindow {
+  position: absolute;
+  top: 7px;
+  height: 8px;
+  border-radius: 4px;
+  background: #3a4252;
+}
+.emitterWindowSelected {
+  background: #4b5a78;
+}
+.burstTick {
+  position: absolute;
+  top: 3px;
+  width: 2px;
+  height: 16px;
+  transform: translateX(-50%);
+  background: #d9b56a;
+  pointer-events: none;
+}

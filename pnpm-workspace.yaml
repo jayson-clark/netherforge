@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+  - packages/*
+  - docs
+
+catalog:
+  # Lua 5.4 in WebAssembly, for terrain scripts in JS: format's Kotlin/JS build (packages/format/build.gradle.kts
+  # reads this line) and the terrain preview, which loads its glue.wasm, must be the same build.
+  wasmoon: 1.16.0

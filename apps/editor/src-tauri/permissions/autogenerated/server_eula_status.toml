@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-server-eula-status"
+description = "Enables the server_eula_status command without any pre-configured scope."
+commands.allow = ["server_eula_status"]
+
+[[permission]]
+identifier = "deny-server-eula-status"
+description = "Denies the server_eula_status command without any pre-configured scope."
+commands.deny = ["server_eula_status"]

@@ -1,0 +1,8 @@
+{
+  "$schema": ".netherforge/schema/netherforge.schema.json",
+  "formatVersion": 1,
+  "name": "Structures",
+  "namespace": "case",
+  "version": "1.0.0",
+  "minecraft": "26.3"
+}

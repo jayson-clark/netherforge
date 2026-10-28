@@ -1,0 +1,6 @@
+{
+  "color": "red",
+  "stats": { "Bad Name": 1 },
+  "cures": ["nope"],
+  "maxTicks": 0
+}

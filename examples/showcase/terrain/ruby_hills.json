@@ -1,0 +1,170 @@
+{
+  "$schema": "../.netherforge/schema/terrain.schema.json",
+  "terrain": {
+    "base": 66,
+    "seaLevel": 62,
+    "noises": {
+      "detail": {
+        "noise": {
+          "frequency": 0.04,
+          "octaves": 2
+        },
+        "amplitude": 3
+      },
+      "hills": {
+        "noise": {
+          "frequency": 0.004,
+          "octaves": 4
+        },
+        "amplitude": 28
+      }
+    },
+    "blend": 24,
+    "density": {}
+  },
+  "layers": [
+    {
+      "block": "minecraft:grass_block"
+    },
+    {
+      "block": "minecraft:dirt",
+      "thickness": 3
+    }
+  ],
+  "underwater": [
+    {
+      "block": "minecraft:sand",
+      "thickness": 2
+    },
+    {
+      "block": "minecraft:dirt",
+      "thickness": 2
+    }
+  ],
+  "floor": {
+    "block": "minecraft:bedrock"
+  },
+  "caves": {
+    "caverns": {}
+  },
+  "ores": {
+    "coal": {
+      "block": "minecraft:coal_ore",
+      "size": 12,
+      "veins": 16,
+      "minY": 0,
+      "maxY": 96
+    },
+    "iron": {
+      "block": "minecraft:iron_ore",
+      "size": 8,
+      "veins": 10,
+      "minY": -32,
+      "maxY": 64
+    },
+    "ruby": {
+      "customBlock": "ruby_ore",
+      "size": 5,
+      "veins": 6,
+      "minY": -48,
+      "maxY": 32,
+      "distribution": "triangle",
+      "biomes": ["snowy"]
+    }
+  },
+  "decorations": {
+    "flowers": {
+      "block": "minecraft:poppy",
+      "count": 10,
+      "noise": {
+        "frequency": 0.03
+      },
+      "threshold": 0.2,
+      "biomes": ["plains"],
+      "on": ["minecraft:grass_block"]
+    },
+    "oaks": {
+      "structure": "oak_tree",
+      "count": 2,
+      "chance": 0.6,
+      "biomes": ["plains"],
+      "on": ["minecraft:grass_block"]
+    },
+    "ruby_crystals": {
+      "customBlock": "ruby_ore",
+      "placement": "caveFloor",
+      "count": 4,
+      "maxY": 32
+    }
+  },
+  "climate": {
+    "jitter": {
+      "amplitude": 24
+    }
+  },
+  "biomes": {
+    "grove": {
+      "biome": "ruby_grove",
+      "temperature": {
+        "min": 0.3
+      },
+      "humidity": {
+        "min": 0.2
+      },
+      "terrain": {
+        "density": {
+          "noises": {
+            "ledges": {
+              "noise": {
+                "frequency": 0.04,
+                "octaves": 2
+              },
+              "amplitude": 5,
+              "squash": 2
+            }
+          }
+        }
+      }
+    },
+    "plains": {
+      "biome": "minecraft:plains",
+      "temperature": {
+        "min": -0.2
+      },
+      "terrain": {
+        "scale": 0.7
+      }
+    },
+    "snowy": {
+      "biome": "minecraft:snowy_plains",
+      "temperature": {
+        "max": -0.2
+      },
+      "layers": [
+        {
+          "block": "minecraft:snow_block"
+        },
+        {
+          "block": "minecraft:dirt",
+          "thickness": 3
+        }
+      ],
+      "terrain": {
+        "scale": 1.6,
+        "noises": {
+          "peaks": {
+            "noise": {
+              "frequency": 0.012,
+              "fractal": "ridged",
+              "octaves": 3
+            },
+            "amplitude": 22
+          }
+        }
+      }
+    }
+  },
+  "structures": {
+    "vanilla": true
+  }
+}

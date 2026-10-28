@@ -1,0 +1,5 @@
+{
+  "nodes": {
+    "label": { "display": { "type": "text", "text": "hi", "billboard": "sideways" } }
+  }
+}

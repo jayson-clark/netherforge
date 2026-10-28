@@ -1,0 +1,8 @@
+{
+  "formatVersion": 1,
+  "name": "B",
+  "namespace": "b",
+  "version": "1.0.0",
+  "minecraft": "26.3",
+  "dependencies": { "a": { "path": "../a" }, "d": { "path": "../d2" } }
+}

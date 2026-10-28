@@ -1,0 +1,20 @@
+diff --git a/dist/read.js b/dist/read.js
+index 34d4100e78f9c7d0d6f0fc0c8ea4280553609385..d88645a6fbef7473c3e16873f03ce9edf8f1e904 100644
+--- a/dist/read.js
++++ b/dist/read.js
+@@ -338,6 +338,7 @@ class NBTReader {
+     }
+     #readIntArray() {
+         const length = this.#varint ? this.#readVarIntZigZag(true) : this.#readInt(true);
++        this.#allocate(this.#varint ? length : length * 4);
+         const value = new Int32Array(length);
+         for (const i in value) {
+             const entry = this.#readInt(true);
+@@ -347,6 +348,7 @@ class NBTReader {
+     }
+     #readLongArray() {
+         const length = this.#varint ? this.#readVarIntZigZag(true) : this.#readInt(true);
++        this.#allocate(this.#varint ? length : length * 8);
+         const value = new BigInt64Array(length);
+         for (const i in value) {
+             const entry = this.#readLong();

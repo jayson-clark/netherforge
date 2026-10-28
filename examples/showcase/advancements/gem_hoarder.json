@@ -1,0 +1,14 @@
+{
+  "$schema": "../.netherforge/schema/advancement.schema.json",
+  "parent": "library:gem_collector",
+  "display": {
+    "icon": {
+      "item": "library:gem"
+    },
+    "title": "Gem Hoarder",
+    "description": "Hold a library gem on the quest tab the library started"
+  },
+  "criteria": {
+    "hoarded": {}
+  }
+}

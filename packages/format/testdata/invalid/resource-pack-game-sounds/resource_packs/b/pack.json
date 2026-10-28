@@ -1,0 +1,9 @@
+{
+  "description": "Replaces the event pack a does, one with no files, and keys of no namespace the game has",
+  "sounds": {
+    "minecraft:block.stone.break": { "files": ["break.ogg"] },
+    "minecraft:block.stone.place": { "volume": 0.5 },
+    "minecraft:Stone Break": { "files": ["break.ogg"] },
+    "acme:block.stone.break": { "files": ["break.ogg"] }
+  }
+}

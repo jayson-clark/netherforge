@@ -1,0 +1,215 @@
+[
+  {
+    "severity": "error",
+    "file": "recipes/Upper.json",
+    "message": "\"Upper\" isn't a usable id (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+    "code": "project.id"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/bare.json",
+    "message": "A station recipe takes at least one material",
+    "path": "$.materials",
+    "code": "recipe.ingredients"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/cut.json",
+    "message": "An ingredient object has only \"item\", not \"count\"",
+    "code": "parse"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/loose.json",
+    "message": "A shapeless recipe has no experience",
+    "path": "$.experience",
+    "code": "recipe.field"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/loose.json",
+    "message": "A shapeless recipe takes 1 to 9 ingredients",
+    "path": "$.ingredients",
+    "code": "recipe.ingredients"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/loose.json",
+    "message": "There's no item \"ghost\" (items/ghost/item.json)",
+    "path": "$.result.item",
+    "code": "reference.item"
+  },
+  {
+    "severity": "warning",
+    "file": "recipes/nested/extra.json",
+    "message": "Only recipes/<id>.json goes in recipes/, so this file is ignored",
+    "code": "project.stray-file"
+  },
+  {
+    "severity": "warning",
+    "file": "recipes/notes.txt",
+    "message": "Only recipes/<id>.json goes in recipes/, so this file is ignored",
+    "code": "project.stray-file"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/oven.json",
+    "message": "experience can't be negative",
+    "path": "$.experience",
+    "code": "recipe.experience"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/oven.json",
+    "message": "cookingTime must be at least 1 tick",
+    "path": "$.cookingTime",
+    "code": "recipe.cooking-time"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/oven.json",
+    "message": "A smoking recipe's category is one of \"food\", \"blocks\", \"misc\"",
+    "path": "$.category",
+    "code": "recipe.category"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/oven.json",
+    "message": "There's no item \"nothing\" (items/nothing/item.json)",
+    "path": "$.ingredient.item",
+    "code": "reference.item"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/shape.json",
+    "message": "A shaped recipe has no ingredients",
+    "path": "$.ingredients",
+    "code": "recipe.field"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/shape.json",
+    "message": "A pattern has 1 to 3 rows",
+    "path": "$.pattern",
+    "code": "recipe.pattern"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/shape.json",
+    "message": "Every row of a pattern is as wide as the first (2)",
+    "path": "$.pattern[1]",
+    "code": "recipe.pattern"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/shape.json",
+    "message": "A pattern row has 1 to 3 characters",
+    "path": "$.pattern[2]",
+    "code": "recipe.pattern"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/shape.json",
+    "message": "Every row of a pattern is as wide as the first (2)",
+    "path": "$.pattern[3]",
+    "code": "recipe.pattern"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/shape.json",
+    "message": "\"B\" in the pattern isn't in key",
+    "path": "$.pattern",
+    "code": "recipe.pattern"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/shape.json",
+    "message": "\"C\" in the pattern isn't in key",
+    "path": "$.pattern",
+    "code": "recipe.pattern"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/shape.json",
+    "message": "\"Z\" isn't in the pattern",
+    "path": "$.key.Z",
+    "code": "recipe.key"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/shape.json",
+    "message": "A key is one character other than a space",
+    "path": "$.key.long",
+    "code": "recipe.key"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/shape.json",
+    "message": "A shaped recipe's category is one of \"building\", \"redstone\", \"equipment\", \"misc\"",
+    "path": "$.category",
+    "code": "recipe.category"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/shape.json",
+    "message": "An ingredient can't be air",
+    "path": "$.key.long",
+    "code": "recipe.ingredient"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/smith.json",
+    "message": "A smithing_transform recipe needs addition",
+    "path": "$",
+    "code": "recipe.missing"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/smith.json",
+    "message": "A smithing_transform recipe has no category",
+    "path": "$.category",
+    "code": "recipe.category"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/smith.json",
+    "message": "\"#not a tag\" isn't an item tag",
+    "path": "$.template",
+    "code": "recipe.ingredient"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/smith.json",
+    "message": "\"Bad Id!\" isn't an item id",
+    "path": "$.base",
+    "code": "recipe.ingredient"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/station.json",
+    "message": "A station recipe has no experience",
+    "path": "$.experience",
+    "code": "recipe.field"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/station.json",
+    "message": "count must be at least 1",
+    "path": "$.materials[0].count",
+    "code": "recipe.ingredients"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/station.json",
+    "message": "A station is a block id, a #tag or a project block, or several of them between | (any of them)",
+    "path": "$.stations[0]",
+    "code": "recipe.station"
+  },
+  {
+    "severity": "error",
+    "file": "recipes/station.json",
+    "message": "stationRange must be 1 to 16",
+    "path": "$.stationRange",
+    "code": "recipe.station"
+  }
+]

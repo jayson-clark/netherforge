@@ -1,0 +1,8 @@
+{
+  "type": "station",
+  "materials": [{ "ingredient": "minecraft:stick", "count": 0 }],
+  "stations": [""],
+  "stationRange": 40,
+  "experience": 2,
+  "result": { "kind": "minecraft:torch" }
+}

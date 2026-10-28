@@ -1,0 +1,14 @@
+{
+  "$schema": ".netherforge/schema/netherforge.schema.json",
+  "formatVersion": 1,
+  "name": "Requires",
+  "namespace": "case",
+  "version": "1.0.0",
+  "minecraft": "26.3",
+  "requires": {
+    "moderation": true,
+    "db": true,
+    "http": ["*.com", "*.example.com", "Discord.com", "api.example.com", "https://x.dev", "localhost"],
+    "plugins": ["PlaceholderAPI", "vault", "with space"]
+  }
+}

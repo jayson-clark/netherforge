@@ -1,0 +1,24 @@
+{
+  "sea_level": -64,
+  "disable_mob_generation": true,
+  "legacy_random_source": false,
+  "default_block": "minecraft:smooth_basalt",
+  "default_fluid": "minecraft:air",
+  "noise": {
+    "min_y": -64,
+    "height": 384
+  },
+  "noise_router": {
+    "chunk_surface_level": 0.0,
+    "continents": 0.0,
+    "depth": 0.0,
+    "erosion": 0.0,
+    "final_density": "showcase:it_shelf",
+    "ridges": 0.0,
+    "temperature": 0.0,
+    "vegetation": 0.0
+  },
+  "material_rule": "showcase:it_basalt",
+  "spawn_target": [],
+  "debug_functions": []
+}

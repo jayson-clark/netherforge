@@ -1,0 +1,628 @@
+[
+  {
+    "severity": "error",
+    "file": "blocks/lamp/block.json",
+    "message": "There's no centity \"lamp\" (centities/lamp/centity.json)",
+    "path": "$.centity",
+    "code": "reference.centity"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/Upper.json",
+    "message": "\"Upper\" isn't a usable id (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+    "code": "project.id"
+  },
+  {
+    "severity": "warning",
+    "file": "terrain/alone.lua",
+    "message": "There's no terrain/alone.json beside this, so it's ignored",
+    "code": "project.missing-file"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "blend is from 0 to 64 blocks, not -1",
+    "path": "$.terrain.blend",
+    "code": "terrain.border"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "Name a `block` or a `customBlock`",
+    "path": "$.layers[0]",
+    "code": "terrain.one-block"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "Name one of `block` and `customBlock`, not both",
+    "path": "$.stone",
+    "code": "terrain.one-block"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "\"nowhere\" isn't one of the file's biome areas (its areas are hills)",
+    "path": "$.caves.c.biomes[1]",
+    "code": "terrain.area"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "\"nowhere\" isn't one of the file's biome areas (its areas are hills)",
+    "path": "$.ores.o.biomes[0]",
+    "code": "terrain.area"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "count is from 0 to 256 a chunk, not 300",
+    "path": "$.decorations.flowers.count",
+    "code": "terrain.decoration"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "chance is from 0 to 1",
+    "path": "$.decorations.flowers.chance",
+    "code": "terrain.decoration"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "\"Grass\" isn't a block id",
+    "path": "$.decorations.flowers.on[0]",
+    "code": "terrain.block"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "\"nowhere\" isn't one of the file's biome areas (its areas are hills)",
+    "path": "$.decorations.flowers.biomes[0]",
+    "code": "terrain.area"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "Name a `block`, a `customBlock` or a `structure`",
+    "path": "$.decorations.nothing",
+    "code": "terrain.one-block"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "Name one of `block`, `customBlock` and `structure`, not more",
+    "path": "$.decorations.pile",
+    "code": "terrain.one-block"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "A structure goes on the surface, underwater or underground, not on a cave's floor or ceiling",
+    "path": "$.decorations.trees.placement",
+    "code": "terrain.decoration"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "minY (10) is above maxY (5)",
+    "path": "$.decorations.trees.minY",
+    "code": "terrain.decoration"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "Only a structure is turned",
+    "path": "$.decorations.patchy.rotate",
+    "code": "terrain.decoration"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "A threshold is of a noise: add one, or leave the threshold out",
+    "path": "$.decorations.patchy.threshold",
+    "code": "terrain.decoration"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "amplitude is from 0 to 4096 blocks",
+    "path": "$.climate.jitter.amplitude",
+    "code": "terrain.border"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "base must be from -2032 to 2031, not 3000",
+    "path": "$.biomes.hills.terrain.base",
+    "code": "terrain.height"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "scale is from 0 to 16",
+    "path": "$.biomes.hills.terrain.scale",
+    "code": "terrain.height"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "frequency must be more than 0 and at most 1",
+    "path": "$.biomes.hills.terrain.noises.peaks.noise.frequency",
+    "code": "terrain.noise"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "amplitude must be a number from -4096 to 4096",
+    "path": "$.biomes.hills.terrain.noises.peaks.amplitude",
+    "code": "terrain.height"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "Block \"lamp\" is drawn by the centity \"lamp\", so a terrain can't place it: use a block that's a plain cube",
+    "path": "$.layers[1].customBlock",
+    "code": "terrain.custom-block",
+    "related": [
+      {
+        "file": "blocks/lamp/block.json",
+        "path": "$.centity"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "Block \"lamp\" is drawn by the centity \"lamp\", so a terrain can't place it: use a block that's a plain cube",
+    "path": "$.floor.customBlock",
+    "code": "terrain.custom-block",
+    "related": [
+      {
+        "file": "blocks/lamp/block.json",
+        "path": "$.centity"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "Block \"lamp\" is drawn by the centity \"lamp\", so a terrain can't place it: use a block that's a plain cube",
+    "path": "$.decorations.lamps.customBlock",
+    "code": "terrain.custom-block",
+    "related": [
+      {
+        "file": "blocks/lamp/block.json",
+        "path": "$.centity"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "Block \"lamp\" is drawn by the centity \"lamp\", so a terrain can't place it: use a block that's a plain cube",
+    "path": "$.biomes.hills.underwater[0].customBlock",
+    "code": "terrain.custom-block",
+    "related": [
+      {
+        "file": "blocks/lamp/block.json",
+        "path": "$.centity"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "There's no structure \"rock\" (structures/rock.nbt)",
+    "path": "$.decorations.pile.structure",
+    "code": "reference.structure"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "There's no structure \"missing_tree\" (structures/missing_tree.nbt)",
+    "path": "$.decorations.trees.structure",
+    "code": "reference.structure"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "base must be from -2032 to 2031, not 99999",
+    "path": "$.terrain.base",
+    "code": "terrain.height"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "seaLevel must be from -2032 to 2031, not 5000000",
+    "path": "$.terrain.seaLevel",
+    "code": "terrain.height"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "\"not a state\" isn't a block state",
+    "path": "$.terrain.fluid",
+    "code": "terrain.block"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "\"Bad Name\" can't name one of the terrain noises (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+    "path": "$.terrain.noises[\"Bad Name\"]",
+    "code": "terrain.name"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "frequency must be more than 0 and at most 1",
+    "path": "$.terrain.noises[\"Bad Name\"].noise.frequency",
+    "code": "terrain.noise"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "octaves is from 1 to 8, not 20",
+    "path": "$.terrain.noises[\"Bad Name\"].noise.octaves",
+    "code": "terrain.noise"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "lacunarity is from 1 to 4",
+    "path": "$.terrain.noises[\"Bad Name\"].noise.lacunarity",
+    "code": "terrain.noise"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "gain is from 0 to 1",
+    "path": "$.terrain.noises[\"Bad Name\"].noise.gain",
+    "code": "terrain.noise"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "amplitude must be a number from -4096 to 4096",
+    "path": "$.terrain.noises[\"Bad Name\"].amplitude",
+    "code": "terrain.height"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "thickness is from 1 to 256 blocks, not 0",
+    "path": "$.layers[0].thickness",
+    "code": "terrain.layer"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "\"[]\" isn't a block state",
+    "path": "$.layers[1].block",
+    "code": "terrain.block"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "thickness is from 1 to 256 blocks, not 999",
+    "path": "$.underwater[0].thickness",
+    "code": "terrain.layer"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "\"no way\" isn't a block state",
+    "path": "$.stone.block",
+    "code": "terrain.block"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "floor thickness is from 1 to 256 blocks, not 0",
+    "path": "$.floor.thickness",
+    "code": "terrain.layer"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "threshold of a cheese cave must be from -1 to 1",
+    "path": "$.caves.a.threshold",
+    "code": "terrain.cave"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "minY (10) is above maxY (0)",
+    "path": "$.caves.a.minY",
+    "code": "terrain.cave"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "depth is from 0 to 256",
+    "path": "$.caves.a.depth",
+    "code": "terrain.cave"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "threshold of a spaghetti cave must be more than 0 and at most 1",
+    "path": "$.caves.b.threshold",
+    "code": "terrain.cave"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "An ore needs a `block` (a vanilla one) or a `customBlock` (one of the project's)",
+    "path": "$.ores.none",
+    "code": "terrain.ore"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "An ore is a `block` or a `customBlock`, not both",
+    "path": "$.ores.both",
+    "code": "terrain.ore"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "\"Not An Id\" isn't a block id",
+    "path": "$.ores.big.replace[0]",
+    "code": "terrain.block"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "size is from 1 to 64 blocks, not 100",
+    "path": "$.ores.big.size",
+    "code": "terrain.ore"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "veins is from 0 to 256 a chunk, not 999",
+    "path": "$.ores.big.veins",
+    "code": "terrain.ore"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "minY (50) is above maxY (0)",
+    "path": "$.ores.big.minY",
+    "code": "terrain.ore"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "octaves is from 1 to 8, not 0",
+    "path": "$.climate.temperature.octaves",
+    "code": "terrain.noise"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "min must be from -1 to 1",
+    "path": "$.biomes.a.temperature.min",
+    "code": "terrain.climate"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "max must be from -1 to 1",
+    "path": "$.biomes.a.temperature.max",
+    "code": "terrain.climate"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "min (2) is above max (-2)",
+    "path": "$.biomes.a.temperature.min",
+    "code": "terrain.climate"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "\"\" isn't a block state",
+    "path": "$.biomes.a.layers[0].block",
+    "code": "terrain.block"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "Block \"lamp\" is drawn by the centity \"lamp\", so a terrain can't place it: use a block that's a plain cube",
+    "path": "$.ores.both.customBlock",
+    "code": "terrain.custom-block",
+    "related": [
+      {
+        "file": "blocks/lamp/block.json",
+        "path": "$.centity"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "Block \"lamp\" is drawn by the centity \"lamp\", so a terrain can't place it: use a block that's a plain cube",
+    "path": "$.ores.lamp.customBlock",
+    "code": "terrain.custom-block",
+    "related": [
+      {
+        "file": "blocks/lamp/block.json",
+        "path": "$.centity"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "There's no block \"nothing\" (blocks/nothing/block.json)",
+    "path": "$.ores.missing.customBlock",
+    "code": "reference.block"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/bad.json",
+    "message": "\"Not A Biome\" isn't a reference to a biome: write <id>, or <namespace>:<id> for another package's, or minecraft:<id> for the game's",
+    "path": "$.biomes.a.biome",
+    "code": "reference.syntax"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/crowded.json",
+    "message": "A list of layers holds at most 32",
+    "path": "$.layers",
+    "code": "terrain.limit"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/density.json",
+    "message": "amplitude must be a number from -4096 to 4096",
+    "path": "$.terrain.density.noises.overhangs.amplitude",
+    "code": "terrain.height"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/density.json",
+    "message": "squash must be more than 0 and at most 16",
+    "path": "$.terrain.density.noises.overhangs.squash",
+    "code": "terrain.density"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/density.json",
+    "message": "y must be from -2032 to 2031, not 5000",
+    "path": "$.terrain.density.islands.y",
+    "code": "terrain.density"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/density.json",
+    "message": "thickness is from 2 to 256 blocks, not 1",
+    "path": "$.terrain.density.islands.thickness",
+    "code": "terrain.density"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/density.json",
+    "message": "threshold is from -1 up to but not including 1",
+    "path": "$.terrain.density.islands.threshold",
+    "code": "terrain.density"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/density.json",
+    "message": "\"nowhere\" isn't one of the file's biome areas (its areas are steep)",
+    "path": "$.terrain.density.islands.biomes[0]",
+    "code": "terrain.area"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/density.json",
+    "message": "scale is from 0 to 16",
+    "path": "$.biomes.steep.terrain.density.scale",
+    "code": "terrain.density"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/density.json",
+    "message": "squash must be more than 0 and at most 16",
+    "path": "$.biomes.steep.terrain.density.noises.lean.squash",
+    "code": "terrain.density"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/flat_density.json",
+    "message": "An area's density is of the file's: add a terrain.density to the file (`{}` for no noises of its own)",
+    "path": "$.biomes.steep.terrain.density",
+    "code": "terrain.density"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/scripted.json",
+    "message": "budget is from 1000 to 100000000 instructions a call, not 5",
+    "path": "$.script.budget",
+    "code": "terrain.script"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/scripted.json",
+    "message": "\"minecraft:stone[nope\" isn't a block state",
+    "path": "$.script.blocks[0]",
+    "code": "terrain.block"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/scripted.json",
+    "message": "There's no terrain/scripted.lua beside this file for its script to run",
+    "path": "$.script",
+    "code": "terrain.script-missing"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/scripted.json",
+    "message": "Block \"lamp\" is drawn by the centity \"lamp\", so a terrain can't place it: use a block that's a plain cube",
+    "path": "$.script.customBlocks[0]",
+    "code": "terrain.custom-block",
+    "related": [
+      {
+        "file": "blocks/lamp/block.json",
+        "path": "$.centity"
+      }
+    ]
+  },
+  {
+    "severity": "warning",
+    "file": "terrain/unused.lua",
+    "message": "terrain/unused.json has no `script`, so this never runs: add one to hand it stages",
+    "code": "terrain.script-unused"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/volumes.json",
+    "message": "A project block holds no items to fill from a loot table",
+    "path": "$.decorations.caches.loot",
+    "code": "terrain.decoration"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/volumes.json",
+    "message": "\"wild\" isn't one of the file's climate.noises (it declares evil)",
+    "path": "$.biomes.forest.climate.wild",
+    "code": "terrain.climate"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/volumes.json",
+    "message": "min (40) is above max (10)",
+    "path": "$.biomes.caves.depth.min",
+    "code": "terrain.volume"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/volumes.json",
+    "message": "An area limited by height gives its places a biome and nothing else: it has no layers",
+    "path": "$.biomes.caves.layers",
+    "code": "terrain.volume"
+  },
+  {
+    "severity": "error",
+    "file": "terrain/volumes.json",
+    "message": "Block \"lamp\" is drawn by the centity \"lamp\", so a terrain can't place it: use a block that's a plain cube",
+    "path": "$.decorations.caches.customBlock",
+    "code": "terrain.custom-block",
+    "related": [
+      {
+        "file": "blocks/lamp/block.json",
+        "path": "$.centity"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "terrain/volumes.json",
+    "message": "There's no loot table \"nope\" (loot/nope.json)",
+    "path": "$.decorations.caches.loot",
+    "code": "reference.loot-table"
+  }
+]

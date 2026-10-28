@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mc-glyph-advances"
+description = "Enables the mc_glyph_advances command without any pre-configured scope."
+commands.allow = ["mc_glyph_advances"]
+
+[[permission]]
+identifier = "deny-mc-glyph-advances"
+description = "Denies the mc_glyph_advances command without any pre-configured scope."
+commands.deny = ["mc_glyph_advances"]

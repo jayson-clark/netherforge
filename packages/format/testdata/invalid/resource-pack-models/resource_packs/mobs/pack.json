@@ -1,0 +1,12 @@
+{
+  "items": {
+    "wing": { "model": "wing.json" },
+    "gone": { "model": "gone.json" },
+    "path": { "model": "../wing.json" },
+    "both": { "model": "wing.json", "texture": "gem.png" }
+  },
+  "blocks": {
+    "crystal": { "model": "crystal.json" },
+    "mixed": { "model": "crystal.json", "texture": "gem.png" }
+  }
+}

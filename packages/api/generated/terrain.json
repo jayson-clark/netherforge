@@ -1,0 +1,989 @@
+{
+  "classes": [
+    {
+      "name": "Terrain",
+      "doc": "The world a terrain's script shapes, and the noises its file declares: what the script is given as `...`, so it starts `local terrain = ...`. The same for every call of the script, on whichever thread.",
+      "methods": false,
+      "fields": [],
+      "functions": [
+        {
+          "name": "seed",
+          "doc": "The world's seed.",
+          "params": [],
+          "returns": [
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        {
+          "name": "min_y",
+          "doc": "The y of the world's lowest block.",
+          "params": [],
+          "returns": [
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        {
+          "name": "max_y",
+          "doc": "The y of the world's highest block.",
+          "params": [],
+          "returns": [
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        {
+          "name": "sea_level",
+          "doc": "The file's sea level: a column whose top is below it is flooded up to it.",
+          "params": [],
+          "returns": [
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        {
+          "name": "noise",
+          "doc": "One of the noises the file's `script.noises` declares, by its name there: its own pattern from the world's seed, the same numbers as the file's noises. A name the file doesn't declare is an error.",
+          "params": [
+            {
+              "name": "name",
+              "type": "string",
+              "doc": "Its name in `script.noises`."
+            }
+          ],
+          "returns": [
+            {
+              "type": "Noise"
+            }
+          ],
+          "example": "local ridges = terrain.noise(\"ridges\")"
+        },
+        {
+          "name": "height",
+          "doc": "The y of a column's top block, as a chunk is generated with it: the file's height, then the script's `height` stage. Any column, in the chunk or not. Not from the `height` stage itself, which is given the file's. In a file with a `terrain.density`, the height the density is shaped around: the ground's blocks are the chunk's to read (`chunk:block`).",
+          "params": [
+            {
+              "name": "x",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "z",
+              "type": "integer",
+              "doc": ""
+            }
+          ],
+          "returns": [
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        {
+          "name": "area",
+          "doc": "The name of the biome area a column is in (a key of the file's `biomes`), or `default` when the file has none: its climate's, then the script's `area` stage. With three numbers, the area at a place (`x`, `y`, `z`): a volume area there (one limited by `y`, `depth` or `surface`), else its column's, then the script's `biome` stage; a place is read at the corner of its 4x4x4 cell, as the game keeps biomes. Not from the `area` stage (an area depends on the areas), and a place's not from the `height`, `density` or `biome` stage (it depends on the heights).",
+          "params": [
+            {
+              "name": "x",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "y",
+              "type": "integer",
+              "doc": "The column's `z` when there are two numbers."
+            },
+            {
+              "name": "z",
+              "type": "integer",
+              "doc": "The place's `z`.",
+              "optional": true
+            }
+          ],
+          "returns": [
+            {
+              "type": "string"
+            }
+          ],
+          "example": "local here = terrain.area(x, y, z)"
+        },
+        {
+          "name": "biome",
+          "doc": "The biome of the area a column (two numbers) or a place (three) is in, as `area` finds it and the file writes it: `minecraft:plains`, or a project biome's id.",
+          "params": [
+            {
+              "name": "x",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "y",
+              "type": "integer",
+              "doc": "The column's `z` when there are two numbers."
+            },
+            {
+              "name": "z",
+              "type": "integer",
+              "doc": "The place's `z`.",
+              "optional": true
+            }
+          ],
+          "returns": [
+            {
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "name": "plan",
+          "doc": "A plan: something big worked out once per cell of a grid (a dungeon's rooms, a temple's layout) rather than in every chunk it touches. `make(cell_x, cell_z)` is called the first time a cell's plan is asked for and its result kept (each Lua state keeps the last 256 cells of each plan), so it must depend on the cell alone: noises, `terrain.height`, `terrain.area` and `math.random`, which in a plan gives numbers of the cell's own (the same whenever it's made). Don't change the table it returns. Made in the script's body, once per name.",
+          "params": [
+            {
+              "name": "name",
+              "type": "string",
+              "doc": "Its name, which its numbers are drawn from: two plans of one name are an error."
+            },
+            {
+              "name": "size",
+              "type": "integer",
+              "doc": "How wide a cell is, in blocks, 1 to 65536."
+            },
+            {
+              "name": "make",
+              "type": "fun(cell_x: integer, cell_z: integer): any",
+              "doc": "Works out a cell's plan: any value, `nil` for none."
+            }
+          ],
+          "returns": [
+            {
+              "type": "Plan"
+            }
+          ],
+          "example": "local dungeons = terrain.plan(\"dungeon\", 512, function(cell_x, cell_z)\n  return { x = cell_x * 512 + math.random(0, 511), z = cell_z * 512 + math.random(0, 511) }\nend)"
+        },
+        {
+          "name": "structure",
+          "doc": "A new, empty structure: something to build once (a tree, a ruin, a floating island) and draw chunk by chunk with `chunk:place_structure`, each chunk drawing the part of it inside it, so it can be any size and cross chunk borders. Build it where it's the same whichever chunk asks: in a plan's or scatter's `make`, or the script's body.",
+          "params": [],
+          "returns": [
+            {
+              "type": "Structure"
+            }
+          ],
+          "example": "local tree = terrain.structure()\ntree:fill(0, 0, 0, 0, 6, 0, \"minecraft:oak_log\")\ntree:ellipsoid(0, 7, 0, 3, 2, 3, \"minecraft:oak_leaves\")"
+        },
+        {
+          "name": "scatter",
+          "doc": "Structures over a grid, at most one in each cell (a plan of structures): `make(cell_x, cell_z)` builds a cell's, or returns `nil`, with the cell's own `math.random` numbers. `scatter:place(chunk)` draws every one that reaches the chunk. Each must lie within `reach` cells of its own. Made in the script's body, once per name.",
+          "params": [
+            {
+              "name": "name",
+              "type": "string",
+              "doc": "Its name, which its numbers are drawn from, as a plan's."
+            },
+            {
+              "name": "size",
+              "type": "integer",
+              "doc": "How wide a cell is, in blocks, 1 to 65536."
+            },
+            {
+              "name": "make",
+              "type": "fun(cell_x: integer, cell_z: integer): Structure?",
+              "doc": "Builds a cell's structure, in the world's coordinates, or `nil` for none."
+            },
+            {
+              "name": "reach",
+              "type": "integer",
+              "doc": "How many cells past its own a structure can reach, 0 to 8. Default 1.",
+              "optional": true
+            }
+          ],
+          "returns": [
+            {
+              "type": "Scatter"
+            }
+          ],
+          "example": "local ruins = terrain.scatter(\"ruins\", 128, function(cell_x, cell_z)\n  if math.random() < 0.7 then return nil end\n  local x, z = cell_x * 128 + math.random(16, 111), cell_z * 128 + math.random(16, 111)\n  local y = terrain.height(x, z)\n  local ruin = terrain.structure()\n  ruin:ellipsoid(x, y, z, 6, 4, 6, \"minecraft:mossy_cobblestone\", { shell = 1 })\n  return ruin\nend)\n\nreturn {\n  decorate = function(chunk) ruins:place(chunk) end,\n}"
+        }
+      ]
+    },
+    {
+      "name": "Structure",
+      "doc": "Something built once and drawn chunk by chunk (`terrain.structure()`): its operations, drawn in the order they were added, each only where it reaches into the chunk. Every method returns the structure, so calls chain.",
+      "methods": true,
+      "fields": [],
+      "functions": [
+        {
+          "name": "fill",
+          "doc": "Fills a box with a block, both corners included, as `chunk:fill` does.",
+          "params": [
+            {
+              "name": "x1",
+              "type": "integer",
+              "doc": "One corner."
+            },
+            {
+              "name": "y1",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "z1",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "x2",
+              "type": "integer",
+              "doc": "The other."
+            },
+            {
+              "name": "y2",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "z2",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "block",
+              "type": "string",
+              "doc": "A block id.",
+              "names": "block"
+            }
+          ],
+          "returns": [
+            {
+              "type": "Structure"
+            }
+          ]
+        },
+        {
+          "name": "set",
+          "doc": "Sets one block.",
+          "params": [
+            {
+              "name": "x",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "y",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "z",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "block",
+              "type": "string",
+              "doc": "A block id.",
+              "names": "block"
+            }
+          ],
+          "returns": [
+            {
+              "type": "Structure"
+            }
+          ]
+        },
+        {
+          "name": "ellipsoid",
+          "doc": "An ellipsoid, as `chunk:ellipsoid` draws one.",
+          "params": [
+            {
+              "name": "cx",
+              "type": "integer",
+              "doc": "Its centre."
+            },
+            {
+              "name": "cy",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "cz",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "rx",
+              "type": "integer",
+              "doc": "Its radius along x, in whole blocks, 0 or more."
+            },
+            {
+              "name": "ry",
+              "type": "integer",
+              "doc": "Along y."
+            },
+            {
+              "name": "rz",
+              "type": "integer",
+              "doc": "Along z."
+            },
+            {
+              "name": "block",
+              "type": "string",
+              "doc": "A block id.",
+              "names": "block"
+            },
+            {
+              "name": "options",
+              "type": "EllipsoidOptions",
+              "doc": "",
+              "optional": true
+            }
+          ],
+          "returns": [
+            {
+              "type": "Structure"
+            }
+          ]
+        },
+        {
+          "name": "loot",
+          "doc": "Fills the container at a place from a loot table, as `chunk:set_loot` does: put the container there first.",
+          "params": [
+            {
+              "name": "x",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "y",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "z",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "table",
+              "type": "string",
+              "doc": "A loot table, by id.",
+              "names": "loot_table"
+            }
+          ],
+          "returns": [
+            {
+              "type": "Structure"
+            }
+          ]
+        },
+        {
+          "name": "sprinkle",
+          "doc": "Sets `count` blocks at places through a box: the same places whichever chunk draws them (drawn from `seed`, or a number of the structure's own). With `only`, a place is set only when its block is one of them, so a wall can weather without anything appearing in the air.",
+          "params": [
+            {
+              "name": "x1",
+              "type": "integer",
+              "doc": "One corner."
+            },
+            {
+              "name": "y1",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "z1",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "x2",
+              "type": "integer",
+              "doc": "The other."
+            },
+            {
+              "name": "y2",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "z2",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "block",
+              "type": "string",
+              "doc": "A block id.",
+              "names": "block"
+            },
+            {
+              "name": "count",
+              "type": "integer",
+              "doc": "How many places, 0 or more."
+            },
+            {
+              "name": "options",
+              "type": "SprinkleOptions",
+              "doc": "",
+              "optional": true
+            }
+          ],
+          "returns": [
+            {
+              "type": "Structure"
+            }
+          ],
+          "example": "local wall = terrain.structure()\nwall:fill(0, 60, 0, 9, 64, 0, \"minecraft:stone_bricks\")\nwall:sprinkle(0, 60, 0, 9, 64, 0, \"minecraft:mossy_stone_bricks\", 12, { only = { \"minecraft:stone_bricks\" } })"
+        },
+        {
+          "name": "bounds",
+          "doc": "The box everything in it lies in, both corners included, or `nil` when it has nothing.",
+          "params": [],
+          "returns": [
+            {
+              "type": "integer?"
+            },
+            {
+              "type": "integer?"
+            },
+            {
+              "type": "integer?"
+            },
+            {
+              "type": "integer?"
+            },
+            {
+              "type": "integer?"
+            },
+            {
+              "type": "integer?"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Scatter",
+      "doc": "Structures over a grid, at most one per cell (`terrain.scatter`).",
+      "methods": true,
+      "fields": [],
+      "functions": [
+        {
+          "name": "place",
+          "doc": "Draws the part inside the chunk of every structure that reaches it.",
+          "params": [
+            {
+              "name": "chunk",
+              "type": "Chunk",
+              "doc": ""
+            }
+          ],
+          "returns": []
+        },
+        {
+          "name": "get",
+          "doc": "A cell's structure, or `nil`.",
+          "params": [
+            {
+              "name": "cell_x",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "cell_z",
+              "type": "integer",
+              "doc": ""
+            }
+          ],
+          "returns": [
+            {
+              "type": "Structure?"
+            }
+          ]
+        },
+        {
+          "name": "at",
+          "doc": "The structure of the cell a column is in, then that cell's place in the grid.",
+          "params": [
+            {
+              "name": "x",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "z",
+              "type": "integer",
+              "doc": ""
+            }
+          ],
+          "returns": [
+            {
+              "type": "Structure?"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Plan",
+      "doc": "Something a script works out once per cell of a grid (`terrain.plan`), kept for the chunks that ask again.",
+      "methods": true,
+      "fields": [],
+      "functions": [
+        {
+          "name": "get",
+          "doc": "The plan of a cell, by the cell's place in the grid: `make`'s result, made the first time it's asked for.",
+          "params": [
+            {
+              "name": "cell_x",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "cell_z",
+              "type": "integer",
+              "doc": ""
+            }
+          ],
+          "returns": [
+            {
+              "type": "any"
+            }
+          ],
+          "example": "local dungeon = dungeons:get(0, 0)"
+        },
+        {
+          "name": "at",
+          "doc": "The plan of the cell a column is in, then that cell's place in the grid.",
+          "params": [
+            {
+              "name": "x",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "z",
+              "type": "integer",
+              "doc": ""
+            }
+          ],
+          "returns": [
+            {
+              "type": "any"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "example": "local dungeon, cell_x, cell_z = dungeons:at(chunk:min_x(), chunk:min_z())"
+        },
+        {
+          "name": "size",
+          "doc": "How wide a cell is, in blocks.",
+          "params": [],
+          "returns": [
+            {
+              "type": "integer"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Noise",
+      "doc": "A noise the file's `script.noises` declares (`terrain.noise(name)`): FastNoiseLite, as every noise of the file is, so the same numbers on the server and in the editor.",
+      "methods": true,
+      "fields": [],
+      "functions": [
+        {
+          "name": "at",
+          "doc": "The noise's value, from -1 to 1: with two numbers at a column (`x`, `z`), with three at a point (`x`, `y`, `z`).",
+          "params": [
+            {
+              "name": "x",
+              "type": "number",
+              "doc": ""
+            },
+            {
+              "name": "y",
+              "type": "number",
+              "doc": "The column's `z` when there are two numbers."
+            },
+            {
+              "name": "z",
+              "type": "number",
+              "doc": "The point's `z`.",
+              "optional": true
+            }
+          ],
+          "returns": [
+            {
+              "type": "number"
+            }
+          ],
+          "example": "local value = ridges:at(x, z)"
+        }
+      ]
+    },
+    {
+      "name": "Chunk",
+      "doc": "The chunk a `terrain` or `decorate` stage is given: 16 by 16 columns of the world's whole height, which it reads and fills. Positions are the world's; a part outside the chunk is left out. Only during the stage it's given to.",
+      "methods": true,
+      "fields": [],
+      "functions": [
+        {
+          "name": "x",
+          "doc": "The chunk's x, in chunks: its blocks are `chunk:x() * 16` to `chunk:x() * 16 + 15`.",
+          "params": [],
+          "returns": [
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        {
+          "name": "z",
+          "doc": "The chunk's z, in chunks.",
+          "params": [],
+          "returns": [
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        {
+          "name": "min_x",
+          "doc": "The x of its first column: `chunk:x() * 16`.",
+          "params": [],
+          "returns": [
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        {
+          "name": "min_z",
+          "doc": "The z of its first column: `chunk:z() * 16`.",
+          "params": [],
+          "returns": [
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        {
+          "name": "fill",
+          "doc": "Fills a box with a block, both corners included: the part of it in the chunk and the world. The block is an id, `minecraft:cobblestone` (the game's, written in full) or a project block's as the file names it, and one the generator places: one the file names anywhere, one the script or its modules write whole as a string, or one its `script.blocks` or `script.customBlocks` lists. `minecraft:air` empties the box.",
+          "params": [
+            {
+              "name": "x1",
+              "type": "integer",
+              "doc": "One corner."
+            },
+            {
+              "name": "y1",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "z1",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "x2",
+              "type": "integer",
+              "doc": "The other."
+            },
+            {
+              "name": "y2",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "z2",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "block",
+              "type": "string",
+              "doc": "A block id.",
+              "names": "block"
+            }
+          ],
+          "returns": [],
+          "example": "chunk:fill(x, top - 2, z, x, top, z, \"minecraft:cobblestone\")"
+        },
+        {
+          "name": "set",
+          "doc": "Sets one block, as `fill` does a box.",
+          "params": [
+            {
+              "name": "x",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "y",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "z",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "block",
+              "type": "string",
+              "doc": "A block id.",
+              "names": "block"
+            }
+          ],
+          "returns": []
+        },
+        {
+          "name": "set_loot",
+          "doc": "Fills the container at a place in the chunk (a chest, a barrel) from one of the project's loot tables, rolled the first time it's opened, broken or emptied by a hopper, for whoever does it. Put the container there first, in this stage or another: a place that holds no container once the chunk is made is left as it is. The table is one the file's `script.loot` lists. Outside the chunk, nothing.",
+          "params": [
+            {
+              "name": "x",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "y",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "z",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "table",
+              "type": "string",
+              "doc": "A loot table, by id.",
+              "names": "loot_table"
+            }
+          ],
+          "returns": [],
+          "example": "chunk:set_loot(x, y, z, \"dungeon_chest\")"
+        },
+        {
+          "name": "ellipsoid",
+          "doc": "Fills an ellipsoid (a ball, an egg, a disc) with a block: the part of it in the chunk. Radii are whole blocks, each taken half a block out so a small ball is round; 0 is one block thick. With `shell`, only its outer `shell` blocks (hollow), and with `only`, only where the block now is one of them.",
+          "params": [
+            {
+              "name": "cx",
+              "type": "integer",
+              "doc": "Its centre."
+            },
+            {
+              "name": "cy",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "cz",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "rx",
+              "type": "integer",
+              "doc": "Its radius along x, in whole blocks, 0 or more."
+            },
+            {
+              "name": "ry",
+              "type": "integer",
+              "doc": "Along y."
+            },
+            {
+              "name": "rz",
+              "type": "integer",
+              "doc": "Along z."
+            },
+            {
+              "name": "block",
+              "type": "string",
+              "doc": "A block id.",
+              "names": "block"
+            },
+            {
+              "name": "options",
+              "type": "EllipsoidOptions",
+              "doc": "",
+              "optional": true
+            }
+          ],
+          "returns": [],
+          "example": "chunk:ellipsoid(x, y, z, 4, 3, 4, \"minecraft:oak_leaves\", { only = { \"minecraft:air\" } })"
+        },
+        {
+          "name": "place_structure",
+          "doc": "Draws the part of a structure inside the chunk, moved by `x`, `y`, `z` (default 0): one structure can be placed in many places.",
+          "params": [
+            {
+              "name": "structure",
+              "type": "Structure",
+              "doc": ""
+            },
+            {
+              "name": "x",
+              "type": "integer",
+              "doc": "Default 0.",
+              "optional": true
+            },
+            {
+              "name": "y",
+              "type": "integer",
+              "doc": "Default 0.",
+              "optional": true
+            },
+            {
+              "name": "z",
+              "type": "integer",
+              "doc": "Default 0.",
+              "optional": true
+            }
+          ],
+          "returns": [],
+          "example": "local stump = terrain.structure():fill(0, 0, 0, 0, 1, 0, \"minecraft:oak_log\")\n\nreturn {\n  decorate = function(chunk)\n    local x, z = chunk:min_x() + 8, chunk:min_z() + 8\n    chunk:place_structure(stump, x, terrain.height(x, z) + 1, z)\n  end,\n}"
+        },
+        {
+          "name": "block",
+          "doc": "The block at a place in the chunk, as `fill` takes it (`minecraft:air` for none); `nil` outside the chunk or the world.",
+          "params": [
+            {
+              "name": "x",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "y",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "z",
+              "type": "integer",
+              "doc": ""
+            }
+          ],
+          "returns": [
+            {
+              "type": "string?"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "shapes": [
+    {
+      "name": "EllipsoidOptions",
+      "doc": "How an ellipsoid is drawn. A key that isn't one of these is an error.",
+      "methods": false,
+      "functions": [],
+      "fields": [
+        {
+          "name": "shell",
+          "type": "integer?",
+          "doc": "Hollow: only its outer this many blocks, 1 or more."
+        },
+        {
+          "name": "only",
+          "type": "string[]?",
+          "doc": "Set only where the block now is one of these."
+        }
+      ]
+    },
+    {
+      "name": "SprinkleOptions",
+      "doc": "How `structure:sprinkle` sets its blocks. A key that isn't one of these is an error.",
+      "methods": false,
+      "functions": [],
+      "fields": [
+        {
+          "name": "only",
+          "type": "string[]?",
+          "doc": "Set only where the block now is one of these."
+        },
+        {
+          "name": "seed",
+          "type": "integer?",
+          "doc": "The number its places are drawn from. Default one of the structure's own."
+        }
+      ]
+    },
+    {
+      "name": "TerrainStages",
+      "doc": "What a terrain's script returns: the stages it runs, each optional. A key that isn't one of them is an error.",
+      "methods": false,
+      "functions": [],
+      "fields": [
+        {
+          "name": "height",
+          "type": "fun(x: integer, z: integer, height: integer): number",
+          "doc": "A column's height: the y of its top block, given the file's (`height`). Rounded down, and kept inside the world. Everything asks it (the terrain, the decorations, a spawn, the preview's map), so keep it quick."
+        },
+        {
+          "name": "density",
+          "type": "fun(x: integer, y: integer, z: integer, value: number): number",
+          "doc": "Only in a file with a `terrain.density`: the density at a point (above 0 is solid), given the file's (`value`, in blocks: the ground's height above or below the point, moved by its 3D noises, or the islands'). Asked at the points of a grid 4 blocks apart across and 8 up (`x` and `z` multiples of 4, `y` of 8), and blended between them for the blocks, so keep it smooth: what it changes is blended too. Every point of the world's height is asked, so a file with one draws its map more slowly."
+        },
+        {
+          "name": "area",
+          "type": "fun(x: integer, z: integer, area: string): string",
+          "doc": "A column's biome area, given the one its climate picks (`area`): the name of one of the file's areas that isn't limited by height. Everything about a column follows it (its height and layers, the blending at its borders, filters), so it's asked often: keep it quick, and it can't ask `terrain.height` or `terrain.area`."
+        },
+        {
+          "name": "biome",
+          "type": "fun(x: integer, y: integer, z: integer, area: string): string",
+          "doc": "The biome area of a place (the corner of a 4x4x4 cell), given the one the file picks there (`area`: a volume, else the column's): the name of any of the file's areas. It decides the place's biome (its sky, fog, music, mobs) and what the areas' filters see there, nothing about the ground's shape. Asked for every cell of every chunk."
+        },
+        {
+          "name": "terrain",
+          "type": "fun(chunk: Chunk)",
+          "doc": "After the file's terrain (its stone, layers and sea), before caves, the floor and ores: fills the chunk."
+        },
+        {
+          "name": "decorate",
+          "type": "fun(chunk: Chunk)",
+          "doc": "After the file's decorations, last: places blocks in the chunk."
+        }
+      ]
+    }
+  ],
+  "removed": [
+    "io",
+    "os",
+    "debug",
+    "load",
+    "loadfile",
+    "dofile",
+    "collectgarbage",
+    "print",
+    "package",
+    "math.randomseed",
+    "string.dump"
+  ]
+}

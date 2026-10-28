@@ -1,0 +1,16 @@
+/* The game's default tooltip frame. */
+.tooltip {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(16, 0, 16, 0.94);
+  border: 2px solid #28007f;
+  border-radius: 3px;
+  padding: 4px 6px;
+}
+.floating {
+  position: fixed;
+  z-index: 400;
+  pointer-events: none;
+  max-width: 420px;
+}

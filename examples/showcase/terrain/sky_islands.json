@@ -1,0 +1,68 @@
+{
+  "$schema": "../.netherforge/schema/terrain.schema.json",
+  "terrain": {
+    "base": 0,
+    "seaLevel": -64,
+    "fluid": "minecraft:air",
+    "density": {
+      "islands": {
+        "y": 112,
+        "thickness": 64,
+        "noise": {
+          "frequency": 0.012,
+          "octaves": 2
+        },
+        "threshold": 0.12
+      }
+    }
+  },
+  "layers": [
+    {
+      "block": "minecraft:moss_block"
+    },
+    {
+      "block": "minecraft:dirt",
+      "thickness": 2
+    }
+  ],
+  "stone": {
+    "block": "minecraft:calcite"
+  },
+  "ores": {
+    "amethyst": {
+      "block": "minecraft:amethyst_block",
+      "size": 10,
+      "veins": 4,
+      "minY": 88,
+      "maxY": 136
+    },
+    "ruby": {
+      "customBlock": "ruby_ore",
+      "size": 6,
+      "veins": 14,
+      "minY": 88,
+      "maxY": 136
+    }
+  },
+  "decorations": {
+    "buds": {
+      "block": "minecraft:small_amethyst_bud[facing=up]",
+      "count": 10,
+      "on": ["minecraft:moss_block"]
+    },
+    "spires": {
+      "structure": "crystal_spire",
+      "count": 3,
+      "chance": 0.6,
+      "on": ["minecraft:moss_block"]
+    }
+  },
+  "biomes": {
+    "isles": {
+      "biome": "glow_grove"
+    }
+  },
+  "script": {
+    "budget": 20000
+  }
+}

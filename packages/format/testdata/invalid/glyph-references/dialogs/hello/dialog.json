@@ -1,0 +1,5 @@
+{
+  "title": "<glyph:coin>",
+  "body": [{ "type": "message", "text": "Costs \\<glyph:not:checked> <glyph:ui/gem>" }],
+  "buttons": [{ "key": "ok", "label": "<glyph:ui/coin>", "tooltip": "<glyph:ui/gem>" }]
+}

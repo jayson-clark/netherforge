@@ -1,0 +1,15 @@
+{
+  "$schema": "../../.netherforge/schema/block.schema.json",
+  "model": "ui/glow_lamp",
+  "hardness": 1.5,
+  "tool": "pickaxe",
+  "drops": "glow_lamp",
+  "sounds": {
+    "place": "ui/crystal_place",
+    "break": "ui/crystal_break"
+  },
+  "tick": 40,
+  "script": {
+    "file": "script.lua"
+  }
+}

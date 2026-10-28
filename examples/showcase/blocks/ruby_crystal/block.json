@@ -1,0 +1,9 @@
+{
+  "$schema": "../../.netherforge/schema/block.schema.json",
+  "model": "ui/ruby_crystal",
+  "carrier": "leaves",
+  "hardness": 0.5,
+  "tool": "pickaxe",
+  "drops": "ruby_crystal",
+  "rotation": "all"
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@netherforge/project-support",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "What NetherForge writes into a project's .netherforge/ for the tools around it (lua-language-server's library, the JSON Schemas, the docs for agents), shared by the editor and `netherforge setup`",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "tsc --noEmit -p . && eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@netherforge/api": "workspace:*",
+    "@netherforge/format": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.3",
+    "vite": "^8.3.2"
+  }
+}

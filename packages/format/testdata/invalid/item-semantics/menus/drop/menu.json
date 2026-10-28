@@ -1,0 +1,6 @@
+{
+  "$schema": "../../.netherforge/schema/menu.schema.json",
+  "type": "dispenser",
+  "title": "Drops",
+  "skin": "ui/frame"
+}

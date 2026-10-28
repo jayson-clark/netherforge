@@ -1,0 +1,23 @@
+[
+  {
+    "severity": "warning",
+    "file": "fonts/default.json",
+    "message": "These advances are Minecraft 26.2's, but the project targets 26.3: open the project in the editor with 26.3 imported to regenerate them",
+    "path": "$.minecraft",
+    "code": "font.stale"
+  },
+  {
+    "severity": "error",
+    "file": "fonts/default.json",
+    "message": "\"065\" isn't a code point (a whole number, no leading zeros)",
+    "path": "$.advances[\"065\"]",
+    "code": "font.code-point"
+  },
+  {
+    "severity": "error",
+    "file": "fonts/default.json",
+    "message": "An advance can't be negative",
+    "path": "$.advances[\"66\"]",
+    "code": "font.advance"
+  }
+]

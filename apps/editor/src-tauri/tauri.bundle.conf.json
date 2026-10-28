@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": {
+      "../../plugin/paper-*/build/libs/NetherForge-*-paper-*.jar": "plugins/",
+      "../../proxy/velocity/build/libs/NetherForge-*-velocity.jar": "plugins/",
+      "../../plugin/test-runner/build/libs/NetherForgeTest-*.jar": "test-runner/",
+      "lua-language-server/": "lua-language-server/"
+    }
+  }
+}

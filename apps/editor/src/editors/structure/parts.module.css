@@ -1,0 +1,20 @@
+.counts {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: var(--font-size-sm);
+}
+.counts td {
+  padding: 1px 4px;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.counts td.number {
+  text-align: right;
+  white-space: nowrap;
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}

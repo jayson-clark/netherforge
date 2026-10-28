@@ -1,0 +1,8 @@
+[
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "This folder has no netherforge.json, so it isn't a NetherForge project",
+    "code": "project.no-manifest"
+  }
+]

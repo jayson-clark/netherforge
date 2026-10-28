@@ -1,0 +1,665 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "name": "Pool table",
+  "nodes": {
+    "ball_1": {
+      "parent": "root",
+      "transform": {
+        "translation": [1.25, 0.125, 0]
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.125, -0.125, -0.125],
+            "max": [0.125, 0.125, 0.125]
+          }
+        ]
+      },
+      "physics": {
+        "mass": 0.17,
+        "bounciness": 0.92,
+        "friction": 0.2,
+        "drag": 0.02,
+        "angularDrag": 0.45,
+        "maxSpin": 9000,
+        "shape": "sphere"
+      }
+    },
+    "ball_10": {
+      "parent": "root",
+      "transform": {
+        "translation": [2.0294, 0.125, 0.45]
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.125, -0.125, -0.125],
+            "max": [0.125, 0.125, 0.125]
+          }
+        ]
+      },
+      "physics": {
+        "mass": 0.17,
+        "bounciness": 0.92,
+        "friction": 0.2,
+        "drag": 0.02,
+        "angularDrag": 0.45,
+        "maxSpin": 9000,
+        "shape": "sphere"
+      }
+    },
+    "ball_10_skin": {
+      "parent": "ball_10",
+      "transform": {
+        "translation": [-0.125, -0.125, -0.125],
+        "scale": [0.25, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:light_blue_concrete"
+      }
+    },
+    "ball_11": {
+      "parent": "root",
+      "transform": {
+        "translation": [2.2892, 0.125, -0.6]
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.125, -0.125, -0.125],
+            "max": [0.125, 0.125, 0.125]
+          }
+        ]
+      },
+      "physics": {
+        "mass": 0.17,
+        "bounciness": 0.92,
+        "friction": 0.2,
+        "drag": 0.02,
+        "angularDrag": 0.45,
+        "maxSpin": 9000,
+        "shape": "sphere"
+      }
+    },
+    "ball_11_skin": {
+      "parent": "ball_11",
+      "transform": {
+        "translation": [-0.125, -0.125, -0.125],
+        "scale": [0.25, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:pink_concrete"
+      }
+    },
+    "ball_12": {
+      "parent": "root",
+      "transform": {
+        "translation": [2.2892, 0.125, -0.3]
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.125, -0.125, -0.125],
+            "max": [0.125, 0.125, 0.125]
+          }
+        ]
+      },
+      "physics": {
+        "mass": 0.17,
+        "bounciness": 0.92,
+        "friction": 0.2,
+        "drag": 0.02,
+        "angularDrag": 0.45,
+        "maxSpin": 9000,
+        "shape": "sphere"
+      }
+    },
+    "ball_12_skin": {
+      "parent": "ball_12",
+      "transform": {
+        "translation": [-0.125, -0.125, -0.125],
+        "scale": [0.25, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:lime_concrete"
+      }
+    },
+    "ball_13": {
+      "parent": "root",
+      "transform": {
+        "translation": [2.2892, 0.125, 0]
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.125, -0.125, -0.125],
+            "max": [0.125, 0.125, 0.125]
+          }
+        ]
+      },
+      "physics": {
+        "mass": 0.17,
+        "bounciness": 0.92,
+        "friction": 0.2,
+        "drag": 0.02,
+        "angularDrag": 0.45,
+        "maxSpin": 9000,
+        "shape": "sphere"
+      }
+    },
+    "ball_13_skin": {
+      "parent": "ball_13",
+      "transform": {
+        "translation": [-0.125, -0.125, -0.125],
+        "scale": [0.25, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:magenta_concrete"
+      }
+    },
+    "ball_14": {
+      "parent": "root",
+      "transform": {
+        "translation": [2.2892, 0.125, 0.3]
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.125, -0.125, -0.125],
+            "max": [0.125, 0.125, 0.125]
+          }
+        ]
+      },
+      "physics": {
+        "mass": 0.17,
+        "bounciness": 0.92,
+        "friction": 0.2,
+        "drag": 0.02,
+        "angularDrag": 0.45,
+        "maxSpin": 9000,
+        "shape": "sphere"
+      }
+    },
+    "ball_14_skin": {
+      "parent": "ball_14",
+      "transform": {
+        "translation": [-0.125, -0.125, -0.125],
+        "scale": [0.25, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:cyan_concrete"
+      }
+    },
+    "ball_15": {
+      "parent": "root",
+      "transform": {
+        "translation": [2.2892, 0.125, 0.6]
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.125, -0.125, -0.125],
+            "max": [0.125, 0.125, 0.125]
+          }
+        ]
+      },
+      "physics": {
+        "mass": 0.17,
+        "bounciness": 0.92,
+        "friction": 0.2,
+        "drag": 0.02,
+        "angularDrag": 0.45,
+        "maxSpin": 9000,
+        "shape": "sphere"
+      }
+    },
+    "ball_15_skin": {
+      "parent": "ball_15",
+      "transform": {
+        "translation": [-0.125, -0.125, -0.125],
+        "scale": [0.25, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:gray_concrete"
+      }
+    },
+    "ball_1_skin": {
+      "parent": "ball_1",
+      "transform": {
+        "translation": [-0.125, -0.125, -0.125],
+        "scale": [0.25, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:yellow_concrete"
+      }
+    },
+    "ball_2": {
+      "parent": "root",
+      "transform": {
+        "translation": [1.5098, 0.125, -0.15]
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.125, -0.125, -0.125],
+            "max": [0.125, 0.125, 0.125]
+          }
+        ]
+      },
+      "physics": {
+        "mass": 0.17,
+        "bounciness": 0.92,
+        "friction": 0.2,
+        "drag": 0.02,
+        "angularDrag": 0.45,
+        "maxSpin": 9000,
+        "shape": "sphere"
+      }
+    },
+    "ball_2_skin": {
+      "parent": "ball_2",
+      "transform": {
+        "translation": [-0.125, -0.125, -0.125],
+        "scale": [0.25, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:blue_concrete"
+      }
+    },
+    "ball_3": {
+      "parent": "root",
+      "transform": {
+        "translation": [1.5098, 0.125, 0.15]
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.125, -0.125, -0.125],
+            "max": [0.125, 0.125, 0.125]
+          }
+        ]
+      },
+      "physics": {
+        "mass": 0.17,
+        "bounciness": 0.92,
+        "friction": 0.2,
+        "drag": 0.02,
+        "angularDrag": 0.45,
+        "maxSpin": 9000,
+        "shape": "sphere"
+      }
+    },
+    "ball_3_skin": {
+      "parent": "ball_3",
+      "transform": {
+        "translation": [-0.125, -0.125, -0.125],
+        "scale": [0.25, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:red_concrete"
+      }
+    },
+    "ball_4": {
+      "parent": "root",
+      "transform": {
+        "translation": [1.7696, 0.125, -0.3]
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.125, -0.125, -0.125],
+            "max": [0.125, 0.125, 0.125]
+          }
+        ]
+      },
+      "physics": {
+        "mass": 0.17,
+        "bounciness": 0.92,
+        "friction": 0.2,
+        "drag": 0.02,
+        "angularDrag": 0.45,
+        "maxSpin": 9000,
+        "shape": "sphere"
+      }
+    },
+    "ball_4_skin": {
+      "parent": "ball_4",
+      "transform": {
+        "translation": [-0.125, -0.125, -0.125],
+        "scale": [0.25, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:purple_concrete"
+      }
+    },
+    "ball_5": {
+      "parent": "root",
+      "transform": {
+        "translation": [1.7696, 0.125, 0]
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.125, -0.125, -0.125],
+            "max": [0.125, 0.125, 0.125]
+          }
+        ]
+      },
+      "physics": {
+        "mass": 0.17,
+        "bounciness": 0.92,
+        "friction": 0.2,
+        "drag": 0.02,
+        "angularDrag": 0.45,
+        "maxSpin": 9000,
+        "shape": "sphere"
+      }
+    },
+    "ball_5_skin": {
+      "parent": "ball_5",
+      "transform": {
+        "translation": [-0.125, -0.125, -0.125],
+        "scale": [0.25, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:orange_concrete"
+      }
+    },
+    "ball_6": {
+      "parent": "root",
+      "transform": {
+        "translation": [1.7696, 0.125, 0.3]
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.125, -0.125, -0.125],
+            "max": [0.125, 0.125, 0.125]
+          }
+        ]
+      },
+      "physics": {
+        "mass": 0.17,
+        "bounciness": 0.92,
+        "friction": 0.2,
+        "drag": 0.02,
+        "angularDrag": 0.45,
+        "maxSpin": 9000,
+        "shape": "sphere"
+      }
+    },
+    "ball_6_skin": {
+      "parent": "ball_6",
+      "transform": {
+        "translation": [-0.125, -0.125, -0.125],
+        "scale": [0.25, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:green_concrete"
+      }
+    },
+    "ball_7": {
+      "parent": "root",
+      "transform": {
+        "translation": [2.0294, 0.125, -0.45]
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.125, -0.125, -0.125],
+            "max": [0.125, 0.125, 0.125]
+          }
+        ]
+      },
+      "physics": {
+        "mass": 0.17,
+        "bounciness": 0.92,
+        "friction": 0.2,
+        "drag": 0.02,
+        "angularDrag": 0.45,
+        "maxSpin": 9000,
+        "shape": "sphere"
+      }
+    },
+    "ball_7_skin": {
+      "parent": "ball_7",
+      "transform": {
+        "translation": [-0.125, -0.125, -0.125],
+        "scale": [0.25, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:brown_concrete"
+      }
+    },
+    "ball_8": {
+      "parent": "root",
+      "transform": {
+        "translation": [2.0294, 0.125, -0.15]
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.125, -0.125, -0.125],
+            "max": [0.125, 0.125, 0.125]
+          }
+        ]
+      },
+      "physics": {
+        "mass": 0.17,
+        "bounciness": 0.92,
+        "friction": 0.2,
+        "drag": 0.02,
+        "angularDrag": 0.45,
+        "maxSpin": 9000,
+        "shape": "sphere"
+      }
+    },
+    "ball_8_skin": {
+      "parent": "ball_8",
+      "transform": {
+        "translation": [-0.125, -0.125, -0.125],
+        "scale": [0.25, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:black_concrete"
+      }
+    },
+    "ball_9": {
+      "parent": "root",
+      "transform": {
+        "translation": [2.0294, 0.125, 0.15]
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.125, -0.125, -0.125],
+            "max": [0.125, 0.125, 0.125]
+          }
+        ]
+      },
+      "physics": {
+        "mass": 0.17,
+        "bounciness": 0.92,
+        "friction": 0.2,
+        "drag": 0.02,
+        "angularDrag": 0.45,
+        "maxSpin": 9000,
+        "shape": "sphere"
+      }
+    },
+    "ball_9_skin": {
+      "parent": "ball_9",
+      "transform": {
+        "translation": [-0.125, -0.125, -0.125],
+        "scale": [0.25, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:light_gray_concrete"
+      }
+    },
+    "ball_cue": {
+      "parent": "root",
+      "transform": {
+        "translation": [-1.25, 0.125, 0]
+      },
+      "hitbox": {
+        "boxes": [
+          {
+            "min": [-0.125, -0.125, -0.125],
+            "max": [0.125, 0.125, 0.125]
+          }
+        ]
+      },
+      "physics": {
+        "mass": 0.17,
+        "bounciness": 0.92,
+        "friction": 0.2,
+        "drag": 0.02,
+        "angularDrag": 0.45,
+        "maxSpin": 9000,
+        "shape": "sphere"
+      }
+    },
+    "ball_cue_skin": {
+      "parent": "ball_cue",
+      "transform": {
+        "translation": [-0.125, -0.125, -0.125],
+        "scale": [0.25, 0.25, 0.25]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:white_concrete"
+      }
+    },
+    "bed": {
+      "parent": "table",
+      "transform": {
+        "translation": [-2.5, -0.2, -1.25],
+        "scale": [5, 0.2, 2.5]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:green_concrete"
+      },
+      "hitbox": {}
+    },
+    "label": {
+      "parent": "root",
+      "transform": {
+        "translation": [0, 1.2, 0]
+      },
+      "display": {
+        "type": "text",
+        "text": "<gray>pool",
+        "billboard": "center",
+        "alignment": "center"
+      }
+    },
+    "rail_east": {
+      "parent": "table",
+      "transform": {
+        "translation": [2.5, 0, -1.04],
+        "scale": [0.15, 0.22, 2.08]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:dark_oak_log"
+      },
+      "hitbox": {}
+    },
+    "rail_north_0": {
+      "parent": "table",
+      "transform": {
+        "translation": [-2.29, 0, -1.4],
+        "scale": [2.08, 0.22, 0.15]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:dark_oak_log"
+      },
+      "hitbox": {}
+    },
+    "rail_north_1": {
+      "parent": "table",
+      "transform": {
+        "translation": [0.21, 0, -1.4],
+        "scale": [2.08, 0.22, 0.15]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:dark_oak_log"
+      },
+      "hitbox": {}
+    },
+    "rail_south_0": {
+      "parent": "table",
+      "transform": {
+        "translation": [-2.29, 0, 1.25],
+        "scale": [2.08, 0.22, 0.15]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:dark_oak_log"
+      },
+      "hitbox": {}
+    },
+    "rail_south_1": {
+      "parent": "table",
+      "transform": {
+        "translation": [0.21, 0, 1.25],
+        "scale": [2.08, 0.22, 0.15]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:dark_oak_log"
+      },
+      "hitbox": {}
+    },
+    "rail_west": {
+      "parent": "table",
+      "transform": {
+        "translation": [-2.65, 0, -1.04],
+        "scale": [0.15, 0.22, 2.08]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:dark_oak_log"
+      },
+      "hitbox": {}
+    },
+    "root": {},
+    "skirt": {
+      "parent": "table",
+      "transform": {
+        "translation": [-2.65, -0.55, -1.4],
+        "scale": [5.3, 0.35, 2.8]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:dark_oak_planks"
+      },
+      "hitbox": {}
+    },
+    "table": {
+      "parent": "root"
+    }
+  },
+  "script": {
+    "file": "script.lua"
+  }
+}

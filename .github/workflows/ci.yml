@@ -1,0 +1,169 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # The release workflow runs these same checks on the tagged commit before it builds anything.
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # A newer push to a PR supersedes the older run; every commit on main and every tag gets a full one.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: lint + test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    # About 20 minutes; macOS is the slowest.
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: pnpm build
+      - name: Lint
+        if: runner.os == 'Linux'
+        run: pnpm lint
+      # rustfmt and clippy say the same on every OS; Linux runs them, the Rust tests still run everywhere.
+      - name: Lint (without Rust)
+        if: runner.os != 'Linux'
+        run: node tools/check.mjs lint --skip rust
+      - run: pnpm test
+
+  adapters:
+    name: Paper adapters
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      minecraft: ${{ steps.list.outputs.minecraft }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      # One adapter per apps/plugin/paper-<minecraft> folder, as Gradle includes them.
+      - name: List them
+        id: list
+        run: |
+          versions=$(find apps/plugin -mindepth 1 -maxdepth 1 -type d -name 'paper-*' -printf '%f\n' \
+            | sed -n 's/^paper-\([0-9][0-9.]*\)$/\1/p' | sort -V | jq -R . | jq -sc .)
+          echo "minecraft=$versions" >> "$GITHUB_OUTPUT"
+
+  integration:
+    name: integration (headless Paper ${{ matrix.minecraft }})
+    needs: adapters
+    runs-on: ubuntu-latest
+    # A full run of one version is about 20 minutes, building included; a PR's scope less.
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        minecraft: ${{ fromJSON(needs.adapters.outputs.minecraft) }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          rust: 'false'
+      - name: The pinned Paper build
+        id: paper
+        env:
+          MINECRAFT: ${{ matrix.minecraft }}
+        run: echo "pin=$(grep -E '^\s*(paper|serverBuild) =' "apps/plugin/paper-$MINECRAFT/build.gradle.kts" | tr -d ' "' | tr '\n' '-')" >> "$GITHUB_OUTPUT"
+      # This version's Paper jar (downloadPaper) and what Paperclip fetches and patches on first start
+      # (the Mojang server jar, libraries), so a run doesn't depend on those servers. Keyed on the
+      # adapter's pinned build: a bump starts a new entry, and each version keeps its own.
+      - name: Cache the Paper and Mojang server jars
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: |
+            ~/.gradle/caches/netherforge/paper/paper-${{ matrix.minecraft }}-*.jar
+            apps/plugin/integration/build/integration/${{ matrix.minecraft }}/server/cache
+            apps/plugin/integration/build/integration/${{ matrix.minecraft }}/server/libraries
+            apps/plugin/integration/build/integration/${{ matrix.minecraft }}/server/versions
+          key: paper-jars-${{ runner.os }}-${{ matrix.minecraft }}-${{ steps.paper.outputs.pin }}
+      # A PR runs every scenario on the newest version and only the version-sensitive ones on the
+      # others (the `pr` scope, which works out the newest from the adapters itself); main and
+      # releases run them all. Quarantined tests are left out of both (nightly runs them).
+      - name: The scenarios against this version's adapter
+        env:
+          MINECRAFT: ${{ matrix.minecraft }}
+          SCOPE: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}
+        run: node tools/gradle.mjs ":plugin:integration:integrationTest-$MINECRAFT" "-Pnetherforge.integration.scope=$SCOPE"
+      - name: Test counts
+        if: success() || failure()
+        uses: ./.github/actions/junit-summary
+        with:
+          title: Integration, Paper ${{ matrix.minecraft }}
+          path: apps/plugin/integration/build/test-results/integration/${{ matrix.minecraft }}
+      # Each scenario's server output (<Scenario>.log, contract-test.log, a JVM crash's hs_err) and the reports.
+      - name: Keep the server logs and reports
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: integration-${{ matrix.minecraft }}
+          path: |
+            apps/plugin/integration/build/integration/${{ matrix.minecraft }}/server/*.log
+            apps/plugin/integration/build/integration/${{ matrix.minecraft }}/server/logs/
+            apps/plugin/integration/build/test-results/integration/${{ matrix.minecraft }}/
+            apps/plugin/integration/build/reports/integration/${{ matrix.minecraft }}/
+          retention-days: 14
+
+  e2e:
+    name: editor e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          rust: 'false'
+      - run: pnpm build
+      - run: pnpm --filter @netherforge/editor exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      # The previews' pictures, with the browser in the pinned Playwright container (Docker).
+      - run: pnpm test:screenshots
+      # What failed: each test's output, its trace (kept on failure), and the HTML report.
+      - name: Keep Playwright's results
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-results
+          path: |
+            apps/editor/test-results/
+            apps/editor/playwright-report/
+          retention-days: 14
+
+  tauri-build:
+    name: editor debug build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: pnpm build
+      - run: pnpm --filter @netherforge/editor exec tauri build --debug --no-bundle

@@ -1,0 +1,1 @@
+{ "model": "ui/nowhere", "drops": "nothing", "centity": "ghost", "sounds": { "place": "ui/thud", "break": "gone/crumble" }, "tick": 72001, "falls": true }

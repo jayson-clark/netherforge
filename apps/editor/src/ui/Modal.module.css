@@ -1,0 +1,125 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 8, 11, 0.6);
+  backdrop-filter: blur(2px);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 100;
+}
+.backdrop[data-entering] {
+  animation: fade 120ms ease-out;
+}
+.backdrop[data-exiting] {
+  animation: fade 100ms ease-in reverse;
+}
+/* A set width, so a long message or path wraps instead of widening the dialog. */
+.modal {
+  width: min(440px, 100%);
+  max-height: min(88vh, 100%);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.25),
+    var(--shadow);
+  overflow: hidden;
+}
+.modal[data-entering] {
+  animation: rise 140ms ease-out;
+}
+.wide {
+  width: min(900px, 100%);
+}
+.dialog {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  outline: none;
+}
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 12px 4px 18px;
+}
+.headerIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  color: var(--accent);
+}
+.headerIcon.danger {
+  color: var(--error);
+  background: var(--error-bg);
+  border-color: transparent;
+}
+.title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.body {
+  padding: 10px 18px 16px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.body > :first-child {
+  margin-top: 0;
+}
+.message {
+  margin: 0 0 12px;
+  color: var(--muted);
+  white-space: pre-line;
+}
+.message:last-child {
+  margin-bottom: 0;
+}
+.body > input,
+.input {
+  width: 100%;
+  height: 30px;
+  padding: 4px 9px;
+  margin-top: 4px;
+  font-size: 13px;
+}
+.input[data-error] {
+  border-color: var(--error);
+}
+.footer {
+  display: flex;
+  gap: 8px;
+  padding: 12px 18px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  justify-content: flex-end;
+  align-items: center;
+}
+.footer button {
+  min-height: 28px;
+  padding-inline: 14px;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}

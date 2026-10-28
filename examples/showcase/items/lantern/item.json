@@ -1,0 +1,16 @@
+{
+  "$schema": "../../.netherforge/schema/item.schema.json",
+  "kind": "minecraft:paper",
+  "name": "<light_purple>Cold lantern",
+  "lore": [
+    "<gray>Kindle it at a glow lamp's altar.",
+    "<dark_gray>Its stack remembers once it burns"
+  ],
+  "itemModel": "ui/lantern",
+  "tooltipStyle": "ui/glow",
+  "maxStackSize": 1,
+  "rarity": "rare",
+  "script": {
+    "file": "script.lua"
+  }
+}

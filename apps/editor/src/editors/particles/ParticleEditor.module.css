@@ -1,0 +1,12 @@
+.colorField {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.colorField input[type='color'] {
+  width: 28px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: none;
+}

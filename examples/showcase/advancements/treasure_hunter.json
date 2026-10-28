@@ -1,0 +1,18 @@
+{
+  "$schema": "../.netherforge/schema/advancement.schema.json",
+  "parent": "adventurer",
+  "display": {
+    "icon": {
+      "item": "ruby"
+    },
+    "title": "Treasure Hunter",
+    "description": "Roll for <glyph:ui/coin> treasure three times with /treasure",
+    "frame": "goal"
+  },
+  "criteria": {
+    "first": {},
+    "second": {},
+    "third": {}
+  },
+  "experience": 10
+}

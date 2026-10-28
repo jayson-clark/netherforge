@@ -1,0 +1,9 @@
+{
+  "$schema": "../../.netherforge/schema/menu.schema.json",
+  "name": "Backpack",
+  "rows": 1,
+  "title": "<dark_gray>Backpack: kept with you",
+  "script": {
+    "file": "script.lua"
+  }
+}

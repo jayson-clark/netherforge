@@ -1,0 +1,30 @@
+{
+  "$schema": "../../.netherforge/schema/dialog.schema.json",
+  "name": "Guestbook",
+  "type": "notice",
+  "title": "<gold>Sign the guestbook",
+  "body": [
+    {
+      "type": "message",
+      "text": "<gray>What you write is kept in the project's database, and the line is shown in the booth.",
+      "width": 260
+    }
+  ],
+  "inputs": [
+    {
+      "type": "text",
+      "key": "line",
+      "label": "Your line",
+      "maxLength": 48
+    }
+  ],
+  "buttons": [
+    {
+      "key": "sign",
+      "label": "Sign"
+    }
+  ],
+  "script": {
+    "file": "script.lua"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "../.netherforge/schema/terrain.schema.json",
+  "climate": { "noises": { "evil": {} } },
+  "decorations": { "caches": { "customBlock": "lamp", "loot": "nope" } },
+  "biomes": {
+    "forest": { "biome": "minecraft:forest", "climate": { "evil": { "max": 0.4 }, "wild": { "min": 0 } } },
+    "caves": { "biome": "minecraft:lush_caves", "depth": { "min": 40, "max": 10 }, "layers": [{ "block": "minecraft:moss_block" }] }
+  }
+}

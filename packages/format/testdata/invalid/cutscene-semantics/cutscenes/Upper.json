@@ -1,0 +1,6 @@
+{
+  "camera": {
+    "position": [{ "time": 0, "value": [0, 0, 0] }, { "time": 1, "value": [0, 0, 1] }],
+    "rotation": [{ "time": 0, "yaw": 0, "pitch": 0 }]
+  }
+}

@@ -1,0 +1,98 @@
+[
+  {
+    "severity": "error",
+    "file": "items/Upper",
+    "message": "\"Upper\" isn't a usable id (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+    "code": "project.id"
+  },
+  {
+    "severity": "error",
+    "file": "items/broken/item.json",
+    "message": "\"not an id!\" isn't an item id",
+    "path": "$.kind",
+    "code": "item.kind"
+  },
+  {
+    "severity": "error",
+    "file": "items/broken/item.json",
+    "message": "maxStackSize must be between 1 and 99",
+    "path": "$.maxStackSize",
+    "code": "item.max-stack-size"
+  },
+  {
+    "severity": "error",
+    "file": "items/drawn/item.json",
+    "message": "Only a bow can draw without ammo",
+    "path": "$.drawWithoutAmmo",
+    "code": "item.draw-without-ammo"
+  },
+  {
+    "severity": "error",
+    "file": "items/gem/item.json",
+    "message": "Script file \"missing.lua\" doesn't exist",
+    "path": "$.script.file",
+    "code": "script.missing"
+  },
+  {
+    "severity": "error",
+    "file": "items/gem/item.json",
+    "message": "<glyph:ui/nope>: There's no resource pack \"ui\"",
+    "path": "$.name",
+    "code": "reference.resource-pack"
+  },
+  {
+    "severity": "error",
+    "file": "items/gem/item.json",
+    "message": "There's no resource pack \"nopack\"",
+    "path": "$.itemModel",
+    "code": "reference.resource-pack"
+  },
+  {
+    "severity": "error",
+    "file": "items/gem/item.json",
+    "message": "There's no resource pack \"nopack\"",
+    "path": "$.equipment.asset",
+    "code": "reference.resource-pack"
+  },
+  {
+    "severity": "error",
+    "file": "items/hat/item.json",
+    "message": "\"hands\" isn't one of \"head\", \"chest\", \"legs\", \"feet\", \"body\", \"saddle\"",
+    "path": "$.equipment.slot",
+    "code": "parse"
+  },
+  {
+    "severity": "error",
+    "file": "menus/stall/menu.json",
+    "message": "An item needs a kind, like \"minecraft:bread\", or an item: one of the project's own",
+    "path": "$.slots[\"4\"].item.kind",
+    "code": "item.kind"
+  },
+  {
+    "severity": "error",
+    "file": "menus/stall/menu.json",
+    "message": "Item \"gem\" is a minecraft:emerald, not a minecraft:diamond: leave kind out",
+    "path": "$.slots[\"2\"].item.kind",
+    "code": "item.kind-mismatch",
+    "related": [
+      {
+        "file": "items/gem/item.json",
+        "path": "$.kind"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "menus/stall/menu.json",
+    "message": "There's no item \"ghost\" (items/ghost/item.json)",
+    "path": "$.slots[\"1\"].item.item",
+    "code": "reference.item"
+  },
+  {
+    "severity": "error",
+    "file": "menus/stall/menu.json",
+    "message": "\"Bad Id\" isn't a reference to an item: write <id>, or <namespace>:<id> for another package's",
+    "path": "$.slots[\"3\"].item.item",
+    "code": "reference.syntax"
+  }
+]

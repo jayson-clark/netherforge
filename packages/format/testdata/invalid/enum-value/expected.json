@@ -1,0 +1,9 @@
+[
+  {
+    "severity": "error",
+    "file": "centities/sign/centity.json",
+    "message": "\"sideways\" isn't one of \"fixed\", \"vertical\", \"horizontal\", \"center\"",
+    "path": "$.nodes.label.display.billboard",
+    "code": "parse"
+  }
+]

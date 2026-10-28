@@ -1,0 +1,42 @@
+diff --git a/dist/events-21d8cd92.cjs.dev.js b/dist/events-21d8cd92.cjs.dev.js
+index 9b43bdf7d5f4e4fa58d53e0a53954d3595569459..a3f8d3874681801ac6176030b155bea79dd82acc 100644
+--- a/dist/events-21d8cd92.cjs.dev.js
++++ b/dist/events-21d8cd92.cjs.dev.js
+@@ -1076,7 +1076,8 @@ const createStore = (invalidate, advance) => {
+       linear: false,
+       flat: false,
+       controls: null,
+-      clock: new THREE__namespace.Clock(),
++      // THREE.Clock warns that it's deprecated each time one is made (r183): the same clock, made without its constructor.
++      clock: Object.assign(Object.create(THREE__namespace.Clock.prototype), { autoStart: true, startTime: 0, oldTime: 0, elapsedTime: 0, running: false }),
+       pointer,
+       mouse: pointer,
+       frameloop: 'always',
+diff --git a/dist/events-9ce18a08.esm.js b/dist/events-9ce18a08.esm.js
+index ea6b4c903fe1a45092eca8440397ebcef2de7341..f03e3cbb5293db97752664be4095a5aa29db31e9 100644
+--- a/dist/events-9ce18a08.esm.js
++++ b/dist/events-9ce18a08.esm.js
+@@ -1051,7 +1051,8 @@ const createStore = (invalidate, advance) => {
+       linear: false,
+       flat: false,
+       controls: null,
+-      clock: new THREE.Clock(),
++      // THREE.Clock warns that it's deprecated each time one is made (r183): the same clock, made without its constructor.
++      clock: Object.assign(Object.create(THREE.Clock.prototype), { autoStart: true, startTime: 0, oldTime: 0, elapsedTime: 0, running: false }),
+       pointer,
+       mouse: pointer,
+       frameloop: 'always',
+diff --git a/dist/events-a816cbab.cjs.prod.js b/dist/events-a816cbab.cjs.prod.js
+index c26a227f3264c978f78d2ab7a7231ce943fe911f..1d98292358f519b75287182853b5ab5f15aaf994 100644
+--- a/dist/events-a816cbab.cjs.prod.js
++++ b/dist/events-a816cbab.cjs.prod.js
+@@ -1076,7 +1076,8 @@ const createStore = (invalidate, advance) => {
+       linear: false,
+       flat: false,
+       controls: null,
+-      clock: new THREE__namespace.Clock(),
++      // THREE.Clock warns that it's deprecated each time one is made (r183): the same clock, made without its constructor.
++      clock: Object.assign(Object.create(THREE__namespace.Clock.prototype), { autoStart: true, startTime: 0, oldTime: 0, elapsedTime: 0, running: false }),
+       pointer,
+       mouse: pointer,
+       frameloop: 'always',

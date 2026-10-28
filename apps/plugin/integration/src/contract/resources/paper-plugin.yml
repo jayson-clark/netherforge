@@ -1,0 +1,20 @@
+name: NetherForgeContract
+version: '${version}'
+main: dev.netherforge.plugin.paper.contract.ContractPlugin
+# Registers the biomes the terrain suites use, before the worlds load.
+bootstrapper: dev.netherforge.plugin.paper.contract.ContractBootstrap
+api-version: '${minecraft}'
+folia-supported: false
+description: Runs NetherForge's Platform contract suites against this server. Test only; never shipped.
+dependencies:
+  # The bootstrapper builds its datapack with the NetherForge plugin's classes, as the plugin itself does.
+  bootstrap:
+    NetherForge:
+      load: BEFORE
+      required: true
+      join-classpath: true
+  server:
+    NetherForge:
+      load: BEFORE
+      required: true
+      join-classpath: true

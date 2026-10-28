@@ -1,0 +1,133 @@
+[
+  {
+    "severity": "error",
+    "file": "biomes/grove.json",
+    "message": "There's no placed feature \"boulders\" (data/case/worldgen/placed_feature/boulders.json in one of datapacks/); the game's are written \"minecraft:boulders\"",
+    "path": "$.features.vegetal_decoration[2]",
+    "code": "reference.placed-feature"
+  },
+  {
+    "severity": "error",
+    "file": "datapacks/broken/pack.mcmeta",
+    "message": "min_format and max_format are each a data pack format (a number, or [major, minor]), the first no later than the second",
+    "path": "$.pack",
+    "code": "datapack.format"
+  },
+  {
+    "severity": "error",
+    "file": "datapacks/broken/pack.mcmeta",
+    "message": "min_format and max_format are each a data pack format (a number, or [major, minor]), the first no later than the second",
+    "path": "$.overlays.entries[0]",
+    "code": "datapack.format"
+  },
+  {
+    "severity": "error",
+    "file": "datapacks/broken/pack.mcmeta",
+    "message": "\"old\" is listed twice",
+    "path": "$.overlays.entries[1].directory",
+    "code": "datapack.overlay"
+  },
+  {
+    "severity": "error",
+    "file": "datapacks/broken/pack.mcmeta",
+    "message": "\"data\" isn't an overlay's folder: lowercase letters, digits, _, - and ., and not \"data\"",
+    "path": "$.overlays.entries[2].directory",
+    "code": "datapack.overlay"
+  },
+  {
+    "severity": "error",
+    "file": "datapacks/main/data/case/loot_table/chest.json",
+    "message": "Only worldgen passes through, and tags of blocks: entries go in data/case/worldgen/<registry>/, tags of them in data/case/tags/worldgen/<registry>/, and block tags in data/case/tags/block/",
+    "code": "datapack.file"
+  },
+  {
+    "severity": "error",
+    "file": "datapacks/main/data/case/tags/worldgen/biome/odd.json",
+    "message": "A tag is { \"values\": [...] } (and \"replace\": true or false), each an id, a #tag or { \"id\": … }",
+    "code": "datapack.tag"
+  },
+  {
+    "severity": "error",
+    "file": "datapacks/main/data/case/worldgen/biome/grove.json",
+    "message": "The biome \"grove\" is \"case:grove\" in worldgen/biome too: rename one of them",
+    "code": "datapack.conflict",
+    "related": [
+      {
+        "file": "biomes/grove.json"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "datapacks/main/data/case/worldgen/noise/Wobble.json",
+    "message": "\"Wobble\" isn't an id the game takes: lowercase letters, digits, _, - and ., in folders",
+    "code": "datapack.file"
+  },
+  {
+    "severity": "error",
+    "file": "datapacks/main/data/case/worldgen/placed_feature/broken.json",
+    "message": "Trailing comma before the end of JSON object",
+    "path": "$",
+    "line": 1,
+    "column": 26,
+    "code": "parse"
+  },
+  {
+    "severity": "error",
+    "file": "datapacks/main/data/case/worldgen/placed_feature/missing.json",
+    "message": "The project has no configured feature \"case:nothing\": a datapack's data/case/worldgen/configured_feature/nothing.json would be it",
+    "path": "$.feature",
+    "code": "datapack.reference"
+  },
+  {
+    "severity": "error",
+    "file": "datapacks/main/data/case/worldgen/structure_set/elsewhere.json",
+    "message": "\"Not An Id\" isn't an id, like \"minecraft:…\"",
+    "path": "$.structures[1].structure",
+    "code": "datapack.reference"
+  },
+  {
+    "severity": "error",
+    "file": "datapacks/main/data/case/worldgen/structure_set/elsewhere.json",
+    "message": "\"stranger\" is neither this project's namespace (\"case\"), the game's, nor a package's it depends on",
+    "path": "$.structures[0].structure",
+    "code": "datapack.reference"
+  },
+  {
+    "severity": "error",
+    "file": "datapacks/main/data/minecraft/tags/worldgen/biome/is_forest.json",
+    "message": "The project has no biome tag \"#case:nowhere\": a datapack's data/case/tags/worldgen/biome/nowhere.json would be it",
+    "path": "$.values[1]",
+    "code": "datapack.reference"
+  },
+  {
+    "severity": "error",
+    "file": "datapacks/main/data/stranger/worldgen/noise/wobble.json",
+    "message": "A datapack here writes only the project's namespace, \"case\", or \"minecraft\", not \"stranger\"",
+    "code": "datapack.namespace"
+  },
+  {
+    "severity": "error",
+    "file": "datapacks/main/notes.json",
+    "message": "Only data/ and the overlays pack.mcmeta lists (older) hold a datapack's files",
+    "code": "datapack.file"
+  },
+  {
+    "severity": "error",
+    "file": "datapacks/twin/data/case/worldgen/placed_feature/rocks.json",
+    "message": "Datapack \"main\" writes data/case/worldgen/placed_feature/rocks.json too: keep it in one of them",
+    "code": "datapack.conflict",
+    "related": [
+      {
+        "file": "datapacks/main/data/case/worldgen/placed_feature/rocks.json"
+      }
+    ]
+  },
+  {
+    "severity": "error",
+    "file": "terrain/areas.json",
+    "message": "There's no biome \"nowhere\" (biomes/nowhere.json, or data/case/worldgen/biome/nowhere.json in one of datapacks/); the game's are written \"minecraft:nowhere\"",
+    "path": "$.biomes.none.biome",
+    "code": "reference.biome"
+  }
+]

@@ -1,0 +1,19 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "nodes": {
+    "root": {
+      "display": { "type": "block", "block": "minecraft:stone" }
+    }
+  },
+  "spawning": {
+    "worlds": ["fine", "not a world"],
+    "biomes": ["Not A Biome", "#Not A Tag"],
+    "blocks": ["#"],
+    "light": { "min": 9, "max": 20 },
+    "height": { "min": 70, "max": 60 },
+    "weight": 0,
+    "group": { "min": 0 },
+    "cap": -1,
+    "despawnDistance": 10
+  }
+}

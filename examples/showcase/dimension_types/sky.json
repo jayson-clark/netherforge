@@ -1,0 +1,12 @@
+{
+  "$schema": "../.netherforge/schema/dimension_type.schema.json",
+  "minY": -64,
+  "height": 448,
+  "ambientLight": 0.05,
+  "colors": {
+    "sky": "#5b4a9e",
+    "fog": "#8f78c9",
+    "clouds": "#cce8dcff"
+  },
+  "cloudHeight": 260
+}

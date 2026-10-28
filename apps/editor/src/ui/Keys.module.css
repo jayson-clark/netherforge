@@ -1,0 +1,31 @@
+.keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--font);
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  white-space: nowrap;
+}
+/* Ctrl+Shift+S: the plus between keys, quieter than the keys. */
+.plus .key + .key::before {
+  content: '+';
+  margin-right: 2px;
+  opacity: 0.6;
+}
+.key {
+  font: inherit;
+  min-width: 1em;
+  text-align: center;
+}
+.caps {
+  gap: 3px;
+}
+.caps .key {
+  min-width: 18px;
+  padding: 2px 4px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+}

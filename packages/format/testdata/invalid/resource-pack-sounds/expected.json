@@ -1,0 +1,63 @@
+[
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "\"Bad Key\" isn't a usable sound key (path segments of lowercase letters, digits and _, joined by /)",
+    "path": "$.sounds[\"Bad Key\"]",
+    "code": "resource_pack.sound-key"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "sounds/missing.ogg doesn't exist, and this sound lists no files to play instead",
+    "path": "$.sounds.missing",
+    "code": "resource_pack.sound-missing"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "\"../x.ogg\" must be a .ogg path inside this resource pack's sounds/ folder (path segments of lowercase letters, digits and _, joined by /)",
+    "path": "$.sounds.multi.files[1]",
+    "code": "resource_pack.sound-path"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "sounds/gone.ogg doesn't exist",
+    "path": "$.sounds.multi.files[2]",
+    "code": "resource_pack.sound-missing"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "volume must be positive",
+    "path": "$.sounds.multi.volume",
+    "code": "resource_pack.sound-volume"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "pitch must be positive",
+    "path": "$.sounds.multi.pitch",
+    "code": "resource_pack.sound-pitch"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "files lists no sound files",
+    "path": "$.sounds.none.files",
+    "code": "resource_pack.sound-files"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/sounds/Click.ogg",
+    "message": "\"Click.ogg\" can't be a sound: its path must be path segments of lowercase letters, digits and _, joined by /, ending in .ogg",
+    "code": "resource_pack.sound-name"
+  },
+  {
+    "severity": "warning",
+    "file": "resource_packs/ui/sounds/notes.txt",
+    "message": "Minecraft only plays Ogg Vorbis files, so this isn't a sound: convert it to .ogg",
+    "code": "resource_pack.sound-file"
+  }
+]

@@ -1,0 +1,5 @@
+.picture {
+  object-fit: contain;
+  image-rendering: pixelated;
+  border-radius: var(--radius);
+}

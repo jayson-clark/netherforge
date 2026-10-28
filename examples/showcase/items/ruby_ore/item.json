@@ -1,0 +1,8 @@
+{
+  "$schema": "../../.netherforge/schema/item.schema.json",
+  "kind": "minecraft:paper",
+  "name": "<red>Ruby ore",
+  "lore": ["<gray>Place it, then mine it with a pickaxe"],
+  "itemModel": "ui/ruby_ore",
+  "block": "ruby_ore"
+}

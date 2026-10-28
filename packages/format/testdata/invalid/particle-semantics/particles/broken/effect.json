@@ -1,0 +1,52 @@
+{
+  "duration": 20,
+  "emitters": {
+    "bad name": { "particle": "minecraft:flame", "burst": 1 },
+    "both": { "particle": "minecraft:flame", "burst": 2, "rate": 1 },
+    "late": { "particle": "minecraft:flame", "burst": 1, "start": 20, "end": 30 },
+    "pulse": { "particle": "Flame!", "rate": 300, "every": 2 },
+    "ring": {
+      "particle": "minecraft:dust",
+      "burst": 8,
+      "shape": { "type": "ring", "radius": 2 },
+      "distribution": "even",
+      "color": "#FFAA00",
+      "size": 5,
+      "curves": {
+        "radius": [{ "time": 0, "value": 1 }],
+        "size": [{ "time": 0, "value": 1 }],
+        "rate": [{ "time": 0, "value": 1 }]
+      }
+    },
+    "cloud": {
+      "particle": "minecraft:cloud",
+      "burst": 4,
+      "shape": { "type": "disc" },
+      "distribution": "even",
+      "spin": 4,
+      "motion": "outward",
+      "direction": [0, 1, 0],
+      "count": 3,
+      "spread": [0.1, 0.1, 0.1],
+      "speed": -1
+    },
+    "stream": {
+      "particle": "minecraft:bubble",
+      "burst": 1,
+      "every": 0,
+      "shape": { "type": "box", "size": [1, 0, 1] },
+      "motion": "direction",
+      "blockState": "stone[",
+      "curves": {
+        "speed": [
+          { "time": 5, "value": 1 },
+          { "time": 5, "value": 2 },
+          { "time": 21, "value": -1 }
+        ]
+      }
+    },
+    "line": { "particle": "minecraft:crit", "burst": 1, "shape": { "type": "line", "to": [0, 0, 0] }, "spin": 1 },
+    "none": { "particle": "minecraft:crit", "burst": 0 },
+    "ball": { "particle": "minecraft:crit", "burst": 1, "shape": { "type": "sphere", "radius": 1 }, "spin": 3 }
+  }
+}

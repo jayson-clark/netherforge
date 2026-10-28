@@ -1,0 +1,30 @@
+[
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "NetherForge supports Minecraft 1.21.11 and later",
+    "path": "$.minecraft",
+    "code": "project.minecraft-old"
+  },
+  {
+    "severity": "warning",
+    "file": "netherforge.json",
+    "message": "The project has no name",
+    "path": "$.name",
+    "code": "project.name"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"minecraft\" is taken (by the game, the server or NetherForge): pick one that's the project's own",
+    "path": "$.namespace",
+    "code": "project.namespace-reserved"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"1.0\" isn't a semantic version, like 1.0.0",
+    "path": "$.version",
+    "code": "project.version"
+  }
+]

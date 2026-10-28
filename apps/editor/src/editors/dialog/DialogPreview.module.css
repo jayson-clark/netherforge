@@ -1,0 +1,88 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 100%;
+  min-height: 100%;
+}
+.title,
+.column,
+.row {
+  display: flex;
+  align-items: center;
+}
+.column {
+  flex-direction: column;
+  flex: 1;
+}
+.row {
+  justify-content: center;
+}
+.element {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 0;
+}
+.element:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.picked,
+.picked:hover {
+  border-color: var(--accent);
+}
+.item,
+.input {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.item,
+.inputRow {
+  flex-direction: row;
+}
+
+/* The game's widgets. */
+.button,
+.textbox,
+.slider,
+.checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: #6f6f6f;
+  border: 2px solid #000;
+  box-shadow:
+    inset 2px 2px 0 #aaa,
+    inset -2px -2px 0 #3b3b3b;
+  width: 100%;
+  height: 100%;
+}
+.listed {
+  opacity: 0.85;
+}
+.textbox {
+  background: #000;
+  box-shadow: inset 0 0 0 1px #a0a0a0;
+  justify-content: flex-start;
+  align-items: flex-start;
+  padding: 4px;
+}
+.slider {
+  background: #222;
+}
+.sliderHandle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: #8b8b8b;
+  border: 1px solid #000;
+}
+.checkbox {
+  color: #fff;
+  font-weight: 700;
+}

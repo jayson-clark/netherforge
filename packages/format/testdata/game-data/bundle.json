@@ -1,0 +1,29 @@
+{
+  "minecraft": "26.3",
+  "registries": {
+    "minecraft:block": ["minecraft:oak_log", "minecraft:stone"],
+    "minecraft:item": ["minecraft:birch_log", "minecraft:oak_log", "minecraft:stone"],
+    "minecraft:particle_type": ["minecraft:dust", "minecraft:flame"],
+    "minecraft:worldgen/biome": ["minecraft:plains", "minecraft:the_void"]
+  },
+  "tags": {
+    "minecraft:item": {
+      "minecraft:logs": ["minecraft:birch_log", "minecraft:oak_log"]
+    },
+    "minecraft:worldgen/biome": {
+      "minecraft:is_overworld": ["minecraft:plains"]
+    }
+  },
+  "blocks": {
+    "minecraft:oak_log": { "properties": { "axis": ["x", "y", "z"] }, "defaults": { "axis": "y" } },
+    "minecraft:stone": {}
+  },
+  "collision": {
+    "minecraft:stone": [{ "min": [0, 0, 0], "max": [1, 1, 1] }]
+  },
+  "packFormat": [97, 1],
+  "dataPackFormat": [121, 0],
+  "particles": { "minecraft:dust": "dust", "minecraft:flame": "none" },
+  "mapColors": [0, 0, 0, 0, -16777216, -1, -65536, -16711936, -16776961, -8355712, -256, -16711681],
+  "schema": 3
+}

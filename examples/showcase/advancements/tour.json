@@ -1,0 +1,47 @@
+{
+  "$schema": "../.netherforge/schema/advancement.schema.json",
+  "parent": "adventurer",
+  "display": {
+    "icon": {
+      "item": "guide"
+    },
+    "title": "<gold>The Grand Tour",
+    "description": "Step into every booth of the expo",
+    "frame": "challenge"
+  },
+  "criteria": {
+    "advancements": {},
+    "blocks": {},
+    "bots": {},
+    "buffs": {},
+    "centities": {},
+    "cinema": {},
+    "cutscenes": {},
+    "data": {},
+    "dialogs": {},
+    "environment": {},
+    "integrations": {},
+    "interface": {},
+    "items": {},
+    "loot": {},
+    "mannequins": {},
+    "menus": {},
+    "mobs": {},
+    "motion": {},
+    "packages": {},
+    "packs": {},
+    "particles": {},
+    "physics": {},
+    "recipes": {},
+    "screens": {},
+    "settings": {},
+    "spawning": {},
+    "teams": {},
+    "terrain_scripts": {},
+    "wasm": {},
+    "web": {},
+    "worldgen": {},
+    "worlds": {}
+  },
+  "experience": 50
+}

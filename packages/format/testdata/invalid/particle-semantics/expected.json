@@ -1,0 +1,226 @@
+[
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "\"bad name\" isn't a usable emitter name (letters, digits, _ and -, at most 64 characters)",
+    "path": "$.emitters[\"bad name\"]",
+    "code": "particle.emitter-name"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "An emitter has exactly one of burst and rate",
+    "path": "$.emitters.both",
+    "code": "particle.emission"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "start must be from 0 to before the effect's duration (20)",
+    "path": "$.emitters.late.start",
+    "code": "particle.window"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "end must be after start and at most the effect's duration (20)",
+    "path": "$.emitters.late.end",
+    "code": "particle.window"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "\"Flame!\" isn't a particle id",
+    "path": "$.emitters.pulse.particle",
+    "code": "particle.id"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "rate must be more than 0 and at most 256 points per tick",
+    "path": "$.emitters.pulse.rate",
+    "code": "particle.rate"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "every repeats a burst, so it needs burst",
+    "path": "$.emitters.pulse.every",
+    "code": "particle.every"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "Colours are #rrggbb, lowercase",
+    "path": "$.emitters.ring.color",
+    "code": "particle.color"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "size must be 0.01 to 4",
+    "path": "$.emitters.ring.size",
+    "code": "particle.size"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "radius is set and curves.radius drives it too; keep one",
+    "path": "$.emitters.ring.shape.radius",
+    "code": "particle.curve-conflict"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "There's no rate curve on an emitter without rate",
+    "path": "$.emitters.ring.curves.rate",
+    "code": "particle.curve-channel"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "size is set and has a curve too; keep one",
+    "path": "$.emitters.ring.curves.size",
+    "code": "particle.curve-conflict"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "A disc needs a radius, or a radius curve",
+    "path": "$.emitters.cloud.shape",
+    "code": "particle.shape"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "even spacing is only for a line, a ring, or a sphere with surface",
+    "path": "$.emitters.cloud.distribution",
+    "code": "particle.distribution"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "direction is only for motion: \"direction\"",
+    "path": "$.emitters.cloud.direction",
+    "code": "particle.direction"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "count is only for motion: \"random\"; the game ignores it otherwise",
+    "path": "$.emitters.cloud.count",
+    "code": "particle.count"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "spread is only for motion: \"random\"; the game ignores it otherwise",
+    "path": "$.emitters.cloud.spread",
+    "code": "particle.spread"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "speed can't be negative",
+    "path": "$.emitters.cloud.speed",
+    "code": "particle.speed"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "\"stone[\" isn't a block state",
+    "path": "$.emitters.stream.blockState",
+    "code": "particle.block-state"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "every must be at least 1 tick",
+    "path": "$.emitters.stream.every",
+    "code": "particle.every"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "A box's size must be more than 0 on every axis",
+    "path": "$.emitters.stream.shape.size",
+    "code": "particle.shape"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "motion: \"direction\" needs a direction",
+    "path": "$.emitters.stream",
+    "code": "particle.direction"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "Two keys are at tick 5",
+    "path": "$.emitters.stream.curves.speed[1].time",
+    "code": "particle.curve-duplicate"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "A key's time must be 0 to the effect's duration (20)",
+    "path": "$.emitters.stream.curves.speed[2].time",
+    "code": "particle.curve-time"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "speed can't be negative",
+    "path": "$.emitters.stream.curves.speed[2].value",
+    "code": "particle.speed"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "A line's to can't be [0, 0, 0]",
+    "path": "$.emitters.line.shape.to",
+    "code": "particle.shape"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "burst must be 1 to 256 points",
+    "path": "$.emitters.none.burst",
+    "code": "particle.burst"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "Only a ring, a disc or a line can spin",
+    "path": "$.emitters.ball.spin",
+    "code": "particle.spin"
+  },
+  {
+    "severity": "error",
+    "file": "particles/broken/effect.json",
+    "message": "This effect can spawn 319 points in one tick; the limit is 256",
+    "path": "$.emitters",
+    "code": "particle.budget"
+  },
+  {
+    "severity": "warning",
+    "file": "particles/empty/effect.json",
+    "message": "This effect has no emitters, so it shows nothing",
+    "path": "$.emitters",
+    "code": "particle.emitters-empty"
+  },
+  {
+    "severity": "error",
+    "file": "particles/greedy/effect.json",
+    "message": "duration must be 1 to 72000 ticks",
+    "path": "$.duration",
+    "code": "particle.duration"
+  },
+  {
+    "severity": "error",
+    "file": "particles/greedy/effect.json",
+    "message": "This effect can spawn 261 points in one tick; the limit is 256",
+    "path": "$.emitters",
+    "code": "particle.budget"
+  }
+]

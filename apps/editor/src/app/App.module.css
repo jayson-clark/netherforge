@@ -1,0 +1,5 @@
+.fatal {
+  color: var(--error);
+  padding: 20px;
+  white-space: pre-wrap;
+}

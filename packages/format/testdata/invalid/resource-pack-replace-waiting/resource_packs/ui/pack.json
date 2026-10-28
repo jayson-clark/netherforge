@@ -1,0 +1,5 @@
+{
+  "description": "Replaces the hotbar and the inventory screen without client/vanilla.json",
+  "hud": { "replace": { "hud/hotbar": "gui/box.png" } },
+  "textures": { "gui/container/inventory": "gui/box.png" }
+}

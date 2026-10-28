@@ -1,0 +1,9 @@
+[
+  {
+    "severity": "warning",
+    "file": "resource_packs/ui/pack.json",
+    "message": "Replacing the game's sprites, textures and models takes their names and sizes, which the editor writes into client/vanilla.json from your Minecraft: open the project in the editor with Minecraft 26.3 imported (import it again if it was imported before the editor listed them). Until then nothing is replaced",
+    "path": "$.hud.replace",
+    "code": "resource_pack.vanilla-missing"
+  }
+]

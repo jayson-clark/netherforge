@@ -1,0 +1,28 @@
+{
+  "$schema": "../../.netherforge/schema/particle_effect.schema.json",
+  "duration": 20,
+  "emitters": {
+    "main": {
+      "particle": "minecraft:dust",
+      "burst": 10,
+      "every": 4,
+      "shape": {
+        "type": "sphere",
+        "radius": 0.5
+      },
+      "size": 0.8,
+      "curves": {
+        "color": [
+          {
+            "time": 0,
+            "color": "#7fe8ff"
+          },
+          {
+            "time": 20,
+            "color": "#d47bff"
+          }
+        ]
+      }
+    }
+  }
+}

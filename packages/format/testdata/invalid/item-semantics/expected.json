@@ -1,0 +1,107 @@
+[
+  {
+    "severity": "error",
+    "file": "menus/bag/menu.json",
+    "message": "maxStackSize must be between 1 and 99",
+    "path": "$.slots[\"0\"].item.maxStackSize",
+    "code": "item.max-stack-size"
+  },
+  {
+    "severity": "error",
+    "file": "menus/bag/menu.json",
+    "message": "An item with durability can't stack: maxStackSize must be 1",
+    "path": "$.slots[\"1\"].item.maxStackSize",
+    "code": "item.max-stack-size-durable"
+  },
+  {
+    "severity": "error",
+    "file": "menus/bag/menu.json",
+    "message": "count can't be more than maxStackSize",
+    "path": "$.slots[\"2\"].item.count",
+    "code": "item.count"
+  },
+  {
+    "severity": "error",
+    "file": "menus/bag/menu.json",
+    "message": "\"Attack Damage\" isn't an attribute id",
+    "path": "$.slots[\"3\"].item.attributeModifiers[0].attribute",
+    "code": "item.attribute"
+  },
+  {
+    "severity": "error",
+    "file": "menus/bag/menu.json",
+    "message": "Two modifiers have the id \"a:b\"",
+    "path": "$.slots[\"3\"].item.attributeModifiers[2].id",
+    "code": "item.attribute-id"
+  },
+  {
+    "severity": "error",
+    "file": "menus/bag/menu.json",
+    "message": "\"painting_variant\" isn't a tooltip line hiddenTooltipComponents can hide: did you mean \"painting/variant\"?",
+    "path": "$.slots[\"4\"].item.hiddenTooltipComponents[0]",
+    "code": "item.tooltip-component"
+  },
+  {
+    "severity": "error",
+    "file": "menus/bag/menu.json",
+    "message": "nutrition can't be negative",
+    "path": "$.slots[\"5\"].item.food.nutrition",
+    "code": "item.food"
+  },
+  {
+    "severity": "error",
+    "file": "menus/bag/menu.json",
+    "message": "eatSeconds must be more than 0",
+    "path": "$.slots[\"5\"].item.food.eatSeconds",
+    "code": "item.food"
+  },
+  {
+    "severity": "error",
+    "file": "menus/bag/menu.json",
+    "message": "A cooldown's seconds must be more than 0",
+    "path": "$.slots[\"6\"].item.cooldown.seconds",
+    "code": "item.cooldown"
+  },
+  {
+    "severity": "error",
+    "file": "menus/bag/menu.json",
+    "message": "\"Not An Id\" isn't a namespaced id",
+    "path": "$.slots[\"6\"].item.cooldown.group",
+    "code": "item.cooldown-group"
+  },
+  {
+    "severity": "error",
+    "file": "menus/bag/menu.json",
+    "message": "\"Not An Enchantment\" isn't an enchantment id",
+    "path": "$.slots[\"8\"].item.enchantments[\"Not An Enchantment\"]",
+    "code": "item.enchantment"
+  },
+  {
+    "severity": "error",
+    "file": "menus/bag/menu.json",
+    "message": "An item that's held can't be eaten too: hold and food both make it a consumable",
+    "path": "$.slots[\"8\"].item.hold",
+    "code": "item.hold-food"
+  },
+  {
+    "severity": "error",
+    "file": "menus/bag/menu.json",
+    "message": "speedMultiplier must be from 0 to 1",
+    "path": "$.slots[\"8\"].item.useEffects.speedMultiplier",
+    "code": "item.use-effects"
+  },
+  {
+    "severity": "error",
+    "file": "menus/bag/menu.json",
+    "message": "\"not a block\" isn't a reference to a block: write <id>, or <namespace>:<id> for another package's, or minecraft:<id> for the game's, or a #tag, or * for any",
+    "path": "$.slots[\"4\"].item.canBreak[0]",
+    "code": "reference.syntax"
+  },
+  {
+    "severity": "warning",
+    "file": "menus/drop/menu.json",
+    "message": "A dispenser centres its title, so its skin is placed from the title's width, but there's no fonts/default.json: open the project in the editor with Minecraft 26.3 imported to write it",
+    "path": "$.skin",
+    "code": "font.needed"
+  }
+]

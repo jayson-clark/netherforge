@@ -1,0 +1,20 @@
+[
+  {
+    "severity": "warning",
+    "file": "centities/c/lib/two.parts.lua",
+    "message": "Lua files beside a script must be named with letters, digits and _ so require() can reach them",
+    "code": "script.file-name"
+  },
+  {
+    "severity": "warning",
+    "file": "centities/c/my-helper.lua",
+    "message": "Lua files beside a script must be named with letters, digits and _ so require() can reach them",
+    "code": "script.file-name"
+  },
+  {
+    "severity": "warning",
+    "file": "items/gem/odd-one.lua",
+    "message": "Lua files beside a script must be named with letters, digits and _ so require() can reach them",
+    "code": "script.file-name"
+  }
+]

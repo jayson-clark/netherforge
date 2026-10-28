@@ -1,0 +1,17 @@
+{
+  "$schema": "../.netherforge/schema/recipe.schema.json",
+  "type": "shaped",
+  "pattern": [" R ", " R ", " S "],
+  "key": {
+    "R": {
+      "item": "ruby"
+    },
+    "S": "minecraft:stick"
+  },
+  "result": {
+    "kind": "minecraft:iron_sword",
+    "name": "<red>Ruby sword",
+    "lore": ["<gray>Cuts like it's warm"]
+  },
+  "category": "equipment"
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "../.netherforge/schema/recipe.schema.json",
+  "type": "shapeless",
+  "ingredients": ["minecraft:redstone_block", "minecraft:emerald"],
+  "result": {
+    "item": "ruby"
+  },
+  "category": "misc"
+}

@@ -1,0 +1,44 @@
+[
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "\"../gui/inventory\" isn't the name of a game texture: a path like hud/hotbar, without .png",
+    "path": "$.textures[\"../gui/inventory\"]",
+    "code": "resource_pack.replace-name"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "\"../block/stone\" isn't the name of a game model: a path like block/red_mushroom, without .json",
+    "path": "$.models[\"../block/stone\"]",
+    "code": "resource_pack.replace-name"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "models/missing.json doesn't exist",
+    "path": "$.models[\"block/stone\"]",
+    "code": "resource_pack.model-file"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "The game has no \"hud/nothing\" (client/vanilla.json lists what Minecraft 26.3 has)",
+    "path": "$.hud.replace[\"hud/nothing\"]",
+    "code": "resource_pack.replace-name"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "The game has no \"gui/container/nothing\" (client/vanilla.json lists what Minecraft 26.3 has)",
+    "path": "$.textures[\"gui/container/nothing\"]",
+    "code": "resource_pack.replace-name"
+  },
+  {
+    "severity": "error",
+    "file": "resource_packs/ui/pack.json",
+    "message": "The game has no \"block/nothing\" (client/vanilla.json lists what Minecraft 26.3 has)",
+    "path": "$.models[\"block/nothing\"]",
+    "code": "resource_pack.replace-name"
+  }
+]

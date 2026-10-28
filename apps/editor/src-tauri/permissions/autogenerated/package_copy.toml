@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-package-copy"
+description = "Enables the package_copy command without any pre-configured scope."
+commands.allow = ["package_copy"]
+
+[[permission]]
+identifier = "deny-package-copy"
+description = "Denies the package_copy command without any pre-configured scope."
+commands.deny = ["package_copy"]

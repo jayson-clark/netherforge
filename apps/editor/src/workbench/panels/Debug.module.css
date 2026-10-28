@@ -1,0 +1,77 @@
+.debug {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.toolbar {
+  display: flex;
+  gap: 2px;
+}
+.columns {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) 3fr;
+}
+.column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  border-right: 1px solid var(--border);
+}
+.column:last-child {
+  border-right: none;
+}
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 2px 0;
+}
+.row {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+  align-items: baseline;
+  background: none;
+  border: none;
+  padding: 2px 8px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.row:hover {
+  background: var(--bg-hover);
+}
+.selected {
+  background: var(--bg-selected);
+}
+.name {
+  white-space: nowrap;
+}
+.place {
+  font-family: var(--mono);
+  font-size: var(--font-size-sm);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.breakpoint {
+  display: flex;
+  align-items: center;
+  padding-right: 4px;
+}
+.variables {
+  flex: 1;
+  min-height: 0;
+}
+.value {
+  font-family: var(--mono);
+  font-size: var(--font-size-sm);
+  white-space: pre;
+}
+.type {
+  font-family: var(--font);
+}

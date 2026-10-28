@@ -1,0 +1,22 @@
+{
+  "$schema": "../../.netherforge/schema/centity.schema.json",
+  "name": "Wooden crate",
+  "nodes": {
+    "box": {
+      "transform": {
+        "translation": [0, 3, 0]
+      },
+      "display": {
+        "type": "block",
+        "block": "minecraft:oak_planks"
+      },
+      "hitbox": {},
+      "physics": {
+        "bounciness": 0.2
+      }
+    }
+  },
+  "script": {
+    "file": "script.lua"
+  }
+}

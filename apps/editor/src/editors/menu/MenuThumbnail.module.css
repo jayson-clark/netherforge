@@ -1,0 +1,9 @@
+.window {
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.slot {
+  position: absolute;
+  display: grid;
+}

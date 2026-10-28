@@ -1,0 +1,11 @@
+{
+  "$schema": "../.netherforge/schema/buff.schema.json",
+  "name": "<red>Frail",
+  "debuff": true,
+  "stats": {
+    "defense": -4,
+    "move": -0.2
+  },
+  "blockedBy": ["ironskin"],
+  "stacking": "add"
+}

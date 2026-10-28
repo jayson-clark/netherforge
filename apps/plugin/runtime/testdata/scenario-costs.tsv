@@ -1,0 +1,47 @@
+# Instructions what scripts do all the time costs them (ApiCostTest). UPDATE_GOLDEN=1 rewrites it.
+6 × 6 × 6 blocks, each world:block():is_solid()	20518
+a tick handler, before its first line	6
+block:kind()	19
+centity:data().hp	16
+centity:emit, nobody listening	55
+centity:id()	15
+give_item({ item })	22
+inventory:item(i)	17
+mob:id() (Entity's, on a Mob)	15
+mob:is_mob()	32
+mob:location()	15
+mob:on + cancel	252
+mob:position()	24
+mob:set_velocity(v)	24
+nf.after + cancel	122
+nf.emit, a handler reading three fields	79
+nf.emit, nobody listening	51
+nf.emit, one listening	72
+nf.emit, ten listening	180
+nf.items.id(stack)	9
+nf.json.decode(a small object)	9
+nf.json.encode(a small table)	16
+nf.json.encode(a typed value)	11
+nf.json.encode(floats)	15
+nf.math.clamp	29
+nf.on + cancel	249
+nf.on + cancel, among 100 others	234
+node:set_translation(v)	25
+node:translation()	24
+player:send_message(text)	21
+random:integer(1, 6)	85
+random:number()	59
+set_item(a rich item)	19
+set_item(a stack read back)	19
+set_item(an item with data)	30
+set_item({ kind, count })	21
+spawn a centity with no script	12
+spawn a scripted centity	237
+v * 2	22
+v + w	28
+v.x	6
+v:distance(w)	41
+v:length()	31
+vec3(x, y, z)	25
+world:block(v)	24
+world:blocks, 6 × 6 × 6 as classes	86

@@ -1,0 +1,156 @@
+[
+  {
+    "severity": "error",
+    "file": "dialogs/ask/dialog.json",
+    "message": "Only a multi_action dialog lays its buttons out in columns",
+    "path": "$.columns",
+    "code": "dialog.columns-type"
+  },
+  {
+    "severity": "warning",
+    "file": "dialogs/ask/dialog.json",
+    "message": "This message has no text",
+    "path": "$.body[0].text",
+    "code": "dialog.body-empty"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/ask/dialog.json",
+    "message": "Two body elements are called \"intro\"",
+    "path": "$.body[1].key",
+    "code": "dialog.body-duplicate"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/ask/dialog.json",
+    "message": "\"bad key!\" isn't a usable key (letters, digits, _ and -, at most 64 characters)",
+    "path": "$.body[2].key",
+    "code": "dialog.body-key"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/ask/dialog.json",
+    "message": "maxLength must be at least 1",
+    "path": "$.inputs[0].maxLength",
+    "code": "dialog.max-length"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/ask/dialog.json",
+    "message": "Two inputs are called \"name\"",
+    "path": "$.inputs[1].key",
+    "code": "dialog.input-duplicate"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/ask/dialog.json",
+    "message": "Two options are called \"a\"",
+    "path": "$.inputs[2].options[1].id",
+    "code": "dialog.option-duplicate"
+  },
+  {
+    "severity": "warning",
+    "file": "dialogs/ask/dialog.json",
+    "message": "More than one option starts selected; the first wins",
+    "path": "$.inputs[2].options",
+    "code": "dialog.option-initial"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/ask/dialog.json",
+    "message": "end must be greater than start",
+    "path": "$.inputs[3].end",
+    "code": "dialog.range"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/ask/dialog.json",
+    "message": "step must be positive",
+    "path": "$.inputs[3].step",
+    "code": "dialog.range-step"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/ask/dialog.json",
+    "message": "initial must be between start and end",
+    "path": "$.inputs[3].initial",
+    "code": "dialog.range-initial"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/ask/dialog.json",
+    "message": "\"bad key!\" isn't a usable key (letters, digits, _ and -, at most 64 characters)",
+    "path": "$.inputs[4].key",
+    "code": "dialog.input-key"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/ask/dialog.json",
+    "message": "A confirmation dialog shows 2 buttons",
+    "path": "$.buttons",
+    "code": "dialog.button-count"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/ask/dialog.json",
+    "message": "Only a dialog_list lists other dialogs",
+    "path": "$.dialogs",
+    "code": "dialog.list-type"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/grid/dialog.json",
+    "message": "A dialog has 1 to 8 columns",
+    "path": "$.columns",
+    "code": "dialog.columns"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/grid/dialog.json",
+    "message": "lines must be at least 1",
+    "path": "$.inputs[0].lines",
+    "code": "dialog.lines"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/grid/dialog.json",
+    "message": "A single_option input needs options",
+    "path": "$.inputs[1].options",
+    "code": "dialog.options-empty"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/grid/dialog.json",
+    "message": "\"Bad Key!\" isn't a usable key (letters, digits, _ and -, at most 64 characters)",
+    "path": "$.buttons[0].key",
+    "code": "dialog.button-key"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/grid/dialog.json",
+    "message": "Two buttons are called \"go\"",
+    "path": "$.buttons[2].key",
+    "code": "dialog.button-duplicate"
+  },
+  {
+    "severity": "warning",
+    "file": "dialogs/lost/dialog.json",
+    "message": "This dialog_list lists no dialogs",
+    "path": "$.dialogs",
+    "code": "dialog.list-empty"
+  },
+  {
+    "severity": "error",
+    "file": "dialogs/menu/dialog.json",
+    "message": "There's no dialog \"ghost\" (dialogs/ghost/dialog.json)",
+    "path": "$.dialogs[1]",
+    "code": "reference.dialog"
+  },
+  {
+    "severity": "warning",
+    "file": "dialogs/yes/dialog.json",
+    "message": "A confirmation dialog has a yes and a no button",
+    "path": "$.buttons",
+    "code": "dialog.confirmation"
+  }
+]

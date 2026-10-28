@@ -1,0 +1,38 @@
+.text {
+  display: inline-flex;
+  flex-direction: column;
+  font-family: var(--mono);
+  white-space: pre;
+}
+.line {
+  display: block;
+}
+.glyph {
+  image-rendering: pixelated;
+}
+/* A <space:N>: nothing drawn, the cursor moved by its margin. */
+.move {
+  display: inline-block;
+  width: 0;
+}
+/* An <at:N>: no width of its own, what it holds drawn from where it's moved to. */
+.overlay {
+  display: inline-block;
+  position: relative;
+  width: 0;
+}
+.held {
+  display: inline-block;
+}
+/* A line of text on the background it shows on in game: a window's grey, or dark. */
+.preview {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  background: #c6c6c6;
+  padding: 4px 6px;
+  border-radius: 2px;
+}
+.dark {
+  background: #1b1b1b;
+}

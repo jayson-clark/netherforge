@@ -1,0 +1,7 @@
+{
+  "duration": 0,
+  "emitters": {
+    "a": { "particle": "minecraft:flame", "burst": 200 },
+    "b": { "particle": "minecraft:flame", "rate": 50, "curves": { "rate": [{ "time": 0, "value": 60.5 }] } }
+  }
+}

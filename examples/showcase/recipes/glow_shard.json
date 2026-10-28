@@ -1,0 +1,10 @@
+{
+  "$schema": "../.netherforge/schema/recipe.schema.json",
+  "type": "blasting",
+  "ingredient": "minecraft:amethyst_shard",
+  "result": {
+    "item": "shard"
+  },
+  "experience": 0.7,
+  "category": "misc"
+}

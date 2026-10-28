@@ -1,0 +1,22 @@
+{
+  "description": "Hides the hearts without client/vanilla.json, and has a bar out of reach",
+  "hud": {
+    "hide": [
+      "health"
+    ],
+    "bars": {
+      "mana": {
+        "full": "hud/gem.png",
+        "empty": "hud/gem.png",
+        "segments": 0,
+        "x": 0,
+        "y": 80
+      }
+    },
+    "texts": {
+      "mana": {
+        "x": 0
+      }
+    }
+  }
+}

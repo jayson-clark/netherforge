@@ -1,0 +1,12 @@
+{
+  "$schema": "../../.netherforge/schema/item.schema.json",
+  "kind": "minecraft:paper",
+  "name": "<red>Ruby",
+  "lore": ["<gray>Warm to the touch"],
+  "itemModel": "ui/ruby",
+  "tooltipStyle": "ui/fancy",
+  "rarity": "rare",
+  "script": {
+    "file": "script.lua"
+  }
+}

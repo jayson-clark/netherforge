@@ -1,0 +1,12 @@
+{
+  "$schema": "../../.netherforge/schema/block.schema.json",
+  "model": "ui/ruby_ore",
+  "hardness": 3,
+  "tool": "pickaxe",
+  "requiresTool": true,
+  "drops": "ruby_ore",
+  "tick": 100,
+  "script": {
+    "file": "script.lua"
+  }
+}

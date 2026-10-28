@@ -1,0 +1,11 @@
+# Prettier already skips everything in .gitignore. These are committed but
+# written by tools that own their formatting.
+pnpm-lock.yaml
+packages/api/generated/
+docs/reference/
+apps/editor/src/core/backend/generated/
+apps/editor/src-tauri/permissions/generated/
+examples/**/*.json
+packages/format/testdata/
+.claude/settings*.json
+tools/gradle/kotlin-js-store/

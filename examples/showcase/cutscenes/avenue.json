@@ -1,0 +1,75 @@
+{
+  "$schema": "../.netherforge/schema/cutscene.schema.json",
+  "length": 16,
+  "skippable": true,
+  "camera": {
+    "position": [
+      {
+        "time": 0,
+        "value": [0, 30, -24],
+        "easing": "ease_in_out"
+      },
+      {
+        "time": 5,
+        "value": [16, 18, 60],
+        "easing": "ease_in_out"
+      },
+      {
+        "time": 10,
+        "value": [-16, 14, 150],
+        "easing": "ease_in_out"
+      },
+      {
+        "time": 16,
+        "value": [0, 40, 270],
+        "easing": "ease_out"
+      }
+    ],
+    "rotation": [
+      {
+        "time": 0,
+        "yaw": 0,
+        "pitch": 35,
+        "easing": "ease_in_out"
+      },
+      {
+        "time": 5,
+        "yaw": 30,
+        "pitch": 25,
+        "easing": "ease_in_out"
+      },
+      {
+        "time": 10,
+        "yaw": -30,
+        "pitch": 25,
+        "easing": "ease_in_out"
+      },
+      {
+        "time": 16,
+        "yaw": 180,
+        "pitch": 40
+      }
+    ]
+  },
+  "cues": [
+    {
+      "time": 0.5,
+      "text": "<gold>The NetherForge Showcase",
+      "duration": 3
+    },
+    {
+      "time": 5,
+      "text": "<gray>One booth for every part of the engine",
+      "duration": 3
+    },
+    {
+      "time": 10,
+      "text": "<gray>…and worlds beyond the avenue",
+      "duration": 3
+    },
+    {
+      "time": 15,
+      "event": "end_of_avenue"
+    }
+  ]
+}

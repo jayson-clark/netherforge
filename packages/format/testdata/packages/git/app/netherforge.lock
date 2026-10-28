@@ -1,0 +1,14 @@
+{
+  "packages": {
+    "lib": {
+      "version": "1.0.0",
+      "source": {
+        "type": "git",
+        "url": "https://example.com/lib.git",
+        "rev": "v1",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "hash": "sha256:1590262bc4e3dbc84872fd5343cde9eca8c50f50cbe9ee4fff3bb2f43b6170d6"
+    }
+  }
+}

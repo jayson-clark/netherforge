@@ -1,0 +1,41 @@
+/*
+ * A 1px rule. The library sets the separator's `flex: 0 0 auto` inline, so its size is a width
+ * or height here (a flex-basis would be overridden, and the line would take no space at all).
+ * The library widens the grip on its own; the box around the line (3px each side, over the
+ * panels' edges) is kept because it decides how the page is layered: the inspector paints into
+ * a layer that starts at the grip, and the pixel-exact previews in it (a skin at 1.75×, nearest
+ * neighbour) sample differently from another layer origin. See the editor-ui skill, "Testing".
+ */
+.splitter {
+  position: relative;
+  background: var(--border);
+  outline: none;
+  z-index: 5;
+}
+.splitter::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.splitter[aria-orientation='vertical'] {
+  width: 1px;
+}
+.splitter[aria-orientation='vertical']::after {
+  inset: 0 -3px;
+}
+.splitter[aria-orientation='horizontal'] {
+  height: 1px;
+}
+.splitter[aria-orientation='horizontal']::after {
+  inset: -3px 0;
+}
+.splitter[data-separator='hover'],
+.splitter[data-separator='active'],
+.splitter:focus-visible {
+  background: var(--accent-dim);
+}
+.splitter.hidden {
+  width: 0;
+  height: 0;
+  visibility: hidden;
+}

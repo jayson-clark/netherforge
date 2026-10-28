@@ -1,0 +1,8 @@
+.stage {
+  background: rgba(0, 0, 0, 0.75);
+}
+.listPicker {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}

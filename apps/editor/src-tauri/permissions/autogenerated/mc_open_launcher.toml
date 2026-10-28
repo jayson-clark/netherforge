@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mc-open-launcher"
+description = "Enables the mc_open_launcher command without any pre-configured scope."
+commands.allow = ["mc_open_launcher"]
+
+[[permission]]
+identifier = "deny-mc-open-launcher"
+description = "Denies the mc_open_launcher command without any pre-configured scope."
+commands.deny = ["mc_open_launcher"]

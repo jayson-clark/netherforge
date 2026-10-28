@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-luals-start"
+description = "Enables the luals_start command without any pre-configured scope."
+commands.allow = ["luals_start"]
+
+[[permission]]
+identifier = "deny-luals-start"
+description = "Denies the luals_start command without any pre-configured scope."
+commands.deny = ["luals_start"]

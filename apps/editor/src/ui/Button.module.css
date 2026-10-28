@@ -1,0 +1,72 @@
+.button {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.button:disabled {
+  opacity: 0.45;
+}
+.small {
+  padding: 2px 8px;
+  font-size: var(--font-size-sm);
+}
+.primary {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+.primary:hover:not(:disabled) {
+  background: var(--accent);
+  color: #071417;
+}
+.danger {
+  background: var(--error-bg);
+  border-color: var(--error);
+}
+.ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.link {
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 2px 4px;
+}
+.link:hover:not(:disabled) {
+  background: none;
+  color: var(--text);
+  text-decoration: underline;
+}
+.active {
+  background: var(--bg-selected);
+  border-color: var(--accent-dim);
+}
+
+.iconButton {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 3px;
+  color: var(--muted);
+  display: inline-grid;
+  place-items: center;
+}
+.iconButton:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.iconButton:disabled {
+  opacity: 0.45;
+}
+.iconButton.active {
+  color: var(--text);
+  background: var(--bg-selected);
+}
