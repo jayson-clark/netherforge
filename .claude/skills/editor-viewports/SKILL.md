@@ -62,6 +62,18 @@ into nothing), block and item models (`minecraft/client/models.tsx`) and
   camera, raycaster and pointer; only the active one is drawn (a
   priority-1 `useFrame`) and hit (`setEvents({ enabled })`), and its orbit
   controls alone listen. With nothing on screen the frame loop stops.
+- **Drawn on demand** (`frameloop="demand"`), not every frame: a picture
+  that stands still costs nothing. r3f asks for a frame itself when an
+  object's props change through React (a pose, playback, an edit) or its
+  store does (a resize, the canvas moved), and the controls do while they
+  move. Anything that changes the picture outside React must call
+  `invalidate()`: a texture that finishes loading (`render.ts`, `atlas.ts`),
+  sprites placed in a `useFrame` (`EffectViewport`), a scene coming on
+  screen, its lens or a placed camera (`SceneRoot`). Damping's last
+  momentum, below the least step that asks for a frame, is spent on the
+  frame the easing stops, so the picture left standing is where the camera
+  stays (`centity.spec.ts` holds a tab switch to the same picture). A view
+  that doesn't update until you move the mouse is a missing `invalidate`.
 - **Why not a canvas per viewport**: a browser keeps a handful of WebGL
   contexts (WebKit and Chromium drop the oldest past 16), and a context
   made again on every tab switch uploads every texture and compiles every

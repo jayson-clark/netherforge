@@ -7,6 +7,7 @@
  * state's faces are rewritten to point at their tiles (`remap`), so the
  * mesher, which groups by texture, makes one group of them all.
  */
+import { invalidate } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { ClientAssets } from './assets'
 import type { BakedState } from './blockMesh'
@@ -94,10 +95,13 @@ export class BlockAtlas {
       const frame = Math.min(image.naturalWidth, image.naturalHeight)
       this.context?.drawImage(image, 0, 0, image.naturalWidth, frame, x, y, TILE, TILE)
       this.texture.needsUpdate = true
+      // The viewport draws on demand: the terrain drawn with the atlas is drawn again with this tile.
+      invalidate()
     }
     image.onerror = () => {
       this.drawMissing(slot)
       this.texture.needsUpdate = true
+      invalidate()
     }
     image.src = this.assets.textureUrl(texture)
   }
