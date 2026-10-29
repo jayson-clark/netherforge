@@ -1,6 +1,7 @@
 package dev.netherforge.plugin.store
 import dev.netherforge.format.Severity
 import dev.netherforge.plugin.TestServer
+import kotlin.io.path.invariantSeparatorsPathString
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -158,15 +159,17 @@ class PackageDatabaseTest {
     @Test
     fun `a package's database can't attach or write another file`() {
         val elsewhere = kotlin.io.path.createTempDirectory("netherforge-attach").resolve("elsewhere.db")
+        // Forward slashes: a Windows path's backslashes would be escapes in the Lua string
+        val elsewhereSql = elsewhere.invariantSeparatorsPathString
         server(
             """
             local function try(what, f)
               local ok, problem = pcall(f)
               log(what .. ": " .. (ok and "ran" or tostring(problem):gsub("^[^:]+:%d+: ", "")))
             end
-            try("attach", function() db:query("ATTACH DATABASE ? AS x", { "$elsewhere" }, print) end)
-            try("attach after a comment", function() db:query("/* hi */ attach ? as x", { "$elsewhere" }, print) end)
-            try("vacuum into", function() db:execute("VACUUM INTO ?", { "$elsewhere" }, print) end)
+            try("attach", function() db:query("ATTACH DATABASE ? AS x", { "$elsewhereSql" }, print) end)
+            try("attach after a comment", function() db:query("/* hi */ attach ? as x", { "$elsewhereSql" }, print) end)
+            try("vacuum into", function() db:execute("VACUUM INTO ?", { "$elsewhereSql" }, print) end)
             try("folder pragma", function() db:query("PRAGMA main.temp_store_directory = '/tmp'", nil, print) end)
             try("other pragma", function() db:query("PRAGMA foreign_keys", nil, print) end)
             """
