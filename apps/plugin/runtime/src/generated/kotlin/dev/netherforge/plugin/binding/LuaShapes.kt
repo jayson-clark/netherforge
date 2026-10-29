@@ -8375,6 +8375,91 @@ data class NoiseOptions(val seed: Long? = null, val scale: Double? = null) : Lua
     }
 }
 
+/** How `nf.encoding.base64_encode` writes base64. A key that isn't one of these is an error. */
+data class Base64Options(val urlSafe: Boolean? = null, val padding: Boolean? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<Base64Options>("Base64Options") {
+        val urlSafeCodec = LuaOptional(LuaCodecs.BOOLEAN)
+        val paddingCodec = LuaOptional(LuaCodecs.BOOLEAN)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "url_safe" to urlSafeCodec,
+            "padding" to paddingCodec
+        )
+
+        override fun read(fields: ShapeReader) = Base64Options(
+            urlSafe = fields.field("url_safe", urlSafeCodec),
+            padding = fields.field("padding", paddingCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: Base64Options) {
+            fields.field("url_safe", value.urlSafe, urlSafeCodec)
+            fields.field("padding", value.padding, paddingCodec)
+        }
+    }
+}
+
+/** How `nf.crypto.hash` hashes. A key that isn't one of these is an error. */
+data class HashOptions(val algorithm: String? = null, val encoding: String? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<HashOptions>("HashOptions") {
+        val algorithmCodec = LuaOptional(LuaChoice(listOf("sha256", "sha1", "sha512")))
+        val encodingCodec = LuaOptional(LuaChoice(listOf("hex", "base64")))
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "algorithm" to algorithmCodec,
+            "encoding" to encodingCodec
+        )
+
+        override fun read(fields: ShapeReader) = HashOptions(
+            algorithm = fields.field("algorithm", algorithmCodec),
+            encoding = fields.field("encoding", encodingCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: HashOptions) {
+            fields.field("algorithm", value.algorithm, algorithmCodec)
+            fields.field("encoding", value.encoding, encodingCodec)
+        }
+    }
+}
+
+/** How `nf.crypto.sign` signs. A key that isn't one of these is an error. */
+data class SigningOptions(val secret: String, val algorithm: String? = null, val encoding: String? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<SigningOptions>("SigningOptions") {
+        val secretCodec = LuaCodecs.STRING
+        val algorithmCodec = LuaOptional(LuaChoice(listOf("sha256", "sha1", "sha512")))
+        val encodingCodec = LuaOptional(LuaChoice(listOf("hex", "base64")))
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "secret" to secretCodec,
+            "algorithm" to algorithmCodec,
+            "encoding" to encodingCodec
+        )
+
+        override fun read(fields: ShapeReader) = SigningOptions(
+            secret = fields.field("secret", secretCodec),
+            algorithm = fields.field("algorithm", algorithmCodec),
+            encoding = fields.field("encoding", encodingCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: SigningOptions) {
+            fields.field("secret", value.secret, secretCodec)
+            fields.field("algorithm", value.algorithm, algorithmCodec)
+            fields.field("encoding", value.encoding, encodingCodec)
+        }
+    }
+}
+
 /** A message another server of a test's network heard, from `nf.test.network_received`. */
 data class TestNetworkMessage(val channel: String, val value: Any? = null, val server: String) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)

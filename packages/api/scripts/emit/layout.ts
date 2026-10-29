@@ -102,7 +102,7 @@ export const CATEGORIES: Category[] = [
   },
   {
     title: 'Values and utilities',
-    doc: 'Vectors and locations, text, looks, time, randomness and maths.',
+    doc: 'Vectors and locations, text, looks, time, randomness, maths, JSON, encodings and hashes.',
     pages: [
       'Vec3',
       'Location',
@@ -113,6 +113,8 @@ export const CATEGORIES: Category[] = [
       'Random',
       'nf.math',
       'nf.json',
+      'nf.encoding',
+      'nf.crypto',
     ],
   },
   {

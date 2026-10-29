@@ -2677,6 +2677,34 @@ Which noise `nf.random.noise2` and `noise3` give. A key that isn't one of these 
 | `seed` | `integer?` | Which noise: each seed is a different pattern. Default 0. |
 | `scale` | `number?` | What the coordinates are multiplied by first: smaller is smoother and wider (0.05 changes over about 20 blocks). Default 1. |
 
+### Base64Options {#base64options}
+
+How `nf.encoding.base64_encode` writes base64. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `url_safe` | `boolean?` | Whether to use the URL-safe alphabet (`-` and `_` for `+` and `/`), for a URL or a token. Default `false`. |
+| `padding` | `boolean?` | Whether to end with `=` to a multiple of four characters. Default `true`. |
+
+### HashOptions {#hashoptions}
+
+How `nf.crypto.hash` hashes. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `algorithm` | `"sha256"\|"sha1"\|"sha512"?` | The hash. Default `"sha256"`. |
+| `encoding` | `"hex"\|"base64"?` | How the result is written: `"hex"` (lowercase), or `"base64"`. Default `"hex"`. |
+
+### SigningOptions {#signingoptions}
+
+How `nf.crypto.sign` signs. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `secret` | `string` | The secret to sign with. |
+| `algorithm` | `"sha256"\|"sha1"\|"sha512"?` | The hash. Default `"sha256"`. |
+| `encoding` | `"hex"\|"base64"?` | How the result is written: `"hex"` (lowercase), or `"base64"`. Default `"hex"`. |
+
 ## Files, data, the web and computation
 
 ### DatabaseStatement {#databasestatement}

@@ -21,6 +21,7 @@ import { nfSchedule } from './schedule.ts'
 import { nfSpawning } from './spawning.ts'
 import { nfEconomy, nfPlaceholders } from './interop.ts'
 import { nfMath, nfRandom, nfTime } from './utilities.ts'
+import { nfCrypto, nfEncoding } from './encoding.ts'
 import { nfTest } from './test.ts'
 
 /** A namespace under `nf`: plain functions on a table, called with a dot. */
@@ -453,6 +454,8 @@ const namespaces = [
   nfText,
   nfLooks,
   nfJson,
+  nfEncoding,
+  nfCrypto,
   nfHttp,
   nfWeb,
   nfWasm,

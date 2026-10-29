@@ -19,8 +19,6 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.Base64
 import java.util.HexFormat
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
 
 /**
  * `nf.web`: routes scripts answer, their package's public address, webhook
@@ -47,19 +45,11 @@ internal class NfWebImpl(private val session: ProjectSession) : NfWebApi {
     }
 
     override fun verifySignature(caller: Caller, body: String, signature: String, options: SignatureOptions): Boolean {
-        val algorithm = when (options.algorithm ?: "sha256") {
-            "sha1" -> "HmacSHA1"
-            "sha512" -> "HmacSHA512"
-            else -> "HmacSHA256"
-        }
         val trimmed = signature.trim()
         val prefix = options.prefix.orEmpty()
         if (!trimmed.startsWith(prefix)) return false
         val given = trimmed.substring(prefix.length)
-        val expected = Mac.getInstance(algorithm).run {
-            init(SecretKeySpec(options.secret.toByteArray(StandardCharsets.UTF_8), algorithm))
-            doFinal(body.toByteArray(StandardCharsets.UTF_8))
-        }
+        val expected = hmac(body, options.secret, options.algorithm)
         val bytes = try {
             if (options.encoding == "base64") Base64.getDecoder().decode(given) else HexFormat.of().parseHex(given.lowercase())
         } catch (e: IllegalArgumentException) {

@@ -67,7 +67,7 @@ export const nfWeb: LuaClass = {
     },
     {
       name: 'verify_signature',
-      doc: "Whether `signature` is the HMAC of `body` under `options.secret`, as webhook senders sign what they send (GitHub's `X-Hub-Signature-256`, Stripe's and Shopify's): compared in constant time, so the answer leaks nothing about the right one. Check it before acting on a webhook. Keep the secret in a setting (`nf.config`), not in a script. A signature that isn't in `options.encoding` is `false`, not an error.",
+      doc: "Whether `signature` is the HMAC of `body` under `options.secret`, as webhook senders sign what they send (GitHub's `X-Hub-Signature-256`, Stripe's and Shopify's): compared in constant time, so the answer leaks nothing about the right one. Check it before acting on a webhook. Keep the secret in a setting (`nf.config`), not in a script. A signature that isn't in `options.encoding` is `false`, not an error. A sender that signs more than the body says what to check: Stripe signs `<t>.<body>`, its header's `t=` and the body, and sends the signature as `v1=` (and wants `t` checked to be recent). To make a signature, `nf.crypto.sign`.",
       params: [
         {
           name: 'body',

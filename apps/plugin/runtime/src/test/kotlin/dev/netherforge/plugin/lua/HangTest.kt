@@ -298,6 +298,12 @@ class HangTest {
     }
 
     @Test
+    fun `a huge form is charged to the script, not walked for free`() {
+        val message = refused("""local t = { ("x"):rep(900000):byte(1, -1) } local s = nf.encoding.form_encode({ items = t })""")
+        assertTrue("ran past its budget" in message, message)
+    }
+
+    @Test
     fun `shuffling a list that claims to be huge is charged, not looped for free`() {
         // The shuffle's loop is the prelude's, which the hook never stops mid-way: it's charged before it starts.
         val message = refused(
