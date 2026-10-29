@@ -27,6 +27,9 @@ runs:
       if: inputs.rust == 'true'
       with:
         workspaces: apps/editor/src-tauri
+        # Saved from main only (Nightly), as setup-gradle does: a PR's own copies, ~2 GB each, push
+        # the repo past its 10 GB and evict main's, so every OS would compile Rust from cold.
+        save-if: ${{ github.ref == 'refs/heads/main' }}
     - name: Tauri dependencies (Linux)
       if: inputs.rust == 'true' && runner.os == 'Linux'
       shell: bash
