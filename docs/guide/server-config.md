@@ -320,16 +320,16 @@ web:
   handler-timeout-seconds: 10
 ```
 
-| Key                          | Meaning                                                                                                                                      | Default                            |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| `enabled`                    | Serve web routes at all.                                                                                                                     | `false`                            |
-| `public-url`                 | The address the world reaches them at, which scripts build links with (`https://play.example.com`).                                          | the resource pack server's address |
-| `trust-proxy-headers`        | Take a request's address from `X-Forwarded-For`. Only behind your own reverse proxy: anyone can send that header.                            | `false`                            |
-| `max-body-bytes`             | The largest request body. A larger one is answered `413` without reaching a script.                                                          | 64 KiB                             |
-| `max-response-bytes`         | The largest answer a script may send.                                                                                                        | 1 MiB                              |
-| `requests-per-minute-per-ip` | How many requests one address may make a minute. Past it: `429`.                                                                             | `60`                               |
-| `max-pending`                | How many requests may wait for the main thread at once. Past it: `503`. At most 32 are handled each tick, so a flood can't take over a tick. | `64`                               |
-| `handler-timeout-seconds`    | How long a script may take to answer. Past it: `504`.                                                                                        | `10`                               |
+| Key                          | Meaning                                                                                                                                                               | Default                            |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `enabled`                    | Serve web routes at all.                                                                                                                                              | `false`                            |
+| `public-url`                 | The address the world reaches them at, which scripts build links with (`https://play.example.com`).                                                                   | the resource pack server's address |
+| `trust-proxy-headers`        | Take a request's address from `X-Forwarded-For`: its last entry, the one your proxy added. Only behind your own reverse proxy (one hop): anyone can send that header. | `false`                            |
+| `max-body-bytes`             | The largest request body. A larger one is answered `413` without reaching a script.                                                                                   | 64 KiB                             |
+| `max-response-bytes`         | The largest answer a script may send.                                                                                                                                 | 1 MiB                              |
+| `requests-per-minute-per-ip` | How many requests one address may make a minute. Past it: `429`.                                                                                                      | `60`                               |
+| `max-pending`                | How many requests may wait for the main thread at once. Past it: `503`. At most 32 are handled each tick, so a flood can't take over a tick.                          | `64`                               |
+| `handler-timeout-seconds`    | How long a script may take to answer. Past it: `504`.                                                                                                                 | `10`                               |
 
 Routes are served on the resource pack's port (`resource-pack.bind` and
 `port`), each package under its own path (`/shop/...`). NetherForge doesn't do
@@ -403,6 +403,24 @@ Things to know:
   that needs it fails with a message saying it couldn't connect (the log says
   why), and the next one tries again.
 
+## Script files
+
+`nf.files` keeps each package's files in a folder of its own,
+`plugins/NetherForge/data/<namespace>/`, which no other package's scripts see
+unless they're handed a file. Files kept from before packages had folders of
+their own are moved into the project's folder the first time the server starts
+with this version.
+
+```yaml
+files:
+  max-megabytes-per-package: 64
+  max-entries-per-package: 10000
+```
+
+A package may keep at most `max-megabytes-per-package` of files and
+`max-entries-per-package` files and folders; a write past either fails (the
+script gets `false`), so no package can fill the server's disk.
+
 ## Time zone for schedules
 
 Scripts can run things at a time of day (`nf.schedule.daily("18:00", ...)`).
@@ -424,13 +442,21 @@ A script whose code takes more than `warn-ms` milliseconds a tick, on average
 over `warn-ticks` ticks, is logged as slow, at most once a minute, with the
 file and line it's slow in (see [Limits and performance](performance.md)).
 
+`max-ms-per-tick` also caps how long one script's code may run in a single
+tick, across all its timers, handlers and other call-ins. Once a script passes
+it in a tick, that script's timers and event handlers wait for the next tick
+(its commands, its body and its `unload` still run), and the owner is warned,
+so no one script can take the whole server by piling up timers and handlers.
+
 ```yaml
 performance:
   warn-ms: 10
   warn-ticks: 20
+  max-ms-per-tick: 25
 ```
 
-| Key          | Meaning                                                                        | Default |
-| ------------ | ------------------------------------------------------------------------------ | ------- |
-| `warn-ms`    | Milliseconds a tick, on average, above which a script is slow. 0 turns it off. | `10`    |
-| `warn-ticks` | How many ticks that average is over (1 to 100).                                | `20`    |
+| Key               | Meaning                                                                                                 | Default |
+| ----------------- | ------------------------------------------------------------------------------------------------------- | ------- |
+| `warn-ms`         | Milliseconds a tick, on average, above which a script is slow. 0 turns it off.                          | `10`    |
+| `warn-ticks`      | How many ticks that average is over (1 to 100).                                                         | `20`    |
+| `max-ms-per-tick` | Milliseconds a script's code may run in a tick before its timers and handlers wait for the next. 0 off. | `25`    |

@@ -23,11 +23,17 @@ import kotlinx.serialization.json.JsonPrimitive
  * reconnects if the connection drops). Frames are newline-delimited JSON-RPC
  * 2.0 ([JsonRpc]), one message or batch per line.
  *
- * The plugin's first frame is the [Bridge.hello] request, carrying the token
- * and [Bridge.PROTOCOL]. The editor closes a connection whose first frame
- * isn't a hello with its token, and answers one of another protocol with a
- * [Bridge.PROTOCOL_MISMATCH] error saying so; either way nothing else
- * travels on it. After the hello the editor sends requests ([Bridge.requests],
+ * The plugin's first frame is the [Bridge.hello] request, carrying a nonce
+ * and [Bridge.PROTOCOL], never the token: whatever listens on the port gets
+ * nothing it could use. The editor answers one of another protocol with a
+ * [Bridge.PROTOCOL_MISMATCH] error saying so, and anything else with a nonce
+ * of its own and its proof of the token over both ([HelloResult]); the
+ * plugin checks that proof (a listener that isn't the editor can't make it)
+ * before it says anything more, then proves the token itself with
+ * [Bridge.authenticate]. The editor closes a connection whose first frame
+ * isn't a hello, or whose proof is wrong, without another word; until the
+ * proofs are done nothing else travels on it (`BridgeAuth` says how a proof
+ * is made). After the hello the editor sends requests ([Bridge.requests],
  * plus each [BridgeExtension]'s) and the plugin sends notifications
  * ([Bridge.events]) and streams ([Bridge.streams]); the debugger's DAP
  * messages ([Bridge.dap]) go both ways as notifications. A request for a method
@@ -124,7 +130,8 @@ private const val UNIT = "kotlin.Unit"
 
 @Serializable
 data class HelloParams(
-    val token: String,
+    /** The plugin's random nonce for this connection (hex), which the editor's proof covers. */
+    val nonce: String,
     /** [Bridge.PROTOCOL] of the plugin's build. */
     val protocol: Int,
     val pluginVersion: String,
@@ -133,9 +140,17 @@ data class HelloParams(
     val project: String
 )
 
-/** The editor accepted the hello; [protocol] is its own (the same). */
+/**
+ * The editor's answer to a hello of its [protocol]: a [nonce] of its own and its
+ * [proof] of the token over both nonces, which the plugin checks before
+ * answering with [Bridge.authenticate].
+ */
 @Serializable
-data class HelloResult(val protocol: Int)
+data class HelloResult(val protocol: Int, val nonce: String? = null, val proof: String? = null)
+
+/** The plugin's proof of the token over both nonces, once it has checked the editor's. */
+@Serializable
+data class AuthenticateParams(val proof: String)
 
 /** The problems the plugin found loading the project; replaces any earlier set. */
 @Serializable
@@ -399,7 +414,7 @@ object Bridge {
      * from the other: the editor refuses a plugin of another version (and
      * the plugin says why) rather than half-understanding it.
      */
-    const val PROTOCOL = 1
+    const val PROTOCOL = 2
 
     /**
      * One JSON value per line; no pretty printing, so a frame never contains
@@ -438,6 +453,9 @@ object Bridge {
 
     /** The plugin's first frame on every connection. */
     val hello = BridgeMethod("hello", HelloParams.serializer(), HelloResult.serializer(), BridgeThread.BRIDGE)
+
+    /** The plugin's second, once the editor's answer to the hello proved it holds the token: the plugin's own proof. */
+    val authenticate = BridgeMethod("authenticate", AuthenticateParams.serializer(), Unit.serializer(), BridgeThread.BRIDGE)
 
     /** On load, every reload, every connect: the full set. */
     val problems = BridgeEvent("problems", Problems.serializer())

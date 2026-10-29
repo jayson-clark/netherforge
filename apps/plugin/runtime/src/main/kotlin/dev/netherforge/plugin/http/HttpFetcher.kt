@@ -62,7 +62,12 @@ class HttpFetcher(
     /** Where a name leads: called once for each connection made to a host that isn't an IP in the URL. */
     private val resolve: (String) -> List<InetAddress> = { InetAddress.getAllByName(it).toList() },
     /** Makes the sockets connections are made on; a test's records and redirects them. */
-    private val socketFactory: SocketFactory = SocketFactory.getDefault()
+    private val socketFactory: SocketFactory = SocketFactory.getDefault(),
+    /**
+     * This machine's own addresses (every network interface's), refused like private ones: a public address the
+     * server itself has would otherwise reach whatever listens on it (RCON, the pack server, the network's hub).
+     */
+    private val ownAddresses: () -> Set<InetAddress> = OwnAddresses::current
 ) : Closeable {
     private val client: OkHttpClient = OkHttpClient.Builder()
         .proxy(Proxy.NO_PROXY)
@@ -97,7 +102,9 @@ class HttpFetcher(
 
     /** Why [address] is out of bounds for a request to [host], in the words a script is told, or null when it may be reached. */
     private fun refusal(host: String, address: InetAddress): String? {
-        val why = AddressGuard.refusal(address, limits.allowPrivateAddresses) ?: return null
+        val why = AddressGuard.refusal(address, limits.allowPrivateAddresses)
+            ?: "this server's own address".takeIf { !limits.allowPrivateAddresses && address in ownAddresses() }
+            ?: return null
         val leads = if (host == address.hostAddress) "$host is" else "$host leads to ${address.hostAddress},"
         return "$leads $why, which nf.http.request doesn't reach " +
             "(the server owner can allow private addresses with http.allow-private-addresses in config.yml)"
@@ -312,5 +319,24 @@ class HttpFetcher(
         fun portOf(url: URI): Int = if (url.port == -1) defaultPort(url.scheme) else url.port
 
         private fun defaultPort(scheme: String) = if (scheme == "https") 443 else 80
+    }
+}
+
+/** This machine's addresses, read from its network interfaces at most every [EVERY_NANOS] (they rarely change). */
+internal object OwnAddresses {
+    private const val EVERY_NANOS = 60_000_000_000L
+
+    @Volatile private var cached: Pair<Long, Set<InetAddress>>? = null
+
+    fun current(): Set<InetAddress> {
+        val now = System.nanoTime()
+        cached?.let { (at, addresses) -> if (now - at < EVERY_NANOS) return addresses }
+        val addresses = try {
+            java.net.NetworkInterface.networkInterfaces().toList().flatMap { it.inetAddresses().toList() }.toSet()
+        } catch (_: java.net.SocketException) {
+            emptySet()
+        }
+        cached = now to addresses
+        return addresses
     }
 }

@@ -1,6 +1,6 @@
 package dev.netherforge.plugin.debug
 import dev.netherforge.format.bridge.Bridge
-import dev.netherforge.format.bridge.HelloResult
+import dev.netherforge.format.bridge.BridgeAuth
 import dev.netherforge.format.bridge.JsonRpc
 import dev.netherforge.format.bridge.Log
 import dev.netherforge.format.bridge.RpcFrame
@@ -83,6 +83,9 @@ class DebuggerTest {
         private val responses = LinkedBlockingQueue<RpcResponse>()
         private val hello = CountDownLatch(1)
 
+        /** The handshake's editor end: the server is started with the token "secret". */
+        private val auth = BridgeAuth.EditorSide("secret")
+
         /** What scripts logged, and the script errors reported, as the editor's console hears them. */
         val logs: MutableList<String> = CopyOnWriteArrayList()
         val errors: MutableList<String> = CopyOnWriteArrayList()
@@ -128,7 +131,11 @@ class DebuggerTest {
                         val message = (JsonRpc.decode(line) as? RpcFrame.Single)?.message ?: continue
                         when {
                             message is RpcRequest && message.method == Bridge.hello.name -> {
-                                write(RpcResponse.ok(message.id, Bridge.hello.encodeResult(HelloResult(Bridge.PROTOCOL))))
+                                val answer = auth.answer(Bridge.hello.decodeParams(message.params))
+                                write(RpcResponse.ok(message.id, Bridge.hello.encodeResult(answer)))
+                            }
+                            message is RpcRequest && message.method == Bridge.authenticate.name -> {
+                                write(RpcResponse.ok(message.id, Bridge.authenticate.encodeResult(Unit)))
                                 hello.countDown()
                             }
                             message is RpcNotification && message.method == Bridge.dap.name ->

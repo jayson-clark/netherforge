@@ -1,6 +1,6 @@
 ---
 name: plugin-sandbox
-description: Inside the plugin's one Lua state - the sandbox (one hook, the instruction budget, time limits, the memory census, the standard library's caps and what a pattern costs, with the benchmarks behind every number), the profiler, the debugger (DAP over the bridge, breakpoints, stepping, freezing the tick), and the prelude's modules. Read before touching apps/plugin/runtime/.../lua, the prelude (lua/prelude.lua, lua/prelude/*.lua, lua/caps.lua), SandboxLimits, .../profile or .../debug.
+description: Inside the plugin's one Lua state - the sandbox (one hook, the instruction budget, time limits, the memory census, the standard library's caps and what a pattern costs, with the benchmarks behind every number), the profiler, the debugger (DAP over the bridge, breakpoints, stepping, freezing the tick), and the prelude's modules. Read before touching apps/plugin/runtime/.../lua, the prelude (lua/prelude.lua, lua/prelude/*.lua), format's lua/caps.lua, SandboxLimits, .../profile or .../debug.
 ---
 
 # Plugin sandbox, profiler and debugger
@@ -89,6 +89,38 @@ script's line; `SandboxLimitsTest` covers the rest.
   only a running call that doubles the limit fails too. A real allocation
   failure ("not enough memory": Lua calls no message handler for it) is
   reported as the call's error.
+- **Re-arming a hook resets its count.** `sethook` starts the count of
+  `every` instructions over, so switching a thread to `hooks.fast` and back
+  throws away what it ran since its last count. `guard.collected` (the end of
+  every collection cycle, which a loop making big strings reaches every few
+  hundred instructions) charges the switch `every` instructions and one hook,
+  the most the lost count could have held; without that, such a loop never
+  reached a count, and ran with no budget or time limit at all (`HangTest`).
+- **Work done for a script is charged too.** `guard.charge_work(instructions,
+steps)` (`host.charge` from Kotlin) charges the running frame for work no
+  hook counts and says why it must stop: the JSON codec's key sort, and
+  `LuaHost.meter` for the Kotlin walks over a script's tables (plain JSON,
+  list and map codecs), past a free allowance so an ordinary call costs what
+  it did. The prelude's own code isn't stopped mid-way by the hook, so
+  anything it does in proportion to a script's data has to check this.
+- **Kotlin reads a script's table only through `LuaHost.field`**: `rawget`
+  for a plain table, a protected `t[k]` otherwise. luajava's `getField` is a
+  bare `lua_getfield` from JNI, and a script's `__index` that raises (or runs
+  out of budget) would `longjmp` across the JVM's frames and crash it
+  (`TableReadsTest`).
+- **Shared tables refuse `rawset`.** Handles, events and typed values are one
+  table for every script that holds them; `base.rawset` refuses those (by
+  genuine metatable, `handles.kinds`, or `sandbox.shared`) so one package
+  can't plant methods another's code calls.
+- **Who's calling, from a coroutine.** A coroutine's stack starts at its
+  body, so `coroutine.wrap(player.ban)(player)` shows no project frame; each
+  coroutine the sandbox makes records the file that made it
+  (`guard.note_origin`), `host.calling_file` falls back to it, and
+  `PackageNames.calling` then to the running scope, never to the project.
+- **The caps read a table with a metatable once.** `#t` and `t[k]` can
+  answer differently each time (`__len`, `__index`), so `insert`, `remove`,
+  `sort` and `concat` on such a table read it in Lua (counted) and hand the
+  library a plain copy or do the shift themselves (`length_of`).
 - **Why a census, not an allocator.** luajava gives no allocator hook: the
   native library exports `lua_setallocf`, but setting it from the JVM means
   an FFM upcall on every allocation. And an allocator only knows who
@@ -100,7 +132,7 @@ script's line; `SandboxLimitsTest` covers the rest.
   on demand: `/nf scripts` shows a scope's memory once it's a megabyte. Per
   package (F3) is a sum of its scopes' numbers; to make a package's own
   modules own what they share, walk its scopes together.
-- **The library's caps** (`resources/.../lua/caps.lua`, the chunk
+- **The library's caps** (format's `src/commonMain/lua/caps.lua`, `LuaCaps`; the terrain scripts' sandbox runs the same chunk through `host_caps`; the chunk
   `=nf/caps`). The functions whose work isn't bounded by their arguments'
   size are replaced in the real `string` and `table` tables (which the
   proxies and the string metatable read through) by wrappers that work out

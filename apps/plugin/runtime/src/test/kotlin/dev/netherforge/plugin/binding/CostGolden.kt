@@ -21,8 +21,18 @@ import kotlin.test.fail
  * rewrites it; review the diff like any golden's.
  */
 object CostGolden {
-    /** Counts every instruction, so `nf.instructions_left()` is exact. */
-    val EXACT = SandboxLimits(hookEvery = 1, deadlineEvery = 1_000_000, memoryEvery = 1_000_000, deadlineMillis = 100_000)
+    /**
+     * Counts every instruction, so `nf.instructions_left()` is exact. The per-tick time budget is off
+     * (`maxTickMillis = 0`): it defers a scope's handlers by wall-clock time, which would make these
+     * instruction-exact costs depend on how fast the machine is (its own test, `SandboxLimitsTest`, covers it).
+     */
+    val EXACT = SandboxLimits(
+        hookEvery = 1,
+        deadlineEvery = 1_000_000,
+        memoryEvery = 1_000_000,
+        deadlineMillis = 100_000,
+        maxTickMillis = 0.0
+    )
 
     /** How far a cost may move from its golden before it fails. */
     fun allowance(golden: Int) = maxOf(3, golden / 10)

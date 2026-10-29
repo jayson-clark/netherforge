@@ -160,6 +160,17 @@ class HttpFetcherTest {
     }
 
     @Test
+    fun `this server's own public address is refused like a private one`() {
+        val own = HttpFetcher(HttpConfig(), resolve = {
+            listOf(publicAddress)
+        }, socketFactory = sockets, ownAddresses = { setOf(publicAddress) })
+            .also { fetchers += it }
+        val message = failure { own.fetch(call("http://me.test:${server.port}/"), anyone) }
+        assertTrue("this server's own address" in message, message)
+        assertEquals(emptyList(), connected)
+    }
+
+    @Test
     fun `an address literal is held to the guard without a lookup`() {
         val strict = fetcher(HttpConfig())
         for (url in listOf(

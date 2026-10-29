@@ -1,8 +1,10 @@
 package dev.netherforge.plugin.bridge
 import dev.netherforge.format.bridge.Bridge
+import dev.netherforge.format.bridge.BridgeAuth
 import dev.netherforge.format.bridge.HelloParams
-import dev.netherforge.format.bridge.HelloResult
 import dev.netherforge.format.bridge.JsonRpc
+import dev.netherforge.format.bridge.RpcFrame
+import dev.netherforge.format.bridge.RpcRequest
 import dev.netherforge.format.bridge.RpcResponse
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.ByteArrayInputStream
@@ -87,7 +89,8 @@ class BridgeClientTest {
         val now = AtomicLong()
         val client = BridgeClient(
             port = listener.localPort,
-            hello = { HelloParams("secret", Bridge.PROTOCOL, "0.1.0", "26.3", "/p") },
+            token = "secret",
+            hello = { nonce -> HelloParams(nonce, Bridge.PROTOCOL, "0.1.0", "26.3", "/p") },
             onFrame = {},
             onConnected = { connected += Unit },
             onProblem = { problems += it },
@@ -96,11 +99,24 @@ class BridgeClientTest {
             clock = now::get
         )
 
-        /** Reads the client's hello off [socket] and accepts it, as the editor does; waits until the client has heard. */
-        fun answerHello(socket: Socket) {
-            readHello(socket)
-            val answer = RpcResponse.ok(JsonPrimitive(0), Bridge.hello.encodeResult(HelloResult(Bridge.PROTOCOL)))
+        /**
+         * Reads the client's hello off [socket] and answers it as the editor does (with [token]'s proof), then
+         * takes its proof back; waits until the client has heard. An editor that doesn't hold the token gets
+         * no proof back, and no connection.
+         */
+        fun answerHello(socket: Socket, token: String = "secret") {
+            val auth = BridgeAuth.EditorSide(token)
+            val hello = Bridge.hello.decodeParams(((JsonRpc.decode(readHello(socket)) as RpcFrame.Single).message as RpcRequest).params)
+            val answer = RpcResponse.ok(JsonPrimitive(0), Bridge.hello.encodeResult(auth.answer(hello)))
             socket.getOutputStream().write((JsonRpc.line(answer) + "\n").toByteArray())
+            socket.getOutputStream().flush()
+            if (token != "secret") return
+            val proof = Bridge.authenticate.decodeParams(
+                ((JsonRpc.decode(readLine(socket)) as RpcFrame.Single).message as RpcRequest).params
+            )
+            assertTrue(auth.accepts(proof), "the client proves the token")
+            val accepted = RpcResponse.ok(JsonPrimitive(1), Bridge.authenticate.encodeResult(Unit))
+            socket.getOutputStream().write((JsonRpc.line(accepted) + "\n").toByteArray())
             socket.getOutputStream().flush()
             assertEquals(Unit, connected.poll(10, TimeUnit.SECONDS), "accepted")
         }
@@ -142,6 +158,22 @@ class BridgeClientTest {
     }
 
     @Test
+    fun `something listening on the editor's port that can't prove the token gets nothing and no connection`() {
+        ServerSocket(0).use { listener ->
+            Harness(listener).use { harness ->
+                harness.client.start()
+                harness.accept().use { socket ->
+                    harness.answerHello(socket, token = "not the editor's")
+                    assertTrue("isn't the editor that started this server" in harness.problem())
+                    // The client said nothing after its hello (no proof to take elsewhere) and hung up.
+                    assertTrue(closedByPeer(socket))
+                }
+                assertEquals(null, harness.connected.poll(200, TimeUnit.MILLISECONDS))
+            }
+        }
+    }
+
+    @Test
     fun `a frame over the small cap before the answer to the hello closes the connection and is logged`() {
         ServerSocket(0).use { listener ->
             Harness(listener).use { harness ->
@@ -178,13 +210,21 @@ class BridgeClientTest {
     }
 }
 
-/** Reads the hello's line off [socket]. */
-private fun readHello(socket: Socket) {
+/** Reads one line off [socket]. */
+private fun readLine(socket: Socket): String {
     val line = StringBuilder()
     while (true) {
         val byte = socket.getInputStream().read()
         if (byte < 0 || byte == '\n'.code) break
         line.append(byte.toChar())
     }
-    assertTrue("\"hello\"" in line, "$line")
+    return line.toString()
+}
+
+/** Reads the hello's line off [socket]: never the token, only a nonce. */
+private fun readHello(socket: Socket): String {
+    val line = readLine(socket)
+    assertTrue("\"hello\"" in line, line)
+    assertTrue("secret" !in line, "the token never crosses: $line")
+    return line
 }

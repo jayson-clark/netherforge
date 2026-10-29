@@ -78,7 +78,7 @@ export const nfPlaceholders: LuaClass = {
         {
           name: 'namespace',
           type: 'string',
-          doc: 'What comes before the first `_`: lowercase letters and digits, starting with a letter, at most 32 characters, like `"shop"`.',
+          doc: 'What comes before the first `_`: lowercase letters and digits, starting with a letter, at most 32 characters, and starting with the package\'s own namespace (its letters and digits), so package `shop` registers `"shop"` or `"shopstats"`, and never another plugin\'s placeholders.',
         },
         {
           name: 'callback',

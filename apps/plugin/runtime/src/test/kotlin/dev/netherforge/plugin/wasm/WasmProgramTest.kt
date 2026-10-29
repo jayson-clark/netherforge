@@ -3,6 +3,7 @@ package dev.netherforge.plugin.wasm
 import dev.netherforge.plugin.binding.LuaHandle
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** What a program prints, cut into the lines scripts hear. */
 class WasmProgramTest {
@@ -40,5 +41,17 @@ class WasmProgramTest {
         assertEquals(4, Utf8.wholeCharacters(euro))
         assertEquals(1, Utf8.wholeCharacters(euro.copyOf(3)))
         assertEquals(1, Utf8.wholeCharacters(euro.copyOf(2)))
+    }
+
+    /** A program that doesn't read can't make the server keep everything a script sends it. */
+    @Test
+    fun `a program's input holds at most its limit of unread lines, and its end always fits`() {
+        val input = WasmProgram.ProgramInput(3)
+        assertEquals(listOf(true, true, true, false), (1..4).map { input.send("line $it") })
+        assertTrue(input.finish(), "the end of its input has room")
+        val read = input.readBytes().decodeToString()
+        assertEquals("line 1\nline 2\nline 3\n", read)
+        val standIn = StandInInput(2)
+        assertEquals(listOf(true, true, false), (1..3).map { standIn.send("x") })
     }
 }

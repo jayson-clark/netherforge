@@ -425,14 +425,25 @@ function Requirements({
         error saying what to add.
       </Hint>
       <CheckField
+        label="Console commands"
+        dataPath="requires.console"
+        value={requires?.console === true}
+        onChange={(on) => onFlag('console', on)}
+      />
+      <Hint>
+        Lets scripts run server commands as the console (<Mono>nf.server.run</Mono>), with the
+        console&apos;s permissions: anything it may do, making operators included. Ask for it only
+        when nothing narrower will do.
+      </Hint>
+      <CheckField
         label="Moderation"
         dataPath="requires.moderation"
         value={requires?.moderation === true}
         onChange={(on) => onFlag('moderation', on)}
       />
       <Hint>
-        Lets scripts ban and unban players, change the whitelist, and change the message of the day
-        and the most players allowed.
+        Lets scripts kick, ban and unban players, change the whitelist, and change the message of
+        the day and the most players allowed.
       </Hint>
       <CheckField
         label="Database"

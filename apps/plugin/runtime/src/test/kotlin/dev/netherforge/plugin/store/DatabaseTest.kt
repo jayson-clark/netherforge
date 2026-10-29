@@ -9,6 +9,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** The one layer every store sits on: staged writes, batches, failures, migrations, a file that isn't a database. */
@@ -48,6 +49,19 @@ class DatabaseTest {
     fun close() {
         workers.close()
         folder.toFile().deleteRecursively()
+    }
+
+    /** No connection can attach another database file: what keeps a package's SQL inside its own file. */
+    @Test
+    fun `a connection attaches no other database`() {
+        open().use { db ->
+            val other = file.resolveSibling("other.db")
+            val refused = runCatching { db.read { it.createStatement().use { s -> s.execute("ATTACH DATABASE '$other' AS x") } } }
+            assertTrue(refused.exceptionOrNull()?.message.orEmpty().contains("too many attached databases"), refused.toString())
+            val vacuum = runCatching { db.read { it.createStatement().use { s -> s.execute("VACUUM INTO '$other'") } } }
+            assertTrue(vacuum.isFailure, vacuum.toString())
+            assertFalse(java.nio.file.Files.exists(other), "$other was made")
+        }
     }
 
     @Test

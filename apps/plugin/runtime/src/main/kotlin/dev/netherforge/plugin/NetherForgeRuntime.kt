@@ -80,7 +80,7 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
     val log = RuntimeLog(platform.log)
 
     /** `nf.files.get`'s sandboxed directory. */
-    val files = ScriptFiles(config.dataDirectory)
+    val files = ScriptFiles(config.dataDirectory, config.files)
 
     /** The project's files and its packages', wherever they are (a dev server's folders, a bundle). */
     val source = ProjectFiles(config.project, config.resolvesPackages, config.packageCache)
@@ -454,8 +454,8 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
         store.flush()
     }
 
-    fun hello(token: String) =
-        HelloParams(token, Bridge.PROTOCOL, platform.info.pluginVersion, platform.info.minecraftVersion, config.project.toString())
+    fun hello(nonce: String) =
+        HelloParams(nonce, Bridge.PROTOCOL, platform.info.pluginVersion, platform.info.minecraftVersion, config.project.toString())
 
     fun status() = Status(platform.players.online().map { it.name }.sorted(), session.centities.count())
 

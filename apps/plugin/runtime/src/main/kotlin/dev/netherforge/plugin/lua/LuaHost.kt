@@ -1,5 +1,6 @@
 package dev.netherforge.plugin.lua
 
+import dev.netherforge.format.lua.LuaCaps
 import dev.netherforge.format.math.Vec3
 import dev.netherforge.plugin.binding.LuaEvent
 import dev.netherforge.plugin.binding.LuaHandle
@@ -66,6 +67,9 @@ class LuaHost(
     /** [TAIL_CALL]'s function: whether a tail call hides who called the running primitive ([callerHiddenByTailCall]). */
     private val tailCallRef: Int
 
+    /** [INDEX]'s function: `t[k]` in a protected call, for [field]. */
+    private val indexRef: Int
+
     /** The prelude's table that says what a genuine typed value is: metatable → kind. */
     private val kindsRef: Int
 
@@ -114,6 +118,59 @@ class LuaHost(
      */
     var callerScope: Int? = null
 
+    /** Entries of script tables the running primitive has walked in Kotlin ([meter]). */
+    private var walked = 0
+
+    /** How many of [walked] are charged (or free: a primitive starts at [METER_FREE]). */
+    private var charged = 0
+
+    /**
+     * Counts [entries] of a script's table the running primitive walked in
+     * Kotlin (reading it as plain JSON, as a list or a map), and charges the
+     * calling script for them past the first [METER_FREE], every [METER_STEP]:
+     * that work runs in no hook, so a table of a million entries, built over
+     * many ticks, would otherwise stall the server inside one call. Throws
+     * [LuaApiException] once the call's budget or time is spent.
+     */
+    fun meter(entries: Int) {
+        walked += entries
+        if (walked - charged >= METER_STEP) chargeWalked()
+    }
+
+    private fun chargeWalked() {
+        val entries = walked - charged
+        charged = walked
+        charge(entries.toLong() * INSTRUCTIONS_PER_ENTRY, entries * STEPS_PER_ENTRY)
+    }
+
+    /**
+     * Charges the calling script [instructions] of its budget and [steps]
+     * (about a nanosecond each) towards its time limit, for work a primitive
+     * does for it in Kotlin; throws [LuaApiException] when that's more than it
+     * has left (the overrun is reported even if the script catches the error).
+     */
+    fun charge(instructions: Long, steps: Double) {
+        owned("charge")
+        if (closed) return
+        val lua = current
+        val top = lua.top
+        val why = try {
+            lua.checkStack(4)
+            lua.refGet(hostRef)
+            lua.getField(-1, "charge")
+            lua.remove(-2)
+            lua.push(instructions)
+            lua.push(steps)
+            lua.pCall(2, 1)
+            if (lua.isString(-1)) lua.toString(-1) else null
+        } catch (e: LuaException) {
+            e.message
+        } finally {
+            lua.setTop(top)
+        }
+        if (why != null) throw LuaApiException(why)
+    }
+
     /** True while any call into this state hasn't returned yet. */
     val busy: Boolean get() = depth > 0
 
@@ -131,6 +188,9 @@ class LuaHost(
         main.load(direct(TAIL_CALL), "=nf/tail")
         main.pCall(0, 1)
         tailCallRef = main.ref()
+        main.load(direct(INDEX), "=nf/index")
+        main.pCall(0, 1)
+        indexRef = main.ref()
         // `clock`: the prelude's budget frames time every call in with it. `handles.*`: the
         // prelude's own handles (a `Task`, a world by name in saved data), a handle's key
         // values (for saving one, and printing it), and finding out a handle's class.
@@ -166,14 +226,22 @@ class LuaHost(
                     val previousAsked = callingFileAsked
                     val previousAnswer = callingFileAnswer
                     val previousIn = inPrimitive
+                    val previousWalked = walked
+                    val previousCharged = charged
                     current = lua
                     callerScope = null
                     reading = null
                     callingFileAsked = false
                     inPrimitive = true
+                    walked = 0
+                    charged = METER_FREE
                     try {
-                        primitive.call(lua)
+                        val results = primitive.call(lua)
+                        if (walked > charged) chargeWalked()
+                        results
                     } finally {
+                        walked = previousWalked
+                        charged = previousCharged
                         current = previous
                         callerScope = previousCaller
                         reading = previousReading
@@ -190,8 +258,8 @@ class LuaHost(
         main.load(direct(PRELUDE), "=nf")
         main.insert(-2)
         main.load(direct(BINDINGS), "=nf/bindings")
-        main.load(direct(CAPS), "=nf/caps")
-        main.createTable(0, 7)
+        main.load(direct(CAPS), LuaCaps.CHUNK_NAME)
+        main.createTable(0, 8)
         for ((name, value) in listOf(
             "hook_every" to limits.hookEvery,
             "deadline_every" to limits.deadlineEvery,
@@ -205,6 +273,8 @@ class LuaHost(
         }
         main.push(limits.maxWork)
         main.setField(-2, "max_work")
+        main.push((limits.maxTickMillis * 1_000_000).toLong())
+        main.setField(-2, "max_tick_ns")
         main.createTable(0, MODULES.size)
         for ((name, source) in MODULES) {
             main.load(direct(source), "=nf:$name")
@@ -562,7 +632,7 @@ class LuaHost(
         val call = LuaCall(this, lua)
         readingAs(from) {
             for (field in raising.writable) {
-                lua.getField(index, field)
+                this.field(lua, index, field)
                 try {
                     raising.payload.write(field, call, lua.top)
                 } catch (e: LuaApiException) {
@@ -662,6 +732,52 @@ class LuaHost(
         1
     }) { (scope, nanos, calls) ->
         scope.toInt() to ScopeCost(nanos, calls.toInt())
+    }
+
+    /** Whether [scope] has run its tick's worth ([SandboxLimits.maxTickMillis]), so a timer of its own waits for the next tick. */
+    fun overTickBudget(scope: Int): Boolean {
+        owned("overTickBudget")
+        if (closed) return false
+        val lua = current
+        val top = lua.top
+        depth++
+        try {
+            lua.refGet(hostRef)
+            lua.getField(-1, "over_tick_budget")
+            lua.remove(-2)
+            lua.push(scope.toLong())
+            lua.pCall(1, 1)
+            return lua.toBoolean(top + 1)
+        } catch (e: LuaException) {
+            return false
+        } finally {
+            lua.setTop(top)
+            depth--
+            if (depth == 0 && closeWanted) close()
+        }
+    }
+
+    /** The scopes whose timers or handlers were deferred since the last call (the owner is warned once each a tick). */
+    fun takeDeferred(): List<Int> {
+        owned("takeDeferred")
+        if (closed) return emptyList()
+        val lua = current
+        val top = lua.top
+        depth++
+        try {
+            lua.refGet(hostRef)
+            lua.getField(-1, "take_deferred")
+            lua.remove(-2)
+            lua.pCall(0, 1)
+            val text = lua.toString(top + 1).orEmpty()
+            return if (text.isEmpty()) emptyList() else text.split('\n').map(String::toInt)
+        } catch (e: LuaException) {
+            return emptyList()
+        } finally {
+            lua.setTop(top)
+            depth--
+            if (depth == 0 && closeWanted) close()
+        }
     }
 
     /**
@@ -1003,6 +1119,40 @@ class LuaHost(
     }
 
     /**
+     * Pushes field [name] of the table at [index] as a script reads it
+     * (`t[name]`, its `__index` included), for a primitive reading a table a
+     * script passed it (a shape's fields, an `any` value's).
+     *
+     * Never with luajava's `getField`: that's a bare `lua_getfield` called from
+     * Java, and a script's `__index` that raises an error (or runs out of
+     * budget, which is an error too) `longjmp`s across the JNI and JVM frames
+     * of the primitive back to the enclosing `lua_pcall`, which crashes the
+     * JVM. A plain table is read with `rawget` (no Lua can run); one with a
+     * metatable through [INDEX] in a protected call, whose error becomes the
+     * primitive's [LuaApiException].
+     */
+    fun field(lua: Lua, index: Int, name: String) {
+        val at = if (index < 0) lua.top + index + 1 else index
+        lua.checkStack(4)
+        if (lua.getMetatable(at) == 0) {
+            lua.push(name)
+            lua.rawGet(at)
+            return
+        }
+        lua.pop(1)
+        val top = lua.top
+        lua.refGet(indexRef)
+        lua.pushValue(at)
+        lua.push(name)
+        try {
+            lua.pCall(2, 1)
+        } catch (e: LuaException) {
+            lua.setTop(top)
+            throw LuaApiException("reading field '$name' failed: ${e.message ?: "an error"}")
+        }
+    }
+
+    /**
      * The table at [index] as JSON, as [encodeData] reads it (a problem, from
      * [root], is an error), at a fraction of the cost: the codec is Lua, and
      * every instruction of it is the calling script's. The table is read here
@@ -1015,7 +1165,7 @@ class LuaHost(
         owned("fieldsJson")
         val at = if (index < 0) lua.top + index + 1 else index
         val fields = plain.fields(lua, at, 0, exact = false, skip = setOf(kept)) ?: return saved(lua, at, root)
-        lua.getField(at, kept)
+        field(lua, at, kept)
         try {
             if (lua.isNil(-1)) return JsonObject(fields)
             val value = plain.value(lua, -1, 1, exact = true) ?: saved(lua, -1, "$root.$kept")
@@ -1368,6 +1518,23 @@ class LuaHost(
          * this function) out to the first project frame (`@` source), whether a frame on the
          * way was entered by a tail call, its caller's frame gone.
          */
+        /** Entries of script tables a primitive walks free of charge ([meter]): what an ordinary call takes. */
+        const val METER_FREE = 256
+
+        /** How often (in entries walked) [meter] charges. */
+        private const val METER_STEP = 4096
+
+        /** What an entry walked costs the script: about what the Lua codec spends per entry, at a fraction of it. */
+        private const val INSTRUCTIONS_PER_ENTRY = 2L
+        private const val STEPS_PER_ENTRY = 100.0
+
+        /** `t[k]`, called protected by [field]: a script's `__index` may raise anything. */
+        private const val INDEX = """
+            return function(t, k)
+              return t[k]
+            end
+        """
+
         private const val TAIL_CALL = """
             local getinfo = debug.getinfo
             return function()
@@ -1396,7 +1563,8 @@ class LuaHost(
         private val MODULES: Map<String, String> = MODULE_NAMES.associateWith { resource("prelude/$it.lua") }
 
         /** The standard library's caps, which the prelude puts in place of the library's unbounded functions. */
-        private val CAPS: String = resource("caps.lua")
+        /** format's, shared with the terrain scripts' sandbox. */
+        private val CAPS: String = LuaCaps.SOURCE
 
         /** Generated from packages/api (`pnpm generate`): the Lua half of the Kotlin-implemented API. */
         private val BINDINGS: String = resource("bindings.lua")

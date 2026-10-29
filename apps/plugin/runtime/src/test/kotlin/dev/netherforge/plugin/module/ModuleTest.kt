@@ -310,8 +310,16 @@ class ModuleTest {
 
     @Test
     fun `nf reaches players, centities and the console`() {
+        val showcase = TestServer.example("showcase")
+        // `nf.server.run` needs `console`, which the showcase doesn't ask for.
+        val manifest = (
+            showcase.getValue(
+                "netherforge.json"
+            ) as String
+            ).replace("\"requires\": {", "\"requires\": {\n    \"console\": true,")
         TestServer(
-            TestServer.example("showcase") + mapOf(
+            showcase + mapOf(
+                "netherforge.json" to manifest,
                 "modules/t/init.lua" to """
                     nf.commands.register("probe", function(ctx)
                       local p = ctx.player
@@ -428,6 +436,37 @@ class ModuleTest {
         }
     }
 
+    /** Each package has a folder of its own: another package sees none of it unless it's handed a file. */
+    @Test
+    fun `a package's files are its own`() {
+        val manifest = { ns: String, more: String ->
+            """{ "formatVersion": ${dev.netherforge.format.project.FormatVersion.CURRENT}, "name": "$ns", "namespace": "$ns", "version": "1.0.0", "minecraft": "26.3"$more }"""
+        }
+        TestServer(
+            mapOf(
+                "netherforge.json" to manifest("test", """, "dependencies": { "lib": { "path": "../lib" } }"""),
+                "../lib/netherforge.json" to manifest("lib", """, "exports": { "modules": ["api"] }"""),
+                "../lib/modules/api/init.lua" to """
+                    local api = {}
+                    function api.peek() return tostring(nf.files.get("secret.txt"):read()), #nf.files.get():children() end
+                    function api.write() return nf.files.get("lib.txt"):write("mine") end
+                    function api.read(file) return file:read() end
+                    return api
+                """,
+                "modules/t/init.lua" to """
+                    local lib = require("lib:api")
+                    nf.files.get("secret.txt"):write("token")
+                    log(lib.peek())
+                    log(lib.write(), tostring(nf.files.get("lib.txt"):read()))
+                    log(lib.read(nf.files.get("secret.txt")))
+                """
+            )
+        ).use { server ->
+            assertEquals(listOf("nil\t0", "true\tnil", "token"), server.logs)
+            assertEquals("mine", server.project.resolve(".netherforge/data/lib/lib.txt").readText())
+        }
+    }
+
     @Test
     fun `files stay inside the data folder`() {
         TestServer(
@@ -456,7 +495,7 @@ class ModuleTest {
                 ),
                 server.logs
             )
-            assertEquals("ab", server.project.resolve(".netherforge/data/log.txt").readText())
+            assertEquals("ab", server.project.resolve(".netherforge/data/test/log.txt").readText())
         }
     }
 }

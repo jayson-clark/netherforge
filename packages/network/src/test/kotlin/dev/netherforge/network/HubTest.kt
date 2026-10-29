@@ -334,4 +334,99 @@ class HubTest {
             server.stop()
         }
     }
+
+    @Test
+    fun `strangers that never say hello are limited, and the network's servers still get in`() {
+        val server = HubServer(hub, InetSocketAddress(InetAddress.getLoopbackAddress(), 0), Quiet)
+        server.start()
+        val strangers = ArrayList<java.net.Socket>()
+        try {
+            // More than one address may keep waiting: the rest are closed as they're accepted.
+            repeat(HubServer.MAX_PENDING_PER_ADDRESS + 4) {
+                strangers += java.net.Socket(InetAddress.getLoopbackAddress(), server.port).apply { soTimeout = 10_000 }
+            }
+            val closed = strangers.drop(HubServer.MAX_PENDING_PER_ADDRESS).map { socket ->
+                // The hub's challenge comes to those it took; the others read the end of the stream.
+                java.io.BufferedReader(java.io.InputStreamReader(socket.getInputStream())).readLine() == null
+            }
+            assertEquals(List(4) { true }, closed)
+            // Hellos from the network's own servers count no stranger against them once accepted, and
+            // the strangers are dropped after their time to say hello anyway.
+            strangers.take(HubServer.MAX_PENDING_PER_ADDRESS).forEach { it.close() }
+            val joined = CompletableFuture<HubFrame.Welcome>()
+            val client = HubClient(
+                "127.0.0.1",
+                server.port,
+                "lobby",
+                "s3cret",
+                object : HubListener {
+                    override fun connected(welcome: HubFrame.Welcome) {
+                        joined.complete(welcome)
+                    }
+
+                    override fun received(frame: HubFrame) = Unit
+
+                    override fun disconnected(why: String) = Unit
+
+                    override fun failed(why: String) = Unit
+                }
+            )
+            client.start()
+            joined.get(20, TimeUnit.SECONDS)
+            client.stop()
+        } finally {
+            strangers.forEach { runCatching { it.close() } }
+            server.stop()
+        }
+    }
+
+    @Test
+    fun `a server refuses a hub that doesn't hold the network's secret`() {
+        // Something answering at the hub's address: it challenges and welcomes, but can't seal with the secret.
+        val fake = java.net.ServerSocket(0, 1, InetAddress.getLoopbackAddress())
+        val impostor = Thread {
+            runCatching {
+                fake.accept().use { socket ->
+                    val out = socket.getOutputStream().bufferedWriter()
+                    out.write(Protocol.encode(HubFrame.Challenge(Protocol.VERSION, Auth.newNonce())) + "\n")
+                    out.flush()
+                    socket.getInputStream().bufferedReader().readLine()
+                    out.write(Protocol.encode(HubFrame.Welcome("lobby", emptyList(), emptyList(), 1024)) + "\n")
+                    out.flush()
+                    Thread.sleep(2_000)
+                }
+            }
+        }.apply { start() }
+        val failed = CompletableFuture<String>()
+        val connected = CompletableFuture<HubFrame.Welcome>()
+        val client = HubClient(
+            "127.0.0.1",
+            fake.localPort,
+            "lobby",
+            "s3cret",
+            object : HubListener {
+                override fun connected(welcome: HubFrame.Welcome) {
+                    connected.complete(welcome)
+                }
+
+                override fun received(frame: HubFrame) = Unit
+
+                override fun disconnected(why: String) = Unit
+
+                override fun failed(why: String) {
+                    failed.complete(why)
+                }
+            }
+        )
+        try {
+            client.start()
+            val why = failed.get(10, TimeUnit.SECONDS)
+            assertTrue("isn't this network's hub" in why, why)
+            assertFalse(connected.isDone)
+        } finally {
+            client.stop()
+            fake.close()
+            impostor.join(5_000)
+        }
+    }
 }

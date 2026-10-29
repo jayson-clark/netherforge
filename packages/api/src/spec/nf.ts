@@ -77,7 +77,8 @@ export const nfServer = namespace(
     },
     {
       name: 'run',
-      doc: "Runs a server command as the console, with the console's permissions. The leading slash is optional.",
+      doc: "Runs a server command as the console, with the console's permissions: anything the console may do, which is why it needs a requirement of its own that whoever runs the server sees first. The leading slash is optional.",
+      requires: 'console',
       params: [{ name: 'command', type: 'string', doc: 'One command line.' }],
       returns: [{ type: 'boolean', doc: 'Whether the server ran it.' }],
       example: 'nf.server.run("time set day")',
@@ -312,11 +313,11 @@ export const nfDialogs = namespace(
 /** `nf.files`: the scripts' data directory. */
 export const nfFiles = namespace(
   'files',
-  'Files in the one directory scripts may keep things in: the only state a script has that survives a restart.',
+  "Files in the package's own folder (`plugins/NetherForge/data/<namespace>/`), which no other package's scripts see unless they're handed a file: the only state a script has that survives a restart. The server owner limits how much each package may keep there (`files:` in `config.yml`); a write past it fails.",
   [
     {
       name: 'get',
-      doc: 'A file or folder in the data directory, which survives restarts and reloads. A handle is a path, not an open file: nothing is read until you ask. Paths that would leave that directory (`..`, backslashes, names starting with a dot) give `nil` rather than an error. No argument is the directory itself.',
+      doc: "A file or folder in the calling package's own folder, which survives restarts and reloads. A handle is a path, not an open file: nothing is read until you ask. Paths that would leave that folder (`..`, backslashes, names starting with a dot) give `nil` rather than an error. No argument is the folder itself.",
       params: [
         {
           name: 'path',

@@ -2,11 +2,10 @@ package dev.netherforge.plugin.screen
 
 import dev.netherforge.format.screen.Dither
 import dev.netherforge.format.screen.MapPalette
+import dev.netherforge.plugin.project.Pictures
 import java.awt.Image
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
-import java.io.ByteArrayInputStream
-import javax.imageio.ImageIO
 
 /**
  * Pictures as map colours: a PNG's pixels scaled to a size and dithered ([Dither]) into [MapPalette]'s colours,
@@ -31,7 +30,7 @@ class ScreenImages(private val read: (path: String) -> ByteArray?) {
         val key = Key(path, width, height, dither)
         kept[key]?.let { return it }
         val bytes = read(path) ?: return null
-        val image = runCatching { ImageIO.read(ByteArrayInputStream(bytes)) }.getOrNull() ?: return null
+        val image = Pictures.decode(bytes) ?: return null
         val (w, h) = size(image.width, image.height, width, height)
         val scaled = scale(image, w, h)
         val argb = scaled.getRGB(0, 0, w, h, null, 0, w)

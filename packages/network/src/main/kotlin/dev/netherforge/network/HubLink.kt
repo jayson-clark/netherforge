@@ -129,19 +129,31 @@ class HubClient(
             )
             return false
         }
-        out.write(Protocol.encode(ServerFrame.Hello(Protocol.VERSION, server, Auth.proof(secret, challenge.nonce, server))))
+        val nonce = Auth.newNonce()
+        out.write(Protocol.encode(ServerFrame.Hello(Protocol.VERSION, server, Auth.proof(secret, challenge.nonce, server, nonce), nonce)))
         out.write("\n")
         out.flush()
-        reader.limit = Protocol.MAX_FRAME
-        val welcome = when (val answer = reader.readLine()?.let(Protocol::decodeHubFrame)) {
-            is HubFrame.Welcome -> answer
-            is HubFrame.Refused -> return false.also { listener.failed("the network's hub refused this server: ${answer.reason}") }
-            else -> return false.also { listener.failed("the network's hub closed the connection before answering") }
+        // Everything from the welcome on is sealed: a hub that can open and seal with these keys holds the secret.
+        val channel = Channel.server(secret, challenge.nonce, nonce, server)
+        reader.limit = Protocol.MAX_SEALED_LINE
+        val answer = reader.readLine()
+            ?: return false.also { listener.failed("the network's hub closed the connection before answering") }
+        val welcome = when (val frame = channel.open(answer)?.let(Protocol::decodeHubFrame) ?: Protocol.decodeHubFrame(answer)) {
+            is HubFrame.Welcome -> frame.takeIf { answer.startsWith(Channel.PREFIX) }
+                ?: return false.also {
+                    listener.failed("$host:$port answered without the network's secret: it isn't this network's hub (check network.hub)")
+                }
+            is HubFrame.Refused -> return false.also { listener.failed("the network's hub refused this server: ${frame.reason}") }
+            else -> return false.also {
+                listener.failed(
+                    "$host:$port answered with something this server can't open: it isn't this network's hub, or its secret differs"
+                )
+            }
         }
         socket.soTimeout = Protocol.IDLE_MILLIS.toInt()
         queue.clear()
         accepted = true
-        val writer = Thread({ drain(socket, out) }, "NetherForge network writer").apply {
+        val writer = Thread({ drain(socket, out, channel) }, "NetherForge network writer").apply {
             isDaemon = true
             start()
         }
@@ -149,8 +161,13 @@ class HubClient(
         try {
             listener.connected(welcome)
             while (running.get()) {
-                val line = reader.readLine() ?: break
-                if (line.isBlank()) continue
+                val read = reader.readLine() ?: break
+                if (read.isBlank()) continue
+                val line = channel.open(read)
+                if (line == null) {
+                    why = "the hub sent a line not sealed with this connection's keys"
+                    break
+                }
                 Protocol.decodeHubFrame(line)?.let(listener::received)
             }
         } catch (_: SocketTimeoutException) {
@@ -170,15 +187,16 @@ class HubClient(
         return true
     }
 
-    private fun drain(socket: Socket, out: BufferedWriter) {
+    /** Writes what's queued, each line sealed with [channel] in the order written (one writer: the order it's counted in). */
+    private fun drain(socket: Socket, out: BufferedWriter, channel: Channel) {
         try {
             while (!socket.isClosed) {
                 val first = queue.poll(Protocol.PING_MILLIS, TimeUnit.MILLISECONDS) ?: Protocol.encode(ServerFrame.Ping)
-                out.write(first)
+                out.write(channel.seal(first))
                 out.write("\n")
                 while (true) {
                     val next = queue.poll() ?: break
-                    out.write(next)
+                    out.write(channel.seal(next))
                     out.write("\n")
                 }
                 out.flush()
@@ -242,7 +260,8 @@ class LocalLink(private val hub: Hub, private val server: String, private val se
         if (session != null) return
         val session = hub.open(peer)
         this.session = session
-        session.receive(ServerFrame.Hello(Protocol.VERSION, server, Auth.proof(secret, nonce!!, server)))
+        val own = Auth.newNonce()
+        session.receive(ServerFrame.Hello(Protocol.VERSION, server, Auth.proof(secret, nonce!!, server, own), own))
     }
 
     override fun stop() = peer.close("the server is stopping")

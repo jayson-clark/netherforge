@@ -39,10 +39,14 @@ import java.util.concurrent.Executor
  * kept here (never in the URL but the state and the verifier's challenge),
  * used once and forgotten after [LOGIN_TICKS]. The callback finds the login
  * by its state (an unknown one is refused with no event: it's forged or used
- * already), trades the code for a token at the flow's token endpoint on a
- * worker (through `nf.http`'s guarded client, its host held to the package's
- * `requires.http`), then raises `complete` or `fail` on the flow and answers
- * the browser with a page saying so. In a test run ([testing]) the endpoint
+ * already) and asks the browser to confirm which Minecraft player it signs in
+ * as: the login is tied to the player who began it, not to the browser that
+ * finishes it, so a link handed to someone else would sign *them* in as that
+ * player. Only once they confirm (`POST /<namespace>/oauth/<name>/confirm`,
+ * with a single-use token from that page) is the code traded for a token at
+ * the flow's token endpoint on a worker (through `nf.http`'s guarded client,
+ * its host held to the package's `requires.http`); then `complete` or `fail`
+ * is raised on the flow and the browser is answered with a page saying so. In a test run ([testing]) the endpoint
  * isn't called: [testTokens] (`nf.test.oauth_token`) answers instead.
  *
  * A flow belongs to the scope that made it; logins under way go with it.
@@ -53,7 +57,9 @@ class OAuthFlows(
     private val async: AsyncWork,
     private val fetcher: () -> HttpFetcher,
     private val ticks: () -> Long,
-    private val testing: Boolean
+    private val testing: Boolean,
+    /** A player's name as the server knows it now, for the confirm page; null when they're offline. */
+    private val playerName: (LuaHandle.Player) -> String? = { null }
 ) : RuntimeService {
     override val name get() = "login flows"
 
@@ -67,11 +73,17 @@ class OAuthFlows(
         val handle: LuaHandle.OAuthFlow
     ) {
         lateinit var route: WebRoutes.Route
+        lateinit var confirmRoute: WebRoutes.Route
         val logins = LinkedHashMap<String, Login>()
+
+        /** Logins back from the service, waiting for the browser to confirm the player, by the confirm page's token. */
+        val confirmations = LinkedHashMap<String, Confirmation>()
         var testToken: JsonObject? = null
     }
 
-    class Login(val player: LuaHandle.Player, val verifier: String, val expires: Long)
+    class Login(val player: LuaHandle.Player, val name: String, val verifier: String, val expires: Long)
+
+    class Confirmation(val login: Login, val code: String)
 
     private val flows = LinkedHashMap<Long, Flow>()
     private var nextNumber = 1L
@@ -97,6 +109,7 @@ class OAuthFlows(
         val number = nextNumber++
         val flow = Flow(number, scope, scope.namespace, options, declared, LuaHandle.OAuthFlow(number))
         flow.route = web.add(scope.namespace, "GET", callbackPath(options.name), null, null) { request, _ -> callback(flow, request) }
+        flow.confirmRoute = web.add(scope.namespace, "POST", confirmPath(options.name), null, null) { request, _ -> confirm(flow, request) }
         flows[number] = flow
         return flow
     }
@@ -123,7 +136,7 @@ class OAuthFlows(
         while (flow.logins.size >= MAX_LOGINS) flow.logins.remove(flow.logins.keys.first())
         val state = token()
         val verifier = token()
-        flow.logins[state] = Login(player, verifier, now + LOGIN_TICKS)
+        flow.logins[state] = Login(player, playerName(player) ?: "this player", verifier, now + LOGIN_TICKS)
         val challenge = base64(MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(StandardCharsets.US_ASCII)))
         val query = LinkedHashMap<String, String>()
         query.putAll(flow.options.parameters.orEmpty())
@@ -142,7 +155,9 @@ class OAuthFlows(
     fun remove(flow: Flow): Boolean {
         if (flows.remove(flow.number) == null) return false
         web.remove(flow.route)
+        web.remove(flow.confirmRoute)
         flow.logins.clear()
+        flow.confirmations.clear()
         scripts.dropTarget(flow.handle)
         return true
     }
@@ -161,7 +176,24 @@ class OAuthFlows(
             else -> null
         }
         if (failure != null) return failed(flow, login, request, failure)
-        val code = query.getValue("code")
+        val token = token()
+        while (flow.confirmations.size >= MAX_LOGINS) flow.confirmations.remove(flow.confirmations.keys.first())
+        flow.confirmations[token] = Confirmation(login, query.getValue("code"))
+        web.finish(request, confirmPage(flow, login, token))
+    }
+
+    /** The browser confirmed the player: the code is traded for a token. */
+    private fun confirm(flow: Flow, request: WebRoutes.Pending) {
+        val form = RoutePath.query(String(request.call.body, StandardCharsets.UTF_8))
+        val confirmation = form["token"]?.let { flow.confirmations.remove(it) }
+        if (confirmation == null || confirmation.login.expires <= ticks()) {
+            web.finish(request, page(400, "This sign-in has expired or was already used. Start again from the game."))
+            return
+        }
+        exchange(flow, confirmation.login, confirmation.code, request)
+    }
+
+    private fun exchange(flow: Flow, login: Login, code: String, request: WebRoutes.Pending) {
         val redirect = web.url(flow.namespace, callbackPath(flow.options.name), emptyMap())
             ?: "http://localhost/${flow.namespace}${callbackPath(flow.options.name)}"
         val answer: CompletableFuture<JsonObject> = if (testing) {
@@ -236,16 +268,31 @@ class OAuthFlows(
 
     private fun base64(bytes: ByteArray) = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
 
+    private fun escape(text: String) = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+
     /** A small page for the browser that came back. */
-    private fun page(status: Int, text: String): WebAnswer {
-        val escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+    private fun page(status: Int, text: String, more: String = ""): WebAnswer {
         val html = "<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">" +
             "<title>Sign-in</title><body style=\"font-family:system-ui,sans-serif;max-width:32em;margin:4em auto;padding:0 1em\">" +
-            "<p>$escaped</p></body>"
+            "<p>${escape(text)}</p>$more</body>"
         return WebAnswer(
             status,
             mapOf("content-type" to "text/html; charset=utf-8", "referrer-policy" to "no-referrer"),
             html.toByteArray()
+        )
+    }
+
+    /** Asks the browser whether it signs in as [login]'s player, with a form that confirms it once ([confirm]). */
+    private fun confirmPage(flow: Flow, login: Login, token: String): WebAnswer {
+        val action = "/${flow.namespace}${confirmPath(flow.options.name)}"
+        val form = "<form method=\"post\" action=\"${escape(action)}\">" +
+            "<input type=\"hidden\" name=\"token\" value=\"${escape(token)}\">" +
+            "<button type=\"submit\">Sign in as ${escape(login.name)}</button></form>"
+        return page(
+            200,
+            "This signs your account in for the Minecraft player ${login.name}. Only continue if you are ${login.name} " +
+                "and you started this sign-in in the game.",
+            form
         )
     }
 
@@ -277,5 +324,7 @@ class OAuthFlows(
         )
 
         fun callbackPath(name: String) = "/oauth/$name/callback"
+
+        fun confirmPath(name: String) = "/oauth/$name/confirm"
     }
 }

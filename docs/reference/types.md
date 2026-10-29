@@ -16,6 +16,7 @@ What every event handler receives: a table with the event's own fields (its payl
 | `current` | `any` | The handle whose handler is running (the node, centity, slot, menu, button or dialog), or `nil` in an `nf.on` handler. As an event bubbles it changes; `target` stays what was hit. |
 | `cancelled` | `boolean` | Whether what caused it will be cancelled, as things stand. Read-only: use `cancel()` and `uncancel()`. |
 | `stopped` | `boolean` | Whether a handler called `stop()`. Read-only. |
+| `from` | `string?` | On a custom event (`nf.emit`, `centity:emit`), the namespace of the package whose code emitted it; `nil` on the server's own events. Any package may emit any custom event, so a handler that grants something checks `event.from` is a package it trusts (its own namespace, as its `netherforge.json` says). Read-only. |
 
 #### `event:stop()`
 
@@ -2846,7 +2847,7 @@ What `nf.web.oauth` takes.
 
 | Field | Type | |
 | --- | --- | --- |
-| `name` | `string` | The flow's name, unique in the package: lowercase letters, digits, `-` and `_`. Its callback is `/<namespace>/oauth/<name>/callback`. |
+| `name` | `string` | The flow's name, unique in the package: lowercase letters, digits, `-` and `_`. Its callback is `/<namespace>/oauth/<name>/callback`, and its confirmation `/<namespace>/oauth/<name>/confirm`. |
 | `authorize_url` | `string` | The service's authorization page: an `https://` URL. |
 | `token_url` | `string` | The service's token endpoint: an `https://` URL whose host the package declares in `requires.http`. |
 | `client_id` | `string` | The client id the service gave you. |

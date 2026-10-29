@@ -21,14 +21,16 @@ class FakeCommands(private val platform: FakePlatform) : CommandOps {
     override fun register(spec: CommandSpec, handler: CommandHandler): Boolean {
         if (spec.name in taken || spec.name in registered) return false
         registered[spec.name] = spec to handler
-        for (alias in spec.aliases) registered.putIfAbsent(alias, spec to handler)
+        // An alias someone already has stays theirs, as on Paper.
+        for (alias in spec.aliases) if (alias !in taken) registered.putIfAbsent(alias, spec to handler)
         return true
     }
 
     override fun unregister(name: String) {
         val spec = registered[name]?.first ?: return
         registered.remove(name)
-        for (alias in spec.aliases) registered.remove(alias)
+        // Only the aliases it holds: one another command had first is still that command's.
+        for (alias in spec.aliases) if (registered[alias]?.first === spec) registered.remove(alias)
     }
 
     /** Item text the "server" reads with components, as `item` arguments do on Paper; a bare item id it reads itself. */

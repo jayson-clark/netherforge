@@ -1,5 +1,6 @@
 package dev.netherforge.plugin.testkit
 
+import dev.netherforge.format.dialog.AfterAction
 import dev.netherforge.format.dialog.DialogType
 import dev.netherforge.plugin.platform.DialogAnswers
 import dev.netherforge.plugin.platform.DialogOps
@@ -189,10 +190,26 @@ class FakeDialogs(private val platform: FakePlatform) : DialogOps {
         return true
     }
 
-    /** A player presses a button on the dialog on their screen (or one it lists, by [dialog]). */
+    /**
+     * A player presses a button on the dialog on their screen (or one it lists, by [dialog]). As the game does, a
+     * dialog whose after-action is `close` (the default) leaves their screen with the press.
+     */
     fun press(player: FakePlayer, button: String, values: Map<String, Any> = emptyMap(), dialog: String? = null) {
         val shown = showing[player.ref.uuid] ?: error("${player.ref.name} has no dialog open")
+        val pressed = dialog?.let { id -> listed(shown, id) } ?: shown
+        if ((pressed.file.afterAction ?: AfterAction.CLOSE) == AfterAction.CLOSE) showing.remove(player.ref.uuid)
         platform.events!!.dialogPressed(player.ref, dialog ?: shown.id, button, values)
+    }
+
+    private fun listed(spec: DialogSpec, id: String): DialogSpec? =
+        spec.listed.firstOrNull { it.id == id } ?: spec.listed.firstNotNullOfOrNull { listed(it, id) }
+
+    /**
+     * A modified client sends a press of [button] on [dialog] whether or not that dialog is on their screen (a
+     * button's click kept from earlier, or made up): what the runtime must not take for a real press.
+     */
+    fun forgePress(player: FakePlayer, dialog: String, button: String, values: Map<String, Any> = emptyMap()) {
+        platform.events!!.dialogPressed(player.ref, dialog, button, values)
     }
 
     /**

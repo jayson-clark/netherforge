@@ -31,6 +31,7 @@ internal class ScriptReports(private val session: ProjectSession) : RuntimeServi
 
     /** When each kind of slow-script warning (a script and where it's slow) was last logged, and how many scopes like it were held back since. */
     private val slowLog = HashMap<String, Pair<Long, Int>>()
+    private val deferredLog = HashMap<Int, Long>()
 
     /** The warning each slow scope has in the problems, until it closes. */
     private val slowProblems = LinkedHashMap<Int, Problem>()
@@ -114,6 +115,23 @@ internal class ScriptReports(private val session: ProjectSession) : RuntimeServi
             line = slow.line
         )
         if (slowProblems.put(scope.id, problem) != problem) session.problemsChanged()
+    }
+
+    /**
+     * A scope's timers or event handlers were deferred to the next tick because its code ran more than
+     * `performance.max-ms-per-tick` in one tick ([ScriptCosts] reports each scope at most once a minute). A sign
+     * the script fans out across more timers or handlers than the server can run a tick.
+     */
+    fun deferred(scope: Scope) {
+        val ticks = session.ticks
+        val last = deferredLog[scope.id]
+        if (last != null && ticks - last < ScriptCosts.QUIET_TICKS) return
+        deferredLog[scope.id] = ticks
+        val limit = session.config.performance.maxTickMillis.toBigDecimal().stripTrailingZeros().toPlainString()
+        platform.log.warn(
+            "${scope.owner.label} ran more than $limit ms in a tick, so its timers and handlers waited for the next; " +
+                "it may schedule more than the server can run a tick (see /nf scripts)"
+        )
     }
 
     private fun add(scope: Scope, problem: Problem) {

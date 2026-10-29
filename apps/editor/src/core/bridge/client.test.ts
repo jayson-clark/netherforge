@@ -61,7 +61,10 @@ function relay(answer: (request: Frame) => Partial<Frame> | null = () => ({ resu
 describe('the bridge client', () => {
   it('sends requests as JSON-RPC, as the recorded session does, and resolves with their results', async () => {
     const reload = recorded.find((it) => it.method === 'reload')!
-    const answered = recorded.find((it) => it.id === reload.id && 'result' in it)!
+    // Its answer is the first with its id after it (the handshake's answers use small ids too).
+    const answered = recorded
+      .slice(recorded.indexOf(reload))
+      .find((it) => it.id === reload.id && 'result' in it)!
     const plugin = relay((request) =>
       request.method === 'reload' ? { result: answered.result } : { result: [] },
     )

@@ -101,11 +101,11 @@ class WebGate(private val config: WebConfig, private val nanoTime: () -> Long = 
         }
     }
 
-    /** The client's address: the connection's, or with [WebConfig.trustProxyHeaders] the first of `X-Forwarded-For`. */
+    /** The client's address: the connection's, or with [WebConfig.trustProxyHeaders] the one the owner's proxy saw ([forwarded]). */
     private fun clientAddress(exchange: HttpExchange): String {
         val direct = exchange.remoteAddress?.address?.hostAddress ?: "unknown"
         if (!config.trustProxyHeaders) return direct
-        return exchange.requestHeaders.getFirst("X-Forwarded-For")?.split(',')?.first()?.trim()?.takeIf { it.isNotEmpty() } ?: direct
+        return forwarded(exchange.requestHeaders["X-Forwarded-For"]) ?: direct
     }
 
     /** The body, or null when it's longer than the limit (reading stops there, whatever it said its length was). */
@@ -140,6 +140,16 @@ class WebGate(private val config: WebConfig, private val nanoTime: () -> Long = 
         const val MAX_PATH = 2048
     }
 }
+
+/**
+ * The client's address from `X-Forwarded-For` (every such header, in order): the
+ * last entry, the one the owner's own reverse proxy appended for the connection
+ * it took. Every entry before it is whatever the client sent, so trusting the
+ * first would let anyone choose their address (and a fresh one per request
+ * would never meet the per-address limit).
+ */
+internal fun forwarded(headers: List<String>?): String? =
+    headers.orEmpty().flatMap { it.split(',') }.map { it.trim() }.lastOrNull { it.isNotEmpty() }
 
 /** How many requests each address may make a minute: a sliding window, from the listener's threads. */
 internal class AddressRate(private val perMinute: Int, private val nanoTime: () -> Long) {

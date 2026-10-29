@@ -164,4 +164,177 @@ class HangTest {
             assertEquals(SourceRef("modules/t/init.lua", 2), error.source)
         }
     }
+
+    @Test
+    fun `a loop that ends collection cycles faster than the hook counts is still stopped`() {
+        // Arming a thread's hook again starts its count over: a loop making garbage ends a
+        // collection cycle every few hundred instructions, and each cycle's check re-armed it.
+        val message = refused(
+            """
+            local s = ("x"):rep(64 * 1024)
+            while true do local u = s .. "a" end
+            """.trimIndent(),
+            line = 2
+        )
+        assertTrue("ran past its budget" in message || "ran past its time limit" in message, message)
+    }
+
+    @Test
+    fun `the same loop in a handler is stopped too`() {
+        TestServer(
+            mapOf(
+                "modules/t/init.lua" to """
+                    nf.after(1, function()
+                      local s = ("x"):rep(64 * 1024)
+                      while true do local u = s .. "a" end
+                    end)
+                """.trimIndent()
+            )
+        ).use { server ->
+            server.tick(2)
+            val error = server.errors.single()
+            assertEquals(SourceRef("modules/t/init.lua", 3), error.source, error.message)
+        }
+    }
+
+    /** A table whose `__len` says 1 to the cap and two billion to the library (which then shifts in C). */
+    private val lying = """
+        local asked = 0
+        local t = setmetatable({}, { __len = function() asked = asked + 1; return asked == 1 and 1 or 2000000000 end })
+    """.trimIndent()
+
+    @Test
+    fun `table remove reads a length that changes only once`() {
+        TestServer(mapOf("modules/t/init.lua" to "$lying\ntable.remove(t, 1)\nlog('removed, asked ' .. asked)")).use { server ->
+            assertEquals(emptyList(), server.errors.map { it.message })
+            assertEquals(listOf("removed, asked 1"), server.logs)
+        }
+    }
+
+    @Test
+    fun `table insert reads a length that changes only once`() {
+        TestServer(mapOf("modules/t/init.lua" to "$lying\ntable.insert(t, 1, 'x')\nlog('inserted, asked ' .. asked)")).use { server ->
+            assertEquals(emptyList(), server.errors.map { it.message })
+            assertEquals(listOf("inserted, asked 1"), server.logs)
+        }
+    }
+
+    @Test
+    fun `table sort reads a length that changes only once`() {
+        TestServer(
+            mapOf("modules/t/init.lua" to "$lying\nrawset(t, 1, 5)\ntable.sort(t)\nlog('sorted, asked ' .. asked)")
+        ).use { server ->
+            assertEquals(emptyList(), server.errors.map { it.message })
+            assertEquals(listOf("sorted, asked 1"), server.logs)
+        }
+    }
+
+    @Test
+    fun `table concat measures the very values it joins`() {
+        // An `__index` that hands the cap empty strings and the library 16 MB ones.
+        val message = refused(
+            """
+            local big = ("x"):rep(16 * 1024 * 1024)
+            local reads = 0
+            local t = setmetatable({}, { __index = function() reads = reads + 1; return reads <= 200 and "" or big end })
+            local s = table.concat(t, "", 1, 400)
+            """.trimIndent(),
+            line = 4
+        )
+        assertTrue("table.concat: the result would be" in message, message)
+    }
+
+    @Test
+    fun `tables with metatables still insert, remove, sort and concat as the library does`() {
+        TestServer(
+            mapOf(
+                "modules/t/init.lua" to """
+                    local List = {}
+                    List.__index = List
+                    local l = setmetatable({ 3, 1, 2 }, List)
+                    table.insert(l, 1, 4)
+                    table.insert(l, 9)
+                    local removed = table.remove(l, 2)
+                    table.sort(l)
+                    log(table.concat(l, ","), removed, table.remove(l), #l)
+                    log(select(2, pcall(table.insert, l, 9, 1)))
+                """.trimIndent()
+            )
+        ).use { server ->
+            assertEquals(emptyList(), server.errors.map { it.message })
+            assertEquals("1,2,4,9\t3\t9\t3", server.logs[0])
+            assertTrue("position out of bounds" in server.logs[1], server.logs[1])
+        }
+    }
+
+    @Test
+    fun `encoding a huge table is charged to the script, not done for free`() {
+        // `byte` fills the table in one instruction; the walk over it is the runtime's, in Kotlin.
+        val message = refused("""local t = { ("x"):rep(900000):byte(1, -1) } local s = nf.json.encode(t)""")
+        assertTrue("ran past its budget" in message, message)
+    }
+
+    @Test
+    fun `sorting a huge object's keys to encode it is charged too`() {
+        TestServer(
+            mapOf(
+                "modules/t/init.lua" to """
+                    local t, n = {}, 0
+                    nf.every(1, function()
+                      if n < 60000 then
+                        for i = 1, 5000 do n = n + 1; t["key" .. n] = n end
+                      elseif n == 60000 then
+                        n = n + 1
+                        local ok, e = pcall(nf.json.encode, t)
+                        log(tostring(ok), tostring(e))
+                      end
+                    end)
+                """.trimIndent()
+            )
+        ).use { server ->
+            server.tick(16)
+            assertTrue(server.errors.any { "ran past its budget" in it.message }, server.errors.map { it.message }.toString())
+        }
+    }
+
+    @Test
+    fun `shuffling a list that claims to be huge is charged, not looped for free`() {
+        // The shuffle's loop is the prelude's, which the hook never stops mid-way: it's charged before it starts.
+        val message = refused(
+            """local t = setmetatable({}, { __len = function() return 1e12 end }) nf.random.new(1):shuffle(t)"""
+        )
+        assertTrue("ran past its budget" in message, message)
+    }
+
+    @Test
+    fun `picking from huge weights is charged as it reads and sorts them`() {
+        // `byte` fills the table in one instruction; the weights are read and sorted by the prelude.
+        val message = refused("""local k = nf.random.new(1):weighted({ ("x"):rep(300000):byte(1, -1) })""")
+        assertTrue("ran past its budget" in message, message)
+    }
+
+    @Test
+    fun `shuffle and weighted still do their job on ordinary tables`() {
+        TestServer(
+            mapOf(
+                "modules/t/init.lua" to """
+                    local r = nf.random.new(7)
+                    local t = { 1, 2, 3, 4, 5 }
+                    r:shuffle(t)
+                    table.sort(t)
+                    log(table.concat(t, ","), r:weighted({ a = 1, b = 0 }))
+                """.trimIndent()
+            )
+        ).use { server ->
+            assertEquals(emptyList(), server.errors.map { it.message })
+            assertEquals(listOf("1,2,3,4,5\ta"), server.logs)
+        }
+    }
+
+    @Test
+    fun `the Lua codec stops encoding a huge table once the script is past its budget`() {
+        // A Vec3 in it makes it more than plain data: the prelude's codec walks it, not Kotlin.
+        val message = refused("""local t = { ("x"):rep(900000):byte(1, -1) } t[1] = vec3(0, 0, 0) local s = nf.json.encode(t)""")
+        assertTrue("ran past its budget" in message, message)
+    }
 }

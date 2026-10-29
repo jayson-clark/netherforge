@@ -395,8 +395,7 @@ class WasmModules(
     /** A script sends [line] to [program]; false when it has ended or its input was closed. */
     fun send(program: WasmProgram, line: String): Boolean {
         if (program.ended || !program.input.open) return false
-        program.input.send(line)
-        return true
+        return program.input.send(line)
     }
 
     fun closeInput(program: WasmProgram): Boolean {

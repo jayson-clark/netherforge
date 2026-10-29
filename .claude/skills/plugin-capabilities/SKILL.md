@@ -284,9 +284,11 @@ Servers behind one Velocity proxy, talking through a **hub** the proxy runs. Thr
   Paper plugin, the proxy plugin and tests share one. `Protocol` (NDJSON, one JSON object a line, its kind in `"t"`:
   `HubFrame`s the hub sends, `ServerFrame`s a server sends; plain frames, not JSON-RPC, since almost everything is a
   notification and the hub relays requests under ids of its own). The handshake: the hub's `Challenge` (a nonce), the
-  server's `Hello` with its name and `Auth.proof` (HMAC-SHA256 of nonce and name under the shared secret: the secret
-  never crosses, and a proof is good for one connection and one name), then `Welcome` (the network as it is, and the
-  hub's `maxValueBytes`) or `Refused`. `Hub` is one lock over everything (sessions by name, presence, `SharedMaps`,
+  server's `Hello` with its name, a nonce of its own and `Auth.proof` (HMAC-SHA256 of both nonces and the name under
+  the shared secret: the secret never crosses, and a proof is good for one connection and one name), then `Welcome`
+  (the network as it is, and the hub's `maxValueBytes`) or `Refused`. From the `Welcome` on every line is sealed with
+  the connection's `Channel` (keys from the secret and both nonces); a line that doesn't open ends the connection,
+  and a hub that can't seal the welcome isn't the network's (the server says so). `Hub` is one lock over everything (sessions by name, presence, `SharedMaps`,
   request routes): frames arrive on each connection's thread, the proxy's events on its, `tick` on a timer, and
   sending only queues (`Peer.send`), so nothing waits on a socket or the proxy while holding it; the proxy is asked
   to move a player outside the lock (`handle` returns what runs after). `HubServer` is it on TCP (a reader and a
@@ -441,8 +443,10 @@ sends).
   secret (proved per connection, never sent) and a name the proxy has; a package reaches only its own channels and
   maps and its dependencies'; values are size-checked by the server and the hub, each package's map storage capped,
   sends rate-limited per package; a server that stops reading is dropped. Every server in the network is trusted with
-  every channel and map: the network is one owner's servers. Traffic isn't encrypted: the hub's port belongs on the
-  owner's own network.
+  every channel and map: the network is one owner's servers. Traffic is sealed (`Channel`: AES-256-GCM, a key per
+  direction from HKDF over the secret and both nonces, a counter nonce per line), so it can't be read, altered or
+  replayed, and a server only accepts a hub that can seal its welcome; strangers before their hello are capped
+  (`HubServer.MAX_PENDING`, per address too) and timed out.
 - **Remote databases** are named only by the owner (`config.yml`'s
   `databases:`, each listing the packages it's for; plugin-persistence).
 - **Plugin interop** (W2.4) has no general escape hatch: only the typed

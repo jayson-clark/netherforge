@@ -1,6 +1,8 @@
 package dev.netherforge.plugin.bridge
 
+import dev.netherforge.format.bridge.AuthenticateParams
 import dev.netherforge.format.bridge.Bridge
+import dev.netherforge.format.bridge.BridgeAuth
 import dev.netherforge.format.bridge.BridgeEvent
 import dev.netherforge.format.bridge.BridgeStream
 import dev.netherforge.format.bridge.HelloParams
@@ -43,7 +45,10 @@ import kotlin.concurrent.withLock
  */
 class BridgeClient(
     private val port: Int,
-    private val hello: () -> HelloParams,
+    /** The token the editor started this server with: proved, never sent ([BridgeAuth]). */
+    private val token: String,
+    /** The hello, carrying this connection's nonce. */
+    private val hello: (nonce: String) -> HelloParams,
     /** Called on the connection thread for each frame after the hello. */
     private val onFrame: (RpcFrame) -> Unit,
     /** Called on the connection thread once the hello is accepted. */
@@ -190,16 +195,37 @@ class BridgeClient(
     private fun session(socket: Socket) {
         val writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8))
         val reader = FrameReader(socket.getInputStream(), MAX_FRAME_BEFORE_HELLO)
-        writer.write(JsonRpc.line(Bridge.hello.request(HELLO_ID, hello())))
+        val nonce = BridgeAuth.nonce()
+        writer.write(JsonRpc.line(Bridge.hello.request(HELLO_ID, hello(nonce))))
         writer.write("\n")
         writer.flush()
 
-        // Nothing else goes out until the editor has accepted the hello.
+        // Nothing else goes out until the editor has proved it holds the token, and accepted ours.
         socket.soTimeout = HELLO_TIMEOUT_MILLIS
-        val answer = awaitHelloAnswer(reader) ?: return
+        val answer = awaitAnswer(reader, HELLO_ID) ?: return
         answer.error?.let { error ->
             running.set(false)
             onRefused(error.message)
+            return
+        }
+        val result = runCatching { Bridge.hello.decodeResult(answer.result!!) }.getOrNull()
+        val editor = result?.nonce
+        if (editor == null || !BridgeAuth.matches(BridgeAuth.editorProof(token, nonce, editor), result.proof)) {
+            // Whatever listens here took the port of the editor that started this server: it gets nothing more.
+            onProblem(
+                "Dev bridge: what answers on 127.0.0.1:$port isn't the editor that started this server " +
+                    "(it can't prove it holds the token); not connecting to it"
+            )
+            return
+        }
+        writer.write(
+            JsonRpc.line(Bridge.authenticate.request(AUTHENTICATE_ID, AuthenticateParams(BridgeAuth.pluginProof(token, editor, nonce))))
+        )
+        writer.write("\n")
+        writer.flush()
+        val authenticated = awaitAnswer(reader, AUTHENTICATE_ID) ?: return
+        authenticated.error?.let { error ->
+            onProblem("Dev bridge: the editor didn't accept this server's proof: ${error.message}")
             return
         }
         socket.soTimeout = 0
@@ -233,8 +259,8 @@ class BridgeClient(
         }
     }
 
-    /** The editor's answer to the hello, or null when the connection closed first (a wrong token is never answered). */
-    private fun awaitHelloAnswer(reader: FrameReader): RpcResponse? {
+    /** The editor's answer to request [id] of the handshake, or null when the connection closed first (a wrong proof is never answered). */
+    private fun awaitAnswer(reader: FrameReader, id: Int): RpcResponse? {
         while (true) {
             val line = try {
                 reader.readFrame()
@@ -244,7 +270,7 @@ class BridgeClient(
             } ?: return null
             if (line.isBlank()) continue
             val message = (JsonRpc.decode(line) as? RpcFrame.Single)?.message
-            if (message is RpcResponse && message.id.content == HELLO_ID.toString()) return message
+            if (message is RpcResponse && message.id.content == id.toString()) return message
             onProblem("The editor sent a frame before answering the hello; ignored")
         }
     }
@@ -302,6 +328,7 @@ class BridgeClient(
          */
         const val MAX_FRAME = 16 * 1024 * 1024
         private const val HELLO_ID = 0
+        private const val AUTHENTICATE_ID = 1
         private const val QUEUE_LIMIT = 10_000
 
         /** Items in one stream notification at most. */

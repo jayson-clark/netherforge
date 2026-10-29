@@ -103,6 +103,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("nf.server.run") { call ->
         val lua = call.lua
         val caller = marshal.caller(lua, 1)
+        marshal.requires("console", "nf.server.run")
         val command = call.arg(2, "command", LuaCodecs.STRING)
         val result = api.nfServer.run(caller, command)
         call.push(result, LuaCodecs.BOOLEAN)
@@ -3953,6 +3954,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("Player.kick") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
+        marshal.requires("moderation", "Player:kick")
         val reason = call.arg(2, "reason", CODEC_78)
         val result = api.player.kick(self, reason)
         call.push(result, LuaCodecs.BOOLEAN)

@@ -329,9 +329,14 @@ class Dialogs(
     }
 
     /** [player] left [dialog] through its exit action (escape, or the exit button). */
-    fun closed(player: PlayerRef, dialog: String) {
+    fun closed(player: PlayerRef, dialog: String, registry: Boolean = false) {
         if (runtimeDialogs[player.uuid]?.ids?.contains(dialog) == true) {
             runtimeDialogs.remove(player.uuid)
+            return
+        }
+        // As for a press: leaving a dialog that isn't on their screen is a client's invention.
+        if (!registry && !onScreen(open[player.uuid], dialog)) {
+            onIgnored("${player.name} left dialog $dialog, which isn't on their screen")
             return
         }
         val opening = open.remove(player.uuid)
@@ -372,8 +377,27 @@ class Dialogs(
         return DialogSpec(id, file, listed)
     }
 
-    /** A button was pressed: heard by the button, then the dialog, then `nf.on("dialog_press")`. */
-    fun pressed(player: PlayerRef, dialog: String, button: String, values: Map<String, Any>) {
+    /**
+     * Whether [dialog] is on [player]'s screen in [opening]: the dialog shown,
+     * or one a `dialog_list` it showed leads to.
+     */
+    private fun onScreen(opening: Opening?, dialog: String): Boolean {
+        if (opening == null) return false
+        if (opening.dialog == dialog) return true
+        return spec(opening.dialog, HashSet())?.let { shown -> listedIn(shown, dialog) } == true
+    }
+
+    private fun listedIn(spec: DialogSpec, dialog: String): Boolean = spec.listed.any { it.id == dialog || listedIn(it, dialog) }
+
+    /**
+     * A button was pressed: heard by the button, then the dialog, then `nf.on("dialog_press")`.
+     *
+     * Only a dialog on the player's screen ([onScreen]) can be pressed: the game's client is the player's, and a
+     * modified one can send a button's click again after the dialog closed, or for one it was never shown. Those
+     * are ignored. [registry] is a dialog of the server's registry (the pause screen's), which the player opens
+     * themselves.
+     */
+    fun pressed(player: PlayerRef, dialog: String, button: String, values: Map<String, Any>, registry: Boolean = false) {
         val mine = runtimeDialogs[player.uuid]
         if (mine != null && dialog in mine.ids) {
             runtimeDialogs.remove(player.uuid)
@@ -383,6 +407,10 @@ class Dialogs(
         val record = records[dialog]
         // The opening it was pressed in (a dialog a `dialog_list` led to is still that opening).
         val opening = open[player.uuid]
+        if (!registry && !onScreen(opening, dialog)) {
+            onIgnored("${player.name} pressed \"$button\" on dialog $dialog, which isn't on their screen")
+            return
+        }
         // A press closes the screen unless the dialog says to keep it up; the context goes once it's been heard.
         val closes = (record?.file?.afterAction ?: AfterAction.CLOSE) == AfterAction.CLOSE
         if (closes) open.remove(player.uuid) else open[player.uuid] = Opening(dialog, opening?.context)
@@ -416,13 +444,13 @@ class Dialogs(
             return true
         }
         when (click) {
-            is DialogJson.Click.Exit -> closed(player, click.dialog)
+            is DialogJson.Click.Exit -> closed(player, click.dialog, registry = true)
             is DialogJson.Click.Press -> {
                 val button = record.file.buttons.getOrNull(click.index)
                 if (button == null) {
                     onIgnored("${player.name} pressed button ${click.index} on dialog ${click.dialog}, which has no such button any more")
                 } else {
-                    pressed(player, click.dialog, button.key, values(record.file, answers))
+                    pressed(player, click.dialog, button.key, values(record.file, answers), registry = true)
                 }
             }
         }
@@ -447,16 +475,25 @@ class Dialogs(
     /**
      * Every input's answer by key, typed by the input: text and an option's id
      * as strings, a checkbox as its `onTrue`/`onFalse` string, a slider as a
-     * number. What [answers] lacks is left out.
+     * number. What [answers] lacks is left out, and so is an answer the dialog
+     * couldn't have given: the game's client is the player's, and a modified
+     * one sends whatever it likes (text past the input's length, an option the
+     * file doesn't list, a number off the slider).
      */
     companion object {
+        /** The game's own most for a text input that doesn't say. */
+        private const val DEFAULT_MAX_LENGTH = 32
+
         fun values(file: DialogFile, answers: DialogAnswers): Map<String, Any> = buildMap {
             for (input in file.inputs) {
                 val value: Any? = runCatching {
                     when (input) {
                         is BooleanInput -> answers.bool(input.key)?.let { if (it) input.onTrue ?: "true" else input.onFalse ?: "false" }
-                        is RangeInput -> answers.number(input.key)
-                        is TextInput, is OptionInput -> answers.text(input.key)
+                        is RangeInput -> answers.number(input.key)?.takeIf { n ->
+                            n.isFinite() && n >= minOf(input.start, input.end) && n <= maxOf(input.start, input.end)
+                        }
+                        is TextInput -> answers.text(input.key)?.takeIf { it.length <= (input.maxLength ?: DEFAULT_MAX_LENGTH) }
+                        is OptionInput -> answers.text(input.key)?.takeIf { id -> input.options.any { it.id == id } }
                     }
                 }.getOrNull()
                 if (value != null) put(input.key, value)

@@ -62,12 +62,22 @@ internal class Placeholders(private val platform: Platform, private val scripts:
      * Offers `%[namespace]_<key>%` for [scope]. A mistake is a
      * [LuaApiException]; [callback] is let go of when one is thrown.
      */
-    fun register(scope: Scope, namespace: String, callback: LuaFunction) {
+    fun register(scope: Scope, namespace: String, callback: LuaFunction, own: String = namespace) {
         try {
             if (!NAMESPACE.matches(namespace)) {
                 throw LuaApiException(
                     "bad argument 'namespace' (\"$namespace\" can't be a placeholder namespace: lowercase letters and digits, " +
                         "starting with a letter, at most 32 characters, since PlaceholderAPI ends it at the first `_`)"
+                )
+            }
+            // A package's own ([own], the calling package's namespace): it answers `%<its namespace>…_…%` and never
+            // another plugin's (`player`, `server`, `luckperms`), which it could otherwise take before their
+            // expansion loads. Spelled without `_`, where PlaceholderAPI ends a placeholder's namespace.
+            val prefix = own.filter { it.isLetterOrDigit() }
+            if (!namespace.startsWith(prefix)) {
+                throw LuaApiException(
+                    "bad argument 'namespace' (a package's placeholders start with its own namespace, \"$prefix\": " +
+                        "\"$prefix\" or \"${prefix}stats\", not \"$namespace\")"
                 )
             }
             expansions[namespace]?.let {

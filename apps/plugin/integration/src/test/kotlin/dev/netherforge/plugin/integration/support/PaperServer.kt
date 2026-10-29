@@ -140,8 +140,8 @@ class PaperServer(
             )
             try {
                 val editor = Editor(listener.accept())
+                // Only a plugin that proved the token gets this far ([Editor] checks the proof).
                 val hello = editor.next { true } as HelloParams
-                assertEquals(TOKEN, hello.token)
                 return Running(process, editor, hello)
             } catch (e: Throwable) {
                 process.destroyForcibly()

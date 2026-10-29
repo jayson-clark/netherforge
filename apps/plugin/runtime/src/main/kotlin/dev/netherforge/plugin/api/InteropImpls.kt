@@ -60,7 +60,7 @@ internal class NfPlaceholdersImpl(private val session: ProjectSession) : NfPlace
             session.scripts.unref(callback.ref)
             throw e
         }
-        session.placeholders.register(caller.scope, namespace, callback)
+        session.placeholders.register(caller.scope, namespace, callback, own = session.names.calling())
     }
 
     private companion object {

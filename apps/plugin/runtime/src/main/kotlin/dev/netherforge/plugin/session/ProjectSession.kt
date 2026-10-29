@@ -240,7 +240,11 @@ class ProjectSession internal constructor(
     val web = service(WebRoutes(scripts, config.web, { runtime.web }, { ticks }, runtime::webBase) { snapshot })
 
     /** "Log in with…" flows (`nf.web.oauth`), each with a route of its own (after [web], so they end before it). */
-    val oauth = service(OAuthFlows(scripts, web, async, { http.fetcher }, { ticks }, testing = config.testing != null))
+    val oauth = service(
+        OAuthFlows(scripts, web, async, { http.fetcher }, { ticks }, testing = config.testing != null) { player ->
+            platform.players.online().firstOrNull { it.uuid.toString() == player.id }?.name
+        }
+    )
 
     /** The project's WebAssembly modules, compiled as it loads, and the instances and programs scripts run of them. */
     val wasm = service(
@@ -381,6 +385,7 @@ class ProjectSession internal constructor(
             scripts,
             config.performance,
             { reports.slow(it) },
+            { reports.deferred(it) },
             { services.fold(LinkedHashMap()) { all, service -> all.apply { putAll(service.costs()) } } },
             { ticks }
         )
@@ -588,6 +593,8 @@ class ProjectSession internal constructor(
             log.error("Not running ${config.project}: ${refusal.first}")
             return
         }
+        // Files kept from before each package had a folder of its own are the project's (once).
+        files.adopt(namespace)
         // A dev server's debugger stops scripts through primitives of its own, and has its breakpoints in place before any runs.
         val debugging = runtime.debugger?.primitives { requireNotNull(scripts.host) { "no Lua state" } }.orEmpty()
         val host = LuaHost(api.primitives() + debugging, api, runtime.time, config.sandbox).also { it.gates = api.gates() }

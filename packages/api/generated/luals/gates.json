@@ -4,6 +4,10 @@
     "requires": "db"
   },
   {
+    "function": "nf.server.run",
+    "requires": "console"
+  },
+  {
     "function": "nf.server.set_max_players",
     "requires": "moderation"
   },
@@ -114,6 +118,10 @@
   {
     "function": "nf.network.send_player",
     "requires": "network"
+  },
+  {
+    "function": "Player:kick",
+    "requires": "moderation"
   },
   {
     "function": "Player:ban",

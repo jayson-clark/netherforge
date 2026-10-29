@@ -397,6 +397,14 @@ internal class RuntimeApi(private val session: ProjectSession) :
             }
         )
         put(
+            "events.calling",
+            Primitive { lua ->
+                // (): the package whose code is running, for a custom event's `from`.
+                lua.push(session.names.calling())
+                1
+            }
+        )
+        put(
             "async.cancel",
             Primitive { lua ->
                 // (wait id): the task waiting on an async function ended, so nothing is delivered.

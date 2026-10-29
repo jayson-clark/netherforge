@@ -19,10 +19,18 @@ data class SandboxLimits(
     /** The longest string a library function makes for a script (`string.rep`, `string.format`, `table.concat`...). */
     val maxStringBytes: Int = 16 * 1024 * 1024,
     /** The most work one library call may do, in steps of about a nanosecond (a pattern's worst case, a sort). */
-    val maxWork: Double = 1e8
+    val maxWork: Double = 1e8,
+    /**
+     * How long one script's code may run in a tick, across all its call-ins, before its timers and event
+     * handlers are deferred to the next tick (its commands, body and unload still run). A script can otherwise
+     * fan out across many timers and handlers to spend as much of the main thread a tick as it likes. 0 turns it
+     * off (`performance.max-ms-per-tick` in `config.yml`).
+     */
+    val maxTickMillis: Double = 25.0
 ) {
     init {
         require(hookEvery > 0 && deadlineEvery > 0 && memoryEvery > 0) { "hook intervals must be positive" }
         require(deadlineMillis > 0 && memoryMegabytes > 0 && maxStringBytes > 0 && maxWork > 0) { "limits must be positive" }
+        require(maxTickMillis >= 0) { "max-ms-per-tick can't be negative" }
     }
 }

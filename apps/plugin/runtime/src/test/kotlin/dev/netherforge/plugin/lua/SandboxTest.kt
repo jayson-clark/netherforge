@@ -19,13 +19,14 @@ class SandboxTest {
                 for _, name in ipairs(names) do
                   log(name .. "=" .. type(_G[name]))
                 end
+                log("string.dump=" .. type(string.dump))
                 """
             )
         ).use { server ->
             assertEquals(
                 listOf("io", "os", "package", "load", "loadstring", "dofile", "loadfile", "debug", "java", "collectgarbage", "warn").map {
                     "$it=nil"
-                },
+                } + "string.dump=nil",
                 server.logs
             )
         }
@@ -77,6 +78,38 @@ class SandboxTest {
             assertTrue(server.logs[0].startsWith("false\t"), server.logs[0])
             assertTrue("Centity handles can't be changed" in server.logs[0], server.logs[0])
             assertTrue("bad argument 'player' (Player expected" in server.logs[1], server.logs[1])
+        }
+    }
+
+    /**
+     * `rawset` gets past a shared table's `__newindex`, so it refuses the tables every
+     * script shares: a handle, an event, a `Vec3` (`vec3.zero` is one table for all).
+     * One package could otherwise plant a method another package's code then calls.
+     */
+    @Test
+    fun `rawset refuses the tables every script shares, and works on a script's own`() {
+        TestServer(
+            mapOf(
+                "modules/a/init.lua" to """
+                    log(pcall(rawset, nf.worlds.default(), "name", function() return "planted" end))
+                    log(pcall(rawset, vec3.zero, 1, 999))
+                    nf.on("tick", function(e) log(pcall(rawset, e, "cancel", function() end)) end, { every = 1 })
+                    local own = setmetatable({}, { __newindex = function() error("no") end })
+                    rawset(own, "x", 1)
+                    log(own.x)
+                """.trimIndent(),
+                "modules/b/init.lua" to """
+                    nf.after(1, function() log(nf.worlds.default():name(), vec3.zero.x) end)
+                """.trimIndent()
+            )
+        ).use { server ->
+            server.tick(2)
+            assertEquals(emptyList(), server.errors.map { it.message })
+            assertTrue("rawset: a World is shared by every script and can't be changed" in server.logs[0], server.logs[0])
+            assertTrue("rawset: a Vec3 is shared by every script" in server.logs[1], server.logs[1])
+            assertEquals("1", server.logs[2])
+            assertTrue(server.logs.any { "rawset: an Event is shared by every script" in it }, server.logs.toString())
+            assertTrue(server.logs.contains("world\t0"), server.logs.toString())
         }
     }
 

@@ -302,4 +302,56 @@ class SandboxLimitsTest {
             assertTrue(server.logs[2].endsWith("(match a shorter string, or simplify the pattern)"), server.logs[2])
         }
     }
+
+    /**
+     * A script that fans out over handlers past its tick budget has its later handlers wait for the next tick
+     * (`performance.max-ms-per-tick`): its first handler spends the budget, the rest are deferred, and the owner
+     * is warned. Its code never errors; it just runs less of itself a tick.
+     */
+    @Test
+    fun `handlers past a script's tick budget wait for the next tick, and the owner is warned`() {
+        TestServer(
+            mapOf(
+                "modules/t/init.lua" to """
+                    nf.on("tick", function()
+                      local n = 0
+                      for i = 1, 60000 do n = n + i end
+                      log("spent")
+                    end)
+                    nf.on("tick", function() log("after") end)
+                """.trimIndent()
+            ),
+            clock = steppingClock(),
+            sandbox = SandboxLimits(maxTickMillis = 5.0)
+        ).use { server ->
+            server.tick(3)
+            assertEquals(emptyList(), server.errors.map { it.message })
+            // The first handler runs each tick and spends the budget; the second is deferred every tick.
+            assertEquals(3, server.logs.count { it == "spent" })
+            assertEquals(0, server.logs.count { it == "after" })
+            assertTrue(server.platform.log.lines.any { "waited for the next" in it }, server.platform.log.lines.toString())
+        }
+    }
+
+    @Test
+    fun `with the tick budget off every handler runs`() {
+        TestServer(
+            mapOf(
+                "modules/t/init.lua" to """
+                    nf.on("tick", function()
+                      local n = 0
+                      for i = 1, 60000 do n = n + i end
+                      log("spent")
+                    end)
+                    nf.on("tick", function() log("after") end)
+                """.trimIndent()
+            ),
+            clock = steppingClock(),
+            sandbox = SandboxLimits(maxTickMillis = 0.0)
+        ).use { server ->
+            server.tick(2)
+            assertEquals(2, server.logs.count { it == "spent" })
+            assertEquals(2, server.logs.count { it == "after" })
+        }
+    }
 }

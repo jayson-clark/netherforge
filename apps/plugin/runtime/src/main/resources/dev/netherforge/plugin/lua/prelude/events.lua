@@ -25,6 +25,7 @@ local handles = require("handles")
 local gates = require("gates")
 local schema = require("schema")
 local guard_module = require("guard")
+local sandbox = require("sandbox")
 
 local prim = input.prim
 local raw, format, concat, unpack, floor = std.raw, std.format, std.concat, std.unpack, std.floor
@@ -370,6 +371,8 @@ local function new_event(name, fields, cancellable, writable)
     view_mt = view_mt,
   }
   event_state[ev] = state
+  -- Every handler gets this one table: `rawset` mustn't plant anything on it for the next.
+  sandbox.shared[ev] = true
   return ev, state
 end
 
@@ -422,6 +425,11 @@ local function deliver(key, event, ev, state, only_scope)
           run = sub.count % sub.every == 0
         end
       end
+      -- A scope that has run its tick's worth has its handlers wait for the next tick; `unload` always runs (its
+      -- scope is closing), so a script hears it whatever it spent.
+      if run and event ~= "unload" and timing.over_budget(sub.scope) then
+        run = false
+      end
       if run then
         if sub.once then
           unsubscribe(sub)
@@ -445,9 +453,12 @@ local function deliver(key, event, ev, state, only_scope)
 end
 
 -- Makes a custom event and delivers it: what `emit_custom` has done unbilled.
-local function deliver_custom(target, key, event, payload)
+-- `from` is the package whose code emitted it: anyone may emit any custom
+-- event, so a handler that grants something checks who raised it.
+local function deliver_custom(target, key, event, payload, from)
   local ev, state = new_event(event, payload or {}, true, true)
   set(state, "current", target)
+  set(state, "from", from)
   deliver(key, event, ev, state)
   return state.cancelled
 end
@@ -468,7 +479,7 @@ local function emit_custom(target, event, payload, level)
   if listeners[key] == nil or listeners[key][event] == nil then
     return false
   end
-  return unbilled(deliver_custom, target, key, event, payload)
+  return unbilled(deliver_custom, target, key, event, payload, prim["events.calling"]())
 end
 -- ---- the hand-written functions
 --

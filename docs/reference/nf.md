@@ -38,7 +38,7 @@ A table of functions: call them with a dot.
 | [`nf.particles`](nf.particles.md) | The project's particle effects (`particles/<id>/effect.json`): timelines of particles authored in the editor, played at a place by scripts. |
 | [`nf.cutscenes`](nf.cutscenes.md) | The project's cutscenes (`cutscenes/<id>.json`): camera paths keyed in the editor, played for one player at a time. |
 | [`nf.screens`](nf.screens.md) | Screens: walls of maps, 128 by 128 pixels each, that scripts draw on (pixels, shapes, text, pictures) and play videos on. |
-| [`nf.files`](nf.files.md) | Files in the one directory scripts may keep things in: the only state a script has that survives a restart. |
+| [`nf.files`](nf.files.md) | Files in the package's own folder (`plugins/NetherForge/data/<namespace>/`), which no other package's scripts see unless they're handed a file: the only state a script has that survives a restart. |
 | [`nf.text`](nf.text.md) | Helpers for the MiniMessage text players see: escaping what players typed, stripping tags, resource pack glyphs, moving the cursor, and measuring. |
 | [`nf.looks`](nf.looks.md) | Resource pack looks (item models, glyphs, skins, tooltips, equipment looks, sounds) handed from one package's code to another's. |
 | [`nf.json`](nf.json.md) | JSON text to and from Lua values. |

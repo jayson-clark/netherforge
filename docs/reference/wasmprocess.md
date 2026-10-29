@@ -29,7 +29,7 @@ Writes a line to its input, with a line ending after it: the program reads it wh
 | --- | --- | --- |
 | `line` | `string` | The line, without its line ending: `"go movetime 500"`. |
 
-**Returns** `boolean`: `false` when it has ended or its input was closed, so nothing was sent.
+**Returns** `boolean`: `false` when it has ended, its input was closed, or it already holds `wasm.max-queued-lines` lines it hasn't read yet (send again once it has), so nothing was sent.
 
 ```lua
 engine:send("position startpos moves e2e4 e7e5")

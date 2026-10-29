@@ -354,8 +354,11 @@ server may fall before the hub drops it.
 
 - **Joining** takes the hub's secret, proved per connection without sending
   it, and a server name the proxy has. Keep the hub's port to your servers.
-  The traffic between servers and hub isn't encrypted, so keep it on your own
-  network, as you do the proxy's connections to the servers.
+- **The traffic** between servers and hub is encrypted and authenticated
+  (AES-256-GCM, with keys derived from the secret for each connection), so it
+  can't be read or changed on the way, and a server only talks to a hub that
+  holds the same secret. Strangers that connect without saying hello are
+  limited (64 at once, 8 from one address) and dropped after 10 seconds.
 - **Packages** only reach the network if they declare it, and only their own
   channels and maps (and those of packages they depend on).
 - **The hub** checks every value's size and every package's share of the

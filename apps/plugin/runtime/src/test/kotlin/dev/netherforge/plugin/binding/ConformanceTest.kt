@@ -606,7 +606,8 @@ class ConformanceTest {
                 TestServer.MANIFEST to TestServer.manifest(
                     allow = """{ "permissions": ["x"] }""",
                     requires =
-                    """{ "moderation": true, "db": true, "http": ["example.com", "conformance.invalid"], "web": true, "bots": true, """ +
+                    """{ "console": true, "moderation": true, "db": true, """ +
+                        """"http": ["example.com", "conformance.invalid"], "web": true, "bots": true, """ +
                         """"wasm": true, "network": true, """ +
                         """"plugins": ["vault", "placeholderapi"] }"""
                 ),

@@ -71,6 +71,11 @@ export const eventShape = shape(
       type: 'boolean',
       doc: 'Whether a handler called `stop()`. Read-only.',
     },
+    {
+      name: 'from',
+      type: 'string?',
+      doc: "On a custom event (`nf.emit`, `centity:emit`), the namespace of the package whose code emitted it; `nil` on the server's own events. Any package may emit any custom event, so a handler that grants something checks `event.from` is a package it trusts (its own namespace, as its `netherforge.json` says). Read-only.",
+    },
   ],
   {
     functions: [

@@ -5,6 +5,7 @@ import dev.netherforge.format.bridge.Log
 import dev.netherforge.format.bridge.PlayParticleEffectParams
 import dev.netherforge.format.bridge.SpawnParams
 import dev.netherforge.plugin.integration.support.Scenario
+import dev.netherforge.plugin.integration.support.TestProject
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -19,6 +20,11 @@ import kotlin.test.assertTrue
  * `it-*` command that logs what it found.
  */
 class WorldScenario : Scenario("world") {
+    /** The fixture saves the world with `nf.server.run("save-all")`, which needs `console`. */
+    override fun prepare(project: TestProject) {
+        project.require("console")
+    }
+
     @Test
     @Order(1)
     fun `a physics crate turned to face west falls onto the real ground and settles`() {

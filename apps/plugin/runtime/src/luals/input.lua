@@ -12,6 +12,7 @@
 ---@field memory_mb integer How much memory scripts may hold together.
 ---@field max_string integer The longest string a script may build.
 ---@field max_work integer The most steps of work a capped library function may do.
+---@field max_tick_ns integer How long a script's code may run in a tick before its timers and handlers wait; 0 is off.
 
 ---@class nf.Input
 ---@field prim table<string, function> The Kotlin primitives by name (`prim["Centity.play_animation"]`).

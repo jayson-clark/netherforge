@@ -73,6 +73,12 @@ class PaperCommands(private val plugin: Plugin) : CommandOps {
     private class Registered(val spec: CommandSpec, val handler: CommandHandler) {
         /** Every label it's reachable by: its name and aliases, each also as `netherforge:<label>`. */
         val labels get() = (listOf(spec.name) + spec.aliases).flatMap { listOf(it, "$NAMESPACE:$it") }
+
+        /**
+         * The labels it actually holds in the dispatcher: an alias another plugin already has stays
+         * theirs, so going away removes only these, never another plugin's command.
+         */
+        val added = LinkedHashSet<String>()
     }
 
     private val registered = LinkedHashMap<String, Registered>()
@@ -88,6 +94,8 @@ class PaperCommands(private val plugin: Plugin) : CommandOps {
             for (command in registered.values) {
                 val labels = commands.register(node(command.spec.name, command), command.spec.description, command.spec.aliases)
                 if (command.spec.name !in labels) plugin.logger.warning("/${command.spec.name} is another plugin's command too; theirs won")
+                command.added.clear()
+                command.added += labels
             }
         }
     }
@@ -99,7 +107,10 @@ class PaperCommands(private val plugin: Plugin) : CommandOps {
         registered[spec.name] = command
         dispatcher?.root?.let { root ->
             for (label in command.labels) {
-                if (root.getChild(label) == null) root.addChild(node(label, command))
+                if (root.getChild(label) == null) {
+                    root.addChild(node(label, command))
+                    command.added += label
+                }
             }
         }
         refreshClients()
@@ -109,7 +120,7 @@ class PaperCommands(private val plugin: Plugin) : CommandOps {
     override fun unregister(name: String) {
         val command = registered.remove(name) ?: return
         dispatcher?.root?.let { root ->
-            for (label in command.labels) remove(root, label)
+            for (label in command.added + command.labels.filter { it.startsWith("$NAMESPACE:") }) remove(root, label)
         }
         refreshClients()
     }

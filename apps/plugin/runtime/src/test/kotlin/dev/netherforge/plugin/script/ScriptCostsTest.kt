@@ -3,6 +3,7 @@ import dev.netherforge.format.Severity
 import dev.netherforge.format.bridge.SourceRef
 import dev.netherforge.plugin.NetherForgeRuntime
 import dev.netherforge.plugin.TestServer
+import dev.netherforge.plugin.lua.SandboxLimits
 import dev.netherforge.plugin.platform.Location
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -222,6 +223,8 @@ class ScriptCostsTest {
         TestServer(
             mapOf("modules/hot/init.lua" to """for i = 1, 50 do nf.on("tick", function() end) end"""),
             performance = PerformanceConfig(warnMillis = 0.0, warnTicks = 20),
+            // This measures the cost of all 50 handlers; the per-tick cap (its own test) would defer some.
+            sandbox = SandboxLimits(maxTickMillis = 0.0),
             clock = steppingClock()
         ).use { server ->
             server.tick(50)
