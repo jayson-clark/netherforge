@@ -148,6 +148,42 @@ class TerrainScriptTest {
     }
 
     @Test
+    fun aPatternThatWouldBacktrackForMinutesIsRefusedAtTheScriptsLine(): LuaTest = withLua { lua ->
+        val compiled = compile(world())
+        val run = Run()
+        // One call of the library is one instruction to the hook: the caps (the plugin's own) refuse it up front.
+        val source = """
+            return {
+              terrain = function(chunk)
+                local s = ("a"):rep(10000)
+                local found = s:find(".-.-.-.-b")
+              end,
+            }
+        """
+        compiled.bind(1, -64, 320, scripts(lua, source, run)).generate(0, 0)
+        val failure = run.failures.single()
+        assertTrue("terrain/t.lua:5: string.find: the pattern \".-.-.-.-b\" could take up to" in failure.message, failure.message)
+    }
+
+    @Test
+    fun aLoopThatEndsCollectionCyclesIsStillHeldToItsBudget(): LuaTest = withLua { lua ->
+        val compiled = compile(world())
+        val run = Run()
+        // Each cycle re-arms the hook, which starts its count over; the re-arm is charged what that count could hold.
+        val source = """
+            return {
+              terrain = function(chunk)
+                local s = ("x"):rep(64 * 1024)
+                while true do local u = s .. "a" end
+              end,
+            }
+        """
+        compiled.bind(1, -64, 320, scripts(lua, source, run)).generate(0, 0)
+        val failure = run.failures.single()
+        assertTrue(failure.message.matches(Regex("""terrain/t\.lua:\d: ran past its budget of 20000 instructions""")), failure.message)
+    }
+
+    @Test
     fun aHeightThatFailsIsTheFilesHeightThere(): LuaTest = withLua { lua ->
         val compiled = compile(world())
         val run = Run()

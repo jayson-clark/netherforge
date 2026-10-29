@@ -4,7 +4,7 @@
 local host_noise, host_fill, host_block = host_noise, host_fill, host_block
 local host_file_height, host_area, host_resolve = host_file_height, host_area, host_resolve
 local host_point_area, host_set_loot = host_point_area, host_set_loot
-local host_module_path, host_load = host_module_path, host_load
+local host_module_path, host_load, host_caps = host_module_path, host_load, host_caps
 for _, name in ipairs({
   "noise",
   "fill",
@@ -16,6 +16,7 @@ for _, name in ipairs({
   "resolve",
   "module_path",
   "load",
+  "caps",
 }) do
   _G["host_" .. name] = nil
 end
@@ -79,10 +80,18 @@ end
 
 -- A string doubled with `..` outgrows any limit between two counts, but a collection runs while it grows: at the
 -- end of each cycle this asks the very next instruction to look at the memory (collectgarbage can't, in here).
+--
+-- Arming the hook again starts its count over, throwing away what ran since the
+-- last count: a loop that ends a cycle more often than every HOOK_EVERY
+-- instructions would barely be counted. So the switch is charged what that count
+-- could have held, HOOK_EVERY (the plugin's sandbox does the same).
 local sentinel
 sentinel = function()
   setmetatable({}, {
     __gc = function()
+      if step ~= 1 then
+        used = used + HOOK_EVERY
+      end
       check_memory = true
       step = 1
       debug_sethook(hook, "", 1)
@@ -93,19 +102,50 @@ end
 
 -- ---- the sandbox ---------------------------------------------------------------------------------------
 
--- One call of string.rep can't make more than MAX_STRING bytes: it's one instruction, however long it takes.
----@diagnostic disable-next-line: duplicate-set-field
-string.rep = function(s, n, separator)
-  if type(n) == "number" and n > 1 and (type(s) == "string" or type(s) == "number") then
-    local size = #tostring(s) * n
-    if separator ~= nil then
-      size = size + #tostring(separator) * (n - 1)
+-- One call of a library function is one instruction, however long it runs, so
+-- every one whose work isn't bounded by its arguments' size (string.rep, the
+-- patterns, string.format, table.concat, the table shifts and sorts) is the
+-- plugin sandbox's capped one (`caps.lua`, which format holds for both): it
+-- refuses a call that could make more than MAX_STRING bytes or take too long,
+-- and counts what it allows towards the budget (about 2.5 of its steps an
+-- instruction). Installed in the real tables, which the copies below and the
+-- string metatable read; this glue's own work uses the library's, taken above.
+do
+  local STEPS_PER_INSTRUCTION, MAX_WORK = 2.5, 1e8
+  local function spend(steps)
+    used = used + steps / STEPS_PER_INSTRUCTION
+    if failure == nil and used > budget then
+      failure = script_line(2) .. "ran past its budget of " .. budget .. " instructions"
     end
-    if size > MAX_STRING then
-      error("string.rep would make more than 16 MB", 2)
+    if failure ~= nil then
+      error(failure, 0)
     end
   end
-  return rep(s, n, separator)
+  local function refuse(message)
+    error(script_line(2) .. message, 0)
+  end
+  local raw = {
+    rep = rep,
+    format = format,
+    find = string.find,
+    match = string.match,
+    gmatch = gmatch,
+    gsub = string.gsub,
+    pack = string.pack,
+    concat = concat,
+    move = table.move,
+    insert = table.insert,
+    remove = table.remove,
+    sort = sort,
+    getmetatable = debug.getmetatable,
+  }
+  local caps = host_caps()(raw, { max_string = MAX_STRING, max_work = MAX_WORK }, spend, refuse)
+  for name, fn in next, caps.string do
+    string[name] = fn
+  end
+  for name, fn in next, caps.table do
+    table[name] = fn
+  end
 end
 getmetatable("").__metatable = false
 

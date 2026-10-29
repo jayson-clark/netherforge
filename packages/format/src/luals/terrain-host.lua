@@ -70,3 +70,8 @@ function host_module_path(name, caller) end
 ---@param path string
 ---@return function
 function host_load(path) end
+
+---The standard library's caps (`caps.lua`), compiled (not run): called with the library's own functions, the
+---limits, `spend` and `refuse`, it returns the capped `string` and `table` functions and `setmetatable`.
+---@return fun(raw: table, limits: table, spend: fun(steps: number), refuse: fun(message: string)): { string: table<string, function>, table: table<string, function>, setmetatable: function }
+function host_caps() end

@@ -149,6 +149,22 @@ do
   local STEPS_PER_STRING_COMPARE = 150
   local SORT_FREE = 64
 
+  -- Entries walked since the last look at the budget: the codec's loops are
+  -- prelude code, which the hook counts but never stops, so they look every
+  -- few thousand entries and stop once the calling script is past its budget.
+  local walked, LOOK_EVERY = 0, 4096
+
+  local function walk()
+    walked = walked + 1
+    if walked >= LOOK_EVERY then
+      walked = 0
+      local why = guard.affords(0)
+      if why ~= nil then
+        error(why, 0)
+      end
+    end
+  end
+
   local function sorted_strings(list)
     local n = #list
     if n > SORT_FREE then
@@ -248,6 +264,7 @@ do
     -- come back as nil); otherwise an object, which takes string keys only.
     local positions, max, others, strings = 0, 0, 0, {}
     for key in next, value do
+      walk()
       if math_type(key) == "integer" and key > 0 then
         positions = positions + 1
         if key > max then
@@ -262,6 +279,7 @@ do
     if positions > 0 and #strings == 0 and others == 0 and max <= 2 * positions then
       out[#out + 1] = "["
       for i = 1, max do
+        walk()
         if i > 1 then
           out[#out + 1] = ","
         end

@@ -145,7 +145,25 @@ local timing = {
   next_what = nil,
   -- function -> { file, line }, resolved once.
   where = setmetatable({}, { __mode = "k" }),
+  -- A scope's code may run this many nanoseconds in a tick (summed in `nanos`, which `take_costs` clears each
+  -- tick) before its timers and handlers wait for the next; 0 is off. See `over_budget`.
+  max_tick_ns = limits.max_tick_ns,
+  -- Scopes whose timers or handlers were deferred this tick, so the host warns once each (drained by `take_costs`).
+  deferred = {},
 }
+
+-- Whether `scope`'s code has already run its tick's worth (`max_tick_ns`), so a timer or handler of its own waits
+-- for the next tick. Its own time this tick is `nanos[scope]` (what `take_costs` clears each tick).
+function timing.over_budget(scope)
+  if timing.max_tick_ns <= 0 or scope == nil then
+    return false
+  end
+  if (timing.nanos[scope] or 0) < timing.max_tick_ns then
+    return false
+  end
+  timing.deferred[scope] = true
+  return true
+end
 
 -- A frame: one call in from the host, which a budget and a time limit bound.
 ---@class nf.Frame
@@ -392,6 +410,23 @@ function guard.charge_work(instructions, steps)
     f.stop = "ran past its budget of " .. f.budget .. " instructions"
   end
   if f.stop ~= nil then
+    guard.count_every(true)
+  end
+  return f.stop
+end
+
+-- For a loop in prelude code whose length a script sets: the hook counts its
+-- instructions as it runs but can't stop it there, so before it starts, why
+-- the running frame can't afford `instructions` more (and the frame is marked
+-- to stop), or nil when it can. Nothing is charged: the loop's own
+-- instructions are, as it runs them.
+function guard.affords(instructions)
+  local f = frame
+  if f == nil or f.spent then
+    return nil
+  end
+  if f.stop == nil and f.left - instructions < 0 then
+    f.stop = "ran past its budget of " .. f.budget .. " instructions"
     guard.count_every(true)
   end
   return f.stop

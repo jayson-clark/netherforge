@@ -25,6 +25,8 @@ class ScriptCosts(
     private val scripts: Scripts,
     private val config: PerformanceConfig,
     private val onSlow: (Slow) -> Unit,
+    /** A scope whose timers or handlers were deferred this tick (over `performance.max-ms-per-tick`): warned about. */
+    private val onDeferred: (Scope) -> Unit = {},
     /**
      * Other things a scope can own, counted per scope for `/nf scripts`, by
      * the word it shows them as (`"effects"` for running particle effects):
@@ -106,6 +108,7 @@ class ScriptCosts(
         }
         val costs = host.takeCosts(rotate = tick % recent == 0L)
         lastTick = costs
+        for (id in host.takeDeferred()) scripts.scope(id)?.takeIf { it.live }?.let(onDeferred)
         windows.keys.retainAll { scripts.scope(it)?.live == true }
         val limit = config.warnMillis * NANOS_PER_MILLI * recent
         for (scope in scripts.scopes()) {

@@ -11,11 +11,27 @@
 local std = require("std")
 local args = require("args")
 local handles = require("handles")
+local guard = require("guard").guard
 -- The sandbox first: the sort below is the library's capped one, as it is for a
 -- script's own work, so sorting a script's big table is charged to it.
 require("sandbox")
 
 local format = std.format
+local log2 = math.log
+
+-- These loops run in prelude code, which the hook counts but never stops
+-- mid-way, so one whose length a script sets is checked first
+-- (`guard.affords`): one the call can't afford fails before it starts. About
+-- the instructions an element costs the loop, and a comparison the sort below;
+-- a short one, which any call affords, isn't checked.
+local PER_ELEMENT, PER_COMPARE = 12, 20
+
+local function affordable(instructions)
+  local why = guard.affords(instructions)
+  if why ~= nil then
+    error(why, 0)
+  end
+end
 local type, pairs, error, tostring, setmetatable = type, pairs, error, tostring, setmetatable
 local want_number = args.want_number
 local new = handles.new
@@ -117,7 +133,11 @@ do
 
   function Random.shuffle(self, list)
     local s = states[self]
-    for i = #list, 2, -1 do
+    local n = #list
+    if n > 64 then
+      affordable(n * PER_ELEMENT)
+    end
+    for i = n, 2, -1 do
       local j = 1 + up_to(s, i - 1)
       list[i], list[j] = list[j], list[i]
     end
@@ -145,8 +165,13 @@ do
 
   function Random.weighted(self, weights)
     local s = states[self]
-    local keys, total = {}, 0
+    local keys, total, seen = {}, 0, 0
     for key, weight in pairs(weights) do
+      -- A big table is checked as it's read, a few thousand keys at a time.
+      seen = seen + 1
+      if seen % 4096 == 0 then
+        affordable(4096 * PER_ELEMENT)
+      end
       if type(weight) ~= "number" or not (weight >= 0 and weight < huge) then
         error(
           format(
@@ -164,6 +189,9 @@ do
     end
     if #keys == 0 then
       return nil
+    end
+    if #keys > 64 then
+      affordable(#keys * log2(#keys, 2) * PER_COMPARE // 1)
     end
     sort(keys, key_before)
     local r = next_fraction(s) * total

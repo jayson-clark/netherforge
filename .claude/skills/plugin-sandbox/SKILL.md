@@ -1,6 +1,6 @@
 ---
 name: plugin-sandbox
-description: Inside the plugin's one Lua state - the sandbox (one hook, the instruction budget, time limits, the memory census, the standard library's caps and what a pattern costs, with the benchmarks behind every number), the profiler, the debugger (DAP over the bridge, breakpoints, stepping, freezing the tick), and the prelude's modules. Read before touching apps/plugin/runtime/.../lua, the prelude (lua/prelude.lua, lua/prelude/*.lua, lua/caps.lua), SandboxLimits, .../profile or .../debug.
+description: Inside the plugin's one Lua state - the sandbox (one hook, the instruction budget, time limits, the memory census, the standard library's caps and what a pattern costs, with the benchmarks behind every number), the profiler, the debugger (DAP over the bridge, breakpoints, stepping, freezing the tick), and the prelude's modules. Read before touching apps/plugin/runtime/.../lua, the prelude (lua/prelude.lua, lua/prelude/*.lua), format's lua/caps.lua, SandboxLimits, .../profile or .../debug.
 ---
 
 # Plugin sandbox, profiler and debugger
@@ -132,7 +132,7 @@ steps)` (`host.charge` from Kotlin) charges the running frame for work no
   on demand: `/nf scripts` shows a scope's memory once it's a megabyte. Per
   package (F3) is a sum of its scopes' numbers; to make a package's own
   modules own what they share, walk its scopes together.
-- **The library's caps** (`resources/.../lua/caps.lua`, the chunk
+- **The library's caps** (format's `src/commonMain/lua/caps.lua`, `LuaCaps`; the terrain scripts' sandbox runs the same chunk through `host_caps`; the chunk
   `=nf/caps`). The functions whose work isn't bounded by their arguments'
   size are replaced in the real `string` and `table` tables (which the
   proxies and the string metatable read through) by wrappers that work out

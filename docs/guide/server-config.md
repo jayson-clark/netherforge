@@ -442,13 +442,21 @@ A script whose code takes more than `warn-ms` milliseconds a tick, on average
 over `warn-ticks` ticks, is logged as slow, at most once a minute, with the
 file and line it's slow in (see [Limits and performance](performance.md)).
 
+`max-ms-per-tick` also caps how long one script's code may run in a single
+tick, across all its timers, handlers and other call-ins. Once a script passes
+it in a tick, that script's timers and event handlers wait for the next tick
+(its commands, its body and its `unload` still run), and the owner is warned,
+so no one script can take the whole server by piling up timers and handlers.
+
 ```yaml
 performance:
   warn-ms: 10
   warn-ticks: 20
+  max-ms-per-tick: 25
 ```
 
-| Key          | Meaning                                                                        | Default |
-| ------------ | ------------------------------------------------------------------------------ | ------- |
-| `warn-ms`    | Milliseconds a tick, on average, above which a script is slow. 0 turns it off. | `10`    |
-| `warn-ticks` | How many ticks that average is over (1 to 100).                                | `20`    |
+| Key               | Meaning                                                                                                 | Default |
+| ----------------- | ------------------------------------------------------------------------------------------------------- | ------- |
+| `warn-ms`         | Milliseconds a tick, on average, above which a script is slow. 0 turns it off.                          | `10`    |
+| `warn-ticks`      | How many ticks that average is over (1 to 100).                                                         | `20`    |
+| `max-ms-per-tick` | Milliseconds a script's code may run in a tick before its timers and handlers wait for the next. 0 off. | `25`    |

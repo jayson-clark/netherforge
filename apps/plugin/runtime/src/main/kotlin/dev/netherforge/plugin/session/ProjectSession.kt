@@ -385,6 +385,7 @@ class ProjectSession internal constructor(
             scripts,
             config.performance,
             { reports.slow(it) },
+            { reports.deferred(it) },
             { services.fold(LinkedHashMap()) { all, service -> all.apply { putAll(service.costs()) } } },
             { ticks }
         )

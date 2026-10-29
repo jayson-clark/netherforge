@@ -465,6 +465,12 @@ class Scripts internal constructor(
         now = tick
         for (timer in timers.values.filter { it.due <= tick }) {
             if (timer.id !in timers) continue
+            // A script that has run its tick's worth has this timer wait for the next tick (it fans out across many
+            // timers to spend the main thread otherwise); its own slow-script warning still covers it.
+            if (host?.overTickBudget(timer.scope.id) == true) {
+                timer.due = tick + 1
+                continue
+            }
             if (timer.period > 0) {
                 timer.due = tick + timer.period
                 val result = call(timer.scope, timer.ref, emptyList())

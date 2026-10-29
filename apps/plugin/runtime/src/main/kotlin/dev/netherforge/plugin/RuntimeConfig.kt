@@ -140,6 +140,7 @@ data class RuntimeConfig(
                     stateDirectory = pluginFolder,
                     bridge = port?.let { BridgeConfig(it, env(Bridge.TOKEN_ENV).orEmpty()) },
                     performance = performance,
+                    sandbox = SandboxLimits(maxTickMillis = performance.maxTickMillis),
                     schedules = schedules,
                     http = http,
                     web = web,
@@ -164,6 +165,7 @@ data class RuntimeConfig(
                 stateDirectory = pluginFolder,
                 pack = pack(settings.section("resource-pack"), server),
                 performance = performance,
+                sandbox = SandboxLimits(maxTickMillis = performance.maxTickMillis),
                 schedules = schedules,
                 http = http,
                 web = web,
@@ -347,7 +349,8 @@ data class RuntimeConfig(
             val defaults = PerformanceConfig()
             return PerformanceConfig(
                 warnMillis = (section.double("warn-ms") ?: defaults.warnMillis).coerceAtLeast(0.0),
-                warnTicks = (section.int("warn-ticks") ?: defaults.warnTicks).coerceIn(1, 100)
+                warnTicks = (section.int("warn-ticks") ?: defaults.warnTicks).coerceIn(1, 100),
+                maxTickMillis = (section.double("max-ms-per-tick") ?: defaults.maxTickMillis).coerceAtLeast(0.0)
             )
         }
 

@@ -425,6 +425,11 @@ local function deliver(key, event, ev, state, only_scope)
           run = sub.count % sub.every == 0
         end
       end
+      -- A scope that has run its tick's worth has its handlers wait for the next tick; `unload` always runs (its
+      -- scope is closing), so a script hears it whatever it spent.
+      if run and event ~= "unload" and timing.over_budget(sub.scope) then
+        run = false
+      end
       if run then
         if sub.once then
           unsubscribe(sub)

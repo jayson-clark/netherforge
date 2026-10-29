@@ -17114,7 +17114,7 @@
           "returns": [
             {
               "type": "boolean",
-              "doc": "`false` when it has ended or its input was closed, so nothing was sent."
+              "doc": "`false` when it has ended, its input was closed, or it already holds `wasm.max-queued-lines` lines it hasn't read yet (send again once it has), so nothing was sent."
             }
           ],
           "example": "engine:send(\"position startpos moves e2e4 e7e5\")"

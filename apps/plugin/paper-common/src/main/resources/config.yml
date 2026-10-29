@@ -33,10 +33,15 @@ resource-pack:
 # console and in the editor's problems, naming where it's slow. A script is
 # slow when its code took more than warn-ms milliseconds a tick on average over
 # the last warn-ticks ticks (at most 100). 0 turns the warning off. `/nf scripts`
-# lists every script's cost either way. Dev servers read this section too.
+# lists every script's cost either way. max-ms-per-tick caps how long one
+# script's code may run in a tick across all its call-ins: past it, its timers
+# and event handlers wait for the next tick (its commands and the rest still
+# run), so one script can't spend the whole server on timers and handlers it
+# piles up. 0 turns that cap off. Dev servers read this section too.
 performance:
   warn-ms: 10
   warn-ticks: 20
+  max-ms-per-tick: 25
 
 # The time zone nf.schedule's times of day are in ("18:00" daily, "sat" weekly,
 # cron expressions), and the one nf.time writes and reads clock times in unless

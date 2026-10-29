@@ -296,4 +296,45 @@ class HangTest {
             assertTrue(server.errors.any { "ran past its budget" in it.message }, server.errors.map { it.message }.toString())
         }
     }
+
+    @Test
+    fun `shuffling a list that claims to be huge is charged, not looped for free`() {
+        // The shuffle's loop is the prelude's, which the hook never stops mid-way: it's charged before it starts.
+        val message = refused(
+            """local t = setmetatable({}, { __len = function() return 1e12 end }) nf.random.new(1):shuffle(t)"""
+        )
+        assertTrue("ran past its budget" in message, message)
+    }
+
+    @Test
+    fun `picking from huge weights is charged as it reads and sorts them`() {
+        // `byte` fills the table in one instruction; the weights are read and sorted by the prelude.
+        val message = refused("""local k = nf.random.new(1):weighted({ ("x"):rep(300000):byte(1, -1) })""")
+        assertTrue("ran past its budget" in message, message)
+    }
+
+    @Test
+    fun `shuffle and weighted still do their job on ordinary tables`() {
+        TestServer(
+            mapOf(
+                "modules/t/init.lua" to """
+                    local r = nf.random.new(7)
+                    local t = { 1, 2, 3, 4, 5 }
+                    r:shuffle(t)
+                    table.sort(t)
+                    log(table.concat(t, ","), r:weighted({ a = 1, b = 0 }))
+                """.trimIndent()
+            )
+        ).use { server ->
+            assertEquals(emptyList(), server.errors.map { it.message })
+            assertEquals(listOf("1,2,3,4,5\ta"), server.logs)
+        }
+    }
+
+    @Test
+    fun `the Lua codec stops encoding a huge table once the script is past its budget`() {
+        // A Vec3 in it makes it more than plain data: the prelude's codec walks it, not Kotlin.
+        val message = refused("""local t = { ("x"):rep(900000):byte(1, -1) } t[1] = vec3(0, 0, 0) local s = nf.json.encode(t)""")
+        assertTrue("ran past its budget" in message, message)
+    }
 }

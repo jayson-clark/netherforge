@@ -32,7 +32,11 @@ sealed interface ProgramInputs {
     /** Whether scripts may still send (main thread's view). */
     val open: Boolean
 
-    fun send(line: String)
+    /**
+     * Queues [line] for the program; false when it already holds as many lines as it may that it hasn't read
+     * (`wasm.max-queued-lines`): a program that doesn't read mustn't make the server keep everything sent to it.
+     */
+    fun send(line: String): Boolean
 
     /** The end of its input, after what's queued. False when it was already closed. */
     fun finish(): Boolean
@@ -42,7 +46,7 @@ sealed interface ProgramInputs {
  * What a test's stand-in hears in place of a program's standard input: lines waiting for its `input` function,
  * which [WasmStandIns] hands them to each tick (main thread only).
  */
-class StandInInput : ProgramInputs {
+class StandInInput(private val capacity: Int) : ProgramInputs {
     val lines = ArrayDeque<String>()
 
     /** Whether the input was closed, and whether the stand-in's program has been ended for it. */
@@ -52,8 +56,10 @@ class StandInInput : ProgramInputs {
 
     override val open: Boolean get() = !finished
 
-    override fun send(line: String) {
+    override fun send(line: String): Boolean {
+        if (lines.size >= capacity) return false
         lines += line
+        return true
     }
 
     override fun finish(): Boolean {
@@ -85,7 +91,7 @@ class WasmProgram(
 ) {
     val output = ConcurrentLinkedQueue<ProgramOutput>()
     val room = Semaphore(maxQueuedLines)
-    val input: ProgramInputs = if (standIn) StandInInput() else ProgramInput()
+    val input: ProgramInputs = if (standIn) StandInInput(maxQueuedLines) else ProgramInput(maxQueuedLines)
 
     /** Whether a test's stand-in answers for it, so no thread runs it. */
     val standIn: Boolean get() = input is StandInInput
@@ -137,10 +143,11 @@ class WasmProgram(
     }
 
     /** What the program reads: the lines scripts `send`, until its input is closed. From the program's thread. */
-    class ProgramInput :
+    class ProgramInput(private val capacity: Int) :
         InputStream(),
         ProgramInputs {
-        private val queue = LinkedBlockingQueue<ByteArray>()
+        // One more than the lines it may hold: the end of its input always has room.
+        private val queue = LinkedBlockingQueue<ByteArray>(capacity + 1)
         private val closed = AtomicBoolean()
         private var current: ByteArray? = null
         private var at = 0
@@ -154,8 +161,9 @@ class WasmProgram(
         /** Whether nothing sent is waiting to be read. */
         val drained: Boolean get() = queue.isEmpty()
 
-        override fun send(line: String) {
-            queue.put((line + "\n").toByteArray(StandardCharsets.UTF_8))
+        override fun send(line: String): Boolean {
+            if (queue.size >= capacity) return false
+            return queue.offer((line + "\n").toByteArray(StandardCharsets.UTF_8))
         }
 
         override fun finish(): Boolean {

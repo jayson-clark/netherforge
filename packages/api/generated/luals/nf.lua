@@ -5388,7 +5388,7 @@ function WasmProcess:state() end
 
 --- Writes a line to its input, with a line ending after it: the program reads it when it next reads. A line over `wasm.max-line-bytes` is an error at the script's line.
 ---@param line string The line, without its line ending: `"go movetime 500"`.
----@return boolean # `false` when it has ended or its input was closed, so nothing was sent.
+---@return boolean # `false` when it has ended, its input was closed, or it already holds `wasm.max-queued-lines` lines it hasn't read yet (send again once it has), so nothing was sent.
 function WasmProcess:send(line) end
 
 --- Ends its input: once it has read what was sent, it reads the end of the file, which most programs answer by finishing what they were doing and exiting.

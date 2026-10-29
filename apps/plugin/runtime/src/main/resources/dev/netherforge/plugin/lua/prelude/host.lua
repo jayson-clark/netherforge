@@ -139,6 +139,23 @@ function host.take_costs(rotate)
   return concat(lines, "\n")
 end
 
+-- Whether `scope` has run its tick's worth, so a timer of its own waits for the next tick (the Kotlin timer path
+-- asks before it runs one; the prelude's `deliver` asks directly). Marks it deferred, for `take_deferred`.
+function host.over_tick_budget(scope)
+  return timing.over_budget(scope)
+end
+
+-- The scopes whose timers or handlers were deferred since the host last asked, one id a line: the host warns once
+-- each (`take_costs` clears the set every tick, so a scope is warned at most once a tick).
+function host.take_deferred()
+  local lines = {}
+  for scope in pairs(timing.deferred) do
+    lines[#lines + 1] = tostring(scope)
+  end
+  timing.deferred = {}
+  return concat(lines, "\n")
+end
+
 -- Turns the profiler on or off (see `timing.fns`); off forgets what it kept.
 function host.profile(on)
   timing.profiling = on

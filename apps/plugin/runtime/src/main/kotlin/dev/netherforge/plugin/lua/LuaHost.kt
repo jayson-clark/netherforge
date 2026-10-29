@@ -1,5 +1,6 @@
 package dev.netherforge.plugin.lua
 
+import dev.netherforge.format.lua.LuaCaps
 import dev.netherforge.format.math.Vec3
 import dev.netherforge.plugin.binding.LuaEvent
 import dev.netherforge.plugin.binding.LuaHandle
@@ -257,8 +258,8 @@ class LuaHost(
         main.load(direct(PRELUDE), "=nf")
         main.insert(-2)
         main.load(direct(BINDINGS), "=nf/bindings")
-        main.load(direct(CAPS), "=nf/caps")
-        main.createTable(0, 7)
+        main.load(direct(CAPS), LuaCaps.CHUNK_NAME)
+        main.createTable(0, 8)
         for ((name, value) in listOf(
             "hook_every" to limits.hookEvery,
             "deadline_every" to limits.deadlineEvery,
@@ -272,6 +273,8 @@ class LuaHost(
         }
         main.push(limits.maxWork)
         main.setField(-2, "max_work")
+        main.push((limits.maxTickMillis * 1_000_000).toLong())
+        main.setField(-2, "max_tick_ns")
         main.createTable(0, MODULES.size)
         for ((name, source) in MODULES) {
             main.load(direct(source), "=nf:$name")
@@ -729,6 +732,52 @@ class LuaHost(
         1
     }) { (scope, nanos, calls) ->
         scope.toInt() to ScopeCost(nanos, calls.toInt())
+    }
+
+    /** Whether [scope] has run its tick's worth ([SandboxLimits.maxTickMillis]), so a timer of its own waits for the next tick. */
+    fun overTickBudget(scope: Int): Boolean {
+        owned("overTickBudget")
+        if (closed) return false
+        val lua = current
+        val top = lua.top
+        depth++
+        try {
+            lua.refGet(hostRef)
+            lua.getField(-1, "over_tick_budget")
+            lua.remove(-2)
+            lua.push(scope.toLong())
+            lua.pCall(1, 1)
+            return lua.toBoolean(top + 1)
+        } catch (e: LuaException) {
+            return false
+        } finally {
+            lua.setTop(top)
+            depth--
+            if (depth == 0 && closeWanted) close()
+        }
+    }
+
+    /** The scopes whose timers or handlers were deferred since the last call (the owner is warned once each a tick). */
+    fun takeDeferred(): List<Int> {
+        owned("takeDeferred")
+        if (closed) return emptyList()
+        val lua = current
+        val top = lua.top
+        depth++
+        try {
+            lua.refGet(hostRef)
+            lua.getField(-1, "take_deferred")
+            lua.remove(-2)
+            lua.pCall(0, 1)
+            val text = lua.toString(top + 1).orEmpty()
+            return if (text.isEmpty()) emptyList() else text.split('\n').map(String::toInt)
+        } catch (e: LuaException) {
+            return emptyList()
+        } finally {
+            lua.setTop(top)
+            depth--
+            if (depth == 0 && closeWanted) close()
+        }
     }
 
     /**
@@ -1514,7 +1563,8 @@ class LuaHost(
         private val MODULES: Map<String, String> = MODULE_NAMES.associateWith { resource("prelude/$it.lua") }
 
         /** The standard library's caps, which the prelude puts in place of the library's unbounded functions. */
-        private val CAPS: String = resource("caps.lua")
+        /** format's, shared with the terrain scripts' sandbox. */
+        private val CAPS: String = LuaCaps.SOURCE
 
         /** Generated from packages/api (`pnpm generate`): the Lua half of the Kotlin-implemented API. */
         private val BINDINGS: String = resource("bindings.lua")

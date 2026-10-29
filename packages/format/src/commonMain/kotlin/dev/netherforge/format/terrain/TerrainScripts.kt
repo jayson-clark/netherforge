@@ -2,6 +2,7 @@ package dev.netherforge.format.terrain
 
 import dev.netherforge.format.game.BlockState
 import dev.netherforge.format.lua.LuaArgs
+import dev.netherforge.format.lua.LuaCaps
 import dev.netherforge.format.lua.LuaChunk
 import dev.netherforge.format.lua.LuaFailure
 import dev.netherforge.format.lua.LuaHostFunction
@@ -344,7 +345,9 @@ internal class TerrainScriptState(private val runner: ScriptRunner) {
             val path = args.string(1).orEmpty()
             val source = runner.scripts.sources[path] ?: throw LuaFailure("$path isn't there to run")
             LuaChunk("@$path", source)
-        }
+        },
+        // The standard library's caps, the plugin sandbox's own: the glue runs them before the script.
+        "host_caps" to LuaHostFunction { LuaChunk(LuaCaps.CHUNK_NAME, LuaCaps.SOURCE) }
     )
 
     /** Fills the box from ([x1], [y1], [z1]) to ([x2], [y2], [z2]), both corners included, where it's in [at] and the world. */
