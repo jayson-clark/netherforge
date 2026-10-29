@@ -36,6 +36,7 @@ import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import java.time.Duration
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
 import io.papermc.paper.registry.data.dialog.type.DialogType as PaperDialogType
 
@@ -77,23 +78,45 @@ class PaperDialogs(private val plugin: Plugin, private val logger: Logger) : Dia
     /** Where presses go; set once the runtime exists. */
     var events: PlatformEvents? = null
 
+    /**
+     * The showing each player has on screen now, by a token its buttons were built with. A button's callback
+     * lives for [CALLBACK_LIFETIME] with any number of uses (a dialog that stays open is pressed again), and a
+     * modified client can send any callback it was ever given: only one of the showing on screen now is heard,
+     * and a press that closes the dialog, leaving it, or another dialog shown ends that showing.
+     */
+    private val showing = ConcurrentHashMap<UUID, Any>()
+
     override fun show(player: UUID, dialog: DialogSpec): Boolean {
         val who = Bukkit.getPlayer(player) ?: return false
-        val built = runCatching { build(dialog) }.getOrElse {
+        val token = Any()
+        val built = runCatching { build(dialog, token) }.getOrElse {
             logger.warning("Couldn't build dialog ${dialog.id}: ${it.message}")
             return false
         }
+        showing[player] = token
         who.showDialog(built)
         return true
     }
 
     override fun close(player: UUID): Boolean {
         val who = Bukkit.getPlayer(player) ?: return false
+        showing.remove(player)
         who.closeDialog()
         return true
     }
 
-    private fun build(spec: DialogSpec): Dialog = Dialog.create { factory ->
+    /** Runs [heard] on the main thread if [token]'s showing is still [player]'s; [ends] takes it off their screen. */
+    private fun heard(player: Player, token: Any, ends: Boolean, heard: () -> Unit) {
+        val run = {
+            if (showing[player.uniqueId] === token) {
+                if (ends) showing.remove(player.uniqueId, token)
+                heard()
+            }
+        }
+        if (Bukkit.isPrimaryThread()) run() else Bukkit.getScheduler().runTask(plugin, Runnable { run() })
+    }
+
+    private fun build(spec: DialogSpec, token: Any): Dialog = Dialog.create { factory ->
         val file = spec.file
         val base = DialogBase.builder(text(file.title))
             .canCloseWithEscape(file.canCloseWithEscape ?: true)
@@ -107,18 +130,25 @@ class PaperDialogs(private val plugin: Plugin, private val logger: Logger) : Dia
         file.externalTitle?.let { base.externalTitle(text(it)) }
         if (file.body.isNotEmpty()) base.body(file.body.mapNotNull(::body))
         if (file.inputs.isNotEmpty()) base.inputs(file.inputs.map(::input))
-        val buttons = file.buttons.map { button(spec, it) }
+        val buttons = file.buttons.map { button(spec, it, token) }
         val columns = (file.columns ?: dev.netherforge.format.dialog.DialogType.DEFAULT_COLUMNS)
         val type = when (file.type ?: DialogType.NOTICE) {
-            DialogType.NOTICE -> PaperDialogType.notice(buttons.firstOrNull() ?: exit(spec, translated("gui.ok")))
+            DialogType.NOTICE -> PaperDialogType.notice(buttons.firstOrNull() ?: exit(spec, token, translated("gui.ok")))
             DialogType.CONFIRMATION -> PaperDialogType.confirmation(
-                buttons.getOrElse(0) { exit(spec, translated("gui.yes")) },
-                buttons.getOrElse(1) { exit(spec, translated("gui.no")) }
+                buttons.getOrElse(0) { exit(spec, token, translated("gui.yes")) },
+                buttons.getOrElse(1) { exit(spec, token, translated("gui.no")) }
             )
-            DialogType.MULTI_ACTION -> PaperDialogType.multiAction(buttons).columns(columns).exitAction(exit(spec)).build()
+            DialogType.MULTI_ACTION -> PaperDialogType.multiAction(buttons).columns(columns).exitAction(exit(spec, token)).build()
             // Its one button is its exit action, so it reports leaving: labelled as the file says.
-            DialogType.DIALOG_LIST -> PaperDialogType.dialogList(RegistrySet.valueSet(RegistryKey.DIALOG, spec.listed.map(::build)))
-                .exitAction(file.buttons.firstOrNull()?.let { exit(spec, it) } ?: exit(spec))
+            DialogType.DIALOG_LIST -> PaperDialogType.dialogList(
+                RegistrySet.valueSet(
+                    RegistryKey.DIALOG,
+                    spec.listed.map {
+                        build(it, token)
+                    }
+                )
+            )
+                .exitAction(file.buttons.firstOrNull()?.let { exit(spec, token, it) } ?: exit(spec, token))
                 .columns(columns)
                 .build()
         }
@@ -170,7 +200,11 @@ class PaperDialogs(private val plugin: Plugin, private val logger: Logger) : Dia
         }
     }
 
-    private fun button(spec: DialogSpec, button: DialogButton): ActionButton = ActionButton.builder(text(button.label ?: button.key))
+    private fun button(spec: DialogSpec, button: DialogButton, token: Any): ActionButton = ActionButton.builder(
+        text(
+            button.label ?: button.key
+        )
+    )
         .apply {
             button.tooltip?.let { tooltip(text(it)) }
             button.width?.let { width(it) }
@@ -182,8 +216,8 @@ class PaperDialogs(private val plugin: Plugin, private val logger: Logger) : Dia
                     val ref = PlayerRef(player.uniqueId, player.name)
                     val values = values(spec, view)
                     // Scripts run on the main thread; a callback may arrive on a network thread.
-                    val press = { events?.dialogPressed(ref, spec.id, button.key, values) }
-                    if (Bukkit.isPrimaryThread()) press() else Bukkit.getScheduler().runTask(plugin, Runnable { press() })
+                    val closes = (spec.file.afterAction ?: AfterAction.CLOSE) == AfterAction.CLOSE
+                    heard(player, token, ends = closes) { events?.dialogPressed(ref, spec.id, button.key, values) }
                 },
                 ClickCallback.Options.builder().uses(ClickCallback.UNLIMITED_USES).lifetime(CALLBACK_LIFETIME).build()
             )
@@ -191,10 +225,11 @@ class PaperDialogs(private val plugin: Plugin, private val logger: Logger) : Dia
         .build()
 
     /** An exit button labelled as the file's [button] says (a `dialog_list`'s own), reported as leaving. */
-    private fun exit(spec: DialogSpec, button: DialogButton): ActionButton = exit(spec, text(button.label ?: button.key)) {
-        button.tooltip?.let { tooltip(text(it)) }
-        button.width?.let { width(it) }
-    }
+    private fun exit(spec: DialogSpec, token: Any, button: DialogButton): ActionButton =
+        exit(spec, token, text(button.label ?: button.key)) {
+            button.tooltip?.let { tooltip(text(it)) }
+            button.width?.let { width(it) }
+        }
 
     /**
      * The exit button NetherForge adds, so leaving the dialog (Escape runs it
@@ -203,6 +238,7 @@ class PaperDialogs(private val plugin: Plugin, private val logger: Logger) : Dia
      */
     private fun exit(
         spec: DialogSpec,
+        token: Any,
         label: Component = translated("gui.back"),
         style: ActionButton.Builder.() -> Unit = {}
     ): ActionButton = ActionButton.builder(label)
@@ -212,8 +248,7 @@ class PaperDialogs(private val plugin: Plugin, private val logger: Logger) : Dia
                 { _, audience ->
                     val player = audience as? Player ?: return@customClick
                     val ref = PlayerRef(player.uniqueId, player.name)
-                    val close = { events?.dialogClosed(ref, spec.id) }
-                    if (Bukkit.isPrimaryThread()) close() else Bukkit.getScheduler().runTask(plugin, Runnable { close() })
+                    heard(player, token, ends = true) { events?.dialogClosed(ref, spec.id) }
                 },
                 ClickCallback.Options.builder().uses(ClickCallback.UNLIMITED_USES).lifetime(CALLBACK_LIFETIME).build()
             )

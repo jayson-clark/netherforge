@@ -212,6 +212,21 @@ abstract class CommandOpsContract : PlatformContract() {
     }
 
     @Test
+    fun `an alias another command has stays its command when the newcomer goes`() {
+        val first = name()
+        val second = name()
+        main {
+            val handler = registered(spec(first))
+            val newcomer = Recording()
+            assertTrue(commands.register(spec(second, listOf(first)), newcomer))
+            commands.unregister(second)
+            assertTrue(commands.runConsole("$first still here"))
+            assertEquals(listOf("still here"), handler.runs.map { words(it.third) })
+            assertEquals(emptyList(), newcomer.runs.toList())
+        }
+    }
+
+    @Test
     fun `the server's own commands can't be taken`() {
         main { assertFalse(commands.register(spec("help"), Recording())) }
     }

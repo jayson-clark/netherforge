@@ -1,6 +1,7 @@
 //! The parts of the dev bridge protocol (`packages/format/.../bridge/Bridge.kt`,
 //! JSON-RPC 2.0 over NDJSON) the backend reads itself: the plugin's `hello`
-//! request, to authenticate it and check its protocol version, and the
+//! and `authenticate` requests, to prove the token both ways (format's
+//! `BridgeAuth` makes the same proofs) and check its protocol version, and the
 //! answers to the backend's own requests (ids `"backend:<n>"`, so they never
 //! meet the UI's numbers). Everything else passes through as text: the UI
 //! speaks JSON-RPC itself (vscode-jsonrpc), typed by format's generated
@@ -11,12 +12,13 @@
 
 use serde::Deserialize;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 use crate::error::{Error, ErrorCode, Result};
 
 /// format's `Bridge.PROTOCOL`: the editor refuses a plugin of another.
 /// `session.ndjson`'s first hello is this version (tested on both sides).
-pub const PROTOCOL: u64 = 1;
+pub const PROTOCOL: u64 = 2;
 
 /// format's `Bridge.PROTOCOL_MISMATCH`, what a refused hello is answered with.
 pub const PROTOCOL_MISMATCH: i64 = -32001;
@@ -34,7 +36,10 @@ const BACKEND_ID: &str = "backend:";
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Hello {
-    pub token: String,
+    /// The plugin's nonce for this connection: what the editor's proof covers.
+    /// The token itself never crosses.
+    #[serde(default)]
+    pub nonce: String,
     /// Missing reads as 0, which no editor speaks.
     #[serde(default)]
     pub protocol: u64,
@@ -57,9 +62,82 @@ pub fn read_hello(line: &str) -> Option<(Value, Hello)> {
     (request.jsonrpc == "2.0" && request.method == "hello").then_some((request.id, request.params))
 }
 
-/// The answer to an accepted hello.
-pub fn hello_accepted(id: &Value) -> Value {
-    json!({"jsonrpc": "2.0", "id": id, "result": {"protocol": PROTOCOL}})
+/// The answer to a hello of our protocol: the editor's own [nonce] and its
+/// [proof] of the token over both nonces, which the plugin checks before it
+/// proves the token itself.
+pub fn hello_answer(id: &Value, nonce: &str, proof: &str) -> Value {
+    json!({"jsonrpc": "2.0", "id": id, "result": {"protocol": PROTOCOL, "nonce": nonce, "proof": proof}})
+}
+
+#[derive(Deserialize)]
+struct AuthenticateParams {
+    proof: String,
+}
+
+#[derive(Deserialize)]
+struct AuthenticateRequest {
+    jsonrpc: String,
+    id: Value,
+    method: String,
+    params: AuthenticateParams,
+}
+
+/// The plugin's second frame, when it's the authenticate request: its id and proof.
+pub fn read_authenticate(line: &str) -> Option<(Value, String)> {
+    let request: AuthenticateRequest = serde_json::from_str(line).ok()?;
+    (request.jsonrpc == "2.0" && request.method == "authenticate")
+        .then_some((request.id, request.params.proof))
+}
+
+/// The answer to an accepted proof: the connection is open.
+pub fn authenticated(id: &Value) -> Value {
+    json!({"jsonrpc": "2.0", "id": id, "result": null})
+}
+
+/// A new nonce: 24 random bytes, as hex.
+pub fn nonce() -> String {
+    let mut bytes = [0u8; 24];
+    getrandom::fill(&mut bytes).expect("the system has randomness");
+    hex::encode(bytes)
+}
+
+/// Whether [nonce] is one a plugin may send: hex, 32 to 64 digits.
+pub fn is_nonce(nonce: &str) -> bool {
+    (32..=64).contains(&nonce.len()) && nonce.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// The editor's proof of [token] for the plugin's nonce [plugin] and its own [editor].
+pub fn editor_proof(token: &str, plugin: &str, editor: &str) -> String {
+    hex::encode(hmac_sha256(
+        token.as_bytes(),
+        format!("editor\n{plugin}\n{editor}").as_bytes(),
+    ))
+}
+
+/// The plugin's proof of [token] for the editor's nonce [editor] and its own [plugin].
+pub fn plugin_proof(token: &str, editor: &str, plugin: &str) -> String {
+    hex::encode(hmac_sha256(
+        token.as_bytes(),
+        format!("plugin\n{editor}\n{plugin}").as_bytes(),
+    ))
+}
+
+/// HMAC-SHA256 (RFC 2104), over the `sha2` the backend already has.
+fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
+    const BLOCK: usize = 64;
+    let mut block = [0u8; BLOCK];
+    if key.len() > BLOCK {
+        block[..32].copy_from_slice(&Sha256::digest(key));
+    } else {
+        block[..key.len()].copy_from_slice(key);
+    }
+    let mut inner = Sha256::new();
+    inner.update(block.map(|b| b ^ 0x36));
+    inner.update(message);
+    let mut outer = Sha256::new();
+    outer.update(block.map(|b| b ^ 0x5c));
+    outer.update(inner.finalize());
+    outer.finalize().into()
 }
 
 /// Why a plugin speaking [theirs] is refused, as the console and the plugin say it.
@@ -166,9 +244,20 @@ mod tests {
         assert_eq!(hellos.len(), 2);
         let (id, hello) = &hellos[0];
         assert_eq!(hello.protocol, PROTOCOL, "the plugin's protocol is ours");
-        assert!(!hello.token.is_empty());
-        let accepted = hello_accepted(id);
-        assert!(frames.contains(&accepted), "{accepted}");
+        assert!(is_nonce(&hello.nonce));
+        // The recorded answer is what we'd answer for the recorded token ("t0k3n") and editor nonce.
+        let answer = &frames[1];
+        let editor = answer["result"]["nonce"].as_str().unwrap();
+        let proof = editor_proof("t0k3n", &hello.nonce, editor);
+        assert_eq!(answer, &hello_answer(id, editor, &proof));
+        // And the plugin's proof is the one we'd accept.
+        let (auth_id, given) = read_authenticate(&lines[2]).expect("the recorded authenticate");
+        assert_eq!(given, plugin_proof("t0k3n", editor, &hello.nonce));
+        assert_eq!(frames[3], authenticated(&auth_id));
+        assert!(
+            lines.iter().take(4).all(|l| !l.contains("t0k3n")),
+            "the token never crosses"
+        );
 
         let (id, newer) = &hellos[1];
         assert_ne!(newer.protocol, PROTOCOL);
@@ -181,13 +270,30 @@ mod tests {
         assert!(
             read_hello(r#"{"jsonrpc":"2.0","method":"console","params":{"items":[]}}"#).is_none()
         );
-        assert!(read_hello(r#"{"type":"hello","token":"t"}"#).is_none());
+        assert!(read_hello(r#"{"type":"hello","nonce":"t"}"#).is_none());
         // An old plugin without a protocol is one the editor doesn't speak.
         let (_, hello) = read_hello(
             r#"{"jsonrpc":"2.0","id":0,"method":"hello","params":{"token":"t","pluginVersion":"0","minecraft":"26.3","project":"/p"}}"#,
         )
         .unwrap();
         assert_eq!(hello.protocol, 0);
+    }
+
+    #[test]
+    fn hmac_is_rfc_4231s() {
+        // RFC 4231, test case 2.
+        assert_eq!(
+            hex::encode(hmac_sha256(b"Jefe", b"what do ya want for nothing?")),
+            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+        );
+        // Test case 6: a key longer than a block.
+        assert_eq!(
+            hex::encode(hmac_sha256(
+                &[0xaa; 131],
+                b"Test Using Larger Than Block-Size Key - Hash Key First"
+            )),
+            "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54"
+        );
     }
 
     #[test]

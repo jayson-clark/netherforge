@@ -397,4 +397,33 @@ class EventTest {
             assertEquals(listOf("landed\tnil\t1.0\ttrue\ttrue", "awake\ttrue"), server.logs)
         }
     }
+
+    /** Any package may emit any custom event: `from` says whose code did, which a handler can check. */
+    @Test
+    fun `a custom event says which package emitted it`() {
+        val manifest = { ns: String, more: String ->
+            """{ "formatVersion": ${dev.netherforge.format.project.FormatVersion.CURRENT}, "name": "$ns", "namespace": "$ns", "version": "1.0.0", "minecraft": "26.3"$more }"""
+        }
+        TestServer(
+            mapOf(
+                "netherforge.json" to manifest("test", """, "dependencies": { "lib": { "path": "../lib" } }"""),
+                "../lib/netherforge.json" to manifest("lib", """, "exports": { "modules": ["api"] }"""),
+                "../lib/modules/api/init.lua" to """
+                    return { pay = function() nf.emit("shop:paid", { amount = 100, from = "test" }) end }
+                """,
+                "modules/t/init.lua" to """
+                    local lib = require("lib:api")
+                    nf.on("shop:paid", function(e)
+                      e.from = "test"
+                      log(e.from, e.amount)
+                    end)
+                    nf.emit("shop:paid", { amount = 1 })
+                    lib.pay()
+                """
+            )
+        ).use { server ->
+            assertEquals(emptyList(), server.errors.map { it.message })
+            assertEquals(listOf("test\t1", "lib\t100"), server.logs)
+        }
+    }
 }

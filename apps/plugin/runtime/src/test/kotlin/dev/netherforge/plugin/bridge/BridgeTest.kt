@@ -7,10 +7,10 @@ import dev.netherforge.format.bridge.BotParams
 import dev.netherforge.format.bridge.BotPosition
 import dev.netherforge.format.bridge.BotsExtension
 import dev.netherforge.format.bridge.Bridge
+import dev.netherforge.format.bridge.BridgeAuth
 import dev.netherforge.format.bridge.BridgeMethod
 import dev.netherforge.format.bridge.CommandParams
 import dev.netherforge.format.bridge.HelloParams
-import dev.netherforge.format.bridge.HelloResult
 import dev.netherforge.format.bridge.JsonRpc
 import dev.netherforge.format.bridge.LoadedWorld
 import dev.netherforge.format.bridge.Log
@@ -67,6 +67,12 @@ class BridgeTest {
     private class Editor(socket: Socket, private val server: TestServer, refuse: String? = null) {
         private val writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8))
 
+        /** The handshake's editor end: every test's server has the token "secret". */
+        private val auth = BridgeAuth.EditorSide("secret")
+
+        /** The plugin's hello, until its proof completes the handshake. */
+        private var hello: HelloParams? = null
+
         /** Hellos, console entries, notifications' params and responses, as they arrive. */
         private val frames = LinkedBlockingQueue<Any>()
         private var nextId = 1
@@ -94,18 +100,23 @@ class BridgeTest {
 
         private fun receive(message: Any, refuse: String?) {
             when (message) {
+                is RpcRequest if message.method == Bridge.authenticate.name -> {
+                    val proof = Bridge.authenticate.decodeParams(message.params)
+                    assertTrue(auth.accepts(proof), "the plugin proves the token")
+                    write(RpcResponse.ok(message.id, Bridge.authenticate.encodeResult(Unit)))
+                    // The test sees the hello once the handshake is done: a request it sends next comes after.
+                    frames += checkNotNull(hello)
+                }
                 is RpcRequest -> {
                     assertEquals(Bridge.hello.name, message.method)
                     val hello = Bridge.hello.decodeParams(message.params)
-                    // Answered before the test sees it, so a request the test sends next comes after the answer.
-                    write(
-                        if (refuse != null) {
-                            RpcResponse.error(message.id, Bridge.PROTOCOL_MISMATCH, refuse)
-                        } else {
-                            RpcResponse.ok(message.id, Bridge.hello.encodeResult(HelloResult(Bridge.PROTOCOL)))
-                        }
-                    )
-                    frames += hello
+                    if (refuse != null) {
+                        write(RpcResponse.error(message.id, Bridge.PROTOCOL_MISMATCH, refuse))
+                        frames += hello
+                    } else {
+                        this.hello = hello
+                        write(RpcResponse.ok(message.id, Bridge.hello.encodeResult(auth.answer(hello))))
+                    }
                 }
                 is RpcNotification -> when (message.method) {
                     Bridge.console.name -> Bridge.console.decode(message.params).also {
@@ -179,7 +190,8 @@ class BridgeTest {
             TestServer(TestServer.example("showcase"), bridge = BridgeConfig(listener.localPort, "secret")).use { server ->
                 val editor = connect(listener, server)
                 val hello = editor.next<HelloParams>()
-                assertEquals("secret", hello.token)
+                // A nonce, never the token: the plugin proves it once the editor has proved it too.
+                assertTrue(hello.nonce.length >= 32 && "secret" !in hello.nonce, hello.nonce)
                 assertEquals(Bridge.PROTOCOL, hello.protocol)
                 assertEquals("26.3", hello.minecraft)
                 assertEquals(server.project.toString(), hello.project)
@@ -492,13 +504,13 @@ class BridgeTest {
     @Test
     fun `a dropped connection is retried, and the editor gets a fresh hello`() {
         ServerSocket(0).use { listener ->
-            TestServer(TestServer.example("showcase"), bridge = BridgeConfig(listener.localPort, "t")).use { server ->
+            TestServer(TestServer.example("showcase"), bridge = BridgeConfig(listener.localPort, "secret")).use { server ->
                 listener.soTimeout = 10_000
                 val first = listener.accept()
-                Editor(first, server).next<HelloParams>()
+                val firstNonce = Editor(first, server).next<HelloParams>().nonce
                 first.close()
                 val again = connect(listener, server)
-                assertEquals("t", again.next<HelloParams>().token)
+                assertTrue(again.next<HelloParams>().nonce != firstNonce, "a fresh nonce for each connection")
                 assertTrue(again.request(Bridge.instances, Unit).ok)
             }
         }
@@ -507,7 +519,7 @@ class BridgeTest {
     @Test
     fun `a dev server whose editor is gone stops itself`() {
         ServerSocket(0).use { listener ->
-            val config = BridgeConfig(listener.localPort, "t", abandonAfterMillis = 500)
+            val config = BridgeConfig(listener.localPort, "secret", abandonAfterMillis = 500)
             TestServer(TestServer.example("showcase"), bridge = config).use { server ->
                 listener.soTimeout = 10_000
                 val editor = listener.accept()

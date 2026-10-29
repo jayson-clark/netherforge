@@ -247,7 +247,12 @@ private val SLOTS = LuaMap(LuaCodecs.INTEGER, LuaCodecs.ITEM)
 
 /** `nf.files`. */
 internal class NfFilesImpl(private val session: ProjectSession) : NfFilesApi {
-    override fun get(caller: Caller, path: String?): LuaHandle.File? = session.files.normalize(path ?: "")?.let { LuaHandle.File(it) }
+    /** A file in the calling package's own folder: the handle's key is `<namespace>/<path>` (see `FileImpl`). */
+    override fun get(caller: Caller, path: String?): LuaHandle.File? {
+        val relative = session.files.normalize(path ?: "") ?: return null
+        val namespace = session.names.calling()
+        return LuaHandle.File(if (relative.isEmpty()) namespace else "$namespace/$relative")
+    }
 }
 
 /** `nf.text`. */

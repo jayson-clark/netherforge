@@ -621,7 +621,7 @@ Random:integer	85
 Random:number	92
 Random:pick	28
 Random:shuffle	29
-Random:weighted	100
+Random:weighted	114
 Route:exists	15
 Route:remove	15
 Schedule:cancel	16
@@ -901,7 +901,7 @@ nf.server.unix_time	6
 nf.spawning.condition	10
 nf.structures.exists	8
 nf.structures.size	11
-nf.task	223
+nf.task	289
 nf.teams.all	6
 nf.teams.create	18
 nf.teams.get	8

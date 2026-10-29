@@ -2,7 +2,7 @@
 
 # nf.files
 
-Files in the one directory scripts may keep things in: the only state a script has that survives a restart.
+Files in the package's own folder (`plugins/NetherForge/data/<namespace>/`), which no other package's scripts see unless they're handed a file: the only state a script has that survives a restart. The server owner limits how much each package may keep there (`files:` in `config.yml`); a write past it fails.
 
 A table of functions: call them with a dot.
 
@@ -10,7 +10,7 @@ A table of functions: call them with a dot.
 
 ### `nf.files.get(path?)` {#get}
 
-A file or folder in the data directory, which survives restarts and reloads. A handle is a path, not an open file: nothing is read until you ask. Paths that would leave that directory (`..`, backslashes, names starting with a dot) give `nil` rather than an error. No argument is the directory itself.
+A file or folder in the calling package's own folder, which survives restarts and reloads. A handle is a path, not an open file: nothing is read until you ask. Paths that would leave that folder (`..`, backslashes, names starting with a dot) give `nil` rather than an error. No argument is the folder itself.
 
 | Parameter | Type | |
 | --- | --- | --- |

@@ -265,7 +265,7 @@ do
 
   function nf.task(scope, callback, ...)
     local task = new_task(scope)
-    task.co = hooks.arm(co_create(tasks.task_body))
+    task.co = guard_module.note_origin(hooks.arm(co_create(tasks.task_body)))
     task.fn = callback
     thread_tasks[task.co] = task
     resume(task, callback, ...)

@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 class RequirementTest {
     @Test
     fun idsReadBackAsTheRequirementTheyName() {
-        for (id in listOf("moderation", "db", "web", "bots", "wasm", "network", "http", "http:discord.com", "plugin:vault")) {
+        for (id in listOf("console", "moderation", "db", "web", "bots", "wasm", "network", "http", "http:discord.com", "plugin:vault")) {
             assertEquals(id, Requirement.parse(id)?.id)
         }
         assertEquals(Requirement.Plugin("vault"), Requirement.parse("plugin:vault"))

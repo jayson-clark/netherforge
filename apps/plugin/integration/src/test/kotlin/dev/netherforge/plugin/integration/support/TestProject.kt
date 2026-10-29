@@ -44,6 +44,15 @@ class TestProject(example: String, dependencies: List<String>, fixtures: List<St
         if (example == "showcase") setWorld("world", "{}")
     }
 
+    /** Declares the yes-or-no requirement [key] (`console`) in `netherforge.json`'s `requires`, which the example has. */
+    fun require(key: String) {
+        val text = read("netherforge.json")
+        val requires = text.indexOf("\"requires\": {")
+        check(requires >= 0) { "netherforge.json has no requires" }
+        val at = requires + "\"requires\": {".length
+        write("netherforge.json", text.substring(0, at) + "\n    \"$key\": true," + text.substring(at))
+    }
+
     /** Makes [json] world [name]'s entry in `netherforge.json`'s `worlds`, in place of the one it has, if any. */
     fun setWorld(name: String, json: String) {
         val text = read("netherforge.json")

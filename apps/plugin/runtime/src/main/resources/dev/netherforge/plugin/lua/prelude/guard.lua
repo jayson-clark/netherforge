@@ -372,6 +372,31 @@ function guard.spend(steps)
   end
 end
 
+-- Charges the running frame for work done on its behalf that no hook counts:
+-- the host's walk over a big table a script passed it, the prelude's own sort
+-- of a table's keys. `instructions` go against the budget, `steps` (about a
+-- nanosecond each) towards the time limit's next check. Returns why the frame
+-- must stop (and marks it, so the overrun is reported even if caught), or nil.
+-- The caller stops its work there: unlike a script's code, this work can't be
+-- stopped by the hook.
+function guard.charge_work(instructions, steps)
+  local f = frame
+  if f == nil or f.spent then
+    return nil
+  end
+  f.left = f.left - instructions
+  if steps > 0 then
+    guard.spend(steps)
+  end
+  if f.stop == nil and f.left < 0 then
+    f.stop = "ran past its budget of " .. f.budget .. " instructions"
+  end
+  if f.stop ~= nil then
+    guard.count_every(true)
+  end
+  return f.stop
+end
+
 function hooks.run(event, line)
   if event ~= "count" then
     local listener = hooks.listeners[event]
@@ -432,10 +457,22 @@ hooks.arm(hooks.main)
 -- can outgrow the memory limit many times over between two count hooks;
 -- collection cycles keep pace with it, so this has the next instruction
 -- check memory. (Not here: inside a finalizer, collectgarbage does nothing.)
+--
+-- Arming a thread's hook again (`sethook`) starts its count of `every`
+-- instructions over, so the instructions it ran since its last count are
+-- never counted. A script that ends collection cycles more often than every
+-- `every` instructions (a loop making big strings) would otherwise never
+-- reach a count at all: no budget, no time limit. So the switch is charged
+-- what the count it throws away could have held: `every` instructions and
+-- one hook towards the next checks, an upper bound (more would have counted).
 function guard.collected()
   setmetatable({}, { __gc = guard.collected })
   local f = frame
   if f ~= nil and not f.spent then
+    if hooks.fast ~= co_running() then
+      f.left = f.left - hooks.every
+      f.checks = f.checks - 1
+    end
     guard.memory_in = 0
     guard.count_every(true)
   end
@@ -457,6 +494,26 @@ local function project_frame(level)
     end
   end
   return nil
+end
+
+-- The project file whose code made each coroutine a script runs (weak, by
+-- thread). A coroutine's own stack starts at its body, so code that runs a
+-- primitive as the body (`coroutine.wrap(player.ban)(player)`) leaves no
+-- project frame on it, and the package that made the call can only be told by
+-- who made the coroutine. Recorded by `note_origin` wherever one is made.
+local origins = setmetatable({}, { __mode = "k" })
+
+--- Records where `co` was made, and returns it: the project code making it, or,
+--- made where none is on this thread's stack, where this thread was made.
+local function note_origin(co)
+  origins[co] = project_frame(2) or origins[co_running()]
+  return co
+end
+
+--- The project file whose code is running on this thread, else the one that
+--- made it (`note_origin`); nil when neither is known.
+local function calling_file()
+  return (project_frame(2)) or origins[co_running()]
 end
 
 -- Lua prefixes errors with a *short* source, which loses the start of long
@@ -577,6 +634,8 @@ return {
   describe = describe,
   locate = locate,
   project_frame = project_frame,
+  note_origin = note_origin,
+  calling_file = calling_file,
   current = current,
   set_current = set_current,
 }

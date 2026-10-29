@@ -1,9 +1,11 @@
 package dev.netherforge.plugin.store
 
 import org.sqlite.SQLiteConfig
+import org.sqlite.SQLiteConnection
 import org.sqlite.SQLiteDataSource
 import org.sqlite.SQLiteErrorCode
 import org.sqlite.SQLiteException
+import org.sqlite.SQLiteLimits
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -265,10 +267,17 @@ class Database private constructor(
         return checked()
     }
 
-    /** A new connection that has read the schema: a file that isn't a database fails here, not at the first write. */
+    /**
+     * A new connection that has read the schema: a file that isn't a database fails here, not at the first write.
+     *
+     * It can attach no other database (`SQLITE_LIMIT_ATTACHED` 0): a package's scripts write their own SQL, and
+     * `ATTACH` (or `VACUUM INTO`, which the engine runs through an attach) would reach any file the server can,
+     * other packages' databases and the runtime's store included. Nothing of the runtime's own needs it.
+     */
     private fun checked(): Connection {
         val connection = dataSource().connection
         try {
+            (connection as SQLiteConnection).setLimit(SQLiteLimits.SQLITE_LIMIT_ATTACHED, 0)
             connection.createStatement().use { it.executeQuery("SELECT count(*) FROM sqlite_schema").close() }
             return connection
         } catch (e: SQLException) {

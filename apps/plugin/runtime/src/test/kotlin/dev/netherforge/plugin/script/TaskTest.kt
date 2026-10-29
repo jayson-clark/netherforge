@@ -410,12 +410,10 @@ class TaskTest {
             val bea = server.player("Bea")
             server.platform.commands.run(alex, "ask")
             assertEquals("ask", server.platform.dialogs.showing.getValue(alex.ref.uuid).id)
-            // Someone else's press on the same dialog isn't the answer.
-            server.platform.dialogs.showing[bea.ref.uuid] = server.platform.dialogs.showing.getValue(alex.ref.uuid)
-            server.platform.dialogs.press(bea, "no")
+            // Someone else's press on the same dialog isn't the answer (nor heard at all: it was never on Bea's screen).
+            server.platform.dialogs.forgePress(bea, "ask", "no")
             server.platform.dialogs.press(alex, "yes")
-            server.platform.dialogs.press(alex, "yes")
-            assertEquals(listOf("dialog heard\tno", "dialog heard\tyes", "answer\tyes\ttrue", "dialog heard\tyes"), server.logs)
+            assertEquals(listOf("dialog heard\tyes", "answer\tyes\ttrue"), server.logs)
         }
     }
 

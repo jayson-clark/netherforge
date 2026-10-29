@@ -38,7 +38,8 @@ local type, tostring, tonumber, select, rawget, setmetatable, pcall =
 local byte, sub, char = string.byte, string.sub, string.char
 local format, find, gsub, gmatch, concat = raw.format, raw.find, raw.gsub, raw.gmatch, raw.concat
 local pack, unpack = table.pack, table.unpack
-local tointeger, log, max, floor = math.tointeger, math.log, math.max, math.floor
+local tointeger, log, max, floor, ult = math.tointeger, math.log, math.max, math.floor, math.ult
+local raw_getmetatable = raw.getmetatable
 
 local MAX_STRING = limits.max_string
 local MAX_WORK = limits.max_work
@@ -818,7 +819,43 @@ local function lengths(t, n)
   return size
 end
 
+-- A table with a metatable can answer `#t` and `t[k]` differently each time
+-- they're asked (`__len`, `__index`), so whatever a cap measures, the library
+-- would read something else when it runs: a length of 1 measured, then two
+-- billion shifted in C where no hook fires. Such a table is read once, here,
+-- where the hook counts every read, and the library gets what was read.
+
+-- The length of `t` as the library would take it (`luaL_len`): an integer, or an error.
+---@param t table
+---@param what string
+---@return integer
+local function length_of(t, what)
+  local n = tointeger(#t)
+  if n == nil then
+    refuse(what .. ": object length is not an integer")
+    return 0 -- never reached: `refuse` raises
+  end
+  return n
+end
+
+local function has_metatable(t)
+  return type(t) == "table" and raw_getmetatable(t) ~= nil
+end
+
 function caps.table.concat(t, sep, i, j)
+  if has_metatable(t) then
+    local from = i == nil and 1 or tointeger(i)
+    local to = j == nil and length_of(t, "table.concat") or tointeger(j)
+    if from ~= nil and to ~= nil then
+      local copy, n = {}, 0
+      for k = from, to do
+        n = n + 1
+        copy[n] = t[k]
+      end
+      return caps.table.concat(copy, sep, 1, n)
+    end
+    return raw.concat(t, sep, i, j)
+  end
   if i == nil and j == nil and type(t) == "table" then
     -- A long list of strings is summed with nothing but `#` (a number among
     -- them stops that, and the loop below goes element by element).
@@ -886,6 +923,23 @@ function caps.table.move(a1, f, e, t, a2)
 end
 
 function caps.table.insert(t, ...)
+  if select("#", ...) == 2 and has_metatable(t) then
+    -- lstrlib's tinsert, read once (see `length_of`).
+    local pos, value = ...
+    local e = length_of(t, "table.insert") + 1
+    local at = tointeger(pos)
+    if at == nil then
+      return raw.insert(t, pos, value) -- the library says what's wrong with it
+    end
+    if not ult(at - 1, e) then
+      refuse("bad argument #2 to 'insert' (position out of bounds)")
+    end
+    for k = e, at + 1, -1 do
+      t[k] = t[k - 1]
+    end
+    t[at] = value
+    return
+  end
   if select("#", ...) == 2 and type(t) == "table" then -- appending (one argument) shifts nothing
     local at = tointeger((...))
     if at ~= nil then
@@ -899,6 +953,28 @@ function caps.table.insert(t, ...)
 end
 
 function caps.table.remove(t, pos)
+  if has_metatable(t) then
+    -- lstrlib's tremove, read once (see `length_of`).
+    local size = length_of(t, "table.remove")
+    local at = size
+    if pos ~= nil then
+      local given = tointeger(pos)
+      if given == nil then
+        return raw.remove(t, pos) -- the library says what's wrong with it
+      end
+      if given ~= size and ult(size, given - 1) then
+        refuse("bad argument #2 to 'remove' (position out of bounds)")
+      end
+      at = given
+    end
+    local value = t[at]
+    while at < size do
+      t[at] = t[at + 1]
+      at = at + 1
+    end
+    t[at] = nil
+    return value
+  end
   if pos ~= nil and type(t) == "table" then
     local at = tointeger(pos)
     if at ~= nil then
@@ -912,6 +988,23 @@ function caps.table.remove(t, pos)
 end
 
 function caps.table.sort(t, comp)
+  if has_metatable(t) then
+    -- Sorted as a plain copy, read and written back once each (see `length_of`).
+    local n = length_of(t, "table.sort")
+    local copy = {}
+    for k = 1, n do
+      local value = t[k]
+      if value == nil then
+        refuse(format("table.sort: the table has nil at position %d of %d", k, n))
+      end
+      copy[k] = value
+    end
+    caps.table.sort(copy, comp)
+    for k = 1, n do
+      t[k] = copy[k]
+    end
+    return
+  end
   -- A comparator is Lua, which the budget counts; so are `__lt` metamethods.
   if comp == nil and type(t) == "table" then
     local n = #t

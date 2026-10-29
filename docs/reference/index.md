@@ -124,7 +124,7 @@ Vectors and locations, text, looks, time, randomness and maths.
 
 Files, databases, web requests both ways, other plugins and WebAssembly modules.
 
-- [nf.files](nf.files.md): Files in the one directory scripts may keep things in: the only state a script has that survives a restart
+- [nf.files](nf.files.md): Files in the package's own folder (`plugins/NetherForge/data/<namespace>/`), which no other package's scripts see unless they're handed a file: the only state a script has that survives a restart
 - [File](file.md): A path in the scripts' data directory (`plugins/NetherForge/data/`, on the editor's dev server too)
 - [Database](database.md): A database, from `nf.db()` or `nf.db('network')`
 - [nf.http](nf.http.md): Requests to web services (a Discord webhook, a status API)
@@ -195,7 +195,8 @@ Some functions only work once the project has declared that it uses them, so who
 | Requirement | Lets scripts | Declared with | Functions |
 | --- | --- | --- | --- |
 | `db` | keep a database of the package's own | `"requires": { "db": true }` in `netherforge.json` | [`nf.db`](nf.md#db) |
-| `moderation` | ban and unban players, change the whitelist and the server settings players see | `"requires": { "moderation": true }` in `netherforge.json` | [`nf.server.set_max_players`](nf.server.md#set_max_players), [`nf.server.set_motd`](nf.server.md#set_motd), [`nf.server.set_whitelist_enabled`](nf.server.md#set_whitelist_enabled), [`player:ban`](player.md#ban), [`player:unban`](player.md#unban), [`player:set_whitelisted`](player.md#set_whitelisted) |
+| `console` | run server commands as the console, with the console's permissions | `"requires": { "console": true }` in `netherforge.json` | [`nf.server.run`](nf.server.md#run) |
+| `moderation` | kick, ban and unban players, change the whitelist and the server settings players see | `"requires": { "moderation": true }` in `netherforge.json` | [`nf.server.set_max_players`](nf.server.md#set_max_players), [`nf.server.set_motd`](nf.server.md#set_motd), [`nf.server.set_whitelist_enabled`](nf.server.md#set_whitelist_enabled), [`player:kick`](player.md#kick), [`player:ban`](player.md#ban), [`player:unban`](player.md#unban), [`player:set_whitelisted`](player.md#set_whitelisted) |
 | `bots` | join fake players to the server and drive them, when the server owner allows bots | `"requires": { "bots": true }` in `netherforge.json` | [`nf.bots.join`](nf.bots.md#join), [`nf.bots.all`](nf.bots.md#all), [`bot:leave`](bot.md#leave), [`bot:walk_to`](bot.md#walk_to), [`bot:stop`](bot.md#stop), [`bot:look_at`](bot.md#look_at), [`bot:jump`](bot.md#jump), [`bot:set_sneaking`](bot.md#set_sneaking), [`bot:set_sprinting`](bot.md#set_sprinting), [`bot:chat`](bot.md#chat), [`bot:attack`](bot.md#attack), [`bot:interact`](bot.md#interact), [`bot:use_item`](bot.md#use_item), [`bot:release_item`](bot.md#release_item), [`bot:swing`](bot.md#swing), [`bot:use_block`](bot.md#use_block), [`bot:break_block`](bot.md#break_block), [`bot:swap_hands`](bot.md#swap_hands), [`bot:drop_item`](bot.md#drop_item), [`bot:click_slot`](bot.md#click_slot), [`bot:respawn`](bot.md#respawn) |
 | `plugin:vault` | use another plugin on the server | `"requires": { "plugins": ["vault"] }` in `netherforge.json` | [`nf.economy.balance`](nf.economy.md#balance), [`nf.economy.deposit`](nf.economy.md#deposit), [`nf.economy.withdraw`](nf.economy.md#withdraw) |
 | `plugin:placeholderapi` | use another plugin on the server | `"requires": { "plugins": ["placeholderapi"] }` in `netherforge.json` | [`nf.placeholders.parse`](nf.placeholders.md#parse), [`nf.placeholders.register`](nf.placeholders.md#register) |

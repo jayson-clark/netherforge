@@ -48,7 +48,7 @@ class BridgeTest {
 
     @Test
     fun everyRecordedMessageHasItsDeclaredShape() {
-        val methods = (listOf(Bridge.hello) + Bridge.allRequests).associateBy { it.name }
+        val methods = (listOf(Bridge.hello, Bridge.authenticate) + Bridge.allRequests).associateBy { it.name }
         // Each unanswered request's id → its method, or null for a deliberately unknown one. An id is free again once answered.
         val asked = mutableMapOf<String, BridgeMethod<*, *>?>()
         // A request whose answer must be an error, by id: the error code it must carry.
@@ -193,7 +193,8 @@ class BridgeTest {
         assertTrue(Bridge.requests.none { '/' in it.name }, "the core protocol has no namespaced methods")
         assertEquals(listOf("ping", "profiler_subscribe"), Bridge.allRequests.filter { it.thread == BridgeThread.BRIDGE }.map { it.name })
         val names =
-            (listOf(Bridge.hello) + Bridge.allRequests).map { it.name } + Bridge.events.map { it.name } + Bridge.streams.map { it.name }
+            (listOf(Bridge.hello, Bridge.authenticate) + Bridge.allRequests).map { it.name } + Bridge.events.map { it.name } +
+                Bridge.streams.map { it.name }
         assertEquals(names.toSet().size, names.size, "two methods share a name")
     }
 

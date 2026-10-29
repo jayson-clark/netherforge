@@ -22,7 +22,7 @@ local type, pairs, ipairs, next, tostring, getmetatable =
   type, pairs, ipairs, next, tostring, getmetatable
 local load = std.load
 local guard, timing, invoke = guard_module.guard, guard_module.timing, guard_module.invoke
-local describe, project_frame = guard_module.describe, guard_module.project_frame
+local describe = guard_module.describe
 local registry, listeners, NF = events.registry, events.listeners, events.NF
 local class_of, key_of, new_event, deliver =
   events.class_of, events.key_of, events.new_event, events.deliver
@@ -234,10 +234,11 @@ function host.env(scope)
 end
 
 -- The project file whose code is running (the innermost "@" frame: a package's
--- at its package path), or nil when no script's code is: the runtime resolves
--- a bare id a script passes it in that file's package.
+-- at its package path, or on a coroutine with none, the file that made it), or
+-- nil when no script's code is: the runtime resolves a bare id a script passes
+-- it in that file's package, and holds a requirement to it.
 function host.calling_file()
-  return (project_frame(2))
+  return guard_module.calling_file()
 end
 
 -- Compiles a resource or module script into its scope and runs its top level.
@@ -342,6 +343,12 @@ function host.drop_targets(targets)
       sub.gone()
     end
   end
+end
+
+-- Charges the running call for the host's work on its behalf (see
+-- `guard.charge_work`): why it must stop, or nil.
+function host.charge(instructions, steps)
+  return guard.charge_work(instructions, steps)
 end
 
 -- A value as JSON text (a data table to save, an item's `data`, `nf.json`'s),

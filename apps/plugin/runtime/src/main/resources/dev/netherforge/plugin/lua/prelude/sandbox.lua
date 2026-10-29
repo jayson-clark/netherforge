@@ -10,9 +10,11 @@
 local std = require("std")
 local input = require("input")
 local guard_module = require("guard")
+local handles = require("handles")
 
 local limits = input.limits
 local hooks, guard, locate = guard_module.hooks, guard_module.guard, guard_module.locate
+local note_origin = guard_module.note_origin
 local raw, load, dump = std.raw, std.load, std.dump
 local co_create, co_resume, co_status, co_yield =
   std.co_create, std.co_resume, std.co_status, std.co_yield
@@ -20,6 +22,7 @@ local co_running, co_isyieldable, co_close = std.co_running, std.co_isyieldable,
 local unpack = std.unpack
 local pairs, ipairs, next, error, setmetatable, getmetatable =
   pairs, ipairs, next, error, setmetatable, getmetatable
+local type, rawset, raw_getmetatable = type, rawset, std.raw_getmetatable
 
 -- A library proxy's metatable: one per library, shared by every scope's
 -- proxy of it (no script can reach a metatable that says `__metatable =
@@ -42,10 +45,10 @@ end
 
 local sandboxed_coroutine = {
   create = function(fn)
-    return hooks.arm(co_create(fn))
+    return note_origin(hooks.arm(co_create(fn)))
   end,
   wrap = function(fn)
-    local co = hooks.arm(co_create(fn))
+    local co = note_origin(hooks.arm(co_create(fn)))
     return function(...)
       local results = { co_resume(co, ...) }
       if not results[1] then
@@ -79,7 +82,6 @@ local base = {
   rawequal = rawequal,
   rawget = rawget,
   rawlen = rawlen,
-  rawset = rawset,
   select = select,
   setmetatable = setmetatable,
   tonumber = tonumber,
@@ -87,6 +89,33 @@ local base = {
   type = type,
   xpcall = xpcall,
 }
+
+-- Tables every script shares, which `rawset` must not write to: one package
+-- planting a method on a handle (the same table for every script that holds
+-- it), an event (the same table for every handler) or a `vec3` constant would
+-- change what every other package's code reads. Handles and typed values
+-- (`Vec3`, `Location`) are told by their genuine metatable (`handles.kinds`);
+-- anything else shared is put in `shared` by the module that makes it (events).
+local shared = setmetatable({}, { __mode = "k" })
+
+local function shared_table(t)
+  if shared[t] then
+    return true
+  end
+  local mt = raw_getmetatable(t)
+  return mt ~= nil and handles.kinds[mt] ~= nil
+end
+
+function base.rawset(t, k, v)
+  if type(t) == "table" and shared_table(t) then
+    local what = getmetatable(t)
+    local named = type(what) == "string"
+        and ((raw.find(what, "^[AEIOU]") and "an " or "a ") .. what)
+      or "this table"
+    error("rawset: " .. named .. " is shared by every script and can't be changed", 2)
+  end
+  return rawset(t, k, v)
+end
 
 -- The library tables, behind read-only proxies.
 local libraries = {
@@ -120,6 +149,11 @@ do
   end
   base.setmetatable = caps.setmetatable
 end
+
+-- A function's bytecode is no use to a script that can't load bytecode, and
+-- one less way to look inside the prelude's functions (the prelude keeps its
+-- own `std.dump` for the caps, above).
+string.dump = nil
 
 -- A scope's own copy of `base`, with its own library proxies. The proxies
 -- stop plain assignment, but `rawset` still writes onto a proxy, so each
@@ -172,6 +206,7 @@ end
 
 return {
   base = base,
+  shared = shared,
   libraries = libraries,
   scope_base = scope_base,
   seal = seal,

@@ -248,7 +248,10 @@ end)
 PKCE, so a player can link an account from another service. NetherForge keeps
 the parts that are easy to get wrong: a random state tied to the player, the
 code verifier, single use, a 10-minute expiry, and trading the code for a
-token on the server. Register `nf.web.url("/oauth/<name>/callback")` with the
+token on the server. When the service sends the browser back, NetherForge asks
+it to confirm which Minecraft player it's signing in as before it trades the
+code, so a sign-in link someone passes on can't link _their_ account to the
+player who began it. Register `nf.web.url("/oauth/<name>/callback")` with the
 service as the redirect URI, and declare the token endpoint's host in
 `requires.http`:
 
@@ -329,5 +332,7 @@ what it answers:
 local alex = nf.test.player("Alex")
 local state = discord:begin(alex):match("state=([^&]+)")
 nf.test.oauth_token(discord, { access_token = "abc" })
-nf.test.request("GET", "/shop/oauth/discord/callback?code=x&state=" .. state)
+local back = nf.test.request("GET", "/shop/oauth/discord/callback?code=x&state=" .. state)
+local token = back.body:match('name="token" value="([^"]+)"')
+nf.test.request("POST", "/shop/oauth/discord/confirm", { body = "token=" .. token })
 ```

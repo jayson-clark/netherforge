@@ -270,6 +270,8 @@ Whether they're a server operator, online or not.
 
 Disconnects them from the server.
 
+*Needs `"requires": { "moderation": true }` in `netherforge.json`: without it, calling it is an error.*
+
 | Parameter | Type | |
 | --- | --- | --- |
 | `reason` (optional) | [`Text`](index.md#types) | What their screen says, MiniMessage. Default the server's own message. |

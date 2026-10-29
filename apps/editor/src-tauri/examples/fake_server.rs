@@ -220,22 +220,38 @@ fn plugin(port: u16, minecraft: &str) {
     let project = std::env::args()
         .find_map(|a| a.strip_prefix("-Dnetherforge.project=").map(str::to_string))
         .unwrap_or_default();
+    let token = std::env::var("NETHERFORGE_BRIDGE_TOKEN").unwrap_or_default();
+    let nonce = "fa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4e";
     send(json!({
         "jsonrpc": "2.0",
         "id": 0,
         "method": "hello",
         "params": {
-            "token": std::env::var("NETHERFORGE_BRIDGE_TOKEN").unwrap_or_default(),
-            "protocol": 1,
+            "nonce": nonce,
+            "protocol": 2,
             "pluginVersion": "0.0.0-fake",
             "minecraft": minecraft,
             "project": project,
         },
     }));
     let mut lines = BufReader::new(stream).lines();
-    // The editor answers the hello, or closes the connection without a word.
-    if lines.next().is_none() {
+    // The editor answers the hello with its nonce and proof, or closes the connection without a word.
+    let Some(Ok(answer)) = lines.next() else {
         eprintln!("[fake plugin] the editor closed the dev bridge without answering the hello");
+        return;
+    };
+    let editor = serde_json::from_str::<Value>(&answer)
+        .ok()
+        .and_then(|a| a["result"]["nonce"].as_str().map(str::to_string))
+        .unwrap_or_default();
+    send(json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "authenticate",
+        "params": { "proof": plugin_proof(&token, &editor, nonce) },
+    }));
+    if lines.next().is_none() {
+        eprintln!("[fake plugin] the editor closed the dev bridge without accepting the proof");
         return;
     }
     send(json!({
@@ -304,4 +320,22 @@ fn language_server() {
         let _ = output.write_all(&body);
         let _ = output.flush();
     }
+}
+
+/// The plugin's proof of [token] (format's `BridgeAuth.pluginProof`): HMAC-SHA256 over the editor's nonce and ours.
+fn plugin_proof(token: &str, editor: &str, plugin: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut block = [0u8; 64];
+    if token.len() > 64 {
+        block[..32].copy_from_slice(&Sha256::digest(token.as_bytes()));
+    } else {
+        block[..token.len()].copy_from_slice(token.as_bytes());
+    }
+    let mut inner = Sha256::new();
+    inner.update(block.map(|b| b ^ 0x36));
+    inner.update(format!("plugin\n{editor}\n{plugin}").as_bytes());
+    let mut outer = Sha256::new();
+    outer.update(block.map(|b| b ^ 0x5c));
+    outer.update(inner.finalize());
+    hex::encode(outer.finalize())
 }

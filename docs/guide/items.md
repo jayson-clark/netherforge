@@ -34,6 +34,15 @@ wherever it goes (a chest, the ground, after a restart).
 player:give_item({ kind = "minecraft:paper", name = "Ticket", data = { seat = "B12" } })
 ```
 
+::: warning A player in creative mode can make any item
+The game lets a creative-mode client hand the server whole stacks it made
+itself, so such a player can make any item, a project item and its `data`
+included (as they can make any vanilla item). Don't let an item's `data` alone
+grant anything that matters (a rank, money, access) to a player who is or has
+been in creative: keep what's owed in a database or `nf.data` and check it
+there.
+:::
+
 To find items in an inventory, give a partial table to match. A `data` in it
 matches if the stack's data has those values, so a tag of your own is enough:
 

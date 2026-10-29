@@ -1116,6 +1116,7 @@ export const playerClass: LuaClass = {
     {
       name: 'kick',
       doc: 'Disconnects them from the server.',
+      requires: 'moderation',
       params: [
         {
           name: 'reason',

@@ -122,6 +122,10 @@ class NfvReader private constructor(private val file: RandomAccessFile, val head
                 if (columns !in 1..16 || rows !in 1..16 || fps !in 1..20 || frames < 0 || keyInterval < 1) {
                     throw IOException("its header doesn't make sense ($columns by $rows maps, $fps fps, $frames frames)")
                 }
+                // Each frame has 8 bytes of index after the header: a count the file can't hold isn't believed.
+                if (frames.toLong() * 8 > file.length() - HEADER_SIZE) {
+                    throw IOException("its header says $frames frames, more than the file holds")
+                }
                 val index = ByteArray(frames * 8)
                 file.seek(HEADER_SIZE.toLong())
                 file.readFully(index)

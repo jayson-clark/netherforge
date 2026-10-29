@@ -10,6 +10,7 @@ import dev.netherforge.plugin.network.NetworkConfig
 import dev.netherforge.plugin.pack.PackConfig
 import dev.netherforge.plugin.schedule.ScheduleConfig
 import dev.netherforge.plugin.screen.ScreensConfig
+import dev.netherforge.plugin.script.FilesConfig
 import dev.netherforge.plugin.script.PerformanceConfig
 import dev.netherforge.plugin.store.DatabasesConfig
 import dev.netherforge.plugin.structure.StructuresConfig
@@ -61,6 +62,8 @@ data class RuntimeConfig(
     val wasm: WasmConfig = WasmConfig(),
     /** Whether this server is part of a network (`nf.network`), how it reaches the hub, and what its packages may send. */
     val network: NetworkConfig = NetworkConfig(),
+    /** `files:`: what each package may keep in `nf.files`. */
+    val files: FilesConfig = FilesConfig(),
     /**
      * Whether the project's dependencies are found where `netherforge.json`'s
      * paths point: on the editor's dev server (and in tests). A production
@@ -128,6 +131,7 @@ data class RuntimeConfig(
             val screens = screens(settings.section("screens"))
             val wasm = wasm(settings.section("wasm"))
             val network = network(settings.section("network"))
+            val files = files(settings.section("files"))
             properties(Bridge.PROJECT_PROPERTY)?.takeIf { it.isNotBlank() }?.let { project ->
                 val port = properties(Bridge.PORT_PROPERTY)?.toIntOrNull()
                 return RuntimeConfig(
@@ -146,6 +150,7 @@ data class RuntimeConfig(
                     screens = screens,
                     wasm = wasm,
                     network = devNetwork(network, properties, env),
+                    files = files,
                     packageCache = properties(Bridge.PACKAGE_CACHE_PROPERTY)?.takeIf {
                         it.isNotBlank()
                     }?.let { Path.of(it).toAbsolutePath().normalize() },
@@ -168,6 +173,7 @@ data class RuntimeConfig(
                 screens = screens,
                 wasm = wasm,
                 network = network,
+                files = files,
                 resolvesPackages = false
             )
         }
@@ -251,6 +257,16 @@ data class RuntimeConfig(
             return StructuresConfig(
                 blocksPerTick = positive("blocks-per-tick", defaults.blocksPerTick),
                 maxJobsPerPackage = positive("max-jobs-per-package", defaults.maxJobsPerPackage)
+            )
+        }
+
+        /** `files:`: what each package may keep in `nf.files`. Read on dev servers too. */
+        private fun files(section: Map<String, Any?>): FilesConfig {
+            val defaults = FilesConfig()
+            return FilesConfig(
+                maxBytesPerPackage = section.int("max-megabytes-per-package")?.takeIf { it > 0 }?.let { it * 1024L * 1024L }
+                    ?: defaults.maxBytesPerPackage,
+                maxEntriesPerPackage = section.int("max-entries-per-package")?.takeIf { it > 0 } ?: defaults.maxEntriesPerPackage
             )
         }
 

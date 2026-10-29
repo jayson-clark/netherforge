@@ -112,12 +112,21 @@ export interface Fn {
 /**
  * Something a package declares before its scripts may use the functions that need it, so
  * whoever runs it sees in one place what it may do ("Trust" in PLAN.md's decisions):
- * `moderation` (banning, the whitelist, the server's settings), `http` (the network), `db`
+ * `console` (running commands as the console), `moderation` (banning, the whitelist, the
+ * server's settings), `http` (the network), `db`
  * (a database) or `plugin:<name>` (another plugin, like `plugin:vault`). `REQUIREMENTS`
  * (`src/requirements.ts`) says how each is declared.
  */
 export type Requirement =
-  'moderation' | 'http' | 'db' | 'web' | 'bots' | 'wasm' | 'network' | `plugin:${string}`
+  | 'console'
+  | 'moderation'
+  | 'http'
+  | 'db'
+  | 'web'
+  | 'bots'
+  | 'wasm'
+  | 'network'
+  | `plugin:${string}`
 
 /** What the server reads a command argument as, before the runtime sees it: the runtime's `ArgumentReading`. */
 export type ArgumentReading =

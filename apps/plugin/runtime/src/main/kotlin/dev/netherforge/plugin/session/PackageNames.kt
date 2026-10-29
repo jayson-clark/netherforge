@@ -64,8 +64,13 @@ class PackageNames internal constructor(private val session: ProjectSession) {
         val host = session.scripts.host ?: return home
         host.reading?.let { return it }
         host.callerScope?.let { id -> session.scripts.scope(id)?.let { return it.namespace } }
-        val file = host.callingFile() ?: return home
-        return PackagePaths.split(session.projectPath(file)).first ?: home
+        val file = host.callingFile()
+        if (file != null) return PackagePaths.split(session.projectPath(file)).first ?: home
+        // No project code on the stack, nor one that made this coroutine: a primitive the host called
+        // itself (a binding given as a handler). Held to the scope whose call that is, never to the
+        // project by default: the project usually declares the most.
+        host.runningScope()?.let { id -> session.scripts.scope(id)?.let { return it.namespace } }
+        return home
     }
 
     /**

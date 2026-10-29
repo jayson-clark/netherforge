@@ -9,6 +9,40 @@ release is cut.
 
 ## [Unreleased]
 
+### Security
+
+- **Scripts can no longer stall or crash the server through the sandbox.** A
+  loop that makes garbage is held to the instruction budget and time limit
+  again; `table.insert`, `remove`, `sort` and `concat` can't be tricked by a
+  table's `__len` or `__index` into unbounded work; a script's `__index` that
+  errors while the server reads its table is the call's error instead of a
+  JVM crash; and big tables handed to the API (`nf.json.encode`, …) are
+  charged to the script.
+- **A package can only use what it declared.** Calling a function from a
+  coroutine no longer passes for the project's own code; `rawset` can't
+  change the handles, events and `vec3` constants every script shares; and a
+  package's database can't `ATTACH` other files.
+- **`nf.server.run` needs `"requires": { "console": true }`** (breaking): it
+  runs any command with the console's permissions, so it's now a requirement
+  of its own, listed first. **`player:kick` needs `moderation`** (breaking),
+  like `ban`.
+- **`nf.files` keeps each package's files in a folder of its own**
+  (`plugins/NetherForge/data/<namespace>/`), within per-package limits
+  (`files:` in `config.yml`). Files kept before are moved into the project's
+  folder the first time the server starts.
+- **The network's hub traffic is encrypted and authenticated**, and strangers
+  connecting to the hub are limited. Hub and servers must be updated together
+  (network protocol 2).
+- **The dev bridge proves the token both ways** instead of sending it, so a
+  process that takes the editor's port gets nothing (bridge protocol 2).
+- **Web and login hardening:** an OAuth login asks the browser to confirm
+  which player it signs in as; `trust-proxy-headers` takes the address the
+  proxy added; `nf.http` refuses the server's own addresses; dialog presses
+  can't be replayed or carry answers the dialog couldn't give; a command alias
+  can't remove another plugin's command; placeholders must start with the
+  package's namespace; custom events say which package emitted them
+  (`event.from`); oversized pictures and videos in a package are refused.
+
 ### Changed
 
 - **3D views draw only when something changes.** A centity, particle effect,

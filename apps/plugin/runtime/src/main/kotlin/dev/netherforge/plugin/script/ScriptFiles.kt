@@ -25,8 +25,82 @@ import kotlin.io.path.readText
  *
  * [root] is `plugins/NetherForge/data/` on every server, the editor's dev
  * server included (whose folder is outside the project).
+ *
+ * **Each package has a folder of its own**, `<root>/<namespace>/`: every path
+ * here starts with the namespace (`nf.files.get` puts the calling package's in
+ * front, and a `File` never climbs above it), so no package reads or writes
+ * another's files unless it's handed one. Each package's folder is held to
+ * [limits]: its bytes and its entries (files and folders), counted once and
+ * kept up to date by every change made here ([usage]). Files from before
+ * folders were per package are moved into the project's ([adopt]).
  */
-class ScriptFiles(private val root: Path) {
+class ScriptFiles(private val root: Path, private val limits: FilesConfig = FilesConfig()) {
+    /** What one package's folder holds. */
+    private class Usage(var bytes: Long, var entries: Int)
+
+    /** By namespace, counted the first time it's needed, then kept up to date. */
+    private val usages = HashMap<String, Usage>()
+
+    /** The package folder (first segment) of a normalized path. */
+    private fun namespaceOf(normalized: String) = normalized.substringBefore('/')
+
+    private fun usage(namespace: String): Usage = usages.getOrPut(namespace) {
+        val folder = root.resolve(namespace)
+        var bytes = 0L
+        var entries = 0
+        if (folder.isDirectory()) {
+            Files.walk(folder).use { paths ->
+                for (path in paths) {
+                    if (path == folder) continue
+                    entries++
+                    if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) bytes += runCatching { Files.size(path) }.getOrDefault(0L)
+                }
+            }
+        }
+        Usage(bytes, entries)
+    }
+
+    /** Whether [namespace]'s folder has room for [bytes] more and [entries] more. */
+    private fun room(namespace: String, bytes: Long, entries: Int): Boolean {
+        val usage = usage(namespace)
+        return usage.bytes + bytes <= limits.maxBytesPerPackage && usage.entries + entries <= limits.maxEntriesPerPackage
+    }
+
+    /** Folders [target] needs made above it, inside its package's folder: each an entry. */
+    private fun missingFolders(target: Path, namespace: String): Int {
+        val top = root.resolve(namespace)
+        var count = 0
+        var at = target.parent
+        while (at != null && at.startsWith(top) && at != top && !at.exists()) {
+            count++
+            at = at.parent
+        }
+        return count
+    }
+
+    /**
+     * Moves files kept from before each package had a folder into
+     * [namespace]'s (the project's), once: they were the project's to see, and
+     * nothing says which package wrote which. A marker file (a name scripts
+     * can't use) says it's done.
+     */
+    fun adopt(namespace: String) {
+        val marker = root.resolve(LAYOUT_MARKER)
+        if (marker.exists()) return
+        try {
+            Files.createDirectories(root)
+            val old = root.listDirectoryEntries().filter { it.name != LAYOUT_MARKER }
+            if (old.isNotEmpty()) {
+                val moving = Files.createTempDirectory(root, ".moving-")
+                for (entry in old) Files.move(entry, moving.resolve(entry.name))
+                Files.move(moving, root.resolve(namespace))
+            }
+            Files.writeString(marker, "Each package's nf.files are in the folder named after its namespace.\n")
+        } catch (_: IOException) {
+            // Left as it was: the next start tries again.
+        }
+        usages.clear()
+    }
 
     /** The canonical form of [path] (`""` for the root), or null when it isn't allowed. */
     fun normalize(path: String): String? {
@@ -90,8 +164,13 @@ class ScriptFiles(private val root: Path) {
         val target = resolve(path) ?: return false
         if (normalize(path) == "" || target.isDirectory()) return false
         val bytes = text.encodeToByteArray()
-        val existing = if (append && target.isRegularFile()) target.fileSize() else 0L
+        val before = if (target.isRegularFile()) target.fileSize() else null
+        val existing = if (append) before ?: 0L else 0L
         if (existing + bytes.size > MAX_BYTES) return false
+        val namespace = namespaceOf(normalize(path)!!)
+        val grows = existing + bytes.size - (before ?: 0L)
+        val made = (if (before == null) 1 else 0) + missingFolders(target, namespace)
+        if (!room(namespace, grows, made)) return false
         return try {
             Files.createDirectories(target.parent)
             if (append) {
@@ -99,18 +178,30 @@ class ScriptFiles(private val root: Path) {
             } else {
                 Files.write(target, bytes)
             }
+            usage(namespace).apply {
+                this.bytes += grows
+                entries += made
+            }
             true
         } catch (_: IOException) {
+            usages.remove(namespace)
             false
         }
     }
 
     fun makeDirectory(path: String): Boolean {
         val target = resolve(path) ?: return false
+        val normalized = normalize(path)!!
+        if (!normalized.contains('/')) return target.isDirectory() || runCatching { Files.createDirectories(target) }.isSuccess
+        val namespace = namespaceOf(normalized)
+        val made = (if (target.exists()) 0 else 1) + missingFolders(target, namespace)
+        if (!room(namespace, 0, made)) return false
         return try {
             Files.createDirectories(target)
+            usage(namespace).entries += made
             true
         } catch (_: IOException) {
+            usages.remove(namespace)
             false
         }
     }
@@ -128,11 +219,23 @@ class ScriptFiles(private val root: Path) {
     fun move(from: String, to: String): Boolean {
         val (source, target) = pair(from, to) ?: return false
         if (target.startsWith(source)) return false
+        // Across packages only through a handle another package was given: recounted, both.
+        val fromPackage = namespaceOf(normalize(from)!!)
+        val intoPackage = namespaceOf(normalize(to)!!)
+        if (fromPackage != intoPackage &&
+            !room(intoPackage, sizeOf(source), entriesOf(source) + missingFolders(target, intoPackage))
+        ) {
+            return false
+        }
         return try {
             Files.createDirectories(target.parent)
             Files.move(source, target)
+            usages.remove(fromPackage)
+            usages.remove(intoPackage)
             true
         } catch (_: IOException) {
+            usages.remove(fromPackage)
+            usages.remove(intoPackage)
             false
         }
     }
@@ -141,11 +244,20 @@ class ScriptFiles(private val root: Path) {
     fun copy(from: String, to: String): Boolean {
         val (source, target) = pair(from, to) ?: return false
         if (!source.isRegularFile()) return false
+        val namespace = namespaceOf(normalize(to)!!)
+        val size = source.fileSize()
+        val made = 1 + missingFolders(target, namespace)
+        if (!room(namespace, size, made)) return false
         return try {
             Files.createDirectories(target.parent)
             Files.copy(source, target)
+            usage(namespace).apply {
+                bytes += size
+                entries += made
+            }
             true
         } catch (_: IOException) {
+            usages.remove(namespace)
             false
         }
     }
@@ -162,12 +274,32 @@ class ScriptFiles(private val root: Path) {
     fun delete(path: String): Boolean {
         if (normalize(path).isNullOrEmpty()) return false
         val target = resolve(path) ?: return false
+        val namespace = namespaceOf(normalize(path)!!)
+        val size = if (target.isRegularFile()) target.fileSize() else 0L
         return try {
-            Files.deleteIfExists(target)
+            Files.deleteIfExists(target).also { deleted ->
+                if (deleted) {
+                    usage(namespace).apply {
+                        bytes -= size
+                        entries -= 1
+                    }
+                }
+            }
         } catch (_: IOException) {
+            usages.remove(namespace)
             false
         }
     }
+
+    private fun sizeOf(path: Path): Long = if (path.isDirectory()) {
+        Files.walk(path).use { paths ->
+            paths.filter { Files.isRegularFile(it, LinkOption.NOFOLLOW_LINKS) }.mapToLong { Files.size(it) }.sum()
+        }
+    } else {
+        path.fileSize()
+    }
+
+    private fun entriesOf(path: Path): Int = if (path.isDirectory()) Files.walk(path).use { it.count().toInt() } else 1
 
     companion object {
         const val MAX_BYTES = 1L shl 20
@@ -175,6 +307,9 @@ class ScriptFiles(private val root: Path) {
         const val MAX_PATH = 200
         const val MAX_DEPTH = 8
         const val MAX_LIST = 500
+
+        /** In [root]: the files are in a folder per package ([adopt] has run). Not a name a script can use. */
+        const val LAYOUT_MARKER = ".netherforge-files"
 
         private val NAME = Regex("^[A-Za-z0-9_. -]+$")
         private val RESERVED = setOf("con", "prn", "aux", "nul") + (1..9).flatMap { listOf("com$it", "lpt$it") }

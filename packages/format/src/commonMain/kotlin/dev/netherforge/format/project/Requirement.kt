@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
  * Something a package's scripts can do only when its `netherforge.json`
  * declares it (`"requires"`, [ProjectRequires]): the capabilities "Trust" in
  * PLAN.md's decisions is about. Its [id] is how the API spec's `requires`
- * names it (`moderation`, `db`, `web`, `bots`, `wasm`, `network`, `http`, `plugin:vault`) and how the editor,
+ * names it (`console`, `moderation`, `db`, `web`, `bots`, `wasm`, `network`, `http`, `plugin:vault`) and how the editor,
  * the server's log and `/nf requires` show it (`http:discord.com`).
  *
  * The one place a declaration is read: the runtime's check
@@ -27,12 +27,24 @@ sealed class Requirement {
 
     override fun toString() = id
 
-    /** Banning players, the whitelist, the message of the day and the most players allowed. */
+    /** Kicking and banning players, the whitelist, the message of the day and the most players allowed. */
     data object Moderation : Requirement() {
         override val id = "moderation"
         override val declaration = "\"requires\": { \"moderation\": true }"
 
         override fun grantedBy(requires: ProjectRequires?) = requires?.moderation == true
+    }
+
+    /**
+     * Running server commands as the console (`nf.server.run`): with the console's permissions, so anything the
+     * server or another plugin lets the console do (making operators, granting permissions, stopping the server).
+     * Every other capability is narrower than this one.
+     */
+    data object Console : Requirement() {
+        override val id = "console"
+        override val declaration = "\"requires\": { \"console\": true }"
+
+        override fun grantedBy(requires: ProjectRequires?) = requires?.console == true
     }
 
     /** A database of the package's own (`nf.db`). */
@@ -107,6 +119,7 @@ sealed class Requirement {
     companion object {
         /** [id] as a requirement (`plugin:vault`), or null for text that isn't one. */
         fun parse(id: String): Requirement? = when {
+            id == Console.id -> Console
             id == Moderation.id -> Moderation
             id == Db.id -> Db
             id == Web.id -> Web
@@ -132,11 +145,12 @@ sealed class Requirement {
 
         /**
          * What [requires] declares, one requirement each, in the order they're
-         * shown: moderation, db, web, bots, wasm, network, each host, each plugin. A host or plugin name
+         * shown: console, moderation, db, web, bots, wasm, network, each host, each plugin. A host or plugin name
          * that isn't one (a problem in the manifest) declares nothing.
          */
         fun declared(requires: ProjectRequires?): List<Requirement> = buildList {
             if (requires == null) return@buildList
+            if (requires.console == true) add(Console)
             if (requires.moderation == true) add(Moderation)
             if (requires.db == true) add(Db)
             if (requires.web == true) add(Web)
@@ -164,14 +178,15 @@ sealed class Requirement {
             }
             val order = { r: Requirement ->
                 when (r) {
-                    Moderation -> 0
-                    Db -> 1
-                    Web -> 2
-                    Bots -> 3
-                    Wasm -> 4
-                    Network -> 5
-                    is Http -> 6
-                    is Plugin -> 7
+                    Console -> 0
+                    Moderation -> 1
+                    Db -> 2
+                    Web -> 3
+                    Bots -> 4
+                    Wasm -> 5
+                    Network -> 6
+                    is Http -> 7
+                    is Plugin -> 8
                 }
             }
             return by.entries.sortedWith(compareBy({ order(it.key) }, { it.key.id })).map { (requirement, packages) ->

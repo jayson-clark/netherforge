@@ -1,6 +1,6 @@
 ---
 name: hot-reload
-description: The dev bridge between the NetherForge editor and the plugin on its dev server (JSON-RPC 2.0 over NDJSON, the hello with its token and protocol version, requests, notifications and batched streams, threads, the bots extension, the relay and vscode-jsonrpc client in the editor) and what a save reloads (per-resource semantics, reattaching live centities, restarting modules and their dependents, problems, script errors with file:line). Read before touching format's bridge/, the plugin's bridge or reload code, or the editor's bridge client.
+description: The dev bridge between the NetherForge editor and the plugin on its dev server (JSON-RPC 2.0 over NDJSON, the hello and its token proofs and protocol version, requests, notifications and batched streams, threads, the bots extension, the relay and vscode-jsonrpc client in the editor) and what a save reloads (per-resource semantics, reattaching live centities, restarting modules and their dependents, problems, script errors with file:line). Read before touching format's bridge/, the plugin's bridge or reload code, or the editor's bridge client.
 ---
 
 # Hot reload and the dev bridge
@@ -31,10 +31,15 @@ description: The dev bridge between the NetherForge editor and the plugin on its
   Unknown keys in params are ignored, so an optional field one side added
   doesn't break the other.
 - **The hello**: the plugin connects when it enables and sends the `hello`
-  request first: the token, `protocol` (`Bridge.PROTOCOL`), its version, the
-  server's Minecraft version and the project's absolute path. Nothing else
-  goes out until the editor answers. A wrong token (or a first frame that
-  isn't a hello) is closed without a word; another protocol version is
+  request first: a nonce (never the token), `protocol` (`Bridge.PROTOCOL`),
+  its version, the server's Minecraft version and the project's absolute
+  path. The editor answers with a nonce of its own and its proof of the token
+  over both (`BridgeAuth.editorProof`, HMAC-SHA256); the plugin checks it (a
+  listener that took the port isn't the editor, and gets nothing more), then
+  sends `authenticate` with its own proof (`pluginProof`, labelled so the
+  editor's can't pass for it). Nothing else goes out until the editor has
+  accepted it. A wrong proof (or a first frame that isn't a hello) is closed
+  without a word; another protocol version is
   answered with `PROTOCOL_MISMATCH` (-32001) and a sentence naming both
   versions, which the plugin logs as an error and the editor's console shows,
   and the plugin stops trying (it won't get better by retrying). **Bump
@@ -271,7 +276,9 @@ project, and writes the result into that server's console.
 
 - Listens on `127.0.0.1:0` _before_ launching the server and passes the port
   as `-Dnetherforge.bridge.port`, the token as `NETHERFORGE_BRIDGE_TOKEN`. The
-  hello must arrive within 10 s with the right token or the socket is closed;
+  hello must arrive within 10 s, and then `authenticate` with the plugin's
+  proof of the token (`protocol.rs`, the same proofs as format's `BridgeAuth`),
+  or the socket is closed;
   one of another protocol is refused (the sentence goes to the console as a
   `[NetherForge editor]` line); a newer connection replaces an older one.
 - `bridge_send(message)` writes one frame from the UI (checked to be JSON,

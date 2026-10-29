@@ -1262,7 +1262,7 @@ mod tests {
                 o["line"]
                     .as_str()
                     .unwrap()
-                    .contains("closed the dev bridge without answering")
+                    .contains("closed the dev bridge without")
             })
         })
         .await;
