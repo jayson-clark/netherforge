@@ -18,6 +18,10 @@ import java.util.concurrent.atomic.AtomicBoolean
  * [Hub.Session.receive]) and a writer (draining what the hub queued, so a slow server never holds the hub up),
  * plus a timer calling [Hub.tick] every second. A connection that sends nothing for [Protocol.IDLE_MILLIS] (servers
  * ping every [Protocol.PING_MILLIS]) or queues past [NetworkLimits.maxQueuedFrames] is dropped.
+ *
+ * Before its hello is accepted a connection is anyone's: each costs two threads, so at most [MAX_PENDING] wait at
+ * once, [MAX_PENDING_PER_ADDRESS] from one address, each for [Protocol.HELLO_MILLIS] at most (its read timeout until
+ * then). Past either, a new connection is closed as it's accepted, so a flood can't take the proxy's threads.
  */
 class HubServer(
     private val hub: Hub,
@@ -83,9 +87,29 @@ class HubServer(
                 if (running.get()) log.warn("NetherForge hub: accepting a connection failed: ${e.message}")
                 continue
             }
+            val host = (client.remoteSocketAddress as? InetSocketAddress)?.address
+            val pending = connections.filter { !it.welcomed }
+            if (pending.size >= MAX_PENDING || pending.count { it.host == host } >= MAX_PENDING_PER_ADDRESS) {
+                refusedSince++
+                val now = System.nanoTime()
+                if (now - lastRefusalLog >= REFUSAL_LOG_NANOS) {
+                    lastRefusalLog = now
+                    log.warn(
+                        "NetherForge hub: refusing connections from ${host?.hostAddress ?: "an unknown address"} and others " +
+                            "($refusedSince lately): too many are waiting to say hello"
+                    )
+                    refusedSince = 0
+                }
+                try {
+                    client.close()
+                } catch (_: IOException) {
+                }
+                continue
+            }
             try {
                 client.tcpNoDelay = true
-                client.soTimeout = Protocol.IDLE_MILLIS.toInt()
+                // Until its hello is accepted: a stranger waits no longer than the hub gives it to say hello.
+                client.soTimeout = Protocol.HELLO_MILLIS.toInt()
                 val connection = Connection(client)
                 connections += connection
                 connection.start()
@@ -96,12 +120,26 @@ class HubServer(
         }
     }
 
+    private var refusedSince = 0
+    private var lastRefusalLog = System.nanoTime() - REFUSAL_LOG_NANOS
+
     private inner class Connection(private val socket: Socket) : Peer {
         override val address: String = socket.remoteSocketAddress.toString().removePrefix("/")
+        val host = (socket.remoteSocketAddress as? InetSocketAddress)?.address
+
+        /** Whether its hello was accepted: a server of the network, no longer a stranger. */
+        @Volatile var welcomed = false
         private val queue = LinkedBlockingQueue<String>(limits.maxQueuedFrames)
         private val open = AtomicBoolean(true)
         private lateinit var session: Hub.Session
         private var writer: Thread? = null
+
+        /** What every line is sealed with once the hello is accepted ([secure]). */
+        @Volatile private var channel: Channel? = null
+
+        override fun secure(channel: Channel) {
+            this.channel = channel
+        }
 
         fun start() {
             writer = Thread(::drain, "NetherForge hub writer $address").apply {
@@ -117,7 +155,12 @@ class HubServer(
 
         override fun send(frame: HubFrame) {
             if (!open.get()) return
-            if (!queue.offer(Protocol.encode(frame))) {
+            // Sealed and queued as one step: a line's place in the queue is its place in the count it's sealed under.
+            val queued = synchronized(this) {
+                val text = Protocol.encode(frame)
+                queue.offer(channel?.seal(text) ?: text)
+            }
+            if (!queued) {
                 log.warn(
                     "NetherForge hub: dropping $address, which isn't reading what it's sent (${limits.maxQueuedFrames} frames waiting)"
                 )
@@ -145,18 +188,35 @@ class HubServer(
             val reader = LineReader(socket.getInputStream(), Protocol.MAX_FRAME_BEFORE_WELCOME)
             try {
                 while (open.get()) {
-                    val line = reader.readLine() ?: break
-                    if (line.isBlank()) continue
+                    val read = reader.readLine() ?: break
+                    if (read.isBlank()) continue
+                    val sealed = channel
+                    val line = if (sealed == null) {
+                        read
+                    } else {
+                        sealed.open(read) ?: run {
+                            log.warn("NetherForge hub: dropping $address, which sent a line not sealed with its connection's keys")
+                            null
+                        } ?: break
+                    }
                     val frame = Protocol.decodeServerFrame(line)
                     if (frame == null) {
                         send(HubFrame.Problem("the hub couldn't read a frame: ${line.take(120)}"))
                         continue
                     }
                     session.receive(frame)
-                    if (session.name != null) reader.limit = Protocol.MAX_FRAME
+                    if (session.name != null && !welcomed) {
+                        welcomed = true
+                        reader.limit = Protocol.MAX_SEALED_LINE
+                        socket.soTimeout = Protocol.IDLE_MILLIS.toInt()
+                    }
                 }
             } catch (_: SocketTimeoutException) {
-                log.info("NetherForge hub: dropping $address, silent for ${Protocol.IDLE_MILLIS / 1000} seconds")
+                if (welcomed) {
+                    log.info("NetherForge hub: dropping $address, silent for ${Protocol.IDLE_MILLIS / 1000} seconds")
+                } else {
+                    log.info("NetherForge hub: dropping $address, which didn't say hello within ${Protocol.HELLO_MILLIS / 1000} seconds")
+                }
             } catch (e: LineTooLongException) {
                 log.warn("NetherForge hub: dropping $address, which sent ${e.message}")
             } catch (_: IOException) {
@@ -196,8 +256,15 @@ class HubServer(
         }
     }
 
-    private companion object {
+    internal companion object {
         const val STOP_WAIT_MILLIS = 2_000L
         const val POLL_MILLIS = 200L
+
+        /** Connections that haven't said hello yet, at most, in all and from one address. */
+        const val MAX_PENDING = 64
+        const val MAX_PENDING_PER_ADDRESS = 8
+
+        /** How often a flood of refusals is logged. */
+        const val REFUSAL_LOG_NANOS = 10_000_000_000L
     }
 }

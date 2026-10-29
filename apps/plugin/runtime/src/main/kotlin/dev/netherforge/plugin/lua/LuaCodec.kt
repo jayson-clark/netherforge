@@ -376,6 +376,7 @@ class LuaList<T>(private val item: LuaCodec<T>) : LuaCodec<List<T>> {
         var count = 0
         lua.pushNil()
         while (lua.next(index) != 0) {
+            call.host.meter(1)
             lua.pop(1)
             count++
         }
@@ -445,6 +446,7 @@ class LuaMap<K, V>(private val key: LuaCodec<K>, private val value: LuaCodec<V>)
         val keys = mutableListOf<K>()
         lua.pushNil()
         while (lua.next(index) != 0) {
+            call.host.meter(1)
             val at = lua.top - 1
             if (!key.accepts(call, at)) {
                 val got = call.typeName(at)
@@ -584,6 +586,7 @@ abstract class ShapeCodec<T>(private val shape: String) : LuaCodec<T> {
         val lua = call.lua
         lua.pushNil()
         while (lua.next(index) != 0) {
+            call.host.meter(1)
             val name = if (lua.type(-2) == Lua.LuaType.STRING) lua.toString(-2) else null
             if (name == null || name !in fields) {
                 val key = name ?: lua.toString(-2) ?: call.typeName(lua.top - 1)
@@ -630,8 +633,7 @@ class LuaLazy<T>(override val expected: String, resolve: () -> LuaCodec<T>) : Lu
 class ShapeReader(val call: LuaCall, private val index: Int, private val where: String) {
     fun <T> field(name: String, codec: LuaCodec<T>): T {
         val lua = call.lua
-        lua.checkStack(2)
-        lua.getField(index, name)
+        call.host.field(lua, index, name)
         val value = codec.read(call, lua.top, "$where.$name")
         if (!codec.pinned) lua.pop(1)
         return value

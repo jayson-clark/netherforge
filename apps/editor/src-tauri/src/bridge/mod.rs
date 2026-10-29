@@ -3,11 +3,16 @@
 //!
 //! The editor listens on `127.0.0.1:0` before launching the server and passes
 //! the port and a random token to it. The plugin connects (and reconnects
-//! after a drop); its first frame must be a `hello` request carrying the
-//! token within [HELLO_TIMEOUT], or the connection is closed unanswered. A
-//! hello of another protocol version is answered with an error saying so
-//! ([BridgeHandler::refused] gets the same sentence) and closed. A newer
-//! accepted connection replaces an older one.
+//! after a drop); its first frame must be a `hello` request carrying its
+//! nonce (never the token) within [HELLO_TIMEOUT], or the connection is
+//! closed unanswered. The editor answers with a nonce of its own and its
+//! proof of the token over both, which the plugin checks before saying more
+//! (so whatever takes this port when the editor is gone gets nothing it could
+//! use), and the plugin's next frame must be `authenticate` with its own
+//! proof, or the connection is closed unanswered (`protocol.rs` makes both
+//! proofs). A hello of another protocol version is answered with an error
+//! saying so ([BridgeHandler::refused] gets the same sentence) and closed. A
+//! newer accepted connection replaces an older one.
 //!
 //! A frame is capped in size, by [FrameReader] (which never buffers more
 //! than the cap): [MAX_FRAME_BEFORE_HELLO] until the hello, [MAX_FRAME] after
@@ -39,7 +44,7 @@ use frames::{Frame, FrameReader};
 use protocol::Hello;
 
 pub const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
-/// The hello is a token, a version and a path: nothing a stranger gets to make bigger.
+/// The hello is a nonce, a version and a path, the proof a hash: nothing a stranger gets to make bigger.
 pub const MAX_FRAME_BEFORE_HELLO: usize = 16 * 1024;
 /// One frame from the plugin once it's authenticated. The game data export
 /// (the biggest, about 7 MB) is one.
@@ -244,7 +249,7 @@ impl Inner {
     }
 }
 
-/// Constant-time-ish so the token can't be probed byte by byte.
+/// Constant-time-ish so a proof can't be probed byte by byte.
 fn token_matches(expected: &str, given: &str) -> bool {
     let (a, b) = (expected.as_bytes(), given.as_bytes());
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
@@ -255,8 +260,8 @@ async fn handle_connection(inner: Arc<Inner>, stream: TcpStream) {
     let (read, mut write) = stream.into_split();
     let mut frames = FrameReader::new(BufReader::new(read), inner.limits.before_hello);
 
-    // Authenticate: the first frame must be a hello with our token. Anything
-    // else is closed without a word, so the port can't be probed.
+    // Authenticate: the first frame must be a hello, and the second the plugin's
+    // proof of our token. Anything else is closed without a word.
     let first = match tokio::time::timeout(HELLO_TIMEOUT, frames.next()).await {
         Ok(Ok(Frame::Line(line))) => protocol::read_hello(&line),
         Ok(Ok(Frame::TooLarge)) => {
@@ -269,8 +274,7 @@ async fn handle_connection(inner: Arc<Inner>, stream: TcpStream) {
         }
         _ => None,
     };
-    let Some((hello_id, hello)) = first.filter(|(_, h)| token_matches(&inner.token, &h.token))
-    else {
+    let Some((hello_id, hello)) = first else {
         let _ = write.shutdown().await;
         return;
     };
@@ -282,7 +286,32 @@ async fn handle_connection(inner: Arc<Inner>, stream: TcpStream) {
         inner.handler.refused(&reason);
         return;
     }
-    let accepted = protocol::hello_accepted(&hello_id);
+    if !protocol::is_nonce(&hello.nonce) {
+        let _ = write.shutdown().await;
+        return;
+    }
+    // Prove the token over both nonces (the plugin checks it before saying more,
+    // so whatever took this port can't get a proof from it), then take its proof.
+    let nonce = protocol::nonce();
+    let proof = protocol::editor_proof(&inner.token, &hello.nonce, &nonce);
+    let answer = protocol::hello_answer(&hello_id, &nonce, &proof);
+    if write
+        .write_all(format!("{answer}\n").as_bytes())
+        .await
+        .is_err()
+    {
+        return;
+    }
+    let second = match tokio::time::timeout(HELLO_TIMEOUT, frames.next()).await {
+        Ok(Ok(Frame::Line(line))) => protocol::read_authenticate(&line),
+        _ => None,
+    };
+    let expected = protocol::plugin_proof(&inner.token, &nonce, &hello.nonce);
+    let Some((auth_id, _)) = second.filter(|(_, given)| token_matches(&expected, given)) else {
+        let _ = write.shutdown().await;
+        return;
+    };
+    let accepted = protocol::authenticated(&auth_id);
     if write
         .write_all(format!("{accepted}\n").as_bytes())
         .await
@@ -408,9 +437,18 @@ mod tests {
         panic!("timed out waiting");
     }
 
-    fn hello_line(token: &str, protocol: u64) -> String {
+    /// The plugin's nonce in these tests.
+    const NONCE: &str = "00112233445566778899aabbccddeeff0011223344556677";
+
+    fn hello_line(protocol: u64) -> String {
         format!(
-            "{{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"hello\",\"params\":{{\"token\":\"{token}\",\"protocol\":{protocol},\"pluginVersion\":\"0.1.0\",\"minecraft\":\"26.3\",\"project\":\"/p\"}}}}\n"
+            "{{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"hello\",\"params\":{{\"nonce\":\"{NONCE}\",\"protocol\":{protocol},\"pluginVersion\":\"0.1.0\",\"minecraft\":\"26.3\",\"project\":\"/p\"}}}}\n"
+        )
+    }
+
+    fn authenticate_line(proof: &str) -> String {
+        format!(
+            "{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"authenticate\",\"params\":{{\"proof\":\"{proof}\"}}}}\n"
         )
     }
 
@@ -420,24 +458,40 @@ mod tests {
     );
 
     /// Connects as the plugin and says hello; the editor's answer is left to read.
-    async fn plugin_with(bridge: &Bridge, token: &str, protocol: u64) -> Plugin {
+    async fn plugin_with(bridge: &Bridge, protocol: u64) -> Plugin {
         let stream = TcpStream::connect(("127.0.0.1", bridge.port()))
             .await
             .unwrap();
         let (read, mut write) = stream.into_split();
         write
-            .write_all(hello_line(token, protocol).as_bytes())
+            .write_all(hello_line(protocol).as_bytes())
             .await
             .unwrap();
         (BufReader::new(read).lines(), write)
     }
 
-    /// Connects as the plugin, says hello and reads it accepted.
-    async fn plugin(bridge: &Bridge, token: &str) -> Plugin {
-        let (mut lines, write) = plugin_with(bridge, token, protocol::PROTOCOL).await;
+    /// Connects as a plugin holding [token], says hello, and answers the editor's proof with its own: whether the
+    /// editor's proof was [token]'s. What comes after (the acceptance, or the end) is left to read.
+    async fn plugin_proving(bridge: &Bridge, token: &str) -> (Plugin, bool) {
+        let (mut lines, mut write) = plugin_with(bridge, protocol::PROTOCOL).await;
         let answer: Value =
             serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
-        assert_eq!(answer, protocol::hello_accepted(&json!(0)));
+        let editor = answer["result"]["nonce"].as_str().unwrap().to_string();
+        let proved = answer["result"]["proof"] == protocol::editor_proof(token, NONCE, &editor);
+        write
+            .write_all(authenticate_line(&protocol::plugin_proof(token, &editor, NONCE)).as_bytes())
+            .await
+            .unwrap();
+        ((lines, write), proved)
+    }
+
+    /// Connects as the plugin, proves the token both ways and reads it accepted.
+    async fn plugin(bridge: &Bridge, token: &str) -> Plugin {
+        let ((mut lines, write), proved) = plugin_proving(bridge, token).await;
+        assert!(proved, "the editor proves the token");
+        let accepted: Value =
+            serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+        assert_eq!(accepted, protocol::authenticated(&json!(1)));
         (lines, write)
     }
 
@@ -454,7 +508,9 @@ mod tests {
             .await
             .unwrap();
 
-        let (mut lines, _write) = plugin_with(&bridge, "wrong", protocol::PROTOCOL).await;
+        // A plugin without the token can't take the editor's proof for its own, and gets nothing more.
+        let ((mut lines, _write), proved) = plugin_proving(&bridge, "wrong").await;
+        assert!(!proved, "the editor's proof is for its own token");
         assert_eq!(lines.next_line().await.unwrap(), None, "closed unanswered");
 
         let stream = TcpStream::connect(("127.0.0.1", bridge.port()))
@@ -561,7 +617,7 @@ mod tests {
         let bridge = Bridge::listen("secret".into(), recorder.clone())
             .await
             .unwrap();
-        let (mut lines, _write) = plugin_with(&bridge, "secret", protocol::PROTOCOL + 1).await;
+        let (mut lines, _write) = plugin_with(&bridge, protocol::PROTOCOL + 1).await;
         let answer = frame(&mut lines).await;
         assert_eq!(answer["error"]["code"], protocol::PROTOCOL_MISMATCH);
         let reason = protocol::mismatch(protocol::PROTOCOL + 1);

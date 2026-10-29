@@ -140,6 +140,66 @@ class RequirementsTest {
         }
     }
 
+    /**
+     * A coroutine whose body is the primitive itself has no project frame on its
+     * stack: it's held to the package whose code made the coroutine, never to the
+     * project (which declared more).
+     */
+    @Test
+    fun `a call from a coroutine with no project frame is held to the package that made it`() {
+        val files = tree + mapOf(
+            "netherforge.json" to manifest(
+                "test",
+                """, "requires": { "moderation": true }, "dependencies": { "chat": { "path": "../chat" } }"""
+            ),
+            "../chat/netherforge.json" to manifest("chat", """, "exports": { "modules": ["api"] }"""),
+            "../chat/modules/api/init.lua" to """
+                local api = {}
+                function api.go()
+                  local p = nf.players.get("Alex")
+                  log(select(2, pcall(coroutine.wrap(p.ban), p)))
+                  log(select(2, pcall(coroutine.wrap(coroutine.wrap(p.ban)), p)))
+                  local co = coroutine.create(p.ban)
+                  log(select(2, coroutine.resume(co, p)))
+                  log(tostring(p:is_banned()))
+                end
+                return api
+            """,
+            "modules/main/init.lua" to """
+                local api = require("chat:api")
+                nf.commands.register("go", function() api.go() end)
+            """
+        )
+        TestServer(files, start = false).use { server ->
+            server.player("Alex")
+            server.start()
+            server.platform.commands.runAsConsole("go")
+            val refused = "Player:ban needs moderation, which package \"chat\" hasn't declared: " +
+                "add \"requires\": { \"moderation\": true } to its netherforge.json"
+            assertEquals(listOf(refused, refused, refused, "false"), server.logs)
+        }
+    }
+
+    /** Console commands can do anything the console can, so they're a requirement of their own. */
+    @Test
+    fun `nf server run needs console`() {
+        TestServer(
+            mapOf(
+                TestServer.MANIFEST to TestServer.manifest(requires = """{ "moderation": true }"""),
+                "modules/t/init.lua" to "log(select(2, pcall(nf.server.run, \"op Alex\")))"
+            )
+        ).use { server ->
+            assertEquals(
+                listOf(
+                    "nf.server.run needs console, which package \"test\" hasn't declared: " +
+                        "add \"requires\": { \"console\": true } to its netherforge.json"
+                ),
+                server.logs
+            )
+            assertTrue(server.platform.commands.console.isEmpty(), server.platform.commands.console.toString())
+        }
+    }
+
     /** A tail call is fine where every package declares what it needs: whoever's code it was may. */
     @Test
     fun `a tail call passes when every package declares the requirement`() {

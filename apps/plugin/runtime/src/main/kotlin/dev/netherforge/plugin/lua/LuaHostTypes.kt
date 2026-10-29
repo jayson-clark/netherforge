@@ -80,7 +80,7 @@ class LuaValue(private val host: LuaHost, private val lua: Lua, private val inde
 
     /** The field [key] of this table, or null when it's nil. */
     fun field(key: String): LuaValue? {
-        lua.getField(index, key)
+        host.field(lua, index, key)
         if (lua.isNil(-1)) {
             lua.pop(1)
             return null

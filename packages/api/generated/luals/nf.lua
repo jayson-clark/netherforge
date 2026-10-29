@@ -84,7 +84,7 @@
 ---@field particles nf.particles The project's particle effects (`particles/<id>/effect.json`): timelines of particles authored in the editor, played at a place by scripts.
 ---@field cutscenes nf.cutscenes The project's cutscenes (`cutscenes/<id>.json`): camera paths keyed in the editor, played for one player at a time.
 ---@field screens nf.screens Screens: walls of maps, 128 by 128 pixels each, that scripts draw on (pixels, shapes, text, pictures) and play videos on. The project's own are its `screens/<id>/screen.json` files; a script can make more. What a screen shows is sent to each player who can see it, a change at a time, so drawing every tick costs only what changed.
----@field files nf.files Files in the one directory scripts may keep things in: the only state a script has that survives a restart.
+---@field files nf.files Files in the package's own folder (`plugins/NetherForge/data/<namespace>/`), which no other package's scripts see unless they're handed a file: the only state a script has that survives a restart. The server owner limits how much each package may keep there (`files:` in `config.yml`); a write past it fails.
 ---@field text nf.text Helpers for the MiniMessage text players see: escaping what players typed, stripping tags, resource pack glyphs, moving the cursor, and measuring.
 ---@field looks nf.looks Resource pack looks (item models, glyphs, skins, tooltips, equipment looks, sounds) handed from one package's code to another's. A look is a value, not a use: any script can show any look the server has, by its full name `<namespace>:<pack>/<key>`, whether or not its package exports it or is one the script's package depends on. That's how a project hands a package it uses looks of its own to draw with (see [Packages](packages.md#looks-are-values)).
 ---@field json nf.json JSON text to and from Lua values.
@@ -678,7 +678,8 @@ function nf.server.minecraft_version() end
 ---@param text Text MiniMessage, like `"<gold>The gate opens"`.
 function nf.server.broadcast(text) end
 
---- Runs a server command as the console, with the console's permissions. The leading slash is optional.
+--- Runs a server command as the console, with the console's permissions: anything the console may do, which is why it needs a requirement of its own that whoever runs the server sees first. The leading slash is optional.
+--- Needs `"requires": { "console": true }` in `netherforge.json`: without it, calling it is an error.
 ---@param command string One command line.
 ---@return boolean # Whether the server ran it.
 function nf.server.run(command) end
@@ -1063,7 +1064,7 @@ function nf.placeholders.parse(text, player) end
 
 --- Makes `%<namespace>_<key>%` a placeholder for the whole server: PlaceholderAPI asks `callback` for the value whenever any plugin parses it. `callback` is called with the `key` (everything after the first `_`, so `%shop_price_apple%` is `"price_apple"`) and the player it's for, if there is one, and returns the text (or a number) to put there, or `nil` when it has no value for that key (the placeholder is then left as written). It runs on the main thread when the server asks from the main thread; PlaceholderAPI is also asked from other threads (async chat, scoreboard plugins), where scripts can't run: there the placeholder answers the value `callback` last gave for that same key and player, and `nil` before it ever has. The placeholder belongs to the script that registered it and goes when that script unloads (a reload, the server stopping). A namespace another script or plugin already uses is an error.
 --- Needs `"requires": { "plugins": ["placeholderapi"] }` in `netherforge.json`: without it, calling it is an error.
----@param namespace string What comes before the first `_`: lowercase letters and digits, starting with a letter, at most 32 characters, like `"shop"`.
+---@param namespace string What comes before the first `_`: lowercase letters and digits, starting with a letter, at most 32 characters, and starting with the package's own namespace (its letters and digits), so package `shop` registers `"shop"` or `"shopstats"`, and never another plugin's placeholders.
 ---@param callback fun(key: string, player: Player?): string|number|nil Gives the value. An error in it is logged with its file and line, and the placeholder is left as written for that request.
 function nf.placeholders.register(namespace, callback) end
 
@@ -1138,11 +1139,11 @@ function nf.screens.map_color(color) end
 ---@return ScreenPoint?
 function nf.screens.looking_at(player, distance) end
 
---- Files in the one directory scripts may keep things in: the only state a script has that survives a restart.
+--- Files in the package's own folder (`plugins/NetherForge/data/<namespace>/`), which no other package's scripts see unless they're handed a file: the only state a script has that survives a restart. The server owner limits how much each package may keep there (`files:` in `config.yml`); a write past it fails.
 ---@class nf.files
 nf.files = {}
 
---- A file or folder in the data directory, which survives restarts and reloads. A handle is a path, not an open file: nothing is read until you ask. Paths that would leave that directory (`..`, backslashes, names starting with a dot) give `nil` rather than an error. No argument is the directory itself.
+--- A file or folder in the calling package's own folder, which survives restarts and reloads. A handle is a path, not an open file: nothing is read until you ask. Paths that would leave that folder (`..`, backslashes, names starting with a dot) give `nil` rather than an error. No argument is the folder itself.
 ---@param path? string Relative, with `/` between folders.
 ---@return File?
 function nf.files.get(path) end
@@ -1251,7 +1252,7 @@ function nf.web.url(path, query) end
 ---@return boolean
 function nf.web.verify_signature(body, signature, options) end
 
---- A "log in with…" flow (OAuth 2 with PKCE, the authorization code grant): `flow:begin(player)` gives the address to send the player to, the service sends them back to the flow's own route (`/<namespace>/oauth/<name>/callback`, which you register with the service as its redirect URI: `nf.web.url("/oauth/<name>/callback")`), and the server trades the code for a token itself and raises `complete` (or `fail`) on the flow. NetherForge keeps the state and the code verifier, ties each to the player who began, uses each once and lets it expire after 10 minutes, so a forged or replayed callback is refused. The token endpoint's host must be one the package declares in `requires.http`. The flow belongs to the script that made it and goes when it unloads; logins begun before a reload are forgotten. Two flows of one package with the same `name` are an error.
+--- A "log in with…" flow (OAuth 2 with PKCE, the authorization code grant): `flow:begin(player)` gives the address to send the player to, the service sends them back to the flow's own route (`/<namespace>/oauth/<name>/callback`, which you register with the service as its redirect URI: `nf.web.url("/oauth/<name>/callback")`), the browser is asked to confirm which Minecraft player it signs in as (`POST /<namespace>/oauth/<name>/confirm`, so a sign-in link passed to someone else can't link their account to the player who began), and the server then trades the code for a token itself and raises `complete` (or `fail`) on the flow. NetherForge keeps the state and the code verifier, ties each to the player who began, uses each once and lets it expire after 10 minutes, so a forged or replayed callback is refused. The token endpoint's host must be one the package declares in `requires.http`. The flow belongs to the script that made it and goes when it unloads; logins begun before a reload are forgotten. Two flows of one package with the same `name` are an error.
 --- Needs `"requires": { "web": true }` in `netherforge.json`: without it, calling it is an error.
 ---@param options OAuthOptions The service's endpoints, the client's id and secret, and the scopes to ask for.
 ---@return OAuthFlow
@@ -3177,6 +3178,7 @@ function Player:locale() end
 function Player:ping() end
 
 --- Disconnects them from the server.
+--- Needs `"requires": { "moderation": true }` in `netherforge.json`: without it, calling it is an error.
 ---@param reason? Text What their screen says, MiniMessage. Default the server's own message.
 ---@return boolean # `false` when they're offline.
 function Player:kick(reason) end
@@ -6238,6 +6240,7 @@ function Location:direction() end
 ---@field current any The handle whose handler is running (the node, centity, slot, menu, button or dialog), or `nil` in an `nf.on` handler. As an event bubbles it changes; `target` stays what was hit.
 ---@field cancelled boolean Whether what caused it will be cancelled, as things stand. Read-only: use `cancel()` and `uncancel()`.
 ---@field stopped boolean Whether a handler called `stop()`. Read-only.
+---@field from string? On a custom event (`nf.emit`, `centity:emit`), the namespace of the package whose code emitted it; `nil` on the server's own events. Any package may emit any custom event, so a handler that grants something checks `event.from` is a package it trusts (its own namespace, as its `netherforge.json` says). Read-only.
 local Event = {}
 
 --- No later handler hears it: none further along its path (a parent node, the centity, `nf`), and none after this one on the same handle.
@@ -7717,7 +7720,7 @@ function Event:uncancel() end
 
 --- What `nf.web.oauth` takes.
 ---@class OAuthOptions
----@field name string The flow's name, unique in the package: lowercase letters, digits, `-` and `_`. Its callback is `/<namespace>/oauth/<name>/callback`.
+---@field name string The flow's name, unique in the package: lowercase letters, digits, `-` and `_`. Its callback is `/<namespace>/oauth/<name>/callback`, and its confirmation `/<namespace>/oauth/<name>/confirm`.
 ---@field authorize_url string The service's authorization page: an `https://` URL.
 ---@field token_url string The service's token endpoint: an `https://` URL whose host the package declares in `requires.http`.
 ---@field client_id string The client id the service gave you.

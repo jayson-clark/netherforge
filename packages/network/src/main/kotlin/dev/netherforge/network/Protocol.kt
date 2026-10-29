@@ -11,14 +11,16 @@ import kotlinx.serialization.json.JsonElement
  * ways, the few answers ([Reply], [MapResult], [SendResult]) carry their own ids, and the hub relays a request it
  * didn't make, under an id of its own.
  *
- * The handshake: the hub speaks first with a [Challenge] (a nonce); the server answers [Hello] with its name and
- * [Auth.proof] of the shared secret over that nonce, never the secret itself; the hub answers [Welcome] (and from
- * then on anything) or [Refused] and closes. A server that hears nothing for [IDLE_MILLIS] drops the connection and
+ * The handshake: the hub speaks first with a [Challenge] (a nonce); the server answers [Hello] with its name, a nonce
+ * of its own and [Auth.proof] of the shared secret over both, never the secret itself; the hub answers [Welcome] (and
+ * from then on anything) or [Refused] and closes. From the [Welcome] on, every line both ways is sealed ([Channel],
+ * keys derived from the secret and both nonces), so the traffic is private and unaltered, and a server knows its
+ * hub holds the secret too. A server that hears nothing for [IDLE_MILLIS] drops the connection and
  * dials again, and sends a [Ping] every [PING_MILLIS] so the hub can do the same.
  */
 object Protocol {
     /** This protocol's version: a hub refuses a [Hello] of another, saying which it speaks. */
-    const val VERSION = 1
+    const val VERSION = 2
 
     /** The port a hub listens on unless its owner says otherwise. */
     const val DEFAULT_PORT = 25590
@@ -37,6 +39,9 @@ object Protocol {
      * the network, and a [HubFrame.MapSnapshot] a whole map. Values are held to far less ([NetworkLimits]).
      */
     const val MAX_FRAME = 16 * 1024 * 1024
+
+    /** The most a sealed line may be: [MAX_FRAME] of JSON, in base64, with its tag. */
+    const val MAX_SEALED_LINE = MAX_FRAME / 3 * 4 + 64
 
     val json = Json {
         classDiscriminator = "t"
@@ -181,7 +186,7 @@ sealed interface ServerFrame {
     /** The answer to a [HubFrame.Challenge]: this server's name (as the proxy names it) and [Auth.proof]. */
     @Serializable
     @SerialName("hello")
-    data class Hello(val version: Int, val server: String, val proof: String) : ServerFrame
+    data class Hello(val version: Int, val server: String, val proof: String, val nonce: String = "") : ServerFrame
 
     /** Every channel and map this server listens to now, replacing what it said before. */
     @Serializable

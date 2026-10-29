@@ -34,7 +34,7 @@ Makes `%<namespace>_<key>%` a placeholder for the whole server: PlaceholderAPI a
 
 | Parameter | Type | |
 | --- | --- | --- |
-| `namespace` | `string` | What comes before the first `_`: lowercase letters and digits, starting with a letter, at most 32 characters, like `"shop"`. |
+| `namespace` | `string` | What comes before the first `_`: lowercase letters and digits, starting with a letter, at most 32 characters, and starting with the package's own namespace (its letters and digits), so package `shop` registers `"shop"` or `"shopstats"`, and never another plugin's placeholders. |
 | `callback` | `fun(key: string, player: `[`Player`](player.md)`?): string\|number\|nil` | Gives the value. An error in it is logged with its file and line, and the placeholder is left as written for that request. |
 
 ```lua

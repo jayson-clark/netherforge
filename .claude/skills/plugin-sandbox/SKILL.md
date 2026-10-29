@@ -89,6 +89,38 @@ script's line; `SandboxLimitsTest` covers the rest.
   only a running call that doubles the limit fails too. A real allocation
   failure ("not enough memory": Lua calls no message handler for it) is
   reported as the call's error.
+- **Re-arming a hook resets its count.** `sethook` starts the count of
+  `every` instructions over, so switching a thread to `hooks.fast` and back
+  throws away what it ran since its last count. `guard.collected` (the end of
+  every collection cycle, which a loop making big strings reaches every few
+  hundred instructions) charges the switch `every` instructions and one hook,
+  the most the lost count could have held; without that, such a loop never
+  reached a count, and ran with no budget or time limit at all (`HangTest`).
+- **Work done for a script is charged too.** `guard.charge_work(instructions,
+steps)` (`host.charge` from Kotlin) charges the running frame for work no
+  hook counts and says why it must stop: the JSON codec's key sort, and
+  `LuaHost.meter` for the Kotlin walks over a script's tables (plain JSON,
+  list and map codecs), past a free allowance so an ordinary call costs what
+  it did. The prelude's own code isn't stopped mid-way by the hook, so
+  anything it does in proportion to a script's data has to check this.
+- **Kotlin reads a script's table only through `LuaHost.field`**: `rawget`
+  for a plain table, a protected `t[k]` otherwise. luajava's `getField` is a
+  bare `lua_getfield` from JNI, and a script's `__index` that raises (or runs
+  out of budget) would `longjmp` across the JVM's frames and crash it
+  (`TableReadsTest`).
+- **Shared tables refuse `rawset`.** Handles, events and typed values are one
+  table for every script that holds them; `base.rawset` refuses those (by
+  genuine metatable, `handles.kinds`, or `sandbox.shared`) so one package
+  can't plant methods another's code calls.
+- **Who's calling, from a coroutine.** A coroutine's stack starts at its
+  body, so `coroutine.wrap(player.ban)(player)` shows no project frame; each
+  coroutine the sandbox makes records the file that made it
+  (`guard.note_origin`), `host.calling_file` falls back to it, and
+  `PackageNames.calling` then to the running scope, never to the project.
+- **The caps read a table with a metatable once.** `#t` and `t[k]` can
+  answer differently each time (`__len`, `__index`), so `insert`, `remove`,
+  `sort` and `concat` on such a table read it in Lua (counted) and hand the
+  library a plain copy or do the shift themselves (`length_of`).
 - **Why a census, not an allocator.** luajava gives no allocator hook: the
   native library exports `lua_setallocf`, but setting it from the JVM means
   an FFM upcall on every allocation. And an allocator only knows who

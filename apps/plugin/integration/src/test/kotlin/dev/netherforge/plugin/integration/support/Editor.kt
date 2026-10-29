@@ -1,11 +1,11 @@
 package dev.netherforge.plugin.integration.support
 
 import dev.netherforge.format.bridge.Bridge
+import dev.netherforge.format.bridge.BridgeAuth
 import dev.netherforge.format.bridge.BridgeEvent
 import dev.netherforge.format.bridge.BridgeMethod
 import dev.netherforge.format.bridge.CommandParams
 import dev.netherforge.format.bridge.HelloParams
-import dev.netherforge.format.bridge.HelloResult
 import dev.netherforge.format.bridge.JsonRpc
 import dev.netherforge.format.bridge.Log
 import dev.netherforge.format.bridge.Problems
@@ -61,16 +61,28 @@ class Editor(socket: Socket) {
     /** The last log lines, matched or not: where a failed [logged] looks for the ones that came closest. */
     private val recentLogs = ArrayDeque<Log>()
 
+    /** The handshake's editor end, with the token every server is started with. */
+    private val auth = BridgeAuth.EditorSide(PaperServer.TOKEN)
+
+    /** The plugin's hello, until its proof completes the handshake. */
+    private var hello: HelloParams? = null
+
     init {
         val reader = BufferedReader(InputStreamReader(socket.getInputStream(), Charsets.UTF_8))
         Thread {
             runCatching {
                 while (true) {
                     when (val message = (JsonRpc.decode(reader.readLine() ?: break) as RpcFrame.Single).message) {
+                        is RpcRequest if message.method == Bridge.authenticate.name -> {
+                            // The plugin proved the server's token: the handshake is done, so steps see the hello now.
+                            check(auth.accepts(Bridge.authenticate.decodeParams(message.params))) { "the plugin's proof is wrong" }
+                            write(RpcResponse.ok(message.id, Bridge.authenticate.encodeResult(Unit)))
+                            frames += checkNotNull(hello)
+                        }
                         is RpcRequest -> {
                             val hello = Bridge.hello.decodeParams(message.params)
-                            write(RpcResponse.ok(message.id, Bridge.hello.encodeResult(HelloResult(Bridge.PROTOCOL))))
-                            frames += hello
+                            this.hello = hello
+                            write(RpcResponse.ok(message.id, Bridge.hello.encodeResult(auth.answer(hello))))
                         }
                         is RpcNotification ->
                             if (message.method == Bridge.console.name) {

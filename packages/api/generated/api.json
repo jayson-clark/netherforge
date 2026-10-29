@@ -145,7 +145,7 @@
         {
           "name": "files",
           "type": "nf.files",
-          "doc": "Files in the one directory scripts may keep things in: the only state a script has that survives a restart."
+          "doc": "Files in the package's own folder (`plugins/NetherForge/data/<namespace>/`), which no other package's scripts see unless they're handed a file: the only state a script has that survives a restart. The server owner limits how much each package may keep there (`files:` in `config.yml`); a write past it fails."
         },
         {
           "name": "text",
@@ -1846,7 +1846,8 @@
         },
         {
           "name": "run",
-          "doc": "Runs a server command as the console, with the console's permissions. The leading slash is optional.",
+          "doc": "Runs a server command as the console, with the console's permissions: anything the console may do, which is why it needs a requirement of its own that whoever runs the server sees first. The leading slash is optional.",
+          "requires": "console",
           "params": [
             {
               "name": "command",
@@ -3053,7 +3054,7 @@
             {
               "name": "namespace",
               "type": "string",
-              "doc": "What comes before the first `_`: lowercase letters and digits, starting with a letter, at most 32 characters, like `\"shop\"`."
+              "doc": "What comes before the first `_`: lowercase letters and digits, starting with a letter, at most 32 characters, and starting with the package's own namespace (its letters and digits), so package `shop` registers `\"shop\"` or `\"shopstats\"`, and never another plugin's placeholders."
             },
             {
               "name": "callback",
@@ -3302,13 +3303,13 @@
     },
     {
       "name": "nf.files",
-      "doc": "Files in the one directory scripts may keep things in: the only state a script has that survives a restart.",
+      "doc": "Files in the package's own folder (`plugins/NetherForge/data/<namespace>/`), which no other package's scripts see unless they're handed a file: the only state a script has that survives a restart. The server owner limits how much each package may keep there (`files:` in `config.yml`); a write past it fails.",
       "methods": false,
       "fields": [],
       "functions": [
         {
           "name": "get",
-          "doc": "A file or folder in the data directory, which survives restarts and reloads. A handle is a path, not an open file: nothing is read until you ask. Paths that would leave that directory (`..`, backslashes, names starting with a dot) give `nil` rather than an error. No argument is the directory itself.",
+          "doc": "A file or folder in the calling package's own folder, which survives restarts and reloads. A handle is a path, not an open file: nothing is read until you ask. Paths that would leave that folder (`..`, backslashes, names starting with a dot) give `nil` rather than an error. No argument is the folder itself.",
           "params": [
             {
               "name": "path",
@@ -3651,7 +3652,7 @@
         },
         {
           "name": "oauth",
-          "doc": "A \"log in with…\" flow (OAuth 2 with PKCE, the authorization code grant): `flow:begin(player)` gives the address to send the player to, the service sends them back to the flow's own route (`/<namespace>/oauth/<name>/callback`, which you register with the service as its redirect URI: `nf.web.url(\"/oauth/<name>/callback\")`), and the server trades the code for a token itself and raises `complete` (or `fail`) on the flow. NetherForge keeps the state and the code verifier, ties each to the player who began, uses each once and lets it expire after 10 minutes, so a forged or replayed callback is refused. The token endpoint's host must be one the package declares in `requires.http`. The flow belongs to the script that made it and goes when it unloads; logins begun before a reload are forgotten. Two flows of one package with the same `name` are an error.",
+          "doc": "A \"log in with…\" flow (OAuth 2 with PKCE, the authorization code grant): `flow:begin(player)` gives the address to send the player to, the service sends them back to the flow's own route (`/<namespace>/oauth/<name>/callback`, which you register with the service as its redirect URI: `nf.web.url(\"/oauth/<name>/callback\")`), the browser is asked to confirm which Minecraft player it signs in as (`POST /<namespace>/oauth/<name>/confirm`, so a sign-in link passed to someone else can't link their account to the player who began), and the server then trades the code for a token itself and raises `complete` (or `fail`) on the flow. NetherForge keeps the state and the code verifier, ties each to the player who began, uses each once and lets it expire after 10 minutes, so a forged or replayed callback is refused. The token endpoint's host must be one the package declares in `requires.http`. The flow belongs to the script that made it and goes when it unloads; logins begun before a reload are forgotten. Two flows of one package with the same `name` are an error.",
           "requires": "web",
           "params": [
             {
@@ -10088,6 +10089,7 @@
         {
           "name": "kick",
           "doc": "Disconnects them from the server.",
+          "requires": "moderation",
           "params": [
             {
               "name": "reason",
@@ -20135,6 +20137,11 @@
           "name": "stopped",
           "type": "boolean",
           "doc": "Whether a handler called `stop()`. Read-only."
+        },
+        {
+          "name": "from",
+          "type": "string?",
+          "doc": "On a custom event (`nf.emit`, `centity:emit`), the namespace of the package whose code emitted it; `nil` on the server's own events. Any package may emit any custom event, so a handler that grants something checks `event.from` is a package it trusts (its own namespace, as its `netherforge.json` says). Read-only."
         }
       ]
     },
@@ -26133,7 +26140,7 @@
         {
           "name": "name",
           "type": "string",
-          "doc": "The flow's name, unique in the package: lowercase letters, digits, `-` and `_`. Its callback is `/<namespace>/oauth/<name>/callback`."
+          "doc": "The flow's name, unique in the package: lowercase letters, digits, `-` and `_`. Its callback is `/<namespace>/oauth/<name>/callback`, and its confirmation `/<namespace>/oauth/<name>/confirm`."
         },
         {
           "name": "authorize_url",

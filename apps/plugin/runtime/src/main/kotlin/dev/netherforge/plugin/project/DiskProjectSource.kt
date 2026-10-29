@@ -11,7 +11,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.SimpleFileVisitor
 import java.nio.file.attribute.BasicFileAttributes
-import javax.imageio.ImageIO
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.readText
 
@@ -73,11 +72,7 @@ class DiskProjectSource(val root: Path) : ProjectSource {
      */
     override fun image(path: String): ImageInfo? {
         val bytes = readBytes(path) ?: return null
-        val image = try {
-            ImageIO.read(bytes.inputStream())
-        } catch (_: Exception) {
-            null
-        } ?: return null
+        val image = Pictures.decode(bytes) ?: return null
         if (image.width <= 0 || image.height <= 0) return null
         var opaque = 0
         val hasAlpha = image.colorModel.hasAlpha()

@@ -256,4 +256,12 @@ class WebRoutesTest {
             assertEquals(1, server.runtime.session.web.all().size, "kept, for tests and for when they're turned on")
         }
     }
+
+    @Test
+    fun `behind a proxy the client's address is the entry the proxy added, not one the client wrote`() {
+        assertEquals("203.0.113.9", forwarded(listOf("1.2.3.4, 203.0.113.9")))
+        assertEquals("203.0.113.9", forwarded(listOf("1.2.3.4", " 203.0.113.9 ")))
+        assertEquals(null, forwarded(listOf(" , ")))
+        assertEquals(null, forwarded(null))
+    }
 }

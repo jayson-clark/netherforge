@@ -11,6 +11,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
 import party.iroiro.luajava.Lua
+import kotlin.math.ln
 
 /**
  * Lua values read as JSON straight off the stack when they're plain data, and JSON pushed as plain Lua values:
@@ -64,6 +65,7 @@ internal class PlainJson(private val host: LuaHost, private val savedHandles: Ma
         lua.checkStack(3)
         lua.pushNil()
         while (lua.next(at) != 0) {
+            host.meter(1)
             val position = if (lua.type(-2) == Lua.LuaType.NUMBER && lua.isInteger(-2)) lua.toInteger(-2) else 0
             val item = if (position > 0) value(lua, -1, depth + 1, exact) else null
             if (item == null) {
@@ -149,6 +151,7 @@ internal class PlainJson(private val host: LuaHost, private val savedHandles: Ma
         lua.checkStack(3)
         lua.pushNil()
         while (lua.next(at) != 0) {
+            host.meter(1)
             val key = if (lua.type(-2) == Lua.LuaType.STRING) lua.toString(-2) else null
             if (key != null && key in skip) {
                 lua.pop(1)
@@ -165,6 +168,11 @@ internal class PlainJson(private val host: LuaHost, private val savedHandles: Ma
         }
         if (!exact || fields.size < 2) return fields
         val keys = fields.keys.toMutableList()
+        if (keys.size > SORT_FREE) {
+            // n log2 n of Lua's `<`, each a strcoll in C: charged, as the Lua codec's sort is.
+            val compares = keys.size * ln(keys.size.toDouble()) / ln(2.0)
+            host.charge(compares.toLong(), compares * STEPS_PER_STRING_COMPARE)
+        }
         var tied = false
         lua.checkStack(2)
         keys.sortWith { a, b ->
@@ -229,5 +237,9 @@ internal class PlainJson(private val host: LuaHost, private val savedHandles: Ma
         }
 
         private const val MAX_PLAIN_DEPTH = 64
+
+        /** Keys sorted free of charge: what an ordinary object has. Above it, as the codec's sort ([fields]). */
+        private const val SORT_FREE = 64
+        private const val STEPS_PER_STRING_COMPARE = 150.0
     }
 }

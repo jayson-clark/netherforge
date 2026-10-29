@@ -51,6 +51,9 @@ local std = {
     remove = table.remove,
     sort = table.sort,
     getupvalue = debug.getupvalue,
+    -- What the caps ask of a table: whether it has a metatable at all, even one
+    -- that hides itself with `__metatable`.
+    getmetatable = debug.getmetatable,
   },
 }
 

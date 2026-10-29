@@ -90,4 +90,41 @@ class ScriptFilesTest {
             )
         }
     }
+
+    @Test
+    fun `a package's folder is held to its bytes and entries`() {
+        val tmp = Files.createTempDirectory("nf-files")
+        val files = ScriptFiles(tmp.resolve("data"), FilesConfig(maxBytesPerPackage = 10, maxEntriesPerPackage = 3))
+        assertTrue(files.write("a/one.txt", "12345", append = false))
+        assertTrue(files.write("a/two.txt", "12345", append = false))
+        // Bytes: a third byte past ten is refused, in that package only.
+        assertFalse(files.write("a/one.txt", "123456", append = false))
+        assertFalse(files.write("a/one.txt", "6", append = true))
+        assertTrue(files.write("b/one.txt", "1234567890", append = false))
+        // Entries: a folder counts as one.
+        assertTrue(files.delete("a/two.txt"))
+        assertTrue(files.makeDirectory("a/dir"))
+        assertFalse(files.write("a/dir/x.txt", "1", append = false) && files.write("a/dir/y.txt", "1", append = false))
+        // Replacing a file with a smaller one frees room.
+        assertTrue(files.write("a/one.txt", "1", append = false))
+        assertFalse(files.copy("b/one.txt", "a/copy.txt"))
+    }
+
+    @Test
+    fun `files from before each package had a folder become the project's, once`() {
+        val tmp = Files.createTempDirectory("nf-files")
+        val data = tmp.resolve("data").createDirectories()
+        data.resolve("scores.json").writeText("{}")
+        data.resolve("test").createDirectories().resolve("inner.txt").writeText("x")
+        val files = ScriptFiles(data)
+        files.adopt("test")
+        assertEquals("{}", data.resolve("test/scores.json").readText())
+        assertEquals("x", data.resolve("test/test/inner.txt").readText())
+        assertTrue(Files.exists(data.resolve(ScriptFiles.LAYOUT_MARKER)))
+        // Once: a later start (or another project) moves nothing.
+        data.resolve("other").createDirectories()
+        files.adopt("elsewhere")
+        assertTrue(Files.exists(data.resolve("other")))
+        assertFalse(Files.exists(data.resolve("elsewhere")))
+    }
 }

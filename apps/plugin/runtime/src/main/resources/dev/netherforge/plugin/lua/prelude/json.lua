@@ -3,6 +3,7 @@ local input = require("input")
 local handles = require("handles")
 local values = require("values")
 local schema = require("schema")
+local guard = require("guard").guard
 
 local prim = input.prim
 local raw, format, concat, math_type = std.raw, std.format, std.concat, std.math_type
@@ -143,7 +144,20 @@ do
     return (raw.match(word, "^[AEIOUaeiou]") and "an " or "a ") .. word
   end
 
+  -- What sorting `n` strings costs the calling script: about n log2 n
+  -- comparisons, each a `strcoll` (the caps' measure) that no hook counts.
+  local STEPS_PER_STRING_COMPARE = 150
+  local SORT_FREE = 64
+
   local function sorted_strings(list)
+    local n = #list
+    if n > SORT_FREE then
+      local compares = n * math.log(n, 2)
+      local why = guard.charge_work(compares // 1, compares * STEPS_PER_STRING_COMPARE)
+      if why ~= nil then
+        error(why, 0)
+      end
+    end
     raw.sort(list)
     return list
   end

@@ -51,8 +51,9 @@ schedules:
 # on. They're served on the resource pack's port (resource-pack.bind and .port),
 # usually behind a reverse proxy that adds HTTPS: set public-url to the address
 # the world reaches them at (https://play.example.com), which scripts build
-# links with. trust-proxy-headers takes the client's address from
-# X-Forwarded-For: turn it on only behind your own proxy. Requests over the
+# links with. trust-proxy-headers takes the client's address from the last entry
+# of X-Forwarded-For, the one your proxy added: turn it on only behind your own
+# proxy. Requests over the
 # limits are refused before any script sees them (413, 429, 503); a script that
 # doesn't answer in time is 504. Read when the server starts; dev servers read it too.
 web:
@@ -120,6 +121,16 @@ http:
     idle-seconds: 300
     max-queued-messages: 1000
     messages-per-tick: 100
+
+# What scripts may keep with nf.files. Each package has a folder of its own,
+# plugins/NetherForge/data/<namespace>/, that no other package's scripts see (a
+# package can still hand a file to another). Each may hold at most
+# max-megabytes-per-package of files and max-entries-per-package files and
+# folders; a write past either fails (false in the script). Read when the
+# server starts; dev servers read it too.
+files:
+  max-megabytes-per-package: 64
+  max-entries-per-package: 10000
 
 # How WebAssembly modules (nf.wasm, a package's wasm/<id>/, for packages that
 # declare "requires": { "wasm": true }) run. They run off the main thread with no

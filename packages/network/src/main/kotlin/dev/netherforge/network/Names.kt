@@ -50,15 +50,19 @@ object Auth {
 
     fun newNonce(): String = hex(ByteArray(24).also(random::nextBytes))
 
-    fun proof(secret: String, nonce: String, server: String): String {
+    /** The hello's proof of [secret]: over the hub's [nonce], the [server]'s name and the server's own [serverNonce]. */
+    fun proof(secret: String, nonce: String, server: String, serverNonce: String): String {
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
-        return hex(mac.doFinal("$nonce\n$server".toByteArray(Charsets.UTF_8)))
+        return hex(mac.doFinal("hello\n$nonce\n$server\n$serverNonce".toByteArray(Charsets.UTF_8)))
     }
 
     /** Whether [proof] is [proof] of [secret], compared in constant time. */
-    fun verify(secret: String, nonce: String, server: String, proof: String): Boolean =
-        MessageDigest.isEqual(proof(secret, nonce, server).toByteArray(), proof.toByteArray())
+    fun verify(secret: String, nonce: String, server: String, serverNonce: String, proof: String): Boolean =
+        MessageDigest.isEqual(proof(secret, nonce, server, serverNonce).toByteArray(), proof.toByteArray())
+
+    /** Whether [nonce] is one a server may send: what [newNonce] makes (hex, 32 to 64 digits). */
+    fun isNonce(nonce: String): Boolean = nonce.length in 32..64 && nonce.all { it in '0'..'9' || it in 'a'..'f' }
 
     private fun hex(bytes: ByteArray) = bytes.joinToString("") { "%02x".format(it) }
 }

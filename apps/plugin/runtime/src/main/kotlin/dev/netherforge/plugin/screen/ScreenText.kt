@@ -8,10 +8,10 @@ import dev.netherforge.format.screen.ScreenFontValidator.codePointList
 import dev.netherforge.format.text.MiniMessagePass
 import dev.netherforge.plugin.api.layout
 import dev.netherforge.plugin.platform.MapFont
+import dev.netherforge.plugin.project.Pictures
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
-import javax.imageio.ImageIO
 
 /** One character's picture: how much of each pixel it covers (0 to 255, row by row), and how far it moves the pen. */
 class Glyph(val width: Int, val height: Int, val advance: Int, val coverage: IntArray)
@@ -83,7 +83,8 @@ class ScreenFont(
         }
 
         private fun bitmap(file: ScreenFontFile, bytes: ByteArray): ScreenFont {
-            val image = ImageIO.read(ByteArrayInputStream(bytes)) ?: throw IllegalArgumentException("${file.file} isn't a picture")
+            val image = Pictures.decode(bytes)
+                ?: throw IllegalArgumentException("${file.file} isn't a picture (or is bigger than ${Pictures.MAX_SIDE} pixels a side)")
             val (across, down) = ScreenFontValidator.grid(file) ?: throw IllegalArgumentException("the font lists no characters")
             val cellWidth = image.width / across
             val cellHeight = image.height / down

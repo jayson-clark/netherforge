@@ -175,7 +175,11 @@ interface NfServerApi {
     /** Sends a line to everyone online and the console, as the server. */
     fun broadcast(caller: Caller, text: String)
 
-    /** Runs a server command as the console, with the console's permissions. The leading slash is optional. */
+    /**
+     * Runs a server command as the console, with the console's permissions: anything the console may do,
+     * which is why it needs a requirement of its own that whoever runs the server sees first. The leading
+     * slash is optional.
+     */
     fun run(caller: Caller, command: String): Boolean
 
     /** How many players the server lets in at once: what the server list shows as its maximum. */
@@ -797,15 +801,17 @@ interface NfScreensApi {
 }
 
 /**
- * Files in the one directory scripts may keep things in: the only state a script has that survives a
- * restart.
+ * Files in the package's own folder (`plugins/NetherForge/data/<namespace>/`), which no other
+ * package's scripts see unless they're handed a file: the only state a script has that survives a
+ * restart. The server owner limits how much each package may keep there (`files:` in `config.yml`); a
+ * write past it fails.
  */
 interface NfFilesApi {
     /**
-     * A file or folder in the data directory, which survives restarts and reloads. A handle is a path, not
-     * an open file: nothing is read until you ask. Paths that would leave that directory (`..`,
-     * backslashes, names starting with a dot) give `nil` rather than an error. No argument is the
-     * directory itself.
+     * A file or folder in the calling package's own folder, which survives restarts and reloads. A handle
+     * is a path, not an open file: nothing is read until you ask. Paths that would leave that folder
+     * (`..`, backslashes, names starting with a dot) give `nil` rather than an error. No argument is the
+     * folder itself.
      */
     fun get(caller: Caller, path: String?): LuaHandle.File?
 }
@@ -1010,12 +1016,14 @@ interface NfWebApi {
      * A "log in with…" flow (OAuth 2 with PKCE, the authorization code grant): `flow:begin(player)` gives
      * the address to send the player to, the service sends them back to the flow's own route
      * (`/<namespace>/oauth/<name>/callback`, which you register with the service as its redirect URI:
-     * `nf.web.url("/oauth/<name>/callback")`), and the server trades the code for a token itself and
-     * raises `complete` (or `fail`) on the flow. NetherForge keeps the state and the code verifier, ties
-     * each to the player who began, uses each once and lets it expire after 10 minutes, so a forged or
-     * replayed callback is refused. The token endpoint's host must be one the package declares in
-     * `requires.http`. The flow belongs to the script that made it and goes when it unloads; logins begun
-     * before a reload are forgotten. Two flows of one package with the same `name` are an error.
+     * `nf.web.url("/oauth/<name>/callback")`), the browser is asked to confirm which Minecraft player it
+     * signs in as (`POST /<namespace>/oauth/<name>/confirm`, so a sign-in link passed to someone else
+     * can't link their account to the player who began), and the server then trades the code for a token
+     * itself and raises `complete` (or `fail`) on the flow. NetherForge keeps the state and the code
+     * verifier, ties each to the player who began, uses each once and lets it expire after 10 minutes, so
+     * a forged or replayed callback is refused. The token endpoint's host must be one the package declares
+     * in `requires.http`. The flow belongs to the script that made it and goes when it unloads; logins
+     * begun before a reload are forgotten. Two flows of one package with the same `name` are an error.
      */
     fun oauth(caller: Caller, options: OAuthOptions): LuaHandle.OAuthFlow
 }

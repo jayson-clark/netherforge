@@ -188,7 +188,7 @@ class InteropTest {
         platform.placeholders.others["player_name"] = "Alex"
         server(
             """
-            nf.placeholders.register("shop", function(key, player)
+            nf.placeholders.register("testshop", function(key, player)
               if key == "sales" then return 12 end
               if key == "price" then return 2.5 end
               if key == "owner" then return player and player:name() or "nobody" end
@@ -196,19 +196,19 @@ class InteropTest {
               if key == "boom" then error("no") end
             end)
             nf.commands.register("p", function(event)
-              log(nf.placeholders.parse("%player_name% sold %shop_sales% at %shop_price% for %shop_owner%, %shop_unknown%", event.player))
-              log(nf.placeholders.parse("%shop_owner%"))
+              log(nf.placeholders.parse("%player_name% sold %testshop_sales% at %testshop_price% for %testshop_owner%, %testshop_unknown%", event.player))
+              log(nf.placeholders.parse("%testshop_owner%"))
             end)
             """,
             platform = platform
         ).use { server ->
             val alex = server.player("Alex")
             server.platform.commands.run(alex, "p")
-            assertEquals(listOf("Alex sold 12 at 2.5 for Alex, %shop_unknown%", "nobody"), server.logs)
+            assertEquals(listOf("Alex sold 12 at 2.5 for Alex, %testshop_unknown%", "nobody"), server.logs)
             // Another plugin reads it the way PlaceholderAPI asks.
-            assertEquals("true", platform.placeholders.request("shop_flag"))
-            assertNull(platform.placeholders.request("shop_boom"))
-            assertTrue(server.errors.any { "placeholder %shop_boom%" in it.message })
+            assertEquals("true", platform.placeholders.request("testshop_flag"))
+            assertNull(platform.placeholders.request("testshop_boom"))
+            assertTrue(server.errors.any { "placeholder %testshop_boom%" in it.message })
         }
     }
 
@@ -218,7 +218,7 @@ class InteropTest {
         server(
             """
             local calls = 0
-            nf.placeholders.register("count", function(key, player)
+            nf.placeholders.register("testcount", function(key, player)
               calls = calls + 1
               return calls
             end)
@@ -228,16 +228,16 @@ class InteropTest {
             val alex = server.player("Alex").ref.uuid
             val pool = Executors.newSingleThreadExecutor()
             try {
-                val off = { pool.submit<String?> { platform.placeholders.request("count_a", alex) }.get(10, TimeUnit.SECONDS) }
+                val off = { pool.submit<String?> { platform.placeholders.request("testcount_a", alex) }.get(10, TimeUnit.SECONDS) }
                 // Nothing has asked from the main thread yet: no value, and no Lua was entered (it would throw WrongThread).
                 assertNull(off())
-                assertEquals("1", platform.placeholders.request("count_a", alex))
+                assertEquals("1", platform.placeholders.request("testcount_a", alex))
                 assertEquals("1", off())
-                assertEquals("2", platform.placeholders.request("count_a", alex))
+                assertEquals("2", platform.placeholders.request("testcount_a", alex))
                 assertEquals("2", off())
                 // Another key or player has its own answer.
-                assertNull(pool.submit<String?> { platform.placeholders.request("count_b", alex) }.get(10, TimeUnit.SECONDS))
-                assertNull(pool.submit<String?> { platform.placeholders.request("count_a", null) }.get(10, TimeUnit.SECONDS))
+                assertNull(pool.submit<String?> { platform.placeholders.request("testcount_b", alex) }.get(10, TimeUnit.SECONDS))
+                assertNull(pool.submit<String?> { platform.placeholders.request("testcount_a", null) }.get(10, TimeUnit.SECONDS))
             } finally {
                 pool.shutdownNow()
             }
@@ -249,29 +249,30 @@ class InteropTest {
         val platform = papi()
         server(
             """
-            nf.placeholders.register("loop", function(key)
-              return nf.placeholders.parse("<%loop_" .. key .. "%>")
+            nf.placeholders.register("testloop", function(key)
+              return nf.placeholders.parse("<%testloop_" .. key .. "%>")
             end)
             """,
             platform = platform
         ).use { _ ->
-            assertEquals("<%loop_x%>", platform.placeholders.request("loop_x"))
+            assertEquals("<%testloop_x%>", platform.placeholders.request("testloop_x"))
         }
     }
 
     @Test
     fun `register refuses what PlaceholderAPI can't hold and what is taken`() {
         val platform = papi()
-        platform.placeholders.taken += "luckperms"
+        platform.placeholders.taken += "testtaken"
         server(
             """
             local function try(name) log(name .. ": " .. tostring(select(2, pcall(nf.placeholders.register, name, function() end)))) end
             try("Shop")
             try("my_shop")
             try("")
+            try("testtaken")
             try("luckperms")
-            nf.placeholders.register("mine", function() end)
-            try("mine")
+            nf.placeholders.register("testmine", function() end)
+            try("testmine")
             """,
             platform = platform
         ).use { server ->
@@ -280,8 +281,9 @@ class InteropTest {
             assertTrue("can't be a placeholder namespace" in logs[1], logs[1])
             assertTrue("can't be a placeholder namespace" in logs[2], logs[2])
             assertTrue("already used by another plugin" in logs[3], logs[3])
-            assertTrue("already registered by module main" in logs[4], logs[4])
-            assertEquals(setOf("mine"), platform.placeholders.registered)
+            assertTrue("start with its own namespace, \"test\"" in logs[4], logs[4])
+            assertTrue("already registered by module main" in logs[5], logs[5])
+            assertEquals(setOf("testmine"), platform.placeholders.registered)
         }
     }
 
@@ -292,7 +294,7 @@ class InteropTest {
             """
             nf.commands.register("t", function(event)
               log(select(2, pcall(nf.placeholders.parse, "%a%", event.player)))
-              log(tostring(pcall(nf.placeholders.register, "late", function() end)))
+              log(tostring(pcall(nf.placeholders.register, "testlate", function() end)))
             end)
             """,
             platform = platform
@@ -310,19 +312,19 @@ class InteropTest {
     @Test
     fun `expansions are the session's, gone with a reload, offered again by the new script, and again after PlaceholderAPI reloads`() {
         val platform = papi()
-        server("nf.placeholders.register('one', function() return 'a' end)", platform = platform).use { server ->
-            assertEquals("a", platform.placeholders.request("one_x"))
-            server.write("modules/main/init.lua", "nf.placeholders.register('one', function() return 'b' end)")
+        server("nf.placeholders.register('testone', function() return 'a' end)", platform = platform).use { server ->
+            assertEquals("a", platform.placeholders.request("testone_x"))
+            server.write("modules/main/init.lua", "nf.placeholders.register('testone', function() return 'b' end)")
             server.reload("modules/main/init.lua")
-            assertEquals("b", platform.placeholders.request("one_x"))
-            assertEquals(setOf("one"), platform.placeholders.registered)
+            assertEquals("b", platform.placeholders.request("testone_x"))
+            assertEquals(setOf("testone"), platform.placeholders.registered)
 
             // PlaceholderAPI forgets everything when it's reloaded; the runtime offers them again.
             platform.placeholders.forgetAll()
             platform.plugins.disable("placeholderapi")
             platform.plugins.enable("placeholderapi")
             server.tick()
-            assertEquals("b", platform.placeholders.request("one_x"))
+            assertEquals("b", platform.placeholders.request("testone_x"))
 
             server.write("modules/main/init.lua", "-- none now")
             server.reload("modules/main/init.lua")
@@ -333,12 +335,12 @@ class InteropTest {
     @Test
     fun `a restart takes the session's expansions away`() {
         val platform = papi()
-        server("nf.placeholders.register('one', function() return 'a' end)", platform = platform).use { server ->
-            assertEquals(setOf("one"), platform.placeholders.registered)
+        server("nf.placeholders.register('testone', function() return 'a' end)", platform = platform).use { server ->
+            assertEquals(setOf("testone"), platform.placeholders.registered)
             server.runtime.reloadAll()
-            assertEquals(setOf("one"), platform.placeholders.registered)
+            assertEquals(setOf("testone"), platform.placeholders.registered)
             server.restart()
-            assertEquals(setOf("one"), platform.placeholders.registered)
+            assertEquals(setOf("testone"), platform.placeholders.registered)
         }
         assertEquals(emptySet(), platform.placeholders.registered)
     }

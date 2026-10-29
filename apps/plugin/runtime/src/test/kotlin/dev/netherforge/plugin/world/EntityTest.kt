@@ -439,6 +439,8 @@ class EntityTest {
             check("offline false", alex:send_actionbar("x"), false)
             check("offline inventory", alex:inventory(), nil)
             """,
+            // `kick` needs moderation, like `ban`.
+            files = mapOf(TestServer.MANIFEST to TestServer.manifest(requires = """{ "moderation": true }""")),
             setup = { it.player("Alex") },
             after = { server ->
                 val alex = server.platform.players.known.values.single()

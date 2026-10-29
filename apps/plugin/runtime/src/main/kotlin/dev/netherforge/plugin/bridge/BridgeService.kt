@@ -47,7 +47,8 @@ typealias Reply<R> = (Result<R>) -> Unit
 class BridgeService(private val runtime: NetherForgeRuntime, private val config: BridgeConfig) : BridgeOutput {
     private val client = BridgeClient(
         port = config.port,
-        hello = { runtime.hello(config.token) },
+        token = config.token,
+        hello = { nonce -> runtime.hello(nonce) },
         onFrame = ::receive,
         onConnected = { runtime.mainThread.execute { runtime.sendState() } },
         // An editor that went away while the server was paused mustn't leave it paused.

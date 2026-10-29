@@ -1,5 +1,7 @@
-{"jsonrpc":"2.0","id":0,"method":"hello","params":{"token":"t0k3n","protocol":1,"pluginVersion":"0.1.0","minecraft":"26.3","project":"/home/me/projects/basic"}}
-{"jsonrpc":"2.0","id":0,"result":{"protocol":1}}
+{"jsonrpc":"2.0","id":0,"method":"hello","params":{"nonce":"5f1c2a9e8b7d6c4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d","protocol":2,"pluginVersion":"0.1.0","minecraft":"26.3","project":"/home/me/projects/basic"}}
+{"jsonrpc":"2.0","id":0,"result":{"protocol":2,"nonce":"a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3","proof":"f80c75fb58248cc3d585a498a175053aa2b914f10806d484d9fa121f6a1543c0"}}
+{"jsonrpc":"2.0","id":1,"method":"authenticate","params":{"proof":"77f0b22bd6e07fc1079c401636d9200f16b5d1635a9053dde11e12f3a6c4ff82"}}
+{"jsonrpc":"2.0","id":1,"result":null}
 {"jsonrpc":"2.0","method":"problems","params":{"problems":[{"severity":"warning","file":"modules/tools","message":"Module \"tools\" has no init.lua and no script requires it, so it never runs","code":"module.no-init"}]}}
 {"jsonrpc":"2.0","method":"status","params":{"players":[],"instances":0}}
 {"jsonrpc":"2.0","id":"backend:1","method":"export_game_data"}
@@ -64,8 +66,8 @@
 {"jsonrpc":"2.0","id":24,"error":{"code":-32602,"message":"Invalid params for spawn: Field 'centity' is required"}}
 [{"jsonrpc":"2.0","id":25,"method":"instances"},{"jsonrpc":"2.0","id":26,"method":"worlds"}]
 [{"jsonrpc":"2.0","id":25,"result":[]},{"jsonrpc":"2.0","id":26,"result":[{"name":"world","environment":"normal","main":true}]}]
-{"jsonrpc":"2.0","id":0,"method":"hello","params":{"token":"t0k3n","protocol":2,"pluginVersion":"0.2.0","minecraft":"26.3","project":"/home/me/projects/basic"}}
-{"jsonrpc":"2.0","id":0,"error":{"code":-32001,"message":"This server's NetherForge plugin speaks dev bridge protocol 2 and the editor speaks 1, so the editor can't talk to it. Use the plugin that came with this editor."}}
+{"jsonrpc":"2.0","id":0,"method":"hello","params":{"nonce":"5f1c2a9e8b7d6c4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d","protocol":3,"pluginVersion":"0.2.0","minecraft":"26.3","project":"/home/me/projects/basic"}}
+{"jsonrpc":"2.0","id":0,"error":{"code":-32001,"message":"This server's NetherForge plugin speaks dev bridge protocol 3 and the editor speaks 2, so the editor can't talk to it. Use the plugin that came with this editor."}}
 {"jsonrpc":"2.0","method":"dap","params":{"seq":1,"type":"request","command":"initialize","arguments":{"clientID":"netherforge","adapterID":"netherforge","linesStartAt1":true,"columnsStartAt1":true,"pathFormat":"path"}}}
 {"jsonrpc":"2.0","method":"dap","params":{"seq":1,"type":"response","request_seq":1,"success":true,"command":"initialize","body":{"supportsConfigurationDoneRequest":true,"exceptionBreakpointFilters":[{"filter":"errors","label":"Script errors","default":false}]}}}
 {"jsonrpc":"2.0","method":"dap","params":{"seq":2,"type":"request","command":"setBreakpoints","arguments":{"source":{"path":"centities/tower/script.lua"},"breakpoints":[{"line":7}]}}}

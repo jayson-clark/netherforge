@@ -179,7 +179,12 @@ data class Dependency(val path: String? = null, val git: String? = null, val rev
 @Serializable
 data class ProjectRequires(
     /**
-     * Whether scripts may ban and unban players, change the whitelist, and
+     * Whether scripts may run server commands as the console (`nf.server.run`), with the console's permissions:
+     * the widest capability there is, shown first wherever the tree's requirements are.
+     */
+    val console: Boolean? = null,
+    /**
+     * Whether scripts may kick, ban and unban players, change the whitelist, and
      * change the message of the day and the most players allowed.
      */
     val moderation: Boolean? = null,

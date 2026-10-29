@@ -12,7 +12,7 @@ import type { Requirement } from './types.ts'
 
 /** A requirement's kind: the word before any `:` (`plugin` for `plugin:vault`). */
 export type RequirementKind =
-  'moderation' | 'http' | 'db' | 'web' | 'bots' | 'wasm' | 'network' | 'plugin'
+  'console' | 'moderation' | 'http' | 'db' | 'web' | 'bots' | 'wasm' | 'network' | 'plugin'
 
 export interface RequirementSpec {
   /** What it lets scripts do, as a phrase: `ban players and change the server's settings`. */
@@ -22,8 +22,12 @@ export interface RequirementSpec {
 }
 
 export const REQUIREMENTS: Record<RequirementKind, RequirementSpec> = {
+  console: {
+    what: "run server commands as the console, with the console's permissions",
+    declared: () => '`"requires": { "console": true }` in `netherforge.json`',
+  },
   moderation: {
-    what: 'ban and unban players, change the whitelist and the server settings players see',
+    what: 'kick, ban and unban players, change the whitelist and the server settings players see',
     declared: () => '`"requires": { "moderation": true }` in `netherforge.json`',
   },
   http: {
@@ -81,6 +85,7 @@ export function requirementSentence(requirement: Requirement, where: string): st
 /** The part of `netherforge.json` a package declares its requirements in: `requires`. */
 export interface DeclaringManifest {
   requires?: {
+    console?: boolean | null
     moderation?: boolean | null
     db?: boolean | null
     web?: boolean | null
@@ -101,6 +106,7 @@ export function granted(manifest: DeclaringManifest | null | undefined): Set<Req
   const out = new Set<Requirement>()
   const requires = manifest?.requires
   if (!requires) return out
+  if (requires.console === true) out.add('console')
   if (requires.moderation === true) out.add('moderation')
   if (requires.db === true) out.add('db')
   if (requires.web === true) out.add('web')

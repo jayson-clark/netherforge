@@ -54,7 +54,10 @@ class DialogTest {
             server.platform.commands.run(alex, "ask")
             assertEquals("ask", server.platform.dialogs.showing.getValue(alex.ref.uuid).id)
             server.platform.dialogs.press(alex, "ok", mapOf("name" to "Al", "sure" to "no", "amount" to 3.5))
+            // A press closes it: each press is on a dialog opened again.
+            server.platform.commands.run(alex, "ask")
             server.platform.dialogs.press(alex, "ok", mapOf("name" to "Al", "sure" to "yes", "amount" to 3.0))
+            server.platform.commands.run(alex, "ask")
             server.platform.dialogs.press(alex, "cancel")
             assertEquals(
                 listOf(
@@ -68,6 +71,39 @@ class DialogTest {
                 ),
                 server.logs
             )
+        }
+    }
+
+    /**
+     * The client is the player's: a modified one can send a button's click after its dialog closed, or for a
+     * dialog it was never shown. Only a dialog on their screen is heard.
+     */
+    @Test
+    fun `a press of a dialog that isn't on the player's screen is ignored`() {
+        TestServer(files).use { server ->
+            val alex = server.player("Alex")
+            val dialogs = server.platform.dialogs
+            dialogs.forgePress(alex, "ask", "ok", mapOf("name" to "x", "sure" to "yes", "amount" to 1.0))
+            server.platform.commands.run(alex, "ask")
+            dialogs.press(alex, "cancel")
+            // Pressed again after it closed: a replay.
+            dialogs.forgePress(alex, "ask", "cancel")
+            // A dialog the menu on screen doesn't lead to, pressed and left.
+            server.platform.commands.run(alex, "menu")
+            dialogs.forgePress(alex, "other", "ok")
+            server.platform.events!!.dialogClosed(alex.ref, "other")
+            assertEquals(listOf("dialog load ask", "dialog heard cancel", "nf heard cancel on ask, target cancel"), server.logs)
+        }
+    }
+
+    /** A dialog a `dialog_list` on screen leads to is on screen too: its presses are heard. */
+    @Test
+    fun `a press on a dialog the list on screen leads to is heard`() {
+        TestServer(files).use { server ->
+            val alex = server.player("Alex")
+            server.platform.commands.run(alex, "menu")
+            server.platform.dialogs.press(alex, "cancel", dialog = "ask")
+            assertTrue("dialog heard cancel" in server.logs, server.logs.toString())
         }
     }
 
@@ -116,6 +152,7 @@ class DialogTest {
             assertEquals("dialog:ask", result.label)
             assertTrue(result.ok)
             server.platform.dialogs.press(alex, "ok")
+            server.platform.commands.run(alex, "ask")
             server.platform.dialogs.press(alex, "fine")
             assertEquals("dialog heard fine", server.logs[server.logs.size - 2])
             assertFalse(server.logs.any { it.startsWith("ok Alex") })

@@ -87,7 +87,7 @@ export const nfWeb: LuaClass = {
     },
     {
       name: 'oauth',
-      doc: 'A "log in with…" flow (OAuth 2 with PKCE, the authorization code grant): `flow:begin(player)` gives the address to send the player to, the service sends them back to the flow\'s own route (`/<namespace>/oauth/<name>/callback`, which you register with the service as its redirect URI: `nf.web.url("/oauth/<name>/callback")`), and the server trades the code for a token itself and raises `complete` (or `fail`) on the flow. NetherForge keeps the state and the code verifier, ties each to the player who began, uses each once and lets it expire after 10 minutes, so a forged or replayed callback is refused. The token endpoint\'s host must be one the package declares in `requires.http`. The flow belongs to the script that made it and goes when it unloads; logins begun before a reload are forgotten. Two flows of one package with the same `name` are an error.',
+      doc: 'A "log in with…" flow (OAuth 2 with PKCE, the authorization code grant): `flow:begin(player)` gives the address to send the player to, the service sends them back to the flow\'s own route (`/<namespace>/oauth/<name>/callback`, which you register with the service as its redirect URI: `nf.web.url("/oauth/<name>/callback")`), the browser is asked to confirm which Minecraft player it signs in as (`POST /<namespace>/oauth/<name>/confirm`, so a sign-in link passed to someone else can\'t link their account to the player who began), and the server then trades the code for a token itself and raises `complete` (or `fail`) on the flow. NetherForge keeps the state and the code verifier, ties each to the player who began, uses each once and lets it expire after 10 minutes, so a forged or replayed callback is refused. The token endpoint\'s host must be one the package declares in `requires.http`. The flow belongs to the script that made it and goes when it unloads; logins begun before a reload are forgotten. Two flows of one package with the same `name` are an error.',
       requires: 'web',
       params: [
         {
@@ -315,7 +315,7 @@ export const webShapes: LuaClass[] = [
     {
       name: 'name',
       type: 'string',
-      doc: "The flow's name, unique in the package: lowercase letters, digits, `-` and `_`. Its callback is `/<namespace>/oauth/<name>/callback`.",
+      doc: "The flow's name, unique in the package: lowercase letters, digits, `-` and `_`. Its callback is `/<namespace>/oauth/<name>/callback`, and its confirmation `/<namespace>/oauth/<name>/confirm`.",
     },
     {
       name: 'authorize_url',

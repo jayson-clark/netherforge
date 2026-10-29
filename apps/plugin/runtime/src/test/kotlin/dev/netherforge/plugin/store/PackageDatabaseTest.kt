@@ -3,6 +3,7 @@ import dev.netherforge.format.Severity
 import dev.netherforge.plugin.TestServer
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -147,6 +148,41 @@ class PackageDatabaseTest {
                 server.logs.filterNot { it.startsWith("sql type") }
             )
             assertTrue(server.logs.any { it.startsWith("sql type: bad argument 'sql'") }, server.logs.toString())
+        }
+    }
+
+    /**
+     * A package's database is one file: no statement reaches another (another
+     * package's database, the runtime's store, a new file anywhere on disk).
+     */
+    @Test
+    fun `a package's database can't attach or write another file`() {
+        val elsewhere = kotlin.io.path.createTempDirectory("netherforge-attach").resolve("elsewhere.db")
+        server(
+            """
+            local function try(what, f)
+              local ok, problem = pcall(f)
+              log(what .. ": " .. (ok and "ran" or tostring(problem):gsub("^[^:]+:%d+: ", "")))
+            end
+            try("attach", function() db:query("ATTACH DATABASE ? AS x", { "$elsewhere" }, print) end)
+            try("attach after a comment", function() db:query("/* hi */ attach ? as x", { "$elsewhere" }, print) end)
+            try("vacuum into", function() db:execute("VACUUM INTO ?", { "$elsewhere" }, print) end)
+            try("folder pragma", function() db:query("PRAGMA main.temp_store_directory = '/tmp'", nil, print) end)
+            try("other pragma", function() db:query("PRAGMA foreign_keys", nil, print) end)
+            """
+        ).use { server ->
+            server.settle(4)
+            assertEquals(
+                listOf(
+                    "attach: Database:query: ATTACH isn't allowed: a package's database is one file, and this would reach another",
+                    "attach after a comment: Database:query: ATTACH isn't allowed: a package's database is one file, and this would reach another",
+                    "vacuum into: Database:execute: VACUUM isn't allowed: a package's database is one file, and this would reach another",
+                    "folder pragma: Database:query: PRAGMA temp_store_directory isn't allowed: it names a folder on the server's disk",
+                    "other pragma: ran"
+                ),
+                server.logs
+            )
+            assertFalse(java.nio.file.Files.exists(elsewhere), "$elsewhere was made")
         }
     }
 

@@ -61,7 +61,9 @@ Sends a line to everyone online and the console, as the server.
 
 ### `nf.server.run(command)` {#run}
 
-Runs a server command as the console, with the console's permissions. The leading slash is optional.
+Runs a server command as the console, with the console's permissions: anything the console may do, which is why it needs a requirement of its own that whoever runs the server sees first. The leading slash is optional.
+
+*Needs `"requires": { "console": true }` in `netherforge.json`: without it, calling it is an error.*
 
 | Parameter | Type | |
 | --- | --- | --- |

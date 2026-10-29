@@ -15,6 +15,12 @@ interface Peer {
 
     /** Ends the connection; the peer calls [Hub.Session.closed] once it has. */
     fun close(reason: String)
+
+    /**
+     * The hello was accepted: from now on every line both ways is sealed with [channel], the [HubFrame.Welcome]
+     * included. A connection in the same JVM ([LocalLink]) has no wire to seal.
+     */
+    fun secure(channel: Channel) {}
 }
 
 /**
@@ -205,7 +211,8 @@ class Hub(
                         "update NetherForge on the ${if (frame.version < Protocol.VERSION) "server" else "proxy"}"
                 )
             }
-            if (!Auth.verify(secret, nonce, frame.server, frame.proof)) {
+            if (!Auth.isNonce(frame.nonce)) return refuse("its hello has no nonce of its own")
+            if (!Auth.verify(secret, nonce, frame.server, frame.nonce, frame.proof)) {
                 return refuse("its secret isn't the hub's (network.secret in its config.yml must be the proxy plugin's)")
             }
             val server = serverNamed(frame.server)
@@ -220,6 +227,8 @@ class Hub(
             name = server
             byName[server] = this
             log.info("NetherForge hub: $server connected from ${peer.address}")
+            // Sealed from the welcome on, under the name the server said (the one its keys are bound to).
+            peer.secure(Channel.hub(secret, nonce, frame.nonce, frame.server))
             send(HubFrame.Welcome(server, servers(), players.values.toList(), limits.maxValueBytes))
             for (other in byName.values) if (other !== this) other.send(HubFrame.Server(ServerState(server, true)))
         }
