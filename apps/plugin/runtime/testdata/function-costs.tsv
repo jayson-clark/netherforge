@@ -620,8 +620,8 @@ ProjectItem:properties	15
 Random:integer	85
 Random:number	92
 Random:pick	28
-Random:shuffle	29
-Random:weighted	114
+Random:shuffle	31
+Random:weighted	120
 Route:exists	15
 Route:remove	15
 Schedule:cancel	16
@@ -815,6 +815,8 @@ nf.centities.properties	8
 nf.centities.spawn	263
 nf.commands.register	12
 nf.config	7
+nf.crypto.hash	12
+nf.crypto.sign	13
 nf.cutscenes.current	8
 nf.cutscenes.play	33
 nf.cutscenes.stop	8
@@ -826,6 +828,14 @@ nf.economy.balance	8
 nf.economy.deposit	10
 nf.economy.withdraw	10
 nf.emit	49
+nf.encoding.base64_decode	8
+nf.encoding.base64_encode	12
+nf.encoding.form_decode	8
+nf.encoding.form_encode	8
+nf.encoding.hex_decode	8
+nf.encoding.hex_encode	8
+nf.encoding.url_decode	8
+nf.encoding.url_encode	8
 nf.every	56
 nf.files.get	8
 nf.http.request	37

@@ -9,6 +9,14 @@ release is cut.
 
 ## [Unreleased]
 
+### Added
+
+- **`nf.encoding` and `nf.crypto`, for talking to web services.**
+  `nf.encoding` writes and reads URL escapes, form bodies (nested tables as
+  `name[key]`, lists from 0, as Stripe and similar APIs take them), base64 (both
+  alphabets) and hex; `nf.crypto` hashes (SHA-256, SHA-1, SHA-512) and signs
+  (HMAC), the signature `nf.web.verify_signature` checks.
+
 ### Security
 
 - **Scripts can no longer stall or crash the server through the sandbox.** A

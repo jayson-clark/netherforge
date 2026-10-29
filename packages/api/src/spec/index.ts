@@ -48,6 +48,7 @@ import { blockClass, worldBorderClass, worldClass, worldShapes } from './worlds.
 import { teamClass, teamShapes } from './teams.ts'
 import { scheduleClass, scheduleShapes } from './schedule.ts'
 import { randomClass, utilityShapes } from './utilities.ts'
+import { encodingShapes } from './encoding.ts'
 import { testShapes } from './test.ts'
 
 const centitySurface: Surface = {
@@ -212,6 +213,7 @@ export const api: ApiSpec = {
     ...cutsceneShapes,
     ...screenShapes,
     ...utilityShapes,
+    ...encodingShapes,
     ...testShapes,
   ],
   removed: [

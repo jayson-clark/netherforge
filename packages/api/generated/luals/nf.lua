@@ -60,7 +60,7 @@
 --- MiniMessage a player reads, like `"<green>Done!"`: a string. A `<glyph:pack/key>` tag in it names a glyph the way the script's own files would: one of its own package's resource packs bare, or `<glyph:namespace:pack/key>` for one a package it depends on exports. The tag means that glyph wherever and whenever the text is shown, whoever shows it; one naming a glyph the script can't use draws nothing, and the server log says why. Text handed back to a script names its glyphs the same way.
 ---@alias Text string
 
---- Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.files`, `nf.text`, `nf.looks`, `nf.json`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
+--- Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.files`, `nf.text`, `nf.looks`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
 ---@class nf
 ---@field server nf.server The server itself: its clock, its performance, its version, its settings (players, message of the day, whitelist), and saying or running things as the console.
 ---@field commands nf.commands Slash commands a module adds to the server for as long as it runs, with typed arguments, tab completion and usage messages from their declaration.
@@ -88,6 +88,8 @@
 ---@field text nf.text Helpers for the MiniMessage text players see: escaping what players typed, stripping tags, resource pack glyphs, moving the cursor, and measuring.
 ---@field looks nf.looks Resource pack looks (item models, glyphs, skins, tooltips, equipment looks, sounds) handed from one package's code to another's. A look is a value, not a use: any script can show any look the server has, by its full name `<namespace>:<pack>/<key>`, whether or not its package exports it or is one the script's package depends on. That's how a project hands a package it uses looks of its own to draw with (see [Packages](packages.md#looks-are-values)).
 ---@field json nf.json JSON text to and from Lua values.
+---@field encoding nf.encoding Text written the ways web services want it: in a URL, as a form, as base64 or as hex. For building what `nf.http.request` sends and reading what comes back (`nf.web` already decodes a request's `query` and `form`). Lua strings cross as text (UTF-8), as `nf.http`'s bodies do, so what's decoded must be text too: decoding to bytes that aren't UTF-8 (an image, a raw key) is `nil`.
+---@field crypto nf.crypto Hashes and signatures (HMAC), for services that sign what they send or want what's sent to them signed. Checking a webhook's signature is `nf.web.verify_signature`, which compares in constant time. Keep secrets in a setting (`nf.config`), not in a script. Both work on the text's UTF-8 bytes.
 ---@field http nf.http Requests to web services (a Discord webhook, a status API). A package declares the hosts it talks to in `netherforge.json`'s `requires` (`"http": ["discord.com"]`, or `"*.discord.com"` for every name under it), and the server owner sees every host the project and its packages declare when it starts (`/nf requires`); a request to any other host is an error. Every request is held to the package whose code makes it. The server looks a name up once, checks the addresses it leads to and connects to exactly the address it checked: a loopback, private, link-local, shared (`100.64.0.0/10`), unique-local or IPv4-mapped address is refused even when its name is declared, unless the server owner turned on `http.allow-private-addresses` in `config.yml` (for a service on the same machine or network). Redirects (at most 5) are followed, and each one is held to the same rules, host declaration included. The server's proxy settings are never used. Only `http` and `https` URLs work. The server owner also limits requests in `config.yml`'s `http:` section: how large a request and a response may be, how long a request may take, and how many a package may make a minute. Connections that stay open (`stream`, `websocket`) are held to the same hosts and addresses, count as a request when they open, and have limits of their own in `http.connections`.
 ---@field web nf.web Web requests to the server: webhooks from stores, CI and chat services, "log in with…" callbacks, small pages and JSON for a companion site. A package declares `"requires": { "web": true }` in its `netherforge.json`, and its routes live under its own path, `/<namespace>/`, so packages can't collide. They're served only once the server owner turns web routes on (`web.enabled` in `config.yml`), on the port the resource pack is served from, usually behind a reverse proxy that adds HTTPS; until then a package that declares them has a warning (`runtime.web-disabled`). Every request waits for the main thread: handlers run there, under the script's budget, like any handler, and the owner limits how large a request may be, how many each address may make a minute and how many may wait (`web:` in `config.yml`). `/nf requires` lists every route.
 ---@field wasm nf.wasm Heavy computation in WebAssembly: a chess engine, pathfinding over a big grid, noise, compression, a library compiled from C, C++ or Rust. A module is `wasm/<id>/module.wasm` in the project (or a package's, exported), built for WASI preview 1 and single-threaded (`wasm32-wasip1`); every other file in its folder is data it can read, never write, as files from its root (`/`). It runs off the main thread, with no access to the server, the network or any file but its own data: it can only answer the script that asked. A package declares it runs modules with `"requires": { "wasm": true }`, and the server owner sees that (`/nf requires`) and limits it in `config.yml`'s `wasm:` section: how many threads run modules, how much memory each may use, how long a call may take, and how many instances and programs a package may keep. There are three ways to run one: `nf.wasm.instantiate` for a library whose functions you call (`instance:call`), `nf.wasm.run` for a program that reads its input and prints its answer, and `nf.wasm.start` for a program that keeps running and talks line by line (a UCI chess engine). The server compiles every module off the main thread as the project loads; one that couldn't be compiled fails when it's run, saying why (and the problem `runtime.wasm` says so too). A module the project doesn't have is an error at the script's line. A script that runs a module restarts when the module changes.
@@ -1200,6 +1202,67 @@ function nf.json.encode(value) end
 ---@return any
 function nf.json.decode(text) end
 
+--- Text written the ways web services want it: in a URL, as a form, as base64 or as hex. For building what `nf.http.request` sends and reading what comes back (`nf.web` already decodes a request's `query` and `form`). Lua strings cross as text (UTF-8), as `nf.http`'s bodies do, so what's decoded must be text too: decoding to bytes that aren't UTF-8 (an image, a raw key) is `nil`.
+---@class nf.encoding
+nf.encoding = {}
+
+--- Text made safe to put in one part of a URL (a path segment, a query value): every character but the letters, digits and `-`, `.`, `_` and `~` is written as its UTF-8 bytes in `%XX`, so a space is `%20` and `/` is `%2F`.
+---@param text string
+---@return string
+function nf.encoding.url_encode(text) end
+
+--- Text with its `%XX` escapes decoded, the other way from `url_encode`. A `+` stays a `+` (in a form it's a space: `form_decode` reads those). `nil` for a `%` that isn't followed by two hex digits.
+---@param text string
+---@return string?
+function nf.encoding.url_decode(text) end
+
+--- A table as a form body (`application/x-www-form-urlencoded`), the way many APIs take a `POST`: `name=value` pairs joined by `&`, names in order, spaces as `+`. Values are strings, numbers and booleans (`true`, `false`). A table inside is written with brackets, as Stripe and other APIs read it: `{ metadata = { player = "Steve" } }` is `metadata[player]=Steve`, and a list counts from 0, `{ items = { "a", "b" } }` being `items[0]=a&items[1]=b` (the brackets escaped, `%5B` and `%5D`, as a form escapes them). An empty table inside adds nothing. A table at the top must be names, not a list. A value that can't be in a form (a function, a `Vec3`, a handle) is an error naming where it was.
+---@param fields table The names and their values.
+---@return string
+function nf.encoding.form_encode(fields) end
+
+--- A form body (`application/x-www-form-urlencoded`) as a table of its names and values, both decoded, as `nf.web` reads a request's: a `+` is a space, and a name given more than once is its first value. Brackets are left in names as they are (`metadata[player]`). `nil` for text that isn't a form (a `%` without two hex digits after it).
+---@param text string
+---@return table<string, string>?
+function nf.encoding.form_decode(text) end
+
+--- Text's UTF-8 bytes as base64: what `Authorization: Basic` wants (`"user:password"`), and what some services put in a header or a token.
+---@param text string
+---@param options? Base64Options Which alphabet, and whether to pad.
+---@return string
+function nf.encoding.base64_encode(text, options) end
+
+--- Base64 decoded back to text. Both alphabets are read (`+/` and the URL-safe `-_`), with or without padding. `nil` for text that isn't base64, and for bytes that aren't text.
+---@param text string
+---@return string?
+function nf.encoding.base64_decode(text) end
+
+--- Text's UTF-8 bytes as hex, two lowercase digits a byte: `"Hi"` is `"4869"`.
+---@param text string
+---@return string
+function nf.encoding.hex_encode(text) end
+
+--- Hex (either case) decoded back to text. `nil` for text that isn't hex (an odd number of digits, a letter past `f`), and for bytes that aren't text.
+---@param text string
+---@return string?
+function nf.encoding.hex_decode(text) end
+
+--- Hashes and signatures (HMAC), for services that sign what they send or want what's sent to them signed. Checking a webhook's signature is `nf.web.verify_signature`, which compares in constant time. Keep secrets in a setting (`nf.config`), not in a script. Both work on the text's UTF-8 bytes.
+---@class nf.crypto
+nf.crypto = {}
+
+--- A hash of text: the same text always has the same hash, and nobody can work the text back out of it. For checking that something arrived unchanged, or for a service that asks for one; not for passwords, which need a slow hash made for them.
+---@param text string
+---@param options? HashOptions Which hash, and how to write it.
+---@return string
+function nf.crypto.hash(text, options) end
+
+--- Text's HMAC under a secret: the signature a service checks to know a request came from someone who has the secret, the same one `nf.web.verify_signature` checks.
+---@param text string What to sign, exactly as it will be sent.
+---@param options SigningOptions The secret, and how to sign.
+---@return string
+function nf.crypto.sign(text, options) end
+
 --- Requests to web services (a Discord webhook, a status API). A package declares the hosts it talks to in `netherforge.json`'s `requires` (`"http": ["discord.com"]`, or `"*.discord.com"` for every name under it), and the server owner sees every host the project and its packages declare when it starts (`/nf requires`); a request to any other host is an error. Every request is held to the package whose code makes it. The server looks a name up once, checks the addresses it leads to and connects to exactly the address it checked: a loopback, private, link-local, shared (`100.64.0.0/10`), unique-local or IPv4-mapped address is refused even when its name is declared, unless the server owner turned on `http.allow-private-addresses` in `config.yml` (for a service on the same machine or network). Redirects (at most 5) are followed, and each one is held to the same rules, host declaration included. The server's proxy settings are never used. Only `http` and `https` URLs work. The server owner also limits requests in `config.yml`'s `http:` section: how large a request and a response may be, how long a request may take, and how many a package may make a minute. Connections that stay open (`stream`, `websocket`) are held to the same hosts and addresses, count as a request when they open, and have limits of their own in `http.connections`.
 ---@class nf.http
 nf.http = {}
@@ -1245,7 +1308,7 @@ function nf.web.route(method, path, handler) end
 ---@return string?
 function nf.web.url(path, query) end
 
---- Whether `signature` is the HMAC of `body` under `options.secret`, as webhook senders sign what they send (GitHub's `X-Hub-Signature-256`, Stripe's and Shopify's): compared in constant time, so the answer leaks nothing about the right one. Check it before acting on a webhook. Keep the secret in a setting (`nf.config`), not in a script. A signature that isn't in `options.encoding` is `false`, not an error.
+--- Whether `signature` is the HMAC of `body` under `options.secret`, as webhook senders sign what they send (GitHub's `X-Hub-Signature-256`, Stripe's and Shopify's): compared in constant time, so the answer leaks nothing about the right one. Check it before acting on a webhook. Keep the secret in a setting (`nf.config`), not in a script. A signature that isn't in `options.encoding` is `false`, not an error. A sender that signs more than the body says what to check: Stripe signs `<t>.<body>`, its header's `t=` and the body, and sends the signature as `v1=` (and wants `t` checked to be recent). To make a signature, `nf.crypto.sign`.
 ---@param body string The request's body exactly as it came: `request.body`.
 ---@param signature string The signature the sender sent, from its header.
 ---@param options SignatureOptions The secret, and how the sender signs.
@@ -7980,6 +8043,22 @@ function Event:uncancel() end
 ---@class NoiseOptions
 ---@field seed integer? Which noise: each seed is a different pattern. Default 0.
 ---@field scale number? What the coordinates are multiplied by first: smaller is smoother and wider (0.05 changes over about 20 blocks). Default 1.
+
+--- How `nf.encoding.base64_encode` writes base64. A key that isn't one of these is an error.
+---@class Base64Options
+---@field url_safe boolean? Whether to use the URL-safe alphabet (`-` and `_` for `+` and `/`), for a URL or a token. Default `false`.
+---@field padding boolean? Whether to end with `=` to a multiple of four characters. Default `true`.
+
+--- How `nf.crypto.hash` hashes. A key that isn't one of these is an error.
+---@class HashOptions
+---@field algorithm "sha256"|"sha1"|"sha512"? The hash. Default `"sha256"`.
+---@field encoding "hex"|"base64"? How the result is written: `"hex"` (lowercase), or `"base64"`. Default `"hex"`.
+
+--- How `nf.crypto.sign` signs. A key that isn't one of these is an error.
+---@class SigningOptions
+---@field secret string The secret to sign with.
+---@field algorithm "sha256"|"sha1"|"sha512"? The hash. Default `"sha256"`.
+---@field encoding "hex"|"base64"? How the result is written: `"hex"` (lowercase), or `"base64"`. Default `"hex"`.
 
 --- A message another server of a test's network heard, from `nf.test.network_received`.
 ---@class TestNetworkMessage

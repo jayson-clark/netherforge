@@ -8615,6 +8615,50 @@ namespaces["nf.json"] = function(scope, ns)
   end
 end
 
+namespaces["nf.encoding"] = function(scope, ns)
+  function ns.url_encode(text)
+    return prim["nf.encoding.url_encode"](scope, text)
+  end
+
+  function ns.url_decode(text)
+    return prim["nf.encoding.url_decode"](scope, text)
+  end
+
+  function ns.form_encode(fields)
+    return prim["nf.encoding.form_encode"](scope, fields)
+  end
+
+  function ns.form_decode(text)
+    return prim["nf.encoding.form_decode"](scope, text)
+  end
+
+  function ns.base64_encode(text, options)
+    return prim["nf.encoding.base64_encode"](scope, text, options)
+  end
+
+  function ns.base64_decode(text)
+    return prim["nf.encoding.base64_decode"](scope, text)
+  end
+
+  function ns.hex_encode(text)
+    return prim["nf.encoding.hex_encode"](scope, text)
+  end
+
+  function ns.hex_decode(text)
+    return prim["nf.encoding.hex_decode"](scope, text)
+  end
+end
+
+namespaces["nf.crypto"] = function(scope, ns)
+  function ns.hash(text, options)
+    return prim["nf.crypto.hash"](scope, text, options)
+  end
+
+  function ns.sign(text, options)
+    return prim["nf.crypto.sign"](scope, text, options)
+  end
+end
+
 namespaces["nf.http"] = function(scope, ns)
   function ns.request(options, callback)
     local waker, task, token = async.begin("nf.http.request", callback)

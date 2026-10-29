@@ -108,7 +108,7 @@ Chest menus and dialog screens.
 
 ## Values and utilities
 
-Vectors and locations, text, looks, time, randomness and maths.
+Vectors and locations, text, looks, time, randomness, maths, JSON, encodings and hashes.
 
 - [Vec3](vec3.md): Three numbers: a position, an offset, a velocity, a direction or a scale
 - [Location](location.md): A position in a particular world, with an optional facing
@@ -119,6 +119,8 @@ Vectors and locations, text, looks, time, randomness and maths.
 - [Random](random.md): A random generator from `nf.random.new`: numbers that repeat for its seed, apart from `math.random` and every other generator
 - [nf.math](nf.math.md): Small arithmetic `math` doesn't have, for animating by hand: blending, clamping, rescaling and easing
 - [nf.json](nf.json.md): JSON text to and from Lua values
+- [nf.encoding](nf.encoding.md): Text written the ways web services want it: in a URL, as a form, as base64 or as hex
+- [nf.crypto](nf.crypto.md): Hashes and signatures (HMAC), for services that sign what they send or want what's sent to them signed
 
 ## Files, data, the web and computation
 

@@ -96,6 +96,9 @@ class LuaValue(private val host: LuaHost, private val lua: Lua, private val inde
 
     /** Reads it with a conversion that works on the stack (`Marshal.itemsByIndex`): [read] gets the state and its index. */
     fun <T> read(read: (Lua, Int) -> T): T = read(lua, index)
+
+    /** Charges the calling script for [entries] of it a [read] walked ([LuaHost.meter]). */
+    fun meter(entries: Int) = host.meter(entries)
 }
 
 /** Why a call into Lua failed, located in the project when Lua could say where. */

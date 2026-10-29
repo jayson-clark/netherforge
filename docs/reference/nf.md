@@ -2,7 +2,7 @@
 
 # nf
 
-Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.files`, `nf.text`, `nf.looks`, `nf.json`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
+Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.files`, `nf.text`, `nf.looks`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
 
 A table of functions: call them with a dot.
 
@@ -42,6 +42,8 @@ A table of functions: call them with a dot.
 | [`nf.text`](nf.text.md) | Helpers for the MiniMessage text players see: escaping what players typed, stripping tags, resource pack glyphs, moving the cursor, and measuring. |
 | [`nf.looks`](nf.looks.md) | Resource pack looks (item models, glyphs, skins, tooltips, equipment looks, sounds) handed from one package's code to another's. |
 | [`nf.json`](nf.json.md) | JSON text to and from Lua values. |
+| [`nf.encoding`](nf.encoding.md) | Text written the ways web services want it: in a URL, as a form, as base64 or as hex. |
+| [`nf.crypto`](nf.crypto.md) | Hashes and signatures (HMAC), for services that sign what they send or want what's sent to them signed. |
 | [`nf.http`](nf.http.md) | Requests to web services (a Discord webhook, a status API). |
 | [`nf.web`](nf.web.md) | Web requests to the server: webhooks from stores, CI and chat services, "log in with…" callbacks, small pages and JSON for a companion site. |
 | [`nf.wasm`](nf.wasm.md) | Heavy computation in WebAssembly: a chess engine, pathfinding over a big grid, noise, compression, a library compiled from C, C++ or Rust. |
