@@ -49,8 +49,12 @@ class ScriptTestRunner(
     private val game: GameDataBundle,
     /** The editor's package cache, where git packages' checkouts are, when the project has any. */
     private val packageCache: Path? = null,
-    /** What the sandbox holds a call into a script to: a test's call includes every tick it advances, so the time limit is generous. */
-    private val sandbox: SandboxLimits = SandboxLimits(deadlineMillis = 120_000, memoryMegabytes = 1024)
+    /**
+     * What the sandbox holds a call into a script to: a test's call includes every tick it advances, so the time
+     * limit is generous. The per-tick time budget is off (`maxTickMillis = 0`): it defers a scope's handlers by
+     * wall-clock time, which would make a deterministic test's outcome depend on how fast the machine is.
+     */
+    private val sandbox: SandboxLimits = SandboxLimits(deadlineMillis = 120_000, memoryMegabytes = 1024, maxTickMillis = 0.0)
 ) {
     /** A project the runtime refused or couldn't load, so no test could run. */
     class Refused(message: String, val problems: List<String> = emptyList()) : RuntimeException(message)

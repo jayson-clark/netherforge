@@ -57,8 +57,13 @@ class TestServer(
     private val wallClock: java.time.Clock? = null,
     /** `schedules.time-zone` in `config.yml`, when set. */
     private val scheduleZone: String? = null,
-    /** What the sandbox holds calls in to, when not its defaults: a small memory limit, a short time limit. */
-    private val sandbox: SandboxLimits = SandboxLimits(),
+    /**
+     * What the sandbox holds calls in to, when not its defaults: a small memory limit, a short time limit. The
+     * per-tick time budget is off by default here (`maxTickMillis = 0`): it defers a scope's handlers by
+     * wall-clock time, which would flake any test that happens to spend a while in a tick on a slow runner. A
+     * test of the budget itself (`SandboxLimitsTest`) turns it on; production has it on through `performance`.
+     */
+    private val sandbox: SandboxLimits = SandboxLimits(maxTickMillis = 0.0),
     /** What needs a newer Minecraft than the fake server's 26.3, when not the spec's own. */
     private val versionGates: VersionGates? = null,
     /** Whether dependencies are found where netherforge.json points, as on a dev server; false is a production server. */
