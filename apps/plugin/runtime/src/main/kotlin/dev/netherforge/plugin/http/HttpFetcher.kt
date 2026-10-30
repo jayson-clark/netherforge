@@ -28,8 +28,11 @@ import javax.net.SocketFactory
 /** One request as `nf.http.request` checked it: [method] in capitals, a [url] with an `http` or `https` scheme and a host, and the headers to send. */
 class HttpCall(val method: String, val url: URI, val headers: Map<String, String>, val body: ByteArray?)
 
-/** What came back: the status, its headers by lowercase name (repeated ones joined with `, `), the decoded body and the URL it came from. */
-class HttpReply(val status: Int, val headers: Map<String, String>, val body: String, val url: URI)
+/**
+ * What came back: the status, its headers by lowercase name (repeated ones joined with `, `), the decoded body, the
+ * URL it came from, and the body's [bytes] as they came (what `nf.images.download` decodes).
+ */
+class HttpReply(val status: Int, val headers: Map<String, String>, val body: String, val url: URI, val bytes: ByteArray = ByteArray(0))
 
 /**
  * Makes `nf.http.request`'s requests, off the main thread (it blocks), with
@@ -194,7 +197,7 @@ class HttpFetcher(
             hop.newCall(request(call, url)).execute().use { response ->
                 val headers = headersOf(response.headers)
                 val body = if (call.method == "HEAD") ByteArray(0) else read(response)
-                return HttpReply(response.code, headers, decode(body, headers["content-type"]), call.url) to headers["location"]
+                return HttpReply(response.code, headers, decode(body, headers["content-type"]), call.url, body) to headers["location"]
             }
         } catch (e: WorkFailed) {
             throw e

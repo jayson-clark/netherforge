@@ -33,6 +33,7 @@ local genuine_mt, with_mt = core.genuine_mt, core.with_mt
 local Vec3_mt, Location_mt = core.Vec3_mt, core.Location_mt
 local Centity_is = accepts.Centity
 local Node_is = accepts.Node
+local Image_is = accepts.Image
 local Entity_is = accepts.Entity
 local Living_is = accepts.Living
 local Mob_is = accepts.Mob
@@ -944,7 +945,7 @@ do
     return with_mt({ result_x, result_y, result_z }, Vec3_mt)
   end
 
-  function Node.set_translation(self, translation)
+  function Node.set_translation(self, translation, options)
     local self_key = ids[self]
     if self_key == nil or not Node_is[class_of(self)] then
       self_key = self_of(self, "Node")
@@ -952,10 +953,10 @@ do
     if genuine_mt(translation) ~= Vec3_mt then
       want_vec3(translation, "translation")
     end
-    prim["Node.set_translation"](self_key, translation[1], translation[2], translation[3])
+    prim["Node.set_translation"](self_key, translation[1], translation[2], translation[3], options)
   end
 
-  function Node.set_rotation(self, rotation)
+  function Node.set_rotation(self, rotation, options)
     local self_key = ids[self]
     if self_key == nil or not Node_is[class_of(self)] then
       self_key = self_of(self, "Node")
@@ -963,10 +964,10 @@ do
     if genuine_mt(rotation) ~= Vec3_mt then
       want_vec3(rotation, "rotation")
     end
-    prim["Node.set_rotation"](self_key, rotation[1], rotation[2], rotation[3])
+    prim["Node.set_rotation"](self_key, rotation[1], rotation[2], rotation[3], options)
   end
 
-  function Node.set_scale(self, scale)
+  function Node.set_scale(self, scale, options)
     local self_key = ids[self]
     if self_key == nil or not Node_is[class_of(self)] then
       self_key = self_of(self, "Node")
@@ -974,7 +975,7 @@ do
     if genuine_mt(scale) ~= Vec3_mt then
       want_vec3(scale, "scale")
     end
-    prim["Node.set_scale"](self_key, scale[1], scale[2], scale[3])
+    prim["Node.set_scale"](self_key, scale[1], scale[2], scale[3], options)
   end
 
   function Node.stretch_between(self, from, to, options)
@@ -1168,6 +1169,77 @@ do
       self_key = self_of(self, "Node")
     end
     return prim["Node.display_kind"](self_key)
+  end
+
+  function Node.image(self)
+    local self_key = ids[self]
+    if self_key == nil or not Node_is[class_of(self)] then
+      self_key = self_of(self, "Node")
+    end
+    return prim["Node.image"](self_key)
+  end
+
+  function Node.set_image(self, image)
+    local self_key = ids[self]
+    if self_key == nil or not Node_is[class_of(self)] then
+      self_key = self_of(self, "Node")
+    end
+    return prim["Node.set_image"](self_key, image)
+  end
+
+  function Node.display_color(self)
+    local self_key = ids[self]
+    if self_key == nil or not Node_is[class_of(self)] then
+      self_key = self_of(self, "Node")
+    end
+    return prim["Node.display_color"](self_key)
+  end
+
+  function Node.set_display_color(self, color)
+    local self_key = ids[self]
+    if self_key == nil or not Node_is[class_of(self)] then
+      self_key = self_of(self, "Node")
+    end
+    return prim["Node.set_display_color"](self_key, color)
+  end
+
+  function Node.display_size(self)
+    local self_key = ids[self]
+    if self_key == nil or not Node_is[class_of(self)] then
+      self_key = self_of(self, "Node")
+    end
+    local result_x, result_y, result_z = prim["Node.display_size"](self_key)
+    if result_x == nil then
+      return nil
+    end
+    return with_mt({ result_x, result_y, result_z }, Vec3_mt)
+  end
+
+  function Node.set_display_size(self, size)
+    local self_key = ids[self]
+    if self_key == nil or not Node_is[class_of(self)] then
+      self_key = self_of(self, "Node")
+    end
+    if genuine_mt(size) ~= Vec3_mt then
+      want_vec3(size, "size")
+    end
+    return prim["Node.set_display_size"](self_key, size[1], size[2], size[3])
+  end
+
+  function Node.display_anchor(self)
+    local self_key = ids[self]
+    if self_key == nil or not Node_is[class_of(self)] then
+      self_key = self_of(self, "Node")
+    end
+    return prim["Node.display_anchor"](self_key)
+  end
+
+  function Node.set_display_anchor(self, anchor)
+    local self_key = ids[self]
+    if self_key == nil or not Node_is[class_of(self)] then
+      self_key = self_of(self, "Node")
+    end
+    return prim["Node.set_display_anchor"](self_key, anchor)
   end
 
   function Node.display_block(self)
@@ -1530,6 +1602,70 @@ do
       want(handler, "function", "handler")
     end
     return hand.Node.once(self, event, handler)
+  end
+end
+
+-- Image ---------------------------------------------------------------------
+
+do
+  local Image = class("Image")
+
+  function new.Image(number)
+    return prim["handles.new"]("Image", number)
+  end
+
+  ---@param handle table
+  ---@return integer number
+  function keys.Image(handle)
+    return prim["handles.key"](handle)
+  end
+
+  function Image.width(self)
+    local self_key = ids[self]
+    if self_key == nil or not Image_is[class_of(self)] then
+      self_key = self_of(self, "Image")
+    end
+    return prim["Image.width"](self_key)
+  end
+
+  function Image.height(self)
+    local self_key = ids[self]
+    if self_key == nil or not Image_is[class_of(self)] then
+      self_key = self_of(self, "Image")
+    end
+    return prim["Image.height"](self_key)
+  end
+
+  function Image.pixel(self, x, y)
+    local self_key = ids[self]
+    if self_key == nil or not Image_is[class_of(self)] then
+      self_key = self_of(self, "Image")
+    end
+    return prim["Image.pixel"](self_key, x, y)
+  end
+
+  function Image.resized(self, width, height)
+    local self_key = ids[self]
+    if self_key == nil or not Image_is[class_of(self)] then
+      self_key = self_of(self, "Image")
+    end
+    return prim["Image.resized"](self_key, width, height)
+  end
+
+  function Image.cropped(self, x, y, width, height)
+    local self_key = ids[self]
+    if self_key == nil or not Image_is[class_of(self)] then
+      self_key = self_of(self, "Image")
+    end
+    return prim["Image.cropped"](self_key, x, y, width, height)
+  end
+
+  function Image.encode(self)
+    local self_key = ids[self]
+    if self_key == nil or not Image_is[class_of(self)] then
+      self_key = self_of(self, "Image")
+    end
+    return prim["Image.encode"](self_key)
   end
 end
 
@@ -3329,12 +3465,28 @@ do
     return prim["Player.bossbars"](self_key)
   end
 
-  function Player.resource_pack_status(self)
+  function Player.resource_pack_status(self, pack)
     local self_key = ids[self]
     if self_key == nil or not Player_is[class_of(self)] then
       self_key = self_of(self, "Player")
     end
-    return prim["Player.resource_pack_status"](self_key)
+    return prim["Player.resource_pack_status"](self_key, pack)
+  end
+
+  function Player.push_resource_pack(self, pack)
+    local self_key = ids[self]
+    if self_key == nil or not Player_is[class_of(self)] then
+      self_key = self_of(self, "Player")
+    end
+    return prim["Player.push_resource_pack"](self_key, pack)
+  end
+
+  function Player.pop_resource_pack(self, pack)
+    local self_key = ids[self]
+    if self_key == nil or not Player_is[class_of(self)] then
+      self_key = self_of(self, "Player")
+    end
+    return prim["Player.pop_resource_pack"](self_key, pack)
   end
 
   function Player.send_block_change(self, location_or_position, state)
@@ -8571,6 +8723,29 @@ namespaces["nf.screens"] = function(scope, ns)
   end
 end
 
+namespaces["nf.images"] = function(scope, ns)
+  function ns.create(width, height, pixels)
+    return prim["nf.images.create"](scope, width, height, pixels)
+  end
+
+  function ns.fill(width, height, color)
+    return prim["nf.images.fill"](scope, width, height, color)
+  end
+
+  function ns.decode(data)
+    return prim["nf.images.decode"](scope, data)
+  end
+
+  function ns.download(options, callback)
+    local waker, task, token = async.begin("nf.images.download", callback)
+    local wait_id = prim["nf.images.download"](scope, options, waker)
+    if task ~= nil then
+      local value, err = async.wait(task, token, wait_id)
+      return value, err
+    end
+  end
+end
+
 namespaces["nf.files"] = function(scope, ns)
   function ns.get(path)
     return prim["nf.files.get"](scope, path)
@@ -8597,11 +8772,25 @@ namespaces["nf.text"] = function(scope, ns)
   function ns.width(text)
     return prim["nf.text.width"](scope, text)
   end
+
+  function ns.measure(text, options)
+    return prim["nf.text.measure"](scope, text, options)
+  end
 end
 
 namespaces["nf.looks"] = function(scope, ns)
   function ns.qualify(look)
     return prim["nf.looks.qualify"](scope, look)
+  end
+end
+
+namespaces["nf.packs"] = function(scope, ns)
+  function ns.rebuild()
+    prim["nf.packs.rebuild"](scope)
+  end
+
+  function ns.on_demand()
+    return prim["nf.packs.on_demand"](scope)
   end
 end
 

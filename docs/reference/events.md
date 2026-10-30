@@ -57,6 +57,7 @@ What `nf.on` listens for.
 | `player_quit` | [PlayerQuitEvent](types.md#playerquitevent) | A player left. Assign `event.message` to change what everyone is told, or `nil` to say nothing. Writable: `message`. |
 | `player_kick` | [PlayerKickEvent](types.md#playerkickevent) | A player is being kicked: by a command, a plugin or a script, or by the server (flying, timing out, a bad packet). `event:cancel()` keeps them on the server; assign `event.text` to change what their screen says, or `event.message` to change what everyone is told (`nil` for nothing). Leaving then goes on to `player_quit`. **Cancellable.** Writable: `text`, `message`. |
 | `player_arrive` | [PlayerArriveEvent](types.md#playerarriveevent) | A player a script on another server sent here (`nf.network.send_player`) has joined, with the data it sent along. Heard the tick after their `player_join`, so whatever `player_join` set up is there. |
+| `player_resource_pack_status` | [PlayerResourcePackStatusEvent](types.md#playerresourcepackstatusevent) | A player's game said what became of a resource pack the server sent it: the project's as they joined or after a rebuild, or an `onDemand` one a script pushed (`event.pack`). |
 
 ### Players: chat and commands
 
@@ -223,6 +224,16 @@ end, { every = 20 })
 ```lua
 nf.on("player_join", function(event)
   event.message = "<yellow>" .. nf.text.escape(event.player:name()) .. " is here"
+end)
+```
+
+#### Example: nf player_resource_pack_status
+
+```lua
+nf.on("player_resource_pack_status", function(event)
+  if event.pack == "featured" and event.status == "loaded" then
+    event.player:send_message("<gold>This week's games are in!")
+  end
 end)
 ```
 
@@ -667,6 +678,7 @@ What [Player](player.md) listens for.
 | `quit` | [PlayerQuitEvent](types.md#playerquitevent) | A player left. Assign `event.message` to change what everyone is told, or `nil` to say nothing. Only this player's: heard before `nf.on("player_quit")`, with the same event, so `event:stop()` keeps it from there. Bubbles. Writable: `message`. |
 | `kick` | [PlayerKickEvent](types.md#playerkickevent) | A player is being kicked: by a command, a plugin or a script, or by the server (flying, timing out, a bad packet). `event:cancel()` keeps them on the server; assign `event.text` to change what their screen says, or `event.message` to change what everyone is told (`nil` for nothing). Leaving then goes on to `player_quit`. Only this player's: heard before `nf.on("player_kick")`, with the same event, so `event:stop()` keeps it from there. **Cancellable.** Bubbles. Writable: `text`, `message`. |
 | `arrive` | [PlayerArriveEvent](types.md#playerarriveevent) | A player a script on another server sent here (`nf.network.send_player`) has joined, with the data it sent along. Heard the tick after their `player_join`, so whatever `player_join` set up is there. Only this player's: heard before `nf.on("player_arrive")`, with the same event, so `event:stop()` keeps it from there. Bubbles. |
+| `resource_pack_status` | [PlayerResourcePackStatusEvent](types.md#playerresourcepackstatusevent) | A player's game said what became of a resource pack the server sent it: the project's as they joined or after a rebuild, or an `onDemand` one a script pushed (`event.pack`). Only this player's: heard before `nf.on("player_resource_pack_status")`, with the same event, so `event:stop()` keeps it from there. Bubbles. |
 
 ### Chat and commands
 

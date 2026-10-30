@@ -292,6 +292,10 @@ object ProblemCodes {
     val CENTITY_UNKNOWN_ITEM = error("centity.unknown-item", CENTITY, "An item display names an item the target version doesn't have.")
     val CENTITY_LINE_WIDTH = error("centity.line-width", CENTITY, "A text display's `lineWidth` isn't positive.")
     val CENTITY_BACKGROUND = error("centity.background", CENTITY, "A text display's `background` isn't `#AARRGGBB`.")
+    val CENTITY_COLOR = error("centity.color", CENTITY, "A rect display's `color` isn't `#RRGGBB` or `#AARRGGBB`.")
+    val CENTITY_DISPLAY_SIZE = error("centity.display-size", CENTITY, "A rect or image display's `size` isn't two lengths more than 0.")
+    val CENTITY_IMAGE_SIZE =
+        error("centity.image-size", CENTITY, "An image display's `width` and `height` are more pixels than it can draw.")
     val CENTITY_HITBOX_BOTH = error("centity.hitbox-both", CENTITY, "A hitbox has both `boxes` and `shape: \"collision\"`.")
     val CENTITY_HITBOX_COLLISION =
         error("centity.hitbox-collision", CENTITY, "`shape: \"collision\"` is on a node without a block display.")
@@ -853,6 +857,11 @@ object ProblemCodes {
     // ---- resource packs -------------------------------------------------------
 
     val RESOURCE_PACK_KEY = error("resource_pack.key", RESOURCE_PACK, "A skin, glyph, item model, tooltip or equipment key isn't an id.")
+    val RESOURCE_PACK_ON_DEMAND = error(
+        "resource_pack.on-demand",
+        RESOURCE_PACK,
+        "An `onDemand` pack draws something every player's game needs: blocks, the HUD, or the game's own textures, models or sounds."
+    )
     val RESOURCE_PACK_TEXTURE_PATH =
         error("resource_pack.texture-path", RESOURCE_PACK, "A texture isn't a `.png` path inside the resource pack's `textures/` folder.")
     val RESOURCE_PACK_TEXTURE_MISSING = error("resource_pack.texture-missing", RESOURCE_PACK, "A texture names a file that doesn't exist.")

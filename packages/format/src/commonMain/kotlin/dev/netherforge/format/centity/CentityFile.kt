@@ -1,6 +1,7 @@
 package dev.netherforge.format.centity
 
 import dev.netherforge.format.game.Box
+import dev.netherforge.format.image.Pixels
 import dev.netherforge.format.json.CanonicalJson
 import dev.netherforge.format.math.Vec3
 import dev.netherforge.format.project.Names
@@ -13,6 +14,7 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.Transient
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.descriptors.buildClassSerialDescriptor
 import kotlinx.serialization.descriptors.element
@@ -394,12 +396,117 @@ data class TextDisplay(
     /** Pixels before wrapping. */
     val lineWidth: Int? = null,
     val seeThrough: Boolean? = null,
-    val shadow: Boolean? = null
+    val shadow: Boolean? = null,
+    /**
+     * Where the node's origin is on the text: placed by that point of its lines, the server measuring it with the
+     * game's font (`fonts/default.json`). Lines then break only at line breaks, never at [lineWidth]. Default none:
+     * the text stands on the origin, centred across it, as the game draws it.
+     */
+    val anchor: Anchor? = null,
+    /**
+     * What draws an image's text, run by run: never in a file, only what the engine draws an [ImageDisplay]
+     * as. [text] says the same as MiniMessage; a platform draws these instead, each run a piece of its own,
+     * since a picture's text is far longer than one piece of the game's text may be, and parsing it would
+     * cost the server's tick.
+     */
+    @Transient val runs: List<TextRun>? = null
 ) : DisplayDef {
     companion object {
         const val DEFAULT_LINE_WIDTH = 200
         val DEFAULT_BILLBOARD = Billboard.CENTER
     }
+}
+
+/** A run of an image's text: characters, in one colour ([rgb], `0xRRGGBB`), or none for moves and line breaks. */
+data class TextRun(val text: String, val rgb: Int? = null)
+
+/**
+ * A flat rectangle of one colour, exactly [size] blocks, in the node's XY plane facing -Z as text does. Drawn by
+ * the server as a text display's background, so it needs nothing in a resource pack but the space characters every
+ * built pack has.
+ */
+@Serializable
+@SerialName("rect")
+data class RectDisplay(
+    /** `#RRGGBB`, or `#AARRGGBB` for one you can see through. */
+    val color: String,
+    /** Width and height in blocks, before the node's scale. Default `[1, 1]`. */
+    val size: List<Double>? = null,
+    /** Which point of it is at the node's origin. Default [Anchor.CENTER]. */
+    val anchor: Anchor? = null
+) : DisplayDef {
+    companion object {
+        val DEFAULT_SIZE = listOf(1.0, 1.0)
+        val DEFAULT_ANCHOR = Anchor.CENTER
+    }
+}
+
+/**
+ * A picture [width] by [height] pixels that a script gives at runtime (`node:set_image`), filling [size] blocks
+ * in the node's XY plane facing -Z as text does. Drawn as rows of the engine's pixel glyphs, one colour per run,
+ * so it moves and eases like any display. Blank (fully transparent) until a script sets one.
+ */
+@Serializable
+@SerialName("image")
+data class ImageDisplay(
+    val width: Int,
+    val height: Int,
+    /** Width and height in blocks, before the node's scale. Default 16 pixels a block. */
+    val size: List<Double>? = null,
+    /** Which point of it is at the node's origin. Default [Anchor.CENTER]. */
+    val anchor: Anchor? = null,
+    /** What it shows now: never in the file, only what a script set. Null is blank. */
+    @Transient val pixels: Pixels? = null
+) : DisplayDef {
+    /** [size], or its default. */
+    val sizeOrDefault: List<Double> get() = size ?: listOf(width / PIXELS_PER_BLOCK, height / PIXELS_PER_BLOCK)
+
+    companion object {
+        /** The most pixels either way. */
+        const val MAX_SIDE = 256
+
+        /** The most pixels in all: what one display's text can carry. */
+        const val MAX_PIXELS = 128 * 128
+
+        const val PIXELS_PER_BLOCK = 16.0
+        val DEFAULT_ANCHOR = Anchor.CENTER
+    }
+}
+
+/** A point of a display's rectangle: a corner, the middle of a side, or the centre. */
+@Serializable
+enum class Anchor(
+    /** From the left edge, as a share of the width. */
+    val x: Double,
+    /** From the bottom edge, as a share of the height. */
+    val y: Double
+) {
+    @SerialName("top_left")
+    TOP_LEFT(0.0, 1.0),
+
+    @SerialName("top")
+    TOP(0.5, 1.0),
+
+    @SerialName("top_right")
+    TOP_RIGHT(1.0, 1.0),
+
+    @SerialName("left")
+    LEFT(0.0, 0.5),
+
+    @SerialName("center")
+    CENTER(0.5, 0.5),
+
+    @SerialName("right")
+    RIGHT(1.0, 0.5),
+
+    @SerialName("bottom_left")
+    BOTTOM_LEFT(0.0, 0.0),
+
+    @SerialName("bottom")
+    BOTTOM(0.5, 0.0),
+
+    @SerialName("bottom_right")
+    BOTTOM_RIGHT(1.0, 0.0)
 }
 
 /** Which axes a display turns on to face its viewer. */

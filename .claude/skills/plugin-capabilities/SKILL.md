@@ -302,7 +302,11 @@ Servers behind one Velocity proxy, talking through a **hub** the proxy runs. Thr
   tells it of `ServerConnectedEvent` and `DisconnectEvent` (`PostOrder.LAST`), moves players with
   `createConnectionRequest(server).connect()` (each failed status said in words), and adds `/nfhub`. The descriptor
   is a hand-written `velocity-plugin.json` (no annotation processing in a Kotlin build). A server's name must be one
-  the proxy has (matched ignoring case, as Velocity does).
+  the proxy has (matched ignoring case, as Velocity does). With `clear-resource-packs` (default true), its
+  `ServerConnectedEvent` handler takes off the packs whose `originalOrigin` is `DOWNSTREAM_SERVER` when the player
+  had a previous server: Velocity keeps a server's packs across a switch until the next server replaces them, so a
+  lobby's would follow a player into a game that sends none. Velocity holds the new backend's packets while the
+  event runs, so the new server's own packs (sent as it hears the join) arrive after the removal.
 - **The editor's dev networks**: a dev server started with `-Dnetherforge.network.hub` (and `.server`, and the secret
   in `NETHERFORGE_NETWORK_SECRET`, never on the command line) is in that network whatever `config.yml` says; the
   owner's limits stay (`RuntimeConfig.devNetwork`). The editor runs the proxy and the servers (tauri-backend's "Dev

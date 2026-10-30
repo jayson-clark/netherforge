@@ -293,6 +293,17 @@ with a new secret:
 | `max-bytes-per-package`   | Bytes of values one package may keep across its shared maps.                                                | `16777216`         |
 | `request-timeout-seconds` | How long the hub waits for a server to answer a request.                                                    | `30`               |
 | `max-queued-frames`       | What may wait to be sent to one server; past it, the server is too slow and the hub drops its connection.   | `50000`            |
+| `clear-resource-packs`    | Whether the resource packs a server sent a player come off as they move to another server.                  | `true`             |
+
+**Resource packs across the network.** Velocity keeps the resource packs a
+server sent a player when they move to another server, until that server
+sends its own: a lobby pack that hides the HUD or replaces sprites would
+follow them into a game that sends none. With `clear-resource-packs` on (the
+default), the hub takes the packs the server they left sent off them as they
+arrive at the next, and the next server's own arrive as they join it
+(NetherForge servers send theirs then, taking anything else off first). The
+cost is a loading screen on each move between servers that both have packs,
+even the same one; turn it off for a network whose servers share one pack.
 
 Shared maps are saved in `plugins/netherforge/maps.json` on the proxy, every
 few seconds while they change and when it stops. Back it up with the proxy.

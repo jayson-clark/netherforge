@@ -31,6 +31,7 @@ sealed interface LuaHandle {
         fun build(luaClass: String, keyValues: List<Any>): LuaHandle = when (luaClass) {
             "Centity" -> Centity(keyValues[0] as String)
             "Node" -> Node(keyValues[0] as String, keyValues[1] as String)
+            "Image" -> Image(keyValues[0] as Long)
             "Entity" -> Entity(keyValues[0] as String)
             "Sender" -> Sender(keyValues[0] as String)
             "World" -> World(keyValues[0] as String)
@@ -104,6 +105,22 @@ sealed interface LuaHandle {
 
         /** Node handles. */
         object Codec : HandleCodec<Node>("Node", setOf("Node"))
+    }
+
+    /** A picture made at runtime by `nf.images`, for image displays (`node:set_image`). */
+    class Image(val number: Long) : LuaHandle {
+        override val luaClass: String get() = "Image"
+
+        override val keyValues: List<Any> get() = listOf(number)
+
+        override fun equals(other: Any?): Boolean = other is Image && other.number == number
+
+        override fun hashCode(): Int = 31 * "Image".hashCode() + number.hashCode()
+
+        override fun toString(): String = "$luaClass($number)"
+
+        /** Image handles. */
+        object Codec : HandleCodec<Image>("Image", setOf("Image"))
     }
 
     /** Something in a world that isn't a block: an arrow, a minecart, a dropped item, a mob, a player. */

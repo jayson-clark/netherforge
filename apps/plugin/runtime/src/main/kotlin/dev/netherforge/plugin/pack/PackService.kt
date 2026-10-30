@@ -9,8 +9,12 @@ import dev.netherforge.format.project.VanillaKind
 import dev.netherforge.format.resourcepack.ResourcePackKind
 import dev.netherforge.format.screen.VideoKind
 import dev.netherforge.plugin.RuntimeLog
+import dev.netherforge.plugin.binding.Events
+import dev.netherforge.plugin.binding.LuaHandle
+import dev.netherforge.plugin.binding.PlayerResourcePackStatusEvent
 import dev.netherforge.plugin.platform.PlayerRef
 import dev.netherforge.plugin.project.Resource
+import dev.netherforge.plugin.script.Scripts
 import dev.netherforge.plugin.session.ReloadBatch
 import dev.netherforge.plugin.session.RuntimeService
 import dev.netherforge.plugin.session.SessionProject
@@ -20,7 +24,13 @@ import dev.netherforge.plugin.session.SessionProject
  * building it from the session's project, sending it to everyone online and
  * to whoever joins, and rebuilding it when a pack is saved.
  */
-internal class PackService(private val packs: Packs, private val log: RuntimeLog) : RuntimeService {
+internal class PackService(
+    private val packs: Packs,
+    private val log: RuntimeLog,
+    private val scripts: Scripts,
+    /** An `onDemand` pack's name as the server knows it, as the script reading it writes it. */
+    private val spell: (String) -> String
+) : RuntimeService {
     override val name get() = "resource pack"
 
     /** What the last build found wrong that the format didn't (the server's pack format unknown). */
@@ -32,7 +42,18 @@ internal class PackService(private val packs: Packs, private val log: RuntimeLog
     }
 
     override fun start() {
+        packs.onStatus = { player, pack, status ->
+            val handle = LuaHandle.Player(player.toString())
+            scripts.emit(
+                listOf(Events.PLAYER_RESOURCE_PACK_STATUS to handle, Events.NF_PLAYER_RESOURCE_PACK_STATUS to null),
+                PlayerResourcePackStatusEvent(handle, pack?.let(spell), status)
+            )
+        }
         packs.sendAll()
+    }
+
+    override fun stop() {
+        packs.onStatus = null
     }
 
     override fun playerJoined(player: PlayerRef) {
@@ -53,10 +74,9 @@ internal class PackService(private val packs: Packs, private val log: RuntimeLog
     override val follows: Set<String> get() = setOf(BlockKind.id, VanillaKind.id, VideoKind.id)
 
     override fun followed(kind: String, ids: Set<String>, batch: ReloadBatch) {
-        val before = packs.built?.sha1
         problems = packs.rebuild(batch.snapshot)
-        val built = packs.built
-        if (built != null && built.sha1 != before) packs.sendAll()
+        // Only what changed goes: the project's pack to whoever lacks this build, an `onDemand` one to whoever has an older one.
+        packs.sendAll()
     }
 
     /**
@@ -66,10 +86,9 @@ internal class PackService(private val packs: Packs, private val log: RuntimeLog
      */
     override fun reload(kind: KindSpec<*, *>, ids: Set<String>, batch: ReloadBatch) {
         val snapshot = batch.snapshot
-        val before = packs.built?.sha1
         problems = packs.rebuild(snapshot)
         val built = packs.built
-        val sent = if (built != null && built.sha1 != before) packs.sendAll() else 0
+        val sent = packs.sendAll()
         val broken = snapshot.everywhere(ResourcePackKind).isNotEmpty() && snapshot.compiledResourcePacks.isEmpty()
         if (broken) log.warn("A resource pack has errors; players keep the last good resource pack")
         val info = built?.let { PackBuild(it.sha1, it.url, it.bytes.size) }

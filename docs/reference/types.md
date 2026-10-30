@@ -509,6 +509,14 @@ How `node:rope_between` strings a rope. A key that isn't one of these is an erro
 | --- | --- | --- |
 | `length` | `number?` | How long the rope is, in blocks: shorter than the ends' distance it's taut, longer it sags by its slack. Default: always taut. |
 
+### PoseOptions {#poseoptions}
+
+How `set_translation`, `set_rotation` and `set_scale` move a node. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `instant` | `boolean?` | Jumps there this once, with no easing, and everything under it with it; later moves still ease over its `interpolation_ticks`. Default `false`. |
+
 ### TweenOptions {#tweenoptions}
 
 A tween for `node:tween`: at least one of `translation`, `rotation` and `scale`. A key that isn't one of these is an error.
@@ -624,6 +632,7 @@ An item stack as a plain table: what `menu:item` returns and what `menu:set_item
 | `hidden_tooltip_components` | `("attribute_modifiers"\|"banner_patterns"\|"bees"\|"block_entity_data"\|"block_state"\|"bundle_contents"\|"can_break"\|"can_place_on"\|"charged_projectiles"\|"container"\|"container_loot"\|"damage"\|"dyed_color"\|"enchantments"\|"entity_data"\|"firework_explosion"\|"fireworks"\|"instrument"\|"intangible_projectile"\|"jukebox_playable"\|"lore"\|"map_id"\|"ominous_bottle_amplifier"\|"painting/variant"\|"pot_decorations"\|"potion_contents"\|"profile"\|"sign_text_back"\|"sign_text_front"\|"stored_enchantments"\|"sulfur_cube_content"\|"suspicious_stew_effects"\|"trim"\|"tropical_fish/pattern"\|"unbreakable"\|"written_book_content")[]?` | Lines of its tooltip to hide, by the component that draws them: `{ "unbreakable", "attribute_modifiers" }` hides "Unbreakable" and the attribute lines ("+2 Attack Damage"). The components still apply: the item stays unbreakable and keeps its modifiers. Left out shows the tooltip as it is; `{}` shows every line. A value that isn't a line an item can hide is an error, and so is one the server's Minecraft version doesn't have. |
 | `food` | [`ItemFood`](types.md#itemfood)`?` | What eating it does. Any item with `food` can be eaten, even one that isn't food: `{ nutrition = 4, saturation = 2.4 }`. |
 | `cooldown` | [`ItemCooldown`](types.md#itemcooldown)`?` | A cooldown after using it (an ender pearl's): `{ seconds = 2 }`. Items with the same `group` share one. |
+| `invisible` | `boolean?` | Drawn as nothing wherever it's drawn: in a slot, on the ground, and in a hand, where the player's own arm isn't drawn either (as with anything held). An empty look every built resource pack has, in place of `item_model`. With `hold`, it's a pointer: no arm in the way, the right button pressed heard as `player_use_item` and let go as `player_stop_using_item`. |
 | `hold` | `boolean\|`[`ItemHold`](types.md#itemhold)`?` | Held down with no end: a right click lasts until the player lets go, never finishes and uses nothing up. Letting go is `player_stop_using_item`, and `event.ticks` says how long it was held: a flail thrown on release, a charge that grows while held. `true` draws nothing (no zoom, no pose); `{ animation = "trident" }` poses the player as that use of the game's does, a knife raised to throw. Read back, it's `true` or that table, as it was given (a hold whose animation is `"none"` reads back `true`). Unless `use_effects` says otherwise, the player keeps their speed and can sprint, whatever the animation. It can't go with `food`, and only works on a kind with no use of its own (`minecraft:stick`, not a bow or a shield). Left clicks don't attack while it's held. |
 | `use_effects` | [`ItemUseEffects`](types.md#itemuseeffects)`?` | How a player moves while using it, for any use: a `hold`, eating, a bow drawn, a shield raised. `{ speed_multiplier = 1, can_sprint = true }` lets them eat at a run. |
 | `data` | `table<string, any>?` | Your script's own data, saved on the stack itself (its persistent data container), so it goes wherever the item goes: tag a coin with `data = { coin = true }`. A table keyed by strings, holding what a `data()` table may: strings, numbers, booleans, tables of them, `Vec3`s, `Location`s, `Item` tables, and `Player` and `Centity` handles, which come back as the same types. Absent when the stack carries none. Anything else (a function, a `Menu` window) is an error, naming where it was. |
@@ -711,6 +720,17 @@ What a spawn condition (`nf.spawning.condition`) is asked about: one centity at 
 | `centity` | `string` | Which centity, as the project names it: its folder name under `centities/` (`wisp`), or `acme:wisp` for one a package brings. |
 | `location` | [`Location`](location.md) | Where it would stand: the block its feet would be in. |
 | `player` | [`Player`](player.md) | The player it would appear near. |
+
+### HttpRequestOptions {#httprequestoptions}
+
+What `nf.http.request` takes.
+
+| Field | Type | |
+| --- | --- | --- |
+| `url` | `string` | An `http://` or `https://` URL, without a user name or password in it (send credentials in a header). Its host must be one the calling package declares in `requires`. |
+| `method` | `"GET"\|"POST"\|"PUT"\|"PATCH"\|"DELETE"\|"HEAD"\|"OPTIONS"?` | The HTTP method; `"GET"` when left out. |
+| `headers` | `table<string, string>?` | Request headers by name. `Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `Upgrade` and the like are set by the server and refused here. A `User-Agent` of `NetherForge` is sent unless you give one. `Authorization`, `Cookie` and `Proxy-Authorization` are dropped when a redirect leads to another host. |
+| `body` | `string?` | The request body, as text (UTF-8). Its size is limited by `http.max-request-bytes` in the server's `config.yml`. A `GET`, `HEAD` or `OPTIONS` can't have one. |
 
 ### ParticlePlayOptions {#particleplayoptions}
 
@@ -928,6 +948,18 @@ Has the fields and methods of [Event](#event) too.
 | `player` | [`Player`](player.md) | Who it was. |
 | `first_join` | `boolean` | Whether they have never played here before. |
 | `message` | [`Text`](index.md#types)`?` | The join message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none. |
+
+### PlayerResourcePackStatusEvent {#playerresourcepackstatusevent}
+
+What a player's game said about a resource pack the server sent it.
+
+Has the fields and methods of [Event](#event) too.
+
+| Field | Type | |
+| --- | --- | --- |
+| `player` | [`Player`](player.md) | Who it was. |
+| `pack` | `string?` | The `onDemand` pack it was (`player:push_resource_pack`), by name; `nil` for the project's own. |
+| `status` | `"loaded"\|"declined"\|"failed"\|"pending"` | `"pending"` (accepted, downloading), then `"loaded"`, `"declined"` or `"failed"`. |
 
 ### PlayerQuitEvent {#playerquitevent}
 
@@ -2542,6 +2574,7 @@ A partial `Item` that picks stacks: a stack matches when every field given match
 | `hidden_tooltip_components` | `("attribute_modifiers"\|"banner_patterns"\|"bees"\|"block_entity_data"\|"block_state"\|"bundle_contents"\|"can_break"\|"can_place_on"\|"charged_projectiles"\|"container"\|"container_loot"\|"damage"\|"dyed_color"\|"enchantments"\|"entity_data"\|"firework_explosion"\|"fireworks"\|"instrument"\|"intangible_projectile"\|"jukebox_playable"\|"lore"\|"map_id"\|"ominous_bottle_amplifier"\|"painting/variant"\|"pot_decorations"\|"potion_contents"\|"profile"\|"sign_text_back"\|"sign_text_front"\|"stored_enchantments"\|"sulfur_cube_content"\|"suspicious_stew_effects"\|"trim"\|"tropical_fish/pattern"\|"unbreakable"\|"written_book_content")[]?` | Lines of its tooltip to hide, by the component that draws them: `{ "unbreakable", "attribute_modifiers" }` hides "Unbreakable" and the attribute lines ("+2 Attack Damage"). The components still apply: the item stays unbreakable and keeps its modifiers. Left out shows the tooltip as it is; `{}` shows every line. A value that isn't a line an item can hide is an error, and so is one the server's Minecraft version doesn't have. |
 | `food` | [`ItemFood`](types.md#itemfood)`?` | What eating it does. Any item with `food` can be eaten, even one that isn't food: `{ nutrition = 4, saturation = 2.4 }`. |
 | `cooldown` | [`ItemCooldown`](types.md#itemcooldown)`?` | A cooldown after using it (an ender pearl's): `{ seconds = 2 }`. Items with the same `group` share one. |
+| `invisible` | `boolean?` | Drawn as nothing wherever it's drawn: in a slot, on the ground, and in a hand, where the player's own arm isn't drawn either (as with anything held). An empty look every built resource pack has, in place of `item_model`. With `hold`, it's a pointer: no arm in the way, the right button pressed heard as `player_use_item` and let go as `player_stop_using_item`. |
 | `hold` | `boolean\|`[`ItemHold`](types.md#itemhold)`?` | Held down with no end: a right click lasts until the player lets go, never finishes and uses nothing up. Letting go is `player_stop_using_item`, and `event.ticks` says how long it was held: a flail thrown on release, a charge that grows while held. `true` draws nothing (no zoom, no pose); `{ animation = "trident" }` poses the player as that use of the game's does, a knife raised to throw. Read back, it's `true` or that table, as it was given (a hold whose animation is `"none"` reads back `true`). Unless `use_effects` says otherwise, the player keeps their speed and can sprint, whatever the animation. It can't go with `food`, and only works on a kind with no use of its own (`minecraft:stick`, not a bow or a shield). Left clicks don't attack while it's held. |
 | `use_effects` | [`ItemUseEffects`](types.md#itemuseeffects)`?` | How a player moves while using it, for any use: a `hold`, eating, a bow drawn, a shield raised. `{ speed_multiplier = 1, can_sprint = true }` lets them eat at a run. |
 | `data` | `table<string, any>?` | Your script's own data, saved on the stack itself (its persistent data container), so it goes wherever the item goes: tag a coin with `data = { coin = true }`. A table keyed by strings, holding what a `data()` table may: strings, numbers, booleans, tables of them, `Vec3`s, `Location`s, `Item` tables, and `Player` and `Centity` handles, which come back as the same types. Absent when the stack carries none. Anything else (a function, a `Menu` window) is an error, naming where it was. |
@@ -2705,6 +2738,23 @@ How `nf.crypto.sign` signs. A key that isn't one of these is an error.
 | `algorithm` | `"sha256"\|"sha1"\|"sha512"?` | The hash. Default `"sha256"`. |
 | `encoding` | `"hex"\|"base64"?` | How the result is written: `"hex"` (lowercase), or `"base64"`. Default `"hex"`. |
 
+### TextMeasureOptions {#textmeasureoptions}
+
+How `nf.text.measure` measures. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `scale` | `number?` | The text display's scale (its node's, and its parents'). Default 1. |
+
+### TextSize {#textsize}
+
+How big text draws on a text display, in blocks: what an `anchor`ed text display is placed by.
+
+| Field | Type | |
+| --- | --- | --- |
+| `width` | `number` | Its widest line: every character and the gap after it. |
+| `height` | `number` | Its lines, a quarter of a block each at scale 1. |
+
 ## Files, data, the web and computation
 
 ### DatabaseStatement {#databasestatement}
@@ -2724,17 +2774,6 @@ What `db:execute` (and each statement of `db:transaction`) did.
 | --- | --- | --- |
 | `changes` | `integer` | How many rows it inserted, updated or deleted. |
 | `last_insert_id` | `integer?` | On the package's own database, the `rowid` of the last row it inserted (the new row's `INTEGER PRIMARY KEY`), or `nil` when nothing was ever inserted. On a MySQL connection, the `AUTO_INCREMENT` key the statement generated, or `nil` when it generated none. On PostgreSQL always `nil`: ask for the key with `INSERT ... RETURNING id` through `db:query`. |
-
-### HttpRequestOptions {#httprequestoptions}
-
-What `nf.http.request` takes.
-
-| Field | Type | |
-| --- | --- | --- |
-| `url` | `string` | An `http://` or `https://` URL, without a user name or password in it (send credentials in a header). Its host must be one the calling package declares in `requires`. |
-| `method` | `"GET"\|"POST"\|"PUT"\|"PATCH"\|"DELETE"\|"HEAD"\|"OPTIONS"?` | The HTTP method; `"GET"` when left out. |
-| `headers` | `table<string, string>?` | Request headers by name. `Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `Upgrade` and the like are set by the server and refused here. A `User-Agent` of `NetherForge` is sent unless you give one. `Authorization`, `Cookie` and `Proxy-Authorization` are dropped when a redirect leads to another host. |
-| `body` | `string?` | The request body, as text (UTF-8). Its size is limited by `http.max-request-bytes` in the server's `config.yml`. A `GET`, `HEAD` or `OPTIONS` can't have one. |
 
 ### HttpResponse {#httpresponse}
 

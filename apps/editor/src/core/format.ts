@@ -313,6 +313,7 @@ export type {
 export * from '@netherforge/format/constants'
 export {
   AdvancementFrameValues,
+  AnchorValues,
   AttributeOperationValues,
   AttributeSlotValues,
   BillboardValues,

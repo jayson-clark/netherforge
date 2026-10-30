@@ -11,6 +11,36 @@ release is cut.
 
 ### Added
 
+- **Image displays.** `{ "type": "image", "width": 96, "height": 54 }` on a
+  centity node shows a picture a script sets at runtime
+  (`node:set_image`), per centity, with no resource pack change: drawn as rows
+  of the engine's pixel glyphs, so it moves and eases like any display, its
+  pixels square and filling exactly its `size` in blocks. `nf.images` makes
+  pictures from colours or base64 bytes, decodes image files and downloads
+  them (`nf.images.download`, held to `nf.http`'s rules); an `Image` resizes,
+  crops and encodes to PNG. A picture already shown isn't sent again, and a
+  centity's changed pictures share about 64 KiB of text a tick.
+- **Rect displays and anchors.** `{ "type": "rect", "color", "size" }` is a
+  rectangle exactly `size` blocks (recoloured and resized in place by a
+  script), and `anchor` (`top_left` … `bottom_right`) places a rect, an image
+  or a text display by that point, the engine accounting for how the game lays
+  text out. `nf.text.measure` gives text's size in blocks. The characters
+  `nf.text.glyph` gives measure as their glyph (`nf.text.width`,
+  `nf.text.measure`), so a glyph tinted by its text's colour can be anchored
+  too; before, only the `<glyph:…>` tag could, and an anchored tinted glyph
+  was drawn unanchored.
+- **On-demand resource packs.** `"onDemand": true` in a `pack.json` leaves the
+  pack out of the one players join with; `player:push_resource_pack` and
+  `pop_resource_pack` send and take it per player, `player_resource_pack_status`
+  says what their game made of it, and `nf.packs.rebuild()` reads the
+  packs from disk again and resends what changed.
+- **Invisible items.** `invisible: true` on an item draws it as nothing, so a
+  held one hides the first-person arm; with `hold`, it's a pointer whose right
+  button is heard pressed (`player_use_item`) and let go
+  (`player_stop_using_item`).
+- **`{ instant = true }` for `set_translation`, `set_rotation` and
+  `set_scale`**: the node jumps there once and still eases later moves.
+
 - **`nf.encoding` and `nf.crypto`, for talking to web services.**
   `nf.encoding` writes and reads URL escapes, form bodies (nested tables as
   `name[key]`, lists from 0, as Stripe and similar APIs take them), base64 (both
@@ -60,10 +90,20 @@ release is cut.
 
 ### Changed
 
+- **The network's hub takes a server's resource packs off a player as they
+  move to another server** (`clear-resource-packs` in `hub.properties`, on by
+  default), so a lobby's pack (its hidden HUD) no longer follows them into a
+  game that sends none.
 - **3D views draw only when something changes.** A centity, particle effect,
   cutscene, structure or map that's on screen and standing still no longer
   redraws 60 times a second, so the editor uses far less CPU and GPU (and
   battery) while you work in it.
+
+### Fixed
+
+- **A hidden centity node shown again appears where it is**, rather than
+  easing in from the centity's position; hiding one no longer shrinks it
+  towards there either.
 
 ## [0.1.0-rc.1] - 2026-10-28
 

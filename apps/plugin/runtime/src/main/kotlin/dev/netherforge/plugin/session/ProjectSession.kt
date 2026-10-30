@@ -45,6 +45,7 @@ import dev.netherforge.plugin.dialog.Dialogs
 import dev.netherforge.plugin.http.Connections
 import dev.netherforge.plugin.http.HttpClient
 import dev.netherforge.plugin.hud.Huds
+import dev.netherforge.plugin.image.Images
 import dev.netherforge.plugin.interop.Placeholders
 import dev.netherforge.plugin.interop.Plugins
 import dev.netherforge.plugin.item.Items
@@ -233,6 +234,14 @@ class ProjectSession internal constructor(
     /** `nf.http`'s client and its connections' transport: closed with the session, so reloads leave no threads or sockets behind. */
     val http = service(HttpClient(config.testing != null) { config.http })
 
+    /** The pictures scripts hold (`nf.images`), let go of as Lua lets go of their handles; past the limit, a collection first. */
+    val images = Images {
+        scripts.host?.let {
+            it.collectGarbage()
+            it.sweepHandles()
+        }
+    }
+
     /** The streams and WebSockets scripts hold open, each its script's (after [http], so they end before it closes). */
     val connections = service(Connections(scripts, { config.http }, { http.connections }, { ticks }, keepHistory = config.testing != null))
 
@@ -314,7 +323,7 @@ class ProjectSession internal constructor(
     internal val effects = service(Effects(platform, names::packSound))
 
     /** Builds and sends the resource pack: first, since menus' skins and scripts' glyphs read the build. */
-    private val packService = service(PackService(packs, log))
+    private val packService = service(PackService(packs, log, scripts) { names.spell(it) })
 
     /** What scripts did wrong: the console, the editor and the problems list. */
     internal val reports = service(ScriptReports(this))
@@ -490,7 +499,8 @@ class ProjectSession internal constructor(
             handover.instances,
             { namespace },
             runtime.profiler.parts,
-            { entityHandle(it) }
+            { entityHandle(it) },
+            ::measureTextLines
         ) {
             data.remove(ScriptData.Owner.Centity(it))
         }
@@ -598,6 +608,7 @@ class ProjectSession internal constructor(
         // A dev server's debugger stops scripts through primitives of its own, and has its breakpoints in place before any runs.
         val debugging = runtime.debugger?.primitives { requireNotNull(scripts.host) { "no Lua state" } }.orEmpty()
         val host = LuaHost(api.primitives() + debugging, api, runtime.time, config.sandbox).also { it.gates = api.gates() }
+        host.handles.onRelease = { handle -> if (handle is LuaHandle.Image) images.release(handle.number) }
         scripts.attach(host)
         runtime.debugger?.sync(host)
         running = true
@@ -626,6 +637,7 @@ class ProjectSession internal constructor(
             }
         }
         scripts.detach()
+        images.clear()
         running = false
         started = false
         for (event in WatchedEvent.entries) if (watching[event] == true) watch(event, false)
@@ -781,7 +793,22 @@ class ProjectSession internal constructor(
      */
     internal fun measureText(text: String): Int? {
         val font = snapshot.defaultFont ?: return null
-        return TextWidth(font, packs::glyphAdvance).measure(text)
+        return TextWidth(font, glyphChar = packs::glyphCharAdvance, glyph = packs::glyphAdvance).measure(text)
+    }
+
+    /** A script asked for the resource packs read again from disk: the runtime does it once this tick is over. */
+    internal var packsWanted = false
+
+    /** `nf.packs.rebuild`: the resource packs read again from disk and built, after this tick. */
+    internal fun rebuildResourcePacks() {
+        packsWanted = true
+    }
+
+    /** [measureText], with how many lines it is: what an anchored text display is placed by. */
+    internal fun measureTextLines(text: String): Pair<Int, Int>? {
+        val font = snapshot.defaultFont ?: return null
+        val measure = TextWidth(font, glyphChar = packs::glyphCharAdvance, glyph = packs::glyphAdvance)
+        return measure.measure(text)?.let { it to measure.lineCount(text) }
     }
 
     /** `<at>` tags already reported as unplaceable, so text sent every tick warns once. */
@@ -797,7 +824,11 @@ class ProjectSession internal constructor(
     internal fun layoutText(text: String): String {
         if (!text.contains("<at", ignoreCase = true)) return text
         val font = snapshot.defaultFont
-        val width = if (font != null) TextWidth(font, packs::glyphAdvance) else TextWidth({ null }, packs::glyphAdvance)
+        val width = if (font != null) {
+            TextWidth(font, glyphChar = packs::glyphCharAdvance, glyph = packs::glyphAdvance)
+        } else {
+            TextWidth({ null }, glyphChar = packs::glyphCharAdvance, glyph = packs::glyphAdvance)
+        }
         val layout = width.layout(text)
         for (tag in layout.unplaced) {
             if (unplacedAts.size < MAX_REPORTED_ATS && unplacedAts.add(tag)) {

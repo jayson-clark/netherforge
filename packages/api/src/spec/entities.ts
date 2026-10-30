@@ -1479,11 +1479,35 @@ export const playerClass: LuaClass = {
       "The project's boss bars they're among the viewers of (`bossbar:show_to`), offline or not.",
       'BossBar[]',
     ),
-    getter(
-      'resource_pack_status',
-      'What became of the project\'s resource pack on their game: `"loaded"`, `"declined"`, `"failed"`, `"pending"` (accepted, still downloading), or `nil` before their game has answered (and when they\'re offline, or there\'s no resource pack).',
-      '"loaded"|"declined"|"failed"|"pending"|nil',
-    ),
+    {
+      name: 'resource_pack_status',
+      doc: 'What became of the project\'s resource pack on their game, or of an `onDemand` pack pushed to them: `"loaded"`, `"declined"`, `"failed"`, `"pending"` (accepted, still downloading), or `nil` before their game has answered (and when they\'re offline, or there\'s no such pack). `player_resource_pack_status` says when it changes.',
+      params: [
+        {
+          name: 'pack',
+          type: 'string',
+          doc: "An `onDemand` pack, by name. Left out, the project's pack.",
+          optional: true,
+        },
+      ],
+      returns: [{ type: '"loaded"|"declined"|"failed"|"pending"|nil' }],
+    },
+    {
+      name: 'push_resource_pack',
+      doc: "Sends them one of the project's `onDemand` resource packs (`\"onDemand\": true` in its `pack.json`), beside the packs they have: their game shows its loading screen while it applies it, so it's for things that change rarely (this week's featured banners), not every search. Pushing one they have changes nothing; one rebuilt since (`nf.packs.rebuild`) is sent to them again. `player_resource_pack_status` says what became of it. It's taken off again by `pop_resource_pack`, or when they leave. A name that isn't an `onDemand` pack is an error. `false` when they're offline, or nothing is built (the packs have errors).",
+      params: [
+        { name: 'pack', type: 'string', doc: 'The pack\'s name, as its folder is: `"featured"`.' },
+      ],
+      returns: [{ type: 'boolean' }],
+      example:
+        'nf.on("player_join", function(event)\n  event.player:push_resource_pack("featured")\nend)',
+    },
+    {
+      name: 'pop_resource_pack',
+      doc: "Takes an `onDemand` pack `push_resource_pack` sent them back off their game (a loading screen again). `false` when they're offline or don't have it.",
+      params: [{ name: 'pack', type: 'string', doc: '' }],
+      returns: [{ type: 'boolean' }],
+    },
     ...playerIllusionFunctions,
     {
       name: 'data',

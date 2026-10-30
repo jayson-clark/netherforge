@@ -113,7 +113,16 @@ class FakeSounds(private val platform: FakePlatform) : SoundOps {
 class FakePacks(private val platform: FakePlatform) : ResourcePackOps {
     val sent = mutableListOf<Pair<UUID, PackOffer>>()
 
+    /** Packs taken off players, by id. */
+    val removed = mutableListOf<Pair<UUID, UUID>>()
+
     /** Offers [pack]; a player whose game answers ([FakePlayer.packAnswer]) is heard answering. */
+    override fun remove(player: UUID, id: UUID): Boolean {
+        platform.players.byId[player] ?: return false
+        removed += player to id
+        return true
+    }
+
     override fun send(player: UUID, pack: PackOffer): Boolean {
         val who = platform.players.byId[player] ?: return false
         sent += player to pack

@@ -8,6 +8,7 @@ import dev.netherforge.format.menu.MenuKind
 import dev.netherforge.format.project.Names
 import dev.netherforge.format.recipe.RecipeKind
 import dev.netherforge.format.ref.ResourceRef
+import dev.netherforge.format.resourcepack.ResourcePackKind
 import dev.netherforge.format.sky.SkyKind
 import dev.netherforge.plugin.binding.ActiveBuff
 import dev.netherforge.plugin.binding.AdvancementProgress
@@ -477,7 +478,31 @@ internal class PlayerImpl(private val session: ProjectSession) : PlayerApi {
     override fun bossbars(self: LuaHandle.Player): List<LuaHandle.BossBar> =
         self.uuidOrNull()?.let(session.bossBars::of).orEmpty().map { LuaHandle.BossBar(it.id.toLong()) }
 
-    override fun resourcePackStatus(self: LuaHandle.Player): String? = online(self)?.let { session.packs.status(it) }
+    override fun resourcePackStatus(self: LuaHandle.Player, pack: String?): String? {
+        val name = pack?.let(::onDemandPack)
+        return online(self)?.let { session.packs.status(it, name) }
+    }
+
+    override fun pushResourcePack(self: LuaHandle.Player, pack: String): Boolean {
+        val name = onDemandPack(pack)
+        return online(self)?.let { session.packs.push(it, name) } == true
+    }
+
+    override fun popResourcePack(self: LuaHandle.Player, pack: String): Boolean {
+        val name = onDemandPack(pack)
+        return online(self)?.let { session.packs.pop(it, name) } == true
+    }
+
+    /** [pack], an `onDemand` pack the calling script named, as the server names it; an error when it isn't one. */
+    private fun onDemandPack(pack: String): String {
+        val name = session.names.resource(ResourcePackKind, pack)
+        val loaded = session.snapshot.everywhere(ResourcePackKind)[name]
+            ?: throw LuaApiException("there's no resource pack \"$pack\"")
+        if (loaded.value.onDemand != true) {
+            throw LuaApiException("resource pack \"$pack\" isn't onDemand: give it \"onDemand\": true in its pack.json to push it")
+        }
+        return name
+    }
 
     // ---- permissions ----------------------------------------------------------
 

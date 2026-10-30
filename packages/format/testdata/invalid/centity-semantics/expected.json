@@ -113,6 +113,41 @@
   },
   {
     "severity": "error",
+    "file": "centities/page/centity.json",
+    "message": "an image is 1 to 256 pixels each way, not 300 by 10",
+    "path": "$.nodes.huge.display",
+    "code": "centity.image-size"
+  },
+  {
+    "severity": "error",
+    "file": "centities/page/centity.json",
+    "message": "an image has at most 16384 pixels, not 40000",
+    "path": "$.nodes.many.display",
+    "code": "centity.image-size"
+  },
+  {
+    "severity": "error",
+    "file": "centities/page/centity.json",
+    "message": "size is [width, height] in blocks, both more than 0",
+    "path": "$.nodes.many.display.size",
+    "code": "centity.display-size"
+  },
+  {
+    "severity": "error",
+    "file": "centities/page/centity.json",
+    "message": "color must be #RRGGBB or #AARRGGBB",
+    "path": "$.nodes.panel.display.color",
+    "code": "centity.color"
+  },
+  {
+    "severity": "error",
+    "file": "centities/page/centity.json",
+    "message": "size is [width, height] in blocks, both more than 0",
+    "path": "$.nodes.panel.display.size",
+    "code": "centity.display-size"
+  },
+  {
+    "severity": "error",
     "file": "centities/rope/centity.json",
     "message": "links must be 1 to 64",
     "path": "$.nodes.chain.rope.links",

@@ -1,10 +1,13 @@
 package dev.netherforge.plugin.paper
 
+import dev.netherforge.format.centity.TextDisplay
+import dev.netherforge.format.centity.TextRun
 import dev.netherforge.format.text.GlyphTags
 import dev.netherforge.format.text.SpaceTags
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.Style
+import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.Tag
@@ -43,6 +46,18 @@ object PaperText {
     var layout: (text: String) -> String = { it }
 
     val mini: MiniMessage = parser({ glyphs(it) }, { spaces(it) }) { layout(it) }
+
+    /**
+     * An image's text ([TextDisplay.runs]) as the game's text, built rather than parsed: a piece per run, in its
+     * colour. One piece of the game's text is at most 65535 bytes on the wire (a picture's whole text is far more),
+     * and parsing it as MiniMessage would take the server's tick.
+     */
+    fun runs(runs: List<TextRun>): Component = Component.text().append(
+        runs.map { run -> run.rgb?.let { Component.text(run.text, TextColor.color(it)) } ?: Component.text(run.text) }
+    ).build()
+
+    /** [display]'s text as the game's: its runs when it's an image's, its MiniMessage otherwise. */
+    fun displayText(display: TextDisplay): Component = display.runs?.let(::runs) ?: mini.deserialize(display.text)
 
     /**
      * MiniMessage [text] as the game's JSON text component, in the form this

@@ -1,11 +1,14 @@
 package dev.netherforge.plugin.api
 
+import dev.netherforge.format.centity.Anchor
 import dev.netherforge.format.centity.Billboard
 import dev.netherforge.format.centity.BlockDisplay
 import dev.netherforge.format.centity.Channel
 import dev.netherforge.format.centity.Easing
+import dev.netherforge.format.centity.ImageDisplay
 import dev.netherforge.format.centity.ItemDisplay
 import dev.netherforge.format.centity.ModelDisplay
+import dev.netherforge.format.centity.RectDisplay
 import dev.netherforge.format.centity.TextAlignment
 import dev.netherforge.format.centity.TextDisplay
 import dev.netherforge.format.game.BlockState
@@ -17,6 +20,7 @@ import dev.netherforge.format.ref.ResourceRef
 import dev.netherforge.plugin.binding.Brightness
 import dev.netherforge.plugin.binding.LuaHandle
 import dev.netherforge.plugin.binding.NodeApi
+import dev.netherforge.plugin.binding.PoseOptions
 import dev.netherforge.plugin.binding.RopeOptions
 import dev.netherforge.plugin.binding.StretchOptions
 import dev.netherforge.plugin.binding.TextStyle
@@ -31,6 +35,7 @@ import dev.netherforge.plugin.centity.StrungRope
 import dev.netherforge.plugin.centity.length
 import dev.netherforge.plugin.centity.lookRotation
 import dev.netherforge.plugin.centity.normalized
+import dev.netherforge.plugin.image.Images
 import dev.netherforge.plugin.lua.LuaApiException
 import dev.netherforge.plugin.lua.LuaValue
 import dev.netherforge.plugin.physics.BodyState
@@ -83,9 +88,9 @@ internal class NodeImpl(private val session: ProjectSession) : NodeApi {
         return instance.get(index, channel)
     }
 
-    private fun set(self: LuaHandle.Node, channel: Channel, value: Vec3) {
+    private fun set(self: LuaHandle.Node, channel: Channel, value: Vec3, options: PoseOptions?) {
         val (instance, index) = node(self) ?: return
-        instance.set(index, channel, value)
+        instance.set(index, channel, value, options?.instant == true)
     }
 
     override fun translation(self: LuaHandle.Node) = get(self, Channel.TRANSLATION)
@@ -94,11 +99,12 @@ internal class NodeImpl(private val session: ProjectSession) : NodeApi {
 
     override fun scale(self: LuaHandle.Node) = get(self, Channel.SCALE)
 
-    override fun setTranslation(self: LuaHandle.Node, translation: Vec3) = set(self, Channel.TRANSLATION, translation)
+    override fun setTranslation(self: LuaHandle.Node, translation: Vec3, options: PoseOptions?) =
+        set(self, Channel.TRANSLATION, translation, options)
 
-    override fun setRotation(self: LuaHandle.Node, rotation: Vec3) = set(self, Channel.ROTATION, rotation)
+    override fun setRotation(self: LuaHandle.Node, rotation: Vec3, options: PoseOptions?) = set(self, Channel.ROTATION, rotation, options)
 
-    override fun setScale(self: LuaHandle.Node, scale: Vec3) = set(self, Channel.SCALE, scale)
+    override fun setScale(self: LuaHandle.Node, scale: Vec3, options: PoseOptions?) = set(self, Channel.SCALE, scale, options)
 
     override fun stretchBetween(self: LuaHandle.Node, from: Vec3, to: Vec3, options: StretchOptions?): Boolean {
         val thickness = options?.thickness?.also {
@@ -255,8 +261,92 @@ internal class NodeImpl(private val session: ProjectSession) : NodeApi {
             is ItemDisplay -> "item"
             is ModelDisplay -> "model"
             is TextDisplay -> "text"
+            is RectDisplay -> "rect"
+            is ImageDisplay -> "image"
             null -> null
         }
+    }
+
+    override fun image(self: LuaHandle.Node): LuaHandle.Image? {
+        val (instance, index) = node(self) ?: return null
+        val pixels = (instance.display(index) as? ImageDisplay)?.pixels ?: return null
+        return try {
+            LuaHandle.Image(session.images.hold(pixels))
+        } catch (e: Images.TooMany) {
+            throw LuaApiException(e.message.orEmpty())
+        }
+    }
+
+    override fun setImage(self: LuaHandle.Node, image: LuaHandle.Image?): Boolean {
+        val pixels = image?.let {
+            session.images[it.number] ?: throw LuaApiException("this image is gone (the session that made it ended)")
+        }
+        val (instance, index) = node(self) ?: return false
+        val current = instance.display(index) as? ImageDisplay
+            ?: throw LuaApiException("node \"${self.name}\" isn't an image display")
+        if (current.pixels != pixels) instance.setDisplay(index, current.copy(pixels = pixels))
+        return true
+    }
+
+    override fun displayColor(self: LuaHandle.Node): String? {
+        val (instance, index) = node(self) ?: return null
+        return (instance.display(index) as? RectDisplay)?.color
+    }
+
+    override fun setDisplayColor(self: LuaHandle.Node, color: String): Boolean {
+        if (Images.color(color) == null) throw LuaApiException("bad argument 'color' (#RRGGBB or #AARRGGBB, got \"$color\")")
+        val (instance, index) = node(self) ?: return false
+        val current = instance.display(index) as? RectDisplay
+            ?: throw LuaApiException("node \"${self.name}\" isn't a rect display")
+        if (current.color != color) instance.setDisplay(index, current.copy(color = color))
+        return true
+    }
+
+    override fun displaySize(self: LuaHandle.Node): Vec3? {
+        val (instance, index) = node(self) ?: return null
+        val size = when (val display = instance.display(index)) {
+            is RectDisplay -> display.size ?: RectDisplay.DEFAULT_SIZE
+            is ImageDisplay -> display.sizeOrDefault
+            else -> return null
+        }
+        return Vec3(size[0], size[1], 0.0)
+    }
+
+    override fun setDisplaySize(self: LuaHandle.Node, size: Vec3): Boolean {
+        if (!(size.x > 0) || !(size.y > 0) || !size.x.isFinite() || !size.y.isFinite()) {
+            throw LuaApiException("bad argument 'size' (a width and height more than 0, got ${size.x} by ${size.y})")
+        }
+        val (instance, index) = node(self) ?: return false
+        val wanted = listOf(size.x, size.y)
+        when (val display = instance.display(index)) {
+            is RectDisplay -> if (display.size != wanted) instance.setDisplay(index, display.copy(size = wanted))
+            is ImageDisplay -> if (display.size != wanted) instance.setDisplay(index, display.copy(size = wanted))
+            else -> throw LuaApiException("node \"${self.name}\" isn't a rect or an image display")
+        }
+        return true
+    }
+
+    override fun displayAnchor(self: LuaHandle.Node): String? {
+        val (instance, index) = node(self) ?: return null
+        val anchor = when (val display = instance.display(index)) {
+            is RectDisplay -> display.anchor ?: RectDisplay.DEFAULT_ANCHOR
+            is ImageDisplay -> display.anchor ?: ImageDisplay.DEFAULT_ANCHOR
+            is TextDisplay -> display.anchor
+            else -> null
+        }
+        return anchor?.name?.lowercase()
+    }
+
+    override fun setDisplayAnchor(self: LuaHandle.Node, anchor: String?): Boolean {
+        val wanted = anchor?.let { name -> Anchor.entries.first { it.name.lowercase() == name } }
+        val (instance, index) = node(self) ?: return false
+        when (val display = instance.display(index)) {
+            is RectDisplay -> if (display.anchor != wanted) instance.setDisplay(index, display.copy(anchor = wanted))
+            is ImageDisplay -> if (display.anchor != wanted) instance.setDisplay(index, display.copy(anchor = wanted))
+            is TextDisplay -> if (display.anchor != wanted) instance.setDisplay(index, display.copy(anchor = wanted))
+            else -> throw LuaApiException("node \"${self.name}\" isn't a rect, image or text display")
+        }
+        return true
     }
 
     override fun model(self: LuaHandle.Node): String? {

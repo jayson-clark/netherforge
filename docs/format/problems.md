@@ -370,6 +370,18 @@ Error. A text display's `lineWidth` isn't positive. See [centities](centity.md).
 
 Error. A text display's `background` isn't `#AARRGGBB`. See [centities](centity.md).
 
+### `centity.color` {#centity-color}
+
+Error. A rect display's `color` isn't `#RRGGBB` or `#AARRGGBB`. See [centities](centity.md).
+
+### `centity.display-size` {#centity-display-size}
+
+Error. A rect or image display's `size` isn't two lengths more than 0. See [centities](centity.md).
+
+### `centity.image-size` {#centity-image-size}
+
+Error. An image display's `width` and `height` are more pixels than it can draw. See [centities](centity.md).
+
 ### `centity.hitbox-both` {#centity-hitbox-both}
 
 Error. A hitbox has both `boxes` and `shape: "collision"`. See [centities](centity.md).
@@ -1469,6 +1481,10 @@ Error. A cue's `duration` isn't more than 0, or is set without `text`. See [cuts
 ### `resource_pack.key` {#resource_pack-key}
 
 Error. A skin, glyph, item model, tooltip or equipment key isn't an id. See [resource packs](resource-pack.md).
+
+### `resource_pack.on-demand` {#resource_pack-on-demand}
+
+Error. An `onDemand` pack draws something every player's game needs: blocks, the HUD, or the game's own textures, models or sounds. See [resource packs](resource-pack.md).
 
 ### `resource_pack.texture-path` {#resource_pack-texture-path}
 

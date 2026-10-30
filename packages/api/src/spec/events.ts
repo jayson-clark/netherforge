@@ -216,6 +216,23 @@ export const shapes: LuaClass[] = [
       doc: 'The join message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none.',
     },
   ]),
+  payload(
+    'PlayerResourcePackStatusEvent',
+    "What a player's game said about a resource pack the server sent it.",
+    [
+      player,
+      {
+        name: 'pack',
+        type: 'string?',
+        doc: "The `onDemand` pack it was (`player:push_resource_pack`), by name; `nil` for the project's own.",
+      },
+      {
+        name: 'status',
+        type: '"loaded"|"declined"|"failed"|"pending"',
+        doc: '`"pending"` (accepted, downloading), then `"loaded"`, `"declined"` or `"failed"`.',
+      },
+    ],
+  ),
   payload('PlayerQuitEvent', 'A player left the server.', [
     player,
     {
@@ -456,6 +473,13 @@ export const nfEvents: EventSpec[] = [
     example:
       'nf.on("player_join", function(event)\n  event.message = "<yellow>" .. nf.text.escape(event.player:name()) .. " is here"\nend)',
     raised: byPlayer('player_join'),
+  },
+  {
+    name: 'player_resource_pack_status',
+    doc: "A player's game said what became of a resource pack the server sent it: the project's as they joined or after a rebuild, or an `onDemand` one a script pushed (`event.pack`).",
+    payload: 'PlayerResourcePackStatusEvent',
+    example:
+      'nf.on("player_resource_pack_status", function(event)\n  if event.pack == "featured" and event.status == "loaded" then\n    event.player:send_message("<gold>This week\'s games are in!")\n  end\nend)',
   },
   {
     name: 'player_quit',

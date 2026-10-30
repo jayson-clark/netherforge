@@ -337,6 +337,37 @@ data class PlayerJoinEvent(val player: LuaHandle.Player, val firstJoin: Boolean,
     }
 }
 
+/** What a player's game said about a resource pack the server sent it. */
+data class PlayerResourcePackStatusEvent(val player: LuaHandle.Player, val pack: String? = null, val status: String) : LuaEvent {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<PlayerResourcePackStatusEvent>("PlayerResourcePackStatusEvent") {
+        val playerCodec = LuaHandle.Player.Codec
+        val packCodec = LuaOptional(LuaCodecs.STRING)
+        val statusCodec = LuaChoice(listOf("loaded", "declined", "failed", "pending"))
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "player" to playerCodec,
+            "pack" to packCodec,
+            "status" to statusCodec
+        )
+
+        override fun read(fields: ShapeReader) = PlayerResourcePackStatusEvent(
+            player = fields.field("player", playerCodec),
+            pack = fields.field("pack", packCodec),
+            status = fields.field("status", statusCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: PlayerResourcePackStatusEvent) {
+            fields.field("player", value.player, playerCodec)
+            fields.field("pack", value.pack, packCodec)
+            fields.field("status", value.status, statusCodec)
+        }
+    }
+}
+
 /** A player left the server. */
 data class PlayerQuitEvent(val player: LuaHandle.Player, var message: String? = null) : LuaEvent {
     override fun push(call: LuaCall) = Codec.push(call, this)
@@ -3537,6 +3568,32 @@ data class RopeOptions(val length: Double? = null) : LuaShape {
 
         override fun write(fields: ShapeWriter, value: RopeOptions) {
             fields.field("length", value.length, lengthCodec)
+        }
+    }
+}
+
+/**
+ * How `set_translation`, `set_rotation` and `set_scale` move a node. A key that isn't one of these is
+ * an error.
+ */
+data class PoseOptions(val instant: Boolean? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<PoseOptions>("PoseOptions") {
+        val instantCodec = LuaOptional(LuaCodecs.BOOLEAN)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "instant" to instantCodec
+        )
+
+        override fun read(fields: ShapeReader) = PoseOptions(
+            instant = fields.field("instant", instantCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: PoseOptions) {
+            fields.field("instant", value.instant, instantCodec)
         }
     }
 }
@@ -8456,6 +8513,56 @@ data class SigningOptions(val secret: String, val algorithm: String? = null, val
             fields.field("secret", value.secret, secretCodec)
             fields.field("algorithm", value.algorithm, algorithmCodec)
             fields.field("encoding", value.encoding, encodingCodec)
+        }
+    }
+}
+
+/** How `nf.text.measure` measures. A key that isn't one of these is an error. */
+data class TextMeasureOptions(val scale: Double? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<TextMeasureOptions>("TextMeasureOptions") {
+        val scaleCodec = LuaOptional(LuaCodecs.NUMBER)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "scale" to scaleCodec
+        )
+
+        override fun read(fields: ShapeReader) = TextMeasureOptions(
+            scale = fields.field("scale", scaleCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: TextMeasureOptions) {
+            fields.field("scale", value.scale, scaleCodec)
+        }
+    }
+}
+
+/** How big text draws on a text display, in blocks: what an `anchor`ed text display is placed by. */
+data class TextSize(val width: Double, val height: Double) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<TextSize>("TextSize") {
+        val widthCodec = LuaCodecs.NUMBER
+        val heightCodec = LuaCodecs.NUMBER
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "width" to widthCodec,
+            "height" to heightCodec
+        )
+
+        override fun read(fields: ShapeReader) = TextSize(
+            width = fields.field("width", widthCodec),
+            height = fields.field("height", heightCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: TextSize) {
+            fields.field("width", value.width, widthCodec)
+            fields.field("height", value.height, heightCodec)
         }
     }
 }

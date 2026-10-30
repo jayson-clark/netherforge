@@ -6,6 +6,10 @@ Helpers for the MiniMessage text players see: escaping what players typed, strip
 
 A table of functions: call them with a dot.
 
+| | Functions |
+| --- | --- |
+| [Functions](#functions) | [`escape`](#escape) [`strip`](#strip) [`glyph`](#glyph) [`space`](#space) [`width`](#width) [`measure`](#measure) |
+
 ## Functions {#functions}
 
 ### `nf.text.escape(text)` {#escape}
@@ -34,7 +38,7 @@ MiniMessage with its tags taken out: the plain text a player would read, for log
 
 ### `nf.text.glyph(glyph)` {#glyph}
 
-The character a resource pack glyph is drawn as, for building text by hand: a glyph wider than 256 pixels is drawn in pieces, so it's those pieces' characters and the moves between them. In MiniMessage text the tag `<glyph:ui/coin>` is usually simpler: it works anywhere text does (names, lore, chat, titles, dialogs, text displays) and draws the picture in its own colours, never bold, while this text is tinted by the text colour around it like any other (wrap it in `<white>` to avoid that, and keep it out of `<bold>`, which pulls a wide glyph's pieces apart). `nil` while the project's resource packs have errors (nothing is built then); a glyph no resource pack has is an error.
+The character a resource pack glyph is drawn as, for building text by hand: a glyph wider than 256 pixels is drawn in pieces, so it's those pieces' characters and the moves between them. In MiniMessage text the tag `<glyph:ui/coin>` is usually simpler: it works anywhere text does (names, lore, chat, titles, dialogs, text displays) and draws the picture in its own colours, never bold, while this text is tinted by the text colour around it like any other (wrap it in `<white>` to avoid that, and keep it out of `<bold>`, which pulls a wide glyph's pieces apart). It measures as the glyph does (`nf.text.width`, `nf.text.measure`), so an anchored text display can hold it. `nil` while the project's resource packs have errors (nothing is built then); a glyph no resource pack has is an error.
 
 | Parameter | Type | |
 | --- | --- | --- |
@@ -64,7 +68,7 @@ player:send_message("Sword" .. (nf.text.space(60 - column) or " ") .. "<gold>12 
 
 ### `nf.text.width(text)` {#width}
 
-How wide a line of MiniMessage text draws in the game's default font, in pixels (GUI pixels: the font is 8 tall), for laying out menu titles and text displays. Tags draw nothing, except `<bold>` (a pixel more per character), `<glyph:ui/coin>` (the glyph's own width) and `<space:N>` (N, which may be negative); what an `<at:N>` holds takes no width. Text with line breaks measures as its widest line. It reads the default font's widths from `fonts/default.json`, which the editor writes into the project from your Minecraft install. `nil` when it can't be measured exactly: that file is missing (open the project in the editor with Minecraft imported), or the text uses a character it doesn't cover.
+How wide a line of MiniMessage text draws in the game's default font, in pixels (GUI pixels: the font is 8 tall), for laying out menu titles and text displays. Tags draw nothing, except `<bold>` (a pixel more per character), `<glyph:ui/coin>` and the characters `nf.text.glyph` gives (the glyph's own width) and `<space:N>` (N, which may be negative); what an `<at:N>` holds takes no width. Text with line breaks measures as its widest line. It reads the default font's widths from `fonts/default.json`, which the editor writes into the project from your Minecraft install. `nil` when it can't be measured exactly: that file is missing (open the project in the editor with Minecraft imported), or the text uses a character it doesn't cover.
 
 | Parameter | Type | |
 | --- | --- | --- |
@@ -76,5 +80,24 @@ How wide a line of MiniMessage text draws in the game's default font, in pixels 
 local width = nf.text.width("<bold>Shop")
 if width then
   log("the title is " .. width .. " pixels wide")
+end
+```
+
+### `nf.text.measure(text, options?)` {#measure}
+
+How big MiniMessage text draws on a text display, in blocks: its widest line across and its lines up, measured as `nf.text.width` measures (so `nil` when that can't), each line a quarter of a block at scale 1. Lines break only at line breaks, as an `anchor`ed text display breaks them, which is what this is for: laying text out beside rects and images exactly.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `text` | [`Text`](index.md#types) | MiniMessage. |
+| `options` (optional) | [`TextMeasureOptions`](types.md#textmeasureoptions) |  |
+
+**Returns** [`TextSize`](types.md#textsize)`?`
+
+```lua
+-- A label centred on a button, with a pixel of room each side.
+local size = nf.text.measure("Play", { scale = 0.5 })
+if size then
+  log("the label is " .. size.width .. " by " .. size.height .. " blocks")
 end
 ```

@@ -2,7 +2,7 @@
 
 # nf
 
-Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.files`, `nf.text`, `nf.looks`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
+Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.images`, `nf.files`, `nf.text`, `nf.looks`, `nf.packs`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
 
 A table of functions: call them with a dot.
 
@@ -10,7 +10,7 @@ A table of functions: call them with a dot.
 | --- | --- |
 | [Timers and tasks](#timers-and-tasks) | [`after`](#after) [`every`](#every) [`task`](#task) [`wait`](#wait) [`wait_until`](#wait_until) [`wait_for`](#wait_for) [`instructions_left`](#instructions_left) |
 | [Data and settings](#data-and-settings) | [`data`](#data) [`db`](#db) [`config`](#config) |
-| [Events](#events) | [`on`](#on) [`once`](#once) [`emit`](#emit) and 105 events |
+| [Events](#events) | [`on`](#on) [`once`](#once) [`emit`](#emit) and 106 events |
 
 ## Namespaces
 
@@ -38,9 +38,11 @@ A table of functions: call them with a dot.
 | [`nf.particles`](nf.particles.md) | The project's particle effects (`particles/<id>/effect.json`): timelines of particles authored in the editor, played at a place by scripts. |
 | [`nf.cutscenes`](nf.cutscenes.md) | The project's cutscenes (`cutscenes/<id>.json`): camera paths keyed in the editor, played for one player at a time. |
 | [`nf.screens`](nf.screens.md) | Screens: walls of maps, 128 by 128 pixels each, that scripts draw on (pixels, shapes, text, pictures) and play videos on. |
+| [`nf.images`](nf.images.md) | Pictures made at runtime, for image displays (`node:set_image`): from pixels, from an image file's bytes, or downloaded. |
 | [`nf.files`](nf.files.md) | Files in the package's own folder (`plugins/NetherForge/data/<namespace>/`), which no other package's scripts see unless they're handed a file: the only state a script has that survives a restart. |
 | [`nf.text`](nf.text.md) | Helpers for the MiniMessage text players see: escaping what players typed, stripping tags, resource pack glyphs, moving the cursor, and measuring. |
 | [`nf.looks`](nf.looks.md) | Resource pack looks (item models, glyphs, skins, tooltips, equipment looks, sounds) handed from one package's code to another's. |
+| [`nf.packs`](nf.packs.md) | The project's resource packs as the server builds and sends them: built again from the files on disk, and which of them are `onDemand` (left out of the pack players get as they join, for `player:push_resource_pack`). |
 | [`nf.json`](nf.json.md) | JSON text to and from Lua values. |
 | [`nf.encoding`](nf.encoding.md) | Text written the ways web services want it: in a URL, as a form, as base64 or as hex. |
 | [`nf.crypto`](nf.crypto.md) | Hashes and signatures (HMAC), for services that sign what they send or want what's sent to them signed. |
@@ -85,7 +87,7 @@ end)
 
 ### `nf.task(callback, ...)` {#task}
 
-Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.send_player`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.
+Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.send_player`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.
 
 | Parameter | Type | |
 | --- | --- | --- |
@@ -253,6 +255,7 @@ What `nf.on(event, handler)` listens for. See [Events](events.md) for how events
 | `player_quit` | [PlayerQuitEvent](types.md#playerquitevent) | A player left. Assign `event.message` to change what everyone is told, or `nil` to say nothing. Writable: `message`. |
 | `player_kick` | [PlayerKickEvent](types.md#playerkickevent) | A player is being kicked: by a command, a plugin or a script, or by the server (flying, timing out, a bad packet). `event:cancel()` keeps them on the server; assign `event.text` to change what their screen says, or `event.message` to change what everyone is told (`nil` for nothing). Leaving then goes on to `player_quit`. **Cancellable.** Writable: `text`, `message`. |
 | `player_arrive` | [PlayerArriveEvent](types.md#playerarriveevent) | A player a script on another server sent here (`nf.network.send_player`) has joined, with the data it sent along. Heard the tick after their `player_join`, so whatever `player_join` set up is there. |
+| `player_resource_pack_status` | [PlayerResourcePackStatusEvent](types.md#playerresourcepackstatusevent) | A player's game said what became of a resource pack the server sent it: the project's as they joined or after a rebuild, or an `onDemand` one a script pushed (`event.pack`). |
 
 ### Players: chat and commands
 

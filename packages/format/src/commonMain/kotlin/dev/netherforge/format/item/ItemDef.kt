@@ -64,6 +64,13 @@ data class ItemDef(
     val damage: Int? = null,
     /** `<pack>/<key>`: a custom look from one of the project's resource packs (the `item_model` component). */
     @Ref(RefKind.ITEM_MODEL) val itemModel: ResourceRef? = null,
+    /**
+     * Drawn as nothing, wherever it's drawn: in a slot, on the ground, and in a hand, where the player's own arm isn't
+     * drawn either, as with anything held. It's an empty look every built resource pack has ([INVISIBLE_MODEL]), in
+     * place of [itemModel]. With a [hold], what a launcher's pointer is: no arm in the way, and the right button
+     * pressed (`player_use_item`) and let go (`player_stop_using_item`).
+     */
+    val invisible: Boolean? = null,
     /** `<pack>/<key>`: a custom tooltip frame from one of the project's packs (the `tooltip_style` component). */
     @Ref(RefKind.TOOLTIP) val tooltipStyle: ResourceRef? = null,
     /** Worn as armour or equipment, drawn as a pack's equipment look (the `equippable` component). */
@@ -120,7 +127,12 @@ data class ItemDef(
      * values by key: `{ "coin": true }`. Scripts read it back as `item.data`.
      */
     val data: Map<String, JsonElement>? = null
-)
+) {
+    companion object {
+        /** The item model an [invisible] item is drawn as: an empty one, in every built resource pack. */
+        const val INVISIBLE_MODEL = "netherforge:invisible"
+    }
+}
 
 /** Where an item can be worn, and what it looks like there (the `equippable` component). */
 @Serializable

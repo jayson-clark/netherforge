@@ -42,6 +42,8 @@ Your own entities, the particle effects and cutscenes made in the editor.
 - [Effect](effect.md): One playing particle effect, from `nf.particles.play`
 - [nf.cutscenes](nf.cutscenes.md): The project's cutscenes (`cutscenes/<id>.json`): camera paths keyed in the editor, played for one player at a time
 - [Cutscene](cutscene.md): One cutscene playing for one player, from `nf.cutscenes.play`
+- [nf.images](nf.images.md): Pictures made at runtime, for image displays (`node:set_image`): from pixels, from an image file's bytes, or downloaded
+- [Image](image.md): A picture made at runtime by `nf.images`, for image displays (`node:set_image`)
 
 ## Screens
 
@@ -114,6 +116,7 @@ Vectors and locations, text, looks, time, randomness, maths, JSON, encodings and
 - [Location](location.md): A position in a particular world, with an optional facing
 - [nf.text](nf.text.md): Helpers for the MiniMessage text players see: escaping what players typed, stripping tags, resource pack glyphs, moving the cursor, and measuring
 - [nf.looks](nf.looks.md): Resource pack looks (item models, glyphs, skins, tooltips, equipment looks, sounds) handed from one package's code to another's
+- [nf.packs](nf.packs.md): The project's resource packs as the server builds and sends them: built again from the files on disk, and which of them are `onDemand` (left out of the pack players get as they join, for `player:push_resource_pack`)
 - [nf.time](nf.time.md): Dates and durations as text, in the same unit as `nf.server.unix_time()`: milliseconds
 - [nf.random](nf.random.md): Randomness `math.random` doesn't give: generators of your own that repeat for a seed, smooth noise, and random ids
 - [Random](random.md): A random generator from `nf.random.new`: numbers that repeat for its seed, apart from `math.random` and every other generator
@@ -202,7 +205,7 @@ Some functions only work once the project has declared that it uses them, so who
 | `bots` | join fake players to the server and drive them, when the server owner allows bots | `"requires": { "bots": true }` in `netherforge.json` | [`nf.bots.join`](nf.bots.md#join), [`nf.bots.all`](nf.bots.md#all), [`bot:leave`](bot.md#leave), [`bot:walk_to`](bot.md#walk_to), [`bot:stop`](bot.md#stop), [`bot:look_at`](bot.md#look_at), [`bot:jump`](bot.md#jump), [`bot:set_sneaking`](bot.md#set_sneaking), [`bot:set_sprinting`](bot.md#set_sprinting), [`bot:chat`](bot.md#chat), [`bot:attack`](bot.md#attack), [`bot:interact`](bot.md#interact), [`bot:use_item`](bot.md#use_item), [`bot:release_item`](bot.md#release_item), [`bot:swing`](bot.md#swing), [`bot:use_block`](bot.md#use_block), [`bot:break_block`](bot.md#break_block), [`bot:swap_hands`](bot.md#swap_hands), [`bot:drop_item`](bot.md#drop_item), [`bot:click_slot`](bot.md#click_slot), [`bot:respawn`](bot.md#respawn) |
 | `plugin:vault` | use another plugin on the server | `"requires": { "plugins": ["vault"] }` in `netherforge.json` | [`nf.economy.balance`](nf.economy.md#balance), [`nf.economy.deposit`](nf.economy.md#deposit), [`nf.economy.withdraw`](nf.economy.md#withdraw) |
 | `plugin:placeholderapi` | use another plugin on the server | `"requires": { "plugins": ["placeholderapi"] }` in `netherforge.json` | [`nf.placeholders.parse`](nf.placeholders.md#parse), [`nf.placeholders.register`](nf.placeholders.md#register) |
-| `http` | make requests to other servers, only to the hosts the package lists | each host it calls in `"requires": { "http": [...] }` in `netherforge.json` | [`nf.http.request`](nf.http.md#request), [`nf.http.stream`](nf.http.md#stream), [`nf.http.websocket`](nf.http.md#websocket) |
+| `http` | make requests to other servers, only to the hosts the package lists | each host it calls in `"requires": { "http": [...] }` in `netherforge.json` | [`nf.images.download`](nf.images.md#download), [`nf.http.request`](nf.http.md#request), [`nf.http.stream`](nf.http.md#stream), [`nf.http.websocket`](nf.http.md#websocket) |
 | `web` | answer web requests to the server under the package's own path | `"requires": { "web": true }` in `netherforge.json` | [`nf.web.route`](nf.web.md#route), [`nf.web.url`](nf.web.md#url), [`nf.web.oauth`](nf.web.md#oauth) |
 | `wasm` | run the package's WebAssembly modules, off the main thread within the server owner's limits | `"requires": { "wasm": true }` in `netherforge.json` | [`nf.wasm.functions`](nf.wasm.md#functions), [`nf.wasm.instantiate`](nf.wasm.md#instantiate), [`nf.wasm.run`](nf.wasm.md#run), [`nf.wasm.start`](nf.wasm.md#start) |
 | `network` | talk to the other servers of the network the server is part of, and send players between them | `"requires": { "network": true }` in `netherforge.json` | [`nf.network.server_name`](nf.network.md#server_name), [`nf.network.is_connected`](nf.network.md#is_connected), [`nf.network.servers`](nf.network.md#servers), [`nf.network.players`](nf.network.md#players), [`nf.network.find_player`](nf.network.md#find_player), [`nf.network.channel`](nf.network.md#channel), [`nf.network.map`](nf.network.md#map), [`nf.network.send_player`](nf.network.md#send_player) |

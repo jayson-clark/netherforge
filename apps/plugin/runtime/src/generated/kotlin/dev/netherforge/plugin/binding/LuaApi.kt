@@ -37,9 +37,11 @@ interface LuaApi {
     val nfParticles: NfParticlesApi
     val nfCutscenes: NfCutscenesApi
     val nfScreens: NfScreensApi
+    val nfImages: NfImagesApi
     val nfFiles: NfFilesApi
     val nfText: NfTextApi
     val nfLooks: NfLooksApi
+    val nfPacks: NfPacksApi
     val nfJson: NfJsonApi
     val nfEncoding: NfEncodingApi
     val nfCrypto: NfCryptoApi
@@ -52,6 +54,7 @@ interface LuaApi {
     val nfTest: NfTestApi
     val centity: CentityApi
     val node: NodeApi
+    val image: ImageApi
     val entity: EntityApi
     val living: LivingApi
     val mob: MobApi
@@ -100,9 +103,9 @@ interface LuaApi {
  * `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`,
  * `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`,
  * `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`,
- * `nf.screens`, `nf.files`, `nf.text`, `nf.looks`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`,
- * `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions
- * on tables, so call them with a dot: `nf.players.online()`.
+ * `nf.screens`, `nf.images`, `nf.files`, `nf.text`, `nf.looks`, `nf.packs`, `nf.json`, `nf.encoding`,
+ * `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and
+ * `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
  */
 interface NfApi {
     /**
@@ -803,6 +806,44 @@ interface NfScreensApi {
 }
 
 /**
+ * Pictures made at runtime, for image displays (`node:set_image`): from pixels, from an image file's
+ * bytes, or downloaded. An `Image` is a value that never changes: resizing or cropping one makes
+ * another. An image is at most 2048 pixels each way, and the images the server holds for scripts at
+ * once are at most 32 million pixels in all; one past that is an error, so let go of images you no
+ * longer need (an image Lua no longer holds is let go of for you).
+ */
+interface NfImagesApi {
+    /**
+     * An image from its pixels, row by row from the top left: a list of colours (`"#RRGGBB"`, or
+     * `"#AARRGGBB"` for one you can see through), or every pixel's bytes in one base64 string, 3 a pixel
+     * (red, green, blue) or 4 (and alpha). The wrong number of pixels, or a colour that isn't one, is an
+     * error.
+     */
+    fun create(caller: Caller, width: Long, height: Long, pixels: StringListOrString): LuaHandle.Image
+
+    /** An image all one colour. */
+    fun fill(caller: Caller, width: Long, height: Long, color: String): LuaHandle.Image
+
+    /**
+     * An image from an image file's bytes (PNG, JPEG, GIF or BMP) in base64, as a catalog, a database or
+     * `image:encode` keeps them. `nil` for bytes that aren't an image this can read, or one bigger than
+     * 2048 pixels either way.
+     */
+    fun decode(caller: Caller, data: String): LuaHandle.Image?
+
+    /**
+     * Downloads an image file (PNG, JPEG, GIF or BMP) and gives it as an image: `nf.http.request`'s
+     * request, held to the same rules (the host declared in `requires.http`, the size limit, the rate),
+     * its body read as the image it is rather than as text. A response that isn't `2xx`, or isn't an image
+     * this can read, fails. It works off the main thread, so its image arrives later: give `callback`,
+     * which is called with `image, err` once it's done, or call it inside a task (`nf.task`) without one,
+     * and it waits and returns `image, err`. Without a callback outside a task, it's an error. When it
+     * fails, `image` is `nil` and `err` says why.
+     */
+    fun download(caller: Caller, options: HttpRequestOptions): CompletionStage<LuaHandle.Image>
+}
+
+/**
  * Files in the package's own folder (`plugins/NetherForge/data/<namespace>/`), which no other
  * package's scripts see unless they're handed a file: the only state a script has that survives a
  * restart. The server owner limits how much each package may keep there (`files:` in `config.yml`); a
@@ -839,9 +880,10 @@ interface NfTextApi {
      * MiniMessage text the tag `<glyph:ui/coin>` is usually simpler: it works anywhere text does (names,
      * lore, chat, titles, dialogs, text displays) and draws the picture in its own colours, never bold,
      * while this text is tinted by the text colour around it like any other (wrap it in `<white>` to avoid
-     * that, and keep it out of `<bold>`, which pulls a wide glyph's pieces apart). `nil` while the
-     * project's resource packs have errors (nothing is built then); a glyph no resource pack has is an
-     * error.
+     * that, and keep it out of `<bold>`, which pulls a wide glyph's pieces apart). It measures as the
+     * glyph does (`nf.text.width`, `nf.text.measure`), so an anchored text display can hold it. `nil`
+     * while the project's resource packs have errors (nothing is built then); a glyph no resource pack has
+     * is an error.
      */
     fun glyph(caller: Caller, glyph: String): String?
 
@@ -860,14 +902,22 @@ interface NfTextApi {
     /**
      * How wide a line of MiniMessage text draws in the game's default font, in pixels (GUI pixels: the
      * font is 8 tall), for laying out menu titles and text displays. Tags draw nothing, except `<bold>` (a
-     * pixel more per character), `<glyph:ui/coin>` (the glyph's own width) and `<space:N>` (N, which may
-     * be negative); what an `<at:N>` holds takes no width. Text with line breaks measures as its widest
-     * line. It reads the default font's widths from `fonts/default.json`, which the editor writes into the
-     * project from your Minecraft install. `nil` when it can't be measured exactly: that file is missing
-     * (open the project in the editor with Minecraft imported), or the text uses a character it doesn't
-     * cover.
+     * pixel more per character), `<glyph:ui/coin>` and the characters `nf.text.glyph` gives (the glyph's
+     * own width) and `<space:N>` (N, which may be negative); what an `<at:N>` holds takes no width. Text
+     * with line breaks measures as its widest line. It reads the default font's widths from
+     * `fonts/default.json`, which the editor writes into the project from your Minecraft install. `nil`
+     * when it can't be measured exactly: that file is missing (open the project in the editor with
+     * Minecraft imported), or the text uses a character it doesn't cover.
      */
     fun width(caller: Caller, text: String): Long?
+
+    /**
+     * How big MiniMessage text draws on a text display, in blocks: its widest line across and its lines
+     * up, measured as `nf.text.width` measures (so `nil` when that can't), each line a quarter of a block
+     * at scale 1. Lines break only at line breaks, as an `anchor`ed text display breaks them, which is
+     * what this is for: laying text out beside rects and images exactly.
+     */
+    fun measure(caller: Caller, text: String, options: TextMeasureOptions?): TextSize?
 }
 
 /**
@@ -887,6 +937,28 @@ interface NfLooksApi {
      * here, but where it's shown; a name that isn't shaped like a look is an error.
      */
     fun qualify(caller: Caller, look: String): String
+}
+
+/**
+ * The project's resource packs as the server builds and sends them: built again from the files on
+ * disk, and which of them are `onDemand` (left out of the pack players get as they join, for
+ * `player:push_resource_pack`).
+ */
+interface NfPacksApi {
+    /**
+     * Reads the project's resource packs from disk again and builds them, at the end of this tick: for art
+     * that changes without a deploy (a job that writes this week's banners into
+     * `resource_packs/featured/`). A pack whose files changed is sent again to every player who has it
+     * (the project's to everyone online, an `onDemand` one to whoever it was pushed to); one that didn't
+     * change sends nothing. A pack with errors keeps its last good build, as a save in the editor does.
+     */
+    fun rebuild(caller: Caller)
+
+    /**
+     * The `onDemand` packs there are now, by name as the calling script's package names them: what
+     * `player:push_resource_pack` takes. Empty while the packs have errors and nothing is built.
+     */
+    fun onDemand(caller: Caller): List<String>
 }
 
 /** JSON text to and from Lua values. */
@@ -2085,17 +2157,20 @@ interface NodeApi {
     /** Its scale on each of its own axes. `nil` once its centity is removed. */
     fun scale(self: LuaHandle.Node): Vec3?
 
-    /** Moves it relative to its parent (a root node, relative to the centity's position). */
-    fun setTranslation(self: LuaHandle.Node, translation: Vec3)
+    /**
+     * Moves it relative to its parent (a root node, relative to the centity's position). Its display eases
+     * there over its `interpolation_ticks`, unless `options.instant`.
+     */
+    fun setTranslation(self: LuaHandle.Node, translation: Vec3, options: PoseOptions?)
 
     /**
      * Turns it relative to its parent. Displays ease to the new pose over a tick, so setting it every tick
      * looks smooth.
      */
-    fun setRotation(self: LuaHandle.Node, rotation: Vec3)
+    fun setRotation(self: LuaHandle.Node, rotation: Vec3, options: PoseOptions?)
 
     /** Scales it along its own axes. */
-    fun setScale(self: LuaHandle.Node, scale: Vec3)
+    fun setScale(self: LuaHandle.Node, scale: Vec3, options: PoseOptions?)
 
     /**
      * Lays it from one point of the world to another: its origin halfway, its Z pointing from `from` to
@@ -2184,7 +2259,10 @@ interface NodeApi {
     /** Whether it's set visible (it can still be hidden by a hidden parent). */
     fun isVisible(self: LuaHandle.Node): Boolean
 
-    /** Shows or hides it and everything under it. A hidden node can't be clicked. */
+    /**
+     * Shows or hides it and everything under it, at once and where it is: a node shown again appears in
+     * place, with no easing, whatever its `interpolation_ticks`. A hidden node can't be clicked.
+     */
     fun setVisible(self: LuaHandle.Node, visible: Boolean)
 
     /**
@@ -2201,10 +2279,66 @@ interface NodeApi {
     fun setClickable(self: LuaHandle.Node, clickable: Boolean)
 
     /**
-     * What it draws: `"block"`, `"item"`, `"model"` (a resource pack look) or `"text"`, or `nil` for a
-     * node that draws nothing (a pivot, a hitbox alone) or once its centity is removed.
+     * What it draws: `"block"`, `"item"`, `"model"` (a resource pack look), `"text"`, `"rect"` or
+     * `"image"`, or `nil` for a node that draws nothing (a pivot, a hitbox alone) or once its centity is
+     * removed.
      */
     fun displayKind(self: LuaHandle.Node): String?
+
+    /**
+     * What an image display shows now, as an `Image` (a new one each call), or `nil` while it's blank, for
+     * a node that isn't an image display, or once its centity is removed.
+     */
+    fun image(self: LuaHandle.Node): LuaHandle.Image?
+
+    /**
+     * Shows an image on an image display, its pixels one for one from the top left: resize it to the
+     * display's `width` and `height` first (`image:resized`); a smaller one leaves the rest blank and a
+     * bigger one is cut off. `nil` blanks it. Its viewers are sent it once: showing the same pixels again
+     * sends nothing. A centity's changed images send at most about 64 KiB of text a tick between them, so
+     * a page of new pictures can take a few ticks to arrive. A node that isn't an image display is an
+     * error.
+     */
+    fun setImage(self: LuaHandle.Node, image: LuaHandle.Image?): Boolean
+
+    /**
+     * The colour a rect display is: `"#RRGGBB"` or `"#AARRGGBB"`, as set. `nil` when it isn't a rect
+     * display.
+     */
+    fun displayColor(self: LuaHandle.Node): String?
+
+    /**
+     * Recolours a rect display: one update to its viewers, nothing respawned. A colour that isn't one, or
+     * a node that isn't a rect display, is an error.
+     */
+    fun setDisplayColor(self: LuaHandle.Node, color: String): Boolean
+
+    /**
+     * How big a rect or image display is, in blocks before the node's scale: `x` its width, `y` its height
+     * (`z` is 0). `nil` for any other node.
+     */
+    fun displaySize(self: LuaHandle.Node): Vec3?
+
+    /**
+     * Resizes a rect or image display, exactly: `x` its width and `y` its height in blocks before the
+     * node's scale (`z` is ignored). It's a pose change, so it eases as a move does. Either more than 0,
+     * or an error, as is a node that isn't a rect or an image display.
+     */
+    fun setDisplaySize(self: LuaHandle.Node, size: Vec3): Boolean
+
+    /**
+     * Which point of a rect, image or text display is at its node's origin. `nil` for a text display
+     * without one (drawn as the game draws text) or a node of any other kind.
+     */
+    fun displayAnchor(self: LuaHandle.Node): String?
+
+    /**
+     * Places a rect, image or text display by another of its points. A text display's anchor needs its
+     * text measured (`nf.text.measure`); one that can't be is drawn unanchored, with a warning in the log.
+     * `nil` takes a text display's away (and puts a rect or image back at its centre). A node of any other
+     * kind is an error.
+     */
+    fun setDisplayAnchor(self: LuaHandle.Node, anchor: String?): Boolean
 
     /**
      * The block state a block display shows, like `"minecraft:oak_slab[type=top]"`, or `nil` when the node
@@ -2423,6 +2557,46 @@ interface NodeApi {
      * velocity, so it carries on where it left off when it's let go. Not saved.
      */
     fun setPhysicsEnabled(self: LuaHandle.Node, enabled: Boolean): Boolean
+}
+
+/**
+ * A picture made at runtime by `nf.images`, for image displays (`node:set_image`). It never changes:
+ * `resized` and `cropped` make new ones. Ephemeral: it can't be saved in a `data()` table (keep
+ * `image:encode()` instead). An image is at most 2048 pixels each way, and the images the server holds
+ * for scripts at once are at most 32 million pixels in all; one past that is an error, so let go of
+ * images you no longer need (an image Lua no longer holds is let go of for you).
+ */
+interface ImageApi {
+    /** Its width in pixels. */
+    fun width(self: LuaHandle.Image): Long
+
+    /** Its height in pixels. */
+    fun height(self: LuaHandle.Image): Long
+
+    /**
+     * The colour of the pixel at column `x`, row `y` (both from 0, at the top left): `"#RRGGBB"`, or
+     * `"#AARRGGBB"` when it isn't opaque. `nil` outside the image.
+     */
+    fun pixel(self: LuaHandle.Image, x: Long, y: Long): String?
+
+    /**
+     * A copy `width` by `height` pixels: each new pixel the average of the old ones it covers, so
+     * shrinking is smooth. An image display draws an image's pixels one for one, so resize one to the
+     * display's `width` and `height` first.
+     */
+    fun resized(self: LuaHandle.Image, width: Long, height: Long): LuaHandle.Image
+
+    /**
+     * The part `width` by `height` pixels whose top left is at column `x`, row `y`. `nil` when that isn't
+     * all inside the image.
+     */
+    fun cropped(self: LuaHandle.Image, x: Long, y: Long, width: Long, height: Long): LuaHandle.Image?
+
+    /**
+     * The image as a PNG file, base64: what `nf.images.decode` reads back, to keep in a database, a
+     * network map or saved data.
+     */
+    fun encode(self: LuaHandle.Image): String
 }
 
 /**
@@ -3447,11 +3621,29 @@ interface PlayerApi {
     fun bossbars(self: LuaHandle.Player): List<LuaHandle.BossBar>
 
     /**
-     * What became of the project's resource pack on their game: `"loaded"`, `"declined"`, `"failed"`,
-     * `"pending"` (accepted, still downloading), or `nil` before their game has answered (and when they're
-     * offline, or there's no resource pack).
+     * What became of the project's resource pack on their game, or of an `onDemand` pack pushed to them:
+     * `"loaded"`, `"declined"`, `"failed"`, `"pending"` (accepted, still downloading), or `nil` before
+     * their game has answered (and when they're offline, or there's no such pack).
+     * `player_resource_pack_status` says when it changes.
      */
-    fun resourcePackStatus(self: LuaHandle.Player): String?
+    fun resourcePackStatus(self: LuaHandle.Player, pack: String?): String?
+
+    /**
+     * Sends them one of the project's `onDemand` resource packs (`"onDemand": true` in its `pack.json`),
+     * beside the packs they have: their game shows its loading screen while it applies it, so it's for
+     * things that change rarely (this week's featured banners), not every search. Pushing one they have
+     * changes nothing; one rebuilt since (`nf.packs.rebuild`) is sent to them again.
+     * `player_resource_pack_status` says what became of it. It's taken off again by `pop_resource_pack`,
+     * or when they leave. A name that isn't an `onDemand` pack is an error. `false` when they're offline,
+     * or nothing is built (the packs have errors).
+     */
+    fun pushResourcePack(self: LuaHandle.Player, pack: String): Boolean
+
+    /**
+     * Takes an `onDemand` pack `push_resource_pack` sent them back off their game (a loading screen
+     * again). `false` when they're offline or don't have it.
+     */
+    fun popResourcePack(self: LuaHandle.Player, pack: String): Boolean
 
     /**
      * Shows them a block that isn't there: only their game draws it, and the world doesn't change. It

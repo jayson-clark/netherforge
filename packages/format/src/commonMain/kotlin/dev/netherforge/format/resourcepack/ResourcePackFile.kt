@@ -61,7 +61,15 @@ data class ResourcePackFile(
      */
     val models: Map<String, String> = emptyMap(),
     /** What it does to the HUD: the game's elements it hides, and elements of its own scripts fill in ([HudDef]). */
-    val hud: HudDef? = null
+    val hud: HudDef? = null,
+    /**
+     * Left out of the resource pack players get as they join: built into a pack of its own that a script sends to the
+     * players it chooses (`player:push_resource_pack`) and takes back (`pop_resource_pack`). For art not everyone needs,
+     * or that changes on its own schedule (this week's featured banners). Its glyphs are numbered with every other
+     * pack's, so they never clash. It can't draw what everyone's game must have (blocks, the HUD, the game's own
+     * textures, models and sounds): `resource_pack.on-demand`.
+     */
+    val onDemand: Boolean? = null
 ) {
     companion object {
         const val FILE_NAME = "pack.json"

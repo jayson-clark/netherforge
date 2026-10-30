@@ -23,6 +23,9 @@ class HandleTable {
     }
 
     private val byHandle = HashMap<LuaHandle, Entry>()
+
+    /** Told of each handle Lua let go of: what's kept for it alone (an image's pixels) can go. */
+    var onRelease: ((LuaHandle) -> Unit)? = null
     private val byKey = HashMap<Long, Entry>()
     private var next = 1L
 
@@ -60,6 +63,7 @@ class HandleTable {
     fun release(key: Long) {
         val entry = byKey.remove(key) ?: return
         byHandle.remove(entry.handle)
+        onRelease?.invoke(entry.handle)
     }
 
     private fun moreSpecific(candidate: LuaHandle, current: LuaHandle) =

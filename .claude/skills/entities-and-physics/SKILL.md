@@ -409,7 +409,19 @@ resolved rules are rebuilt).
   never teleports the anchor, since a teleport would dismount it; if the
   mount fails (other world) the anchor is teleported as usual. A teleport or
   `move_to` ends a follow; physics bodies refuse one. Not persisted.
-  Hidden = zero-scale matrix. `cullSize` widens the client's culling box.
+  Hidden = zero-scale matrix, collapsed at the node's own place (`Centities.collapsed`), never at the anchor: the
+  client eases from the collapsed matrix, so collapsing to the anchor glided a shown node in from there.
+  `Instance.jumps` (set by `setVisible` and `set(…, instant = true)`, read up the parent chain like `edited`,
+  cleared by `markSynced`) sends that node's next pose with 0 interpolation ticks, so showing, hiding and
+  `{ instant = true }` moves land at once while later moves still ease. `cullSize` widens the client's culling box.
+- **Rects, images and anchored text** (`centity/DisplayDrawing.kt`, geometry in format's `DisplayGlyphs`): what the
+  entity shows isn't the node's content but `DisplayDrawing.drawn(content)`: a rect is a text display whose text is
+  one space character and whose background is the colour, an image rows of the engine's pixel glyphs one
+  `<color>` per run, anchored text the text with a line width that never wraps; each with a `fit`, a matrix in the
+  display's own space post-multiplied in `Centities.drawn` (so the pushed pose is compared fit included). Drawn
+  displays are cached by content (`Pixels` is equal by its pixels, so the same picture again is the same display
+  and sends nothing). Changed images share `IMAGE_BYTES_PER_TICK` per instance per sync; what's past it waits
+  (`Instance.deferContent`). Adapters never see `RectDisplay`/`ImageDisplay` (they answer false/null for them).
   Interpolation is each node's `interpolation_ticks` (1 unless a script
   changed it: smooth at 20 Hz), 0 when forced; the roots' least, capped at
   59, is the anchor entity's teleport duration (`Instance.moveTicks`), so a

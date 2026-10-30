@@ -74,7 +74,8 @@ class ResourcePackTest {
         assertEquals(
             listOf(
                 "assets/minecraft/atlases/items.json",
-                "assets/minecraft/font/default.json",
+                "assets/minecraft/font/default.json"
+            ) + PIXEL_FILES + listOf(
                 "assets/shop/font/ui/gui.json",
                 "assets/shop/items/ui/ruby.json",
                 "assets/shop/models/item/ui/ruby.json",
@@ -194,8 +195,7 @@ class ResourcePackTest {
         // textures under textures/entity/equipment/<layer>/gear/ruby.png. Nothing is copied twice into textures/gear/.
         // The default font is always there, holding the space characters any text may move the cursor with.
         assertEquals(
-            listOf(
-                "assets/minecraft/font/default.json",
+            listOf("assets/minecraft/font/default.json") + PIXEL_FILES + listOf(
                 "assets/shop/equipment/gear/ruby.json",
                 "assets/shop/equipment/gear/wings.json",
                 "assets/shop/textures/entity/equipment/horse_body/gear/wings.png",
@@ -471,5 +471,33 @@ class ResourcePackTest {
         val header = byteArrayOf(-119, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, -80, 0, 0, 0, -90)
         assertEquals(176 to 166, pngSize(header))
         assertNull(pngSize(byteArrayOf(1, 2, 3)))
+    }
+
+    @Test
+    fun theDefaultFontHasTheEnginesPixelGlyphs() {
+        val files = PackLayout.build(emptyList(), listOf(75, 0), "Test") { null }
+        val font = (files.getValue("assets/minecraft/font/default.json") as PackLayout.Entry.Text).text
+        for ((file, _) in DisplayGlyphs.providers()) {
+            assertTrue("\"file\": \"$file\"" in font, font)
+        }
+        assertTrue("\"height\": 10" in font && "\"ascent\": 7" in font, font)
+        val invisible = (files.getValue("assets/netherforge/items/invisible.json") as PackLayout.Entry.Text).text
+        assertTrue("\"type\": \"minecraft:empty\"" in invisible, invisible)
+        for (path in DisplayGlyphs.pictures().keys) {
+            val bytes = (files.getValue(path) as PackLayout.Entry.Bytes).bytes
+            // A PNG of the run's width, one pixel tall.
+            assertEquals(0x89.toByte(), bytes[0])
+            val width = path.substringAfter("pixel_").removeSuffix(".png").toInt()
+            assertEquals(
+                width,
+                ((bytes[16].toInt() and 0xFF) shl 24) or ((bytes[17].toInt() and 0xFF) shl 16) or ((bytes[18].toInt() and 0xFF) shl 8) or
+                    (bytes[19].toInt() and 0xFF)
+            )
+        }
+    }
+
+    private companion object {
+        /** The engine's own files, which every build has: the invisible item's look and the pixel glyphs' pictures. */
+        val PIXEL_FILES = (DisplayGlyphs.pictures().keys + "assets/netherforge/items/invisible.json").sorted()
     }
 }

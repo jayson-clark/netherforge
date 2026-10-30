@@ -201,8 +201,25 @@ class PaperPlatform(private val plugin: JavaPlugin, private val version: PaperVe
 
         override fun send(player: UUID, pack: PackOffer): Boolean {
             val who = Bukkit.getPlayer(player) ?: return false
-            val hash = pack.sha1.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-            who.setResourcePack(pack.id, pack.url, hash, pack.prompt?.let(miniMessage::deserialize), pack.required)
+            if (pack.replacing) {
+                val hash = pack.sha1.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+                who.setResourcePack(pack.id, pack.url, hash, pack.prompt?.let(miniMessage::deserialize), pack.required)
+                return true
+            }
+            // Beside the packs they have: only one of the same id is replaced.
+            val info = net.kyori.adventure.resource.ResourcePackInfo.resourcePackInfo(pack.id, java.net.URI.create(pack.url), pack.sha1)
+            val request = net.kyori.adventure.resource.ResourcePackRequest.resourcePackRequest()
+                .packs(info)
+                .replace(false)
+                .required(pack.required)
+            pack.prompt?.let { request.prompt(miniMessage.deserialize(it)) }
+            who.sendResourcePacks(request.build())
+            return true
+        }
+
+        override fun remove(player: UUID, id: UUID): Boolean {
+            val who = Bukkit.getPlayer(player) ?: return false
+            who.removeResourcePack(id)
             return true
         }
     }

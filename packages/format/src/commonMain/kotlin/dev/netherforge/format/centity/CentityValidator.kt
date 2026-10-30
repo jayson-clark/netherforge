@@ -286,6 +286,35 @@ object CentityValidator {
                     sink.report(ProblemCodes.CENTITY_LINE_WIDTH, "lineWidth must be positive", "$at.lineWidth")
                 }
             }
+            is RectDisplay -> {
+                if (!RGB.matches(display.color) && !ARGB.matches(display.color)) {
+                    sink.report(ProblemCodes.CENTITY_COLOR, "color must be #RRGGBB or #AARRGGBB", "$at.color")
+                }
+                display.size?.let { validateSize(it, "$at.size", sink) }
+            }
+            is ImageDisplay -> {
+                val side = 1..ImageDisplay.MAX_SIDE
+                if (display.width !in side || display.height !in side) {
+                    sink.report(
+                        ProblemCodes.CENTITY_IMAGE_SIZE,
+                        "an image is 1 to ${ImageDisplay.MAX_SIDE} pixels each way, not ${display.width} by ${display.height}",
+                        at
+                    )
+                } else if (display.width * display.height > ImageDisplay.MAX_PIXELS) {
+                    sink.report(
+                        ProblemCodes.CENTITY_IMAGE_SIZE,
+                        "an image has at most ${ImageDisplay.MAX_PIXELS} pixels, not ${display.width * display.height}",
+                        at
+                    )
+                }
+                display.size?.let { validateSize(it, "$at.size", sink) }
+            }
+        }
+    }
+
+    private fun validateSize(size: List<Double>, at: String, sink: ProblemSink) {
+        if (size.size != 2 || size.any { !(it > 0) || !it.isFinite() }) {
+            sink.report(ProblemCodes.CENTITY_DISPLAY_SIZE, "size is [width, height] in blocks, both more than 0", at)
         }
     }
 
@@ -331,7 +360,7 @@ object CentityValidator {
     fun fitKey(display: DisplayDef?): String? = when (display) {
         is BlockDisplay -> BlockState.parse(display.block)?.toString() ?: display.block
         is TextDisplay -> "text:" + display.text
-        is ItemDisplay, is ModelDisplay -> null
+        is ItemDisplay, is ModelDisplay, is RectDisplay, is ImageDisplay -> null
         null -> null
     }
 
@@ -442,4 +471,5 @@ object CentityValidator {
     /** [parent] extended by [key]: `.key` when it's an identifier, `["key"]` otherwise. */
     fun child(parent: String, key: String) = CanonicalJson.childPath(parent, key)
     private val ARGB = Regex("^#[0-9a-fA-F]{8}$")
+    private val RGB = Regex("^#[0-9a-fA-F]{6}$")
 }

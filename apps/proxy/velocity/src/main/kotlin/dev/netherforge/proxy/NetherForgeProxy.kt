@@ -11,6 +11,7 @@ import com.velocitypowered.api.event.proxy.ProxyShutdownEvent
 import com.velocitypowered.api.plugin.annotation.DataDirectory
 import com.velocitypowered.api.proxy.ConnectionRequestBuilder
 import com.velocitypowered.api.proxy.ProxyServer
+import com.velocitypowered.api.proxy.player.ResourcePackInfo
 import dev.netherforge.network.FileMapStore
 import dev.netherforge.network.Hub
 import dev.netherforge.network.HubLog
@@ -38,6 +39,7 @@ class NetherForgeProxy @Inject constructor(
 ) {
     private var hub: Hub? = null
     private var server: HubServer? = null
+    private var clearResourcePacks = true
 
     @Subscribe
     fun onInitialize(event: ProxyInitializeEvent) {
@@ -62,6 +64,7 @@ class NetherForgeProxy @Inject constructor(
         }
         this.hub = hub
         this.server = server
+        clearResourcePacks = settings.clearResourcePacks
         logger.info("NetherForge: the network's hub is listening on ${settings.bind}:${server.port}")
         proxy.commandManager.register(proxy.commandManager.metaBuilder("nfhub").plugin(this).build(), StatusCommand())
     }
@@ -77,6 +80,11 @@ class NetherForgeProxy @Inject constructor(
     @Subscribe(order = PostOrder.LAST)
     fun onServerConnected(event: ServerConnectedEvent) {
         val player = event.player
+        if (clearResourcePacks && event.previousServer.isPresent) {
+            // What the server they left sent comes off; the new one's arrive as they join it, after this.
+            val left = player.appliedResourcePacks.filter { it.originalOrigin == ResourcePackInfo.Origin.DOWNSTREAM_SERVER }
+            for (pack in left) player.removeResourcePacks(pack.id)
+        }
         hub?.playerMoved(player.uniqueId.toString(), player.username, event.server.serverInfo.name)
     }
 

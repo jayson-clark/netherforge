@@ -20,10 +20,19 @@ import dev.netherforge.format.resourcepack.PackFonts
 class TextWidth(
     /** A character's advance by code point, gap included (from [DefaultFontFile]); null when unknown. */
     private val advance: (codePoint: Int) -> Int?,
+    /**
+     * A pack glyph's bare character's advance by code point (what `nf.text.glyph` gives, which takes the text's
+     * colour where the tag doesn't), or a wide glyph's piece's; null for a character that isn't a glyph's.
+     */
+    private val glyphChar: (codePoint: Int) -> Int? = { null },
     /** A pack glyph's advance by reference (`ui:coin`), for `<glyph:ui:coin>`; null when unknown. */
     private val glyph: (reference: String) -> Int? = { null }
 ) {
-    constructor(font: DefaultFontFile, glyph: (reference: String) -> Int? = { null }) : this(font::advance, glyph)
+    constructor(
+        font: DefaultFontFile,
+        glyphChar: (codePoint: Int) -> Int? = { null },
+        glyph: (reference: String) -> Int? = { null }
+    ) : this(font::advance, glyphChar, glyph)
 
     /**
      * The width of [text] in pixels, or null when it can't be measured
@@ -31,7 +40,8 @@ class TextWidth(
      * as the game draws bold), `<glyph:pack:key>` (the glyph's advance),
      * `<space:N>` (N, bold or not) and `<at:N>…</at>` (nothing: what it
      * holds is drawn over the line, [SpaceTags]). The pack's space characters
-     * ([PackFonts.offset]) measure as the moves they are. Text with line
+     * ([PackFonts.offset]) measure as the moves they are, and a glyph's bare
+     * characters as the glyph (bold like any character, as the game draws them). Text with line
      * breaks (`\n`, `<newline>`, `<br>`) measures as its widest line. A tag
      * MiniMessage doesn't know is drawn as written, so it's measured as text;
      * `\<` is a literal `<`.
@@ -41,6 +51,9 @@ class TextWidth(
         if (lines.any { !it.known }) return null
         return maxOf(0, lines.maxOf { it.width })
     }
+
+    /** How many lines [text] draws as when nothing wraps it: one more than its line breaks. */
+    fun lineCount(text: String): Int = walk(text).lines.size
 
     /**
      * [text] with every `<at>` turned into the moves that place it: a
@@ -151,7 +164,7 @@ class TextWidth(
             for (it in open) it.frame?.known = false
         }
         fun char(code: Int) {
-            val width = PackFonts.spaceAdvance(code) ?: advance(code) ?: return unknown()
+            val width = PackFonts.spaceAdvance(code) ?: glyphChar(code) ?: advance(code) ?: return unknown()
             line.width += if (bold()) width + 1 else width
         }
 

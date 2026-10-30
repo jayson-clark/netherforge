@@ -1,0 +1,5 @@
+{
+  "onDemand": true,
+  "glyphs": { "banner": { "texture": "a.png" } },
+  "textures": { "block/stone": "a.png" }
+}

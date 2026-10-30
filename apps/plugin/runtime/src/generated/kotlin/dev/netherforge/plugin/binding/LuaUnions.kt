@@ -6,6 +6,7 @@ import dev.netherforge.plugin.lua.LuaChoice
 import dev.netherforge.plugin.lua.LuaCodec
 import dev.netherforge.plugin.lua.LuaCodecs
 import dev.netherforge.plugin.lua.LuaHandleUnion
+import dev.netherforge.plugin.lua.LuaList
 import dev.netherforge.plugin.lua.LuaUnion
 
 /** A `CommandDefinition|Function`: whichever it was. */
@@ -88,6 +89,19 @@ sealed interface PlayerOrString {
         listOf(
             LuaUnion.Member<PlayerOrString, LuaHandle.Player>(LuaHandle.Player.Codec, ::Player) { (it as? Player)?.value },
             LuaUnion.Member<PlayerOrString, kotlin.String>(LuaCodecs.STRING, ::String) { (it as? String)?.value }
+        )
+    )
+}
+
+/** A `StringList|String`: whichever it was. */
+sealed interface StringListOrString {
+    data class StringList(val value: List<kotlin.String>) : StringListOrString
+    data class String(val value: kotlin.String) : StringListOrString
+
+    object Codec : LuaCodec<StringListOrString> by LuaUnion(
+        listOf(
+            LuaUnion.Member<StringListOrString, List<kotlin.String>>(LuaList(LuaCodecs.STRING), ::StringList) { (it as? StringList)?.value },
+            LuaUnion.Member<StringListOrString, kotlin.String>(LuaCodecs.STRING, ::String) { (it as? String)?.value }
         )
     )
 }
