@@ -5,6 +5,8 @@ import dev.netherforge.format.Problem
 import dev.netherforge.format.ProblemCode
 import dev.netherforge.format.ProblemCodes
 import dev.netherforge.format.ProblemSink
+import dev.netherforge.format.block.BlockKind
+import dev.netherforge.format.block.GameBlockKind
 import dev.netherforge.format.block.VanillaFile
 import dev.netherforge.format.datapack.DatapackKind
 import dev.netherforge.format.datapack.DatapackLayout
@@ -395,7 +397,9 @@ object Projects {
         val defaultFont: DefaultFontFile?,
         val vanilla: VanillaFile?,
         val pending: List<Pending<*, *>>,
-        val problems: MutableList<Problem>
+        val problems: MutableList<Problem>,
+        /** The game's facts it was read with. */
+        val game: GameData?
     ) {
         /** What its resources define, by the kinds of reference that can name them, with the part it exports. */
         val defined: ReferenceIndex.Defined by lazy {
@@ -579,7 +583,7 @@ object Projects {
             }
         }
         cache.end()
-        return Reading(source, files, manifest, home ?: manifest?.namespace.orEmpty(), defaultFont, vanilla, pending, problems)
+        return Reading(source, files, manifest, home ?: manifest?.namespace.orEmpty(), defaultFont, vanilla, pending, problems, game)
     }
 
     /**
@@ -624,10 +628,26 @@ object Projects {
             it.group.isNotEmpty()
         }.groupBy({ it.kind.id }, { it.id to it.group }).mapValues { it.value.toMap() }
         val exportedModules = reading.manifest?.exports?.get(ModuleKind.folder).orEmpty().toSet()
-        val index = ProjectIndex(reading.source, reading.defaultFont, read, references, folders, reading.vanilla, groups, exportedModules)
+        val index = ProjectIndex(
+            reading.source,
+            reading.defaultFont,
+            read,
+            references,
+            folders,
+            reading.vanilla,
+            groups,
+            exportedModules,
+            packages
+        )
         val loaded = reading.pending.map { it.kind to it.load(index, qualified) }
         for ((_, resource) in loaded) problems += resource.problems
         manifest?.worlds?.let { problems += worldHeights(it, references, read, index, packages) }
+        if (packages.isNotEmpty()) {
+            // The game's blocks are the whole server's: the packages' rules are checked against each other here.
+            val sink = ProblemSink(ProjectManifest.FILE_NAME)
+            GameBlockKind.acrossPackages(packages, index.models(BlockKind).values, reading.game, sink)
+            problems += sink.problems
+        }
         val resources = Kinds.all.associate { kind ->
             kind.id to loaded.filter { it.first == kind }.associate { (_, resource) -> resource.id to resource }
         }

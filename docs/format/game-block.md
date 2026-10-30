@@ -52,6 +52,25 @@ broken. The blocks the project's own blocks are
 block blocks) are the project's to the server, so they can't be named
 (`game_block.carrier`).
 
+## In a package
+
+A [package](packages.md)'s game block files run wherever the package does,
+as its other resources do: a server running a project runs its packages'
+rules beside its own. The game's blocks are the whole server's, so a block
+has one set of rules across the project and every package it runs:
+
+- A project's file naming a block a package already has rules for, or one a
+  package's blocks are held in, is the project's error, at its file
+  (`game_block.twice`, `game_block.carrier`). The package's rules hold.
+- Two packages with rules for one block, or a package's rules for a block
+  another package's blocks (or the project's own) are held in, are the
+  project's error, at its `netherforge.json`'s `dependencies`, naming both
+  files: each package is right on its own, and it's the project that runs
+  them together.
+
+A package is still checked on its own, so it's never wrong for what another
+package or the project depending on it holds.
+
 ## Mining
 
 A block with `hardness`, `tool` or `requiresTool` is mined the way a project
@@ -114,5 +133,4 @@ A game block file is checked on its own (`game_block.blocks`,
 against the project (`game_block.twice`, `game_block.carrier`, and its `drops`
 must exist, `reference.loot-table`). [Problems](problems.md) lists them.
 
-Rules for the game's blocks are the project's own: a [package](packages.md)
-can't export them, and a package's apply only when it's run as the project.
+Against a project's packages, see [in a package](#in-a-package).

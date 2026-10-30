@@ -318,6 +318,13 @@ class KindContext internal constructor(
     /** Every resource of [kind] that read, by id. */
     fun <T> models(kind: KindSpec<T, *>): Map<String, T> = project.models(kind)
 
+    /**
+     * Every resource of [kind] that read in the packages the project runs (the whole tree), by the `ns:id` the server
+     * names it by; none while a package is checked, since a package is checked on its own. For what can't be one
+     * project's alone: rules for the game's own blocks, which every package on a server shares.
+     */
+    fun <T> packageModels(kind: KindSpec<T, *>): Map<String, Loaded<T, *>> = project.packageModels(kind)
+
     /** Where the resource [id] of [kind] sits (in its group folders), or where it would if it's not there. */
     fun placeOf(kind: KindSpec<*, *>, id: String): ResourcePlace = kind.place(id, project.groupOf(kind, id))
 
@@ -392,7 +399,9 @@ internal class ProjectIndex(
     /** The group folders each resource is in, by kind and id; absent for one in its kind's folder. */
     private val groups: Map<String, Map<String, String>> = emptyMap(),
     /** The modules the manifest exports, which other projects require. */
-    private val exportedModules: Set<String> = emptySet()
+    private val exportedModules: Set<String> = emptySet(),
+    /** The packages the project runs, by namespace: none for a package, which is checked on its own. */
+    private val packages: Map<String, LoadedPackage> = emptyMap()
 ) {
     private val images = HashMap<String, ImageInfo?>()
 
@@ -402,6 +411,11 @@ internal class ProjectIndex(
     fun <T> models(kind: KindSpec<T, *>): Map<String, T> = read[kind.id].orEmpty() as Map<String, T>
 
     fun filesOf(kind: KindSpec<*, *>, id: String): Set<String> = files[kind.id]?.get(id).orEmpty()
+
+    fun <T> packageModels(kind: KindSpec<T, *>): Map<String, Loaded<T, *>> =
+        packages.entries.sortedBy { it.key }.flatMap { (namespace, pkg) ->
+            pkg.snapshot[kind].map { (id, loaded) -> PackagePaths.of(namespace, id) to loaded }
+        }.toMap()
 
     fun groupOf(kind: KindSpec<*, *>, id: String): String = groups[kind.id]?.get(id).orEmpty()
 

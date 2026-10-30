@@ -868,7 +868,7 @@ Error. A game block file names a block or block tag the target version doesn't h
 
 ### `game_block.twice` {#game_block-twice}
 
-Error. One of the game's blocks is named twice: by two files, or twice in one (a tag names every block in it). See [format/game-block.md](game-block.md).
+Error. One of the game's blocks is named twice: by two files (the project's or its packages'), or twice in one (a tag names every block in it). See [format/game-block.md](game-block.md).
 
 ### `game_block.hardness` {#game_block-hardness}
 
@@ -876,7 +876,7 @@ Error. A game block file's `hardness` is below -1 or isn't a number. See [format
 
 ### `game_block.carrier` {#game_block-carrier}
 
-Error. A game block file names a block the project's own blocks are held in. See [format/game-block.md](game-block.md).
+Error. A game block file names a block the project's own blocks, or a package's, are held in. See [format/game-block.md](game-block.md).
 
 ### `game_block.requires-tool` {#game_block-requires-tool}
 

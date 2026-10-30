@@ -313,8 +313,12 @@ never re-encodes the rule. The problem codes are `block.*`, `resource_pack.block
 game's own when left out. `GameBlocks.resolve(files, tag)` is the one reading of which file a block is in (first by
 id), shared by the checks and the runtime. `GameBlockValidator` (`game_block.blocks`, `.unknown` with game data,
 `.twice` within a file, `.hardness`, `.requires-tool`) and the kind's `crossCheck` (`.twice` across files, `.carrier`:
-the carriers of the project's blocks, from `BlockCarriers.pool`). Not exportable: a package's rules apply only when
-it's the project. The template names `minecraft:<id>` so a new file is for the block it's called after.
+the carriers of the project's blocks, from `BlockCarriers.pool`). A package's run beside the project's
+(`running` takes the tree), so a block has one set of rules on a server: the project's file is also held to its packages'
+(`KindContext.packageModels`: their rules and their blocks' carriers, reported at the project's file, so the package's
+rules hold), and `GameBlockKind.acrossPackages` (run by the root's `validate`) holds the packages to each other and to
+the project's blocks, at the root's `netherforge.json` `$.dependencies` (a package is checked on its own, so a clash
+between two is the project's to resolve, as `package.conflict` is). The template names `minecraft:<id>` so a new file is for the block it's called after.
 `BlockFile.falls` (`block.falls`: not tripwire, not a centity's).
 
 ## Terrains
