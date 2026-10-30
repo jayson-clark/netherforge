@@ -489,11 +489,12 @@ object ProblemCodes {
         error(
             "game_block.twice",
             GAME_BLOCK,
-            "One of the game's blocks is named twice: by two files, or twice in one (a tag names every block in it)."
+            "One of the game's blocks is named twice: by two files (the project's or its packages'), or twice in one (a tag names " +
+                "every block in it)."
         )
     val GAME_BLOCK_HARDNESS = error("game_block.hardness", GAME_BLOCK, "A game block file's `hardness` is below -1 or isn't a number.")
     val GAME_BLOCK_CARRIER =
-        error("game_block.carrier", GAME_BLOCK, "A game block file names a block the project's own blocks are held in.")
+        error("game_block.carrier", GAME_BLOCK, "A game block file names a block the project's own blocks, or a package's, are held in.")
     val GAME_BLOCK_REQUIRES_TOOL =
         warning(
             "game_block.requires-tool",

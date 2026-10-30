@@ -16,6 +16,13 @@ release is cut.
   `name[key]`, lists from 0, as Stripe and similar APIs take them), base64 (both
   alphabets) and hex; `nf.crypto` hashes (SHA-256, SHA-1, SHA-512) and signs
   (HMAC), the signature `nf.web.verify_signature` checks.
+- **Packages can have rules for the game's blocks.** A package's
+  `game_blocks/` run beside the project's (and can be listed in `exports`),
+  and a block has one set of rules across the whole server: a project's file
+  naming a block a package already has rules for, or one a package's blocks
+  are held in, is an error at that file, and packages that clash with each
+  other or with the project's blocks are an error at the project's
+  `netherforge.json` (`game_block.twice`, `game_block.carrier`).
 
 ### Security
 

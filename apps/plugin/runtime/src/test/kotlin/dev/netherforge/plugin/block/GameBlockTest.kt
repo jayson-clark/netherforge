@@ -175,6 +175,33 @@ class GameBlockTest {
     }
 
     @Test
+    fun `a package's rules run beside the project's, dropping the package's loot`() {
+        fun manifest(namespace: String, more: String = "") =
+            """{ "formatVersion": ${dev.netherforge.format.project.FormatVersion.CURRENT}, "name": "$namespace", """ +
+                """"namespace": "$namespace", "version": "1.0.0", "minecraft": "26.3"$more }"""
+        val lib = mapOf(
+            "netherforge.json" to manifest("lib"),
+            // Its loot table is its own: the package's rules name it bare, and it needn't be exported to drop.
+            "game_blocks/dirt.json" to """{ "blocks": ["minecraft:dirt"], "drops": "clods" }""",
+            "loot/clods.json" to
+                """{ "pools": { "main": { "entries": [{ "type": "item", "item": { "kind": "minecraft:gold_nugget" }, "count": 2 }] } } }"""
+        )
+        val project = files + ("netherforge.json" to manifest("test", """, "dependencies": { "lib": { "path": "../lib" } }""")) +
+            lib.mapKeys { "../lib/${it.key}" }
+        TestServer(project).use { server ->
+            server.platform.players.add("Alex")
+            assertEquals(emptyList(), server.errors.map { it.message })
+            assertEquals(emptyList(), server.runtime.session.problems().map { "${it.file} ${it.message}" })
+            val dirt = ref(5, "minecraft:dirt")
+            server.set(5, 64, 0, "minecraft:dirt")
+            val answer = server.runtime.events.blockBreak(server.alex.ref, dirt, { error("the game's drops") }, 0)
+            assertEquals(listOf("2 minecraft:gold_nugget"), answer?.drops?.map { "${it.def.count} ${it.def.kind}" })
+            // The project's own rules hold beside them.
+            assertEquals(setOf("minecraft:stone", "minecraft:oak_planks", "minecraft:dirt"), server.platform.blocks.watchedDrops)
+        }
+    }
+
+    @Test
     fun `a rule saved again holds from the next block, and one taken out leaves the block to the game`() {
         server().use { server ->
             server.write("game_blocks/stone.json", """{ "blocks": ["minecraft:stone"], "hardness": 1.5 }""")
