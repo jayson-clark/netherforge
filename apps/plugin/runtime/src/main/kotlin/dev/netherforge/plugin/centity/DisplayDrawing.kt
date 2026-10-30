@@ -19,7 +19,10 @@ import dev.netherforge.format.resourcepack.DisplayGlyphs
  * can't (no `fonts/default.json`, a character it doesn't cover).
  */
 internal class DisplayDrawing(private val textSize: (String) -> Pair<Int, Int>?, private val warn: (String) -> Unit) {
-    /** A display as drawn: what the entity shows, the matrix it's fitted by (null: none), and what showing it costs. */
+    /**
+     * A display as drawn: what the entity shows, the matrix it's fitted by (null: none), and what showing it costs:
+     * for an image, its text as the connection sends it, compressed ([wireBytes]).
+     */
     class Drawn(val shown: DisplayDef, val fit: Matrix4?, val bytes: Int)
 
     private val cache = object : LinkedHashMap<DisplayDef, Drawn>(CACHED, 0.75f, true) {
@@ -65,7 +68,7 @@ internal class DisplayDrawing(private val textSize: (String) -> Pair<Int, Int>?,
                     size[0],
                     size[1]
                 ),
-                text.length
+                wireBytes(text)
             )
         }
         is TextDisplay -> {
@@ -100,6 +103,28 @@ internal class DisplayDrawing(private val textSize: (String) -> Pair<Int, Int>?,
         private const val UNWRAPPED_SLACK = 64
 
         private const val TRANSPARENT = "#00000000"
+
+        /**
+         * About what [text] costs on the wire: compressed as the game's connection compresses a packet (zlib, its
+         * default level). A picture's text is a few colours and glyphs over and over, so it's a tenth or less of
+         * its length; budgeting by length would send a photo's thumbnail ten times slower than the connection can.
+         */
+        fun wireBytes(text: String): Int {
+            val deflater = java.util.zip.Deflater(WIRE_LEVEL)
+            try {
+                deflater.setInput(text.encodeToByteArray())
+                deflater.finish()
+                val buffer = ByteArray(64 * 1024)
+                var size = 0
+                while (!deflater.finished()) size += deflater.deflate(buffer)
+                return size
+            } finally {
+                deflater.end()
+            }
+        }
+
+        /** The compression level Minecraft's connection uses: zlib's default. */
+        private const val WIRE_LEVEL = 6
 
         /** `#RRGGBB` (opaque) or `#AARRGGBB` as `#AARRGGBB`. */
         fun argb(color: String): String = if (color.length == 7) "#FF" + color.substring(1) else color

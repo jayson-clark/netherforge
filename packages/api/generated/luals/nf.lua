@@ -2294,7 +2294,7 @@ function Node:display_kind() end
 ---@return Image?
 function Node:image() end
 
---- Shows an image on an image display, its pixels one for one from the top left: resize it to the display's `width` and `height` first (`image:resized`); a smaller one leaves the rest blank and a bigger one is cut off. `nil` blanks it. Its viewers are sent it once: showing the same pixels again sends nothing. A centity's changed images send at most about 64 KiB of text a tick between them, so a page of new pictures can take a few ticks to arrive. A node that isn't an image display is an error.
+--- Shows an image on an image display, its pixels one for one from the top left: resize it to the display's `width` and `height` first (`image:resized`); a smaller one leaves the rest blank and a bigger one is cut off. `nil` blanks it. Its viewers are sent it once: showing the same pixels again sends nothing. A centity's changed images send at most about 64 KiB a tick between them, counted as the connection sends them (compressed: a photo-like 128 by 72 picture is about 25 KiB), so a page of new pictures can take a few ticks to arrive. A node that isn't an image display is an error.
 ---@param image Image?
 ---@return boolean # `false` once its centity is removed.
 function Node:set_image(image) end

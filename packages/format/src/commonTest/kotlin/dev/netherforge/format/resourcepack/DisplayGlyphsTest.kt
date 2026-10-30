@@ -43,7 +43,10 @@ class DisplayGlyphsTest {
         val photo = Pixels(128, 72, noise)
         val runs = DisplayGlyphs.imageRuns(128, 72, photo)
         val text = DisplayGlyphs.imageText(128, 72, photo)
-        val written = runs.joinToString("") { run -> run.rgb?.let { "<color:#${it.toString(16).padStart(6, '0')}>${run.text}</color>" } ?: run.text }
+        val written = runs.joinToString("") { run ->
+            val rgb = run.rgb
+            if (rgb == null) run.text else "<color:#${rgb.toString(16).padStart(6, '0')}>${run.text}</color>"
+        }
         assertEquals(text, written)
         assertTrue(text.encodeToByteArray().size > 65535, "the whole text is past one piece's limit")
         assertTrue(runs.all { it.text.encodeToByteArray().size < 1024 }, "every run is a short piece")

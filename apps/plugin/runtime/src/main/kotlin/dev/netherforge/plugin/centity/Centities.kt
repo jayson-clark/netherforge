@@ -1288,8 +1288,9 @@ class Centities(
         private const val SYNC_HITBOXES = "$SYNC/hitboxes"
 
         /**
-         * The text an instance's changed image displays may send in one tick (about what the server sends its viewers
-         * for them): one more waits for the next tick, unless it's the first, so a big one still goes.
+         * What an instance's changed image displays may send in one tick, counted as the connection sends it
+         * (compressed: [DisplayDrawing.wireBytes]): one more waits for the next tick, unless it's the first, so a
+         * big one still goes.
          */
         const val IMAGE_BYTES_PER_TICK = 64 * 1024
 

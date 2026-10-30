@@ -170,9 +170,12 @@ picture. Pixels are drawn as rows of the engine's pixel glyphs, one text colour
 per run of equal pixels, so a picture moves and eases like any display and
 needs no resource pack change; pixels less than half opaque are left out. Its
 viewers are sent a picture once: setting the same pixels again sends nothing.
-A picture with many colour changes is a lot of text (a 96 by 54 photo can be
-tens of kilobytes), so a centity's changed images send at most about 64 KiB a
-tick between them and the rest follow on the next ticks.
+A picture with many colour changes is a lot of text (a 128 by 72 photo is
+about 300 KiB of it, and about 25 KiB once the connection compresses it), so a
+centity's changed images send at most about 64 KiB a tick between them,
+counted compressed, and the rest follow on the next ticks. Every character is
+also the client's to lay out and draw each frame: a few photo-sized pictures
+on screen cost its frame rate, so fewer colours or fewer pixels draw faster.
 
 ### `hitbox`
 

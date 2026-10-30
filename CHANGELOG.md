@@ -19,7 +19,9 @@ release is cut.
   pictures from colours or base64 bytes, decodes image files and downloads
   them (`nf.images.download`, held to `nf.http`'s rules); an `Image` resizes,
   crops and encodes to PNG. A picture already shown isn't sent again, and a
-  centity's changed pictures share about 64 KiB of text a tick.
+  centity's changed pictures share about 64 KiB a tick, counted as the
+  connection sends them (compressed). A picture is built into the game's text
+  run by run, never parsed, so no piece of it is past the protocol's limit.
 - **Rect displays and anchors.** `{ "type": "rect", "color", "size" }` is a
   rectangle exactly `size` blocks (recoloured and resized in place by a
   script), and `anchor` (`top_left` … `bottom_right`) places a rect, an image

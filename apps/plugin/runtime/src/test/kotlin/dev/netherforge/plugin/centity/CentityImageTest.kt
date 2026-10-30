@@ -188,11 +188,29 @@ class CentityImageTest {
     }
 
     @Test
+    fun `an image costs what the connection sends for it, compressed, not its text's length`() {
+        // A photo: a gradient with grain, hardly two neighbouring pixels alike.
+        var seed = 11
+        val argb = IntArray(128 * 72) { i ->
+            seed = seed * 1103515245 + 12345
+            val grain = (seed ushr 16 and 15) - 8
+            val shade = (i / 128 * 3 + grain).coerceIn(0, 255)
+            0xFF000000.toInt() or (shade shl 16) or ((shade + 40).coerceAtMost(255) shl 8) or 200
+        }
+        val photo = dev.netherforge.format.image.Pixels(128, 72, argb)
+        val text = DisplayGlyphs.imageText(128, 72, photo)
+        val wire = DisplayDrawing.wireBytes(text)
+        assertTrue(text.length > 100_000, "a photo is a lot of text (${text.length})")
+        assertTrue(wire < text.length / 5, "but compresses to a fraction of it ($wire of ${text.length})")
+        assertTrue(wire < Centities.IMAGE_BYTES_PER_TICK, "so one tick sends more than one")
+    }
+
+    @Test
     fun `changed images past a tick's budget wait for the next tick`() {
         val many = (1..8).joinToString(",\n") { """"img$it": { "display": { "type": "image", "width": 128, "height": 128 } }""" }
         val centity = """{ "nodes": { $many }, "script": { "file": "script.lua" } }"""
-        // Every pixel a colour of its own: the most text an image can be.
-        val bytes = ByteArray(128 * 128 * 3) { (it * 997 % 251).toByte() }
+        // Every pixel a colour of its own, at random: the most text an image can be, and it barely compresses.
+        val bytes = ByteArray(128 * 128 * 3).also { java.util.Random(42).nextBytes(it) }
         val packed = java.util.Base64.getEncoder().encodeToString(bytes)
         val script = """
             local noisy = nf.images.create(128, 128, "$packed")

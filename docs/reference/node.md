@@ -467,7 +467,7 @@ What an image display shows now, as an `Image` (a new one each call), or `nil` w
 
 ### `node:set_image(image)` {#set_image}
 
-Shows an image on an image display, its pixels one for one from the top left: resize it to the display's `width` and `height` first (`image:resized`); a smaller one leaves the rest blank and a bigger one is cut off. `nil` blanks it. Its viewers are sent it once: showing the same pixels again sends nothing. A centity's changed images send at most about 64 KiB of text a tick between them, so a page of new pictures can take a few ticks to arrive. A node that isn't an image display is an error.
+Shows an image on an image display, its pixels one for one from the top left: resize it to the display's `width` and `height` first (`image:resized`); a smaller one leaves the rest blank and a bigger one is cut off. `nil` blanks it. Its viewers are sent it once: showing the same pixels again sends nothing. A centity's changed images send at most about 64 KiB a tick between them, counted as the connection sends them (compressed: a photo-like 128 by 72 picture is about 25 KiB), so a page of new pictures can take a few ticks to arrive. A node that isn't an image display is an error.
 
 | Parameter | Type | |
 | --- | --- | --- |
