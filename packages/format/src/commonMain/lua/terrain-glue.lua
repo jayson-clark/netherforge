@@ -1542,6 +1542,7 @@ local STAGES =
 ---@param palette string
 ---@param volumes string
 ---@param loot string
+---@param home string the package the script is in ("" for the project's own), whose tables it may name bare
 ---@return string
 function nf_load(
   path,
@@ -1556,7 +1557,8 @@ function nf_load(
   biomes,
   palette,
   volumes,
-  loot
+  loot,
+  home
 )
   budget = tointeger(budget_of_call) --[[@as integer]]
   memory_mb = tointeger(memory) --[[@as integer]]
@@ -1572,8 +1574,13 @@ function nf_load(
   for _, name in ipairs(lines(volumes)) do
     volume_set[name] = true
   end
+  local own = home ~= "" and home .. ":" or nil
   for index, name in ipairs(lines(loot)) do
     loot_index[name] = index - 1
+    -- A package's generator lists its tables in full; its script names its own bare, as its package writes them.
+    if own and name:sub(1, #own) == own then
+      loot_index[name:sub(#own + 1)] = index - 1
+    end
   end
   for index, label in ipairs(lines(palette)) do
     labels[index - 1] = label

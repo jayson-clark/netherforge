@@ -72,7 +72,8 @@ class StartupGenerators(private val platform: Platform, private val source: Proj
             { name -> WorldGenerators.structureFile(snapshot, name, source::resolve)?.let(platform.structures::template) },
             scriptBlocks = { at, terrain ->
                 val sources = terrain.script?.let { WorldGenerators.sourcesFor(at, it, files, source::read) }.orEmpty()
-                terrain.withScriptBlocks(sources.values, { platform.game.block(it) != null }) { plan?.stateOf(it) != null }
+                val namespace = at.substringBefore(':', "").ifEmpty { null }
+                terrain.withScriptBlocks(sources.values, { platform.game.block(it) != null }, namespace) { plan?.stateOf(it) != null }
             },
             scriptsOf = { at, terrain -> WorldGenerators.scriptsFor(at, terrain, files, source::read, scriptFailed(at)) }
         ) { at, message ->

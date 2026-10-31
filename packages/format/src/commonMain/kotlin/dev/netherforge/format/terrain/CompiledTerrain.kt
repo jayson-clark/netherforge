@@ -313,12 +313,15 @@ data class CompiledTerrain(
     /**
      * This generator with the blocks its script's [sources] (the script and the modules it may `require`) name in
      * full as string literals added to its palette, after every other: a game block state (`"minecraft:oak_stairs[facing=north]"`)
-     * whose block [isGameBlock] knows, or a project block's id that [isProjectBlock] knows. So a script places them
-     * without listing them in `script.blocks`; one whose id it puts together from pieces still has to be listed.
+     * whose block [isGameBlock] knows, or a project block's id that [isProjectBlock] knows: bare (the generator's own),
+     * or a package's in full (`"acme:altar"`). A package's generator ([namespace]) is compiled with its names in full,
+     * so its own bare ids join as `namespace:id`. So a script places them without listing them in `script.blocks`;
+     * one whose id it puts together from pieces still has to be listed.
      */
     fun withScriptBlocks(
         sources: Collection<String>,
         isGameBlock: (String) -> Boolean,
+        namespace: String? = null,
         isProjectBlock: (String) -> Boolean
     ): CompiledTerrain {
         if (script == null) return this
@@ -327,7 +330,9 @@ data class CompiledTerrain(
             val block = when {
                 literal.startsWith("minecraft:") ->
                     BlockState.parse(literal)?.takeIf { isGameBlock(it.id) }?.let { TerrainBlock.Vanilla(it.toString()) }
-                PROJECT_BLOCK.matches(literal) && isProjectBlock(literal) -> TerrainBlock.Custom(literal)
+                PROJECT_BLOCK.matches(literal) ->
+                    (if (namespace != null && ':' !in literal) "$namespace:$literal" else literal)
+                        .takeIf(isProjectBlock)?.let { TerrainBlock.Custom(it) }
                 else -> null
             } ?: continue
             if (block !in entries) entries += block
@@ -370,7 +375,7 @@ data class CompiledTerrain(
         val NOT_PLACED = EmptyBlocks.IDS
 
         /** What a project block's id written in a script looks like: the project's own (a package's is listed). */
-        val PROJECT_BLOCK = Regex("[a-z0-9_]+")
+        val PROJECT_BLOCK = Regex("([a-z0-9_]+:)?[a-z0-9_]+")
     }
 }
 

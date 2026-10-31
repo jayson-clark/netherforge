@@ -241,7 +241,7 @@ fun terrainPreviewer(id: String, text: String, structuresJson: String?, sourcesJ
     // it's one of [blocksJson]'s.
     val blocks = blocksJson?.let { CanonicalJson.json.decodeFromString<List<String>>(it) }.orEmpty().toSet()
     val compiled = TerrainCompiler.compile(file, TerrainKind.scriptPathOf(id)).withStructures(structures)
-    return TerrainPreviewer(compiled.withScriptBlocks(sources.values, { true }, blocks::contains), emptyList(), sources)
+    return TerrainPreviewer(compiled.withScriptBlocks(sources.values, { true }, isProjectBlock = blocks::contains), emptyList(), sources)
 }
 
 /** What a new `terrain/<id>.lua` starts as. */
