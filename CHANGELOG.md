@@ -110,9 +110,10 @@ release is cut.
   (`acme:hills`) looked for its script at `acme:terrain/hills.lua` among its
   package's own files, never found it, and generated only the file's own
   stages; its script's problems are now at its package path too. Its script
-  names its own loot tables and blocks bare (`chunk:set_loot(x, y, z,
-  "treasure")`), as its package writes them, and places another package's
-  blocks named in full (`"lib:altar"`) without listing them.
+  names its own loot tables and blocks bare
+  (`chunk:set_loot(x, y, z, "treasure")`), as its package writes them, and
+  places another package's blocks named in full (`"lib:altar"`) without
+  listing them.
 
 ## [0.1.0-rc.1] - 2026-10-28
 
