@@ -118,6 +118,24 @@ class PackTest {
     }
 
     @Test
+    fun `a glyph's bare character measures as its tag does, so tinted glyphs can be anchored`() {
+        // The example's default font isn't committed: a font of one character is enough to measure text at all.
+        val font = """{ "minecraft": "26.3", "advances": { "65": 6 } }"""
+        TestServer(
+            TestServer.example("showcase") + ("fonts/default.json" to font) + (
+                "modules/g/init.lua" to """
+                local coin = nf.text.glyph('ui/coin')
+                log(nf.text.width('<glyph:ui/coin>') == nf.text.width('<red>' .. coin), nf.text.width(coin) ~= nil)
+                local tag, bare = nf.text.measure('<glyph:ui/coin>'), nf.text.measure('<gold>' .. coin)
+                log(bare ~= nil and tag.width == bare.width)
+                """.trimIndent()
+                )
+        ).use { server ->
+            assertEquals(listOf("true\ttrue", "true"), server.logs)
+        }
+    }
+
+    @Test
     fun `glyph tags resolve to the glyph's character, and an unknown one is nothing, reported once`() {
         TestServer(TestServer.example("showcase")).use { server ->
             val glyphs = server.platform.glyphs

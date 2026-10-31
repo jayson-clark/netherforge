@@ -1,0 +1,27 @@
+{
+  "$schema": "../../.netherforge/schemas/centity.schema.json",
+  "nodes": {
+    "huge": {
+      "display": {
+        "type": "image",
+        "width": 300,
+        "height": 10
+      }
+    },
+    "many": {
+      "display": {
+        "type": "image",
+        "width": 200,
+        "height": 200,
+        "size": [1, 2, 3]
+      }
+    },
+    "panel": {
+      "display": {
+        "type": "rect",
+        "color": "red",
+        "size": [0, 1]
+      }
+    }
+  }
+}

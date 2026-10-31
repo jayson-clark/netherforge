@@ -3,9 +3,11 @@ package dev.netherforge.plugin.paper
 import dev.netherforge.format.centity.Billboard
 import dev.netherforge.format.centity.BlockDisplay
 import dev.netherforge.format.centity.DisplayDef
+import dev.netherforge.format.centity.ImageDisplay
 import dev.netherforge.format.centity.ItemDisplay
 import dev.netherforge.format.centity.ItemTransform
 import dev.netherforge.format.centity.ModelDisplay
+import dev.netherforge.format.centity.RectDisplay
 import dev.netherforge.format.centity.TextAlignment
 import dev.netherforge.format.centity.TextDisplay
 import dev.netherforge.format.math.Matrix4
@@ -51,7 +53,6 @@ class PaperEntities(private val plugin: Plugin) : EntityOps {
     private val instanceKey = NamespacedKey(plugin, "instance")
     private val nodeKey = NamespacedKey(plugin, "node")
     private val roleKey = NamespacedKey(plugin, "role")
-    private val miniMessage = PaperText.mini
 
     fun tagOf(entity: Entity): EntityTag? {
         val data = entity.persistentDataContainer
@@ -105,6 +106,8 @@ class PaperEntities(private val plugin: Plugin) : EntityOps {
                 stamp(it, tag)
                 apply(it, display)
             }
+            // The runtime draws these as text displays (DisplayDrawing) before they get here.
+            is RectDisplay, is ImageDisplay -> return null
         }
         applyPose(entity, pose)
         return entity.uniqueId
@@ -169,13 +172,15 @@ class PaperEntities(private val plugin: Plugin) : EntityOps {
                 if (entity !is BukkitTextDisplay) return false
                 apply(entity, display)
             }
+            // The runtime draws these as text displays (DisplayDrawing) before they get here.
+            is RectDisplay, is ImageDisplay -> return false
         }
         return true
     }
 
     /** Every text property, defaults included, so a property removed from the file goes back to vanilla. */
     private fun apply(entity: BukkitTextDisplay, display: TextDisplay) {
-        entity.text(miniMessage.deserialize(display.text))
+        entity.text(PaperText.displayText(display))
         entity.billboard = billboard(display.billboard ?: TextDisplay.DEFAULT_BILLBOARD)
         entity.alignment = when (display.alignment) {
             TextAlignment.LEFT -> BukkitTextDisplay.TextAlignment.LEFT

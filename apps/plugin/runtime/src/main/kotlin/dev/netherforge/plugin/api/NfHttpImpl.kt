@@ -12,6 +12,7 @@ import dev.netherforge.plugin.binding.WebSocketOptions
 import dev.netherforge.plugin.http.ConnectionRequest
 import dev.netherforge.plugin.http.HttpCall
 import dev.netherforge.plugin.http.HttpFetcher
+import dev.netherforge.plugin.http.HttpReply
 import dev.netherforge.plugin.http.RequestRate
 import dev.netherforge.plugin.http.StreamFormat
 import dev.netherforge.plugin.lua.LuaApiException
@@ -43,21 +44,29 @@ internal class NfHttpImpl(private val session: ProjectSession) : NfHttpApi {
     private val limits get() = session.config.http
     private val rate by lazy { RequestRate(limits.requestsPerMinute) }
 
-    override fun request(caller: Caller, options: HttpRequestOptions): CompletionStage<HttpResponse> {
+    override fun request(caller: Caller, options: HttpRequestOptions): CompletionStage<HttpResponse> =
+        fetch(caller, options, "nf.http.request") { reply ->
+            HttpResponse(reply.status.toLong(), reply.headers, reply.body, reply.url.toString())
+        }
+
+    /**
+     * A request as `nf.http.request` makes it, checked the same way for [what] (the function a script called), with
+     * [read] turning the reply into its result on the worker, after the request: `nf.images.download` decodes there.
+     */
+    internal fun <T> fetch(caller: Caller, options: HttpRequestOptions, what: String, read: (HttpReply) -> T): CompletionStage<T> {
         val url = url(options.url, HTTP)
         val host = HttpFetcher.hostOf(url)!!
         val method = options.method ?: "GET"
         val body = body(method, options.body)
         val headers = headers(options.headers.orEmpty())
         // The narrow check: this host, for the package whose code is running. Redirects are held to the same one, bound to it here.
-        session.requirements.check(Requirement.Http(host), "nf.http.request")
-        val held = session.requirements.held("nf.http.request")
+        session.requirements.check(Requirement.Http(host), what)
+        val held = session.requirements.held(what)
         rateRefusal(caller)?.let { return CompletableFuture.failedFuture(WorkFailed(it)) }
         val call = HttpCall(method, url, headers, body)
         val fetcher = session.http.fetcher
         return session.async.submit {
-            val reply = fetcher.fetch(call) { redirectedTo -> held(Requirement.Http(redirectedTo)) }
-            HttpResponse(reply.status.toLong(), reply.headers, reply.body, reply.url.toString())
+            read(fetcher.fetch(call) { redirectedTo -> held(Requirement.Http(redirectedTo)) })
         }
     }
 

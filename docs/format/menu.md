@@ -107,6 +107,7 @@ with `<glyph:<pack>/<key>>` (see [Glyphs](resource-pack.md#glyphs)):
 | `unbreakable`             |                                                                                                                                                                              |
 | `damage`                  | Durability used: 0 is pristine.                                                                                                                                              |
 | `itemModel`               | `<pack>/<key>`: a custom look from a resource pack.                                                                                                                          |
+| `invisible`               | Drawn as nothing: in a slot, on the ground, and in a hand, where the player's arm isn't drawn either. With `hold`, a [pointer](item.md#pointers).                            |
 | `tooltipStyle`            | `<pack>/<key>`: a custom tooltip frame from a resource pack.                                                                                                                 |
 | `equipment`               | `{ "asset": "<pack>/<key>", "slot" }`: worn in `head`, `chest`, `legs`, `feet`, `body` or `saddle`, drawn as a resource pack's [equipment look](resource-pack.md#equipment). |
 | `color`                   | `#RRGGBB`, for dyed leather, potions and maps.                                                                                                                               |

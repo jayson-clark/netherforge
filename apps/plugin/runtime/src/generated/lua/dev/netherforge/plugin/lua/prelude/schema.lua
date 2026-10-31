@@ -12,6 +12,7 @@ local events = {
     ["tick"] = { owner = "nf", cancellable = false, options = { every = true }, writable = {} },
     ["unload"] = { owner = "nf", cancellable = false, options = {}, writable = {}, local_only = true },
     ["player_join"] = { owner = "nf", cancellable = false, options = {}, writable = { message = true } },
+    ["player_resource_pack_status"] = { owner = "nf", cancellable = false, options = {}, writable = {} },
     ["player_quit"] = { owner = "nf", cancellable = false, options = {}, writable = { message = true } },
     ["player_chat"] = { owner = "nf", cancellable = true, options = {}, writable = { message = true, format = true } },
     ["player_interact"] = { owner = "nf", cancellable = true, options = {}, writable = {} },
@@ -207,6 +208,7 @@ local events = {
   },
   ["Player"] = {
     ["join"] = { owner = "Player", cancellable = false, options = {}, writable = { message = true } },
+    ["resource_pack_status"] = { owner = "Player", cancellable = false, options = {}, writable = {} },
     ["quit"] = { owner = "Player", cancellable = false, options = {}, writable = { message = true } },
     ["chat"] = { owner = "Player", cancellable = true, options = {}, writable = { message = true, format = true } },
     ["interact"] = { owner = "Player", cancellable = true, options = {}, writable = {} },
@@ -263,6 +265,7 @@ local events = {
   },
   ["Bot"] = {
     ["join"] = { owner = "Player", cancellable = false, options = {}, writable = { message = true } },
+    ["resource_pack_status"] = { owner = "Player", cancellable = false, options = {}, writable = {} },
     ["quit"] = { owner = "Player", cancellable = false, options = {}, writable = { message = true } },
     ["chat"] = { owner = "Player", cancellable = true, options = {}, writable = { message = true, format = true } },
     ["interact"] = { owner = "Player", cancellable = true, options = {}, writable = {} },

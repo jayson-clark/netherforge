@@ -164,6 +164,7 @@ object PaperItems {
         def.unbreakable?.let { meta.isUnbreakable = it }
         def.damage?.let { damage -> (meta as? Damageable)?.damage = damage }
         def.itemModel?.let(::key)?.let { meta.itemModel = it }
+        if (def.invisible == true) meta.itemModel = NamespacedKey.fromString(ItemDef.INVISIBLE_MODEL)
         def.tooltipStyle?.let(::key)?.let { meta.tooltipStyle = it }
         def.color?.removePrefix("#")?.toIntOrNull(16)?.let { rgb ->
             val color = Color.fromRGB(rgb)
@@ -601,7 +602,10 @@ object PaperItems {
             hideTooltip = meta?.isHideTooltip?.takeIf { it },
             unbreakable = meta?.isUnbreakable?.takeIf { it },
             damage = (meta as? Damageable)?.takeIf { it.hasDamage() }?.damage,
-            itemModel = meta?.takeIf { it.hasItemModel() }?.itemModel?.toString()?.let(::reference),
+            itemModel = meta?.takeIf {
+                it.hasItemModel()
+            }?.itemModel?.toString()?.takeIf { it != ItemDef.INVISIBLE_MODEL }?.let(::reference),
+            invisible = meta?.takeIf { it.hasItemModel() }?.itemModel?.toString()?.takeIf { it == ItemDef.INVISIBLE_MODEL }?.let { true },
             tooltipStyle = meta?.takeIf { it.hasTooltipStyle() }?.tooltipStyle?.toString()?.let(::reference),
             color = when (meta) {
                 is LeatherArmorMeta -> meta.color.asRGB()

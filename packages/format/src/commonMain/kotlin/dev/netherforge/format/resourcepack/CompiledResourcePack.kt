@@ -3,6 +3,7 @@ package dev.netherforge.format.resourcepack
 import dev.netherforge.format.block.BlockCarriers
 import dev.netherforge.format.block.VanillaBlockStates
 import dev.netherforge.format.block.VanillaFile
+import dev.netherforge.format.item.ItemDef
 import dev.netherforge.format.json.CanonicalJson
 import dev.netherforge.format.project.ImageInfo
 import dev.netherforge.format.project.PackagePaths
@@ -61,7 +62,9 @@ class CompiledResourcePack(
     /** The game's sound events it replaces (`sounds` keyed `minecraft:…`), by the event in full ([PackSounds.replacements]). */
     val soundReplacements: Map<String, PackSounds.Sound> = emptyMap(),
     /** The game's models it redraws (`models`), by name (`block/red_mushroom`), each a model file of the pack. */
-    val modelReplacements: Map<String, String> = emptyMap()
+    val modelReplacements: Map<String, String> = emptyMap(),
+    /** Built into a pack of its own, sent by scripts, rather than into the one players get as they join ([ResourcePackFile.onDemand]). */
+    val onDemand: Boolean = false
 ) {
     /** A game sprite or texture drawn with the pack's [texture] (a path under `textures/`), and its `.mcmeta` when it has [meta]. */
     class Replacement(val texture: String, val meta: Boolean)
@@ -99,8 +102,16 @@ class CompiledResourcePack(
      * [char] is what draws the glyph in text: its character, or for a picture wider than a font sheet its pieces
      * side by side and the moves between them ([PackFonts.picture]), whose characters are [cells]. [advance]: the
      * glyph's advance in text ([PackFonts.bitmapAdvance]), or null when its picture couldn't be read.
+     * [cellAdvances]: each of [cells]' own advance, for measuring text that holds the bare characters.
      */
-    class Glyph(val key: String, val def: GlyphDef, val char: String, val advance: Int?, val cells: String = char) {
+    class Glyph(
+        val key: String,
+        val def: GlyphDef,
+        val char: String,
+        val advance: Int?,
+        val cells: String = char,
+        val cellAdvances: List<Int>? = advance?.let { listOf(it) }
+    ) {
         val height: Int get() = def.height ?: GlyphDef.DEFAULT_HEIGHT
         val ascent: Int get() = def.ascent ?: GlyphDef.DEFAULT_ASCENT
     }
@@ -223,7 +234,7 @@ class CompiledResourcePack(
             val glyphs = glyphKeys.withIndex().associate { (i, key) ->
                 val def = file.glyphs.getValue(key)
                 val drawn = picture(PackFonts.charAt(glyphStart + i), def.texture, def.height ?: GlyphDef.DEFAULT_HEIGHT, glyphPiece)
-                key to Glyph(key, def, drawn.text, drawn.advance, drawn.cells)
+                key to Glyph(key, def, drawn.text, drawn.advance, drawn.cells, drawn.cellAdvances)
             }
             return CompiledResourcePack(
                 namespace,
@@ -245,7 +256,8 @@ class CompiledResourcePack(
                 replacements(file.hud?.replace.orEmpty()),
                 replacements(file.textures),
                 PackSounds.replacements(file),
-                file.models.entries.sortedBy { it.key }.associate { it.key to it.value }
+                file.models.entries.sortedBy { it.key }.associate { it.key to it.value },
+                file.onDemand == true
             )
         }
     }
@@ -621,6 +633,16 @@ object PackLayout {
         for ((ns, events) in soundEvents) {
             out["assets/$ns/sounds.json"] =
                 json(JsonObject(events.entries.sortedBy { it.key }.associate { it.key to it.value }))
+        }
+        // The look an invisible item is drawn as: nothing at all (ItemDef.invisible).
+        val (invisibleNs, invisiblePath) = ItemDef.INVISIBLE_MODEL.split(':', limit = 2)
+        out["assets/$invisibleNs/items/$invisiblePath.json"] = json(
+            buildJsonObject { putJsonObject("model") { put("type", "minecraft:empty") } }
+        )
+        // The engine's pixel glyphs, which draw image displays (DisplayGlyphs).
+        for ((path, bytes) in DisplayGlyphs.pictures()) out[path] = Entry.Bytes(bytes)
+        for ((file, char) in DisplayGlyphs.providers()) {
+            defaultFontProviders += bitmap(file, DisplayGlyphs.PIXEL_HEIGHT, DisplayGlyphs.TOP_ASCENT, char.toString())
         }
         // The space characters too, so any text can move the cursor (`<space:N>`, `<at:N>`: SpaceTags).
         defaultFontProviders += buildJsonObject {

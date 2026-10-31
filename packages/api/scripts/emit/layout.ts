@@ -48,6 +48,8 @@ export const CATEGORIES: Category[] = [
       'Effect',
       'nf.cutscenes',
       'Cutscene',
+      'nf.images',
+      'Image',
     ],
   },
   {
@@ -108,6 +110,7 @@ export const CATEGORIES: Category[] = [
       'Location',
       'nf.text',
       'nf.looks',
+      'nf.packs',
       'nf.time',
       'nf.random',
       'Random',
@@ -257,6 +260,10 @@ export const FUNCTION_GROUPS: Record<string, Group[]> = {
       'display_kind display_block set_display_block display_item set_display_item model set_model display_text set_display_text display_text_style set_display_text_style brightness set_brightness billboard set_billboard',
     ),
     group(
+      'Rects and images',
+      'image set_image display_color set_display_color display_size set_display_size display_anchor set_display_anchor',
+    ),
+    group(
       'Visibility, clicks and glow',
       'is_visible set_visible is_clickable set_clickable is_glowing set_glowing glow_color set_glow_color',
     ),
@@ -350,7 +357,7 @@ export const FUNCTION_GROUPS: Record<string, Group[]> = {
     ),
     group(
       'What they see of the world',
-      'sky set_sky clear_sky border has_own_border reset_border send_block_change reset_block send_equipment_change camera set_camera compass_target set_compass_target view_distance set_view_distance resource_pack_status',
+      'sky set_sky clear_sky border has_own_border reset_border send_block_change reset_block send_equipment_change camera set_camera compass_target set_compass_target view_distance set_view_distance resource_pack_status push_resource_pack pop_resource_pack',
     ),
   ],
   World: [
@@ -429,7 +436,10 @@ export const FUNCTION_GROUPS: Record<string, Group[]> = {
 export const EVENT_GROUPS: Record<string, Group[]> = {
   nf: [
     group('Server and scripts', 'tick unload setting_changed server_list_ping'),
-    group('Players joining and leaving', 'player_join player_quit player_kick player_arrive'),
+    group(
+      'Players joining and leaving',
+      'player_join player_quit player_kick player_arrive player_resource_pack_status',
+    ),
     group('Players: chat and commands', 'player_chat player_command'),
     group(
       'Players: moving',
@@ -470,7 +480,7 @@ export const EVENT_GROUPS: Record<string, Group[]> = {
     ),
   ],
   Player: [
-    group('Joining and leaving', 'join quit kick arrive'),
+    group('Joining and leaving', 'join quit kick arrive resource_pack_status'),
     group('Chat and commands', 'chat command'),
     group('Moving', 'move teleport change_world input sneak sprint fly jump swing'),
     group(

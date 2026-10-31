@@ -52,7 +52,8 @@ object LuaItems {
     private val FIELDS = listOf(
         "kind", "item", "count", "name", "lore", "enchantments", "glint", "hide_tooltip", "unbreakable", "damage",
         "item_model", "tooltip_style", "equipment", "color", "profile", "max_stack_size", "rarity", "attribute_modifiers",
-        "can_break", "can_place_on", "hidden_tooltip_components", "food", "cooldown", "hold", "use_effects", "map", "data", "raw"
+        "can_break", "can_place_on", "hidden_tooltip_components", "food", "cooldown", "hold", "use_effects", "invisible", "map", "data",
+        "raw"
     )
     private val MODIFIER_FIELDS = listOf("id", "attribute", "amount", "operation", "slot")
     private val FOOD_FIELDS = listOf("nutrition", "saturation", "can_always_eat", "eat_seconds")
@@ -207,6 +208,7 @@ object LuaItems {
             glint = boolean("glint"),
             hideTooltip = boolean("hide_tooltip"),
             unbreakable = boolean("unbreakable"),
+            invisible = boolean("invisible"),
             damage = integer("damage"),
             itemModel = string("item_model")?.let(::ResourceRef),
             tooltipStyle = string("tooltip_style")?.let(::ResourceRef),
@@ -293,6 +295,7 @@ object LuaItems {
             def.glint?.let { put("glint", it) }
             def.hideTooltip?.let { put("hide_tooltip", it) }
             def.unbreakable?.let { put("unbreakable", it) }
+            def.invisible?.let { put("invisible", it) }
             def.damage?.let { put("damage", it) }
             def.itemModel?.let { put("item_model", it.text) }
             def.tooltipStyle?.let { put("tooltip_style", it.text) }

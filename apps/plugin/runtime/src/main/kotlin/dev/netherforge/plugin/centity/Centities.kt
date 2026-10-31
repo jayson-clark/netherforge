@@ -4,6 +4,7 @@ import dev.netherforge.format.bridge.InstanceInfo
 import dev.netherforge.format.centity.BlockDisplay
 import dev.netherforge.format.centity.CentityKind
 import dev.netherforge.format.centity.CompiledCentity
+import dev.netherforge.format.centity.ImageDisplay
 import dev.netherforge.format.centity.ModelDisplay
 import dev.netherforge.format.game.BlockState
 import dev.netherforge.format.game.Box
@@ -107,10 +108,15 @@ class Centities(
     private val parts: TickParts = TickParts.OFF,
     /** The handle an entity is given in an event (a `Player`, a `Mob`...): the session's, which asks the server what it is. */
     private val entityHandle: (UUID) -> LuaHandle.Entity = { LuaHandle.Entity(it.toString()) },
+    /** Text measured as the game draws it, for anchored text: its widest line in pixels and its lines, or null when it can't be. */
+    textSize: (String) -> Pair<Int, Int>? = { null },
     /** An instance was removed for good (or its inert record was): what's kept for it elsewhere goes too. */
     private val onRemoved: (UUID) -> Unit = {}
 ) : RuntimeService {
     override val name get() = "centities"
+
+    /** What each display is drawn as: rects, images and anchored text are text displays fitted to their box. */
+    private val drawing = DisplayDrawing(textSize) { log.warn(it) }
 
     /** Instances whose identity changed since the store last heard: written at the end of the tick. */
     private val dirty = LinkedHashSet<UUID>()
@@ -785,13 +791,25 @@ class Centities(
         val world = parts.time(SYNC_PLACE) { shiftedBy(instance.placed(), riderShift(instance, vehicle)) }
         val cull = cullSize(world)
         val ahead = Lookahead(instance)
+        // Image displays changed this tick share a budget; what's past it waits for the next tick.
+        var imageBytes = 0
+        var deferred: MutableList<Int>? = null
         for ((index, node) in instance.definition.nodes.withIndex()) {
             val shown = instance.shown(index)
             instance.displays[node.name]?.let { entity ->
                 val from = if (parts.active) parts.now() else 0L
                 val display = instance.display(index)
-                val contentChanged = instance.contentChanged(index)
-                if (contentChanged && display != null && !entities.updateDisplay(entity, display)) {
+                var contentChanged = instance.contentChanged(index)
+                if (contentChanged && display is ImageDisplay) {
+                    val bytes = drawing.drawn(display).bytes
+                    if (imageBytes > 0 && imageBytes + bytes > IMAGE_BYTES_PER_TICK) {
+                        (deferred ?: ArrayList<Int>().also { deferred = it }) += index
+                        contentChanged = false
+                    } else {
+                        imageBytes += bytes
+                    }
+                }
+                if (contentChanged && display != null && !entities.updateDisplay(entity, drawing.drawn(display).shown)) {
                     instance.needsReconcile = true
                 }
                 // After the content, which a look overrides (a billboard, an item), and before a teleport it eases.
@@ -821,7 +839,9 @@ class Centities(
                     }
                 }
                 if (parts.active) parts.add(SYNC_DISPLAYS, parts.now() - from)
-                parts.time(SYNC_POSES) { syncPose(instance, index, entity, if (shown) world[index] else HIDDEN, shown, cull, ahead) }
+                parts.time(SYNC_POSES) {
+                    syncPose(instance, index, entity, if (shown) world[index] else collapsed(world[index]), shown, cull, ahead)
+                }
             }
             instance.hitboxes[node.name]?.let { entity ->
                 val from = if (parts.active) parts.now() else 0L
@@ -853,6 +873,7 @@ class Centities(
             }
         }
         instance.markSynced()
+        deferred?.forEach { instance.deferContent(it) }
         // A display that turned out to be the wrong kind is respawned on the next pass.
         if (instance.needsReconcile) sync(instance)
     }
@@ -901,11 +922,14 @@ class Centities(
             ahead.at(reach)[index] to reach
         } else {
             instance.due[index] = instance.age
-            (if (billboarded) billboardPose(matrix) else matrix) to if (instance.forceSync) 0 else instance.interpolation(index)
+            val ticks = if (instance.forceSync || instance.jumps(index)) 0 else instance.interpolation(index)
+            (if (billboarded) billboardPose(matrix) else matrix) to ticks
         }
-        val pushed = Instance.PushedPose(target.values.toList(), cull)
+        // What's drawn, fit included: a rect resized or an anchor moved changes it with the node standing still.
+        val shown = drawn(instance, index, target)
+        val pushed = Instance.PushedPose(shown.values.toList(), cull)
         if (instance.forceSync || instance.pushedPoses[entity] != pushed) {
-            platform.entities.setPose(entity, DisplayPose(drawn(instance, index, target), ticks, cull))
+            platform.entities.setPose(entity, DisplayPose(shown, ticks, cull))
             instance.pushedPoses[entity] = pushed
         }
     }
@@ -938,8 +962,12 @@ class Centities(
      * a half turn about its own Y, so it's turned back here to put its nose where
      * the node's +Z points. Blocks and the rest are drawn as they are.
      */
-    private fun drawn(instance: Instance, index: Int, matrix: Matrix4): Matrix4 =
-        if (instance.display(index) is ModelDisplay) matrix.copy().rotateY(PI) else matrix
+    private fun drawn(instance: Instance, index: Int, matrix: Matrix4): Matrix4 {
+        val display = instance.display(index) ?: return matrix
+        if (display is ModelDisplay) return matrix.copy().rotateY(PI)
+        val fit = drawing.drawn(display).fit ?: return matrix
+        return matrix.copy().mul(fit)
+    }
 
     /** [Instance.placedAhead] for 1, 2, … ticks on, each worked out once, the first time a display asks. */
     private class Lookahead(private val instance: Instance) {
@@ -988,16 +1016,16 @@ class Centities(
             val display = instance.display(index)
             if (display != null) {
                 val existing = instance.displays[node.name]
-                if (existing != null && !entities.updateDisplay(existing, display)) {
+                if (existing != null && !entities.updateDisplay(existing, drawing.drawn(display).shown)) {
                     instance.displays.remove(node.name)
                     retire(instance, existing)
                 }
                 if (instance.displays[node.name] == null) {
-                    val shown = if (instance.shown(index)) world[index] else HIDDEN
+                    val shown = if (instance.shown(index)) world[index] else collapsed(world[index])
                     val matrix = if (instance.billboarded(index)) billboardPose(shown) else shown
                     entities.spawnDisplay(
                         standsAt(instance, index),
-                        display,
+                        drawing.drawn(display).shown,
                         DisplayPose(drawn(instance, index, matrix), 0, cull),
                         EntityTag(instance.id, node.name, EntityRole.DISPLAY)
                     )
@@ -1259,10 +1287,23 @@ class Centities(
         private const val SYNC_POSES = "$SYNC/poses"
         private const val SYNC_HITBOXES = "$SYNC/hitboxes"
 
+        /**
+         * What an instance's changed image displays may send in one tick, counted as the connection sends it
+         * (compressed: [DisplayDrawing.wireBytes]): one more waits for the next tick, unless it's the first, so a
+         * big one still goes.
+         */
+        const val IMAGE_BYTES_PER_TICK = 64 * 1024
+
         /** The node an anchor entity's tag names: none. */
         const val ANCHOR_NODE = ""
 
-        /** Displays can't be hidden, only collapsed. */
-        private val HIDDEN = Matrix4().scale(0.0, 0.0, 0.0)
+        /**
+         * A hidden display's matrix: displays can't be hidden, only collapsed, and one is collapsed where its node is,
+         * so nothing seen moves between there and the anchor when it's hidden or shown.
+         */
+        private fun collapsed(matrix: Matrix4): Matrix4 {
+            val at = matrix.translation()
+            return Matrix4().translate(at.x, at.y, at.z).scale(0.0, 0.0, 0.0)
+        }
     }
 }

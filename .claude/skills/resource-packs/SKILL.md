@@ -204,6 +204,29 @@ advance))`: it nets to zero width, so the words start where a vanilla title
   plugin-runtime skill's "Packages in a session"). A package's resource packs are
   built in even when the project has none of its own.
 
+## The engine's own files
+
+`PackLayout.build` always adds, whatever the packs: the space provider (above); the pixel glyphs
+(`DisplayGlyphs`: white `2^k`×1 pictures written by format's `PngWriter`, at `assets/netherforge/textures/font/`, each
+a bitmap provider `height` 10, `ascent` 7 at `U+F840 + k`) that image displays draw with; and
+`assets/netherforge/items/invisible.json` (a `minecraft:empty` model), the look of an `ItemDef.invisible` item
+(`ItemDef.INVISIBLE_MODEL`; `PaperItems` writes and reads it back as `invisible`, never as an `itemModel`).
+
+## Packs sent on demand
+
+A pack with `onDemand` (`CompiledResourcePack.onDemand`) is compiled with the rest, so its glyphs are numbered
+project-wide and never clash, but `Packs.rebuild` builds it into a zip of its own (`Packs.onDemand`, by the pack's
+server name), served by `PackServer` beside the project's (`serve(sha1, bytes, name)`: each name keeps its current
+and previous build) and never at the owner's external URL. `player:push_resource_pack` sends it under
+`Packs.packId(name)` with `PackOffer.replacing = false`; the project's pack is sent `replacing` only the first time a
+player gets it this session (taking off what another server sent), and beside the pushed ones after. `sendAll`
+resends the project's pack to whoever lacks its build and each pushed pack to whoever has an older one, so
+`PackService` calls it after every rebuild. Statuses are kept per pack id, and `Packs.onStatus` (set by
+`PackService.start`) raises `player_resource_pack_status`. `nf.packs.rebuild` sets
+`ProjectSession.packsWanted`; `NetherForgeRuntime.tick` reloads every pack's `pack.json` after the session's tick,
+out of every script's way. `resource_pack.on-demand` refuses what every player needs (blocks, the HUD, the game's
+textures, models, sounds) in such a pack.
+
 ## Block models
 
 `pack.json`'s `blocks` (`BlockModelDef`, `RefKind.BLOCK_MODEL`) is what a block's `model` points

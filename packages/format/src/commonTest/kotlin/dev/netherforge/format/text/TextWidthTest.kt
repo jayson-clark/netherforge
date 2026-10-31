@@ -26,6 +26,18 @@ class TextWidthTest {
     private fun String.code() = this[0].code.toString()
 
     @Test
+    fun aGlyphsBareCharacterMeasuresAsTheGlyph() {
+        // `nf.text.glyph`'s character, which the text's colour tints, measures as its tag does.
+        val glyphs = TextWidth(font, glyphChar = { if (it == 0xE000) 9 else null }) { if (it == "ui:coin") 9 else null }
+        assertEquals(glyphs.measure("<glyph:ui:coin>"), glyphs.measure("<#ff0000>\uE000"))
+        assertEquals(9 + 6, glyphs.measure("\uE000a"))
+        // Bold like any character, as the game draws it; a character no glyph has still can't be measured.
+        assertEquals(10, glyphs.measure("<b>\uE000</b>"))
+        assertNull(glyphs.measure("\uE001"))
+        assertNull(width.measure("\uE000"), "without the lookup it's a character the font doesn't cover")
+    }
+
+    @Test
     fun plainTextIsTheSumOfItsAdvances() {
         assertEquals(0, width.measure(""))
         assertEquals(6 + 2 + 4 + 6, width.measure("ai b"))

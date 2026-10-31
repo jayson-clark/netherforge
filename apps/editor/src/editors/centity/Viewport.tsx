@@ -246,7 +246,70 @@ export function DisplayVisual({
       )
     case 'text':
       return <TextVisual display={display} />
+    case 'rect':
+      return <FlatVisual {...rectBox(display)} color={display.color} />
+    case 'image':
+      return <FlatVisual {...imageBox(display)} color="#80808080" />
   }
+}
+
+/** Where a rect's or image's anchor puts it: its size and its centre, from the node's origin. */
+function anchored(width: number, height: number, anchor: string | undefined) {
+  const [ax, ay] = ANCHOR_SHARES[anchor ?? 'center'] ?? [0.5, 0.5]
+  return { width, height, x: (0.5 - ax) * width, y: (0.5 - ay) * height }
+}
+
+/** A point of a display by its share of the width from the left and of the height from the bottom. */
+const ANCHOR_SHARES: Record<string, [number, number]> = {
+  top_left: [0, 1],
+  top: [0.5, 1],
+  top_right: [1, 1],
+  left: [0, 0.5],
+  center: [0.5, 0.5],
+  right: [1, 0.5],
+  bottom_left: [0, 0],
+  bottom: [0.5, 0],
+  bottom_right: [1, 0],
+}
+
+function rectBox(display: Extract<DisplayDef, { type: 'rect' }>) {
+  const [width = 1, height = 1] = display.size ?? []
+  return anchored(width, height, display.anchor)
+}
+
+/** An image's box: its pixels are set by a script, so the editor shows the box alone. */
+function imageBox(display: Extract<DisplayDef, { type: 'image' }>) {
+  const [width = display.width / 16, height = display.height / 16] = display.size ?? []
+  return anchored(width, height, display.anchor)
+}
+
+/** A flat rectangle in the node's XY plane, as rect and image displays draw. */
+function FlatVisual({
+  width,
+  height,
+  x,
+  y,
+  color,
+}: {
+  width: number
+  height: number
+  x: number
+  y: number
+  color: string
+}) {
+  const css = color.length === 9 ? `#${color.slice(3)}` : color
+  const opacity = color.length === 9 ? parseInt(color.slice(1, 3), 16) / 255 : 1
+  return (
+    <mesh position={[x, y, 0]}>
+      <planeGeometry args={[width, height]} />
+      <meshBasicMaterial
+        color={css}
+        transparent={opacity < 1}
+        opacity={opacity}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  )
 }
 
 /** A model display: one of the project's resource pack looks, as the server shows it. */

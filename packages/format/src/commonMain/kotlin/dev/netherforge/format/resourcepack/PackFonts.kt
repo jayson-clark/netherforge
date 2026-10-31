@@ -111,9 +111,11 @@ object PackFonts {
     /**
      * A picture as characters of a font: [cells] is its provider's one row of characters, one per piece left to
      * right; [text] draws the whole picture (its one character, or the pieces and the moves between them);
-     * [advance] is how far [text] moves the cursor, null when the picture's pixels are unknown.
+     * [advance] is how far [text] moves the cursor, null when the picture's pixels are unknown; [cellAdvances]
+     * is how far each of [cells] moves it on its own (the one character's is [advance]), so text holding the
+     * bare characters ([text], from `nf.text.glyph`) measures as it draws.
      */
-    class Picture(val cells: String, val text: String, val advance: Int?)
+    class Picture(val cells: String, val text: String, val advance: Int?, val cellAdvances: List<Int>? = advance?.let { listOf(it) })
 
     /**
      * Picture [image] drawn [drawnHeight] tall as [first], its own character, and when it's too wide for a font
@@ -130,7 +132,7 @@ object PackFonts {
         val chars = listOf(first) + List(count - 1) { extra() ?: return whole }
         val cell = image.width / count
         val advances = List(count) { bitmapAdvance(image.opaqueWidth(it * cell, (it + 1) * cell), image.height, drawnHeight) }
-        return Picture(chars.joinToString(""), lay(chars, cell, image.height, drawnHeight, advances, advance), advance)
+        return Picture(chars.joinToString(""), lay(chars, cell, image.height, drawnHeight, advances, advance), advance, advances)
     }
 
     /** The narrowest a picture can be padded to so it cuts into [pieces] (for a [width] that doesn't). */

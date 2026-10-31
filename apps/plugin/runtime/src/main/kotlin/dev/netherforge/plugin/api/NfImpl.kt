@@ -8,6 +8,7 @@ import dev.netherforge.format.menu.MenuKind
 import dev.netherforge.format.menu.MenuValidator
 import dev.netherforge.format.project.Names
 import dev.netherforge.format.ref.RefKind
+import dev.netherforge.format.resourcepack.DisplayGlyphs
 import dev.netherforge.format.resourcepack.PackFonts
 import dev.netherforge.plugin.binding.Caller
 import dev.netherforge.plugin.binding.CentityFilter
@@ -25,6 +26,8 @@ import dev.netherforge.plugin.binding.NfMenusApi
 import dev.netherforge.plugin.binding.NfPlayersApi
 import dev.netherforge.plugin.binding.NfServerApi
 import dev.netherforge.plugin.binding.NfTextApi
+import dev.netherforge.plugin.binding.TextMeasureOptions
+import dev.netherforge.plugin.binding.TextSize
 import dev.netherforge.plugin.binding.notInProject
 import dev.netherforge.plugin.binding.place
 import dev.netherforge.plugin.data.ScriptData
@@ -268,6 +271,14 @@ internal class NfTextImpl(private val session: ProjectSession) : NfTextApi {
     override fun glyph(caller: Caller, glyph: String): String? = session.packs.glyph(session.names.entry(RefKind.GLYPH, glyph))
 
     override fun width(caller: Caller, text: String): Long? = session.measureText(text)?.toLong()
+
+    override fun measure(caller: Caller, text: String, options: TextMeasureOptions?): TextSize? {
+        val scale = options?.scale ?: 1.0
+        if (!(scale > 0) || !scale.isFinite()) throw LuaApiException("bad argument 'options.scale' (more than 0, got $scale)")
+        val (width, lines) = session.measureTextLines(text) ?: return null
+        val box = DisplayGlyphs.textBox(width, lines)
+        return TextSize(box.width * scale, box.height * scale)
+    }
 
     override fun space(caller: Caller, pixels: Long): String? {
         if (session.packs.built == null) return null

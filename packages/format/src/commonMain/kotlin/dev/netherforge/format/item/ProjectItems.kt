@@ -32,6 +32,7 @@ object ProjectItems {
         unbreakable = def.unbreakable ?: look.unbreakable,
         damage = def.damage,
         itemModel = def.itemModel ?: look.itemModel,
+        invisible = def.invisible ?: look.invisible,
         tooltipStyle = def.tooltipStyle ?: look.tooltipStyle,
         equipment = def.equipment ?: look.equipment,
         color = def.color ?: look.color,

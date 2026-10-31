@@ -11,14 +11,16 @@ import java.util.concurrent.Executors
  * serving the resource pack at `GET /<sha1>.zip`, and, when the server owner
  * turned web routes on, handing every other request to [web] (`nf.web`).
  *
- * It keeps the current build and the one before it, so a player who started
- * downloading just before a rebuild still gets their bytes. The hash in the
+ * It keeps the current build and the one before it of each pack it serves (the
+ * project's, and each `onDemand` pack's), so a player who started downloading
+ * just before a rebuild still gets their bytes. The hash in the
  * path means a cache in between can never hand a client stale content under
  * a current name.
  */
 class PackServer private constructor(private val server: HttpServer, private val executor: ExecutorService) {
+    /** Each pack's current build and the one before, by the pack's name (`""` for the project's). */
     @Volatile
-    private var packs: List<Pair<String, ByteArray>> = emptyList()
+    private var packs: Map<String, List<Pair<String, ByteArray>>> = emptyMap()
 
     /** Where requests that aren't for a pack go; null (`404`) while web routes are off. */
     @Volatile
@@ -32,8 +34,10 @@ class PackServer private constructor(private val server: HttpServer, private val
     /** The host to put in a URL: the bound address, or loopback when bound to every interface. */
     val host: String get() = server.address.address.let { if (it.isAnyLocalAddress) "127.0.0.1" else it.hostAddress }
 
-    fun serve(sha1: String, bytes: ByteArray) {
-        packs = listOf(sha1 to bytes) + packs.filter { it.first != sha1 }.take(1)
+    /** Serves [bytes] as pack [name]'s current build (`""`: the project's), keeping the one before it. */
+    fun serve(sha1: String, bytes: ByteArray, name: String = "") {
+        val kept = packs[name].orEmpty()
+        packs = packs + (name to (listOf(sha1 to bytes) + kept.filter { it.first != sha1 }.take(1)))
     }
 
     fun stop() {
@@ -50,7 +54,7 @@ class PackServer private constructor(private val server: HttpServer, private val
         }
         exchange.use {
             val name = exchange.requestURI.path.removePrefix("/").removeSuffix(".zip")
-            val bytes = packs.firstOrNull { it.first == name }?.second
+            val bytes = packs.values.firstNotNullOfOrNull { builds -> builds.firstOrNull { it.first == name }?.second }
             val method = exchange.requestMethod
             when {
                 method != "GET" && method != "HEAD" -> exchange.sendResponseHeaders(405, -1)

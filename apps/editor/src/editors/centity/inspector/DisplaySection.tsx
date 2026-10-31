@@ -1,6 +1,7 @@
 /** A display node's fields: what it shows (a block with its properties, an item, text) and how. */
 import { setKey } from '@/core/draft'
 import {
+  AnchorValues,
   BillboardValues,
   ItemTransformValues,
   TEXT_DEFAULTS,
@@ -31,6 +32,8 @@ export function DisplaySection({ node, editNode }: { node: NodeDef; editNode: Ed
       else if (next === 'block') target.display = { type: 'block', block: 'minecraft:stone' }
       else if (next === 'item') target.display = { type: 'item', item: 'minecraft:stick' }
       else if (next === 'model') target.display = { type: 'model', model: looks[0] ?? '' }
+      else if (next === 'rect') target.display = { type: 'rect', color: '#FFFFFF' }
+      else if (next === 'image') target.display = { type: 'image', width: 64, height: 36 }
       else target.display = { type: 'text', text: 'Text' }
     })
 
@@ -45,7 +48,7 @@ export function DisplaySection({ node, editNode }: { node: NodeDef; editNode: Ed
         label="Type"
         dataPath="display"
         value={type}
-        options={['none', 'block', 'item', 'model', 'text'] as const}
+        options={['none', 'block', 'item', 'model', 'text', 'rect', 'image'] as const}
         onChange={switchType}
       />
       {display?.type === 'block' && (
@@ -192,9 +195,124 @@ export function DisplaySection({ node, editNode }: { node: NodeDef; editNode: Ed
             defaultLabel="off"
             onChange={(value) => editDisplay<typeof display>((d) => setKey(d, 'shadow', value))}
           />
+          <SelectField
+            label="Anchor"
+            dataPath="display.anchor"
+            value={display.anchor ?? ''}
+            options={[
+              { value: '', label: 'None (as the game draws text)' },
+              ...AnchorValues.map((it) => ({ value: it, label: it })),
+            ]}
+            onChange={(value) =>
+              editDisplay<typeof display>((d) =>
+                setKey(d, 'anchor', (value || undefined) as typeof d.anchor),
+              )
+            }
+          />
+          {display.anchor && (
+            <Hint>
+              Placed by that point of its lines, measured with the game&apos;s font
+              (fonts/default.json). Lines break only at line breaks.
+            </Hint>
+          )}
+        </>
+      )}
+      {display?.type === 'rect' && (
+        <>
+          <TextField
+            label="Colour"
+            dataPath="display.color"
+            value={display.color}
+            placeholder="#RRGGBB or #AARRGGBB"
+            onChange={(color) => editDisplay<typeof display>((d) => (d.color = color))}
+          />
+          <SizeFields
+            size={display.size ?? [1, 1]}
+            onChange={(size) => editDisplay<typeof display>((d) => (d.size = size))}
+          />
+          <AnchorField
+            value={display.anchor}
+            onChange={(anchor) => editDisplay<typeof display>((d) => setKey(d, 'anchor', anchor))}
+          />
+        </>
+      )}
+      {display?.type === 'image' && (
+        <>
+          <NumberField
+            label="Width (pixels)"
+            dataPath="display.width"
+            value={display.width}
+            step={1}
+            onChange={(value) => editDisplay<typeof display>((d) => (d.width = value ?? d.width))}
+          />
+          <NumberField
+            label="Height (pixels)"
+            dataPath="display.height"
+            value={display.height}
+            step={1}
+            onChange={(value) => editDisplay<typeof display>((d) => (d.height = value ?? d.height))}
+          />
+          <SizeFields
+            size={display.size ?? [display.width / 16, display.height / 16]}
+            onChange={(size) => editDisplay<typeof display>((d) => (d.size = size))}
+          />
+          <AnchorField
+            value={display.anchor}
+            onChange={(anchor) => editDisplay<typeof display>((d) => setKey(d, 'anchor', anchor))}
+          />
+          <Hint>
+            A script shows pictures on it with node:set_image. It&apos;s blank until then.
+          </Hint>
         </>
       )}
     </Section>
+  )
+}
+
+/** A rect's or image's size in blocks, before the node's scale. */
+function SizeFields({ size, onChange }: { size: number[]; onChange: (size: number[]) => void }) {
+  const [width = 1, height = 1] = size
+  return (
+    <>
+      <NumberField
+        label="Width (blocks)"
+        dataPath="display.size"
+        value={width}
+        step={0.1}
+        onChange={(value) => onChange([value ?? width, height])}
+      />
+      <NumberField
+        label="Height (blocks)"
+        dataPath="display.size"
+        value={height}
+        step={0.1}
+        onChange={(value) => onChange([width, value ?? height])}
+      />
+    </>
+  )
+}
+
+type AnchorName = (typeof AnchorValues)[number]
+
+/** Which point of a rect or image is at the node's origin. */
+function AnchorField({
+  value,
+  onChange,
+}: {
+  value: AnchorName | undefined
+  onChange: (anchor: AnchorName | undefined) => void
+}) {
+  return (
+    <SelectField
+      label="Anchor"
+      dataPath="display.anchor"
+      value={value ?? ''}
+      options={[
+        { value: '', label: 'Default (center)' },
+        ...AnchorValues.map((it) => ({ value: it, label: it })),
+      ]}
+      onChange={(next) => onChange((next || undefined) as AnchorName | undefined)}
+    />
   )
 }
 

@@ -136,6 +136,46 @@ ticks animate it as a flipbook, alongside the animation tracks.
 | `lineWidth`  | Pixels before wrapping. Default 200.                                                                            |
 | `seeThrough` | Visible through blocks.                                                                                         |
 | `shadow`     | Draw a text shadow.                                                                                             |
+| `anchor`     | Which point of the text is at the node's origin (see below). Default none: it stands on the origin, centred.    |
+
+**Anchors.** `anchor` is one of `top_left`, `top`, `top_right`, `left`,
+`center`, `right`, `bottom_left`, `bottom` or `bottom_right`: the point of the
+display's rectangle that's put at the node's origin, the engine accounting for
+how the game lays a text display out (a font pixel is 1/40 of a block, a line
+10 pixels, the background's pixel of padding). Text with an `anchor` is
+measured by the server with the game's font (`fonts/default.json`, which the
+editor writes) and the resource packs' glyphs (as `<glyph:…>` tags or the
+characters `nf.text.glyph` gives, which take the text's colour), its rectangle being its widest line (every character and the
+gap after it) by its lines; lines break only at line breaks, never at
+`lineWidth`. Text the server can't measure is drawn unanchored, with a warning
+in the log. A glyph with `ascent` 7 has its top at the top of its line, so a
+glyph anchored `top_left` lines up with a rect anchored `top_left` at the same
+place.
+
+**Rect**: `{ "type": "rect", "color": "#FF3366", "size": [8.4, 4.8], "anchor": "top_left" }`.
+A flat rectangle of one colour in the node's XY plane, facing -Z as text does,
+exactly `size` blocks (width, height; default `[1, 1]`) before the node's
+scale. `color` is `#RRGGBB`, or `#AARRGGBB` for one you can see through.
+`anchor` defaults to `center`. It's drawn as a text display's background, so
+it needs only the space characters every built resource pack has. A script
+recolours and resizes it (`node:set_display_color`, `node:set_display_size`)
+with one small update, nothing respawned.
+
+**Image**: `{ "type": "image", "width": 96, "height": 54, "size": [6, 3.375] }`.
+A picture `width` by `height` pixels (at most 256 either way and 16384 in
+all) that a script sets at runtime with `node:set_image` (from `nf.images`),
+filling `size` blocks (default 16 pixels a block) in the node's XY plane,
+facing -Z. `anchor` defaults to `center`. It's blank until a script sets a
+picture. Pixels are drawn as rows of the engine's pixel glyphs, one text colour
+per run of equal pixels, so a picture moves and eases like any display and
+needs no resource pack change; pixels less than half opaque are left out. Its
+viewers are sent a picture once: setting the same pixels again sends nothing.
+A picture with many colour changes is a lot of text (a 128 by 72 photo is
+about 300 KiB of it, and about 25 KiB once the connection compresses it), so a
+centity's changed images send at most about 64 KiB a tick between them,
+counted compressed, and the rest follow on the next ticks. Every character is
+also the client's to lay out and draw each frame: a few photo-sized pictures
+on screen cost its frame rate, so fewer colours or fewer pixels draw faster.
 
 ### `hitbox`
 

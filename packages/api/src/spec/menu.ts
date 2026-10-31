@@ -776,6 +776,11 @@ export const menuShapes: LuaClass[] = [
         doc: "A cooldown after using it (an ender pearl's): `{ seconds = 2 }`. Items with the same `group` share one.",
       },
       {
+        name: 'invisible',
+        type: 'boolean?',
+        doc: "Drawn as nothing wherever it's drawn: in a slot, on the ground, and in a hand, where the player's own arm isn't drawn either (as with anything held). An empty look every built resource pack has, in place of `item_model`. With `hold`, it's a pointer: no arm in the way, the right button pressed heard as `player_use_item` and let go as `player_stop_using_item`.",
+      },
+      {
         name: 'hold',
         type: 'boolean|ItemHold?',
         doc: "Held down with no end: a right click lasts until the player lets go, never finishes and uses nothing up. Letting go is `player_stop_using_item`, and `event.ticks` says how long it was held: a flail thrown on release, a charge that grows while held. `true` draws nothing (no zoom, no pose); `{ animation = \"trident\" }` poses the player as that use of the game's does, a knife raised to throw. Read back, it's `true` or that table, as it was given (a hold whose animation is `\"none\"` reads back `true`). Unless `use_effects` says otherwise, the player keeps their speed and can sprint, whatever the animation. It can't go with `food`, and only works on a kind with no use of its own (`minecraft:stick`, not a bow or a shield). Left clicks don't attack while it's held.",

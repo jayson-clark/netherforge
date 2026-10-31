@@ -22,8 +22,8 @@ It is a [Living](living.md), which is an [Entity](entity.md), so it has every me
 | [Menus, inventories and dialogs](#menus-inventories-and-dialogs) | [`open_menu`](#open_menu) [`menu`](#menu) [`close_menu`](#close_menu) [`open_inventory`](#open_inventory) [`close_inventory`](#close_inventory) [`open_dialog`](#open_dialog) [`close_dialog`](#close_dialog) |
 | [On their screen](#on-their-screen) | [`hud`](#hud) [`sidebar`](#sidebar) [`bossbars`](#bossbars) [`below_name`](#below_name) [`set_below_name`](#set_below_name) |
 | [The player list](#the-player-list) | [`tab_header`](#tab_header) [`set_tab_header`](#set_tab_header) [`tab_footer`](#tab_footer) [`set_tab_footer`](#set_tab_footer) [`tab_name`](#tab_name) [`set_tab_name`](#set_tab_name) [`tab_order`](#tab_order) [`set_tab_order`](#set_tab_order) [`is_listed_for`](#is_listed_for) [`set_listed_for`](#set_listed_for) |
-| [What they see of the world](#what-they-see-of-the-world) | [`sky`](#sky) [`set_sky`](#set_sky) [`clear_sky`](#clear_sky) [`border`](#border) [`has_own_border`](#has_own_border) [`reset_border`](#reset_border) [`send_block_change`](#send_block_change) [`reset_block`](#reset_block) [`send_equipment_change`](#send_equipment_change) [`camera`](#camera) [`set_camera`](#set_camera) [`compass_target`](#compass_target) [`set_compass_target`](#set_compass_target) [`view_distance`](#view_distance) [`set_view_distance`](#set_view_distance) [`resource_pack_status`](#resource_pack_status) |
-| [Events](#events) | [`on`](#on) [`once`](#once) and 44 events |
+| [What they see of the world](#what-they-see-of-the-world) | [`sky`](#sky) [`set_sky`](#set_sky) [`clear_sky`](#clear_sky) [`border`](#border) [`has_own_border`](#has_own_border) [`reset_border`](#reset_border) [`send_block_change`](#send_block_change) [`reset_block`](#reset_block) [`send_equipment_change`](#send_equipment_change) [`camera`](#camera) [`set_camera`](#set_camera) [`compass_target`](#compass_target) [`set_compass_target`](#set_compass_target) [`view_distance`](#view_distance) [`set_view_distance`](#set_view_distance) [`resource_pack_status`](#resource_pack_status) [`push_resource_pack`](#push_resource_pack) [`pop_resource_pack`](#pop_resource_pack) |
+| [Events](#events) | [`on`](#on) [`once`](#once) and 45 events |
 | From [Living](living.md) | [`health`](living.md#health) [`set_health`](living.md#set_health) [`max_health`](living.md#max_health) [`damage`](living.md#damage) [`heal`](living.md#heal) [`attribute`](living.md#attribute) [`attribute_base`](living.md#attribute_base) [`set_attribute_base`](living.md#set_attribute_base) [`attribute_modifiers`](living.md#attribute_modifiers) [`add_attribute_modifier`](living.md#add_attribute_modifier) [`remove_attribute_modifier`](living.md#remove_attribute_modifier) [`effects`](living.md#effects) [`has_effect`](living.md#has_effect) [`add_effect`](living.md#add_effect) [`remove_effect`](living.md#remove_effect) [`equipment`](living.md#equipment) [`set_equipment`](living.md#set_equipment) |
 | From [Entity](entity.md) | [`id`](entity.md#id) [`kind`](entity.md#kind) [`exists`](entity.md#exists) [`is_player`](entity.md#is_player) [`is_living`](entity.md#is_living) [`is_mob`](entity.md#is_mob) [`location`](entity.md#location) [`position`](entity.md#position) [`world`](entity.md#world) [`eye_position`](entity.md#eye_position) [`yaw`](entity.md#yaw) [`pitch`](entity.md#pitch) [`direction`](entity.md#direction) [`set_yaw`](entity.md#set_yaw) [`set_pitch`](entity.md#set_pitch) [`look_at`](entity.md#look_at) [`teleport`](entity.md#teleport) [`velocity`](entity.md#velocity) [`set_velocity`](entity.md#set_velocity) [`add_velocity`](entity.md#add_velocity) [`is_on_ground`](entity.md#is_on_ground) [`remove`](entity.md#remove) [`custom_name`](entity.md#custom_name) [`set_custom_name`](entity.md#set_custom_name) [`is_custom_name_visible`](entity.md#is_custom_name_visible) [`set_custom_name_visible`](entity.md#set_custom_name_visible) [`tags`](entity.md#tags) [`has_tag`](entity.md#has_tag) [`add_tag`](entity.md#add_tag) [`remove_tag`](entity.md#remove_tag) [`is_glowing`](entity.md#is_glowing) [`set_glowing`](entity.md#set_glowing) [`is_visible`](entity.md#is_visible) [`set_visible`](entity.md#set_visible) [`hide_from`](entity.md#hide_from) [`show_to`](entity.md#show_to) [`is_hidden_from`](entity.md#is_hidden_from) [`team`](entity.md#team) [`is_silent`](entity.md#is_silent) [`set_silent`](entity.md#set_silent) [`has_gravity`](entity.md#has_gravity) [`set_gravity`](entity.md#set_gravity) [`is_invulnerable`](entity.md#is_invulnerable) [`set_invulnerable`](entity.md#set_invulnerable) [`passengers`](entity.md#passengers) [`add_passenger`](entity.md#add_passenger) [`remove_passenger`](entity.md#remove_passenger) [`vehicle`](entity.md#vehicle) [`inventory`](entity.md#inventory) [`target_block`](entity.md#target_block) [`target_entity`](entity.md#target_entity) [`target_centity`](entity.md#target_centity) |
 
@@ -1215,11 +1215,41 @@ Changes how many chunks around them the server sends, until they leave, from the
 
 **Returns** `boolean`: `false` when they're offline.
 
-### `player:resource_pack_status()` {#resource_pack_status}
+### `player:resource_pack_status(pack?)` {#resource_pack_status}
 
-What became of the project's resource pack on their game: `"loaded"`, `"declined"`, `"failed"`, `"pending"` (accepted, still downloading), or `nil` before their game has answered (and when they're offline, or there's no resource pack).
+What became of the project's resource pack on their game, or of an `onDemand` pack pushed to them: `"loaded"`, `"declined"`, `"failed"`, `"pending"` (accepted, still downloading), or `nil` before their game has answered (and when they're offline, or there's no such pack). `player_resource_pack_status` says when it changes.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `pack` (optional) | `string` | An `onDemand` pack, by name. Left out, the project's pack. |
 
 **Returns** `"loaded"\|"declined"\|"failed"\|"pending"\|nil`
+
+### `player:push_resource_pack(pack)` {#push_resource_pack}
+
+Sends them one of the project's `onDemand` resource packs (`"onDemand": true` in its `pack.json`), beside the packs they have: their game shows its loading screen while it applies it, so it's for things that change rarely (this week's featured banners), not every search. Pushing one they have changes nothing; one rebuilt since (`nf.packs.rebuild`) is sent to them again. `player_resource_pack_status` says what became of it. It's taken off again by `pop_resource_pack`, or when they leave. A name that isn't an `onDemand` pack is an error. `false` when they're offline, or nothing is built (the packs have errors).
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `pack` | `string` | The pack's name, as its folder is: `"featured"`. |
+
+**Returns** `boolean`
+
+```lua
+nf.on("player_join", function(event)
+  event.player:push_resource_pack("featured")
+end)
+```
+
+### `player:pop_resource_pack(pack)` {#pop_resource_pack}
+
+Takes an `onDemand` pack `push_resource_pack` sent them back off their game (a loading screen again). `false` when they're offline or don't have it.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `pack` | `string` |  |
+
+**Returns** `boolean`
 
 ## Events
 
@@ -1233,6 +1263,7 @@ What `player:on(event, handler)` listens for. See [Events](events.md) for how ev
 | `quit` | [PlayerQuitEvent](types.md#playerquitevent) | A player left. Assign `event.message` to change what everyone is told, or `nil` to say nothing. Only this player's: heard before `nf.on("player_quit")`, with the same event, so `event:stop()` keeps it from there. Bubbles. Writable: `message`. |
 | `kick` | [PlayerKickEvent](types.md#playerkickevent) | A player is being kicked: by a command, a plugin or a script, or by the server (flying, timing out, a bad packet). `event:cancel()` keeps them on the server; assign `event.text` to change what their screen says, or `event.message` to change what everyone is told (`nil` for nothing). Leaving then goes on to `player_quit`. Only this player's: heard before `nf.on("player_kick")`, with the same event, so `event:stop()` keeps it from there. **Cancellable.** Bubbles. Writable: `text`, `message`. |
 | `arrive` | [PlayerArriveEvent](types.md#playerarriveevent) | A player a script on another server sent here (`nf.network.send_player`) has joined, with the data it sent along. Heard the tick after their `player_join`, so whatever `player_join` set up is there. Only this player's: heard before `nf.on("player_arrive")`, with the same event, so `event:stop()` keeps it from there. Bubbles. |
+| `resource_pack_status` | [PlayerResourcePackStatusEvent](types.md#playerresourcepackstatusevent) | A player's game said what became of a resource pack the server sent it: the project's as they joined or after a rebuild, or an `onDemand` one a script pushed (`event.pack`). Only this player's: heard before `nf.on("player_resource_pack_status")`, with the same event, so `event:stop()` keeps it from there. Bubbles. |
 
 ### Chat and commands
 

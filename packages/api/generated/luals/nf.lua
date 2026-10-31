@@ -6,13 +6,13 @@
 -- project's modules: "Lua.runtime.path": ["modules/?.lua", "modules/?/init.lua"].
 -- The sandbox removes io, os, package, load, loadstring, dofile, loadfile, debug, collectgarbage, warn, java.
 
----@alias nf.Event "tick"|"unload"|"player_join"|"player_quit"|"player_chat"|"player_interact"|"player_interact_entity"|"player_move"|"player_teleport"|"player_change_world"|"player_death"|"player_respawn"|"player_drop_item"|"player_pickup_item"|"player_use_item"|"player_consume_item"|"player_swap_hands"|"player_sneak"|"player_command"|"block_break"|"block_place"|"entity_damage"|"entity_death"|"entity_spawn"|"world_dusk"|"world_dawn"|"player_input"|"player_change_slot"|"player_swing"|"player_sprint"|"player_fly"|"player_jump"|"player_change_game_mode"|"player_change_food"|"player_gain_experience"|"player_change_level"|"player_kick"|"player_complete_advancement"|"player_stop_using_item"|"player_break_item"|"entity_heal"|"projectile_launch"|"projectile_hit"|"entity_shoot_bow"|"entity_target"|"entity_explode"|"block_explode"|"entity_combust"|"entity_change_effect"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"world_load"|"world_unload"|"entity_mount"|"entity_dismount"|"vehicle_move"|"vehicle_damage"|"vehicle_destroy"|"player_open_inventory"|"player_close_inventory"|"player_click_inventory"|"player_drag_inventory"|"player_craft"|"player_prepare_craft"|"player_prepare_anvil"|"player_prepare_smithing"|"player_prepare_grindstone"|"player_enchant_item"|"furnace_smelt"|"server_list_ping"|"centity_click"|"recipe_craft"|"item_view"|"centity_natural_spawn"|"menu_open"|"menu_close"|"menu_click"|"dialog_press"|"setting_changed"|"network_connect"|"network_disconnect"|"network_server_connect"|"network_server_disconnect"|"network_player_join"|"network_player_switch"|"network_player_quit"|"player_arrive"|string
+---@alias nf.Event "tick"|"unload"|"player_join"|"player_resource_pack_status"|"player_quit"|"player_chat"|"player_interact"|"player_interact_entity"|"player_move"|"player_teleport"|"player_change_world"|"player_death"|"player_respawn"|"player_drop_item"|"player_pickup_item"|"player_use_item"|"player_consume_item"|"player_swap_hands"|"player_sneak"|"player_command"|"block_break"|"block_place"|"entity_damage"|"entity_death"|"entity_spawn"|"world_dusk"|"world_dawn"|"player_input"|"player_change_slot"|"player_swing"|"player_sprint"|"player_fly"|"player_jump"|"player_change_game_mode"|"player_change_food"|"player_gain_experience"|"player_change_level"|"player_kick"|"player_complete_advancement"|"player_stop_using_item"|"player_break_item"|"entity_heal"|"projectile_launch"|"projectile_hit"|"entity_shoot_bow"|"entity_target"|"entity_explode"|"block_explode"|"entity_combust"|"entity_change_effect"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"world_load"|"world_unload"|"entity_mount"|"entity_dismount"|"vehicle_move"|"vehicle_damage"|"vehicle_destroy"|"player_open_inventory"|"player_close_inventory"|"player_click_inventory"|"player_drag_inventory"|"player_craft"|"player_prepare_craft"|"player_prepare_anvil"|"player_prepare_smithing"|"player_prepare_grindstone"|"player_enchant_item"|"furnace_smelt"|"server_list_ping"|"centity_click"|"recipe_craft"|"item_view"|"centity_natural_spawn"|"menu_open"|"menu_close"|"menu_click"|"dialog_press"|"setting_changed"|"network_connect"|"network_disconnect"|"network_server_connect"|"network_server_disconnect"|"network_player_join"|"network_player_switch"|"network_player_quit"|"player_arrive"|string
 ---@alias Centity.Event "spawn"|"remove"|"tick"|"click"|"animation_start"|"animation_end"|"chunk_load"|"chunk_unload"|"hit"|"bounce"|"stick"|"flight_end"|"damage"|"death"|"land"|"bump"|"touch"|"path_end"|"buff_add"|"buff_end"|string
 ---@alias Node.Event "click"|"collide"|"wake"|"sleep"
 ---@alias Entity.Event "damage"|"interact"|"hit"|"explode"|"combust"|"mount"|"dismount"
 ---@alias Living.Event "death"|"heal"|"launch_projectile"|"shoot_bow"|"change_effect"|"damage"|"interact"|"hit"|"explode"|"combust"|"mount"|"dismount"
 ---@alias Mob.Event "path_end"|"target"|"death"|"heal"|"launch_projectile"|"shoot_bow"|"change_effect"|"damage"|"interact"|"hit"|"explode"|"combust"|"mount"|"dismount"
----@alias Player.Event "join"|"quit"|"chat"|"interact"|"interact_entity"|"move"|"teleport"|"change_world"|"death"|"respawn"|"drop_item"|"pickup_item"|"use_item"|"consume_item"|"swap_hands"|"sneak"|"command"|"input"|"change_slot"|"swing"|"sprint"|"fly"|"jump"|"change_game_mode"|"change_food"|"gain_experience"|"change_level"|"kick"|"complete_advancement"|"stop_using_item"|"break_item"|"open_inventory"|"close_inventory"|"click_inventory"|"drag_inventory"|"craft"|"prepare_craft"|"prepare_anvil"|"prepare_smithing"|"prepare_grindstone"|"enchant_item"|"arrive"|"buff_add"|"buff_end"|"heal"|"launch_projectile"|"shoot_bow"|"change_effect"|"damage"|"hit"|"explode"|"combust"|"mount"|"dismount"
+---@alias Player.Event "join"|"resource_pack_status"|"quit"|"chat"|"interact"|"interact_entity"|"move"|"teleport"|"change_world"|"death"|"respawn"|"drop_item"|"pickup_item"|"use_item"|"consume_item"|"swap_hands"|"sneak"|"command"|"input"|"change_slot"|"swing"|"sprint"|"fly"|"jump"|"change_game_mode"|"change_food"|"gain_experience"|"change_level"|"kick"|"complete_advancement"|"stop_using_item"|"break_item"|"open_inventory"|"close_inventory"|"click_inventory"|"drag_inventory"|"craft"|"prepare_craft"|"prepare_anvil"|"prepare_smithing"|"prepare_grindstone"|"enchant_item"|"arrive"|"buff_add"|"buff_end"|"heal"|"launch_projectile"|"shoot_bow"|"change_effect"|"damage"|"hit"|"explode"|"combust"|"mount"|"dismount"
 ---@alias World.Event "block_break"|"block_place"|"entity_spawn"|"dusk"|"dawn"|"block_explode"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"furnace_smelt"
 ---@alias ProjectBlock.Event "place"|"break"|"click"|"tick"
 ---@alias Menu.Event "open"|"close"|"click"|"drag"
@@ -60,7 +60,7 @@
 --- MiniMessage a player reads, like `"<green>Done!"`: a string. A `<glyph:pack/key>` tag in it names a glyph the way the script's own files would: one of its own package's resource packs bare, or `<glyph:namespace:pack/key>` for one a package it depends on exports. The tag means that glyph wherever and whenever the text is shown, whoever shows it; one naming a glyph the script can't use draws nothing, and the server log says why. Text handed back to a script names its glyphs the same way.
 ---@alias Text string
 
---- Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.files`, `nf.text`, `nf.looks`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
+--- Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.images`, `nf.files`, `nf.text`, `nf.looks`, `nf.packs`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
 ---@class nf
 ---@field server nf.server The server itself: its clock, its performance, its version, its settings (players, message of the day, whitelist), and saying or running things as the console.
 ---@field commands nf.commands Slash commands a module adds to the server for as long as it runs, with typed arguments, tab completion and usage messages from their declaration.
@@ -84,9 +84,11 @@
 ---@field particles nf.particles The project's particle effects (`particles/<id>/effect.json`): timelines of particles authored in the editor, played at a place by scripts.
 ---@field cutscenes nf.cutscenes The project's cutscenes (`cutscenes/<id>.json`): camera paths keyed in the editor, played for one player at a time.
 ---@field screens nf.screens Screens: walls of maps, 128 by 128 pixels each, that scripts draw on (pixels, shapes, text, pictures) and play videos on. The project's own are its `screens/<id>/screen.json` files; a script can make more. What a screen shows is sent to each player who can see it, a change at a time, so drawing every tick costs only what changed.
+---@field images nf.images Pictures made at runtime, for image displays (`node:set_image`): from pixels, from an image file's bytes, or downloaded. An `Image` is a value that never changes: resizing or cropping one makes another. An image is at most 2048 pixels each way, and the images the server holds for scripts at once are at most 32 million pixels in all; one past that is an error, so let go of images you no longer need (an image Lua no longer holds is let go of for you).
 ---@field files nf.files Files in the package's own folder (`plugins/NetherForge/data/<namespace>/`), which no other package's scripts see unless they're handed a file: the only state a script has that survives a restart. The server owner limits how much each package may keep there (`files:` in `config.yml`); a write past it fails.
 ---@field text nf.text Helpers for the MiniMessage text players see: escaping what players typed, stripping tags, resource pack glyphs, moving the cursor, and measuring.
 ---@field looks nf.looks Resource pack looks (item models, glyphs, skins, tooltips, equipment looks, sounds) handed from one package's code to another's. A look is a value, not a use: any script can show any look the server has, by its full name `<namespace>:<pack>/<key>`, whether or not its package exports it or is one the script's package depends on. That's how a project hands a package it uses looks of its own to draw with (see [Packages](packages.md#looks-are-values)).
+---@field packs nf.packs The project's resource packs as the server builds and sends them: built again from the files on disk, and which of them are `onDemand` (left out of the pack players get as they join, for `player:push_resource_pack`).
 ---@field json nf.json JSON text to and from Lua values.
 ---@field encoding nf.encoding Text written the ways web services want it: in a URL, as a form, as base64 or as hex. For building what `nf.http.request` sends and reading what comes back (`nf.web` already decodes a request's `query` and `form`). Lua strings cross as text (UTF-8), as `nf.http`'s bodies do, so what's decoded must be text too: decoding to bytes that aren't UTF-8 (an image, a raw key) is `nil`.
 ---@field crypto nf.crypto Hashes and signatures (HMAC), for services that sign what they send or want what's sent to them signed. Checking a webhook's signature is `nf.web.verify_signature`, which compares in constant time. Keep secrets in a setting (`nf.config`), not in a script. Both work on the text's UTF-8 bytes.
@@ -108,6 +110,7 @@ nf = {}
 ---@overload fun(event: "tick", handler: fun(event: TickEvent), options?: EventOptions): Subscription
 ---@overload fun(event: "unload", handler: fun(event: Event)): Subscription
 ---@overload fun(event: "player_join", handler: fun(event: PlayerJoinEvent)): Subscription
+---@overload fun(event: "player_resource_pack_status", handler: fun(event: PlayerResourcePackStatusEvent)): Subscription
 ---@overload fun(event: "player_quit", handler: fun(event: PlayerQuitEvent)): Subscription
 ---@overload fun(event: "player_chat", handler: fun(event: PlayerChatEvent)): Subscription
 ---@overload fun(event: "player_interact", handler: fun(event: PlayerInteractEvent)): Subscription
@@ -219,6 +222,7 @@ function nf.on(event, handler, options) end
 ---@overload fun(event: "tick", handler: fun(event: TickEvent)): Subscription
 ---@overload fun(event: "unload", handler: fun(event: Event)): Subscription
 ---@overload fun(event: "player_join", handler: fun(event: PlayerJoinEvent)): Subscription
+---@overload fun(event: "player_resource_pack_status", handler: fun(event: PlayerResourcePackStatusEvent)): Subscription
 ---@overload fun(event: "player_quit", handler: fun(event: PlayerQuitEvent)): Subscription
 ---@overload fun(event: "player_chat", handler: fun(event: PlayerChatEvent)): Subscription
 ---@overload fun(event: "player_interact", handler: fun(event: PlayerInteractEvent)): Subscription
@@ -341,7 +345,7 @@ function nf.after(ticks, callback) end
 ---@return Task
 function nf.every(ticks, callback) end
 
---- Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.send_player`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.
+--- Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.send_player`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.
 ---@param callback async fun(...: any) The task: plain Lua that may wait.
 ---@param ... any Passed to `callback`.
 ---@return Task # Call `:cancel()` on it to end it early.
@@ -371,6 +375,7 @@ function nf.wait_until(predicate, timeout) end
 ---@overload fun(handle: nf, event: "tick", filter?: fun(event: TickEvent): boolean): TickEvent
 ---@overload fun(handle: nf, event: "unload", filter?: fun(event: Event): boolean): Event
 ---@overload fun(handle: nf, event: "player_join", filter?: fun(event: PlayerJoinEvent): boolean): PlayerJoinEvent
+---@overload fun(handle: nf, event: "player_resource_pack_status", filter?: fun(event: PlayerResourcePackStatusEvent): boolean): PlayerResourcePackStatusEvent
 ---@overload fun(handle: nf, event: "player_quit", filter?: fun(event: PlayerQuitEvent): boolean): PlayerQuitEvent
 ---@overload fun(handle: nf, event: "player_chat", filter?: fun(event: PlayerChatEvent): boolean): PlayerChatEvent
 ---@overload fun(handle: nf, event: "player_interact", filter?: fun(event: PlayerInteractEvent): boolean): PlayerInteractEvent
@@ -512,6 +517,7 @@ function nf.wait_until(predicate, timeout) end
 ---@overload fun(handle: Mob, event: "path_end", filter?: fun(event: EntityPathEndEvent): boolean): EntityPathEndEvent
 ---@overload fun(handle: Mob, event: "target", filter?: fun(event: EntityTargetEvent): boolean): EntityTargetEvent
 ---@overload fun(handle: Player, event: "join", filter?: fun(event: PlayerJoinEvent): boolean): PlayerJoinEvent
+---@overload fun(handle: Player, event: "resource_pack_status", filter?: fun(event: PlayerResourcePackStatusEvent): boolean): PlayerResourcePackStatusEvent
 ---@overload fun(handle: Player, event: "quit", filter?: fun(event: PlayerQuitEvent): boolean): PlayerQuitEvent
 ---@overload fun(handle: Player, event: "chat", filter?: fun(event: PlayerChatEvent): boolean): PlayerChatEvent
 ---@overload fun(handle: Player, event: "interact", filter?: fun(event: PlayerInteractEvent): boolean): PlayerInteractEvent
@@ -1141,6 +1147,39 @@ function nf.screens.map_color(color) end
 ---@return ScreenPoint?
 function nf.screens.looking_at(player, distance) end
 
+--- Pictures made at runtime, for image displays (`node:set_image`): from pixels, from an image file's bytes, or downloaded. An `Image` is a value that never changes: resizing or cropping one makes another. An image is at most 2048 pixels each way, and the images the server holds for scripts at once are at most 32 million pixels in all; one past that is an error, so let go of images you no longer need (an image Lua no longer holds is let go of for you).
+---@class nf.images
+nf.images = {}
+
+--- An image from its pixels, row by row from the top left: a list of colours (`"#RRGGBB"`, or `"#AARRGGBB"` for one you can see through), or every pixel's bytes in one base64 string, 3 a pixel (red, green, blue) or 4 (and alpha). The wrong number of pixels, or a colour that isn't one, is an error.
+---@param width integer In pixels, 1 to 2048.
+---@param height integer In pixels, 1 to 2048.
+---@param pixels string[]|string Colours, or base64 bytes.
+---@return Image
+function nf.images.create(width, height, pixels) end
+
+--- An image all one colour.
+---@param width integer In pixels, 1 to 2048.
+---@param height integer In pixels, 1 to 2048.
+---@param color string `"#RRGGBB"` or `"#AARRGGBB"`.
+---@return Image
+function nf.images.fill(width, height, color) end
+
+--- An image from an image file's bytes (PNG, JPEG, GIF or BMP) in base64, as a catalog, a database or `image:encode` keeps them. `nil` for bytes that aren't an image this can read, or one bigger than 2048 pixels either way.
+---@param data string The file, base64.
+---@return Image?
+function nf.images.decode(data) end
+
+--- Downloads an image file (PNG, JPEG, GIF or BMP) and gives it as an image: `nf.http.request`'s request, held to the same rules (the host declared in `requires.http`, the size limit, the rate), its body read as the image it is rather than as text. A response that isn't `2xx`, or isn't an image this can read, fails. It works off the main thread, so its image arrives later: give `callback`, which is called with `image, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `image, err`. Without a callback outside a task, it's an error. When it fails, `image` is `nil` and `err` says why.
+--- Needs each host it calls in `"requires": { "http": [...] }` in `netherforge.json`: without it, calling it is an error.
+---@param options HttpRequestOptions The request, as `nf.http.request` takes it: usually just its `url`.
+---@param callback? fun(image: Image?, err: string?) Called on the main thread once it's done, as this script's code, with the picture (or `nil` and why not). Not called if the script has stopped by then.
+---@return Image? # Only without a callback, in a task: the picture, or `nil`.
+---@return string? # Why it failed, when it did; `nil` when it worked.
+---@overload async fun(options: HttpRequestOptions): Image?, string?
+---@overload fun(options: HttpRequestOptions, callback: fun(image: Image?, err: string?))
+function nf.images.download(options, callback) end
+
 --- Files in the package's own folder (`plugins/NetherForge/data/<namespace>/`), which no other package's scripts see unless they're handed a file: the only state a script has that survives a restart. The server owner limits how much each package may keep there (`files:` in `config.yml`); a write past it fails.
 ---@class nf.files
 nf.files = {}
@@ -1164,7 +1203,7 @@ function nf.text.escape(text) end
 ---@return string
 function nf.text.strip(text) end
 
---- The character a resource pack glyph is drawn as, for building text by hand: a glyph wider than 256 pixels is drawn in pieces, so it's those pieces' characters and the moves between them. In MiniMessage text the tag `<glyph:ui/coin>` is usually simpler: it works anywhere text does (names, lore, chat, titles, dialogs, text displays) and draws the picture in its own colours, never bold, while this text is tinted by the text colour around it like any other (wrap it in `<white>` to avoid that, and keep it out of `<bold>`, which pulls a wide glyph's pieces apart). `nil` while the project's resource packs have errors (nothing is built then); a glyph no resource pack has is an error.
+--- The character a resource pack glyph is drawn as, for building text by hand: a glyph wider than 256 pixels is drawn in pieces, so it's those pieces' characters and the moves between them. In MiniMessage text the tag `<glyph:ui/coin>` is usually simpler: it works anywhere text does (names, lore, chat, titles, dialogs, text displays) and draws the picture in its own colours, never bold, while this text is tinted by the text colour around it like any other (wrap it in `<white>` to avoid that, and keep it out of `<bold>`, which pulls a wide glyph's pieces apart). It measures as the glyph does (`nf.text.width`, `nf.text.measure`), so an anchored text display can hold it. `nil` while the project's resource packs have errors (nothing is built then); a glyph no resource pack has is an error.
 ---@param glyph GlyphRef `<pack>/<key>`, like `"ui/coin"`, or another loaded package's as `<namespace>:<pack>/<key>` ([looks are values](packages.md#looks-are-values)).
 ---@return string?
 function nf.text.glyph(glyph) end
@@ -1174,10 +1213,16 @@ function nf.text.glyph(glyph) end
 ---@return string?
 function nf.text.space(pixels) end
 
---- How wide a line of MiniMessage text draws in the game's default font, in pixels (GUI pixels: the font is 8 tall), for laying out menu titles and text displays. Tags draw nothing, except `<bold>` (a pixel more per character), `<glyph:ui/coin>` (the glyph's own width) and `<space:N>` (N, which may be negative); what an `<at:N>` holds takes no width. Text with line breaks measures as its widest line. It reads the default font's widths from `fonts/default.json`, which the editor writes into the project from your Minecraft install. `nil` when it can't be measured exactly: that file is missing (open the project in the editor with Minecraft imported), or the text uses a character it doesn't cover.
+--- How wide a line of MiniMessage text draws in the game's default font, in pixels (GUI pixels: the font is 8 tall), for laying out menu titles and text displays. Tags draw nothing, except `<bold>` (a pixel more per character), `<glyph:ui/coin>` and the characters `nf.text.glyph` gives (the glyph's own width) and `<space:N>` (N, which may be negative); what an `<at:N>` holds takes no width. Text with line breaks measures as its widest line. It reads the default font's widths from `fonts/default.json`, which the editor writes into the project from your Minecraft install. `nil` when it can't be measured exactly: that file is missing (open the project in the editor with Minecraft imported), or the text uses a character it doesn't cover.
 ---@param text Text MiniMessage.
 ---@return integer?
 function nf.text.width(text) end
+
+--- How big MiniMessage text draws on a text display, in blocks: its widest line across and its lines up, measured as `nf.text.width` measures (so `nil` when that can't), each line a quarter of a block at scale 1. Lines break only at line breaks, as an `anchor`ed text display breaks them, which is what this is for: laying text out beside rects and images exactly.
+---@param text Text MiniMessage.
+---@param options? TextMeasureOptions
+---@return TextSize?
+function nf.text.measure(text, options) end
 
 --- Resource pack looks (item models, glyphs, skins, tooltips, equipment looks, sounds) handed from one package's code to another's. A look is a value, not a use: any script can show any look the server has, by its full name `<namespace>:<pack>/<key>`, whether or not its package exports it or is one the script's package depends on. That's how a project hands a package it uses looks of its own to draw with (see [Packages](packages.md#looks-are-values)).
 ---@class nf.looks
@@ -1187,6 +1232,17 @@ nf.looks = {}
 ---@param look string `<pack>/<key>`, or `<namespace>:<pack>/<key>`.
 ---@return string
 function nf.looks.qualify(look) end
+
+--- The project's resource packs as the server builds and sends them: built again from the files on disk, and which of them are `onDemand` (left out of the pack players get as they join, for `player:push_resource_pack`).
+---@class nf.packs
+nf.packs = {}
+
+--- Reads the project's resource packs from disk again and builds them, at the end of this tick: for art that changes without a deploy (a job that writes this week's banners into `resource_packs/featured/`). A pack whose files changed is sent again to every player who has it (the project's to everyone online, an `onDemand` one to whoever it was pushed to); one that didn't change sends nothing. A pack with errors keeps its last good build, as a save in the editor does.
+function nf.packs.rebuild() end
+
+--- The `onDemand` packs there are now, by name as the calling script's package names them: what `player:push_resource_pack` takes. Empty while the packs have errors and nothing is built.
+---@return string[]
+function nf.packs.on_demand() end
 
 --- JSON text to and from Lua values.
 ---@class nf.json
@@ -1521,7 +1577,7 @@ function nf.test.advance(ticks) end
 function nf.test.player(name) end
 
 --- Raises a server-wide event as the server would, to the scripts: whoever listens to `event` with `nf.on` hears it, and, for an event the server raises about a player, an entity or a world, the handlers on that handle (`player:on("chat")`) hear it first, in the order the server uses. Each can `stop()` or `cancel()` it or set its writable fields. The few events the runtime stages itself (a death, damage, a click on a centity) reach `nf.on` handlers only. `payload` is what the event carries, the same table its handlers read (`event.player`, `event.message`): a field the event does not have is an error naming the fields. What the server would then do with a cancelled event is not simulated: read the result.
----@param event "tick"|"player_join"|"player_quit"|"player_chat"|"player_interact"|"player_interact_entity"|"player_move"|"player_teleport"|"player_change_world"|"player_death"|"player_respawn"|"player_drop_item"|"player_pickup_item"|"player_use_item"|"player_consume_item"|"player_swap_hands"|"player_sneak"|"player_command"|"block_break"|"block_place"|"entity_damage"|"entity_death"|"entity_spawn"|"world_dusk"|"world_dawn"|"player_input"|"player_change_slot"|"player_swing"|"player_sprint"|"player_fly"|"player_jump"|"player_change_game_mode"|"player_change_food"|"player_gain_experience"|"player_change_level"|"player_kick"|"player_complete_advancement"|"player_stop_using_item"|"player_break_item"|"entity_heal"|"projectile_launch"|"projectile_hit"|"entity_shoot_bow"|"entity_target"|"entity_explode"|"block_explode"|"entity_combust"|"entity_change_effect"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"world_load"|"world_unload"|"entity_mount"|"entity_dismount"|"vehicle_move"|"vehicle_damage"|"vehicle_destroy"|"player_open_inventory"|"player_close_inventory"|"player_click_inventory"|"player_drag_inventory"|"player_craft"|"player_prepare_craft"|"player_prepare_anvil"|"player_prepare_smithing"|"player_prepare_grindstone"|"player_enchant_item"|"furnace_smelt"|"server_list_ping"|"centity_click"|"recipe_craft"|"item_view"|"centity_natural_spawn"|"menu_open"|"menu_close"|"menu_click"|"dialog_press"|"setting_changed"|"network_connect"|"network_disconnect"|"network_server_connect"|"network_server_disconnect"|"network_player_join"|"network_player_switch"|"network_player_quit"|"player_arrive" The event's name, as `nf.on` takes it.
+---@param event "tick"|"player_join"|"player_resource_pack_status"|"player_quit"|"player_chat"|"player_interact"|"player_interact_entity"|"player_move"|"player_teleport"|"player_change_world"|"player_death"|"player_respawn"|"player_drop_item"|"player_pickup_item"|"player_use_item"|"player_consume_item"|"player_swap_hands"|"player_sneak"|"player_command"|"block_break"|"block_place"|"entity_damage"|"entity_death"|"entity_spawn"|"world_dusk"|"world_dawn"|"player_input"|"player_change_slot"|"player_swing"|"player_sprint"|"player_fly"|"player_jump"|"player_change_game_mode"|"player_change_food"|"player_gain_experience"|"player_change_level"|"player_kick"|"player_complete_advancement"|"player_stop_using_item"|"player_break_item"|"entity_heal"|"projectile_launch"|"projectile_hit"|"entity_shoot_bow"|"entity_target"|"entity_explode"|"block_explode"|"entity_combust"|"entity_change_effect"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"world_load"|"world_unload"|"entity_mount"|"entity_dismount"|"vehicle_move"|"vehicle_damage"|"vehicle_destroy"|"player_open_inventory"|"player_close_inventory"|"player_click_inventory"|"player_drag_inventory"|"player_craft"|"player_prepare_craft"|"player_prepare_anvil"|"player_prepare_smithing"|"player_prepare_grindstone"|"player_enchant_item"|"furnace_smelt"|"server_list_ping"|"centity_click"|"recipe_craft"|"item_view"|"centity_natural_spawn"|"menu_open"|"menu_close"|"menu_click"|"dialog_press"|"setting_changed"|"network_connect"|"network_disconnect"|"network_server_connect"|"network_server_disconnect"|"network_player_join"|"network_player_switch"|"network_player_quit"|"player_arrive" The event's name, as `nf.on` takes it.
 ---@param payload? table The payload: its fields by name. Leave it out for an event that has none.
 ---@return RaisedEvent # Whether a handler cancelled it, and the event as the handlers left it.
 function nf.test.raise(event, payload) end
@@ -2131,17 +2187,20 @@ function Node:rotation() end
 ---@return Vec3?
 function Node:scale() end
 
---- Moves it relative to its parent (a root node, relative to the centity's position).
+--- Moves it relative to its parent (a root node, relative to the centity's position). Its display eases there over its `interpolation_ticks`, unless `options.instant`.
 ---@param translation Vec3 In its parent's space, in blocks.
-function Node:set_translation(translation) end
+---@param options? PoseOptions
+function Node:set_translation(translation, options) end
 
 --- Turns it relative to its parent. Displays ease to the new pose over a tick, so setting it every tick looks smooth.
 ---@param rotation Vec3 Degrees, applied X then Y then Z.
-function Node:set_rotation(rotation) end
+---@param options? PoseOptions
+function Node:set_rotation(rotation, options) end
 
 --- Scales it along its own axes.
 ---@param scale Vec3 A factor per axis: `vec3.one` is its natural size.
-function Node:set_scale(scale) end
+---@param options? PoseOptions
+function Node:set_scale(scale, options) end
 
 --- Lays it from one point of the world to another: its origin halfway, its Z pointing from `from` to `to`, and its Z scale the distance between them. For a node whose display is one block long along Z and centred on its origin (a beam, a string, a link), that's the whole way from one to the other. Its X and Y scale stay as they are, or are `thickness`.
 ---@param from Vec3 A point in the world.
@@ -2215,7 +2274,7 @@ function Node:rotate(axis, degrees) end
 ---@return boolean
 function Node:is_visible() end
 
---- Shows or hides it and everything under it. A hidden node can't be clicked.
+--- Shows or hides it and everything under it, at once and where it is: a node shown again appears in place, with no easing, whatever its `interpolation_ticks`. A hidden node can't be clicked.
 ---@param visible boolean
 function Node:set_visible(visible) end
 
@@ -2227,9 +2286,45 @@ function Node:is_clickable() end
 ---@param clickable boolean
 function Node:set_clickable(clickable) end
 
---- What it draws: `"block"`, `"item"`, `"model"` (a resource pack look) or `"text"`, or `nil` for a node that draws nothing (a pivot, a hitbox alone) or once its centity is removed.
----@return "block"|"item"|"model"|"text"?
+--- What it draws: `"block"`, `"item"`, `"model"` (a resource pack look), `"text"`, `"rect"` or `"image"`, or `nil` for a node that draws nothing (a pivot, a hitbox alone) or once its centity is removed.
+---@return "block"|"item"|"model"|"text"|"rect"|"image"?
 function Node:display_kind() end
+
+--- What an image display shows now, as an `Image` (a new one each call), or `nil` while it's blank, for a node that isn't an image display, or once its centity is removed.
+---@return Image?
+function Node:image() end
+
+--- Shows an image on an image display, its pixels one for one from the top left: resize it to the display's `width` and `height` first (`image:resized`); a smaller one leaves the rest blank and a bigger one is cut off. `nil` blanks it. Its viewers are sent it once: showing the same pixels again sends nothing. A centity's changed images send at most about 64 KiB a tick between them, counted as the connection sends them (compressed: a photo-like 128 by 72 picture is about 25 KiB), so a page of new pictures can take a few ticks to arrive. A node that isn't an image display is an error.
+---@param image Image?
+---@return boolean # `false` once its centity is removed.
+function Node:set_image(image) end
+
+--- The colour a rect display is: `"#RRGGBB"` or `"#AARRGGBB"`, as set. `nil` when it isn't a rect display.
+---@return string?
+function Node:display_color() end
+
+--- Recolours a rect display: one update to its viewers, nothing respawned. A colour that isn't one, or a node that isn't a rect display, is an error.
+---@param color string `"#RRGGBB"`, or `"#AARRGGBB"` for one you can see through.
+---@return boolean # `false` once its centity is removed.
+function Node:set_display_color(color) end
+
+--- How big a rect or image display is, in blocks before the node's scale: `x` its width, `y` its height (`z` is 0). `nil` for any other node.
+---@return Vec3?
+function Node:display_size() end
+
+--- Resizes a rect or image display, exactly: `x` its width and `y` its height in blocks before the node's scale (`z` is ignored). It's a pose change, so it eases as a move does. Either more than 0, or an error, as is a node that isn't a rect or an image display.
+---@param size Vec3
+---@return boolean # `false` once its centity is removed.
+function Node:set_display_size(size) end
+
+--- Which point of a rect, image or text display is at its node's origin. `nil` for a text display without one (drawn as the game draws text) or a node of any other kind.
+---@return "top_left"|"top"|"top_right"|"left"|"center"|"right"|"bottom_left"|"bottom"|"bottom_right"?
+function Node:display_anchor() end
+
+--- Places a rect, image or text display by another of its points. A text display's anchor needs its text measured (`nf.text.measure`); one that can't be is drawn unanchored, with a warning in the log. `nil` takes a text display's away (and puts a rect or image back at its centre). A node of any other kind is an error.
+---@param anchor "top_left"|"top"|"top_right"|"left"|"center"|"right"|"bottom_left"|"bottom"|"bottom_right"?
+---@return boolean # `false` once its centity is removed.
+function Node:set_display_anchor(anchor) end
 
 --- The block state a block display shows, like `"minecraft:oak_slab[type=top]"`, or `nil` when the node isn't a block display.
 ---@return string?
@@ -2422,6 +2517,42 @@ function Node:on(event, handler, options) end
 ---@overload fun(self: Node, event: "wake", handler: fun(event: NodeEvent)): Subscription
 ---@overload fun(self: Node, event: "sleep", handler: fun(event: NodeEvent)): Subscription
 function Node:once(event, handler) end
+
+--- A picture made at runtime by `nf.images`, for image displays (`node:set_image`). It never changes: `resized` and `cropped` make new ones. Ephemeral: it can't be saved in a `data()` table (keep `image:encode()` instead). An image is at most 2048 pixels each way, and the images the server holds for scripts at once are at most 32 million pixels in all; one past that is an error, so let go of images you no longer need (an image Lua no longer holds is let go of for you).
+---@class Image
+local Image = {}
+
+--- Its width in pixels.
+---@return integer
+function Image:width() end
+
+--- Its height in pixels.
+---@return integer
+function Image:height() end
+
+--- The colour of the pixel at column `x`, row `y` (both from 0, at the top left): `"#RRGGBB"`, or `"#AARRGGBB"` when it isn't opaque. `nil` outside the image.
+---@param x integer
+---@param y integer
+---@return string?
+function Image:pixel(x, y) end
+
+--- A copy `width` by `height` pixels: each new pixel the average of the old ones it covers, so shrinking is smooth. An image display draws an image's pixels one for one, so resize one to the display's `width` and `height` first.
+---@param width integer In pixels, 1 to 2048.
+---@param height integer In pixels, 1 to 2048.
+---@return Image
+function Image:resized(width, height) end
+
+--- The part `width` by `height` pixels whose top left is at column `x`, row `y`. `nil` when that isn't all inside the image.
+---@param x integer
+---@param y integer
+---@param width integer
+---@param height integer
+---@return Image?
+function Image:cropped(x, y, width, height) end
+
+--- The image as a PNG file, base64: what `nf.images.decode` reads back, to keep in a database, a network map or saved data.
+---@return string
+function Image:encode() end
 
 --- Something in a world that isn't a block: an arrow, a minecart, a dropped item, a mob, a player. A handle is its UUID, so keeping one is fine: once the entity has gone (killed, removed) or while its chunk is unloaded, its methods answer `nil` or `false` rather than erroring. Its handle is the class it is: a `Living` (health, effects, equipment), a `Mob` (a target, AI, walking, goals), a `Player` or a `DroppedItem`, each with every `Entity` method too, and taken wherever an `Entity` is. A handle to an entity that wasn't in the world when it was handed out becomes its class once it's back. The entities NetherForge draws centities with are never handed out as `Entity`. Positions are world space.
 --- A `data()` table, `Item.data` and `nf.json` can keep one: it is saved as what identifies it and comes back as a handle.
@@ -3506,9 +3637,20 @@ function Player:set_below_name(text) end
 ---@return BossBar[]
 function Player:bossbars() end
 
---- What became of the project's resource pack on their game: `"loaded"`, `"declined"`, `"failed"`, `"pending"` (accepted, still downloading), or `nil` before their game has answered (and when they're offline, or there's no resource pack).
+--- What became of the project's resource pack on their game, or of an `onDemand` pack pushed to them: `"loaded"`, `"declined"`, `"failed"`, `"pending"` (accepted, still downloading), or `nil` before their game has answered (and when they're offline, or there's no such pack). `player_resource_pack_status` says when it changes.
+---@param pack? string An `onDemand` pack, by name. Left out, the project's pack.
 ---@return "loaded"|"declined"|"failed"|"pending"|nil
-function Player:resource_pack_status() end
+function Player:resource_pack_status(pack) end
+
+--- Sends them one of the project's `onDemand` resource packs (`"onDemand": true` in its `pack.json`), beside the packs they have: their game shows its loading screen while it applies it, so it's for things that change rarely (this week's featured banners), not every search. Pushing one they have changes nothing; one rebuilt since (`nf.packs.rebuild`) is sent to them again. `player_resource_pack_status` says what became of it. It's taken off again by `pop_resource_pack`, or when they leave. A name that isn't an `onDemand` pack is an error. `false` when they're offline, or nothing is built (the packs have errors).
+---@param pack string The pack's name, as its folder is: `"featured"`.
+---@return boolean
+function Player:push_resource_pack(pack) end
+
+--- Takes an `onDemand` pack `push_resource_pack` sent them back off their game (a loading screen again). `false` when they're offline or don't have it.
+---@param pack string
+---@return boolean
+function Player:pop_resource_pack(pack) end
 
 --- Shows them a block that isn't there: only their game draws it, and the world doesn't change. It lasts until the real block updates (something changes it, or their game reloads the chunk), or `reset_block`. They can't walk through or stand on it any differently from the real block. A block state the server doesn't have is an error.
 ---@param location_or_position Location|Vec3 Any point in the block; a bare vector is in their world.
@@ -3574,6 +3716,7 @@ function Player:session() end
 ---@param options? EventOptions How to listen: `{ every = n }` for `tick`.
 ---@return Subscription # Call `:cancel()` on it to stop listening.
 ---@overload fun(self: Player, event: "join", handler: fun(event: PlayerJoinEvent)): Subscription
+---@overload fun(self: Player, event: "resource_pack_status", handler: fun(event: PlayerResourcePackStatusEvent)): Subscription
 ---@overload fun(self: Player, event: "quit", handler: fun(event: PlayerQuitEvent)): Subscription
 ---@overload fun(self: Player, event: "chat", handler: fun(event: PlayerChatEvent)): Subscription
 ---@overload fun(self: Player, event: "interact", handler: fun(event: PlayerInteractEvent)): Subscription
@@ -3634,6 +3777,7 @@ function Player:on(event, handler, options) end
 ---@param handler fun(event: Event) Called with the event.
 ---@return Subscription # Call `:cancel()` on it to stop waiting before then.
 ---@overload fun(self: Player, event: "join", handler: fun(event: PlayerJoinEvent)): Subscription
+---@overload fun(self: Player, event: "resource_pack_status", handler: fun(event: PlayerResourcePackStatusEvent)): Subscription
 ---@overload fun(self: Player, event: "quit", handler: fun(event: PlayerQuitEvent)): Subscription
 ---@overload fun(self: Player, event: "chat", handler: fun(event: PlayerChatEvent)): Subscription
 ---@overload fun(self: Player, event: "interact", handler: fun(event: PlayerInteractEvent)): Subscription
@@ -6375,6 +6519,12 @@ function Event:uncancel() end
 ---@field first_join boolean Whether they have never played here before.
 ---@field message Text? The join message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none.
 
+--- What a player's game said about a resource pack the server sent it.
+---@class PlayerResourcePackStatusEvent: Event
+---@field player Player Who it was.
+---@field pack string? The `onDemand` pack it was (`player:push_resource_pack`), by name; `nil` for the project's own.
+---@field status "loaded"|"declined"|"failed"|"pending" `"pending"` (accepted, downloading), then `"loaded"`, `"declined"` or `"failed"`.
+
 --- A player left the server.
 ---@class PlayerQuitEvent: Event
 ---@field player Player Who it was.
@@ -6985,6 +7135,10 @@ function Event:uncancel() end
 ---@class RopeOptions
 ---@field length number? How long the rope is, in blocks: shorter than the ends' distance it's taut, longer it sags by its slack. Default: always taut.
 
+--- How `set_translation`, `set_rotation` and `set_scale` move a node. A key that isn't one of these is an error.
+---@class PoseOptions
+---@field instant boolean? Jumps there this once, with no easing, and everything under it with it; later moves still ease over its `interpolation_ticks`. Default `false`.
+
 --- A tween for `node:tween`: at least one of `translation`, `rotation` and `scale`. A key that isn't one of these is an error.
 ---@class TweenOptions
 ---@field translation Vec3? Where it ends up, as `set_translation` takes.
@@ -7267,6 +7421,7 @@ function Event:uncancel() end
 ---@field hidden_tooltip_components ("attribute_modifiers"|"banner_patterns"|"bees"|"block_entity_data"|"block_state"|"bundle_contents"|"can_break"|"can_place_on"|"charged_projectiles"|"container"|"container_loot"|"damage"|"dyed_color"|"enchantments"|"entity_data"|"firework_explosion"|"fireworks"|"instrument"|"intangible_projectile"|"jukebox_playable"|"lore"|"map_id"|"ominous_bottle_amplifier"|"painting/variant"|"pot_decorations"|"potion_contents"|"profile"|"sign_text_back"|"sign_text_front"|"stored_enchantments"|"sulfur_cube_content"|"suspicious_stew_effects"|"trim"|"tropical_fish/pattern"|"unbreakable"|"written_book_content")[]? Lines of its tooltip to hide, by the component that draws them: `{ "unbreakable", "attribute_modifiers" }` hides "Unbreakable" and the attribute lines ("+2 Attack Damage"). The components still apply: the item stays unbreakable and keeps its modifiers. Left out shows the tooltip as it is; `{}` shows every line. A value that isn't a line an item can hide is an error, and so is one the server's Minecraft version doesn't have.
 ---@field food ItemFood? What eating it does. Any item with `food` can be eaten, even one that isn't food: `{ nutrition = 4, saturation = 2.4 }`.
 ---@field cooldown ItemCooldown? A cooldown after using it (an ender pearl's): `{ seconds = 2 }`. Items with the same `group` share one.
+---@field invisible boolean? Drawn as nothing wherever it's drawn: in a slot, on the ground, and in a hand, where the player's own arm isn't drawn either (as with anything held). An empty look every built resource pack has, in place of `item_model`. With `hold`, it's a pointer: no arm in the way, the right button pressed heard as `player_use_item` and let go as `player_stop_using_item`.
 ---@field hold boolean|ItemHold? Held down with no end: a right click lasts until the player lets go, never finishes and uses nothing up. Letting go is `player_stop_using_item`, and `event.ticks` says how long it was held: a flail thrown on release, a charge that grows while held. `true` draws nothing (no zoom, no pose); `{ animation = "trident" }` poses the player as that use of the game's does, a knife raised to throw. Read back, it's `true` or that table, as it was given (a hold whose animation is `"none"` reads back `true`). Unless `use_effects` says otherwise, the player keeps their speed and can sprint, whatever the animation. It can't go with `food`, and only works on a kind with no use of its own (`minecraft:stick`, not a bow or a shield). Left clicks don't attack while it's held.
 ---@field use_effects ItemUseEffects? How a player moves while using it, for any use: a `hold`, eating, a bow drawn, a shield raised. `{ speed_multiplier = 1, can_sprint = true }` lets them eat at a run.
 ---@field data table<string, any>? Your script's own data, saved on the stack itself (its persistent data container), so it goes wherever the item goes: tag a coin with `data = { coin = true }`. A table keyed by strings, holding what a `data()` table may: strings, numbers, booleans, tables of them, `Vec3`s, `Location`s, `Item` tables, and `Player` and `Centity` handles, which come back as the same types. Absent when the stack carries none. Anything else (a function, a `Menu` window) is an error, naming where it was.
@@ -7387,6 +7542,7 @@ function Event:uncancel() end
 ---@field hidden_tooltip_components ("attribute_modifiers"|"banner_patterns"|"bees"|"block_entity_data"|"block_state"|"bundle_contents"|"can_break"|"can_place_on"|"charged_projectiles"|"container"|"container_loot"|"damage"|"dyed_color"|"enchantments"|"entity_data"|"firework_explosion"|"fireworks"|"instrument"|"intangible_projectile"|"jukebox_playable"|"lore"|"map_id"|"ominous_bottle_amplifier"|"painting/variant"|"pot_decorations"|"potion_contents"|"profile"|"sign_text_back"|"sign_text_front"|"stored_enchantments"|"sulfur_cube_content"|"suspicious_stew_effects"|"trim"|"tropical_fish/pattern"|"unbreakable"|"written_book_content")[]? Lines of its tooltip to hide, by the component that draws them: `{ "unbreakable", "attribute_modifiers" }` hides "Unbreakable" and the attribute lines ("+2 Attack Damage"). The components still apply: the item stays unbreakable and keeps its modifiers. Left out shows the tooltip as it is; `{}` shows every line. A value that isn't a line an item can hide is an error, and so is one the server's Minecraft version doesn't have.
 ---@field food ItemFood? What eating it does. Any item with `food` can be eaten, even one that isn't food: `{ nutrition = 4, saturation = 2.4 }`.
 ---@field cooldown ItemCooldown? A cooldown after using it (an ender pearl's): `{ seconds = 2 }`. Items with the same `group` share one.
+---@field invisible boolean? Drawn as nothing wherever it's drawn: in a slot, on the ground, and in a hand, where the player's own arm isn't drawn either (as with anything held). An empty look every built resource pack has, in place of `item_model`. With `hold`, it's a pointer: no arm in the way, the right button pressed heard as `player_use_item` and let go as `player_stop_using_item`.
 ---@field hold boolean|ItemHold? Held down with no end: a right click lasts until the player lets go, never finishes and uses nothing up. Letting go is `player_stop_using_item`, and `event.ticks` says how long it was held: a flail thrown on release, a charge that grows while held. `true` draws nothing (no zoom, no pose); `{ animation = "trident" }` poses the player as that use of the game's does, a knife raised to throw. Read back, it's `true` or that table, as it was given (a hold whose animation is `"none"` reads back `true`). Unless `use_effects` says otherwise, the player keeps their speed and can sprint, whatever the animation. It can't go with `food`, and only works on a kind with no use of its own (`minecraft:stick`, not a bow or a shield). Left clicks don't attack while it's held.
 ---@field use_effects ItemUseEffects? How a player moves while using it, for any use: a `hold`, eating, a bow drawn, a shield raised. `{ speed_multiplier = 1, can_sprint = true }` lets them eat at a run.
 ---@field data table<string, any>? Your script's own data, saved on the stack itself (its persistent data container), so it goes wherever the item goes: tag a coin with `data = { coin = true }`. A table keyed by strings, holding what a `data()` table may: strings, numbers, booleans, tables of them, `Vec3`s, `Location`s, `Item` tables, and `Player` and `Centity` handles, which come back as the same types. Absent when the stack carries none. Anything else (a function, a `Menu` window) is an error, naming where it was.
@@ -8059,6 +8215,15 @@ function Event:uncancel() end
 ---@field secret string The secret to sign with.
 ---@field algorithm "sha256"|"sha1"|"sha512"? The hash. Default `"sha256"`.
 ---@field encoding "hex"|"base64"? How the result is written: `"hex"` (lowercase), or `"base64"`. Default `"hex"`.
+
+--- How `nf.text.measure` measures. A key that isn't one of these is an error.
+---@class TextMeasureOptions
+---@field scale number? The text display's scale (its node's, and its parents'). Default 1.
+
+--- How big text draws on a text display, in blocks: what an `anchor`ed text display is placed by.
+---@class TextSize
+---@field width number Its widest line: every character and the gap after it.
+---@field height number Its lines, a quarter of a block each at scale 1.
 
 --- A message another server of a test's network heard, from `nf.test.network_received`.
 ---@class TestNetworkMessage

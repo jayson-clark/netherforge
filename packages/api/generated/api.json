@@ -29,7 +29,7 @@
   "classes": [
     {
       "name": "nf",
-      "doc": "Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.files`, `nf.text`, `nf.looks`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.",
+      "doc": "Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.images`, `nf.files`, `nf.text`, `nf.looks`, `nf.packs`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.",
       "methods": false,
       "fields": [
         {
@@ -143,6 +143,11 @@
           "doc": "Screens: walls of maps, 128 by 128 pixels each, that scripts draw on (pixels, shapes, text, pictures) and play videos on. The project's own are its `screens/<id>/screen.json` files; a script can make more. What a screen shows is sent to each player who can see it, a change at a time, so drawing every tick costs only what changed."
         },
         {
+          "name": "images",
+          "type": "nf.images",
+          "doc": "Pictures made at runtime, for image displays (`node:set_image`): from pixels, from an image file's bytes, or downloaded. An `Image` is a value that never changes: resizing or cropping one makes another. An image is at most 2048 pixels each way, and the images the server holds for scripts at once are at most 32 million pixels in all; one past that is an error, so let go of images you no longer need (an image Lua no longer holds is let go of for you)."
+        },
+        {
           "name": "files",
           "type": "nf.files",
           "doc": "Files in the package's own folder (`plugins/NetherForge/data/<namespace>/`), which no other package's scripts see unless they're handed a file: the only state a script has that survives a restart. The server owner limits how much each package may keep there (`files:` in `config.yml`); a write past it fails."
@@ -156,6 +161,11 @@
           "name": "looks",
           "type": "nf.looks",
           "doc": "Resource pack looks (item models, glyphs, skins, tooltips, equipment looks, sounds) handed from one package's code to another's. A look is a value, not a use: any script can show any look the server has, by its full name `<namespace>:<pack>/<key>`, whether or not its package exports it or is one the script's package depends on. That's how a project hands a package it uses looks of its own to draw with (see [Packages](packages.md#looks-are-values))."
+        },
+        {
+          "name": "packs",
+          "type": "nf.packs",
+          "doc": "The project's resource packs as the server builds and sends them: built again from the files on disk, and which of them are `onDemand` (left out of the pack players get as they join, for `player:push_resource_pack`)."
         },
         {
           "name": "json",
@@ -243,6 +253,12 @@
               "field": "player"
             }
           }
+        },
+        {
+          "name": "player_resource_pack_status",
+          "doc": "A player's game said what became of a resource pack the server sent it: the project's as they joined or after a rebuild, or an `onDemand` one a script pushed (`event.pack`).",
+          "payload": "PlayerResourcePackStatusEvent",
+          "example": "nf.on(\"player_resource_pack_status\", function(event)\n  if event.pack == \"featured\" and event.status == \"loaded\" then\n    event.player:send_message(\"<gold>This week's games are in!\")\n  end\nend)"
         },
         {
           "name": "player_quit",
@@ -1625,7 +1641,7 @@
         {
           "name": "task",
           "impl": "lua",
-          "doc": "Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.send_player`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.",
+          "doc": "Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.send_player`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.",
           "params": [
             {
               "name": "callback",
@@ -3312,6 +3328,113 @@
       ]
     },
     {
+      "name": "nf.images",
+      "doc": "Pictures made at runtime, for image displays (`node:set_image`): from pixels, from an image file's bytes, or downloaded. An `Image` is a value that never changes: resizing or cropping one makes another. An image is at most 2048 pixels each way, and the images the server holds for scripts at once are at most 32 million pixels in all; one past that is an error, so let go of images you no longer need (an image Lua no longer holds is let go of for you).",
+      "methods": false,
+      "fields": [],
+      "functions": [
+        {
+          "name": "create",
+          "doc": "An image from its pixels, row by row from the top left: a list of colours (`\"#RRGGBB\"`, or `\"#AARRGGBB\"` for one you can see through), or every pixel's bytes in one base64 string, 3 a pixel (red, green, blue) or 4 (and alpha). The wrong number of pixels, or a colour that isn't one, is an error.",
+          "params": [
+            {
+              "name": "width",
+              "type": "integer",
+              "doc": "In pixels, 1 to 2048."
+            },
+            {
+              "name": "height",
+              "type": "integer",
+              "doc": "In pixels, 1 to 2048."
+            },
+            {
+              "name": "pixels",
+              "type": "string[]|string",
+              "doc": "Colours, or base64 bytes."
+            }
+          ],
+          "returns": [
+            {
+              "type": "Image"
+            }
+          ],
+          "example": "local flag = nf.images.create(3, 1, { \"#0055A4\", \"#FFFFFF\", \"#EF4135\" })\nassert(this:node(\"flag\")):set_image(flag)"
+        },
+        {
+          "name": "fill",
+          "doc": "An image all one colour.",
+          "params": [
+            {
+              "name": "width",
+              "type": "integer",
+              "doc": "In pixels, 1 to 2048."
+            },
+            {
+              "name": "height",
+              "type": "integer",
+              "doc": "In pixels, 1 to 2048."
+            },
+            {
+              "name": "color",
+              "type": "string",
+              "doc": "`\"#RRGGBB\"` or `\"#AARRGGBB\"`."
+            }
+          ],
+          "returns": [
+            {
+              "type": "Image"
+            }
+          ]
+        },
+        {
+          "name": "decode",
+          "doc": "An image from an image file's bytes (PNG, JPEG, GIF or BMP) in base64, as a catalog, a database or `image:encode` keeps them. `nil` for bytes that aren't an image this can read, or one bigger than 2048 pixels either way.",
+          "params": [
+            {
+              "name": "data",
+              "type": "string",
+              "doc": "The file, base64."
+            }
+          ],
+          "returns": [
+            {
+              "type": "Image?"
+            }
+          ]
+        },
+        {
+          "name": "download",
+          "doc": "Downloads an image file (PNG, JPEG, GIF or BMP) and gives it as an image: `nf.http.request`'s request, held to the same rules (the host declared in `requires.http`, the size limit, the rate), its body read as the image it is rather than as text. A response that isn't `2xx`, or isn't an image this can read, fails. It works off the main thread, so its image arrives later: give `callback`, which is called with `image, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `image, err`. Without a callback outside a task, it's an error. When it fails, `image` is `nil` and `err` says why.",
+          "params": [
+            {
+              "name": "options",
+              "type": "HttpRequestOptions",
+              "doc": "The request, as `nf.http.request` takes it: usually just its `url`."
+            },
+            {
+              "name": "callback",
+              "type": "fun(image: Image?, err: string?)",
+              "doc": "Called on the main thread once it's done, as this script's code, with the picture (or `nil` and why not). Not called if the script has stopped by then.",
+              "optional": true
+            }
+          ],
+          "requires": "http",
+          "example": "nf.task(function()\n  local image, err = nf.images.download({ url = \"https://cdn.example.com/thumbs/42.png\" })\n  if image then\n    assert(this:node(\"thumbnail\")):set_image(image:resized(96, 54))\n  else\n    log(\"no thumbnail: \" .. err)\n  end\nend)",
+          "returns": [
+            {
+              "type": "Image?",
+              "doc": "Only without a callback, in a task: the picture, or `nil`."
+            },
+            {
+              "type": "string?",
+              "doc": "Why it failed, when it did; `nil` when it worked."
+            }
+          ],
+          "async": true
+        }
+      ]
+    },
+    {
       "name": "nf.files",
       "doc": "Files in the package's own folder (`plugins/NetherForge/data/<namespace>/`), which no other package's scripts see unless they're handed a file: the only state a script has that survives a restart. The server owner limits how much each package may keep there (`files:` in `config.yml`); a write past it fails.",
       "methods": false,
@@ -3379,7 +3502,7 @@
         },
         {
           "name": "glyph",
-          "doc": "The character a resource pack glyph is drawn as, for building text by hand: a glyph wider than 256 pixels is drawn in pieces, so it's those pieces' characters and the moves between them. In MiniMessage text the tag `<glyph:ui/coin>` is usually simpler: it works anywhere text does (names, lore, chat, titles, dialogs, text displays) and draws the picture in its own colours, never bold, while this text is tinted by the text colour around it like any other (wrap it in `<white>` to avoid that, and keep it out of `<bold>`, which pulls a wide glyph's pieces apart). `nil` while the project's resource packs have errors (nothing is built then); a glyph no resource pack has is an error.",
+          "doc": "The character a resource pack glyph is drawn as, for building text by hand: a glyph wider than 256 pixels is drawn in pieces, so it's those pieces' characters and the moves between them. In MiniMessage text the tag `<glyph:ui/coin>` is usually simpler: it works anywhere text does (names, lore, chat, titles, dialogs, text displays) and draws the picture in its own colours, never bold, while this text is tinted by the text colour around it like any other (wrap it in `<white>` to avoid that, and keep it out of `<bold>`, which pulls a wide glyph's pieces apart). It measures as the glyph does (`nf.text.width`, `nf.text.measure`), so an anchored text display can hold it. `nil` while the project's resource packs have errors (nothing is built then); a glyph no resource pack has is an error.",
           "params": [
             {
               "name": "glyph",
@@ -3414,7 +3537,7 @@
         },
         {
           "name": "width",
-          "doc": "How wide a line of MiniMessage text draws in the game's default font, in pixels (GUI pixels: the font is 8 tall), for laying out menu titles and text displays. Tags draw nothing, except `<bold>` (a pixel more per character), `<glyph:ui/coin>` (the glyph's own width) and `<space:N>` (N, which may be negative); what an `<at:N>` holds takes no width. Text with line breaks measures as its widest line. It reads the default font's widths from `fonts/default.json`, which the editor writes into the project from your Minecraft install. `nil` when it can't be measured exactly: that file is missing (open the project in the editor with Minecraft imported), or the text uses a character it doesn't cover.",
+          "doc": "How wide a line of MiniMessage text draws in the game's default font, in pixels (GUI pixels: the font is 8 tall), for laying out menu titles and text displays. Tags draw nothing, except `<bold>` (a pixel more per character), `<glyph:ui/coin>` and the characters `nf.text.glyph` gives (the glyph's own width) and `<space:N>` (N, which may be negative); what an `<at:N>` holds takes no width. Text with line breaks measures as its widest line. It reads the default font's widths from `fonts/default.json`, which the editor writes into the project from your Minecraft install. `nil` when it can't be measured exactly: that file is missing (open the project in the editor with Minecraft imported), or the text uses a character it doesn't cover.",
           "params": [
             {
               "name": "text",
@@ -3428,6 +3551,29 @@
             }
           ],
           "example": "local width = nf.text.width(\"<bold>Shop\")\nif width then\n  log(\"the title is \" .. width .. \" pixels wide\")\nend"
+        },
+        {
+          "name": "measure",
+          "doc": "How big MiniMessage text draws on a text display, in blocks: its widest line across and its lines up, measured as `nf.text.width` measures (so `nil` when that can't), each line a quarter of a block at scale 1. Lines break only at line breaks, as an `anchor`ed text display breaks them, which is what this is for: laying text out beside rects and images exactly.",
+          "params": [
+            {
+              "name": "text",
+              "type": "Text",
+              "doc": "MiniMessage."
+            },
+            {
+              "name": "options",
+              "type": "TextMeasureOptions",
+              "doc": "",
+              "optional": true
+            }
+          ],
+          "returns": [
+            {
+              "type": "TextSize?"
+            }
+          ],
+          "example": "-- A label centred on a button, with a pixel of room each side.\nlocal size = nf.text.measure(\"Play\", { scale = 0.5 })\nif size then\n  log(\"the label is \" .. size.width .. \" by \" .. size.height .. \" blocks\")\nend"
         }
       ]
     },
@@ -3453,6 +3599,31 @@
             }
           ],
           "example": "-- The project hands the chess package a skin of its own models.\nlocal chess = require(\"chess:board\")\nchess.set_skin(\"black\", {\n  pawn = nf.looks.qualify(\"nether/pawn\"),\n  king = nf.looks.qualify(\"nether/king\"),\n})"
+        }
+      ]
+    },
+    {
+      "name": "nf.packs",
+      "doc": "The project's resource packs as the server builds and sends them: built again from the files on disk, and which of them are `onDemand` (left out of the pack players get as they join, for `player:push_resource_pack`).",
+      "methods": false,
+      "fields": [],
+      "functions": [
+        {
+          "name": "rebuild",
+          "doc": "Reads the project's resource packs from disk again and builds them, at the end of this tick: for art that changes without a deploy (a job that writes this week's banners into `resource_packs/featured/`). A pack whose files changed is sent again to every player who has it (the project's to everyone online, an `onDemand` one to whoever it was pushed to); one that didn't change sends nothing. A pack with errors keeps its last good build, as a save in the editor does.",
+          "params": [],
+          "returns": [],
+          "example": "-- Every Monday at 9, after the job that downloads the week's banners.\nnf.schedule.weekly(\"mon\", \"09:00\", function()\n  nf.packs.rebuild()\nend)"
+        },
+        {
+          "name": "on_demand",
+          "doc": "The `onDemand` packs there are now, by name as the calling script's package names them: what `player:push_resource_pack` takes. Empty while the packs have errors and nothing is built.",
+          "params": [],
+          "returns": [
+            {
+              "type": "string[]"
+            }
+          ]
         }
       ]
     },
@@ -4525,7 +4696,7 @@
           "params": [
             {
               "name": "event",
-              "type": "\"tick\"|\"player_join\"|\"player_quit\"|\"player_chat\"|\"player_interact\"|\"player_interact_entity\"|\"player_move\"|\"player_teleport\"|\"player_change_world\"|\"player_death\"|\"player_respawn\"|\"player_drop_item\"|\"player_pickup_item\"|\"player_use_item\"|\"player_consume_item\"|\"player_swap_hands\"|\"player_sneak\"|\"player_command\"|\"block_break\"|\"block_place\"|\"entity_damage\"|\"entity_death\"|\"entity_spawn\"|\"world_dusk\"|\"world_dawn\"|\"player_input\"|\"player_change_slot\"|\"player_swing\"|\"player_sprint\"|\"player_fly\"|\"player_jump\"|\"player_change_game_mode\"|\"player_change_food\"|\"player_gain_experience\"|\"player_change_level\"|\"player_kick\"|\"player_complete_advancement\"|\"player_stop_using_item\"|\"player_break_item\"|\"entity_heal\"|\"projectile_launch\"|\"projectile_hit\"|\"entity_shoot_bow\"|\"entity_target\"|\"entity_explode\"|\"block_explode\"|\"entity_combust\"|\"entity_change_effect\"|\"block_ignite\"|\"block_burn\"|\"block_spread\"|\"block_flow\"|\"block_grow\"|\"block_fade\"|\"block_form\"|\"leaves_decay\"|\"piston_extend\"|\"piston_retract\"|\"block_redstone\"|\"sign_change\"|\"block_start_break\"|\"block_drop_item\"|\"weather_change\"|\"thunder_change\"|\"lightning_strike\"|\"chunk_load\"|\"chunk_generated\"|\"chunk_unload\"|\"world_load\"|\"world_unload\"|\"entity_mount\"|\"entity_dismount\"|\"vehicle_move\"|\"vehicle_damage\"|\"vehicle_destroy\"|\"player_open_inventory\"|\"player_close_inventory\"|\"player_click_inventory\"|\"player_drag_inventory\"|\"player_craft\"|\"player_prepare_craft\"|\"player_prepare_anvil\"|\"player_prepare_smithing\"|\"player_prepare_grindstone\"|\"player_enchant_item\"|\"furnace_smelt\"|\"server_list_ping\"|\"centity_click\"|\"recipe_craft\"|\"item_view\"|\"centity_natural_spawn\"|\"menu_open\"|\"menu_close\"|\"menu_click\"|\"dialog_press\"|\"setting_changed\"|\"network_connect\"|\"network_disconnect\"|\"network_server_connect\"|\"network_server_disconnect\"|\"network_player_join\"|\"network_player_switch\"|\"network_player_quit\"|\"player_arrive\"",
+              "type": "\"tick\"|\"player_join\"|\"player_resource_pack_status\"|\"player_quit\"|\"player_chat\"|\"player_interact\"|\"player_interact_entity\"|\"player_move\"|\"player_teleport\"|\"player_change_world\"|\"player_death\"|\"player_respawn\"|\"player_drop_item\"|\"player_pickup_item\"|\"player_use_item\"|\"player_consume_item\"|\"player_swap_hands\"|\"player_sneak\"|\"player_command\"|\"block_break\"|\"block_place\"|\"entity_damage\"|\"entity_death\"|\"entity_spawn\"|\"world_dusk\"|\"world_dawn\"|\"player_input\"|\"player_change_slot\"|\"player_swing\"|\"player_sprint\"|\"player_fly\"|\"player_jump\"|\"player_change_game_mode\"|\"player_change_food\"|\"player_gain_experience\"|\"player_change_level\"|\"player_kick\"|\"player_complete_advancement\"|\"player_stop_using_item\"|\"player_break_item\"|\"entity_heal\"|\"projectile_launch\"|\"projectile_hit\"|\"entity_shoot_bow\"|\"entity_target\"|\"entity_explode\"|\"block_explode\"|\"entity_combust\"|\"entity_change_effect\"|\"block_ignite\"|\"block_burn\"|\"block_spread\"|\"block_flow\"|\"block_grow\"|\"block_fade\"|\"block_form\"|\"leaves_decay\"|\"piston_extend\"|\"piston_retract\"|\"block_redstone\"|\"sign_change\"|\"block_start_break\"|\"block_drop_item\"|\"weather_change\"|\"thunder_change\"|\"lightning_strike\"|\"chunk_load\"|\"chunk_generated\"|\"chunk_unload\"|\"world_load\"|\"world_unload\"|\"entity_mount\"|\"entity_dismount\"|\"vehicle_move\"|\"vehicle_damage\"|\"vehicle_destroy\"|\"player_open_inventory\"|\"player_close_inventory\"|\"player_click_inventory\"|\"player_drag_inventory\"|\"player_craft\"|\"player_prepare_craft\"|\"player_prepare_anvil\"|\"player_prepare_smithing\"|\"player_prepare_grindstone\"|\"player_enchant_item\"|\"furnace_smelt\"|\"server_list_ping\"|\"centity_click\"|\"recipe_craft\"|\"item_view\"|\"centity_natural_spawn\"|\"menu_open\"|\"menu_close\"|\"menu_click\"|\"dialog_press\"|\"setting_changed\"|\"network_connect\"|\"network_disconnect\"|\"network_server_connect\"|\"network_server_disconnect\"|\"network_player_join\"|\"network_player_switch\"|\"network_player_quit\"|\"player_arrive\"",
               "doc": "The event's name, as `nf.on` takes it."
             },
             {
@@ -6557,15 +6728,22 @@
         },
         {
           "name": "set_translation",
-          "doc": "Moves it relative to its parent (a root node, relative to the centity's position).",
+          "doc": "Moves it relative to its parent (a root node, relative to the centity's position). Its display eases there over its `interpolation_ticks`, unless `options.instant`.",
           "params": [
             {
               "name": "translation",
               "type": "Vec3",
               "doc": "In its parent's space, in blocks."
+            },
+            {
+              "name": "options",
+              "type": "PoseOptions",
+              "doc": "",
+              "optional": true
             }
           ],
-          "returns": []
+          "returns": [],
+          "example": "-- Back to the top of the list at once, still easing later scrolls.\nlocal list = assert(this:node(\"list\"))\nlist:set_translation(vec3(0, 0, 0), { instant = true })"
         },
         {
           "name": "set_rotation",
@@ -6575,6 +6753,12 @@
               "name": "rotation",
               "type": "Vec3",
               "doc": "Degrees, applied X then Y then Z."
+            },
+            {
+              "name": "options",
+              "type": "PoseOptions",
+              "doc": "",
+              "optional": true
             }
           ],
           "returns": [],
@@ -6588,6 +6772,12 @@
               "name": "scale",
               "type": "Vec3",
               "doc": "A factor per axis: `vec3.one` is its natural size."
+            },
+            {
+              "name": "options",
+              "type": "PoseOptions",
+              "doc": "",
+              "optional": true
             }
           ],
           "returns": []
@@ -6827,7 +7017,7 @@
         },
         {
           "name": "set_visible",
-          "doc": "Shows or hides it and everything under it. A hidden node can't be clicked.",
+          "doc": "Shows or hides it and everything under it, at once and where it is: a node shown again appears in place, with no easing, whatever its `interpolation_ticks`. A hidden node can't be clicked.",
           "params": [
             {
               "name": "visible",
@@ -6862,11 +7052,120 @@
         },
         {
           "name": "display_kind",
-          "doc": "What it draws: `\"block\"`, `\"item\"`, `\"model\"` (a resource pack look) or `\"text\"`, or `nil` for a node that draws nothing (a pivot, a hitbox alone) or once its centity is removed.",
+          "doc": "What it draws: `\"block\"`, `\"item\"`, `\"model\"` (a resource pack look), `\"text\"`, `\"rect\"` or `\"image\"`, or `nil` for a node that draws nothing (a pivot, a hitbox alone) or once its centity is removed.",
           "params": [],
           "returns": [
             {
-              "type": "\"block\"|\"item\"|\"model\"|\"text\"?"
+              "type": "\"block\"|\"item\"|\"model\"|\"text\"|\"rect\"|\"image\"?"
+            }
+          ]
+        },
+        {
+          "name": "image",
+          "doc": "What an image display shows now, as an `Image` (a new one each call), or `nil` while it's blank, for a node that isn't an image display, or once its centity is removed.",
+          "params": [],
+          "returns": [
+            {
+              "type": "Image?"
+            }
+          ]
+        },
+        {
+          "name": "set_image",
+          "doc": "Shows an image on an image display, its pixels one for one from the top left: resize it to the display's `width` and `height` first (`image:resized`); a smaller one leaves the rest blank and a bigger one is cut off. `nil` blanks it. Its viewers are sent it once: showing the same pixels again sends nothing. A centity's changed images send at most about 64 KiB a tick between them, counted as the connection sends them (compressed: a photo-like 128 by 72 picture is about 25 KiB), so a page of new pictures can take a few ticks to arrive. A node that isn't an image display is an error.",
+          "params": [
+            {
+              "name": "image",
+              "type": "Image?",
+              "doc": ""
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean",
+              "doc": "`false` once its centity is removed."
+            }
+          ],
+          "example": "local thumbnail = assert(this:node(\"thumbnail\"))\nthumbnail:set_image(nf.images.fill(96, 54, \"#202030\"))"
+        },
+        {
+          "name": "display_color",
+          "doc": "The colour a rect display is: `\"#RRGGBB\"` or `\"#AARRGGBB\"`, as set. `nil` when it isn't a rect display.",
+          "params": [],
+          "returns": [
+            {
+              "type": "string?"
+            }
+          ]
+        },
+        {
+          "name": "set_display_color",
+          "doc": "Recolours a rect display: one update to its viewers, nothing respawned. A colour that isn't one, or a node that isn't a rect display, is an error.",
+          "params": [
+            {
+              "name": "color",
+              "type": "string",
+              "doc": "`\"#RRGGBB\"`, or `\"#AARRGGBB\"` for one you can see through."
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean",
+              "doc": "`false` once its centity is removed."
+            }
+          ]
+        },
+        {
+          "name": "display_size",
+          "doc": "How big a rect or image display is, in blocks before the node's scale: `x` its width, `y` its height (`z` is 0). `nil` for any other node.",
+          "params": [],
+          "returns": [
+            {
+              "type": "Vec3?"
+            }
+          ]
+        },
+        {
+          "name": "set_display_size",
+          "doc": "Resizes a rect or image display, exactly: `x` its width and `y` its height in blocks before the node's scale (`z` is ignored). It's a pose change, so it eases as a move does. Either more than 0, or an error, as is a node that isn't a rect or an image display.",
+          "params": [
+            {
+              "name": "size",
+              "type": "Vec3",
+              "doc": ""
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean",
+              "doc": "`false` once its centity is removed."
+            }
+          ]
+        },
+        {
+          "name": "display_anchor",
+          "doc": "Which point of a rect, image or text display is at its node's origin. `nil` for a text display without one (drawn as the game draws text) or a node of any other kind.",
+          "params": [],
+          "returns": [
+            {
+              "type": "\"top_left\"|\"top\"|\"top_right\"|\"left\"|\"center\"|\"right\"|\"bottom_left\"|\"bottom\"|\"bottom_right\"?"
+            }
+          ]
+        },
+        {
+          "name": "set_display_anchor",
+          "doc": "Places a rect, image or text display by another of its points. A text display's anchor needs its text measured (`nf.text.measure`); one that can't be is drawn unanchored, with a warning in the log. `nil` takes a text display's away (and puts a rect or image back at its centre). A node of any other kind is an error.",
+          "params": [
+            {
+              "name": "anchor",
+              "type": "\"top_left\"|\"top\"|\"top_right\"|\"left\"|\"center\"|\"right\"|\"bottom_left\"|\"bottom\"|\"bottom_right\"?",
+              "doc": ""
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean",
+              "doc": "`false` once its centity is removed."
             }
           ]
         },
@@ -7446,6 +7745,125 @@
             {
               "type": "Subscription",
               "doc": "Call `:cancel()` on it to stop waiting before then."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Image",
+      "doc": "A picture made at runtime by `nf.images`, for image displays (`node:set_image`). It never changes: `resized` and `cropped` make new ones. Ephemeral: it can't be saved in a `data()` table (keep `image:encode()` instead). An image is at most 2048 pixels each way, and the images the server holds for scripts at once are at most 32 million pixels in all; one past that is an error, so let go of images you no longer need (an image Lua no longer holds is let go of for you).",
+      "methods": true,
+      "handle": {
+        "key": [
+          {
+            "name": "number",
+            "type": "integer"
+          }
+        ]
+      },
+      "fields": [],
+      "functions": [
+        {
+          "name": "width",
+          "doc": "Its width in pixels.",
+          "params": [],
+          "returns": [
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        {
+          "name": "height",
+          "doc": "Its height in pixels.",
+          "params": [],
+          "returns": [
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        {
+          "name": "pixel",
+          "doc": "The colour of the pixel at column `x`, row `y` (both from 0, at the top left): `\"#RRGGBB\"`, or `\"#AARRGGBB\"` when it isn't opaque. `nil` outside the image.",
+          "params": [
+            {
+              "name": "x",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "y",
+              "type": "integer",
+              "doc": ""
+            }
+          ],
+          "returns": [
+            {
+              "type": "string?"
+            }
+          ]
+        },
+        {
+          "name": "resized",
+          "doc": "A copy `width` by `height` pixels: each new pixel the average of the old ones it covers, so shrinking is smooth. An image display draws an image's pixels one for one, so resize one to the display's `width` and `height` first.",
+          "params": [
+            {
+              "name": "width",
+              "type": "integer",
+              "doc": "In pixels, 1 to 2048."
+            },
+            {
+              "name": "height",
+              "type": "integer",
+              "doc": "In pixels, 1 to 2048."
+            }
+          ],
+          "returns": [
+            {
+              "type": "Image"
+            }
+          ]
+        },
+        {
+          "name": "cropped",
+          "doc": "The part `width` by `height` pixels whose top left is at column `x`, row `y`. `nil` when that isn't all inside the image.",
+          "params": [
+            {
+              "name": "x",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "y",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "width",
+              "type": "integer",
+              "doc": ""
+            },
+            {
+              "name": "height",
+              "type": "integer",
+              "doc": ""
+            }
+          ],
+          "returns": [
+            {
+              "type": "Image?"
+            }
+          ]
+        },
+        {
+          "name": "encode",
+          "doc": "The image as a PNG file, base64: what `nf.images.decode` reads back, to keep in a database, a network map or saved data.",
+          "params": [],
+          "returns": [
+            {
+              "type": "string"
             }
           ]
         }
@@ -9237,6 +9655,12 @@
           "writable": [
             "message"
           ]
+        },
+        {
+          "name": "resource_pack_status",
+          "doc": "A player's game said what became of a resource pack the server sent it: the project's as they joined or after a rebuild, or an `onDemand` one a script pushed (`event.pack`). Only this player's: heard before `nf.on(\"player_resource_pack_status\")`, with the same event, so `event:stop()` keeps it from there.",
+          "bubbles": true,
+          "payload": "PlayerResourcePackStatusEvent"
         },
         {
           "name": "quit",
@@ -11140,11 +11564,51 @@
         },
         {
           "name": "resource_pack_status",
-          "doc": "What became of the project's resource pack on their game: `\"loaded\"`, `\"declined\"`, `\"failed\"`, `\"pending\"` (accepted, still downloading), or `nil` before their game has answered (and when they're offline, or there's no resource pack).",
-          "params": [],
+          "doc": "What became of the project's resource pack on their game, or of an `onDemand` pack pushed to them: `\"loaded\"`, `\"declined\"`, `\"failed\"`, `\"pending\"` (accepted, still downloading), or `nil` before their game has answered (and when they're offline, or there's no such pack). `player_resource_pack_status` says when it changes.",
+          "params": [
+            {
+              "name": "pack",
+              "type": "string",
+              "doc": "An `onDemand` pack, by name. Left out, the project's pack.",
+              "optional": true
+            }
+          ],
           "returns": [
             {
               "type": "\"loaded\"|\"declined\"|\"failed\"|\"pending\"|nil"
+            }
+          ]
+        },
+        {
+          "name": "push_resource_pack",
+          "doc": "Sends them one of the project's `onDemand` resource packs (`\"onDemand\": true` in its `pack.json`), beside the packs they have: their game shows its loading screen while it applies it, so it's for things that change rarely (this week's featured banners), not every search. Pushing one they have changes nothing; one rebuilt since (`nf.packs.rebuild`) is sent to them again. `player_resource_pack_status` says what became of it. It's taken off again by `pop_resource_pack`, or when they leave. A name that isn't an `onDemand` pack is an error. `false` when they're offline, or nothing is built (the packs have errors).",
+          "params": [
+            {
+              "name": "pack",
+              "type": "string",
+              "doc": "The pack's name, as its folder is: `\"featured\"`."
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean"
+            }
+          ],
+          "example": "nf.on(\"player_join\", function(event)\n  event.player:push_resource_pack(\"featured\")\nend)"
+        },
+        {
+          "name": "pop_resource_pack",
+          "doc": "Takes an `onDemand` pack `push_resource_pack` sent them back off their game (a loading screen again). `false` when they're offline or don't have it.",
+          "params": [
+            {
+              "name": "pack",
+              "type": "string",
+              "doc": ""
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean"
             }
           ]
         },
@@ -20588,6 +21052,30 @@
       "extends": "Event"
     },
     {
+      "name": "PlayerResourcePackStatusEvent",
+      "doc": "What a player's game said about a resource pack the server sent it.",
+      "methods": false,
+      "functions": [],
+      "fields": [
+        {
+          "name": "player",
+          "type": "Player",
+          "doc": "Who it was."
+        },
+        {
+          "name": "pack",
+          "type": "string?",
+          "doc": "The `onDemand` pack it was (`player:push_resource_pack`), by name; `nil` for the project's own."
+        },
+        {
+          "name": "status",
+          "type": "\"loaded\"|\"declined\"|\"failed\"|\"pending\"",
+          "doc": "`\"pending\"` (accepted, downloading), then `\"loaded\"`, `\"declined\"` or `\"failed\"`."
+        }
+      ],
+      "extends": "Event"
+    },
+    {
       "name": "PlayerQuitEvent",
       "doc": "A player left the server.",
       "methods": false,
@@ -23100,6 +23588,19 @@
       ]
     },
     {
+      "name": "PoseOptions",
+      "doc": "How `set_translation`, `set_rotation` and `set_scale` move a node. A key that isn't one of these is an error.",
+      "methods": false,
+      "functions": [],
+      "fields": [
+        {
+          "name": "instant",
+          "type": "boolean?",
+          "doc": "Jumps there this once, with no easing, and everything under it with it; later moves still ease over its `interpolation_ticks`. Default `false`."
+        }
+      ]
+    },
+    {
       "name": "TweenOptions",
       "doc": "A tween for `node:tween`: at least one of `translation`, `rotation` and `scale`. A key that isn't one of these is an error.",
       "methods": false,
@@ -24250,6 +24751,11 @@
           "doc": "A cooldown after using it (an ender pearl's): `{ seconds = 2 }`. Items with the same `group` share one."
         },
         {
+          "name": "invisible",
+          "type": "boolean?",
+          "doc": "Drawn as nothing wherever it's drawn: in a slot, on the ground, and in a hand, where the player's own arm isn't drawn either (as with anything held). An empty look every built resource pack has, in place of `item_model`. With `hold`, it's a pointer: no arm in the way, the right button pressed heard as `player_use_item` and let go as `player_stop_using_item`."
+        },
+        {
           "name": "hold",
           "type": "boolean|ItemHold?",
           "doc": "Held down with no end: a right click lasts until the player lets go, never finishes and uses nothing up. Letting go is `player_stop_using_item`, and `event.ticks` says how long it was held: a flail thrown on release, a charge that grows while held. `true` draws nothing (no zoom, no pose); `{ animation = \"trident\" }` poses the player as that use of the game's does, a knife raised to throw. Read back, it's `true` or that table, as it was given (a hold whose animation is `\"none\"` reads back `true`). Unless `use_effects` says otherwise, the player keeps their speed and can sprint, whatever the animation. It can't go with `food`, and only works on a kind with no use of its own (`minecraft:stick`, not a bow or a shield). Left clicks don't attack while it's held."
@@ -24755,6 +25261,11 @@
           "name": "cooldown",
           "type": "ItemCooldown?",
           "doc": "A cooldown after using it (an ender pearl's): `{ seconds = 2 }`. Items with the same `group` share one."
+        },
+        {
+          "name": "invisible",
+          "type": "boolean?",
+          "doc": "Drawn as nothing wherever it's drawn: in a slot, on the ground, and in a hand, where the player's own arm isn't drawn either (as with anything held). An empty look every built resource pack has, in place of `item_model`. With `hold`, it's a pointer: no arm in the way, the right button pressed heard as `player_use_item` and let go as `player_stop_using_item`."
         },
         {
           "name": "hold",
@@ -27439,6 +27950,37 @@
           "name": "encoding",
           "type": "\"hex\"|\"base64\"?",
           "doc": "How the result is written: `\"hex\"` (lowercase), or `\"base64\"`. Default `\"hex\"`."
+        }
+      ]
+    },
+    {
+      "name": "TextMeasureOptions",
+      "doc": "How `nf.text.measure` measures. A key that isn't one of these is an error.",
+      "methods": false,
+      "functions": [],
+      "fields": [
+        {
+          "name": "scale",
+          "type": "number?",
+          "doc": "The text display's scale (its node's, and its parents'). Default 1."
+        }
+      ]
+    },
+    {
+      "name": "TextSize",
+      "doc": "How big text draws on a text display, in blocks: what an `anchor`ed text display is placed by.",
+      "methods": false,
+      "functions": [],
+      "fields": [
+        {
+          "name": "width",
+          "type": "number",
+          "doc": "Its widest line: every character and the gap after it."
+        },
+        {
+          "name": "height",
+          "type": "number",
+          "doc": "Its lines, a quarter of a block each at scale 1."
         }
       ]
     },

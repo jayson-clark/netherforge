@@ -1,8 +1,11 @@
 package dev.netherforge.plugin.paper
 
+import dev.netherforge.format.centity.TextDisplay
+import dev.netherforge.format.centity.TextRun
 import dev.netherforge.format.resourcepack.PackFonts
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextComponent
+import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import kotlin.test.AfterTest
@@ -21,6 +24,16 @@ class PaperTextTest {
 
     private fun texts(component: Component): List<TextComponent> =
         listOfNotNull(component as? TextComponent) + component.children().flatMap(::texts)
+
+    @Test
+    fun `an image's text is built from its runs, a coloured piece each, not parsed`() {
+        val runs = listOf(TextRun("ab", 0xFF0000), TextRun(PackFonts.offset(10)), TextRun("\n"), TextRun("c", 0x00FF00))
+        val shown = PaperText.displayText(TextDisplay("<red>ignored", runs = runs))
+        assertEquals(listOf("ab", PackFonts.offset(10), "\n", "c"), shown.children().map { (it as TextComponent).content() })
+        assertEquals(listOf(TextColor.color(0xFF0000), null, null, TextColor.color(0x00FF00)), shown.children().map { it.color() })
+        // Text without runs is MiniMessage, as always.
+        assertEquals("hi", plain(PaperText.displayText(TextDisplay("<red>hi"))))
+    }
 
     @Test
     fun `a space is the pack's characters, never bold, and nothing before the runtime says what they are`() {

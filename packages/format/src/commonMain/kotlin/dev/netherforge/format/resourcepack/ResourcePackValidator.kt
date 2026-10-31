@@ -38,6 +38,24 @@ object ResourcePackValidator {
             if (!Names.isId(key)) sink.report(ProblemCodes.RESOURCE_PACK_KEY, "\"$key\" isn't a usable key (${Names.ID_RULE})", at)
         }
 
+        if (file.onDemand == true) {
+            // What every player's game must draw can't wait for a script to send it.
+            val everyone = listOfNotNull(
+                "blocks".takeIf { file.blocks.isNotEmpty() },
+                "hud".takeIf { file.hud != null },
+                "textures".takeIf { file.textures.isNotEmpty() },
+                "models".takeIf { file.models.isNotEmpty() },
+                "the game's sounds".takeIf { file.sounds.keys.any { PackSounds.isGameEvent(it) } }
+            )
+            if (everyone.isNotEmpty()) {
+                sink.report(
+                    ProblemCodes.RESOURCE_PACK_ON_DEMAND,
+                    "an onDemand pack can't have ${everyone.joinToString(" or ")}: every player's game needs them, " +
+                        "so they go in a pack players get as they join",
+                    "$.onDemand"
+                )
+            }
+        }
         for ((key, skin) in file.skins) {
             val at = CanonicalJson.childPath("$.skins", key)
             key(key, at)

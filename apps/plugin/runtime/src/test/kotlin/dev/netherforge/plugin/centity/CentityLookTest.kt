@@ -185,6 +185,61 @@ class CentityLookTest {
     }
 
     @Test
+    fun `hiding and showing a node jumps in place, without easing`() {
+        server("this:node(\"base\"):set_interpolation_ticks(3)").use { server ->
+            val sign = server.spawn()
+            sign.set(0, dev.netherforge.format.centity.Channel.TRANSLATION, dev.netherforge.format.math.Vec3(2.0, 1.0, 0.0))
+            server.tick()
+            server.tick()
+            val base = server.platform.entities.display(sign.id, "base")
+            val sword = server.platform.entities.display(sign.id, "sword")
+
+            sign.setVisible(0, false)
+            server.tick()
+            // Collapsed where it stands, not at the anchor, and at once; its child goes with it.
+            assertEquals(0, base.pose!!.interpolationTicks)
+            assertEquals(0, sword.pose!!.interpolationTicks)
+            val hidden = base.pose!!.matrix
+            assertEquals(2.0, hidden.translation().x, 1e-9)
+            assertEquals(1.0, hidden.translation().y, 1e-9)
+            assertEquals(0.0, hidden.scale().x, 1e-9)
+
+            sign.setVisible(0, true)
+            server.tick()
+            assertEquals(0, base.pose!!.interpolationTicks)
+            assertEquals(sign.placed()[0].values, base.pose!!.matrix.values)
+
+            // Later moves ease again.
+            sign.set(0, dev.netherforge.format.centity.Channel.TRANSLATION, dev.netherforge.format.math.Vec3(3.0, 1.0, 0.0))
+            server.tick()
+            assertEquals(3, base.pose!!.interpolationTicks)
+        }
+    }
+
+    @Test
+    fun `an instant move jumps once, with everything under it`() {
+        server(
+            """
+            local base = this:node("base")
+            base:set_interpolation_ticks(5)
+            nf.after(2, function() base:set_translation(vec3(0, 4, 0), { instant = true }) end)
+            nf.after(4, function() base:set_rotation(vec3(0, 90, 0)) end)
+            """
+        ).use { server ->
+            val sign = server.spawn()
+            val base = server.platform.entities.display(sign.id, "base")
+            val sword = server.platform.entities.display(sign.id, "sword")
+            repeat(3) { server.tick() }
+            assertEquals(4.0, base.pose!!.matrix.translation().y, 1e-9)
+            assertEquals(0, base.pose!!.interpolationTicks)
+            assertEquals(0, sword.pose!!.interpolationTicks)
+            repeat(2) { server.tick() }
+            assertEquals(5, base.pose!!.interpolationTicks)
+            assertEquals(1, sword.pose!!.interpolationTicks)
+        }
+    }
+
+    @Test
     fun `text style is read whole and replaced whole`() {
         server(
             """

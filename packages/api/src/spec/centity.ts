@@ -879,14 +879,22 @@ export const nodeClass: LuaClass = {
     },
     {
       name: 'set_translation',
-      doc: "Moves it relative to its parent (a root node, relative to the centity's position).",
-      params: [{ name: 'translation', type: 'Vec3', doc: "In its parent's space, in blocks." }],
+      doc: "Moves it relative to its parent (a root node, relative to the centity's position). Its display eases there over its `interpolation_ticks`, unless `options.instant`.",
+      params: [
+        { name: 'translation', type: 'Vec3', doc: "In its parent's space, in blocks." },
+        { name: 'options', type: 'PoseOptions', doc: '', optional: true },
+      ],
       returns: [],
+      example:
+        '-- Back to the top of the list at once, still easing later scrolls.\nlocal list = assert(this:node("list"))\nlist:set_translation(vec3(0, 0, 0), { instant = true })',
     },
     {
       name: 'set_rotation',
       doc: 'Turns it relative to its parent. Displays ease to the new pose over a tick, so setting it every tick looks smooth.',
-      params: [{ name: 'rotation', type: 'Vec3', doc: 'Degrees, applied X then Y then Z.' }],
+      params: [
+        { name: 'rotation', type: 'Vec3', doc: 'Degrees, applied X then Y then Z.' },
+        { name: 'options', type: 'PoseOptions', doc: '', optional: true },
+      ],
       returns: [],
       example:
         'local angle = 0\nthis:on("tick", function()\n  angle = (angle + 6) % 360\n  this:node("blade"):set_rotation(vec3(0, angle, 0))\nend)',
@@ -896,6 +904,7 @@ export const nodeClass: LuaClass = {
       doc: 'Scales it along its own axes.',
       params: [
         { name: 'scale', type: 'Vec3', doc: 'A factor per axis: `vec3.one` is its natural size.' },
+        { name: 'options', type: 'PoseOptions', doc: '', optional: true },
       ],
       returns: [],
     },
@@ -1017,7 +1026,7 @@ export const nodeClass: LuaClass = {
     },
     {
       name: 'set_visible',
-      doc: "Shows or hides it and everything under it. A hidden node can't be clicked.",
+      doc: "Shows or hides it and everything under it, at once and where it is: a node shown again appears in place, with no easing, whatever its `interpolation_ticks`. A hidden node can't be clicked.",
       params: [{ name: 'visible', type: 'boolean', doc: '' }],
       returns: [],
     },
@@ -1037,9 +1046,75 @@ export const nodeClass: LuaClass = {
     },
     {
       name: 'display_kind',
-      doc: 'What it draws: `"block"`, `"item"`, `"model"` (a resource pack look) or `"text"`, or `nil` for a node that draws nothing (a pivot, a hitbox alone) or once its centity is removed.',
+      doc: 'What it draws: `"block"`, `"item"`, `"model"` (a resource pack look), `"text"`, `"rect"` or `"image"`, or `nil` for a node that draws nothing (a pivot, a hitbox alone) or once its centity is removed.',
       params: [],
-      returns: [{ type: '"block"|"item"|"model"|"text"?' }],
+      returns: [{ type: '"block"|"item"|"model"|"text"|"rect"|"image"?' }],
+    },
+    {
+      name: 'image',
+      doc: "What an image display shows now, as an `Image` (a new one each call), or `nil` while it's blank, for a node that isn't an image display, or once its centity is removed.",
+      params: [],
+      returns: [{ type: 'Image?' }],
+    },
+    {
+      name: 'set_image',
+      doc: "Shows an image on an image display, its pixels one for one from the top left: resize it to the display's `width` and `height` first (`image:resized`); a smaller one leaves the rest blank and a bigger one is cut off. `nil` blanks it. Its viewers are sent it once: showing the same pixels again sends nothing. A centity's changed images send at most about 64 KiB a tick between them, counted as the connection sends them (compressed: a photo-like 128 by 72 picture is about 25 KiB), so a page of new pictures can take a few ticks to arrive. A node that isn't an image display is an error.",
+      params: [{ name: 'image', type: 'Image?', doc: '' }],
+      returns: [{ type: 'boolean', doc: '`false` once its centity is removed.' }],
+      example:
+        'local thumbnail = assert(this:node("thumbnail"))\nthumbnail:set_image(nf.images.fill(96, 54, "#202030"))',
+    },
+    {
+      name: 'display_color',
+      doc: 'The colour a rect display is: `"#RRGGBB"` or `"#AARRGGBB"`, as set. `nil` when it isn\'t a rect display.',
+      params: [],
+      returns: [{ type: 'string?' }],
+    },
+    {
+      name: 'set_display_color',
+      doc: "Recolours a rect display: one update to its viewers, nothing respawned. A colour that isn't one, or a node that isn't a rect display, is an error.",
+      params: [
+        {
+          name: 'color',
+          type: 'string',
+          doc: '`"#RRGGBB"`, or `"#AARRGGBB"` for one you can see through.',
+        },
+      ],
+      returns: [{ type: 'boolean', doc: '`false` once its centity is removed.' }],
+    },
+    {
+      name: 'display_size',
+      doc: "How big a rect or image display is, in blocks before the node's scale: `x` its width, `y` its height (`z` is 0). `nil` for any other node.",
+      params: [],
+      returns: [{ type: 'Vec3?' }],
+    },
+    {
+      name: 'set_display_size',
+      doc: "Resizes a rect or image display, exactly: `x` its width and `y` its height in blocks before the node's scale (`z` is ignored). It's a pose change, so it eases as a move does. Either more than 0, or an error, as is a node that isn't a rect or an image display.",
+      params: [{ name: 'size', type: 'Vec3', doc: '' }],
+      returns: [{ type: 'boolean', doc: '`false` once its centity is removed.' }],
+    },
+    {
+      name: 'display_anchor',
+      doc: "Which point of a rect, image or text display is at its node's origin. `nil` for a text display without one (drawn as the game draws text) or a node of any other kind.",
+      params: [],
+      returns: [
+        {
+          type: '"top_left"|"top"|"top_right"|"left"|"center"|"right"|"bottom_left"|"bottom"|"bottom_right"?',
+        },
+      ],
+    },
+    {
+      name: 'set_display_anchor',
+      doc: "Places a rect, image or text display by another of its points. A text display's anchor needs its text measured (`nf.text.measure`); one that can't be is drawn unanchored, with a warning in the log. `nil` takes a text display's away (and puts a rect or image back at its centre). A node of any other kind is an error.",
+      params: [
+        {
+          name: 'anchor',
+          type: '"top_left"|"top"|"top_right"|"left"|"center"|"right"|"bottom_left"|"bottom"|"bottom_right"?',
+          doc: '',
+        },
+      ],
+      returns: [{ type: 'boolean', doc: '`false` once its centity is removed.' }],
     },
     {
       name: 'display_block',
@@ -1785,6 +1860,19 @@ export const centityShapes: LuaClass[] = [
         name: 'length',
         type: 'number?',
         doc: "How long the rope is, in blocks: shorter than the ends' distance it's taut, longer it sags by its slack. Default: always taut.",
+      },
+    ],
+  },
+  {
+    name: 'PoseOptions',
+    doc: "How `set_translation`, `set_rotation` and `set_scale` move a node. A key that isn't one of these is an error.",
+    methods: false,
+    functions: [],
+    fields: [
+      {
+        name: 'instant',
+        type: 'boolean?',
+        doc: 'Jumps there this once, with no easing, and everything under it with it; later moves still ease over its `interpolation_ticks`. Default `false`.',
       },
     ],
   },

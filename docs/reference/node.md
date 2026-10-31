@@ -14,6 +14,7 @@ A handle: call its methods with a colon, `node:method()`.
 | [World space](#world-space) | [`world_position`](#world_position) [`world_rotation`](#world_rotation) [`world_direction`](#world_direction) [`to_local`](#to_local) [`to_world`](#to_world) [`look_at`](#look_at) [`rotate`](#rotate) |
 | [Ropes](#ropes) | [`stretch_between`](#stretch_between) [`is_rope`](#is_rope) [`rope_between`](#rope_between) [`release_rope`](#release_rope) |
 | [What it shows](#what-it-shows) | [`display_kind`](#display_kind) [`display_block`](#display_block) [`set_display_block`](#set_display_block) [`display_item`](#display_item) [`set_display_item`](#set_display_item) [`model`](#model) [`set_model`](#set_model) [`display_text`](#display_text) [`set_display_text`](#set_display_text) [`display_text_style`](#display_text_style) [`set_display_text_style`](#set_display_text_style) [`brightness`](#brightness) [`set_brightness`](#set_brightness) [`billboard`](#billboard) [`set_billboard`](#set_billboard) |
+| [Rects and images](#rects-and-images) | [`image`](#image) [`set_image`](#set_image) [`display_color`](#display_color) [`set_display_color`](#set_display_color) [`display_size`](#display_size) [`set_display_size`](#set_display_size) [`display_anchor`](#display_anchor) [`set_display_anchor`](#set_display_anchor) |
 | [Visibility, clicks and glow](#visibility-clicks-and-glow) | [`is_visible`](#is_visible) [`set_visible`](#set_visible) [`is_clickable`](#is_clickable) [`set_clickable`](#set_clickable) [`is_glowing`](#is_glowing) [`set_glowing`](#set_glowing) [`glow_color`](#glow_color) [`set_glow_color`](#set_glow_color) |
 | [Physics](#physics) | [`is_physics_enabled`](#is_physics_enabled) [`set_physics_enabled`](#set_physics_enabled) [`velocity`](#velocity) [`set_velocity`](#set_velocity) [`add_velocity`](#add_velocity) [`angular_velocity`](#angular_velocity) [`set_angular_velocity`](#set_angular_velocity) [`mass`](#mass) [`apply_impulse`](#apply_impulse) [`apply_impulse_at`](#apply_impulse_at) [`apply_force`](#apply_force) [`has_gravity`](#has_gravity) [`set_gravity`](#set_gravity) [`is_kinematic`](#is_kinematic) [`set_kinematic`](#set_kinematic) [`is_on_ground`](#is_on_ground) [`is_asleep`](#is_asleep) [`wake`](#wake) |
 | [Events](#events) | [`on`](#on) [`once`](#once) and 4 events |
@@ -88,21 +89,29 @@ Its scale on each of its own axes. `nil` once its centity is removed.
 
 **Returns** [`Vec3`](vec3.md)`?`
 
-### `node:set_translation(translation)` {#set_translation}
+### `node:set_translation(translation, options?)` {#set_translation}
 
-Moves it relative to its parent (a root node, relative to the centity's position).
+Moves it relative to its parent (a root node, relative to the centity's position). Its display eases there over its `interpolation_ticks`, unless `options.instant`.
 
 | Parameter | Type | |
 | --- | --- | --- |
 | `translation` | [`Vec3`](vec3.md) | In its parent's space, in blocks. |
+| `options` (optional) | [`PoseOptions`](types.md#poseoptions) |  |
 
-### `node:set_rotation(rotation)` {#set_rotation}
+```lua
+-- Back to the top of the list at once, still easing later scrolls.
+local list = assert(this:node("list"))
+list:set_translation(vec3(0, 0, 0), { instant = true })
+```
+
+### `node:set_rotation(rotation, options?)` {#set_rotation}
 
 Turns it relative to its parent. Displays ease to the new pose over a tick, so setting it every tick looks smooth.
 
 | Parameter | Type | |
 | --- | --- | --- |
 | `rotation` | [`Vec3`](vec3.md) | Degrees, applied X then Y then Z. |
+| `options` (optional) | [`PoseOptions`](types.md#poseoptions) |  |
 
 ```lua
 local angle = 0
@@ -112,13 +121,14 @@ this:on("tick", function()
 end)
 ```
 
-### `node:set_scale(scale)` {#set_scale}
+### `node:set_scale(scale, options?)` {#set_scale}
 
 Scales it along its own axes.
 
 | Parameter | Type | |
 | --- | --- | --- |
 | `scale` | [`Vec3`](vec3.md) | A factor per axis: `vec3.one` is its natural size. |
+| `options` (optional) | [`PoseOptions`](types.md#poseoptions) |  |
 
 ### `node:tween(options)` {#tween}
 
@@ -303,9 +313,9 @@ Stops keeping a rope strung: its links stay where they were last laid.
 
 ### `node:display_kind()` {#display_kind}
 
-What it draws: `"block"`, `"item"`, `"model"` (a resource pack look) or `"text"`, or `nil` for a node that draws nothing (a pivot, a hitbox alone) or once its centity is removed.
+What it draws: `"block"`, `"item"`, `"model"` (a resource pack look), `"text"`, `"rect"` or `"image"`, or `nil` for a node that draws nothing (a pivot, a hitbox alone) or once its centity is removed.
 
-**Returns** `"block"\|"item"\|"model"\|"text"?`
+**Returns** `"block"\|"item"\|"model"\|"text"\|"rect"\|"image"?`
 
 ### `node:display_block()` {#display_block}
 
@@ -447,6 +457,77 @@ Makes its display turn to face each viewer (or stop). A turning display ignores 
 
 **Returns** `boolean`: `false` for a node that draws nothing.
 
+## Rects and images {#rects-and-images}
+
+### `node:image()` {#image}
+
+What an image display shows now, as an `Image` (a new one each call), or `nil` while it's blank, for a node that isn't an image display, or once its centity is removed.
+
+**Returns** [`Image`](image.md)`?`
+
+### `node:set_image(image)` {#set_image}
+
+Shows an image on an image display, its pixels one for one from the top left: resize it to the display's `width` and `height` first (`image:resized`); a smaller one leaves the rest blank and a bigger one is cut off. `nil` blanks it. Its viewers are sent it once: showing the same pixels again sends nothing. A centity's changed images send at most about 64 KiB a tick between them, counted as the connection sends them (compressed: a photo-like 128 by 72 picture is about 25 KiB), so a page of new pictures can take a few ticks to arrive. A node that isn't an image display is an error.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `image` | [`Image`](image.md)`?` |  |
+
+**Returns** `boolean`: `false` once its centity is removed.
+
+```lua
+local thumbnail = assert(this:node("thumbnail"))
+thumbnail:set_image(nf.images.fill(96, 54, "#202030"))
+```
+
+### `node:display_color()` {#display_color}
+
+The colour a rect display is: `"#RRGGBB"` or `"#AARRGGBB"`, as set. `nil` when it isn't a rect display.
+
+**Returns** `string?`
+
+### `node:set_display_color(color)` {#set_display_color}
+
+Recolours a rect display: one update to its viewers, nothing respawned. A colour that isn't one, or a node that isn't a rect display, is an error.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `color` | `string` | `"#RRGGBB"`, or `"#AARRGGBB"` for one you can see through. |
+
+**Returns** `boolean`: `false` once its centity is removed.
+
+### `node:display_size()` {#display_size}
+
+How big a rect or image display is, in blocks before the node's scale: `x` its width, `y` its height (`z` is 0). `nil` for any other node.
+
+**Returns** [`Vec3`](vec3.md)`?`
+
+### `node:set_display_size(size)` {#set_display_size}
+
+Resizes a rect or image display, exactly: `x` its width and `y` its height in blocks before the node's scale (`z` is ignored). It's a pose change, so it eases as a move does. Either more than 0, or an error, as is a node that isn't a rect or an image display.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `size` | [`Vec3`](vec3.md) |  |
+
+**Returns** `boolean`: `false` once its centity is removed.
+
+### `node:display_anchor()` {#display_anchor}
+
+Which point of a rect, image or text display is at its node's origin. `nil` for a text display without one (drawn as the game draws text) or a node of any other kind.
+
+**Returns** `"top_left"\|"top"\|"top_right"\|"left"\|"center"\|"right"\|"bottom_left"\|"bottom"\|"bottom_right"?`
+
+### `node:set_display_anchor(anchor)` {#set_display_anchor}
+
+Places a rect, image or text display by another of its points. A text display's anchor needs its text measured (`nf.text.measure`); one that can't be is drawn unanchored, with a warning in the log. `nil` takes a text display's away (and puts a rect or image back at its centre). A node of any other kind is an error.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `anchor` | `"top_left"\|"top"\|"top_right"\|"left"\|"center"\|"right"\|"bottom_left"\|"bottom"\|"bottom_right"?` |  |
+
+**Returns** `boolean`: `false` once its centity is removed.
+
 ## Visibility, clicks and glow {#visibility-clicks-and-glow}
 
 ### `node:is_visible()` {#is_visible}
@@ -457,7 +538,7 @@ Whether it's set visible (it can still be hidden by a hidden parent).
 
 ### `node:set_visible(visible)` {#set_visible}
 
-Shows or hides it and everything under it. A hidden node can't be clicked.
+Shows or hides it and everything under it, at once and where it is: a node shown again appears in place, with no easing, whatever its `interpolation_ticks`. A hidden node can't be clicked.
 
 | Parameter | Type | |
 | --- | --- | --- |

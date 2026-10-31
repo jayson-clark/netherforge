@@ -181,6 +181,12 @@ class Instance(val id: UUID, declared: CompiledCentity, anchor: Location, yaw: D
     private var edited: BooleanArray = BooleanArray(0)
     private var allEdited = true
 
+    /**
+     * Nodes whose display jumps to its next pose rather than easing there: shown or hidden (else it would grow out of
+     * or shrink into where it was collapsed), or moved with `instant`. Everything under one jumps with it.
+     */
+    private var jumps: BooleanArray = BooleanArray(0)
+
     /** The clips' [AnimationPlayer.version] at the last sync: a clip started, stopped or moved since means nothing planned holds. */
     private var syncedClips = -1L
 
@@ -314,6 +320,7 @@ class Instance(val id: UUID, declared: CompiledCentity, anchor: Location, yaw: D
         unclickable = BooleanArray(nodes.size) { from[it] >= 0 && unclickable[from[it]] }
         interpolation = IntArray(nodes.size) { if (from[it] >= 0) interpolation[from[it]] else DEFAULT_INTERPOLATION_TICKS }
         edited = BooleanArray(nodes.size)
+        jumps = BooleanArray(nodes.size)
         due = LongArray(nodes.size)
         allEdited = true
         if (renumber != null) {
@@ -349,6 +356,7 @@ class Instance(val id: UUID, declared: CompiledCentity, anchor: Location, yaw: D
         unclickable = BooleanArray(next.nodes.size)
         interpolation = IntArray(next.nodes.size) { DEFAULT_INTERPOLATION_TICKS }
         edited = BooleanArray(next.nodes.size)
+        jumps = BooleanArray(next.nodes.size)
         due = LongArray(next.nodes.size)
         allEdited = true
         animations.stopAll()
@@ -384,12 +392,26 @@ class Instance(val id: UUID, declared: CompiledCentity, anchor: Location, yaw: D
         Channel.SCALE -> rest[index].scaleOrDefault
     }
 
-    /** Sets a channel of the rest pose. An animation driving the channel still overrides it while it plays. */
-    fun set(index: Int, channel: Channel, value: Vec3) {
+    /**
+     * Sets a channel of the rest pose. An animation driving the channel still overrides it while it plays. [instant]
+     * shows it there at the next sync without easing.
+     */
+    fun set(index: Int, channel: Channel, value: Vec3, instant: Boolean = false) {
         rest[index] = rest[index].with(channel, value)
         pose[index] = pose[index].with(channel, value)
         edited[index] = true
+        if (instant) jumps[index] = true
         posed()
+    }
+
+    /** Whether node [index]'s display jumps at the next sync: it or a node above it was shown, hidden or moved `instant`. */
+    fun jumps(index: Int): Boolean {
+        var at = index
+        while (at >= 0) {
+            if (jumps[at]) return true
+            at = definition.nodes[at].parentIndex
+        }
+        return false
     }
 
     /** A channel of a node's rest pose easing from [from] to [to] over [ticks] (and back, with [back]). */
@@ -596,6 +618,7 @@ class Instance(val id: UUID, declared: CompiledCentity, anchor: Location, yaw: D
         moved = false
         contentChanged.fill(false)
         edited.fill(false)
+        jumps.fill(false)
         allEdited = false
         syncedClips = animations.version
     }
@@ -608,6 +631,7 @@ class Instance(val id: UUID, declared: CompiledCentity, anchor: Location, yaw: D
         if (hidden[index] == !value) return
         hidden[index] = !value
         edited[index] = true
+        jumps[index] = true
         poseDirty = true
         reshaped()
     }
@@ -627,11 +651,19 @@ class Instance(val id: UUID, declared: CompiledCentity, anchor: Location, yaw: D
     fun setDisplay(index: Int, display: DisplayDef) {
         content[index] = display
         contentChanged[index] = true
+        // Its fit may change with it (a rect's size, an anchor), so its pose is sent now too.
+        edited[index] = true
         poseDirty = true
         reshaped()
     }
 
     fun contentChanged(index: Int): Boolean = contentChanged[index]
+
+    /** Node [index]'s new content wasn't sent this sync (past a budget): send it at the next. */
+    fun deferContent(index: Int) {
+        contentChanged[index] = true
+        poseDirty = true
+    }
 
     /** How node [index]'s display turns to the camera: a script's look, else a text display's own, else fixed. */
     fun billboard(index: Int): Billboard {

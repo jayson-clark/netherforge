@@ -7,6 +7,20 @@
   },
   {
     "severity": "error",
+    "file": "resource_packs/featured/pack.json",
+    "message": "an onDemand pack can't have textures: every player's game needs them, so they go in a pack players get as they join",
+    "path": "$.onDemand",
+    "code": "resource_pack.on-demand"
+  },
+  {
+    "severity": "warning",
+    "file": "resource_packs/featured/pack.json",
+    "message": "Replacing the game's sprites, textures and models takes their names and sizes, which the editor writes into client/vanilla.json from your Minecraft: open the project in the editor with Minecraft 26.3 imported (import it again if it was imported before the editor listed them). Until then nothing is replaced",
+    "path": "$.textures",
+    "code": "resource_pack.vanilla-missing"
+  },
+  {
+    "severity": "error",
     "file": "resource_packs/ui/pack.json",
     "message": "ascent can't exceed height; Minecraft refuses to load it",
     "path": "$.skins.big.ascent",

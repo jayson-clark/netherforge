@@ -33,8 +33,10 @@ collide however they name them.
 ```
 
 `name` and `description` are labels for whoever reads the file (the editor's
-resource pack list shows them); the game never sees them. Every other key is a section
-below, each a set of entries by key.
+resource pack list shows them); the game never sees them. `onDemand` leaves the
+pack out of the one players get as they join, for scripts to send
+([below](#packs-sent-on-demand)). Every other key is a section below, each a set
+of entries by key.
 
 Texture paths are relative to the resource pack's `textures/` folder and must be PNGs.
 Keys follow the [id rules](project.md#ids).
@@ -105,7 +107,10 @@ the picture's pixels, not the `height` it's drawn at.
 The built resource pack's default font also holds the space characters that
 `<space:N>` and `<at:N>…</at>` move the cursor with (see the
 [resource packs guide](../guide/resource-packs.md#spacing-moving-the-cursor-in-text)), so
-those tags work in any text whenever there's a resource pack.
+those tags work in any text whenever there's a resource pack. It holds the
+engine's pixel glyphs too (white pictures 1 to 128 pixels wide, one line tall,
+under `assets/netherforge/textures/font/`), which
+[image displays](centity.md#display) are drawn with.
 
 ## Item models
 
@@ -603,4 +608,35 @@ model.
 The plugin builds the resource pack whenever one of the project's changes, serves it from the server
 itself (or a URL you configure), and sends it with its SHA-1 so clients only
 download it again when it actually changed. The pack format is the one your
-target Minecraft version uses.
+target Minecraft version uses. A player's game gets it as they join, taking
+off any other pack it has first (what another server of a network sent).
+
+### Packs sent on demand
+
+`"onDemand": true` in a `pack.json` leaves that pack out of the one players
+get as they join. It's built into a pack of its own, served by the plugin's
+own HTTP server (even when the project's pack is at an external URL), and a
+script sends it to the players it chooses, beside the project's pack:
+
+```lua
+nf.on("player_join", function(event)
+  event.player:push_resource_pack("featured")
+end)
+```
+
+`player:pop_resource_pack("featured")` takes it off again, and leaving does
+too; `player_resource_pack_status` says what each player's game made of it
+(`event.pack` is `"featured"`). Every push shows the player's loading screen,
+so it's for art that changes rarely (this week's featured banners), not on
+every click. Its glyphs are numbered with every other pack's, so the
+characters never clash, and `<glyph:featured/banner>` works anywhere text
+does; a player who doesn't have the pack sees nothing there.
+
+`nf.packs.rebuild()` reads the project's packs from disk again at
+the end of the tick and sends what changed to whoever has it: a job that
+writes new banners into `resource_packs/featured/` and calls it rotates them
+without a deploy.
+
+An `onDemand` pack can't draw what every player's game needs whoever it was
+sent to: blocks, the HUD, or the game's own textures, models or sounds
+(`resource_pack.on-demand`).

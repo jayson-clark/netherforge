@@ -450,6 +450,7 @@ class ConformanceTest {
         h.Subscription = nf.on("tick", function() end)
         h.Task = nf.after(100, function() end)
         h.Random = nf.random.new(1)
+        h.Image = nf.images.fill(2, 2, "#336699")
         h.World = nf.worlds.default()
         h.Block = h.World:block(vec3(0, 64, 0))
         h.CustomBlock = h.ProjectBlock:place(h.World:block(vec3(12, 64, 12)):location())

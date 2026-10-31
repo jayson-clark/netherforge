@@ -12,7 +12,18 @@ import java.util.Properties
  * proves it knows, and the network's limits. Written with a new random secret the first time the proxy starts, so
  * a hub is never open without one. A value that isn't one (a negative number) is the default.
  */
-data class HubSettings(val bind: String, val port: Int, val secret: String, val limits: NetworkLimits) {
+data class HubSettings(
+    val bind: String,
+    val port: Int,
+    val secret: String,
+    val limits: NetworkLimits,
+    /**
+     * Whether a server's resource packs come off a player as they move to another server, so one server's (a lobby's
+     * hidden HUD, its replaced sprites) never follows them to the next. Default true; a file written before this
+     * setting existed has it on too.
+     */
+    val clearResourcePacks: Boolean = true
+) {
     companion object {
         const val FILE = "hub.properties"
 
@@ -28,6 +39,7 @@ data class HubSettings(val bind: String, val port: Int, val secret: String, val 
             Files.newBufferedReader(file).use(properties::load)
             fun text(key: String) = properties.getProperty(key)?.trim()?.takeIf { it.isNotEmpty() }
             fun positive(key: String) = text(key)?.toLongOrNull()?.takeIf { it > 0 }
+            fun flag(key: String) = text(key)?.lowercase()?.let { it == "true" }
             val defaults = NetworkLimits()
             val secret = text("secret") ?: error("$file has no secret: set one (or delete the file for a new one)")
             require(secret.length >= MIN_SECRET) { "$file's secret is shorter than $MIN_SECRET characters" }
@@ -41,7 +53,8 @@ data class HubSettings(val bind: String, val port: Int, val secret: String, val 
                     maxBytesPerPackage = positive("max-bytes-per-package") ?: defaults.maxBytesPerPackage,
                     maxQueuedFrames = positive("max-queued-frames")?.toInt() ?: defaults.maxQueuedFrames,
                     requestTimeoutMillis = positive("request-timeout-seconds")?.let { it * 1000 } ?: defaults.requestTimeoutMillis
-                )
+                ),
+                clearResourcePacks = flag("clear-resource-packs") ?: true
             )
         }
 
@@ -71,6 +84,11 @@ data class HubSettings(val bind: String, val port: Int, val secret: String, val 
                 |request-timeout-seconds=${limits.requestTimeoutMillis / 1000}
                 |# Frames waiting to be sent to one server; past it the server is too slow and is disconnected.
                 |max-queued-frames=${limits.maxQueuedFrames}
+                |
+                |# Whether the resource packs a server sent a player come off as they move to another server, so a
+                |# lobby's (its hidden HUD, its replaced sprites) never follows them into a game. The next server sends
+                |# its own as they join (NetherForge servers do). Off, Velocity leaves them on until a server replaces them.
+                |clear-resource-packs=true
                 |
             """.trimMargin()
         }

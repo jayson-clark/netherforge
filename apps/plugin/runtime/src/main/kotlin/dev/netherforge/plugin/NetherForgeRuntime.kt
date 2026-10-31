@@ -14,6 +14,8 @@ import dev.netherforge.format.project.LockKind
 import dev.netherforge.format.project.ManifestKind
 import dev.netherforge.format.project.VanillaKind
 import dev.netherforge.format.resourcepack.PackFonts
+import dev.netherforge.format.resourcepack.ResourcePackFile
+import dev.netherforge.format.resourcepack.ResourcePackKind
 import dev.netherforge.plugin.admin.AdminCommand
 import dev.netherforge.plugin.async.Completions
 import dev.netherforge.plugin.async.MainThread
@@ -415,6 +417,11 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
         // What the editor set since (breakpoints, a pause), before any script of this tick runs.
         debugger?.let { debugger -> session.scripts.host?.let(debugger::sync) }
         session.tick()
+        // A script asked for the resource packs read again (`nf.packs.rebuild`): after the tick, out of every script's way.
+        if (session.packsWanted) {
+            session.packsWanted = false
+            if (session.running) reload(session.snapshot.everywhere(ResourcePackKind).keys.map { packFile(it) })
+        }
         store.commit()
         if (ticks % STATUS_EVERY == 0L) {
             try {
@@ -426,6 +433,9 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
     }
 
     private fun tickFailed(e: Throwable) = log.error("NetherForge couldn't run work handed to the main thread", e)
+
+    /** Resource pack [id]'s `pack.json`, as a reload names it: the project's, or a package's by its package path. */
+    private fun packFile(id: String): String = session.snapshot.placeOf(ResourcePackKind, id).file(ResourcePackFile.FILE_NAME)
 
     // ---- what the bridge and /nf ask -------------------------------------------
 

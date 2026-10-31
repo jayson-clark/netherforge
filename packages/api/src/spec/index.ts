@@ -49,6 +49,7 @@ import { teamClass, teamShapes } from './teams.ts'
 import { scheduleClass, scheduleShapes } from './schedule.ts'
 import { randomClass, utilityShapes } from './utilities.ts'
 import { encodingShapes } from './encoding.ts'
+import { imageClass, imageShapes } from './images.ts'
 import { testShapes } from './test.ts'
 
 const centitySurface: Surface = {
@@ -99,6 +100,7 @@ const moduleSurface: Surface = {
 const classes = [
   centityClass,
   nodeClass,
+  imageClass,
   entityClass,
   livingClass,
   mobClass,
@@ -214,6 +216,7 @@ export const api: ApiSpec = {
     ...screenShapes,
     ...utilityShapes,
     ...encodingShapes,
+    ...imageShapes,
     ...testShapes,
   ],
   removed: [

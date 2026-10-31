@@ -27,6 +27,7 @@ object RaisableEvents {
     val byName: Map<String, Raisable<*>> = mapOf(
         "tick" to Raisable(Events.NF_TICK),
         "player_join" to Raisable(Events.NF_PLAYER_JOIN, Events.PLAYER_JOIN) { it.player },
+        "player_resource_pack_status" to Raisable(Events.NF_PLAYER_RESOURCE_PACK_STATUS),
         "player_quit" to Raisable(Events.NF_PLAYER_QUIT, Events.PLAYER_QUIT) { it.player },
         "player_chat" to Raisable(Events.NF_PLAYER_CHAT, Events.PLAYER_CHAT) { it.player },
         "player_interact" to Raisable(Events.NF_PLAYER_INTERACT),

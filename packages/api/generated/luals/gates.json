@@ -48,6 +48,10 @@
     "requires": "plugin:placeholderapi"
   },
   {
+    "function": "nf.images.download",
+    "requires": "http"
+  },
+  {
     "function": "nf.http.request",
     "requires": "http"
   },

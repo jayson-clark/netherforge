@@ -607,6 +607,22 @@ class MenuTest {
     }
 
     @Test
+    fun `an invisible pointer reads back as it was written`() {
+        val script = """
+            do
+              this:set_item(0, { kind = "minecraft:paper", invisible = true, hold = true })
+              local pointer = this:item(0)
+              log(pointer.invisible, pointer.hold, tostring(pointer.item_model))
+            end
+        """
+        TestServer(menu(script = script)).use { server ->
+            server.platform.commands.run(server.player("Alex"), "menu")
+            assertEquals(listOf("true\ttrue\tnil"), server.logs)
+            assertEquals(true, server.platform.menus.of(server.player("Alex"))!!.slots[0]!!.def.invisible)
+        }
+    }
+
+    @Test
     fun `a hold with an animation reads back as the table it was, and keeps a hold's use effects`() {
         val script = """
             do
