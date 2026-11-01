@@ -3,7 +3,14 @@
  * React like the rest of `ops.ts`: the inspector's section calls these
  * through `workspace.edit`, and the tests call them on plain objects.
  */
-import type { CentityFile, MoonPhase, SpawnRange, SpawnTime, SpawnWeather } from '@/core/format'
+import type {
+  CentityFile,
+  MoonPhase,
+  SpawnPlacement,
+  SpawnRange,
+  SpawnTime,
+  SpawnWeather,
+} from '@/core/format'
 
 /** The lists a `spawning` block has, edited as comma-separated text. */
 export type SpawningList = 'worlds' | 'biomes' | 'blocks'
@@ -49,6 +56,14 @@ export function setKeepOnInteract(file: CentityFile, on: boolean): void {
   if (!spawning) return
   if (on) spawning.keepOnInteract = true
   else delete spawning.keepOnInteract
+}
+
+/** Where it appears: the ground leaves the key out (it's the default). */
+export function setPlacement(file: CentityFile, placement: SpawnPlacement): void {
+  const spawning = file.spawning
+  if (!spawning) return
+  if (placement === 'ground') delete spawning.placement
+  else spawning.placement = placement
 }
 
 /** One end of a range; a range with neither end is no range, and its key goes. */

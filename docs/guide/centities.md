@@ -360,7 +360,8 @@ no ticks, no animation, until a player comes near again.
 
 Give a centity a [`spawning`](../format/centity.md#spawning) block and it
 appears near players without a script, the way mobs do: in the worlds, biomes,
-light, heights and on the blocks you name, in groups, chosen by weight against
+light, heights and on the blocks you name, on the ground or (with
+`"placement": "water"`) in water, in groups, chosen by weight against
 the other centities that fit the same spot, with a cap per player that is
 separate from the server's mob caps.
 

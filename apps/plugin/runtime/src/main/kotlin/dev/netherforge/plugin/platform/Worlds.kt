@@ -23,7 +23,9 @@ data class BlockSnapshot(
     val liquid: Boolean,
     /** The brighter of block light and sky light, 0 to 15. */
     val light: Int,
-    val skyLight: Int
+    val skyLight: Int,
+    /** It holds water: water itself, or a block with water in it (waterlogged, kelp, seagrass). Never lava. */
+    val water: Boolean
 )
 
 /**

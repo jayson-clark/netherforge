@@ -338,9 +338,14 @@ resolved rules are rebuilt).
   staggered by their UUID; at most `PLAYERS_PER_TICK` (2) passes run in a tick,
   each looking at `ATTEMPTS` (4) places. A place is a column 24 to 48 blocks
   away (`SpawningDef.MIN_DISTANCE`/`MAX_DISTANCE`), searched from near the
-  player's height for air over a solid block (`spotIn`: `BlockOps.get` reads,
-  bounded by `SEARCH`), so the block reads per tick have a fixed ceiling
-  whatever the player count. Nothing here loads a chunk.
+  player's height for air over a solid block, or, when a rule left in the pass
+  has `"placement": "water"`, for water too, whichever the column reaches
+  first (`spotIn`: `BlockOps.get` reads, bounded by `SEARCH`; water is
+  `BlockSnapshot.water`, Paper's fluid there, so waterlogged blocks and kelp
+  count and lava never does, and needs no solid block over it), so the block
+  reads per tick have a fixed ceiling whatever the player count. The `Spot`
+  says which it is, and a rule only `fits` its own placement. Nothing here
+  loads a chunk.
 - **Rules.** `Rule.of` resolves a block's ids and `#tag`s against `Platform.game`
   once per definition (cached by identity, so a reload re-resolves). A place
   `fits` when world, height, light (`BlockSnapshot.light` of the feet block),

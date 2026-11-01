@@ -348,6 +348,7 @@ can't reach them (`script.file-name`, a warning). See
   "worlds": ["world_the_end"],
   "biomes": ["#minecraft:is_end"],
   "blocks": ["minecraft:end_stone"],
+  "placement": "ground",
   "light": { "max": 7 },
   "height": { "min": 40 },
   "weight": 4,
@@ -370,7 +371,8 @@ player is, so say where.
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | `worlds`          | World names it may appear in                                                                                                                          | any     |
 | `biomes`          | Biomes: the game's (`minecraft:plains`) or `#tags` of them (`#minecraft:is_forest`), or the project's [own](biome.md) (`ruby_grove`)                  | any     |
-| `blocks`          | The block it stands on: block ids, or `#tags` of blocks                                                                                               | any     |
+| `blocks`          | The block under it: block ids, or `#tags` of blocks. On the ground, the block it stands on                                                            | any     |
+| `placement`       | Where it appears: `ground` (standing on a solid block, with air for its feet and head) or `water` (in water)                                          | ground  |
 | `light`           | `{ "min", "max" }`: the light level at the spot, 0 to 15 (the brighter of block and sky light)                                                        | 0 to 15 |
 | `height`          | `{ "min", "max" }`: the block `y` it may appear at                                                                                                    | any     |
 | `weight`          | How likely it is against the other centities that may appear at the same spot                                                                         | 10      |
@@ -390,6 +392,15 @@ positive (`centity.spawning-number`), a range's `min` can't be above its `max`
 biomes and blocks (`centity.spawning-biome`, `centity.spawning-block`). A plain
 biome id is one of the project's biomes (`reference.biome` when there's none);
 the game's are written with their namespace.
+
+**In water.** A `"placement": "water"` centity appears in water: water
+itself or a block with water in it (waterlogged, kelp, seagrass), never lava,
+and with no solid block over it, so a pool shut in under the ground isn't a
+place. It may be anywhere from a sea's floor to its surface; `height` narrows
+that. Its `blocks` are still the block under it, which is water unless it's at
+the bottom, so `"blocks": ["#minecraft:sand"]` keeps it to the sea floor. A
+`ground` centity never appears in water, as it never did, and one `water` rule
+doesn't change where the `ground` ones go.
 
 **Time, moon and weather** are the world's, asked as each place is tried. `"night"`
 is from dusk to sunrise, ticks 13000 to 22999 of the day (what `/time set night`

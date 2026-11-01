@@ -2,6 +2,7 @@ package dev.netherforge.plugin.centity
 
 import dev.netherforge.format.biome.BiomeKind
 import dev.netherforge.format.centity.CompiledCentity
+import dev.netherforge.format.centity.SpawnPlacement
 import dev.netherforge.format.centity.SpawnTime
 import dev.netherforge.format.centity.SpawnWeather
 import dev.netherforge.format.centity.SpawningDef
@@ -42,9 +43,10 @@ import kotlin.random.Random
  * pass every [PASS_INTERVAL] ticks (staggered by player, so they don't all
  * land on one tick), at most [PLAYERS_PER_TICK] passes run in a tick, and a
  * pass looks at [ATTEMPTS] places. A place is a column 24 to 48 blocks from
- * the player in a loaded chunk, searched downward from near the player's own
- * height for somewhere to stand ([findSpot]): block reads are the cost, and
- * they're bounded by `PLAYERS_PER_TICK * ATTEMPTS * SEARCH`.
+ * the player in a loaded chunk, searched from near the player's own height for
+ * somewhere to stand, or, when a rule wants water, for water ([findSpot]): the
+ * column decides which, so one search serves both, and block reads are the
+ * cost, bounded by `PLAYERS_PER_TICK * ATTEMPTS * SEARCH`.
  *
  * Which centities may appear at a place is each rule's filter (world, the
  * world's time, moon and weather, height, light, biome, the block stood on),
@@ -174,7 +176,8 @@ class NaturalSpawner(
         val remaining = HashMap(room)
         repeat(ATTEMPTS) {
             if (remaining.isEmpty()) return
-            val spot = findSpot(where) ?: return@repeat
+            val water = remaining.keys.any { it.placement == SpawnPlacement.WATER }
+            val spot = findSpot(where, water) ?: return@repeat
             val fits = remaining.keys.filter { it.fits(spot) && holds(it, spot, player) }
             if (fits.isEmpty()) return@repeat
             val rule = choose(fits)
@@ -223,12 +226,13 @@ class NaturalSpawner(
 
     // ---- finding a place -----------------------------------------------------------
 
-    /** A place a centity could stand: its feet block, what's under it, and what's known of both. */
+    /** A place a centity could be: on the ground or in water, its feet block, what's under it, and what's known of both. */
     internal class Spot(
         val world: String,
         val x: Int,
         val y: Int,
         val z: Int,
+        val placement: SpawnPlacement,
         val feet: BlockSnapshot,
         val below: BlockSnapshot,
         val biome: String?
@@ -236,13 +240,13 @@ class NaturalSpawner(
         val standingOn: String? get() = BlockState.parse(below.state)?.id
     }
 
-    /** A column [MIN_DISTANCE]..[MAX_DISTANCE] blocks from [where], looked down from around its height. Null when none was found. */
-    private fun findSpot(where: Location): Spot? {
+    /** A column [MIN_DISTANCE]..[MAX_DISTANCE] blocks from [where], searched from around its height; [water]: water counts. Null when none was found. */
+    private fun findSpot(where: Location, water: Boolean): Spot? {
         val angle = random.nextDouble(0.0, Math.PI * 2)
         val distance = random.nextDouble(SpawningDef.MIN_DISTANCE.toDouble(), SpawningDef.MAX_DISTANCE.toDouble())
         val x = floor(where.x + cos(angle) * distance).toInt()
         val z = floor(where.z + sin(angle) * distance).toInt()
-        return spotIn(where.world, x, z, floor(where.y).toInt() + random.nextInt(-HEIGHT_REACH, HEIGHT_REACH + 1))
+        return spotIn(where.world, x, z, floor(where.y).toInt() + random.nextInt(-HEIGHT_REACH, HEIGHT_REACH + 1), water)
     }
 
     /** A spot within a few blocks of [spot], for the rest of a group. */
@@ -250,7 +254,7 @@ class NaturalSpawner(
         repeat(GROUP_TRIES) {
             val x = spot.x + random.nextInt(-GROUP_RADIUS, GROUP_RADIUS + 1)
             val z = spot.z + random.nextInt(-GROUP_RADIUS, GROUP_RADIUS + 1)
-            val found = spotIn(spot.world, x, z, spot.y + random.nextInt(-1, 2))
+            val found = spotIn(spot.world, x, z, spot.y + random.nextInt(-1, 2), rule.placement == SpawnPlacement.WATER)
             if (found != null && rule.fits(found) && holds(rule, found, player)) return found
         }
         return null
@@ -301,8 +305,13 @@ class NaturalSpawner(
         }
     }
 
-    /** Searches down from [from] in one column for air over something solid: null when that isn't within [SEARCH] blocks or its chunk isn't loaded. */
-    private fun spotIn(world: String, x: Int, z: Int, from: Int): Spot? {
+    /**
+     * Searches one column from [from] for air over something solid, or with [water], for water too, whichever
+     * comes first: up out of the ground (into the water over a sea floor, or the air over land), or down
+     * through the air (onto land, or a sea's surface). A start in water is a place in it, at that depth.
+     * Null when neither is within [SEARCH] blocks or its chunk isn't loaded.
+     */
+    private fun spotIn(world: String, x: Int, z: Int, from: Int, water: Boolean): Spot? {
         val (low, high) = platform.worlds.heights(world) ?: return null
         val blocks = platform.blocks
         var y = from.coerceIn(low + 1, high - 2)
@@ -310,10 +319,12 @@ class NaturalSpawner(
         // From inside the ground, up to the surface; from the air, down onto it.
         var steps = 0
         while (steps < SEARCH && (feet.solid || feet.liquid) && y < high - 2) {
+            if (water && feet.swimmable) return inWater(world, x, y, z, feet)
             y++
             feet = blocks.get(world, x, y, z) ?: return null
             steps++
         }
+        if (water && feet.swimmable) return inWater(world, x, y, z, feet)
         if (feet.solid || feet.liquid) return null
         var below = blocks.get(world, x, y - 1, z) ?: return null
         while (steps < SEARCH && !below.solid && !below.liquid && y - 1 > low) {
@@ -322,11 +333,24 @@ class NaturalSpawner(
             below = blocks.get(world, x, y - 1, z) ?: return null
             steps++
         }
+        if (water && below.swimmable) return inWater(world, x, y - 1, z, below)
         if (!below.solid || below.liquid) return null
         // Room for its head: a centity is taller than nothing, and not inside a block.
         val head = blocks.get(world, x, y + 1, z) ?: return null
         if (head.solid || head.liquid) return null
-        return Spot(world, x, y, z, feet, below, platform.worlds.biome(world, x, y, z))
+        return Spot(world, x, y, z, SpawnPlacement.GROUND, feet, below, platform.worlds.biome(world, x, y, z))
+    }
+
+    /** Water something can be in: not a waterlogged block that's solid, like stairs. */
+    private val BlockSnapshot.swimmable get() = water && !solid
+
+    /** A place in the water block [feet] at [y]: with no solid block over it, so it isn't shut in under the ground. */
+    private fun inWater(world: String, x: Int, y: Int, z: Int, feet: BlockSnapshot): Spot? {
+        val blocks = platform.blocks
+        val head = blocks.get(world, x, y + 1, z) ?: return null
+        if (head.solid) return null
+        val below = blocks.get(world, x, y - 1, z) ?: return null
+        return Spot(world, x, y, z, SpawnPlacement.WATER, feet, below, platform.worlds.biome(world, x, y, z))
     }
 
     // ---- despawning --------------------------------------------------------------
@@ -392,6 +416,7 @@ class NaturalSpawner(
         val groupMax: Int,
         val cap: Int,
         val despawnDistance: Int,
+        val placement: SpawnPlacement = SpawnPlacement.GROUND,
         private val time: SpawnTime? = null,
         private val moonPhases: Set<Int>? = null,
         private val weather: Set<SpawnWeather>? = null,
@@ -412,6 +437,7 @@ class NaturalSpawner(
         }
 
         fun fits(spot: Spot): Boolean {
+            if (spot.placement != placement) return false
             if (!allowsWorld(spot.world)) return false
             if (heightMin != null && spot.y < heightMin) return false
             if (heightMax != null && spot.y > heightMax) return false
@@ -437,6 +463,7 @@ class NaturalSpawner(
                 groupMax = def.groupMax,
                 cap = def.capOrDefault,
                 despawnDistance = def.despawnDistanceOrDefault,
+                placement = def.placementOrDefault,
                 time = def.time,
                 moonPhases = def.moonPhase?.takeIf { it.isNotEmpty() }?.map { it.ordinal }?.toSet(),
                 weather = def.weather?.takeIf { it.isNotEmpty() }?.toSet(),

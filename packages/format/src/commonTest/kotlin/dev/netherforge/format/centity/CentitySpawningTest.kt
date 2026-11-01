@@ -191,4 +191,18 @@ class CentitySpawningTest {
         assertTrue("\"when\": \"blood_moon\"" in text, text)
         assertEquals("blood_moon", (CentityKind.parse(text, "c") as CanonicalJson.Parsed.Ok).value.spawning?.condition)
     }
+
+    @Test
+    fun placementIsGroundOrWaterAndDefaultsToTheGround() {
+        assertEquals(SpawnPlacement.GROUND, SpawningDef().placementOrDefault)
+        val file = CentityFile(nodes = nodes, spawning = SpawningDef(placement = SpawnPlacement.WATER))
+        assertTrue(problems(file.spawning!!).isEmpty())
+        val text = CentityKind.write(file)
+        assertTrue("\"placement\": \"water\"" in text, text)
+        val parsed = CentityKind.parse(text, "centities/c/centity.json") as CanonicalJson.Parsed.Ok
+        assertEquals(SpawnPlacement.WATER, parsed.value.spawning?.placementOrDefault)
+        assertEquals(SpawnPlacement.WATER, CentityCompiler.compile("c", file).spawning?.placement)
+        assertTrue("placement" !in CentityKind.write(CentityFile(nodes = nodes, spawning = SpawningDef())))
+        assertTrue(parse("""{ "placement": "lava" }""") is CanonicalJson.Parsed.Failed)
+    }
 }
