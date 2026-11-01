@@ -9,7 +9,7 @@ data class PerformanceConfig(
     val warnMillis: Double = 10.0,
     val warnTicks: Int = 20,
     /**
-     * How long one script's code may run in a tick, across all its call-ins, before its timers and event
+     * How long one script's code may run in a tick, across all its call-ins, before its timers and `tick`
      * handlers wait for the next tick. 0 turns it off. Enforced by the sandbox ([dev.netherforge.plugin.lua.SandboxLimits.maxTickMillis]).
      */
     val maxTickMillis: Double = 25.0

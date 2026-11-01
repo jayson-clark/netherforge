@@ -59,7 +59,7 @@ class TestServer(
     private val scheduleZone: String? = null,
     /**
      * What the sandbox holds calls in to, when not its defaults: a small memory limit, a short time limit. The
-     * per-tick time budget is off by default here (`maxTickMillis = 0`): it defers a scope's handlers by
+     * per-tick time budget is off by default here (`maxTickMillis = 0`): it defers a scope's timers and tick handlers by
      * wall-clock time, which would flake any test that happens to spend a while in a tick on a slow runner. A
      * test of the budget itself (`SandboxLimitsTest`) turns it on; production has it on through `performance`.
      */

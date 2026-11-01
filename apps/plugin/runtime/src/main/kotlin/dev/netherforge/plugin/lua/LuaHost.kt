@@ -757,7 +757,7 @@ class LuaHost(
         }
     }
 
-    /** The scopes whose timers or handlers were deferred since the last call (the owner is warned once each a tick). */
+    /** The scopes whose timers or `tick` handlers were deferred since the last call (the owner is warned once each a tick). */
     fun takeDeferred(): List<Int> {
         owned("takeDeferred")
         if (closed) return emptyList()

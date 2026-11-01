@@ -425,9 +425,13 @@ local function deliver(key, event, ev, state, only_scope)
           run = sub.count % sub.every == 0
         end
       end
-      -- A scope that has run its tick's worth has its handlers wait for the next tick; `unload` always runs (its
-      -- scope is closing), so a script hears it whatever it spent.
-      if run and event ~= "unload" and timing.over_budget(sub.scope) then
+      -- A scope that has run its tick's worth has its `tick` handlers wait for the next tick, as its timers do:
+      -- that's where a script fans out over the main thread, and a tick comes again. Nothing else is held back.
+      -- Any other event happened once and isn't delivered again, so a handler skipped would miss it for good,
+      -- and couldn't cancel it (a block break let through); and a custom event is another script's call, whose
+      -- caller reads what its handlers set before `emit` returns. Their time still counts towards the script's
+      -- slow warning.
+      if run and event == "tick" and timing.over_budget(sub.scope) then
         run = false
       end
       if run then

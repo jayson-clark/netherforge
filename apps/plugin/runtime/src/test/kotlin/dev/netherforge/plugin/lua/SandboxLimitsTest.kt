@@ -333,6 +333,39 @@ class SandboxLimitsTest {
         }
     }
 
+    /**
+     * Only timers and `tick` handlers wait: any other event happens once and isn't delivered again, so a script
+     * past its budget still hears it, and a custom event's emitter (here another script) reads what its handlers set.
+     */
+    @Test
+    fun `a script past its tick budget still hears other events, and its emitter sees what it set`() {
+        TestServer(
+            mapOf(
+                "modules/a/init.lua" to """
+                    nf.on("tick", function()
+                      local n = 0
+                      for i = 1, 60000 do n = n + i end
+                    end)
+                    nf.on("tick", function() log("after") end)
+                    nf.on("a:ping", function(event) event.heard = true end)
+                """.trimIndent(),
+                "modules/b/init.lua" to """
+                    nf.on("tick", function()
+                      local event = {}
+                      nf.emit("a:ping", event)
+                      log("heard", tostring(event.heard))
+                    end)
+                """.trimIndent()
+            ),
+            clock = steppingClock(),
+            sandbox = SandboxLimits(maxTickMillis = 5.0)
+        ).use { server ->
+            server.tick(2)
+            assertEquals(emptyList(), server.errors.map { it.message })
+            assertEquals(listOf("heard\ttrue", "heard\ttrue"), server.logs)
+        }
+    }
+
     @Test
     fun `with the tick budget off every handler runs`() {
         TestServer(

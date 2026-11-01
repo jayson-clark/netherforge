@@ -21,10 +21,11 @@ data class SandboxLimits(
     /** The most work one library call may do, in steps of about a nanosecond (a pattern's worst case, a sort). */
     val maxWork: Double = 1e8,
     /**
-     * How long one script's code may run in a tick, across all its call-ins, before its timers and event
-     * handlers are deferred to the next tick (its commands, body and unload still run). A script can otherwise
-     * fan out across many timers and handlers to spend as much of the main thread a tick as it likes. 0 turns it
-     * off (`performance.max-ms-per-tick` in `config.yml`).
+     * How long one script's code may run in a tick, across all its call-ins, before its timers and `tick`
+     * handlers are deferred to the next tick. A script can otherwise fan out across many timers and tick handlers
+     * to spend as much of the main thread a tick as it likes. Every other handler still runs (an event happens
+     * once, and a custom event is a call its emitter waits on), and so do its commands and body. 0 turns it off
+     * (`performance.max-ms-per-tick` in `config.yml`).
      */
     val maxTickMillis: Double = 25.0
 ) {
