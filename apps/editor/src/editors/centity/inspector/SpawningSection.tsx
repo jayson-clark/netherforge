@@ -2,8 +2,10 @@
 import {
   MoonPhaseValues,
   SpawnWeatherValues,
+  SpawnPlacementValues,
   SPAWNING_DEFAULTS,
   type CentityFile,
+  type SpawnPlacement,
 } from '@/core/format'
 import { useApp } from '@/state/providers'
 import {
@@ -22,6 +24,7 @@ import {
   setNumber,
   setRangeEnd,
   setKeepOnInteract,
+  setPlacement,
   setCondition,
   setSpawning,
   setTimeEnd,
@@ -44,10 +47,15 @@ const SPAWNING_LISTS: { key: SpawningList; label: string; placeholder: string }[
   },
   {
     key: 'blocks',
-    label: 'Stands on',
+    label: 'Block under it',
     placeholder: 'any (minecraft:grass_block, #minecraft:dirt)',
   },
 ]
+
+const PLACEMENT_LABELS: Record<SpawnPlacement, string> = {
+  ground: 'on the ground',
+  water: 'in water',
+}
 
 const SPAWNING_RANGES: { key: SpawningRange; label: string; floor?: number }[] = [
   { key: 'light', label: 'Light', floor: SPAWNING_DEFAULTS.minLight },
@@ -84,6 +92,16 @@ export function SpawningSection({ path, model }: { path: string; model: CentityF
     >
       {spawning && (
         <>
+          <SelectField<SpawnPlacement>
+            label="Appears"
+            dataPath="centity.spawning.placement"
+            value={spawning.placement ?? 'ground'}
+            options={SpawnPlacementValues.map((value) => ({
+              value,
+              label: PLACEMENT_LABELS[value],
+            }))}
+            onChange={(placement) => edit((draft) => setPlacement(draft, placement))}
+          />
           {SPAWNING_LISTS.map(({ key, label, placeholder }) => (
             <TextField
               key={key}

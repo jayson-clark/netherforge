@@ -11,6 +11,11 @@ release is cut.
 
 ### Added
 
+- **Natural spawning in water.** `"placement": "water"` in a centity's
+  `spawning` block makes it appear in water (waterlogged blocks and kelp too,
+  never lava, and not under a solid block) instead of on the ground, anywhere
+  from the floor to the surface; the editor's spawning section has it as
+  **Appears**. Ground centities still never appear in water.
 - **Image displays.** `{ "type": "image", "width": 96, "height": 54 }` on a
   centity node shows a picture a script sets at runtime
   (`node:set_image`), per centity, with no resource pack change: drawn as rows

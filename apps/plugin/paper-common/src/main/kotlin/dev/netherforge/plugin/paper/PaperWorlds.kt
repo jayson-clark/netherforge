@@ -34,6 +34,7 @@ import dev.netherforge.plugin.platform.WorldOps
 import org.bukkit.Bukkit
 import org.bukkit.Color
 import org.bukkit.Effect
+import org.bukkit.Fluid
 import org.bukkit.FluidCollisionMode
 import org.bukkit.GameMode
 import org.bukkit.GameRule
@@ -358,7 +359,8 @@ class PaperBlocks(
             solid = block.type.isSolid,
             liquid = block.isLiquid,
             light = block.lightLevel.toInt(),
-            skyLight = block.lightFromSky.toInt()
+            skyLight = block.lightFromSky.toInt(),
+            water = block.world.getFluidData(x, y, z).fluidType.let { it == Fluid.WATER || it == Fluid.FLOWING_WATER }
         )
     }
 

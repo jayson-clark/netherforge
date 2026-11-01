@@ -84,8 +84,13 @@ data class SpawningDef(
     @Ref(RefKind.BIOME) val biomes: List<String>? = null,
     /** The block light level (0 to 15, the brighter of block and sky light) at the spot. */
     val light: SpawnRange? = null,
-    /** The block it stands on: block ids, or `#tag`s of blocks. Absent: any solid block. */
+    /**
+     * The block under it: block ids, or `#tag`s of blocks. On the ground, the block it stands on; in
+     * water, water itself unless it's at the bottom. Absent: any.
+     */
     val blocks: List<String>? = null,
+    /** Where it appears: standing on the ground ([SpawnPlacement.GROUND]) or in water ([SpawnPlacement.WATER]). Default the ground. */
+    val placement: SpawnPlacement? = null,
     /** The heights (block y) it may appear at. */
     val height: SpawnRange? = null,
     /** How likely it is, against the other centities that may appear at the same spot. Default [DEFAULT_WEIGHT]. */
@@ -114,6 +119,7 @@ data class SpawningDef(
     val capOrDefault: Int get() = cap ?: DEFAULT_CAP
     val despawnDistanceOrDefault: Int get() = despawnDistance ?: DEFAULT_DESPAWN_DISTANCE
     val keepOnInteractOrDefault: Boolean get() = keepOnInteract ?: false
+    val placementOrDefault: SpawnPlacement get() = placement ?: SpawnPlacement.GROUND
     val groupMin: Int get() = group?.min ?: 1
     val groupMax: Int get() = maxOf(groupMin, group?.max ?: groupMin)
     val lightMin: Int get() = light?.min ?: MIN_LIGHT
@@ -241,6 +247,18 @@ enum class MoonPhase {
 
     @SerialName("waxing_gibbous")
     WAXING_GIBBOUS
+}
+
+/** Where a natural centity appears. */
+@Serializable
+enum class SpawnPlacement {
+    /** In air (feet and head) over a solid block: where mobs that walk appear. */
+    @SerialName("ground")
+    GROUND,
+
+    /** In water (a waterlogged block too), with no solid block over it: where fish appear. */
+    @SerialName("water")
+    WATER
 }
 
 /** A world's weather, as natural spawning asks it. */

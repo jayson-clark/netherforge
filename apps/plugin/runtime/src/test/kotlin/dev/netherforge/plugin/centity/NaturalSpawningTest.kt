@@ -195,6 +195,53 @@ class NaturalSpawningTest {
     }
 
     @Test
+    fun `a water centity appears in water and a ground one on the sea floor never does`() {
+        TestServer(
+            project(
+                "fish" to """{ "placement": "water", "cap": 6 }""",
+                "goat" to """{ "cap": 6 }""",
+                "kelp" to """{ "placement": "water", "blocks": ["minecraft:stone"], "cap": 6 }"""
+            )
+        ).use { server ->
+            server.seeded()
+            // A sea from the floor at 50 to its surface at 64; the player swims at 60.
+            server.platform.worlds.groundBelow = 50
+            server.platform.worlds.waterBelow = 64
+            server.alex(Location("world", 0.5, 60.0, 0.5))
+            server.tick(600)
+            assertEquals(emptyList(), server.naturals("goat"), "nowhere to stand in the sea")
+            val fish = server.naturals("fish")
+            assertEquals(6, fish.size)
+            for (instance in fish) assertTrue(instance.anchor.y in 50.0..63.0, "in the water at ${instance.anchor.y}")
+            val kelp = server.naturals("kelp")
+            assertTrue(kelp.isNotEmpty(), "some places are on the floor")
+            for (instance in kelp) assertEquals(50.0, instance.anchor.y, "over the stone floor")
+        }
+    }
+
+    @Test
+    fun `a water centity never appears on land, nor in water under a solid block`() {
+        TestServer(project("fish" to """{ "placement": "water" }""", "goat" to """{ "cap": 2 }""")).use { server ->
+            server.seeded()
+            server.alex()
+            server.tick(300)
+            assertEquals(emptyList(), server.naturals("fish"), "dry land")
+            assertEquals(2, server.naturals("goat").size, "a ground one still does, with water rules about")
+        }
+        TestServer(project("fish" to """{ "placement": "water" }""")).use { server ->
+            server.seeded()
+            // One layer of water at 63, shut in between stone below and a stone roof at 64: no open water anywhere.
+            val worlds = server.platform.worlds
+            worlds.groundBelow = 63
+            worlds.waterBelow = 64
+            for (x in -60..60) for (z in -60..60) worlds.solid += Triple(x, 64, z)
+            server.alex(Location("world", 0.5, 65.0, 0.5))
+            server.tick(300)
+            assertEquals(emptyList(), server.naturals("fish"))
+        }
+    }
+
+    @Test
     fun `a project biome is named by its id and is the namespaced biome on the server`() {
         TestServer(
             project("grove" to """{ "biomes": ["ruby_grove"] }""", more = mapOf("biomes/ruby_grove.json" to "{}"))

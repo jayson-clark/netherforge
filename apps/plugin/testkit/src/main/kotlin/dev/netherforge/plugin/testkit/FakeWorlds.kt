@@ -35,15 +35,22 @@ class FakeWorlds(private val platform: FakePlatform) : WorldOps {
     /** Every block below this height is solid stone, everywhere. Null: no ground. */
     var groundBelow: Int? = 64
 
+    /** Every block over the ground and below this height is water, everywhere: a sea. Null: none. */
+    var waterBelow: Int? = null
+
     /** Extra solid full blocks (stone), in every world. */
     val solid = mutableSetOf<Triple<Int, Int, Int>>()
 
     /** Blocks scripts (or tests) set, over the ground and [solid]. */
     val blocks = LinkedHashMap<BlockAt, String>()
 
-    /** The canonical state at a block: what was set there, else stone in the ground or [solid], else air. */
+    /** The canonical state at a block: what was set there, else stone in the ground or [solid], else water below [waterBelow], else air. */
     fun state(world: String, x: Int, y: Int, z: Int): String = blocks[BlockAt(world, x, y, z)]
-        ?: if (groundBelow?.let { y < it } == true || Triple(x, y, z) in solid) "minecraft:stone" else "minecraft:air"
+        ?: when {
+            groundBelow?.let { y < it } == true || Triple(x, y, z) in solid -> "minecraft:stone"
+            waterBelow?.let { y < it } == true -> "minecraft:water[level=0]"
+            else -> "minecraft:air"
+        }
 
     /** A state's collision boxes in block units: the game's, else a cube for anything that isn't air. */
     fun shape(state: String): List<Box> = platform.game.collisionBoxes(BlockState.parse(state)!!)
@@ -309,7 +316,8 @@ class FakeBlocks(private val platform: FakePlatform) : BlockOps {
     override fun get(world: String, x: Int, y: Int, z: Int): BlockSnapshot? {
         if (!loaded(world, x, z)) return null
         val state = platform.worlds.state(world, x, y, z)
-        val liquid = state.substringBefore('[') == "minecraft:water" || state.substringBefore('[') == "minecraft:lava"
+        val id = state.substringBefore('[')
+        val liquid = id == "minecraft:water" || id == "minecraft:lava"
         return BlockSnapshot(
             state,
             state == "minecraft:air",
@@ -317,7 +325,8 @@ class FakeBlocks(private val platform: FakePlatform) : BlockOps {
             !liquid && platform.worlds.shape(state).isNotEmpty(),
             liquid,
             platform.worlds.lights[BlockAt(world, x, y, z)] ?: platform.worlds.defaultLight,
-            15
+            15,
+            id == "minecraft:water" || "waterlogged=true" in state
         )
     }
 

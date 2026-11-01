@@ -6,6 +6,7 @@ import {
   setKeepOnInteract,
   setList,
   setNumber,
+  setPlacement,
   setCondition,
   setRangeEnd,
   setSpawning,
@@ -73,12 +74,22 @@ describe("a centity's spawning edits", () => {
     expect(f.spawning).toEqual({})
   })
 
+  it('sets in water, and the ground (the default) leaves the key out', () => {
+    const f = file()
+    setSpawning(f, true)
+    setPlacement(f, 'water')
+    expect(f.spawning).toEqual({ placement: 'water' })
+    setPlacement(f, 'ground')
+    expect(f.spawning).toEqual({})
+  })
+
   it('does nothing without a spawning block', () => {
     const f = file()
     setList(f, 'worlds', 'a')
     setNumber(f, 'cap', 3)
     setRangeEnd(f, 'group', 'min', 2)
     setKeepOnInteract(f, true)
+    setPlacement(f, 'water')
     expect(f).toEqual(file())
   })
 
