@@ -118,9 +118,9 @@ internal class ScriptReports(private val session: ProjectSession) : RuntimeServi
     }
 
     /**
-     * A scope's timers or event handlers were deferred to the next tick because its code ran more than
+     * A scope's timers or `tick` handlers were deferred to the next tick because its code ran more than
      * `performance.max-ms-per-tick` in one tick ([ScriptCosts] reports each scope at most once a minute). A sign
-     * the script fans out across more timers or handlers than the server can run a tick.
+     * the script fans out across more timers or tick handlers than the server can run a tick.
      */
     fun deferred(scope: Scope) {
         val ticks = session.ticks
@@ -129,7 +129,7 @@ internal class ScriptReports(private val session: ProjectSession) : RuntimeServi
         deferredLog[scope.id] = ticks
         val limit = session.config.performance.maxTickMillis.toBigDecimal().stripTrailingZeros().toPlainString()
         platform.log.warn(
-            "${scope.owner.label} ran more than $limit ms in a tick, so its timers and handlers waited for the next; " +
+            "${scope.owner.label} ran more than $limit ms in a tick, so its timers and tick handlers waited for the next; " +
                 "it may schedule more than the server can run a tick (see /nf scripts)"
         )
     }

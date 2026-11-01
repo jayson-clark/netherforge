@@ -23,7 +23,7 @@ import kotlin.test.fail
 object CostGolden {
     /**
      * Counts every instruction, so `nf.instructions_left()` is exact. The per-tick time budget is off
-     * (`maxTickMillis = 0`): it defers a scope's handlers by wall-clock time, which would make these
+     * (`maxTickMillis = 0`): it defers a scope's timers and tick handlers by wall-clock time, which would make these
      * instruction-exact costs depend on how fast the machine is (its own test, `SandboxLimitsTest`, covers it).
      */
     val EXACT = SandboxLimits(

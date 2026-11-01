@@ -455,9 +455,13 @@ file and line it's slow in (see [Limits and performance](performance.md)).
 
 `max-ms-per-tick` also caps how long one script's code may run in a single
 tick, across all its timers, handlers and other call-ins. Once a script passes
-it in a tick, that script's timers and event handlers wait for the next tick
-(its commands, its body and its `unload` still run), and the owner is warned,
-so no one script can take the whole server by piling up timers and handlers.
+it in a tick, that script's timers and `tick` handlers wait for the next tick,
+and the owner is warned, so no one script can take the whole server by piling
+up timers. Its other event handlers still run: an event happens once and isn't
+delivered again, only a handler that runs can cancel it, and a custom event
+(`nf.emit`, `centity:emit`) is a call whose emitter reads what its handlers
+set. Its commands, its body and its `unload` run too. Their time still counts
+towards its slow warning.
 
 ```yaml
 performance:
@@ -466,8 +470,8 @@ performance:
   max-ms-per-tick: 25
 ```
 
-| Key               | Meaning                                                                                                 | Default |
-| ----------------- | ------------------------------------------------------------------------------------------------------- | ------- |
-| `warn-ms`         | Milliseconds a tick, on average, above which a script is slow. 0 turns it off.                          | `10`    |
-| `warn-ticks`      | How many ticks that average is over (1 to 100).                                                         | `20`    |
-| `max-ms-per-tick` | Milliseconds a script's code may run in a tick before its timers and handlers wait for the next. 0 off. | `25`    |
+| Key               | Meaning                                                                                                      | Default |
+| ----------------- | ------------------------------------------------------------------------------------------------------------ | ------- |
+| `warn-ms`         | Milliseconds a tick, on average, above which a script is slow. 0 turns it off.                               | `10`    |
+| `warn-ticks`      | How many ticks that average is over (1 to 100).                                                              | `20`    |
+| `max-ms-per-tick` | Milliseconds a script's code may run in a tick before its timers and tick handlers wait for the next. 0 off. | `25`    |

@@ -25,7 +25,7 @@ class ScriptCosts(
     private val scripts: Scripts,
     private val config: PerformanceConfig,
     private val onSlow: (Slow) -> Unit,
-    /** A scope whose timers or handlers were deferred this tick (over `performance.max-ms-per-tick`): warned about. */
+    /** A scope whose timers or `tick` handlers were deferred this tick (over `performance.max-ms-per-tick`): warned about. */
     private val onDeferred: (Scope) -> Unit = {},
     /**
      * Other things a scope can own, counted per scope for `/nf scripts`, by

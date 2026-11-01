@@ -35,9 +35,10 @@ resource-pack:
 # the last warn-ticks ticks (at most 100). 0 turns the warning off. `/nf scripts`
 # lists every script's cost either way. max-ms-per-tick caps how long one
 # script's code may run in a tick across all its call-ins: past it, its timers
-# and event handlers wait for the next tick (its commands and the rest still
-# run), so one script can't spend the whole server on timers and handlers it
-# piles up. 0 turns that cap off. Dev servers read this section too.
+# and tick handlers wait for the next tick, so one script can't spend the whole
+# server on timers it piles up. Its other event handlers, commands and the rest
+# still run: an event happens once, and only a handler that runs can cancel it.
+# 0 turns that cap off. Dev servers read this section too.
 performance:
   warn-ms: 10
   warn-ticks: 20

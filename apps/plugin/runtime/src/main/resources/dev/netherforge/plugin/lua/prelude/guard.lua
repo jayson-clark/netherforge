@@ -146,14 +146,14 @@ local timing = {
   -- function -> { file, line }, resolved once.
   where = setmetatable({}, { __mode = "k" }),
   -- A scope's code may run this many nanoseconds in a tick (summed in `nanos`, which `take_costs` clears each
-  -- tick) before its timers and handlers wait for the next; 0 is off. See `over_budget`.
+  -- tick) before its timers and `tick` handlers wait for the next; 0 is off. See `over_budget`.
   max_tick_ns = limits.max_tick_ns,
-  -- Scopes whose timers or handlers were deferred this tick, so the host warns once each (drained by `take_costs`).
+  -- Scopes whose timers or `tick` handlers were deferred this tick, so the host warns once each (drained by `take_costs`).
   deferred = {},
 }
 
--- Whether `scope`'s code has already run its tick's worth (`max_tick_ns`), so a timer or handler of its own waits
--- for the next tick. Its own time this tick is `nanos[scope]` (what `take_costs` clears each tick).
+-- Whether `scope`'s code has already run its tick's worth (`max_tick_ns`), so a timer or `tick` handler of its own
+-- waits for the next tick (no other handler waits: see `deliver`). Its own time this tick is `nanos[scope]` (what `take_costs` clears each tick).
 function timing.over_budget(scope)
   if timing.max_tick_ns <= 0 or scope == nil then
     return false
