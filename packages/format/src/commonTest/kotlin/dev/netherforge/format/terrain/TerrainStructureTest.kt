@@ -154,6 +154,27 @@ class TerrainStructureTest {
     }
 
     @Test
+    fun aPackagesScriptPlacesAnotherPackagesBlocksInFullAndItsOwnBare(): LuaTest = withLua { lua ->
+        val source = """
+            return {
+              decorate = function(chunk)
+                chunk:set(1, 100, 1, "acme:altar")
+                chunk:set(2, 100, 1, "ruby_ore")
+              end,
+            }
+        """
+        val known = setOf("acme:altar", "lib:ruby_ore")
+        val scripted = compiled.withScriptBlocks(listOf(source), { true }, "lib") { it in known }
+        val failures = mutableListOf<TerrainScriptFailure>()
+        val generator = scripted.bind(7L, -64, 320, TerrainScripts(lua, mapOf(script to source), "lib") { failures += it })
+        val chunk = generator.generate(0, 0)
+        generator.close()
+        assertEquals(emptyList(), failures.map { it.message })
+        assertEquals("acme:altar", scripted.palette[chunk[1, 100, 1]].label)
+        assertEquals("lib:ruby_ore", scripted.palette[chunk[2, 100, 1]].label)
+    }
+
+    @Test
     fun vec3AndNfMathAreThereAsInOtherScripts(): LuaTest = withLua { lua ->
         val (_, failures) = generate(
             lua,

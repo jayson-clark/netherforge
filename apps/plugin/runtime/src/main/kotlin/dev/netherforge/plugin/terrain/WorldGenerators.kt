@@ -161,7 +161,8 @@ internal class WorldGenerators(
                 // The blocks its script names in full join its palette, so it needn't list them.
                 val sources = terrain.script?.let { sourcesFor(id, it, listed, read) }.orEmpty()
                 val game = platform.game
-                terrain.withScriptBlocks(sources.values, { game.block(it) != null }) { blocks().stateOf(it) != null }
+                val namespace = id.substringBefore(':', "").ifEmpty { null }
+                terrain.withScriptBlocks(sources.values, { game.block(it) != null }, namespace) { blocks().stateOf(it) != null }
             },
             scriptsOf = { id, terrain ->
                 scriptsFor(id, terrain, listed, read, failures.reporter(id))?.also { scripts ->
@@ -196,7 +197,8 @@ internal class WorldGenerators(
             failed: (TerrainScriptFailure) -> Unit
         ): TerrainScripts? {
             val script = terrain.script ?: return null
-            return TerrainScripts(LuajavaPlatform, sourcesFor(id, script, files, read), failed)
+            val namespace = id.substringBefore(':', "").ifEmpty { null }
+            return TerrainScripts(LuajavaPlatform, sourcesFor(id, script, files, read), namespace, failed)
         }
 
         /** The Lua generator [id]'s [script] may run: itself and the modules of its package, read from [files]. */

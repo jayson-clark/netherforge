@@ -406,6 +406,67 @@ class TerrainTest {
         }
     }
 
+    /** The stages, and a chest of the package's own `treasure` and a block of its own `amber` on every chunk, named bare. */
+    private val packagedStages = stages.replace(
+        "  end,\n}",
+        """
+          |    local x, z = chunk:min_x() + 1, chunk:min_z()
+          |    local y = terrain.height(x, z) + 1
+          |    chunk:set(x, y, z, "minecraft:chest")
+          |    chunk:set_loot(x, y, z, "treasure")
+          |    chunk:set(x, y + 1, z, "amber")
+          |  end,
+          |}
+        """.trimMargin()
+    )
+
+    /** A project whose generator is package `lib`'s `hills`, with its script, the module it requires and its loot in the package. */
+    private fun packagedServer(script: String = packagedStages) = TestServer(
+        mapOf(
+            "netherforge.json" to manifest(""", "dependencies": { "lib": { "path": "../lib" } }"""),
+            "../lib/netherforge.json" to
+                """{ "formatVersion": 1, "name": "Lib", "namespace": "lib", "version": "1.0.0", "minecraft": "26.3",
+                    "exports": { "terrain": ["hills"] } }""",
+            "../lib/terrain/hills.json" to scripted
+                .replace("\"customBlock\": \"ruby_ore\"", "\"block\": \"minecraft:gold_block\"")
+                .replace("\"budget\": 50000,", "\"budget\": 50000, \"loot\": [\"treasure\"],"),
+            "../lib/terrain/hills.lua" to script,
+            "../lib/modules/lift/init.lua" to "return { by = 5 }",
+            "../lib/loot/treasure.json" to
+                """{ "pools": { "main": { "entries": [{ "type": "item", "item": { "kind": "minecraft:stick" } }] } } }""",
+            "../lib/blocks/amber/block.json" to "{}"
+        )
+    )
+
+    @Test
+    fun `a package's generator runs its script and the modules of its package`() {
+        packagedServer().use { server ->
+            assertEquals(emptyList(), server.runtime.session.problems().map { "${it.file}: ${it.message}" })
+            val published = server.platform.worldManager.generators.getValue("lib:hills")
+            assertEquals(setOf("terrain/hills.lua", "modules/lift/init.lua"), published.scripts?.sources?.keys)
+            val generator = server.generator("lib:hills")
+            assertEquals(published.terrain.bind(42, -64, 320).surfaceAt(3, 9) + 5, generator.surfaceAt(3, 9))
+            // Its own loot table and block, named bare by its script, are the ones its file lists in full.
+            val chunk = generator.generate(0, 0)
+            val loot = chunk.lootPlaces(0, 0).single()
+            assertEquals("lib:treasure", published.terrain.loot[loot.table])
+            val amber = published.terrain.palette.indexOf(TerrainBlock.Custom("lib:amber"))
+            assertEquals(amber, chunk[loot.x, loot.y + 1, loot.z])
+            generator.close()
+            server.tick()
+            assertEquals(emptyList(), server.problems("terrain.script-failed"))
+        }
+    }
+
+    @Test
+    fun `a package's script that doesn't load is a problem at its package path`() {
+        packagedServer("local x = \n= 1").use { server ->
+            val problem = server.problems("terrain.script-failed").single()
+            assertEquals("lib:terrain/hills.lua", problem.file)
+            assertEquals(2, problem.line)
+        }
+    }
+
     @Test
     fun `a stage that runs past its budget on a chunk thread is said once, on the main thread, and the chunk is the file's`() {
         val looping = """

@@ -16,7 +16,9 @@ import kotlin.concurrent.Volatile
 
 /**
  * What a generator's script runs with: the platform's Lua ([platform]), the files it reads ([sources]: the script
- * and the module files it may require, by project path, as text), and who hears when it fails ([failed]). The
+ * and the module files it may require, by project path, as text), the package it's in ([namespace], null for the
+ * project's own: a package's generator is compiled with its names written in full, and its script may name its own
+ * blocks and loot tables bare), and who hears when it fails ([failed]). The
  * server reads the files when it publishes the generator, the editor's preview when it draws: a generator never
  * reads a file while it makes a chunk.
  *
@@ -24,7 +26,12 @@ import kotlin.concurrent.Volatile
  * failure is deterministic, so the same script fails the same way at the same place every time, and the caller says
  * it once.
  */
-class TerrainScripts(val platform: LuaPlatform, val sources: Map<String, String>, val failed: (TerrainScriptFailure) -> Unit) {
+class TerrainScripts(
+    val platform: LuaPlatform,
+    val sources: Map<String, String>,
+    val namespace: String? = null,
+    val failed: (TerrainScriptFailure) -> Unit
+) {
     /**
      * Loads [terrain]'s script once as a chunk thread would (its body run, its stages found), in a normal overworld
      * of seed 0, and answers how it failed, or null when it loads: a script that doesn't compile, errors in its body
@@ -35,7 +42,8 @@ class TerrainScripts(val platform: LuaPlatform, val sources: Map<String, String>
         if (terrain.script == null) return null
         var found: TerrainScriptFailure? = null
         val height = WorldHeight.OVERWORLD
-        val generator = terrain.bind(0, height.minY, height.maxY, TerrainScripts(platform, sources) { if (found == null) found = it })
+        val quiet = TerrainScripts(platform, sources, namespace) { if (found == null) found = it }
+        val generator = terrain.bind(0, height.minY, height.maxY, quiet)
         try {
             generator.loadScript()
         } finally {
@@ -227,7 +235,8 @@ internal class TerrainScriptState(private val runner: ScriptRunner) {
                 terrain.areas.joinToString("\n") { it.biome },
                 terrain.palette.joinToString("\n") { it.label },
                 terrain.areas.filter { it.volume != null }.joinToString("\n") { it.name },
-                terrain.loot.joinToString("\n")
+                terrain.loot.joinToString("\n"),
+                runner.scripts.namespace.orEmpty()
             ) as String
             names.split(',').filter { it.isNotEmpty() }.toSet()
         } catch (e: LuaFailure) {
@@ -371,6 +380,9 @@ internal class TerrainScriptState(private val runner: ScriptRunner) {
         val palette = terrain.palette
         val exact = palette.indexOfFirst { it.label == text }
         if (exact >= 0) return exact
+        // A package's own block, named bare as its script names it: the palette has it in full.
+        val home = runner.scripts.namespace
+        if (home != null && ':' !in text) palette.indexOfFirst { it.label == "$home:$text" }.let { if (it >= 0) return it }
         if (!text.startsWith("minecraft:")) return -1
         val state = BlockState.parse(text)?.toString() ?: return -1
         return palette.indexOf(TerrainBlock.Vanilla(state))

@@ -10,6 +10,7 @@ import dev.netherforge.format.noise.NoiseDef
 import dev.netherforge.format.project.DocumentResourceKind
 import dev.netherforge.format.project.KindContext
 import dev.netherforge.format.project.Layout
+import dev.netherforge.format.project.PackagePaths
 import dev.netherforge.format.project.ResourceContext
 import dev.netherforge.format.ref.RefKind
 import dev.netherforge.format.ref.ResourceRef
@@ -122,7 +123,10 @@ object TerrainKind : DocumentResourceKind<TerrainFile, CompiledTerrain>(
         file.script?.customBlocks?.forEachIndexed { i, block -> add("$.script.customBlocks[$i]" to block) }
     }
 
-    override fun compile(id: String, value: TerrainFile, ctx: ResourceContext) = TerrainCompiler.compile(value, scriptPathOf(id, ctx.group))
+    // A package's terrain is compiled as `ns:id`, but its script is a path inside its package (`terrain/<id>.lua`):
+    // its sources, its failures and its chunk names are all its own package's paths.
+    override fun compile(id: String, value: TerrainFile, ctx: ResourceContext) =
+        TerrainCompiler.compile(value, scriptPathOf(PackagePaths.split(id).second, ctx.group))
 
     /** Terrains that fill containers from loot tables need the empty table the game unpacks them with ([GeneratedLoot]). */
     override val datapackAll = DatapackCollection<CompiledTerrain> { resources, _ ->
