@@ -301,6 +301,26 @@ class AdminApiTest {
     }
 
     @Test
+    fun `a login passed to the next stream still names the player logging in`() {
+        val gone = stream("?place=${Hub.LOGINS}")
+        gone.next("hello")
+        val live = stream("?place=${Hub.LOGINS}")
+        live.next("hello")
+
+        // Not online yet: who it is goes with the placement, not looked up again.
+        val placed = hub.placeLogin("u-9", "Zed")
+        val first = gone.next("place").second
+        waitFor { live.any { it.first == "place" } }
+        val again = live.next("place").second
+        assertEquals(first, again, "the same event, players and all")
+        assertTrue(again.contains("\"Zed\""), again)
+        assertTrue(again.contains("\"login\":true"), again)
+        val id = Regex("\"id\":(\\d+)").find(again)!!.groupValues[1]
+        call("POST", "/v1/placements/$id", """{ "server": "lobby" }""")
+        assertEquals(LoginPlace("lobby"), placed.get(5, TimeUnit.SECONDS))
+    }
+
+    @Test
     fun `a revoked client's streams end`() {
         val events = stream("?place=arena")
         events.next("hello")

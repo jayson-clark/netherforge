@@ -1035,6 +1035,8 @@ class Hub(
         var asked: AdminStream,
         val origin: HubEndpoint?,
         val frame: ServerFrame.Send,
+        /** Who the first `place` event named, sent as they were to a stream it's passed to: a player logging in isn't online yet. */
+        val party: List<PlayerState>,
         val from: String?,
         /** A login's: completed with where they go. */
         val login: java.util.concurrent.CompletableFuture<LoginPlace>?,
@@ -1225,7 +1227,7 @@ class Hub(
             next.push(
                 AdminEvent.Place(
                     entry.id,
-                    entry.frame.players.mapNotNull { players[it] },
+                    entry.party,
                     entry.frame.group,
                     entry.from,
                     entry.login != null
@@ -1357,8 +1359,10 @@ class Hub(
         val hook = hookFor(LOGINS) ?: return java.util.concurrent.CompletableFuture.completedFuture(LoginPlace())
         val future = java.util.concurrent.CompletableFuture<LoginPlace>()
         val place = nextPlace++
-        pending[place] = Pending(place, hook, null, ServerFrame.Send(-1, listOf(id)), null, future, clock() + limits.placementTimeoutMillis)
-        hook.push(AdminEvent.Place(place, listOf(PlayerState(id, name)), login = true))
+        val party = listOf(PlayerState(id, name))
+        val deadline = clock() + limits.placementTimeoutMillis
+        pending[place] = Pending(place, hook, null, ServerFrame.Send(-1, listOf(id)), party, null, future, deadline)
+        hook.push(AdminEvent.Place(place, party, login = true))
         future
     }
 
@@ -1599,7 +1603,7 @@ class Hub(
             val party = frame.players.mapNotNull { players[it] }
             if (party.size == frame.players.size) {
                 val id = nextPlace++
-                pending[id] = Pending(id, hook, origin, frame, from, null, clock() + limits.placementTimeoutMillis)
+                pending[id] = Pending(id, hook, origin, frame, party, from, null, clock() + limits.placementTimeoutMillis)
                 hook.push(AdminEvent.Place(id, party, frame.group, from))
                 return
             }
