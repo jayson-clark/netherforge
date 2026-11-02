@@ -361,6 +361,8 @@ export type NetworkLayout = {
 	enabled: boolean,
 	/**  The open project's server's name in the network. */
 	name: string,
+	/**  The open project's server's group, capacity and role. */
+	options?: ServerOptions,
 	/**  The network's other servers. */
 	servers: NetworkServer[],
 };
@@ -403,6 +405,7 @@ export type NetworkServer = {
 	 *  absolute, or `.` for the open project itself.
 	 */
 	project: string,
+	options?: ServerOptions,
 };
 
 /**  One of the layout's other servers as Start would find it. */
@@ -468,6 +471,18 @@ export type RecentProject = {
 	root: string,
 	name: string,
 	openedAt: string,
+};
+
+/**
+ *  A dev network's server as a production network would run it: an instance
+ *  of `group` taking `capacity` players, joining with a credential of `role`
+ *  (`trusted` when none) that owns its project's namespace. As format's
+ *  `WorkspaceServerOptions`.
+ */
+export type ServerOptions = {
+	group?: string | null,
+	capacity?: number | null,
+	role?: string | null,
 };
 
 export type ServerOutputEvent = {
@@ -606,6 +621,8 @@ export type WorkspaceServer = {
 	name: string,
 	/**  The member it runs, as the file names it. */
 	project: string,
+	/**  Its group, capacity and role (the file's `network.options`). */
+	options: ServerOptions,
 };
 
 /* Tauri Specta runtime */

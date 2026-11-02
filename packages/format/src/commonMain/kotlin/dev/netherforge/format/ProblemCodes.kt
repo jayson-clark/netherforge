@@ -1015,6 +1015,12 @@ object ProblemCodes {
             "A server in `network.servers` runs a folder that isn't one of the workspace's projects."
         )
     val WORKSPACE_ARRIVAL = error("workspace.arrival", WORKSPACE, "`network.arrival` isn't one of the network's servers.")
+    val WORKSPACE_SERVER_OPTIONS =
+        error(
+            "workspace.server-options",
+            WORKSPACE,
+            "An entry in `network.options` isn't one of the network's servers, or its group, capacity or role isn't one."
+        )
     val WORKSPACE_UNKNOWN_SERVER =
         warning(
             "workspace.unknown-server",

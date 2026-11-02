@@ -74,6 +74,15 @@ describe('a workspace in the editor', () => {
     await waitFor(() =>
       expect(app.workspaceFile.getState().file?.network?.servers['showcase-2']).toBe('library'),
     )
+    // Its role is the file's, under its name, and follows it when it's renamed.
+    fireEvent.change(screen.getByRole('combobox', { name: 'Role of server showcase-2' }), {
+      target: { value: 'isolated' },
+    })
+    await waitFor(() =>
+      expect(app.workspaceFile.getState().file?.network?.options).toEqual({
+        'showcase-2': { role: 'isolated' },
+      }),
+    )
     const rename = screen.getByRole('textbox', { name: 'Name of server showcase-2' })
     fireEvent.change(rename, { target: { value: 'library' } })
     fireEvent.blur(rename)
@@ -83,6 +92,9 @@ describe('a workspace in the editor', () => {
         library: 'library',
       }),
     )
+    expect(app.workspaceFile.getState().file?.network?.options).toEqual({
+      library: { role: 'isolated' },
+    })
 
     // A name that can't be one stays out of the file, saying why.
     const name = await screen.findByRole('textbox', { name: 'Name of server library' })

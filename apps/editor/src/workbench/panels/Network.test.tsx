@@ -75,6 +75,44 @@ describe('the Network panel', () => {
     await waitFor(() => expect(within(servers).getAllByText('Running')).toHaveLength(3))
     expect(screen.getByRole('status').textContent).toBe('3 of 3 running')
 
+    // As a production network would run it: a group, a capacity, a role with a credential of its own.
+    const group = screen.getByRole('textbox', { name: 'Group of server lobby' })
+    fireEvent.change(group, { target: { value: 'arena' } })
+    fireEvent.blur(group)
+    await waitFor(() =>
+      expect(app.network.getState().layout?.servers[0]!.options).toEqual({ group: 'arena' }),
+    )
+    const capacity = screen.getByRole('textbox', { name: 'Capacity of server lobby' })
+    fireEvent.change(capacity, { target: { value: '16' } })
+    fireEvent.blur(capacity)
+    await waitFor(() =>
+      expect(app.network.getState().layout?.servers[0]!.options?.capacity).toBe(16),
+    )
+    fireEvent.change(screen.getByRole('combobox', { name: 'Role of server lobby' }), {
+      target: { value: 'standard' },
+    })
+    await waitFor(() =>
+      expect(app.network.getState().layout?.servers[0]!.options).toEqual({
+        group: 'arena',
+        capacity: 16,
+        role: 'standard',
+      }),
+    )
+    // Back to trusted: the role is left out, as it's the default.
+    fireEvent.change(screen.getByRole('combobox', { name: 'Role of server lobby' }), {
+      target: { value: 'trusted' },
+    })
+    await waitFor(() =>
+      expect(app.network.getState().layout?.servers[0]!.options).toEqual({
+        group: 'arena',
+        capacity: 16,
+      }),
+    )
+    const bad = screen.getByRole('textbox', { name: 'Group of server lobby' })
+    fireEvent.change(bad, { target: { value: 'Arena Group' } })
+    fireEvent.blur(bad)
+    expect((await screen.findByRole('alert')).textContent).toMatch(/can't name a group/)
+
     fireEvent.click(screen.getByRole('button', { name: 'Remove server lobby' }))
     await waitFor(() => expect(app.network.getState().layout?.servers).toEqual([]))
   })

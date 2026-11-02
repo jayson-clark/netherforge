@@ -119,6 +119,15 @@ shows each server's state and console, and takes commands for the proxy and
 each server; your project's server keeps the Console panel. Stop stops them
 all.
 
+Under each server's project, three fields run it as a production network
+would. **Group** makes it an instance of a [group](#groups-several-copies-of-one-game) (two
+`arena` servers running the same project, players sent to `arena` balanced
+between them), **players** is its capacity, and **role** is what the hub lets
+it do: `trusted` (the default) is everything; `standard` or `isolated` gives
+it a credential of its own, owning its project's namespace, so you see what
+the hub [refuses](#servers-with-credentials) before it's refused in production.
+A workspace keeps them in its file's `network.options`.
+
 `examples/network` is a project made to run this way: a lobby, an arena and a
 market (the same project, its part picked by each server's name), busy with
 bots, using every part of `nf.network`. Its README says how to start it.

@@ -427,7 +427,10 @@ data class RuntimeConfig(
                 port = hub.second,
                 serverName = properties(Bridge.NETWORK_SERVER_PROPERTY)?.trim(),
                 secret = env(Bridge.NETWORK_SECRET_ENV)?.trim(),
-                credential = null
+                // Its role's credential, when it isn't trusted; its group and capacity, as the editor's network has them.
+                credential = properties(Bridge.NETWORK_CREDENTIAL_PROPERTY)?.trim()?.takeIf { it.isNotEmpty() },
+                group = properties(Bridge.NETWORK_GROUP_PROPERTY)?.trim()?.takeIf { it.isNotEmpty() },
+                capacity = properties(Bridge.NETWORK_CAPACITY_PROPERTY)?.trim()?.toIntOrNull()?.takeIf { it > 0 }
             )
         }
 

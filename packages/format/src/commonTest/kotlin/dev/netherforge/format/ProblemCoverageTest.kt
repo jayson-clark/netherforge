@@ -40,6 +40,7 @@ class ProblemCoverageTest {
         "workspace.server-name" to unit("workspace/WorkspaceTest", workspace),
         "workspace.server-project" to unit("workspace/WorkspaceTest", workspace),
         "workspace.arrival" to unit("workspace/WorkspaceTest", workspace),
+        "workspace.server-options" to unit("workspace/WorkspaceTest", workspace),
         "workspace.unknown-server" to unit("workspace/NetworkUsesTest", workspace),
         // The real feature table may gate nothing a project could rely on; FeaturesTest uses a table of its own.
         "project.feature" to unit("game/FeaturesTest", "it needs a feature the target lacks; the real table may have none"),

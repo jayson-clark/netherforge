@@ -237,6 +237,15 @@ class RuntimeConfigTest {
             network
         )
         assertNull(network.problem())
+        // A server of a group, with a role of its own: its credential, and the secret is the credential's.
+        val member = properties + mapOf(
+            Bridge.NETWORK_GROUP_PROPERTY to "arena",
+            Bridge.NETWORK_CAPACITY_PROPERTY to "16",
+            Bridge.NETWORK_CREDENTIAL_PROPERTY to "dev-lobby"
+        )
+        val grouped = RuntimeConfig.read(plugin, mapOf("network" to section), server, member::get, env::get)!!.network
+        assertEquals(Triple("arena", 16, "dev-lobby"), Triple(grouped.group, grouped.capacity, grouped.credential))
+        assertNull(grouped.problem())
         // A production server never reads them.
         assertEquals(false, read(mapOf("project" to "p"), properties - Bridge.PROJECT_PROPERTY)!!.network.enabled)
     }

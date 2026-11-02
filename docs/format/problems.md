@@ -1656,6 +1656,10 @@ Error. A server in `network.servers` runs a folder that isn't one of the workspa
 
 Error. `network.arrival` isn't one of the network's servers. See [format/workspace.md](workspace.md).
 
+### `workspace.server-options` {#workspace-server-options}
+
+Error. An entry in `network.options` isn't one of the network's servers, or its group, capacity or role isn't one. See [format/workspace.md](workspace.md).
+
 ### `workspace.unknown-server` {#workspace-unknown-server}
 
 Warning. A script sends players to a server the workspace's dev network doesn't have. See [format/workspace.md](workspace.md).

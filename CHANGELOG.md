@@ -83,6 +83,11 @@ unmute`, and the admin API's `moderation` scope. `nf.network.report` sends
   builds one first) and sends players the store's URL. With
   `clear-resource-packs=false`, the hub remembers which pack each player has
   loaded, and a server whose pack they have doesn't send it again.
+- **Dev networks run servers as production does.** Each server of the
+  editor's dev network (and of a workspace's, in `network.options`) can have
+  a group, a capacity and a role; a role other than `trusted` joins with a
+  credential of its own, owning its project's namespace, so the hub holds it
+  to that role on your computer too.
 - **Resource packs built into bundles.** With the game's data,
   `netherforge build` makes the project's resource pack into the bundle
   (`resource-pack.zip`, its SHA-1 and pack format in the manifest's

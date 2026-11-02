@@ -435,10 +435,14 @@ object Bridge {
     /**
      * A dev server the editor runs in a dev network: the hub's `host:port` (the editor's proxy), this server's name
      * there, and the hub's secret (in the environment, never on the command line). They put the server in that
-     * network whatever its `config.yml` says.
+     * network whatever its `config.yml` says. Its group and capacity when the editor's network gives it one, and the
+     * credential it joins with when its role isn't `trusted` (the environment's secret is then the credential's).
      */
     const val NETWORK_HUB_PROPERTY = "netherforge.network.hub"
     const val NETWORK_SERVER_PROPERTY = "netherforge.network.server"
+    const val NETWORK_GROUP_PROPERTY = "netherforge.network.group"
+    const val NETWORK_CAPACITY_PROPERTY = "netherforge.network.capacity"
+    const val NETWORK_CREDENTIAL_PROPERTY = "netherforge.network.credential"
     const val NETWORK_SECRET_ENV = "NETHERFORGE_NETWORK_SECRET"
 
     // Error codes beyond the spec's, in its range for implementation-defined server errors.

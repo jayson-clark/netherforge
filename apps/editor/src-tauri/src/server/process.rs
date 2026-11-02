@@ -87,6 +87,11 @@ pub struct Membership {
     pub port: u16,
     pub hub_port: u16,
     pub secrets: Secrets,
+    /// The group it's an instance of, and how many players it takes.
+    pub group: Option<String>,
+    pub capacity: Option<u32>,
+    /// The credential it joins with (id and secret) when its role isn't `trusted`: the hub's secret otherwise.
+    pub credential: Option<(String, String)>,
 }
 
 pub struct ProxyRole {
@@ -95,6 +100,8 @@ pub struct ProxyRole {
     /// Each server's name and port; players join the first.
     pub servers: Vec<(String, u16)>,
     pub secrets: Secrets,
+    /// The credentials of the servers whose role isn't `trusted`, for the hub's `credentials.properties`.
+    pub credentials: Vec<network_setup::DevCredential>,
 }
 
 impl Role {
@@ -401,10 +408,23 @@ impl ServerManager {
                     format!("-Dnetherforge.network.server={}", membership.name),
                 ],
             );
-            envs.push((
-                "NETHERFORGE_NETWORK_SECRET".to_string(),
-                membership.secrets.hub.clone(),
-            ));
+            let at = args.len() - 3;
+            let mut more = Vec::new();
+            if let Some(group) = &membership.group {
+                more.push(format!("-Dnetherforge.network.group={group}"));
+            }
+            if let Some(capacity) = membership.capacity {
+                more.push(format!("-Dnetherforge.network.capacity={capacity}"));
+            }
+            if let Some((id, _)) = &membership.credential {
+                more.push(format!("-Dnetherforge.network.credential={id}"));
+            }
+            args.splice(at..at, more);
+            let secret = match &membership.credential {
+                Some((_, secret)) => secret.clone(),
+                None => membership.secrets.hub.clone(),
+            };
+            envs.push(("NETHERFORGE_NETWORK_SECRET".to_string(), secret));
         }
         // What the editor shows players join: the proxy's, in a network.
         let shown = match &config.role {
@@ -464,6 +484,7 @@ impl ServerManager {
             let dir = proxy.dir.clone();
             let servers = proxy.servers.clone();
             let secrets = proxy.secrets.clone();
+            let credentials = proxy.credentials.clone();
             let hub_port = proxy.hub_port;
             let motd = format!("NetherForge dev network: {}", config.project_name);
             move || {
@@ -473,7 +494,8 @@ impl ServerManager {
                     servers: &servers,
                     motd: &motd,
                 };
-                network_setup::proxy(&dir, &plugin, &plan, &secrets)
+                network_setup::proxy(&dir, &plugin, &plan, &secrets)?;
+                network_setup::credentials(&dir, &credentials)
             }
         })
         .await
