@@ -311,6 +311,33 @@ class NetherForgeProxy @Inject constructor(
      */
     @Subscribe(order = PostOrder.LAST)
     fun onChooseInitialServer(event: PlayerChooseInitialServerEvent): EventTask? {
+        val placing = chooseInitialServer(event)
+        if (placing == null) {
+            countNoServer(event)
+            return null
+        }
+        return EventTask.withContinuation { continuation ->
+            placing.execute(object : com.velocitypowered.api.event.Continuation {
+                override fun resume() {
+                    countNoServer(event)
+                    continuation.resume()
+                }
+
+                override fun resumeWithException(exception: Throwable) = continuation.resumeWithException(exception)
+            })
+        }
+    }
+
+    /** Players turned away while their login was placed, so the empty choice that follows isn't counted twice. */
+    private val turnedAway: MutableSet<java.util.UUID> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** Velocity turns away a login it has no server for ("There are no available servers"): counted, as `no_server`. */
+    private fun countNoServer(event: PlayerChooseInitialServerEvent) {
+        if (turnedAway.remove(event.player.uniqueId)) return
+        if (event.initialServer.isEmpty) counts.refused(ProxyMetrics.LoginRefusal.NO_SERVER)
+    }
+
+    private fun chooseInitialServer(event: PlayerChooseInitialServerEvent): EventTask? {
         remote?.let { client -> return awaitSync(client, event) }
         val hub = hub ?: return null
         val placed = hub.placeLogin(event.player.uniqueId.toString(), event.player.username)
@@ -326,6 +353,7 @@ class NetherForgeProxy @Inject constructor(
     /** Turns away [event]'s player as the hub (or the service placing logins) says. */
     private fun refuse(event: PlayerChooseInitialServerEvent, why: String) {
         counts.refused(ProxyMetrics.LoginRefusal.HUB)
+        turnedAway += event.player.uniqueId
         event.player.disconnect(MiniMessage.miniMessage().deserialize(why))
     }
 

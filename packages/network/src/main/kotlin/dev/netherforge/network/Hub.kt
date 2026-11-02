@@ -373,7 +373,23 @@ class Hub(
                     emit(HubEvent.GroupWanted(queue.first().frame.group ?: queue.first().frame.server ?: key, queue.size))
                 }
             }
-            for (entry in pending.values.filter { it.deadline <= now }) expire(entry)
+            for (entry in pending.values.filter { it.deadline <= now }) {
+                // Settled, or passed to another stream, by a stream closed earlier in this loop.
+                if (entry.id !in pending || entry.deadline > now) continue
+                val asked = entry.asked
+                if (!entry.held && !asked.closed) {
+                    // A stream that doesn't answer in time is taken for gone (a client whose network vanished leaves
+                    // its connection open for many minutes): it's closed, and what it was asked goes to the next.
+                    log.warn(
+                        "NetherForge hub: the admin client ${asked.client} didn't answer placement ${entry.id} in " +
+                            "${limits.placementTimeoutMillis} ms; closing its stream"
+                    )
+                    // Its asks, this one too, go to the group's next stream or its own balancing.
+                    asked.closeLocked()
+                    continue
+                }
+                expire(entry)
+            }
             dispatch()
             tellServers()
             if (now - lastSave >= SAVE_EVERY_MILLIS && maps.takeDirty()) {
@@ -1044,7 +1060,8 @@ class Hub(
         internal fun push(event: AdminEvent) {
             if (!closed && !events.offer(event)) {
                 log.warn("NetherForge hub: the admin client $client isn't reading its stream; closing it")
-                close()
+                // Pushed under the lock: whoever holds it runs what closing leaves for after.
+                synchronized(lock) { closeLocked() }
             }
         }
 
@@ -1056,24 +1073,37 @@ class Hub(
 
         override fun who() = "the admin client $client"
 
-        /** The next event, waiting up to [millis]; null when there's none yet. */
-        fun take(millis: Long): AdminEvent? = events.poll(millis, java.util.concurrent.TimeUnit.MILLISECONDS)
+        /** The next event, waiting up to [millis]; null when there's none yet, or once it's closed. */
+        fun take(millis: Long): AdminEvent? {
+            val until = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(millis)
+            while (!closed) {
+                val left = until - System.nanoTime()
+                if (left <= 0) return null
+                // In slices, so a stream the hub closes ends its connection within a second.
+                val slice = minOf(left, java.util.concurrent.TimeUnit.SECONDS.toNanos(1))
+                events.poll(slice, java.util.concurrent.TimeUnit.NANOSECONDS)?.let { return it }
+            }
+            return null
+        }
 
         /** Ends the stream: what it was asked and hasn't answered goes to the next hook, or the group's own balancing. */
         fun close() {
-            synchronized(lock) {
-                if (closed) return@synchronized
-                closed = true
-                streams.remove(this)
-                for (list in hooks.values) list.remove(this)
-                hooks.values.removeAll { it.isEmpty() }
-                for ((id, route) in routes.entries.filter { it.value.target === this }) {
-                    routes.remove(id)
-                    route.origin.send(HubFrame.Reply(route.originId, error = "the admin client $client went before answering"))
-                }
-                for (entry in pending.values.filter { it.asked === this }) expire(entry)
-            }
+            synchronized(lock) { closeLocked() }
             runLater()
+        }
+
+        /** Under the lock: [close], leaving what it does after to whoever holds the lock. */
+        internal fun closeLocked() {
+            if (closed) return
+            closed = true
+            streams.remove(this)
+            for (list in hooks.values) list.remove(this)
+            hooks.values.removeAll { it.isEmpty() }
+            for ((id, route) in routes.entries.filter { it.value.target === this }) {
+                routes.remove(id)
+                route.origin.send(HubFrame.Reply(route.originId, error = "the admin client $client went before answering"))
+            }
+            for (entry in pending.values.filter { it.asked === this }) expire(entry)
         }
     }
 
@@ -1188,7 +1218,7 @@ class Hub(
         }
         val key = entry.frame.group?.lowercase() ?: LOGINS
         val next = hooks[key]?.firstOrNull { !it.closed && it !== entry.asked }
-        // A client that went has its asks passed to the next; one that didn't answer in time, to the hub.
+        // A stream that went (or didn't answer in time, and was closed for it) has its asks passed to the next.
         if (next != null && entry.asked.closed) {
             entry.asked = next
             entry.deadline = clock() + limits.placementTimeoutMillis

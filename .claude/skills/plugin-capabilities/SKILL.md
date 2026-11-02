@@ -341,7 +341,9 @@ seconds` (`NetworkLink.awaitWelcome`) and `require-hub` (`ProjectSession.waitsFo
   credential; constant-time token compare): HTTP and JSON plus SSE `/v1/events` (first `hello` with `Hub.started`/`instance`, then `server_connected` and
   `server_disconnected` for every server as its session is welcomed and closed, beside `server` for changes); servers, players, sends, messages,
   kicks, publishing and requests answered by an admin client (`{admin=...}`), moderation, placement hooks per group and
-  holding a login until one answers.
+  holding a login until one answers. The JDK's `HttpServer` gives no socket (no keepalive, no write timeout), so a
+  stream whose client's network vanished looks open for ~15 minutes: a placement it doesn't answer in time closes it
+  (`Hub.tick`, `AdminStream.closeLocked`) and passes its asks to the group's next stream, then to the group's balancing.
 - **Moderation** (`Moderation`: the hub's own maps `netherforge:bans`/`mutes`, outside every package's limits, saved
   with the rest; reports): `nf.network.ban`/`mute`/... need the credential's `moderation` (and `requires.moderation`);
   the proxy refuses a banned login; `RuntimeGameEvents` holds back a muted player's chat; `/nfhub disable` takes a server

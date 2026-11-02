@@ -26,7 +26,10 @@ class ProxyMetrics(private val proxy: String) {
         DENIED("denied"),
 
         /** It was let in, but the first server it was sent to didn't take it. */
-        INITIAL_SERVER("initial_server")
+        INITIAL_SERVER("initial_server"),
+
+        /** It was let in, but no server was chosen for it (nothing placed it, and Velocity had none to try). */
+        NO_SERVER("no_server")
     }
 
     private val logins = AtomicLong()

@@ -15,6 +15,8 @@ class ProxyMetricsTest {
         metrics.loggedIn()
         metrics.refused(ProxyMetrics.LoginRefusal.BANNED)
         metrics.refused(ProxyMetrics.LoginRefusal.INITIAL_SERVER)
+        metrics.refused(ProxyMetrics.LoginRefusal.NO_SERVER)
+        metrics.refused(ProxyMetrics.LoginRefusal.NO_SERVER)
         metrics.moved()
         metrics.moveFailed("server_refused")
         metrics.hubJoined()
@@ -28,6 +30,7 @@ class ProxyMetricsTest {
             "netherforge_proxy_logins_total{proxy=\"velocity-2\"} 2",
             "netherforge_proxy_logins_refused_total{proxy=\"velocity-2\",reason=\"banned\"} 1",
             "netherforge_proxy_logins_refused_total{proxy=\"velocity-2\",reason=\"initial_server\"} 1",
+            "netherforge_proxy_logins_refused_total{proxy=\"velocity-2\",reason=\"no_server\"} 2",
             "netherforge_proxy_logins_refused_total{proxy=\"velocity-2\",reason=\"draining\"} 0",
             "netherforge_proxy_moves_total{proxy=\"velocity-2\"} 1",
             "netherforge_proxy_move_failures_total{proxy=\"velocity-2\",reason=\"server_refused\"} 1",

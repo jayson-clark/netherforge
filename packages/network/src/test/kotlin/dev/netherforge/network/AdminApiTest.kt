@@ -98,17 +98,26 @@ class AdminApiTest {
             .header("Authorization", "Bearer ${client.token}").build()
         val response = http.send(request, HttpResponse.BodyHandlers.ofInputStream())
         Thread {
-            BufferedReader(InputStreamReader(response.body())).use { lines ->
-                var name: String? = null
-                for (line in lines.lineSequence()) {
-                    when {
-                        line.startsWith("event: ") -> name = line.removePrefix("event: ")
-                        line.startsWith("data: ") -> events += name!! to line.removePrefix("data: ")
-                    }
-                }
+            try {
+                read(response.body(), events)
+            } catch (_: java.io.IOException) {
+                // The hub closed it.
             }
+            events += ENDED to ""
         }.apply { isDaemon = true }.start()
         return events
+    }
+
+    private fun read(body: java.io.InputStream, events: LinkedBlockingQueue<Pair<String, String>>) {
+        BufferedReader(InputStreamReader(body)).use { lines ->
+            var name: String? = null
+            for (line in lines.lineSequence()) {
+                when {
+                    line.startsWith("event: ") -> name = line.removePrefix("event: ")
+                    line.startsWith("data: ") -> events += name!! to line.removePrefix("data: ")
+                }
+            }
+        }
     }
 
     /** The next event named [name] (any, when null), skipping others. */
@@ -264,11 +273,44 @@ class AdminApiTest {
     }
 
     @Test
+    fun `a stream that doesn't answer a placement in time is closed, and the next one is asked`() {
+        val (lobbyLink, lobby) = join("lobby")
+        join("arena-1", "arena")
+        join("arena-2", "arena")
+        hub.playerMoved("p", "P", "lobby")
+        val gone = stream("?place=arena")
+        gone.next("hello")
+        val live = stream("?place=arena")
+        live.next("hello")
+
+        // The oldest is asked first; it never answers (its client's network went), so it's closed and the next asked.
+        lobbyLink.send(ServerFrame.Send(1, listOf("p"), group = "arena"))
+        val first = Regex("\"id\":(\\d+)").find(gone.next("place").second)!!.groupValues[1]
+        waitFor { live.any { it.first == "place" } }
+        val again = Regex("\"id\":(\\d+)").find(live.next("place").second)!!.groupValues[1]
+        assertEquals(first, again, "the same placement, passed on")
+        assertEquals(ENDED, gone.next(ENDED).first)
+        call("POST", "/v1/placements/$again", """{ "server": "arena-2" }""")
+        waitFor { lobby.of<HubFrame.SendResult>().isNotEmpty() }
+        assertEquals("arena-2", lobby.of<HubFrame.SendResult>().single().server)
+
+        // The next send goes straight to the stream that's left.
+        hub.playerMoved("q", "Q", "lobby")
+        lobbyLink.send(ServerFrame.Send(2, listOf("q"), group = "arena"))
+        assertTrue(live.next("place").second.contains("\"Q\""))
+    }
+
+    @Test
     fun `a revoked client's streams end`() {
         val events = stream("?place=arena")
         events.next("hello")
         hub.detach("ops")
         join("lobby").first.send(ServerFrame.Send(1, listOf("nobody"), group = "arena"))
         assertTrue(events.poll(500, TimeUnit.MILLISECONDS) == null, "it isn't asked any more")
+    }
+
+    private companion object {
+        /** What [stream]'s queue gets once its connection ends. */
+        const val ENDED = "<ended>"
     }
 }

@@ -237,6 +237,16 @@ unmute`, and the admin API's `moderation` scope. `nf.network.report` sends
 
 ### Fixed
 
+- **A dead admin stream no longer holds up logins.** A service placing
+  players whose network vanished (a killed pod) left its stream open for about
+  15 minutes, and every login offered to it waited out the placement timeout
+  and got no server. A stream that doesn't answer a placement in time is now
+  closed, and the placement goes to the group's next stream, or its own
+  balancing.
+- **The proxy counts logins it has no server for.**
+  `netherforge_proxy_logins_refused_total` has the reason `no_server` for a
+  login Velocity turns away because no server was chosen ("There are no
+  available servers").
 - A server the hub refused over TCP heard the connection close without the
   reason: the hub now sends the refusal before closing.
 

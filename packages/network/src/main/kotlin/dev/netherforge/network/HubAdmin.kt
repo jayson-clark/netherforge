@@ -354,6 +354,8 @@ class HubAdmin(
             out.flush()
             while (!stream.closed) {
                 val event = stream.take(PING_MILLIS)
+                // Closed by the hub (revoked, too slow, or a placement it didn't answer): the connection ends.
+                if (stream.closed) break
                 val text = if (event == null) {
                     ": ping\n\n"
                 } else {

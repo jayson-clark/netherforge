@@ -649,10 +649,13 @@ sends `place` with the players and an `id`, and the service answers
 - `{ "fail": "No matches tonight" }`: the send fails with that; a login is
   turned away with it.
 
-With no answer within `placement-timeout-millis` (2 seconds), the group's own
-balancing places them, so the network keeps working without the service. One
-stream places a group at a time; another opened for it takes over when the
-first goes.
+One stream places a group at a time, the oldest open; another opened for it
+takes over when the first goes. A stream that doesn't answer within
+`placement-timeout-millis` (2 seconds) is taken for gone and closed (a client
+whose network vanished, as a killed pod's does, can leave its connection open
+for many minutes), and the placement goes to the group's next stream; with none
+left, the group's own balancing places them, so the network keeps working
+without the service. A service whose stream ends should open a new one.
 
 ## Running the hub on its own
 
