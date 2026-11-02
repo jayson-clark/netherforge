@@ -27,9 +27,17 @@ release is cut.
   `server-name: auto` for `<group>-<n>`) and comes off as it shuts down, or
   after `unregister-after-seconds` gone; a credential registers only with
   `register=true`, as the `names` and `addresses` it allows. Or an
-  orchestrator adds and removes servers through the hub's new admin API
-  (`admin.port` and `admin.token` in `hub.properties`: `POST`, `GET` and
-  `DELETE /v1/servers`).
+  orchestrator adds and removes servers through the hub's admin API.
+- **The hub's admin API.** HTTP and JSON (`admin.port` in `hub.properties`)
+  for services outside the servers, each a client with its own token and
+  scopes (`/nfhub admins add`, `admin.properties`): servers (list, add,
+  remove, drain), presence, sending players, chat, titles and action bars
+  shown by the proxy, kicks, publishing on channels, and a Server-Sent Events
+  stream of joins, moves, leaves, server changes and channel messages.
+  Scripts ask a service as they ask a server
+  (`channel:request({ admin = "matchmaker" }, ...)`). A service can place a
+  group's players, or logins: a server, a hold with a status, or a failure,
+  with the group's own balancing when it doesn't answer in time.
 - **A server's life.** Every server is `starting`, `ready`, `draining` or
   `stopping` (`nf.network.state()`, `network_state`), and only a ready one
   gets new players. `nf.network.hold_ready()` keeps it starting until a

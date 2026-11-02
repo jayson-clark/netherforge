@@ -565,6 +565,30 @@ class NetworkTest {
     }
 
     @Test
+    fun `a script asks a service on the hub's admin API as it asks a server`() {
+        val stream = hub.attach("matchmaker", setOf(dev.netherforge.network.AdminScope.CHANNELS_READ))
+        val lobby = server(
+            "lobby",
+            """
+            nf.on("network_connect", function()
+              nf.task(function()
+                local match, err = nf.network.channel("match"):request({ admin = "matchmaker" }, "Ann")
+                log("match " .. tostring(match or err))
+              end)
+            end)
+            """
+        )
+        connected()
+        val asked = generateSequence { stream.take(10_000) }.first { it is dev.netherforge.network.AdminEvent.Request }
+            as dev.netherforge.network.AdminEvent.Request
+        assertEquals("test:match", asked.channel)
+        assertEquals(null, hub.adminReply("matchmaker", asked.id, kotlinx.serialization.json.JsonPrimitive("arena-2"), null))
+        tickUntil { lobby.logs.isNotEmpty() }
+        assertEquals(listOf("match arena-2"), lobby.logs)
+        stream.close()
+    }
+
+    @Test
     fun `a server with a credential knows its role, and what it may not do is refused at the script's line`() {
         val credential = Credential(
             "survival-cred",

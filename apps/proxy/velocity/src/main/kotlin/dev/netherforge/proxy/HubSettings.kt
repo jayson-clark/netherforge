@@ -4,7 +4,6 @@ import dev.netherforge.network.Auth
 import dev.netherforge.network.Balance
 import dev.netherforge.network.Grants
 import dev.netherforge.network.GroupSettings
-import dev.netherforge.network.HubAdmin
 import dev.netherforge.network.NetworkLimits
 import dev.netherforge.network.NetworkNames
 import dev.netherforge.network.Protocol
@@ -30,10 +29,9 @@ data class HubSettings(
     val roleShares: Map<String, List<Share>> = emptyMap(),
     /** Each group's settings (`group.<name>.balance`), by the group's name. */
     val groups: Map<String, GroupSettings> = emptyMap(),
-    /** The admin API's address and token (`admin.bind`, `admin.port`, `admin.token`): off without a port. */
+    /** Where the admin API listens (`admin.bind`, `admin.port`): off without a port. Its clients are in `admin.properties`. */
     val adminBind: String = "127.0.0.1",
     val adminPort: Int? = null,
-    val adminToken: String? = null,
     /** Where the hub POSTs its events (`webhook.url`), signed with `webhook.secret`; none without a URL. */
     val webhookUrl: java.net.URI? = null,
     val webhookSecret: String? = null,
@@ -97,7 +95,8 @@ data class HubSettings(
                     maxBytesPerPackage = positive("max-bytes-per-package") ?: defaults.maxBytesPerPackage,
                     maxQueuedFrames = positive("max-queued-frames")?.toInt() ?: defaults.maxQueuedFrames,
                     requestTimeoutMillis = positive("request-timeout-seconds")?.let { it * 1000 } ?: defaults.requestTimeoutMillis,
-                    unregisterAfterMillis = positive("unregister-after-seconds")?.let { it * 1000 } ?: defaults.unregisterAfterMillis
+                    unregisterAfterMillis = positive("unregister-after-seconds")?.let { it * 1000 } ?: defaults.unregisterAfterMillis,
+                    placementTimeoutMillis = positive("placement-timeout-millis") ?: defaults.placementTimeoutMillis
                 ),
                 webhookUrl = text("webhook.url")?.let { url ->
                     val uri = try {
@@ -111,9 +110,6 @@ data class HubSettings(
                 webhookSecret = text("webhook.secret"),
                 adminBind = text("admin.bind") ?: "127.0.0.1",
                 adminPort = positive("admin.port")?.toInt(),
-                adminToken = text("admin.token")?.also {
-                    require(it.length >= HubAdmin.MIN_TOKEN) { "$file's admin.token is shorter than ${HubAdmin.MIN_TOKEN} characters" }
-                },
                 clearResourcePacks = flag("clear-resource-packs") ?: true
             )
         }
@@ -172,12 +168,14 @@ data class HubSettings(
                 |# without shutting down cleanly before it comes off the proxy's servers.
                 |unregister-after-seconds=${limits.unregisterAfterMillis / 1000}
                 |
-                |# The admin API: HTTP for what starts and stops your servers (an orchestrator) to add servers to the
-                |# proxy and take them off. Off without a port; every request needs Authorization: Bearer <admin.token>
-                |# (at least ${HubAdmin.MIN_TOKEN} characters). Keep it on localhost or your servers' network.
+                |# The admin API: HTTP for services outside the servers (an orchestrator, a matchmaker, a moderation tool)
+                |# to see the network and act on it: add and remove servers, follow players, send and message them,
+                |# publish on channels, place players. Off without a port. Its clients are in admin.properties, each with
+                |# its token and scopes (/nfhub admins add). Keep it on localhost or your servers' network.
                 |admin.bind=127.0.0.1
                 |admin.port=
-                |admin.token=
+                |# How long the hub waits for a client placing a group's players to answer, before the group's balancing.
+                |placement-timeout-millis=2000
                 |
                 |# Whether the resource packs a server sent a player come off as they move to another server, so a
                 |# lobby's (its hidden HUD, its replaced sprites) never follows them into a game. The next server sends

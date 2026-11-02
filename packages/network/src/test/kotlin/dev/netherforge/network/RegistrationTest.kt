@@ -188,7 +188,12 @@ class RegistrationTest {
     @Test
     fun `the admin API adds and removes servers, and only the named credential joins as one`() {
         val token = "an-admin-token-long-enough-1234"
-        val admin = HubAdmin(hub, java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), 0), token, Quiet)
+        val admin = HubAdmin(
+            hub,
+            java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), 0),
+            { listOf(AdminClient("ops", token, setOf(AdminScope.SERVERS_READ, AdminScope.SERVERS_WRITE))) },
+            Quiet
+        )
         admin.start()
         try {
             val client = java.net.http.HttpClient.newHttpClient()

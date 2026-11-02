@@ -7501,31 +7501,35 @@ data class NetworkPlayersOptions(val server: String? = null, val group: String? 
 }
 
 /**
- * A server or a group, where a request goes. A key that isn't one of these is an error; it names one
- * of the two.
+ * A server, a group or an admin client, where a request goes. A key that isn't one of these is an
+ * error; it names one of them.
  */
-data class NetworkTarget(val server: String? = null, val group: String? = null) : LuaShape {
+data class NetworkTarget(val server: String? = null, val group: String? = null, val admin: String? = null) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)
 
     object Codec : ShapeCodec<NetworkTarget>("NetworkTarget") {
         val serverCodec = LuaOptional(LuaCodecs.STRING)
         val groupCodec = LuaOptional(LuaCodecs.STRING)
+        val adminCodec = LuaOptional(LuaCodecs.STRING)
 
         override val pinned = false
 
         override val fields: Map<String, LuaCodec<*>> = mapOf(
             "server" to serverCodec,
-            "group" to groupCodec
+            "group" to groupCodec,
+            "admin" to adminCodec
         )
 
         override fun read(fields: ShapeReader) = NetworkTarget(
             server = fields.field("server", serverCodec),
-            group = fields.field("group", groupCodec)
+            group = fields.field("group", groupCodec),
+            admin = fields.field("admin", adminCodec)
         )
 
         override fun write(fields: ShapeWriter, value: NetworkTarget) {
             fields.field("server", value.server, serverCodec)
             fields.field("group", value.group, groupCodec)
+            fields.field("admin", value.admin, adminCodec)
         }
     }
 }

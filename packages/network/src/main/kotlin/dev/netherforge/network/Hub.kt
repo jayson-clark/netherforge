@@ -26,6 +26,17 @@ interface Peer {
     fun secure(channel: Channel) {}
 }
 
+/** Something the hub sends to and sends players for: a server's connection, or an admin client. */
+interface HubEndpoint {
+    fun deliver(frame: HubFrame)
+
+    /** What it may do when it sends players. */
+    val sendGrants: Grants
+
+    /** How refusals name it. */
+    fun who(): String
+}
+
 /**
  * A network's hub: every server's NetherForge connects to it, and it relays between them. It knows who's online
  * where (from the [proxy]), which servers are connected, what each listens to, and the network's [SharedMaps].
@@ -182,7 +193,7 @@ class Hub(
     }
 
     /** A send waiting for room: who asked, what, until when, and why it can't go yet. */
-    private class Wait(val origin: Session, val frame: ServerFrame.Send, val from: String, val deadline: Long, var why: String) {
+    private class Wait(val origin: HubEndpoint, val frame: ServerFrame.Send, val from: String, val deadline: Long, var why: String) {
         var position = 0
     }
 
@@ -193,7 +204,7 @@ class Hub(
     private val wanted = HashMap<String, Long>()
 
     /** A request on its way: who asked under which id, who must answer, and until when. */
-    private class Route(val origin: Session, val originId: Long, val target: Session, val deadline: Long)
+    private class Route(val origin: Session, val originId: Long, val target: HubEndpoint, val deadline: Long)
 
     init {
         require(secret == null || secret.isNotBlank()) { "a hub's shared secret can't be blank" }
@@ -267,9 +278,11 @@ class Hub(
         if (previous == null) {
             cameFrom.remove(id)
             for (session in byName.values) session.presence(null, now)
+            tellAdmins(AdminScope.PRESENCE_READ, AdminEvent.PlayerJoined(now))
         } else if (previous.server != server) {
             previous.server?.let { cameFrom[id] = it }
             for (session in byName.values) session.presence(previous, now)
+            tellAdmins(AdminScope.PRESENCE_READ, AdminEvent.PlayerMoved(id, server, previous.server))
         }
         dispatch()
     }
@@ -280,10 +293,11 @@ class Hub(
             val previous = players.remove(id) ?: return@synchronized
             cameFrom.remove(id)
             for (session in byName.values) session.presence(previous, null)
+            tellAdmins(AdminScope.PRESENCE_READ, AdminEvent.PlayerLeft(id))
             for (queue in queues.values) {
                 for (wait in queue.filter { id in it.frame.players }) {
                     queue.remove(wait)
-                    wait.origin.send(HubFrame.SendResult(wait.frame.id, "${previous.name} left the network while waiting"))
+                    wait.origin.deliver(HubFrame.SendResult(wait.frame.id, "${previous.name} left the network while waiting"))
                 }
             }
             dispatch()
@@ -300,11 +314,9 @@ class Hub(
             }
             for ((id, route) in routes.entries.filter { it.value.deadline <= now }) {
                 routes.remove(id)
+                val who = (route.target as? Session)?.name ?: route.target.who()
                 route.origin.send(
-                    HubFrame.Reply(
-                        route.originId,
-                        error = "${route.target.name} didn't answer within ${limits.requestTimeoutMillis / 1000} seconds"
-                    )
+                    HubFrame.Reply(route.originId, error = "$who didn't answer within ${limits.requestTimeoutMillis / 1000} seconds")
                 )
             }
             for (session in sessions.filter { it.name == null && now - it.openedAt > Protocol.HELLO_MILLIS }) {
@@ -317,13 +329,14 @@ class Hub(
                 for (wait in queue.filter { it.deadline <= now }) {
                     queue.remove(wait)
                     val seconds = (wait.frame.waitMillis ?: 0) / 1000
-                    wait.origin.send(HubFrame.SendResult(wait.frame.id, "waited $seconds seconds: ${wait.why}"))
+                    wait.origin.deliver(HubFrame.SendResult(wait.frame.id, "waited $seconds seconds: ${wait.why}"))
                 }
                 if (queue.isNotEmpty() && now - (wanted[key] ?: 0) >= WANTED_EVERY_MILLIS) {
                     wanted[key] = now
                     emit(HubEvent.GroupWanted(queue.first().frame.group ?: queue.first().frame.server ?: key, queue.size))
                 }
             }
+            for (entry in pending.values.filter { it.deadline <= now }) expire(entry)
             dispatch()
             tellServers()
             if (now - lastSave >= SAVE_EVERY_MILLIS && maps.takeDirty()) {
@@ -410,6 +423,7 @@ class Hub(
         val changed = now.values.filter { told[it.name] != it }
         told = now
         if (changed.isNotEmpty()) broadcast(HubFrame.Servers(changed))
+        for (state in changed) tellAdmins(AdminScope.SERVERS_READ, AdminEvent.Server(state))
     }
 
     /** Under the lock: the connected instances of [group] (a server with no group is a group of one, its name). */
@@ -442,7 +456,7 @@ class Hub(
     private fun serverNamed(name: String) = proxy.servers().firstOrNull { it.equals(name, ignoreCase = true) }
 
     /** One connection: a server once it has said hello ([name]). */
-    inner class Session internal constructor(val peer: Peer) {
+    inner class Session internal constructor(val peer: Peer) : HubEndpoint {
         val nonce = Auth.newNonce()
         internal val openedAt = clock()
 
@@ -478,6 +492,12 @@ class Hub(
         internal fun send(frame: HubFrame) {
             if (!closed) peer.send(frame)
         }
+
+        override fun deliver(frame: HubFrame) = send(frame)
+
+        override val sendGrants get() = grants
+
+        override fun who() = credentialName()
 
         /** A frame from this connection, on its reader's thread. */
         fun receive(frame: ServerFrame) {
@@ -716,6 +736,7 @@ class Hub(
                     for (target in targets) {
                         if (frame.channel in target.channels && target.grants.allows(frame.channel, Access.READ)) target.send(message)
                     }
+                    if (frame.to == null && frame.group == null) heard(message)
                 }
                 is ServerFrame.Request -> request(frame, from)
                 is ServerFrame.Reply -> {
@@ -770,7 +791,10 @@ class Hub(
             if (size > limits.maxValueBytes) return fail("the request is $size bytes, over the network's limit of ${limits.maxValueBytes}")
             forbidden(frame.channel, Access.REQUEST)?.let { return fail(it) }
             fun answers(session: Session) = frame.channel in session.channels && session.grants.allows(frame.channel, Access.ANSWER)
-            val target = if (frame.group != null) {
+            val target: HubEndpoint = if (frame.admin != null) {
+                streams.lastOrNull { it.client == frame.admin && AdminScope.CHANNELS_READ in it.scopes }
+                    ?: return fail("the admin client ${frame.admin} isn't connected to the hub")
+            } else if (frame.group != null) {
                 val answering = members(frame.group).filter(::answers)
                 if (answering.isEmpty()) {
                     return fail(
@@ -790,7 +814,7 @@ class Hub(
             }
             val id = nextRoute++
             routes[id] = Route(this, frame.id, target, clock() + limits.requestTimeoutMillis)
-            target.send(HubFrame.Requested(id, frame.channel, from, frame.value))
+            target.deliver(HubFrame.Requested(id, frame.channel, from, frame.value))
         }
 
         private fun write(frame: ServerFrame.MapWrite, from: String) {
@@ -828,6 +852,275 @@ class Hub(
         }
     }
 
+    // ---- admin clients -------------------------------------------------------------
+
+    /** The admin clients' streams, oldest first. */
+    private val streams = ArrayList<AdminStream>()
+
+    /** Placement hooks: by group (lowercase; [LOGINS] for players logging in), the streams that place, first active. */
+    private val hooks = HashMap<String, MutableList<AdminStream>>()
+
+    /** Placements an admin client was asked for and hasn't settled. */
+    private class Pending(
+        val id: Long,
+        var asked: AdminStream,
+        val origin: HubEndpoint?,
+        val frame: ServerFrame.Send,
+        val from: String?,
+        /** A login's: completed with where they go. */
+        val login: java.util.concurrent.CompletableFuture<LoginPlace>?,
+        var deadline: Long,
+        var held: Boolean = false
+    )
+
+    private val pending = LinkedHashMap<Long, Pending>()
+    private var nextPlace = 1L
+
+    /**
+     * An admin client's stream: what it hears, queued for its connection to take ([take]). Past [MAX_ADMIN_QUEUED]
+     * waiting, it's too slow and is closed. It may answer requests addressed to its [client] and place players.
+     */
+    inner class AdminStream internal constructor(val client: String, val scopes: Set<AdminScope>) : HubEndpoint {
+        private val events = java.util.concurrent.LinkedBlockingQueue<AdminEvent>(MAX_ADMIN_QUEUED)
+
+        @Volatile
+        var closed = false
+            private set
+        internal var channels: Set<String> = emptySet()
+
+        internal fun push(event: AdminEvent) {
+            if (!closed && !events.offer(event)) {
+                log.warn("NetherForge hub: the admin client $client isn't reading its stream; closing it")
+                close()
+            }
+        }
+
+        override fun deliver(frame: HubFrame) {
+            if (frame is HubFrame.Requested) push(AdminEvent.Request(frame.id, frame.channel, frame.from, frame.value))
+        }
+
+        override val sendGrants get() = Grants.TRUSTED
+
+        override fun who() = "the admin client $client"
+
+        /** The next event, waiting up to [millis]; null when there's none yet. */
+        fun take(millis: Long): AdminEvent? = events.poll(millis, java.util.concurrent.TimeUnit.MILLISECONDS)
+
+        /** Ends the stream: what it was asked and hasn't answered goes to the next hook, or the group's own balancing. */
+        fun close() {
+            synchronized(lock) {
+                if (closed) return@synchronized
+                closed = true
+                streams.remove(this)
+                for (list in hooks.values) list.remove(this)
+                hooks.values.removeAll { it.isEmpty() }
+                for ((id, route) in routes.entries.filter { it.value.target === this }) {
+                    routes.remove(id)
+                    route.origin.send(HubFrame.Reply(route.originId, error = "the admin client $client went before answering"))
+                }
+                for (entry in pending.values.filter { it.asked === this }) expire(entry)
+            }
+            runLater()
+        }
+    }
+
+    /**
+     * Opens a stream for admin client [client]: presence and servers as its scopes allow, messages on [channels], and
+     * players to place for [place] (groups; [LOGINS] for logins).
+     */
+    fun attach(client: String, scopes: Set<AdminScope>, channels: Set<String> = emptySet(), place: Set<String> = emptySet()): AdminStream =
+        synchronized(lock) {
+            val stream = AdminStream(client, scopes)
+            if (AdminScope.CHANNELS_READ in scopes) stream.channels = channels.filter(NetworkNames::isFull).toSet()
+            if (AdminScope.PLACEMENT in scopes) {
+                for (group in place) hooks.getOrPut(group.lowercase()) { ArrayList() } += stream
+            }
+            streams += stream
+            log.info(
+                "NetherForge hub: the admin client $client is listening" +
+                    if (place.isEmpty()) "" else ", placing for ${place.joinToString()}"
+            )
+            stream
+        }
+
+    /** Closes every stream of admin client [client]: it was revoked. */
+    fun detach(client: String) {
+        val open = synchronized(lock) { streams.filter { it.client == client } }
+        for (stream in open) stream.close()
+    }
+
+    /** Under the lock: [event] to each stream allowed [scope]. */
+    private fun tellAdmins(scope: AdminScope, event: AdminEvent) {
+        for (stream in streams) if (scope in stream.scopes) stream.push(event)
+    }
+
+    /** Under the lock: a message published to every server, to the admin streams listening to its channel. */
+    private fun heard(message: HubFrame.Message) {
+        for (stream in streams) {
+            if (message.channel in
+                stream.channels
+            ) {
+                stream.push(AdminEvent.Message(message.channel, message.from, message.value))
+            }
+        }
+    }
+
+    /** Under the lock: the stream that places players for [key], if any is connected. */
+    private fun hookFor(key: String): AdminStream? = hooks[key]?.firstOrNull { !it.closed }
+
+    /** Under the lock: [entry] wasn't settled in time (or its client went): the next hook, or the hub decides. */
+    private fun expire(entry: Pending) {
+        if (entry.held) {
+            pending.remove(entry.id)
+            entry.login?.complete(LoginPlace(deny = "no server was found in time"))
+            entry.origin?.deliver(HubFrame.SendResult(entry.frame.id, "held, and no server was found in time"))
+            return
+        }
+        val key = entry.frame.group?.lowercase() ?: LOGINS
+        val next = hooks[key]?.firstOrNull { !it.closed && it !== entry.asked }
+        // A client that went has its asks passed to the next; one that didn't answer in time, to the hub.
+        if (next != null && entry.asked.closed) {
+            entry.asked = next
+            entry.deadline = clock() + limits.placementTimeoutMillis
+            next.push(
+                AdminEvent.Place(
+                    entry.id,
+                    entry.frame.players.mapNotNull { players[it] },
+                    entry.frame.group,
+                    entry.from,
+                    entry.login != null
+                )
+            )
+            return
+        }
+        pending.remove(entry.id)
+        if (entry.login != null) entry.login.complete(LoginPlace()) else sendPlayer(entry.origin!!, entry.frame, entry.from!!, asked = true)
+    }
+
+    /** The admin API's: every player online, and where. */
+    fun adminPlayers(): List<PlayerState> = synchronized(lock) { players.values.toList() }
+
+    /** The admin API's: a player by UUID or name (any case). */
+    fun findPlayer(player: String): PlayerState? = synchronized(lock) {
+        players[player] ?: players.values.firstOrNull { it.name.equals(player, ignoreCase = true) }
+    }
+
+    /** How an admin client's send went: the server they're on their way to, or why not. */
+    data class SendOutcome(val server: String? = null, val error: String? = null)
+
+    /** The admin API's: sends [players] to [server] or an instance of [group], as a server's send does (it may wait). */
+    fun adminSend(
+        client: String,
+        players: List<String>,
+        server: String?,
+        group: String?,
+        balance: Balance?,
+        data: JsonElement?,
+        waitMillis: Long?
+    ): java.util.concurrent.CompletableFuture<SendOutcome> {
+        val outcome = java.util.concurrent.CompletableFuture<SendOutcome>()
+        val origin = object : HubEndpoint {
+            override fun deliver(frame: HubFrame) {
+                if (frame is HubFrame.SendResult) outcome.complete(SendOutcome(frame.server.takeIf { frame.error == null }, frame.error))
+            }
+
+            override val sendGrants get() = Grants.TRUSTED
+
+            override fun who() = "the admin client $client"
+        }
+        synchronized(lock) {
+            sendPlayer(origin, ServerFrame.Send(nextPlace++, players, server, data, group, balance, waitMillis), "admin:$client")
+        }
+        runLater()
+        return outcome
+    }
+
+    /** The admin API's: shows a player a chat message, title or action bar through the proxy. Null once shown, or why not. */
+    fun adminMessage(player: String, kind: String, text: String, subtitle: String?): String? {
+        val id = findPlayer(player)?.id ?: return "nobody called $player is online"
+        return proxy.message(id, kind, text, subtitle)
+    }
+
+    fun adminKick(player: String, message: String): String? {
+        val id = findPlayer(player)?.id ?: return "nobody called $player is online"
+        return proxy.kick(id, message)
+    }
+
+    /** The admin API's: publishes on [channel], to [server], [group]'s instances, or every server listening. */
+    fun adminPublish(client: String, channel: String, value: JsonElement, server: String?, group: String?): String? = synchronized(lock) {
+        if (!NetworkNames.isFull(channel)) return "\"$channel\" isn't a channel's full name (namespace:name)"
+        val size = Protocol.size(value)
+        if (size > limits.maxValueBytes) return "the value is $size bytes, over the network's limit of ${limits.maxValueBytes}"
+        val targets = when {
+            server != null -> listOfNotNull(serverNamed(server)?.let(byName::get))
+            group != null -> members(group)
+            else -> byName.values.toList()
+        }
+        val message = HubFrame.Message(channel, "admin:$client", value)
+        for (target in targets) if (channel in target.channels && target.grants.allows(channel, Access.READ)) target.send(message)
+        if (server == null && group == null) heard(message)
+        null
+    }
+
+    /** The admin API's: [stream]'s answer to request [id]. Null once passed on, or why not. */
+    fun adminReply(stream: String, id: Long, value: JsonElement?, error: String?): String? = synchronized(lock) {
+        val route =
+            routes[id]?.takeIf { (it.target as? AdminStream)?.client == stream } ?: return "there's no request $id waiting for $stream"
+        routes.remove(id)
+        route.origin.send(HubFrame.Reply(route.originId, value, error))
+        null
+    }
+
+    /** The admin API's: [client]'s answer to placement [id]. Null once acted on, or why not. */
+    fun adminPlace(client: String, id: Long, answer: PlaceAnswer): String? {
+        val why = synchronized(lock) {
+            val entry = pending[id]?.takeIf { it.asked.client == client } ?: return "there's no placement $id waiting for $client"
+            when {
+                answer.server != null -> {
+                    val server = serverNamed(answer.server) ?: return "the proxy has no server named ${answer.server}"
+                    pending.remove(id)
+                    if (entry.login != null) {
+                        entry.login.complete(LoginPlace(server))
+                    } else {
+                        sendPlayer(entry.origin!!, entry.frame.copy(server = server, group = null), entry.from!!, asked = true)
+                    }
+                    null
+                }
+                answer.fail != null -> {
+                    pending.remove(id)
+                    entry.login?.complete(LoginPlace(deny = answer.fail))
+                    entry.origin?.deliver(HubFrame.SendResult(entry.frame.id, answer.fail))
+                    null
+                }
+                answer.hold != null -> {
+                    if (!entry.held) {
+                        entry.held = true
+                        val most = if (entry.login != null) LOGIN_HOLD_MILLIS else entry.frame.waitMillis ?: DEFAULT_HOLD_MILLIS
+                        entry.deadline = clock() + most.coerceAtMost(MAX_WAIT_MILLIS)
+                    }
+                    entry.origin?.deliver(HubFrame.SendWaiting(entry.frame.id, 0, answer.hold))
+                    null
+                }
+                else -> "an answer names a server, a hold or a fail"
+            }
+        }
+        runLater()
+        return why
+    }
+
+    /**
+     * Where player [id] ([name]) logging in goes, as the admin client placing logins says (null: the proxy's own
+     * choice), within the placement timeout, or longer if it holds them.
+     */
+    fun placeLogin(id: String, name: String): java.util.concurrent.CompletableFuture<LoginPlace> = synchronized(lock) {
+        val hook = hookFor(LOGINS) ?: return java.util.concurrent.CompletableFuture.completedFuture(LoginPlace())
+        val future = java.util.concurrent.CompletableFuture<LoginPlace>()
+        val place = nextPlace++
+        pending[place] = Pending(place, hook, null, ServerFrame.Send(-1, listOf(id)), null, future, clock() + limits.placementTimeoutMillis)
+        hook.push(AdminEvent.Place(place, listOf(PlayerState(id, name)), login = true))
+        future
+    }
+
     // ---- sending players ----------------------------------------------------------
 
     /** Where a send can go now: nowhere ([Failed]), not yet ([Later]), or to [server] ([Go]). */
@@ -841,7 +1134,7 @@ class Hub(
     }
 
     /** Under the lock: where [origin]'s [frame] can go now, held to its grants unless the hub itself is sending ([byHub]). */
-    private fun place(origin: Session, frame: ServerFrame.Send, from: String, byHub: Boolean = false): Placement {
+    private fun place(origin: HubEndpoint, frame: ServerFrame.Send, from: String, byHub: Boolean = false): Placement {
         if (frame.players.isEmpty()) return Placement.Failed("there's nobody to send")
         if ((frame.server == null) == (frame.group == null)) return Placement.Failed("a send names a server or a group")
         val party = frame.players.distinct().map { id ->
@@ -855,10 +1148,10 @@ class Hub(
         ) {
             return Placement.Failed("the data is $size bytes, over the network's limit of ${limits.maxValueBytes}")
         }
-        val grants = if (byHub) Grants.TRUSTED else origin.grants
+        val grants = if (byHub) Grants.TRUSTED else origin.sendGrants
         if (!grants.trusted) {
             party.firstOrNull { it.server != from }?.let {
-                return Placement.Failed("network.forbidden: ${origin.credentialName()} may only send players who are on $from")
+                return Placement.Failed("network.forbidden: ${origin.who()} may only send players who are on $from")
             }
         }
         val server = if (frame.server != null) {
@@ -896,27 +1189,40 @@ class Hub(
         for (player in moving) {
             if (!grants.maySendTo(server, target?.group ?: frame.group, cameFrom[player.id])) {
                 return Placement.Failed(
-                    "network.forbidden: ${origin.credentialName()} may not send ${if (party.size == 1) "players" else player.name} to $server"
+                    "network.forbidden: ${origin.who()} may not send ${if (party.size == 1) "players" else player.name} to $server"
                 )
             }
         }
         return Placement.Go(server, target, party, moving)
     }
 
-    /** Under the lock: [origin]'s [frame], sent now, waiting, or refused. */
-    private fun sendPlayer(origin: Session, frame: ServerFrame.Send, from: String) {
+    /**
+     * Under the lock: [origin]'s [frame], sent now, waiting, or refused; to a group an admin client places players
+     * for, that client is asked first (unless it has been: [asked]).
+     */
+    private fun sendPlayer(origin: HubEndpoint, frame: ServerFrame.Send, from: String, asked: Boolean = false) {
+        val hook = if (asked || frame.group == null) null else hookFor(frame.group.lowercase())
+        if (hook != null) {
+            val party = frame.players.mapNotNull { players[it] }
+            if (party.size == frame.players.size) {
+                val id = nextPlace++
+                pending[id] = Pending(id, hook, origin, frame, from, null, clock() + limits.placementTimeoutMillis)
+                hook.push(AdminEvent.Place(id, party, frame.group, from))
+                return
+            }
+        }
         when (val placement = place(origin, frame, from)) {
-            is Placement.Failed -> origin.send(HubFrame.SendResult(frame.id, placement.why))
+            is Placement.Failed -> origin.deliver(HubFrame.SendResult(frame.id, placement.why))
             is Placement.Go -> go(origin, frame, from, placement)
             is Placement.Later -> {
                 val wait = frame.waitMillis?.coerceAtMost(MAX_WAIT_MILLIS)
-                if (wait == null || wait <= 0) return origin.send(HubFrame.SendResult(frame.id, placement.why))
+                if (wait == null || wait <= 0) return origin.deliver(HubFrame.SendResult(frame.id, placement.why))
                 val queue = queues.getOrPut(placement.target) { ArrayDeque() }
                 val cap = groups[placement.target]?.maxWaiting ?: GroupSettings.DEFAULT_MAX_WAITING
                 if (queue.size >=
                     cap
                 ) {
-                    return origin.send(
+                    return origin.deliver(
                         HubFrame.SendResult(frame.id, "$cap sends already wait for ${placement.target}: ${placement.why}")
                     )
                 }
@@ -931,7 +1237,7 @@ class Hub(
     }
 
     /** Under the lock: moves [placement]'s players, telling [origin] how it went once the proxy has (after the lock). */
-    private fun go(origin: Session, frame: ServerFrame.Send, from: String, placement: Placement.Go) {
+    private fun go(origin: HubEndpoint, frame: ServerFrame.Send, from: String, placement: Placement.Go) {
         val server = placement.server
         val target = placement.target
         val party = placement.party
@@ -957,7 +1263,7 @@ class Hub(
                         party.size == 1 -> failed.single().second
                         else -> failed.joinToString("; ") { (player, error) -> "${player.name}: $error" }
                     }
-                    if (frame.id >= 0) origin.send(HubFrame.SendResult(frame.id, why, server))
+                    if (frame.id >= 0) origin.deliver(HubFrame.SendResult(frame.id, why, server))
                     dispatch()
                 }
                 runLater()
@@ -977,7 +1283,7 @@ class Hub(
                         wait.why = placement.why
                         break
                     }
-                    is Placement.Failed -> wait.origin.send(HubFrame.SendResult(wait.frame.id, placement.why))
+                    is Placement.Failed -> wait.origin.deliver(HubFrame.SendResult(wait.frame.id, placement.why))
                     is Placement.Go -> go(wait.origin, wait.frame, wait.from, placement)
                 }
                 queue.removeFirst()
@@ -994,7 +1300,7 @@ class Hub(
             queue.forEachIndexed { index, wait ->
                 if (wait.position != index + 1) {
                     wait.position = index + 1
-                    wait.origin.send(HubFrame.SendWaiting(wait.frame.id, wait.position))
+                    wait.origin.deliver(HubFrame.SendWaiting(wait.frame.id, wait.position))
                 }
             }
         }
@@ -1023,6 +1329,18 @@ class Hub(
 
         /** How long a send may wait for room, at most. */
         const val MAX_WAIT_MILLIS = 10 * 60_000L
+
+        /** The placement hook for players logging in, as [attach] takes it. */
+        const val LOGINS = "*login"
+
+        /** What may wait for an admin stream before it's too slow and is closed. */
+        const val MAX_ADMIN_QUEUED = 10_000
+
+        /** How long a hold may keep a player logging in waiting (the proxy keeps them on the loading screen). */
+        const val LOGIN_HOLD_MILLIS = 30_000L
+
+        /** How long a hold lasts when the send didn't say how long it may wait. */
+        const val DEFAULT_HOLD_MILLIS = 60_000L
 
         /** How often the webhook hears a target is still wanted while sends wait for it. */
         private const val WANTED_EVERY_MILLIS = 30_000L

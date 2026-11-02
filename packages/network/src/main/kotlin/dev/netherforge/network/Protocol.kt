@@ -249,10 +249,13 @@ sealed interface HubFrame {
     @SerialName("send_result")
     data class SendResult(val id: Long, val error: String? = null, val server: String? = null) : HubFrame
 
-    /** This server's [ServerFrame.Send] [id] waits for an instance with room: [position] in its queue, from 1. */
+    /**
+     * This server's [ServerFrame.Send] [id] waits: [position] in its queue for an instance with room (from 1), or
+     * held by an admin client deciding where it goes (position 0), with what it says ([status]).
+     */
     @Serializable
     @SerialName("send_waiting")
-    data class SendWaiting(val id: Long, val position: Int) : HubFrame
+    data class SendWaiting(val id: Long, val position: Int, val status: String? = null) : HubFrame
 
     /** The admin API asks this server to drain ([draining]) or to stop draining. */
     @Serializable
@@ -331,8 +334,15 @@ sealed interface ServerFrame {
      */
     @Serializable
     @SerialName("request")
-    data class Request(val id: Long, val channel: String, val to: String? = null, val value: JsonElement, val group: String? = null) :
-        ServerFrame
+    data class Request(
+        val id: Long,
+        val channel: String,
+        val to: String? = null,
+        val value: JsonElement,
+        val group: String? = null,
+        /** An admin client of the hub's, by its id, in place of a server. */
+        val admin: String? = null
+    ) : ServerFrame
 
     /** This server's answer to a [HubFrame.Requested] [id]. */
     @Serializable

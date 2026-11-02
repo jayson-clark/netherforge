@@ -504,10 +504,15 @@ export const networkShapes: LuaClass[] = [
   ),
   shape(
     'NetworkTarget',
-    "A server or a group, where a request goes. A key that isn't one of these is an error; it names one of the two.",
+    "A server, a group or an admin client, where a request goes. A key that isn't one of these is an error; it names one of them.",
     [
       { name: 'server', type: 'string?', doc: 'A server, by its name in the network.' },
       { name: 'group', type: 'string?', doc: 'A group: one of its instances is asked.' },
+      {
+        name: 'admin',
+        type: 'string?',
+        doc: "A service connected to the hub's admin API, by its client id (a matchmaker): it answers in place of a server.",
+      },
     ],
   ),
   shape(
@@ -533,8 +538,8 @@ export const networkShapes: LuaClass[] = [
       },
       {
         name: 'on_wait',
-        type: 'fun(position: integer)?',
-        doc: "Called while it waits, each time its place in the queue changes (1 is next). Without it, each player waiting who's on this server sees their place on their action bar.",
+        type: 'fun(position: integer, status: string?)?',
+        doc: "Called while it waits, each time its place in the queue changes (1 is next), or with `status` when a service placing the group's players holds them (`position` 0). Without it, each player waiting who's on this server sees their place, or the status, on their action bar.",
       },
     ],
   ),

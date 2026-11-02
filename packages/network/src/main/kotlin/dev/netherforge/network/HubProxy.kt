@@ -26,6 +26,15 @@ interface HubProxy {
     /** Takes [name] (one [register] added) off the proxy's servers. */
     fun unregister(name: String) {}
 
+    /**
+     * Shows player [id] [text] (MiniMessage) as [kind]: `chat`, `title` (with [subtitle]) or `actionbar`. Null once
+     * shown, or why not.
+     */
+    fun message(id: String, kind: String, text: String, subtitle: String?): String? = "this proxy can't show players messages"
+
+    /** Disconnects player [id] from the network with [message]. Null once done, or why not. */
+    fun kick(id: String, message: String): String? = "this proxy can't kick players"
+
     /** Whether [name] is one of the proxy's own servers (its config's), which no server may register over. */
     fun isFixed(name: String): Boolean = true
 }
@@ -50,7 +59,9 @@ data class NetworkLimits(
     /** How long a request waits for the server asked before the hub answers it failed. */
     val requestTimeoutMillis: Long = 30_000,
     /** How long a server that registered itself may be gone (not a clean shutdown) before it comes off the proxy. */
-    val unregisterAfterMillis: Long = 60_000
+    val unregisterAfterMillis: Long = 60_000,
+    /** How long the hub waits for an admin client to place players before the group's own balancing does. */
+    val placementTimeoutMillis: Long = 2_000
 ) {
     companion object {
         const val DEFAULT_MAX_VALUE_BYTES = 64 * 1024

@@ -297,22 +297,23 @@ scripts can be tried with no proxy.
 `plugins/`. On its first start it writes `plugins/netherforge/hub.properties`
 with a new secret:
 
-| Key                                                 | Meaning                                                                                                      | Default            |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------ |
-| `bind`, `port`                                      | Where the hub listens. Keep the port to your servers (a firewall), as you do theirs.                         | `0.0.0.0`, `25590` |
-| `secret`                                            | What a trusted server proves it knows. Anyone with it can join the network. Empty: only credentials join.    | made for you       |
-| `share.standard`, `share.isolated`                  | What the network shares with every credential of that role: `lobby:return(request), events:*(read)`.         | none               |
-| `group.<name>.balance`                              | How the hub picks an instance of that group to send players to: `least` or `fill`.                           | `least`            |
-| `group.<name>.fallback`, `group.<name>.max-waiting` | Where an instance's players go when it stops, and how many sends may wait for the group at once.             | `lobby`, `500`     |
-| `webhook.url`, `webhook.secret`                     | Where the hub POSTs `server_ready`, `server_idle`, `server_gone` and `group_wanted`, signed with the secret. | none               |
-| `max-value-bytes`                                   | The most one value may be as JSON: a message, a request or its answer, a map's value, a sent player's data.  | `65536`            |
-| `max-keys-per-package`                              | Keys one package may keep across its shared maps.                                                            | `10000`            |
-| `max-bytes-per-package`                             | Bytes of values one package may keep across its shared maps.                                                 | `16777216`         |
-| `request-timeout-seconds`                           | How long the hub waits for a server to answer a request.                                                     | `30`               |
-| `max-queued-frames`                                 | What may wait to be sent to one server; past it, the server is too slow and the hub drops its connection.    | `50000`            |
-| `unregister-after-seconds`                          | How long a server that added itself may be gone without shutting down cleanly before it comes off the proxy. | `60`               |
-| `admin.bind`, `admin.port`, `admin.token`           | The admin API, for an orchestrator to add servers and take them off; off without a port.                     | `127.0.0.1`, off   |
-| `clear-resource-packs`                              | Whether the resource packs a server sent a player come off as they move to another server.                   | `true`             |
+| Key                                                 | Meaning                                                                                                                                                          | Default            |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `bind`, `port`                                      | Where the hub listens. Keep the port to your servers (a firewall), as you do theirs.                                                                             | `0.0.0.0`, `25590` |
+| `secret`                                            | What a trusted server proves it knows. Anyone with it can join the network. Empty: only credentials join.                                                        | made for you       |
+| `share.standard`, `share.isolated`                  | What the network shares with every credential of that role: `lobby:return(request), events:*(read)`.                                                             | none               |
+| `group.<name>.balance`                              | How the hub picks an instance of that group to send players to: `least` or `fill`.                                                                               | `least`            |
+| `group.<name>.fallback`, `group.<name>.max-waiting` | Where an instance's players go when it stops, and how many sends may wait for the group at once.                                                                 | `lobby`, `500`     |
+| `webhook.url`, `webhook.secret`                     | Where the hub POSTs `server_ready`, `server_idle`, `server_gone` and `group_wanted`, signed with the secret.                                                     | none               |
+| `max-value-bytes`                                   | The most one value may be as JSON: a message, a request or its answer, a map's value, a sent player's data.                                                      | `65536`            |
+| `max-keys-per-package`                              | Keys one package may keep across its shared maps.                                                                                                                | `10000`            |
+| `max-bytes-per-package`                             | Bytes of values one package may keep across its shared maps.                                                                                                     | `16777216`         |
+| `request-timeout-seconds`                           | How long the hub waits for a server to answer a request.                                                                                                         | `30`               |
+| `max-queued-frames`                                 | What may wait to be sent to one server; past it, the server is too slow and the hub drops its connection.                                                        | `50000`            |
+| `unregister-after-seconds`                          | How long a server that added itself may be gone without shutting down cleanly before it comes off the proxy.                                                     | `60`               |
+| `admin.bind`, `admin.port`                          | The [admin API](./network.md#the-hubs-admin-api), for services outside the servers; off without a port. Its clients are in `admin.properties` (`/nfhub admins`). | `127.0.0.1`, off   |
+| `placement-timeout-millis`                          | How long the hub waits for a service placing a group's players before the group's balancing does.                                                                | `2000`             |
+| `clear-resource-packs`                              | Whether the resource packs a server sent a player come off as they move to another server.                                                                       | `true`             |
 
 **Resource packs across the network.** Velocity keeps the resource packs a
 server sent a player when they move to another server, until that server

@@ -218,14 +218,21 @@ class Network(
     }
 
     /** Asks [server] on [channel], or (with [group]) one instance of the group. */
-    fun request(namespace: String, channel: String, server: String?, value: JsonElement, group: String? = null): CompletionStage<Any?> {
+    fun request(
+        namespace: String,
+        channel: String,
+        server: String?,
+        value: JsonElement,
+        group: String? = null,
+        admin: String? = null
+    ): CompletionStage<Any?> {
         forbid(channel, Access.REQUEST, "channel:request")
         refusal(namespace)?.let { return CompletableFuture.failedFuture(WorkFailed(it)) }
         val id = link().nextId()
         val future = CompletableFuture<Any?>()
-        val who = server ?: "no instance of $group"
+        val who = server ?: admin?.let { "the admin client $it" } ?: "no instance of $group"
         requests[id] = Waiting(future, ticks() + config.requestTimeoutSeconds * TICKS_PER_SECOND, "$who didn't answer on \"$channel\"")
-        if (!link().send(ServerFrame.Request(id, channel, server, value, group))) {
+        if (!link().send(ServerFrame.Request(id, channel, server, value, group, admin))) {
             requests.remove(id)
             return CompletableFuture.failedFuture(WorkFailed(notConnected()))
         }
@@ -412,13 +419,16 @@ class Network(
     private fun waited(frame: HubFrame.SendWaiting) {
         val shown = showing[frame.id] ?: return
         if (shown.callback != null && shown.scope != null) {
-            when (val result = scripts.callKept(shown.scope, shown.callback, listOf(frame.position.toLong()))) {
+            when (val result = scripts.callKept(shown.scope, shown.callback, listOf(frame.position.toLong(), frame.status))) {
                 is CallResult.Failed -> warnOnce("on_wait", "A send's on_wait failed: ${result.failure.message}")
                 else -> Unit
             }
             return
         }
-        for (player in shown.players) actionbar(player, "<gray>Waiting for <yellow>${shown.target}</yellow>… <white>#${frame.position}")
+        // A hold's status is the placing service's own text, MiniMessage as it wrote it.
+        val text = frame.status?.let { "<gray>$it" }
+            ?: "<gray>Waiting for <yellow>${shown.target}</yellow>… <white>#${frame.position}"
+        for (player in shown.players) actionbar(player, text)
     }
 
     // ---- this server's life ---------------------------------------------------------

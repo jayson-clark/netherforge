@@ -8097,10 +8097,11 @@ function Event:uncancel() end
 ---@field server string? Only this server's players.
 ---@field group string? Only the players on this group's instances.
 
---- A server or a group, where a request goes. A key that isn't one of these is an error; it names one of the two.
+--- A server, a group or an admin client, where a request goes. A key that isn't one of these is an error; it names one of them.
 ---@class NetworkTarget
 ---@field server string? A server, by its name in the network.
 ---@field group string? A group: one of its instances is asked.
+---@field admin string? A service connected to the hub's admin API, by its client id (a matchmaker): it answers in place of a server.
 
 --- Where `send_player` and `send_players` send players. A key that isn't one of these is an error; it names a server or a group.
 ---@class NetworkSendOptions
@@ -8109,7 +8110,7 @@ function Event:uncancel() end
 ---@field balance "least"|"fill"|nil How the hub picks the group's instance for this send: `least` (the fewest players) or `fill` (the fullest with room); the group's own when left out (`group.<name>.balance` in the hub's `hub.properties`, `least` unless its owner says).
 ---@field data any What arrives with them, when `data` isn't given.
 ---@field wait number? Seconds it may wait, when there's no instance with room yet (none is ready, all are full, the server is starting): the hub holds it, first come first served, tells whatever runs the servers that the group is wanted (its webhook), and sends them as soon as one has room. They stay where they are meanwhile. At most 600; it fails after that, saying why it waited.
----@field on_wait fun(position: integer)? Called while it waits, each time its place in the queue changes (1 is next). Without it, each player waiting who's on this server sees their place on their action bar.
+---@field on_wait fun(position: integer, status: string?)? Called while it waits, each time its place in the queue changes (1 is next), or with `status` when a service placing the group's players holds them (`position` 0). Without it, each player waiting who's on this server sees their place, or the status, on their action bar.
 
 --- What this server may do in the network, from `nf.network.server_role`.
 ---@class NetworkRole

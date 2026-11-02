@@ -216,8 +216,13 @@ internal class NetworkChannelImpl(private val session: ProjectSession) : Network
             is StringOrNetworkTarget.String -> checkServer(target.value, "target") to null
             is StringOrNetworkTarget.NetworkTarget -> {
                 val it = target.value
-                if ((it.server == null) == (it.group == null)) {
-                    throw LuaApiException("bad argument 'target' (a table naming a server or a group expected, not both or neither)")
+                if (listOfNotNull(it.server, it.group, it.admin).size != 1) {
+                    throw LuaApiException("bad argument 'target' (a table naming one of a server, a group or an admin client expected)")
+                }
+                if (it.admin != null) {
+                    if (!NetworkNames.isCredential(it.admin)) throw LuaApiException("bad argument 'target.admin' (a client's id expected)")
+                    val json = network.checked(value(data, "data"), "data")
+                    return network.request(session.names.calling(), self.name, null, json, admin = it.admin)
                 }
                 it.server?.let { name -> checkServer(name, "target.server") } to it.group?.let { name -> checkServer(name, "target.group") }
             }

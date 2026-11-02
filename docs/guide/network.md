@@ -493,14 +493,8 @@ arena.group=arena
 
 **Something else adds it.** An orchestrator that starts servers (Kubernetes
 with Agones, say) already knows when one is ready and where it is. The hub's
-**admin API** lets it add and remove them, with a token of its own, never a
-server's credential. Turn it on in `hub.properties`:
-
-```properties
-admin.bind=127.0.0.1
-admin.port=25591
-admin.token=…   # at least 24 characters
-```
+[admin API](#the-hubs-admin-api) lets it add and remove them, as a client
+with the `servers:write` scope:
 
 ```sh
 curl -H "Authorization: Bearer $TOKEN" -d '{"name":"arena-7","address":"10.0.0.7:25565","group":"arena","credential":"arena"}' \
@@ -571,6 +565,70 @@ from the hub's webhook (`webhook.url` in `hub.properties`): `server_ready`,
 `server_gone` and `group_wanted` (sends waiting for a group with no room:
 start an instance). Each is a JSON `POST` signed with `webhook.secret`
 (`X-NetherForge-Signature: sha256=<hex HMAC-SHA256 of the body>`).
+
+## The hub's admin API
+
+Services outside the network's servers (an orchestrator, a matchmaker, a
+social service, a moderation tool) see the network and act on it through the
+hub's admin API: HTTP and JSON, with a stream of what happens as
+[Server-Sent Events](https://developer.mozilla.org/docs/Web/API/Server-sent_events).
+Turn it on in `hub.properties`, and give each service a client of its own:
+
+```properties
+admin.bind=127.0.0.1
+admin.port=25591
+```
+
+```
+/nfhub admins add matchmaker presence:read,players:send,placement
+```
+
+That prints the client's token once, and keeps it in
+`plugins/netherforge/admin.properties`. Every request sends it as
+`Authorization: Bearer <token>`, and may do only what the client's scopes
+allow; `/nfhub admins revoke <id>` ends it and its streams.
+
+| Scope              | Allows                                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `servers:read`     | `GET /v1/servers` (each with its group, state, players and room), and server changes streamed.                                        |
+| `servers:write`    | `POST /v1/servers`, `DELETE /v1/servers/<name>`, `POST /v1/servers/<name>/drain`.                                                     |
+| `presence:read`    | `GET /v1/players`, and joins, moves and leaves streamed.                                                                              |
+| `players:send`     | `POST /v1/players/<id or name>/send` `{ "server" \| "group", "balance", "data", "wait" }`.                                            |
+| `players:message`  | `POST /v1/players/<id or name>/message` `{ "kind": "chat" \| "title" \| "actionbar", "text" }`, shown by the proxy wherever they are. |
+| `players:kick`     | `POST /v1/players/<id or name>/kick` `{ "message" }`.                                                                                 |
+| `channels:publish` | `POST /v1/channels/publish` `{ "channel": "lobby:news", "value", "server", "group" }`.                                                |
+| `channels:read`    | Messages on the channels its stream listens to, and requests addressed to it.                                                         |
+| `placement`        | Deciding where players sent to a group, or logging in, go.                                                                            |
+
+**The stream.** `GET /v1/events` stays open and sends what the client's scopes
+allow: `player_joined`, `player_moved`, `player_left`, `server`, and with
+`?listen=lobby:news,lobby:queue` messages on those channels. A script asks a
+service as it asks a server, by its client id:
+
+```lua
+local match = nf.network.channel("match"):request({ admin = "matchmaker" }, { player = player:id() })
+```
+
+It arrives on the stream as `request`, with an `id`; the service answers with
+`POST /v1/requests/<id>/reply` `{ "value": ... }` (or `{ "error": ... }`).
+
+**Placement.** A stream opened with `?place=arena` (or `?place=*login` for
+players logging in) decides where those players go. For each send, the hub
+sends `place` with the players and an `id`, and the service answers
+`POST /v1/placements/<id>` with one of:
+
+- `{ "server": "arena-3" }`: they go there.
+- `{ "hold": "Finding you a match…" }`: they wait where they are, seeing the
+  status on their action bar (or the send's `on_wait` hears it), until the
+  service answers again or the send's `wait` runs out. A player logging in
+  waits on the loading screen, 30 seconds at most.
+- `{ "fail": "No matches tonight" }`: the send fails with that; a login is
+  turned away with it.
+
+With no answer within `placement-timeout-millis` (2 seconds), the group's own
+balancing places them, so the network keeps working without the service. One
+stream places a group at a time; another opened for it takes over when the
+first goes.
 
 ## Limits
 
