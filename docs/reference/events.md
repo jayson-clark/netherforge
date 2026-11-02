@@ -205,6 +205,7 @@ What `nf.on` listens for.
 | --- | --- | --- |
 | `network_connect` | [NetworkConnectEvent](types.md#networkconnectevent) | This server connected to its network's hub: at start-up, and again after the connection dropped and came back. `nf.network.servers()` and `nf.network.players()` are the network as it is now. What was published while it was away didn't reach it, so this is where to ask again for what it should know. |
 | `network_disconnect` | [NetworkDisconnectEvent](types.md#networkdisconnectevent) | This server lost its connection to the network's hub: the proxy restarted, or the network between them broke. It dials again by itself, and `network_connect` says when it's back; meanwhile `publish`, `set` and the rest return `false` or fail, and requests waiting for an answer fail. |
+| `network_state` | [NetworkStateEvent](types.md#networkstateevent) | This server went from one state of its life to the next (`nf.network.state()`): `ready` once its project has started and nothing holds it back (`nf.network.hold_ready`), `draining` when it's asked to take no new players (`/nf drain`, the hub's admin API, `set_draining`), `stopping` as `/nf shutdown` sends its players elsewhere. The place to stop a match from starting, or to tell players the server is going down. |
 | `network_server_connect` | [NetworkServerEvent](types.md#networkserverevent) | Another server of the network connected to the hub (it started, or came back after losing its connection): from now on it hears what's published and answers requests. |
 | `network_server_disconnect` | [NetworkServerEvent](types.md#networkserverevent) | Another server of the network lost its connection to the hub (it stopped, or the network between them broke). Requests to it fail until it's back. |
 | `network_player_join` | [NetworkPlayerEvent](types.md#networkplayerevent) | A player joined the network, on any server of it, this one included (where `player_join` is heard too). |
@@ -380,6 +381,16 @@ end)
 ```lua
 nf.on("network_connect", function(event)
   log("in the network as " .. event.server .. " with " .. #nf.network.players() .. " players online")
+end)
+```
+
+#### Example: nf network_state
+
+```lua
+nf.on("network_state", function(event)
+  if event.state == "draining" then
+    nf.server.broadcast("<yellow>This server is closing after this round.")
+  end
 end)
 ```
 

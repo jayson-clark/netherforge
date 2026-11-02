@@ -32,6 +32,8 @@ data class NetworkConfig(
      * null when it's one of the proxy's own (`velocity.toml`). With [Registration.host] null, the address the hub sees.
      */
     val register: Registration? = null,
+    /** How long this server may be empty before the hub hears it's idle (its webhook, `server_idle`); 0: never. */
+    val idleAfterSeconds: Int = 0,
     /** What each package may send a minute: messages, requests, map writes and players sent. */
     val messagesPerMinute: Int = 1200,
     /** How long a request waits for its answer, here (the hub has its own, longer, limit). */

@@ -9,6 +9,7 @@ import dev.netherforge.network.HubLink
 import dev.netherforge.network.HubListener
 import dev.netherforge.network.HubLog
 import dev.netherforge.network.HubProxy
+import dev.netherforge.network.Lifecycle
 import dev.netherforge.network.LocalLink
 import dev.netherforge.network.NetworkLimits
 import dev.netherforge.network.PlayerState
@@ -103,6 +104,72 @@ class NetworkLink(
     var accepting = true
         private set
 
+    /**
+     * Where this server is in its life: starting until its project has run a tick with nothing holding it back
+     * ([ready]), then ready, then draining or stopping. Read by the link's own thread for the hello.
+     */
+    @Volatile
+    var state: Lifecycle = if (alone == TEST_NETWORK) Lifecycle.READY else Lifecycle.STARTING
+        private set
+
+    /** Whether it has been empty longer than `network.idle-after-seconds`, and how long it took to be ready. */
+    var idle = false
+        private set
+    var startupMillis: Long? = null
+        private set
+
+    /** `/nf shutdown` under way: whether it waits for the server to empty, until [deadline] (a tick), and when it sent its players away. */
+    class Shutdown(val afterEmpty: Boolean, val deadline: Long) {
+        var stoppingSince: Long? = null
+    }
+
+    var shutdown: Shutdown? = null
+
+    /** Ready, [startupMillis] after the server's process started; only once. */
+    fun ready(startupMillis: Long) {
+        if (state != Lifecycle.STARTING) return
+        state = Lifecycle.READY
+        this.startupMillis = startupMillis
+        status()
+    }
+
+    /** Draining ([draining]) or ready again; a server shutting down stays as it is. */
+    fun setDraining(draining: Boolean) {
+        if (shutdown != null) return
+        state = when {
+            draining && (state == Lifecycle.READY || state == Lifecycle.STARTING) -> Lifecycle.DRAINING
+            !draining && state == Lifecycle.DRAINING -> Lifecycle.READY
+            else -> return
+        }
+        status()
+    }
+
+    /** Begins `/nf shutdown`: draining now, then stopping. */
+    fun beginShutdown(plan: Shutdown) {
+        shutdown = plan
+        if (state != Lifecycle.STOPPING) state = Lifecycle.DRAINING
+        status()
+    }
+
+    /** Stopping: the hub sends every player here to the group's fallback. */
+    fun stopping(tick: Long) {
+        state = Lifecycle.STOPPING
+        shutdown?.stoppingSince = tick
+        status()
+        send(ServerFrame.Evacuate)
+    }
+
+    fun setIdle(idle: Boolean) {
+        if (this.idle == idle) return
+        this.idle = idle
+        status()
+    }
+
+    /** Says to the hub what this server is now. */
+    private fun status() {
+        link?.send(ServerFrame.Status(accepting, state, idle, startupMillis))
+    }
+
     /** This server's group: `network.group`, or its own name (a group of one). */
     val group: String? get() = (if (mode == Mode.REMOTE) config.group else null) ?: name
 
@@ -119,7 +186,7 @@ class NetworkLink(
     fun setAccepting(accepting: Boolean) {
         if (this.accepting == accepting) return
         this.accepting = accepting
-        send(ServerFrame.Status(accepting))
+        status()
     }
     var maxValueBytes = NetworkLimits.DEFAULT_MAX_VALUE_BYTES
         private set
@@ -186,7 +253,8 @@ class NetworkLink(
                     credential = config.credential,
                     group = config.group,
                     capacity = config.capacity,
-                    register = config.register
+                    register = config.register,
+                    state = { state }
                 ).also { it.start() }
             }
             Mode.LOCAL -> {
@@ -195,7 +263,7 @@ class NetworkLink(
                 proxy.hub = hub
                 this.proxy = proxy
                 this.hub = hub
-                link = LocalLink(hub, alone, secret, listener).also { it.start() }
+                link = LocalLink(hub, alone, secret, listener, state = { state }).also { it.start() }
             }
         }
     }
@@ -282,7 +350,8 @@ class NetworkLink(
         for (player in welcome.players) players[player.id] = player
         servers.clear()
         for (server in welcome.servers) servers[server.name] = server
-        if (!accepting) link?.send(ServerFrame.Status(false))
+        // The hello said the state; the rest of what it is, again.
+        status()
     }
 
     private fun apply(frame: HubFrame, tick: Long) {
@@ -428,7 +497,10 @@ class NetworkLink(
         override fun warn(message: String) = Unit
     }
 
-    private companion object {
-        const val FAILURE_EVERY_NANOS = 5 * 60 * 1_000_000_000L
+    companion object {
+        /** A script test run's network: its server is ready from the start, since a test runs before any tick. */
+        const val TEST_NETWORK = "test"
+
+        private const val FAILURE_EVERY_NANOS = 5 * 60 * 1_000_000_000L
     }
 }

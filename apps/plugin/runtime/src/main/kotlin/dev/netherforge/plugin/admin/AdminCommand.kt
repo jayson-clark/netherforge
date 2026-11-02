@@ -31,7 +31,7 @@ import kotlin.math.sqrt
 internal class AdminCommand(private val runtime: NetherForgeRuntime) : CommandHandler {
     private val subcommands = listOf(
         "spawn", "list", "find", "kill", "tp", "reload", "modules", "scripts", "profile", "pack", "data", "settings", "requires",
-        "schedules", "network"
+        "schedules", "network", "drain", "shutdown"
     )
     private val data = DataCommand(runtime)
 
@@ -55,6 +55,8 @@ internal class AdminCommand(private val runtime: NetherForgeRuntime) : CommandHa
                 "requires" -> requires(sender)
                 "schedules" -> schedules(sender)
                 "network" -> network(sender)
+                "drain" -> drain(sender, args.drop(1))
+                "shutdown" -> shutdown(sender, args.drop(1))
                 else -> sender.reply("<gray>/nf ${subcommands.joinToString("|")}")
             }
         } catch (e: IllegalArgumentException) {
@@ -182,6 +184,8 @@ internal class AdminCommand(private val runtime: NetherForgeRuntime) : CommandHa
                 sender.reply("<gold>In the network as <yellow>${link.name}<gold> through its hub at ${config.host}:${config.port}: $state")
             }
         }
+        val startup = link.startupMillis?.let { ", ready ${"%.1f".format(it / 1000.0)}s after start" }.orEmpty()
+        sender.reply("<gray>It's <yellow>${link.state.word}<gray>$startup${if (link.idle) ", idle" else ""}.")
         if (link.mode == NetworkLink.Mode.REMOTE && link.connected && !link.grants.trusted) {
             sender.reply("<gray>Its credential is <yellow>${runtime.config.network.credential}<gray>: ${link.grants.describe()}.")
         }
@@ -195,6 +199,45 @@ internal class AdminCommand(private val runtime: NetherForgeRuntime) : CommandHa
         }
         val session = runtime.session.network
         sender.reply("<gray>Listening to ${session.listening().first.size} channels and ${session.listening().second.size} maps.")
+    }
+
+    /** `/nf drain [off]`: this server takes no new players (or, with `off`, takes them again). */
+    private fun drain(sender: CommandSender, args: List<String>) {
+        val on = args.firstOrNull()?.lowercase(Locale.ROOT) != "off"
+        val link = runtime.network
+        if (link.shutdown != null) return sender.reply("<red>The server is shutting down.")
+        link.setDraining(on)
+        runtime.log.info("${sender.name} ${if (on) "drained the server" else "ended the server's draining"} (/nf drain)")
+        sender.reply(
+            if (on) "<gold>Draining: <gray>no new players are sent here. /nf drain off undoes it." else "<green>Taking players again."
+        )
+    }
+
+    /**
+     * `/nf shutdown [--after-empty] [--timeout <seconds>]`: drains, waits for the server to empty when asked (up to the
+     * timeout, 60 seconds by default), sends the players left to the group's fallback, and stops.
+     */
+    private fun shutdown(sender: CommandSender, args: List<String>) {
+        val afterEmpty = "--after-empty" in args
+        val at = args.indexOf("--timeout")
+        val timeout = if (at < 0) {
+            DEFAULT_SHUTDOWN_SECONDS
+        } else {
+            args.getOrNull(at + 1)?.removeSuffix("s")?.toLongOrNull()?.takeIf { it > 0 }
+                ?: throw IllegalArgumentException("--timeout takes a number of seconds: /nf shutdown --timeout 60")
+        }
+        runtime.log.info(
+            "${sender.name} is shutting the server down (/nf shutdown${if (afterEmpty) " --after-empty" else ""}, $timeout seconds)"
+        )
+        runtime.session.network.shutdown(afterEmpty, timeout)
+        sender.reply(
+            "<gold>Shutting down: <gray>" +
+                if (afterEmpty) {
+                    "draining, then stopping once it's empty (or in $timeout seconds)."
+                } else {
+                    "sending everyone to the fallback, then stopping."
+                }
+        )
     }
 
     /**
@@ -450,6 +493,8 @@ internal class AdminCommand(private val runtime: NetherForgeRuntime) : CommandHa
                     "scripts" -> listOf("all")
                     "profile" -> listOf("10", "30", "60")
                     "settings" -> listOf("list", "set", "reset", "reload")
+                    "drain" -> listOf("off")
+                    "shutdown" -> listOf("--after-empty", "--timeout")
                     else -> emptyList()
                 }
                 3 -> when {
@@ -487,6 +532,9 @@ internal class AdminCommand(private val runtime: NetherForgeRuntime) : CommandHa
     companion object {
         /** `/nf`'s one argument: everything after it, which it reads and completes itself. */
         const val ARGUMENTS = "arguments"
+
+        /** How long `/nf shutdown --after-empty` waits for the server to empty, unless `--timeout` says. */
+        private const val DEFAULT_SHUTDOWN_SECONDS = 60L
 
         private val NEXT_RUN = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm zzz", Locale.ENGLISH)
         private const val MAX_PROBLEMS = 5

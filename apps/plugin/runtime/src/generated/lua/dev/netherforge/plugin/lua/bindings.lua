@@ -67,6 +67,7 @@ local OAuthFlow_is = accepts.OAuthFlow
 local WasmInstance_is = accepts.WasmInstance
 local WasmProcess_is = accepts.WasmProcess
 local NetworkChannel_is = accepts.NetworkChannel
+local NetworkHold_is = accepts.NetworkHold
 local NetworkMap_is = accepts.NetworkMap
 local Cutscene_is = accepts.Cutscene
 local Screen_is = accepts.Screen
@@ -6897,6 +6898,38 @@ do
   end
 end
 
+-- NetworkHold ---------------------------------------------------------------
+
+do
+  local NetworkHold = class("NetworkHold")
+
+  function new.NetworkHold(id)
+    return prim["handles.new"]("NetworkHold", id)
+  end
+
+  ---@param handle table
+  ---@return integer id
+  function keys.NetworkHold(handle)
+    return prim["handles.key"](handle)
+  end
+
+  function NetworkHold.release(self)
+    local self_key = ids[self]
+    if self_key == nil or not NetworkHold_is[class_of(self)] then
+      self_key = self_of(self, "NetworkHold")
+    end
+    prim["NetworkHold.release"](self_key)
+  end
+
+  function NetworkHold.is_released(self)
+    local self_key = ids[self]
+    if self_key == nil or not NetworkHold_is[class_of(self)] then
+      self_key = self_of(self, "NetworkHold")
+    end
+    return prim["NetworkHold.is_released"](self_key)
+  end
+end
+
 -- NetworkMap ----------------------------------------------------------------
 
 do
@@ -8928,6 +8961,22 @@ namespaces["nf.network"] = function(scope, ns)
 
   function ns.set_accepting(accepting)
     prim["nf.network.set_accepting"](scope, accepting)
+  end
+
+  function ns.state()
+    return prim["nf.network.state"](scope)
+  end
+
+  function ns.hold_ready()
+    return prim["nf.network.hold_ready"](scope)
+  end
+
+  function ns.set_draining(draining)
+    prim["nf.network.set_draining"](scope, draining)
+  end
+
+  function ns.is_draining()
+    return prim["nf.network.is_draining"](scope)
   end
 
   function ns.is_accepting()

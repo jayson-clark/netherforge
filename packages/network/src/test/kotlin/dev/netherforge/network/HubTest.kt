@@ -83,14 +83,18 @@ class HubTest {
         val welcome = assertNotNull(lobby.welcome)
         assertEquals("lobby", welcome.server)
         assertEquals(
-            listOf(ServerState("lobby", true, players = 1), ServerState("survival", false), ServerState("creative", false)),
+            listOf(
+                ServerState("lobby", true, players = 1, state = Lifecycle.READY),
+                ServerState("survival", false),
+                ServerState("creative", false)
+            ),
             welcome.servers
         )
         assertEquals(listOf(PlayerState("u-1", "Ann", "lobby")), welcome.players)
 
         val (_, survival) = join("Survival")
         assertEquals("survival", survival.welcome?.server, "the proxy's spelling")
-        assertEquals<List<HubFrame>>(listOf(HubFrame.Server(ServerState("survival", true))), lobby.frames)
+        assertEquals<List<HubFrame>>(listOf(HubFrame.Server(ServerState("survival", true, state = Lifecycle.READY))), lobby.frames)
     }
 
     @Test

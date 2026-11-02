@@ -81,4 +81,15 @@ class HubSettingsTest {
         file.writeText("group.arena.balance=random\n")
         assertTrue(assertFailsWith<IllegalArgumentException> { HubSettings.read(file) {} }.message!!.contains("isn't least or fill"))
     }
+
+    @Test
+    fun `a group's fallback and queue, and the webhook, are read`() {
+        Files.createDirectories(file.parent)
+        file.writeText("group.arena.fallback=hub\ngroup.arena.max-waiting=20\nwebhook.url=https://ops.example.com/nf\nwebhook.secret=s\n")
+        val settings = HubSettings.read(file) {}
+        assertEquals(GroupSettings(fallback = "hub", maxWaiting = 20), settings.groups["arena"])
+        assertEquals("https://ops.example.com/nf", settings.webhookUrl.toString())
+        file.writeText("webhook.url=ftp://x\n")
+        assertTrue(assertFailsWith<IllegalArgumentException> { HubSettings.read(file) {} }.message!!.contains("isn't http(s)"))
+    }
 }

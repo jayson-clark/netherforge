@@ -8,9 +8,12 @@ A table of functions: call them with a dot.
 
 | | Functions |
 | --- | --- |
-| [Functions](#functions) | [`server_name`](#server_name) [`server_role`](#server_role) [`group`](#group) [`set_accepting`](#set_accepting) [`is_accepting`](#is_accepting) [`is_connected`](#is_connected) [`servers`](#servers) [`groups`](#groups) [`players`](#players) [`find_player`](#find_player) [`channel`](#channel) [`map`](#map) [`send_player`](#send_player) [`send_players`](#send_players) |
+| [This server](#this-server) | [`server_name`](#server_name) [`server_role`](#server_role) [`group`](#group) [`is_connected`](#is_connected) [`state`](#state) [`hold_ready`](#hold_ready) [`set_draining`](#set_draining) [`is_draining`](#is_draining) [`set_accepting`](#set_accepting) [`is_accepting`](#is_accepting) |
+| [The network](#the-network) | [`servers`](#servers) [`groups`](#groups) [`players`](#players) [`find_player`](#find_player) |
+| [Channels and maps](#channels-and-maps) | [`channel`](#channel) [`map`](#map) |
+| [Sending players](#sending-players) | [`send_player`](#send_player) [`send_players`](#send_players) |
 
-## Functions {#functions}
+## This server {#this-server}
 
 ### `nf.network.server_name()` {#server_name}
 
@@ -43,6 +46,55 @@ This server's group: the game or role it's one copy of (`network.group` in `conf
 
 **Returns** `string?`
 
+### `nf.network.is_connected()` {#is_connected}
+
+Whether this server is connected to its network's hub now. `network_connect` and `network_disconnect` say when that changes.
+
+*Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
+
+**Returns** `boolean`
+
+### `nf.network.state()` {#state}
+
+Where this server is in its life: `starting` until its project has loaded and its modules have started (and nothing holds it back: `hold_ready`), then `ready`; `draining` when it's asked to take no new players (`/nf drain`, the hub's admin API, `set_draining`), and `stopping` as `/nf shutdown` sends its players elsewhere. Only a `ready` server is sent players by its group; a `draining` or `stopping` one gets none, even by name. `network_state` says when it changes.
+
+*Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
+
+**Returns** `"starting"\|"ready"\|"draining"\|"stopping"`
+
+### `nf.network.hold_ready()` {#hold_ready}
+
+Keeps this server `starting` (so its group sends it no players) until the hold is released: for a world to be made, a map loaded, a match set up. The server is `ready` once every hold is released, the first tick after. Holds go with the script that took them. Once a server is ready it stays so: a hold taken later does nothing.
+
+*Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
+
+**Returns** [`NetworkHold`](networkhold.md)
+
+```lua
+local hold = nf.network.hold_ready()
+nf.worlds.copy("arena", "match", function(world)
+  hold:release()
+end)
+```
+
+### `nf.network.set_draining(draining)` {#set_draining}
+
+Drains this server (`true`): it takes no new players, even sent by name, while it finishes what it's doing; or (`false`) makes it `ready` again. As `/nf drain` does. `/nf shutdown` drains too, and can't be undone.
+
+*Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `draining` | `boolean` | Whether to drain. |
+
+### `nf.network.is_draining()` {#is_draining}
+
+Whether this server is draining or stopping: taking no new players.
+
+*Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
+
+**Returns** `boolean`
+
 ### `nf.network.set_accepting(accepting)` {#set_accepting}
 
 Says whether this server takes players now: one that doesn't (a match is running) is passed over when players are sent to its group, though they can still be sent to it by name. It's said to the hub at once, and again whenever this server reconnects. Every server takes players until it says otherwise.
@@ -67,13 +119,7 @@ Whether this server takes players now, as `set_accepting` last said.
 
 **Returns** `boolean`
 
-### `nf.network.is_connected()` {#is_connected}
-
-Whether this server is connected to its network's hub now. `network_connect` and `network_disconnect` say when that changes.
-
-*Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
-
-**Returns** `boolean`
+## The network {#the-network}
 
 ### `nf.network.servers()` {#servers}
 
@@ -138,6 +184,8 @@ if friend then
 end
 ```
 
+## Channels and maps {#channels-and-maps}
+
 ### `nf.network.channel(name)` {#channel}
 
 A channel: what's `publish`ed on it reaches every server whose scripts listen to its `message` event (this one included), and a `request` on it reaches one server's `request` handlers. Getting it subscribes nothing: a server hears a channel's messages while any of its scripts has a handler on it.
@@ -171,6 +219,8 @@ A shared map: keys (strings) and values the hub keeps for the whole network, whi
 | `name` | `string` | Its name: lowercase letters, digits and `_ . - /`, at most 64 characters. It's the calling package's own (`shop` names `"sales"` `shop:sales`), so packages can't collide; `namespace:name` names one of a package it depends on. |
 
 **Returns** [`NetworkMap`](networkmap.md)
+
+## Sending players {#sending-players}
 
 ### `nf.network.send_player(player, target, data?, callback?)` {#send_player}
 

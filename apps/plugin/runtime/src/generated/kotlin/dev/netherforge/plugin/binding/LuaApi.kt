@@ -88,6 +88,7 @@ interface LuaApi {
     val wasmInstance: WasmInstanceApi
     val wasmProcess: WasmProcessApi
     val networkChannel: NetworkChannelApi
+    val networkHold: NetworkHoldApi
     val networkMap: NetworkMapApi
     val cutscene: CutsceneApi
     val screen: ScreenApi
@@ -1298,6 +1299,33 @@ interface NfNetworkApi {
      * otherwise.
      */
     fun setAccepting(caller: Caller, accepting: Boolean)
+
+    /**
+     * Where this server is in its life: `starting` until its project has loaded and its modules have
+     * started (and nothing holds it back: `hold_ready`), then `ready`; `draining` when it's asked to take
+     * no new players (`/nf drain`, the hub's admin API, `set_draining`), and `stopping` as `/nf shutdown`
+     * sends its players elsewhere. Only a `ready` server is sent players by its group; a `draining` or
+     * `stopping` one gets none, even by name. `network_state` says when it changes.
+     */
+    fun state(caller: Caller): String
+
+    /**
+     * Keeps this server `starting` (so its group sends it no players) until the hold is released: for a
+     * world to be made, a map loaded, a match set up. The server is `ready` once every hold is released,
+     * the first tick after. Holds go with the script that took them. Once a server is ready it stays so: a
+     * hold taken later does nothing.
+     */
+    fun holdReady(caller: Caller): LuaHandle.NetworkHold
+
+    /**
+     * Drains this server (`true`): it takes no new players, even sent by name, while it finishes what it's
+     * doing; or (`false`) makes it `ready` again. As `/nf drain` does. `/nf shutdown` drains too, and
+     * can't be undone.
+     */
+    fun setDraining(caller: Caller, draining: Boolean)
+
+    /** Whether this server is draining or stopping: taking no new players. */
+    fun isDraining(caller: Caller): Boolean
 
     /** Whether this server takes players now, as `set_accepting` last said. */
     fun isAccepting(caller: Caller): Boolean
@@ -5518,6 +5546,21 @@ interface NetworkChannelApi {
      * outside a task, it's an error. When it fails, `reply` is `nil` and `err` says why.
      */
     fun request(self: LuaHandle.NetworkChannel, target: StringOrNetworkTarget, data: LuaValue): CompletionStage<Any?>
+}
+
+/**
+ * A hold on this server being ready, from `nf.network.hold_ready`: while any is held, the server stays
+ * `starting`. It goes with the script that took it.
+ */
+interface NetworkHoldApi {
+    /**
+     * Lets go of the hold. The server is ready the tick after its last hold goes. Releasing it again does
+     * nothing.
+     */
+    fun release(self: LuaHandle.NetworkHold)
+
+    /** Whether it has been let go of. */
+    fun isReleased(self: LuaHandle.NetworkHold): Boolean
 }
 
 /**

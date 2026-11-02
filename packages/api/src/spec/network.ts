@@ -77,6 +77,36 @@ export const nfNetwork: LuaClass = {
       example: 'nf.on("match_started", function()\n  nf.network.set_accepting(false)\nend)',
     },
     {
+      name: 'state',
+      doc: "Where this server is in its life: `starting` until its project has loaded and its modules have started (and nothing holds it back: `hold_ready`), then `ready`; `draining` when it's asked to take no new players (`/nf drain`, the hub's admin API, `set_draining`), and `stopping` as `/nf shutdown` sends its players elsewhere. Only a `ready` server is sent players by its group; a `draining` or `stopping` one gets none, even by name. `network_state` says when it changes.",
+      requires: 'network',
+      params: [],
+      returns: [{ type: '"starting"|"ready"|"draining"|"stopping"' }],
+    },
+    {
+      name: 'hold_ready',
+      doc: 'Keeps this server `starting` (so its group sends it no players) until the hold is released: for a world to be made, a map loaded, a match set up. The server is `ready` once every hold is released, the first tick after. Holds go with the script that took them. Once a server is ready it stays so: a hold taken later does nothing.',
+      requires: 'network',
+      params: [],
+      returns: [{ type: 'NetworkHold' }],
+      example:
+        'local hold = nf.network.hold_ready()\nnf.worlds.copy("arena", "match", function(world)\n  hold:release()\nend)',
+    },
+    {
+      name: 'set_draining',
+      doc: "Drains this server (`true`): it takes no new players, even sent by name, while it finishes what it's doing; or (`false`) makes it `ready` again. As `/nf drain` does. `/nf shutdown` drains too, and can't be undone.",
+      requires: 'network',
+      params: [{ name: 'draining', type: 'boolean', doc: 'Whether to drain.' }],
+      returns: [],
+    },
+    {
+      name: 'is_draining',
+      doc: 'Whether this server is draining or stopping: taking no new players.',
+      requires: 'network',
+      params: [],
+      returns: [{ type: 'boolean' }],
+    },
+    {
       name: 'is_accepting',
       doc: 'Whether this server takes players now, as `set_accepting` last said.',
       requires: 'network',
@@ -263,6 +293,29 @@ export const networkChannelClass: LuaClass = {
   ],
 }
 
+/** A hold on this server's being ready, from `nf.network.hold_ready`. */
+export const networkHoldClass: LuaClass = {
+  name: 'NetworkHold',
+  doc: 'A hold on this server being ready, from `nf.network.hold_ready`: while any is held, the server stays `starting`. It goes with the script that took it.',
+  methods: true,
+  handle: { key: [{ name: 'id', type: 'integer' }] },
+  fields: [],
+  functions: [
+    {
+      name: 'release',
+      doc: 'Lets go of the hold. The server is ready the tick after its last hold goes. Releasing it again does nothing.',
+      params: [],
+      returns: [],
+    },
+    {
+      name: 'is_released',
+      doc: 'Whether it has been let go of.',
+      params: [],
+      returns: [{ type: 'boolean' }],
+    },
+  ],
+}
+
 const mapEvents: EventSpec[] = [
   {
     name: 'change',
@@ -420,6 +473,16 @@ export const networkShapes: LuaClass[] = [
       type: 'boolean',
       doc: 'Whether it takes players now (`set_accepting` there).',
     },
+    {
+      name: 'state',
+      type: '"starting"|"ready"|"draining"|"stopping"|nil',
+      doc: "Where it is in its life (`nf.network.state()` there); `nil` when it isn't connected.",
+    },
+    {
+      name: 'idle',
+      type: 'boolean',
+      doc: 'Whether it has been empty longer than its `network.idle-after-seconds`.',
+    },
   ]),
   shape('NetworkGroup', 'A group of the network and its instances, from `nf.network.groups`.', [
     { name: 'name', type: 'string', doc: 'Its name.' },
@@ -463,6 +526,16 @@ export const networkShapes: LuaClass[] = [
         doc: "How the hub picks the group's instance for this send: `least` (the fewest players) or `fill` (the fullest with room); the group's own when left out (`group.<name>.balance` in the hub's `hub.properties`, `least` unless its owner says).",
       },
       { name: 'data', type: 'any', doc: "What arrives with them, when `data` isn't given." },
+      {
+        name: 'wait',
+        type: 'number?',
+        doc: "Seconds it may wait, when there's no instance with room yet (none is ready, all are full, the server is starting): the hub holds it, first come first served, tells whatever runs the servers that the group is wanted (its webhook), and sends them as soon as one has room. They stay where they are meanwhile. At most 600; it fails after that, saying why it waited.",
+      },
+      {
+        name: 'on_wait',
+        type: 'fun(position: integer)?',
+        doc: "Called while it waits, each time its place in the queue changes (1 is next). Without it, each player waiting who's on this server sees their place on their action bar.",
+      },
     ],
   ),
   shape('NetworkRole', 'What this server may do in the network, from `nf.network.server_role`.', [

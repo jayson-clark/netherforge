@@ -67,7 +67,9 @@ class HubClient(
     /** Where the proxy reaches this server, when it adds itself to the proxy's servers. */
     private val register: Registration? = null,
     /** This process's id: dialling again, it keeps its name. */
-    private val instance: String = Auth.newNonce()
+    private val instance: String = Auth.newNonce(),
+    /** Where this server is in its life when it says hello (it says changes with [ServerFrame.Status]). */
+    private val state: () -> Lifecycle = { Lifecycle.READY }
 ) : HubLink {
     private val running = AtomicBoolean(false)
     private var thread: Thread? = null
@@ -154,7 +156,9 @@ class HubClient(
         val nonce = Auth.newNonce()
         val proof = Auth.proof(secret, challenge.nonce, server, nonce, credential)
         out.write(
-            Protocol.encode(ServerFrame.Hello(Protocol.VERSION, server, proof, nonce, credential, group, capacity, register, instance))
+            Protocol.encode(
+                ServerFrame.Hello(Protocol.VERSION, server, proof, nonce, credential, group, capacity, register, instance, state())
+            )
         )
         out.write("\n")
         out.flush()
@@ -258,7 +262,8 @@ class LocalLink(
     private val group: String? = null,
     private val capacity: Int? = null,
     private val register: Registration? = null,
-    private val instance: String = Auth.newNonce()
+    private val instance: String = Auth.newNonce(),
+    private val state: () -> Lifecycle = { Lifecycle.READY }
 ) : HubLink {
     private var session: Hub.Session? = null
     private var nonce: String? = null
@@ -298,7 +303,7 @@ class LocalLink(
         this.session = session
         val own = Auth.newNonce()
         val proof = Auth.proof(secret, nonce!!, server, own, credential)
-        session.receive(ServerFrame.Hello(Protocol.VERSION, server, proof, own, credential, group, capacity, register, instance))
+        session.receive(ServerFrame.Hello(Protocol.VERSION, server, proof, own, credential, group, capacity, register, instance, state()))
     }
 
     override fun stop() = peer.close("the server is stopping")

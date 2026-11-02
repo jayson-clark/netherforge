@@ -144,7 +144,7 @@ export const CATEGORIES: Category[] = [
   {
     title: 'Networks',
     doc: 'The other servers behind the same proxy: messages, requests, shared maps, who is where, sending players.',
-    pages: ['nf.network', 'NetworkChannel', 'NetworkMap'],
+    pages: ['nf.network', 'NetworkChannel', 'NetworkMap', 'NetworkHold'],
   },
   {
     title: 'Testing',
@@ -172,6 +172,15 @@ const group = (title: string, names: string): Group => ({ title, names: names.sp
  * `emit` (which go with the class's events) is in exactly one.
  */
 export const FUNCTION_GROUPS: Record<string, Group[]> = {
+  'nf.network': [
+    group(
+      'This server',
+      'server_name server_role group is_connected state hold_ready set_draining is_draining set_accepting is_accepting',
+    ),
+    group('The network', 'servers groups players find_player'),
+    group('Channels and maps', 'channel map'),
+    group('Sending players', 'send_player send_players'),
+  ],
   'nf.test': [
     group('Tests and time', 'case advance'),
     group('Players and their input', 'player raise click release input shown'),
@@ -476,7 +485,7 @@ export const EVENT_GROUPS: Record<string, Group[]> = {
     ),
     group(
       'The network',
-      'network_connect network_disconnect network_server_connect network_server_disconnect network_player_join network_player_switch network_player_quit',
+      'network_connect network_disconnect network_state network_server_connect network_server_disconnect network_player_join network_player_switch network_player_quit',
     ),
   ],
   Player: [

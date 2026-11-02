@@ -7388,7 +7388,7 @@ data class WasmEndEvent(val process: LuaHandle.WasmProcess, val reason: String, 
 }
 
 /** A server of the network, from `nf.network.servers`. */
-data class NetworkServer(val name: String, val connected: Boolean, val players: Long, val group: String, val capacity: Long? = null, val accepting: Boolean) : LuaShape {
+data class NetworkServer(val name: String, val connected: Boolean, val players: Long, val group: String, val capacity: Long? = null, val accepting: Boolean, val state: String? = null, val idle: Boolean) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)
 
     object Codec : ShapeCodec<NetworkServer>("NetworkServer") {
@@ -7398,6 +7398,8 @@ data class NetworkServer(val name: String, val connected: Boolean, val players: 
         val groupCodec = LuaCodecs.STRING
         val capacityCodec = LuaOptional(LuaCodecs.INTEGER)
         val acceptingCodec = LuaCodecs.BOOLEAN
+        val stateCodec = LuaOptional(LuaChoice(listOf("starting", "ready", "draining", "stopping")))
+        val idleCodec = LuaCodecs.BOOLEAN
 
         override val pinned = false
 
@@ -7407,7 +7409,9 @@ data class NetworkServer(val name: String, val connected: Boolean, val players: 
             "players" to playersCodec,
             "group" to groupCodec,
             "capacity" to capacityCodec,
-            "accepting" to acceptingCodec
+            "accepting" to acceptingCodec,
+            "state" to stateCodec,
+            "idle" to idleCodec
         )
 
         override fun read(fields: ShapeReader) = NetworkServer(
@@ -7416,7 +7420,9 @@ data class NetworkServer(val name: String, val connected: Boolean, val players: 
             players = fields.field("players", playersCodec),
             group = fields.field("group", groupCodec),
             capacity = fields.field("capacity", capacityCodec),
-            accepting = fields.field("accepting", acceptingCodec)
+            accepting = fields.field("accepting", acceptingCodec),
+            state = fields.field("state", stateCodec),
+            idle = fields.field("idle", idleCodec)
         )
 
         override fun write(fields: ShapeWriter, value: NetworkServer) {
@@ -7426,6 +7432,8 @@ data class NetworkServer(val name: String, val connected: Boolean, val players: 
             fields.field("group", value.group, groupCodec)
             fields.field("capacity", value.capacity, capacityCodec)
             fields.field("accepting", value.accepting, acceptingCodec)
+            fields.field("state", value.state, stateCodec)
+            fields.field("idle", value.idle, idleCodec)
         }
     }
 }
@@ -7526,7 +7534,7 @@ data class NetworkTarget(val server: String? = null, val group: String? = null) 
  * Where `send_player` and `send_players` send players. A key that isn't one of these is an error; it
  * names a server or a group.
  */
-data class NetworkSendOptions(val server: String? = null, val group: String? = null, val balance: String? = null, val data: LuaValue? = null) : LuaShape {
+data class NetworkSendOptions(val server: String? = null, val group: String? = null, val balance: String? = null, val data: LuaValue? = null, val wait: Double? = null, val onWait: LuaFunction? = null) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)
 
     object Codec : ShapeCodec<NetworkSendOptions>("NetworkSendOptions") {
@@ -7534,6 +7542,8 @@ data class NetworkSendOptions(val server: String? = null, val group: String? = n
         val groupCodec = LuaOptional(LuaCodecs.STRING)
         val balanceCodec = LuaOptional(LuaChoice(listOf("least", "fill")))
         val dataCodec = LuaOptional(LuaCodecs.VALUE)
+        val waitCodec = LuaOptional(LuaCodecs.NUMBER)
+        val onWaitCodec = LuaOptional(LuaCodecs.FUNCTION)
 
         override val pinned = true
 
@@ -7541,14 +7551,18 @@ data class NetworkSendOptions(val server: String? = null, val group: String? = n
             "server" to serverCodec,
             "group" to groupCodec,
             "balance" to balanceCodec,
-            "data" to dataCodec
+            "data" to dataCodec,
+            "wait" to waitCodec,
+            "on_wait" to onWaitCodec
         )
 
         override fun read(fields: ShapeReader) = NetworkSendOptions(
             server = fields.field("server", serverCodec),
             group = fields.field("group", groupCodec),
             balance = fields.field("balance", balanceCodec),
-            data = fields.field("data", dataCodec)
+            data = fields.field("data", dataCodec),
+            wait = fields.field("wait", waitCodec),
+            onWait = fields.field("on_wait", onWaitCodec)
         )
 
         override fun write(fields: ShapeWriter, value: NetworkSendOptions) {
@@ -7556,6 +7570,8 @@ data class NetworkSendOptions(val server: String? = null, val group: String? = n
             fields.field("group", value.group, groupCodec)
             fields.field("balance", value.balance, balanceCodec)
             fields.field("data", value.data, dataCodec)
+            fields.field("wait", value.wait, waitCodec)
+            fields.field("on_wait", value.onWait, onWaitCodec)
         }
     }
 }
@@ -7891,6 +7907,33 @@ data class NetworkDisconnectEvent(val detail: String) : LuaEvent {
 
         override fun write(fields: ShapeWriter, value: NetworkDisconnectEvent) {
             fields.field("detail", value.detail, detailCodec)
+        }
+    }
+}
+
+/** This server went from one state of its life to the next. */
+data class NetworkStateEvent(val state: String, val previous: String) : LuaEvent {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<NetworkStateEvent>("NetworkStateEvent") {
+        val stateCodec = LuaChoice(listOf("starting", "ready", "draining", "stopping"))
+        val previousCodec = LuaChoice(listOf("starting", "ready", "draining", "stopping"))
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "state" to stateCodec,
+            "previous" to previousCodec
+        )
+
+        override fun read(fields: ShapeReader) = NetworkStateEvent(
+            state = fields.field("state", stateCodec),
+            previous = fields.field("previous", previousCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: NetworkStateEvent) {
+            fields.field("state", value.state, stateCodec)
+            fields.field("previous", value.previous, previousCodec)
         }
     }
 }

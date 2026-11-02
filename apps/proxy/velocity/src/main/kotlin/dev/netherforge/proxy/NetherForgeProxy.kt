@@ -20,6 +20,7 @@ import dev.netherforge.network.FileMapStore
 import dev.netherforge.network.Grants
 import dev.netherforge.network.Hub
 import dev.netherforge.network.HubAdmin
+import dev.netherforge.network.HubEvents
 import dev.netherforge.network.HubLog
 import dev.netherforge.network.HubProxy
 import dev.netherforge.network.HubServer
@@ -77,7 +78,8 @@ class NetherForgeProxy @Inject constructor(
             settings.limits,
             FileMapStore(folder.resolve("maps.json")),
             credentials = credentials,
-            groups = settings.groups
+            groups = settings.groups,
+            events = settings.webhookUrl?.let { url -> HubEvents(url, settings.webhookSecret, log)::send } ?: {}
         )
         val server = HubServer(hub, InetSocketAddress(settings.bind, settings.port), log, settings.limits)
         try {

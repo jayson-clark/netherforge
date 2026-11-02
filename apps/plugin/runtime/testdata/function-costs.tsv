@@ -388,6 +388,8 @@ NetworkChannel:on	141
 NetworkChannel:once	148
 NetworkChannel:publish	22
 NetworkChannel:request	46
+NetworkHold:is_released	15
+NetworkHold:release	16
 NetworkMap:add	48
 NetworkMap:all	15
 NetworkMap:delete	17
@@ -881,8 +883,10 @@ nf.network.channel	8
 nf.network.find_player	8
 nf.network.group	6
 nf.network.groups	6
+nf.network.hold_ready	6
 nf.network.is_accepting	6
 nf.network.is_connected	6
+nf.network.is_draining	6
 nf.network.map	8
 nf.network.players	10
 nf.network.send_player	38
@@ -891,6 +895,8 @@ nf.network.server_name	6
 nf.network.server_role	6
 nf.network.servers	6
 nf.network.set_accepting	9
+nf.network.set_draining	9
+nf.network.state	6
 nf.on	215
 nf.once	129
 nf.packs.on_demand	6

@@ -6,6 +6,7 @@ import dev.netherforge.network.Hub
 import dev.netherforge.network.HubLog
 import dev.netherforge.network.HubProxy
 import dev.netherforge.network.HubServer
+import dev.netherforge.network.Lifecycle
 import dev.netherforge.network.NetworkLimits
 import dev.netherforge.network.PlayerState
 import dev.netherforge.network.Registration
@@ -84,7 +85,8 @@ class NetworkTest {
         credential: Credential? = null,
         group: String? = null,
         capacity: Int? = null,
-        register: Registration? = null
+        register: Registration? = null,
+        idleAfterSeconds: Int = 0
     ) = TestServer(
         mapOf(TestServer.MANIFEST to TestServer.manifest(requires = requires), "modules/t/init.lua" to script) + extra,
         network = NetworkConfig(
@@ -95,7 +97,8 @@ class NetworkTest {
             credential = credential?.id,
             group = group,
             capacity = capacity,
-            register = register
+            register = register,
+            idleAfterSeconds = idleAfterSeconds
         )
     ).also { servers += it }
 
@@ -464,6 +467,101 @@ class NetworkTest {
         arena.close()
         servers.remove(arena)
         tickUntil { proxy.added.isEmpty() }
+    }
+
+    @Test
+    fun `a held server starts, then is ready, and a send that waits for it goes once it is`() {
+        val arena = server(
+            "survival",
+            """
+            local hold = nf.network.hold_ready()
+            log("state " .. nf.network.state())
+            nf.on("network_state", function(event) log(event.previous .. " -> " .. event.state) end)
+            nf.commands.register("release", function() hold:release() end)
+            """,
+            group = "arena"
+        )
+        val lobby = server(
+            "lobby",
+            """
+            nf.commands.register("send", function()
+              nf.task(function()
+                local server, err = nf.network.send_player("Ann", {
+                  group = "arena",
+                  wait = 30,
+                  on_wait = function(position) log("waiting #" .. position) end,
+                })
+                log("sent " .. tostring(server or err))
+              end)
+            end)
+            """
+        )
+        connected()
+        val ann = UUID.nameUUIDFromBytes("Ann".toByteArray()).toString()
+        hub.playerMoved(ann, "Ann", "lobby")
+        tickUntil { lobby.runtime.network.players.isNotEmpty() }
+        assertEquals(Lifecycle.STARTING, hub.states().single { it.name == "survival" }.state)
+        proxy.onSend = { id, server ->
+            hub.playerMoved(id, "Ann", server)
+            null
+        }
+        lobby.platform.commands.runConsole("send")
+        tickUntil { "waiting #1" in lobby.logs }
+        arena.platform.commands.runConsole("release")
+        tickUntil { lobby.logs.any { it.startsWith("sent") } }
+        assertEquals("sent survival", lobby.logs.last())
+        assertEquals(listOf("state starting", "starting -> ready"), arena.logs)
+        assertEquals(Lifecycle.READY, hub.states().single { it.name == "survival" }.state)
+        assertTrue(arena.runtime.network.startupMillis != null)
+    }
+
+    @Test
+    fun `an empty server is idle once its time is up, and the hub hears it`() {
+        server("survival", "", idleAfterSeconds = 1)
+        connected()
+        tickUntil { hub.states().single { it.name == "survival" }.idle }
+    }
+
+    @Test
+    fun `a drained server takes no players, and shutting down sends its players away and stops`() {
+        val survival = server("survival", "", group = "arena")
+        val lobby = server(
+            "lobby",
+            """
+            nf.commands.register("send", function()
+              nf.task(function()
+                local server, err = nf.network.send_player("Ann", "survival")
+                log("sent " .. tostring(server or err))
+              end)
+            end)
+            """
+        )
+        connected()
+        tickUntil { hub.states().single { it.name == "survival" }.state == Lifecycle.READY }
+        survival.platform.commands.runAsConsole("nf drain")
+        tickUntil { hub.states().single { it.name == "survival" }.state == Lifecycle.DRAINING }
+        val ann = UUID.nameUUIDFromBytes("Ann".toByteArray())
+        hub.playerMoved(ann.toString(), "Ann", "lobby")
+        tickUntil { lobby.runtime.network.players.isNotEmpty() }
+        lobby.platform.commands.runConsole("send")
+        tickUntil { lobby.logs.any { it.startsWith("sent") } }
+        assertEquals("sent survival is draining: it takes no new players", lobby.logs.last())
+
+        // Ann is on survival when it shuts down: the hub sends her to the fallback (lobby).
+        hub.playerMoved(ann.toString(), "Ann", "survival")
+        val joined = survival.platform.players.add("Ann", uuid = ann)
+        survival.platform.raise.playerJoin(GameEvent.PlayerJoin(joined.ref, true, null))
+        proxy.onSend = { id, server ->
+            hub.playerMoved(id, "Ann", server)
+            null
+        }
+        survival.platform.commands.runAsConsole("nf shutdown")
+        tickUntil { proxy.sends.isNotEmpty() }
+        // The proxy took her: she's gone from survival.
+        survival.platform.players.quit(joined)
+        tickUntil { survival.platform.shutdownReason != null }
+        assertEquals(listOf(ann.toString() to "lobby"), proxy.sends)
+        assertEquals(Lifecycle.STOPPING, hub.states().single { it.name == "survival" }.state)
     }
 
     @Test

@@ -441,6 +441,7 @@ class ConformanceTest {
         h.WasmInstance = require("wasm_sample").instance
         h.NetworkChannel = nf.network.channel("smoke")
         h.NetworkMap = nf.network.map("smoke")
+        h.NetworkHold = nf.network.hold_ready()
         -- A request's response, which only a route's handler is handed: the test makes one request (everything).
         nf.web.route("GET", "/sample", function(_, response) h.WebResponse = response end)
         h.Cutscene = nf.cutscenes.play(h.Player, "cs")
@@ -916,6 +917,7 @@ class ConformanceTest {
                 h.WasmProcess = nf.wasm.start("w")
                 h.NetworkChannel = nf.network.channel("smoke")
                 h.NetworkMap = nf.network.map("smoke")
+                h.NetworkHold = nf.network.hold_ready()
                 h.Cutscene = nf.cutscenes.play(h.Player, "cs")
                 h.Screen = nf.screens.get("s")
                 h.Playback = h.Screen:play("v", { loop = true })

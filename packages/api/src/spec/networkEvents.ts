@@ -19,6 +19,13 @@ export const networkEvents: EventSpec[] = [
     payload: 'NetworkDisconnectEvent',
   },
   {
+    name: 'network_state',
+    doc: "This server went from one state of its life to the next (`nf.network.state()`): `ready` once its project has started and nothing holds it back (`nf.network.hold_ready`), `draining` when it's asked to take no new players (`/nf drain`, the hub's admin API, `set_draining`), `stopping` as `/nf shutdown` sends its players elsewhere. The place to stop a match from starting, or to tell players the server is going down.",
+    payload: 'NetworkStateEvent',
+    example:
+      'nf.on("network_state", function(event)\n  if event.state == "draining" then\n    nf.server.broadcast("<yellow>This server is closing after this round.")\n  end\nend)',
+  },
+  {
     name: 'network_server_connect',
     doc: "Another server of the network connected to the hub (it started, or came back after losing its connection): from now on it hears what's published and answers requests.",
     payload: 'NetworkServerEvent',
@@ -70,6 +77,18 @@ export const networkEventShapes: LuaClass[] = [
   ]),
   payload('NetworkDisconnectEvent', "This server lost its connection to the network's hub.", [
     { name: 'detail', type: 'string', doc: 'What happened, in words, for the log.' },
+  ]),
+  payload('NetworkStateEvent', 'This server went from one state of its life to the next.', [
+    {
+      name: 'state',
+      type: '"starting"|"ready"|"draining"|"stopping"',
+      doc: 'Where it is now.',
+    },
+    {
+      name: 'previous',
+      type: '"starting"|"ready"|"draining"|"stopping"',
+      doc: 'Where it was.',
+    },
   ]),
   payload('NetworkServerEvent', 'Another server of the network connected or disconnected.', [
     { name: 'server', type: 'string', doc: 'Its name in the network, as the proxy names it.' },

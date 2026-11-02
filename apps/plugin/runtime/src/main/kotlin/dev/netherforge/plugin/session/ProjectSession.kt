@@ -282,7 +282,9 @@ class ProjectSession internal constructor(
             { ticks },
             { platform.players.get(it) },
             { snapshot },
-            log
+            log,
+            actionbar = { player, text -> platform.players.actionbar(player, text) },
+            shutdownServer = { reason -> platform.shutdownServer(reason) }
         )
     )
 

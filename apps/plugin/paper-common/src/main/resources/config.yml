@@ -184,7 +184,10 @@ wasm:
 # register.address to where the proxy reaches it (host:port, or a port alone
 # for the address the hub sees), with a credential allowed to register (or the
 # shared secret); server-name may then be auto, numbered in its group
-# (arena-3). What each package may send
+# (arena-3). After idle-after-seconds empty (0: never), the hub hears this
+# server is idle (its webhook, for whatever stops servers). /nf drain stops
+# new players coming; /nf shutdown [--after-empty] [--timeout <s>] drains,
+# sends the players left to the group's fallback, and stops. What each package may send
 # a minute (messages, requests, map writes, players sent) is
 # messages-per-minute; a request waits request-timeout-seconds for its answer.
 # What arrives is handed to scripts messages-per-tick a tick, at most
@@ -203,6 +206,7 @@ network:
   capacity: 0
   register:
     address: ''
+  idle-after-seconds: 0
   messages-per-minute: 1200
   request-timeout-seconds: 10
   messages-per-tick: 1000

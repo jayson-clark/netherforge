@@ -516,6 +516,62 @@ stays on the proxy until the API removes it, whether it's connected or not.
 Removing one disconnects it from the hub. `/nfhub` marks the servers added
 either way.
 
+## A server's life: starting, ready, draining, stopping
+
+Every server is in one of four states, which the hub knows and
+`nf.network.state()` says:
+
+| State      | Means                                                                                     |
+| ---------- | ----------------------------------------------------------------------------------------- |
+| `starting` | Its project is loading, or a script holds it back. Its group doesn't send it players yet. |
+| `ready`    | Taking players.                                                                           |
+| `draining` | Taking no new players, even by name, while it finishes what it's doing.                   |
+| `stopping` | Shutting down: its players are being sent to its group's fallback.                        |
+
+A server is `ready` once its project has loaded and its modules have run a
+tick. A script that needs longer (a world to copy, a match to set up) holds
+it back:
+
+```lua
+local hold = nf.network.hold_ready()
+nf.worlds.copy("arena", "match", function(world)
+  hold:release() -- ready the tick after the last hold goes
+end)
+```
+
+`/nf drain` (or the hub's admin API, `POST /v1/servers/<name>/drain`, or
+`nf.network.set_draining(true)`) drains it; `/nf drain off` undoes it.
+`/nf shutdown` drains it, sends the players left to its group's **fallback**
+(`group.<name>.fallback` in `hub.properties`, `lobby` unless you say), and
+stops the server. With `--after-empty` it waits for the server to empty
+first, up to `--timeout` seconds (60). `network_state` tells scripts each
+change. The log says how long the server took from its process starting to
+`ready`, and `/nf network` and the hub's admin API show it: a number to keep
+low when servers start on demand.
+
+**Waiting for a server to start.** A send can wait for an instance with room,
+rather than fail:
+
+```lua
+nf.network.send_player(player, {
+  group = "arena",
+  wait = 90, -- seconds
+  on_wait = function(position) player:send_actionbar("Queue: #" .. position) end,
+})
+```
+
+The hub queues it (first come, first served, at most `group.<name>.max-waiting`
+at once), tells its **webhook** the group is wanted, and sends the player as
+soon as an instance is ready with room. They stay where they are meanwhile;
+without `on_wait`, they see their place on their action bar.
+
+**The webhook.** Whatever starts and stops your servers hears what it needs
+from the hub's webhook (`webhook.url` in `hub.properties`): `server_ready`,
+`server_idle` (empty longer than its `network.idle-after-seconds`: stop it),
+`server_gone` and `group_wanted` (sends waiting for a group with no room:
+start an instance). Each is a JSON `POST` signed with `webhook.secret`
+(`X-NetherForge-Signature: sha256=<hex HMAC-SHA256 of the body>`).
+
 ## Limits
 
 The server's owner limits what its packages send (`network:` in

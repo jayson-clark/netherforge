@@ -140,6 +140,17 @@ Has the fields and methods of [Event](#event) too.
 | --- | --- | --- |
 | `detail` | `string` | What happened, in words, for the log. |
 
+### NetworkStateEvent {#networkstateevent}
+
+This server went from one state of its life to the next.
+
+Has the fields and methods of [Event](#event) too.
+
+| Field | Type | |
+| --- | --- | --- |
+| `state` | `"starting"\|"ready"\|"draining"\|"stopping"` | Where it is now. |
+| `previous` | `"starting"\|"ready"\|"draining"\|"stopping"` | Where it was. |
+
 ### NetworkServerEvent {#networkserverevent}
 
 Another server of the network connected or disconnected.
@@ -3030,6 +3041,8 @@ A server of the network, from `nf.network.servers`.
 | `group` | `string` | Its group (`network.group` in its `config.yml`), or its own name when it has none. |
 | `capacity` | `integer?` | How many players it takes (`network.capacity`); `nil` for any number. |
 | `accepting` | `boolean` | Whether it takes players now (`set_accepting` there). |
+| `state` | `"starting"\|"ready"\|"draining"\|"stopping"\|nil` | Where it is in its life (`nf.network.state()` there); `nil` when it isn't connected. |
+| `idle` | `boolean` | Whether it has been empty longer than its `network.idle-after-seconds`. |
 
 ### NetworkGroup {#networkgroup}
 
@@ -3070,6 +3083,8 @@ Where `send_player` and `send_players` send players. A key that isn't one of the
 | `group` | `string?` | A group: the hub picks the instance with room. |
 | `balance` | `"least"\|"fill"\|nil` | How the hub picks the group's instance for this send: `least` (the fewest players) or `fill` (the fullest with room); the group's own when left out (`group.<name>.balance` in the hub's `hub.properties`, `least` unless its owner says). |
 | `data` | `any` | What arrives with them, when `data` isn't given. |
+| `wait` | `number?` | Seconds it may wait, when there's no instance with room yet (none is ready, all are full, the server is starting): the hub holds it, first come first served, tells whatever runs the servers that the group is wanted (its webhook), and sends them as soon as one has room. They stay where they are meanwhile. At most 600; it fails after that, saying why it waited. |
+| `on_wait` | `fun(position: integer)?` | Called while it waits, each time its place in the queue changes (1 is next). Without it, each player waiting who's on this server sees their place on their action bar. |
 
 ### NetworkRole {#networkrole}
 

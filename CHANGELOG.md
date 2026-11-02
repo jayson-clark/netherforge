@@ -30,6 +30,16 @@ release is cut.
   orchestrator adds and removes servers through the hub's new admin API
   (`admin.port` and `admin.token` in `hub.properties`: `POST`, `GET` and
   `DELETE /v1/servers`).
+- **A server's life.** Every server is `starting`, `ready`, `draining` or
+  `stopping` (`nf.network.state()`, `network_state`), and only a ready one
+  gets new players. `nf.network.hold_ready()` keeps it starting until a
+  script is set up; `/nf drain`, `set_draining` and the admin API drain it;
+  `/nf shutdown [--after-empty] [--timeout <s>]` sends its players to the
+  group's fallback and stops it. A send can `wait` for an instance with room
+  (queued in order, its place on the player's action bar or `on_wait`), and
+  the hub's new webhook hears `server_ready`, `server_idle`
+  (`network.idle-after-seconds`), `server_gone` and `group_wanted`. The time
+  from start to ready is logged.
 - **Groups of servers.** `network.group` and `network.capacity` make a server
   an instance of a group. `send_player` and the new `send_players` (a party,
   landing together) take `{ group = "arena" }`, and the hub picks the

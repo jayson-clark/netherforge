@@ -108,6 +108,22 @@
     "requires": "network"
   },
   {
+    "function": "nf.network.state",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.hold_ready",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.set_draining",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.is_draining",
+    "requires": "network"
+  },
+  {
     "function": "nf.network.is_accepting",
     "requires": "network"
   },

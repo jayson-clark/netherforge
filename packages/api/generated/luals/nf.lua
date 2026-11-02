@@ -6,7 +6,7 @@
 -- project's modules: "Lua.runtime.path": ["modules/?.lua", "modules/?/init.lua"].
 -- The sandbox removes io, os, package, load, loadstring, dofile, loadfile, debug, collectgarbage, warn, java.
 
----@alias nf.Event "tick"|"unload"|"player_join"|"player_resource_pack_status"|"player_quit"|"player_chat"|"player_interact"|"player_interact_entity"|"player_move"|"player_teleport"|"player_change_world"|"player_death"|"player_respawn"|"player_drop_item"|"player_pickup_item"|"player_use_item"|"player_consume_item"|"player_swap_hands"|"player_sneak"|"player_command"|"block_break"|"block_place"|"entity_damage"|"entity_death"|"entity_spawn"|"world_dusk"|"world_dawn"|"player_input"|"player_change_slot"|"player_swing"|"player_sprint"|"player_fly"|"player_jump"|"player_change_game_mode"|"player_change_food"|"player_gain_experience"|"player_change_level"|"player_kick"|"player_complete_advancement"|"player_stop_using_item"|"player_break_item"|"entity_heal"|"projectile_launch"|"projectile_hit"|"entity_shoot_bow"|"entity_target"|"entity_explode"|"block_explode"|"entity_combust"|"entity_change_effect"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"world_load"|"world_unload"|"entity_mount"|"entity_dismount"|"vehicle_move"|"vehicle_damage"|"vehicle_destroy"|"player_open_inventory"|"player_close_inventory"|"player_click_inventory"|"player_drag_inventory"|"player_craft"|"player_prepare_craft"|"player_prepare_anvil"|"player_prepare_smithing"|"player_prepare_grindstone"|"player_enchant_item"|"furnace_smelt"|"server_list_ping"|"centity_click"|"recipe_craft"|"item_view"|"centity_natural_spawn"|"menu_open"|"menu_close"|"menu_click"|"dialog_press"|"setting_changed"|"network_connect"|"network_disconnect"|"network_server_connect"|"network_server_disconnect"|"network_player_join"|"network_player_switch"|"network_player_quit"|"player_arrive"|string
+---@alias nf.Event "tick"|"unload"|"player_join"|"player_resource_pack_status"|"player_quit"|"player_chat"|"player_interact"|"player_interact_entity"|"player_move"|"player_teleport"|"player_change_world"|"player_death"|"player_respawn"|"player_drop_item"|"player_pickup_item"|"player_use_item"|"player_consume_item"|"player_swap_hands"|"player_sneak"|"player_command"|"block_break"|"block_place"|"entity_damage"|"entity_death"|"entity_spawn"|"world_dusk"|"world_dawn"|"player_input"|"player_change_slot"|"player_swing"|"player_sprint"|"player_fly"|"player_jump"|"player_change_game_mode"|"player_change_food"|"player_gain_experience"|"player_change_level"|"player_kick"|"player_complete_advancement"|"player_stop_using_item"|"player_break_item"|"entity_heal"|"projectile_launch"|"projectile_hit"|"entity_shoot_bow"|"entity_target"|"entity_explode"|"block_explode"|"entity_combust"|"entity_change_effect"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"world_load"|"world_unload"|"entity_mount"|"entity_dismount"|"vehicle_move"|"vehicle_damage"|"vehicle_destroy"|"player_open_inventory"|"player_close_inventory"|"player_click_inventory"|"player_drag_inventory"|"player_craft"|"player_prepare_craft"|"player_prepare_anvil"|"player_prepare_smithing"|"player_prepare_grindstone"|"player_enchant_item"|"furnace_smelt"|"server_list_ping"|"centity_click"|"recipe_craft"|"item_view"|"centity_natural_spawn"|"menu_open"|"menu_close"|"menu_click"|"dialog_press"|"setting_changed"|"network_connect"|"network_disconnect"|"network_state"|"network_server_connect"|"network_server_disconnect"|"network_player_join"|"network_player_switch"|"network_player_quit"|"player_arrive"|string
 ---@alias Centity.Event "spawn"|"remove"|"tick"|"click"|"animation_start"|"animation_end"|"chunk_load"|"chunk_unload"|"hit"|"bounce"|"stick"|"flight_end"|"damage"|"death"|"land"|"bump"|"touch"|"path_end"|"buff_add"|"buff_end"|string
 ---@alias Node.Event "click"|"collide"|"wake"|"sleep"
 ---@alias Entity.Event "damage"|"interact"|"hit"|"explode"|"combust"|"mount"|"dismount"
@@ -207,6 +207,7 @@ nf = {}
 ---@overload fun(event: "setting_changed", handler: fun(event: SettingChangedEvent)): Subscription
 ---@overload fun(event: "network_connect", handler: fun(event: NetworkConnectEvent)): Subscription
 ---@overload fun(event: "network_disconnect", handler: fun(event: NetworkDisconnectEvent)): Subscription
+---@overload fun(event: "network_state", handler: fun(event: NetworkStateEvent)): Subscription
 ---@overload fun(event: "network_server_connect", handler: fun(event: NetworkServerEvent)): Subscription
 ---@overload fun(event: "network_server_disconnect", handler: fun(event: NetworkServerEvent)): Subscription
 ---@overload fun(event: "network_player_join", handler: fun(event: NetworkPlayerEvent)): Subscription
@@ -319,6 +320,7 @@ function nf.on(event, handler, options) end
 ---@overload fun(event: "setting_changed", handler: fun(event: SettingChangedEvent)): Subscription
 ---@overload fun(event: "network_connect", handler: fun(event: NetworkConnectEvent)): Subscription
 ---@overload fun(event: "network_disconnect", handler: fun(event: NetworkDisconnectEvent)): Subscription
+---@overload fun(event: "network_state", handler: fun(event: NetworkStateEvent)): Subscription
 ---@overload fun(event: "network_server_connect", handler: fun(event: NetworkServerEvent)): Subscription
 ---@overload fun(event: "network_server_disconnect", handler: fun(event: NetworkServerEvent)): Subscription
 ---@overload fun(event: "network_player_join", handler: fun(event: NetworkPlayerEvent)): Subscription
@@ -472,6 +474,7 @@ function nf.wait_until(predicate, timeout) end
 ---@overload fun(handle: nf, event: "setting_changed", filter?: fun(event: SettingChangedEvent): boolean): SettingChangedEvent
 ---@overload fun(handle: nf, event: "network_connect", filter?: fun(event: NetworkConnectEvent): boolean): NetworkConnectEvent
 ---@overload fun(handle: nf, event: "network_disconnect", filter?: fun(event: NetworkDisconnectEvent): boolean): NetworkDisconnectEvent
+---@overload fun(handle: nf, event: "network_state", filter?: fun(event: NetworkStateEvent): boolean): NetworkStateEvent
 ---@overload fun(handle: nf, event: "network_server_connect", filter?: fun(event: NetworkServerEvent): boolean): NetworkServerEvent
 ---@overload fun(handle: nf, event: "network_server_disconnect", filter?: fun(event: NetworkServerEvent): boolean): NetworkServerEvent
 ---@overload fun(handle: nf, event: "network_player_join", filter?: fun(event: NetworkPlayerEvent): boolean): NetworkPlayerEvent
@@ -1439,6 +1442,26 @@ function nf.network.group() end
 ---@param accepting boolean Whether it takes players.
 function nf.network.set_accepting(accepting) end
 
+--- Where this server is in its life: `starting` until its project has loaded and its modules have started (and nothing holds it back: `hold_ready`), then `ready`; `draining` when it's asked to take no new players (`/nf drain`, the hub's admin API, `set_draining`), and `stopping` as `/nf shutdown` sends its players elsewhere. Only a `ready` server is sent players by its group; a `draining` or `stopping` one gets none, even by name. `network_state` says when it changes.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@return "starting"|"ready"|"draining"|"stopping"
+function nf.network.state() end
+
+--- Keeps this server `starting` (so its group sends it no players) until the hold is released: for a world to be made, a map loaded, a match set up. The server is `ready` once every hold is released, the first tick after. Holds go with the script that took them. Once a server is ready it stays so: a hold taken later does nothing.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@return NetworkHold
+function nf.network.hold_ready() end
+
+--- Drains this server (`true`): it takes no new players, even sent by name, while it finishes what it's doing; or (`false`) makes it `ready` again. As `/nf drain` does. `/nf shutdown` drains too, and can't be undone.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@param draining boolean Whether to drain.
+function nf.network.set_draining(draining) end
+
+--- Whether this server is draining or stopping: taking no new players.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@return boolean
+function nf.network.is_draining() end
+
 --- Whether this server takes players now, as `set_accepting` last said.
 --- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
 ---@return boolean
@@ -1615,7 +1638,7 @@ function nf.test.advance(ticks) end
 function nf.test.player(name) end
 
 --- Raises a server-wide event as the server would, to the scripts: whoever listens to `event` with `nf.on` hears it, and, for an event the server raises about a player, an entity or a world, the handlers on that handle (`player:on("chat")`) hear it first, in the order the server uses. Each can `stop()` or `cancel()` it or set its writable fields. The few events the runtime stages itself (a death, damage, a click on a centity) reach `nf.on` handlers only. `payload` is what the event carries, the same table its handlers read (`event.player`, `event.message`): a field the event does not have is an error naming the fields. What the server would then do with a cancelled event is not simulated: read the result.
----@param event "tick"|"player_join"|"player_resource_pack_status"|"player_quit"|"player_chat"|"player_interact"|"player_interact_entity"|"player_move"|"player_teleport"|"player_change_world"|"player_death"|"player_respawn"|"player_drop_item"|"player_pickup_item"|"player_use_item"|"player_consume_item"|"player_swap_hands"|"player_sneak"|"player_command"|"block_break"|"block_place"|"entity_damage"|"entity_death"|"entity_spawn"|"world_dusk"|"world_dawn"|"player_input"|"player_change_slot"|"player_swing"|"player_sprint"|"player_fly"|"player_jump"|"player_change_game_mode"|"player_change_food"|"player_gain_experience"|"player_change_level"|"player_kick"|"player_complete_advancement"|"player_stop_using_item"|"player_break_item"|"entity_heal"|"projectile_launch"|"projectile_hit"|"entity_shoot_bow"|"entity_target"|"entity_explode"|"block_explode"|"entity_combust"|"entity_change_effect"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"world_load"|"world_unload"|"entity_mount"|"entity_dismount"|"vehicle_move"|"vehicle_damage"|"vehicle_destroy"|"player_open_inventory"|"player_close_inventory"|"player_click_inventory"|"player_drag_inventory"|"player_craft"|"player_prepare_craft"|"player_prepare_anvil"|"player_prepare_smithing"|"player_prepare_grindstone"|"player_enchant_item"|"furnace_smelt"|"server_list_ping"|"centity_click"|"recipe_craft"|"item_view"|"centity_natural_spawn"|"menu_open"|"menu_close"|"menu_click"|"dialog_press"|"setting_changed"|"network_connect"|"network_disconnect"|"network_server_connect"|"network_server_disconnect"|"network_player_join"|"network_player_switch"|"network_player_quit"|"player_arrive" The event's name, as `nf.on` takes it.
+---@param event "tick"|"player_join"|"player_resource_pack_status"|"player_quit"|"player_chat"|"player_interact"|"player_interact_entity"|"player_move"|"player_teleport"|"player_change_world"|"player_death"|"player_respawn"|"player_drop_item"|"player_pickup_item"|"player_use_item"|"player_consume_item"|"player_swap_hands"|"player_sneak"|"player_command"|"block_break"|"block_place"|"entity_damage"|"entity_death"|"entity_spawn"|"world_dusk"|"world_dawn"|"player_input"|"player_change_slot"|"player_swing"|"player_sprint"|"player_fly"|"player_jump"|"player_change_game_mode"|"player_change_food"|"player_gain_experience"|"player_change_level"|"player_kick"|"player_complete_advancement"|"player_stop_using_item"|"player_break_item"|"entity_heal"|"projectile_launch"|"projectile_hit"|"entity_shoot_bow"|"entity_target"|"entity_explode"|"block_explode"|"entity_combust"|"entity_change_effect"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"world_load"|"world_unload"|"entity_mount"|"entity_dismount"|"vehicle_move"|"vehicle_damage"|"vehicle_destroy"|"player_open_inventory"|"player_close_inventory"|"player_click_inventory"|"player_drag_inventory"|"player_craft"|"player_prepare_craft"|"player_prepare_anvil"|"player_prepare_smithing"|"player_prepare_grindstone"|"player_enchant_item"|"furnace_smelt"|"server_list_ping"|"centity_click"|"recipe_craft"|"item_view"|"centity_natural_spawn"|"menu_open"|"menu_close"|"menu_click"|"dialog_press"|"setting_changed"|"network_connect"|"network_disconnect"|"network_state"|"network_server_connect"|"network_server_disconnect"|"network_player_join"|"network_player_switch"|"network_player_quit"|"player_arrive" The event's name, as `nf.on` takes it.
 ---@param payload? table The payload: its fields by name. Leave it out for an event that has none.
 ---@return RaisedEvent # Whether a handler cancelled it, and the event as the handlers left it.
 function nf.test.raise(event, payload) end
@@ -5703,6 +5726,17 @@ function NetworkChannel:on(event, handler, options) end
 ---@overload fun(self: NetworkChannel, event: "request", handler: fun(event: NetworkRequestEvent)): Subscription
 function NetworkChannel:once(event, handler) end
 
+--- A hold on this server being ready, from `nf.network.hold_ready`: while any is held, the server stays `starting`. It goes with the script that took it.
+---@class NetworkHold
+local NetworkHold = {}
+
+--- Lets go of the hold. The server is ready the tick after its last hold goes. Releasing it again does nothing.
+function NetworkHold:release() end
+
+--- Whether it has been let go of.
+---@return boolean
+function NetworkHold:is_released() end
+
 --- A map the whole network shares, from `nf.network.map`: string keys, any values. Reads (`get`, `all`) answer at once from this server's copy. Writes go to the hub, which makes them in the order they arrive and tells every server that has the map: `set` and `delete` don't wait, and this server's copy has the new value once the hub has made the change (the next tick or so, when `change` is heard); `add` and `insert` wait for the hub's answer, so they're safe when two servers write one key at once. A key may expire. The hub keeps them for the whole network, saved on the proxy, within the limits of its `hub.properties` (how many keys and bytes each package may keep).
 ---@class NetworkMap
 local NetworkMap = {}
@@ -8048,6 +8082,8 @@ function Event:uncancel() end
 ---@field group string Its group (`network.group` in its `config.yml`), or its own name when it has none.
 ---@field capacity integer? How many players it takes (`network.capacity`); `nil` for any number.
 ---@field accepting boolean Whether it takes players now (`set_accepting` there).
+---@field state "starting"|"ready"|"draining"|"stopping"|nil Where it is in its life (`nf.network.state()` there); `nil` when it isn't connected.
+---@field idle boolean Whether it has been empty longer than its `network.idle-after-seconds`.
 
 --- A group of the network and its instances, from `nf.network.groups`.
 ---@class NetworkGroup
@@ -8072,6 +8108,8 @@ function Event:uncancel() end
 ---@field group string? A group: the hub picks the instance with room.
 ---@field balance "least"|"fill"|nil How the hub picks the group's instance for this send: `least` (the fewest players) or `fill` (the fullest with room); the group's own when left out (`group.<name>.balance` in the hub's `hub.properties`, `least` unless its owner says).
 ---@field data any What arrives with them, when `data` isn't given.
+---@field wait number? Seconds it may wait, when there's no instance with room yet (none is ready, all are full, the server is starting): the hub holds it, first come first served, tells whatever runs the servers that the group is wanted (its webhook), and sends them as soon as one has room. They stay where they are meanwhile. At most 600; it fails after that, saying why it waited.
+---@field on_wait fun(position: integer)? Called while it waits, each time its place in the queue changes (1 is next). Without it, each player waiting who's on this server sees their place on their action bar.
 
 --- What this server may do in the network, from `nf.network.server_role`.
 ---@class NetworkRole
@@ -8135,6 +8173,11 @@ function Event:uncancel() end
 --- This server lost its connection to the network's hub.
 ---@class NetworkDisconnectEvent: Event
 ---@field detail string What happened, in words, for the log.
+
+--- This server went from one state of its life to the next.
+---@class NetworkStateEvent: Event
+---@field state "starting"|"ready"|"draining"|"stopping" Where it is now.
+---@field previous "starting"|"ready"|"draining"|"stopping" Where it was.
 
 --- Another server of the network connected or disconnected.
 ---@class NetworkServerEvent: Event

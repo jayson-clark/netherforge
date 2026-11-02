@@ -1,6 +1,7 @@
 package dev.netherforge.plugin.api
 
 import dev.netherforge.network.Balance
+import dev.netherforge.network.Lifecycle
 import dev.netherforge.network.MapOp
 import dev.netherforge.network.NetworkNames
 import dev.netherforge.network.ServerState
@@ -57,6 +58,14 @@ internal class NfNetworkImpl(private val session: ProjectSession) : NfNetworkApi
 
     override fun group(caller: Caller): String? = link.group
 
+    override fun state(caller: Caller): String = link.state.word
+
+    override fun holdReady(caller: Caller): LuaHandle.NetworkHold = network.hold(caller.scope)
+
+    override fun setDraining(caller: Caller, draining: Boolean) = link.setDraining(draining)
+
+    override fun isDraining(caller: Caller): Boolean = link.state == Lifecycle.DRAINING || link.state == Lifecycle.STOPPING
+
     override fun setAccepting(caller: Caller, accepting: Boolean) = link.setAccepting(accepting)
 
     override fun isAccepting(caller: Caller): Boolean = link.accepting
@@ -82,6 +91,8 @@ internal class NfNetworkImpl(private val session: ProjectSession) : NfNetworkApi
         name = state.name,
         connected = state.linked,
         players = (counts[state.name] ?: 0).toLong(),
+        state = state.state?.word,
+        idle = state.idle,
         group = state.groupName,
         capacity = state.capacity?.toLong(),
         accepting = state.accepting
@@ -161,7 +172,15 @@ internal class NfNetworkImpl(private val session: ProjectSession) : NfNetworkApi
                     ?: return CompletableFuture.failedFuture(WorkFailed("nobody called \"${player.value}\" is online in the network"))
             }
         }
-        return network.send(caller.scope.namespace, ids, server, json, group, balance)
+        val wait = options?.wait?.also {
+            if (!it.isFinite() ||
+                it < 0
+            ) {
+                throw LuaApiException("bad argument 'target.wait' (seconds, at least 0, expected)")
+            }
+        }
+        val onWait = options?.onWait?.let { caller.scope to it.ref }
+        return network.send(caller.scope.namespace, ids, server, json, group, balance, wait, onWait)
     }
 }
 
@@ -169,6 +188,13 @@ internal class NfNetworkImpl(private val session: ProjectSession) : NfNetworkApi
 internal fun checkServer(name: String, where: String): String {
     if (!NetworkNames.isServer(name)) throw LuaApiException("bad argument '$where' (a server's or group's name expected, got \"$name\")")
     return name
+}
+
+/** `NetworkHold`: a hold on this server being ready. */
+internal class NetworkHoldImpl(private val session: ProjectSession) : dev.netherforge.plugin.binding.NetworkHoldApi {
+    override fun release(self: LuaHandle.NetworkHold) = session.network.release(self)
+
+    override fun isReleased(self: LuaHandle.NetworkHold): Boolean = session.network.isReleased(self)
 }
 
 /** `NetworkChannel`: a channel by its full name. */

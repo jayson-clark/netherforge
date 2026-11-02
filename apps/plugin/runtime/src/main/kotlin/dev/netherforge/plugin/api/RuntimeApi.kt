@@ -105,6 +105,7 @@ internal class RuntimeApi(private val session: ProjectSession) :
     override val wasmProcess = WasmProcessImpl(session)
     override val nfNetwork = NfNetworkImpl(session)
     override val networkChannel = NetworkChannelImpl(session)
+    override val networkHold = NetworkHoldImpl(session)
     override val networkMap = NetworkMapImpl(session)
     override val cutscene = CutsceneImpl(session)
     override val file = FileImpl(session)

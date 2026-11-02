@@ -98,7 +98,7 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
     val network = NetworkLink(
         config.network,
         alone = when {
-            config.testing != null -> "test"
+            config.testing != null -> NetworkLink.TEST_NETWORK
             config.bridge != null -> "dev"
             else -> null
         },

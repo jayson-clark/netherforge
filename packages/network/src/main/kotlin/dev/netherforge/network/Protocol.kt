@@ -88,10 +88,41 @@ data class ServerState(
     val group: String? = null,
     val capacity: Int? = null,
     val accepting: Boolean = true,
-    val players: Int = 0
+    val players: Int = 0,
+    /** Where it is in its life, as NetherForge on it says; null when it isn't connected. */
+    val state: Lifecycle? = null,
+    /** Whether it's been empty longer than its `network.idle-after-seconds`. */
+    val idle: Boolean = false,
+    /** How long it took from its process starting to [Lifecycle.READY], once it got there. */
+    val startupMillis: Long? = null
 ) {
     /** Its group's name: its [group], or its own [name] when it's a group of one. */
     val groupName get() = group ?: name
+
+    /** Whether new players may be sent to it by its group: connected, ready and taking them. */
+    val open get() = linked && state == Lifecycle.READY && accepting
+}
+
+/**
+ * Where a server is in its life. Only a [READY] one is picked for players sent to its group; a [DRAINING] or
+ * [STOPPING] one takes no new players at all.
+ */
+@Serializable
+enum class Lifecycle(val word: String) {
+    /** Its project is loading, or a script holds it back (`nf.network.hold_ready`). */
+    @SerialName("starting")
+    STARTING("starting"),
+
+    @SerialName("ready")
+    READY("ready"),
+
+    /** It takes no new players and finishes what it's doing (`/nf drain`, the admin API, a script). */
+    @SerialName("draining")
+    DRAINING("draining"),
+
+    /** It's shutting down: its players are being sent to its group's fallback. */
+    @SerialName("stopping")
+    STOPPING("stopping")
 }
 
 /**
@@ -218,6 +249,16 @@ sealed interface HubFrame {
     @SerialName("send_result")
     data class SendResult(val id: Long, val error: String? = null, val server: String? = null) : HubFrame
 
+    /** This server's [ServerFrame.Send] [id] waits for an instance with room: [position] in its queue, from 1. */
+    @Serializable
+    @SerialName("send_waiting")
+    data class SendWaiting(val id: Long, val position: Int) : HubFrame
+
+    /** The admin API asks this server to drain ([draining]) or to stop draining. */
+    @Serializable
+    @SerialName("drain")
+    data class Drain(val draining: Boolean) : HubFrame
+
     /** A refusal the hub sends instead of acting on a frame (over a limit, a frame it couldn't read), for the log. */
     @Serializable
     @SerialName("problem")
@@ -249,7 +290,9 @@ sealed interface ServerFrame {
         /** Adds this server to the proxy, which doesn't have it: [server] may then be [Protocol.AUTO_NAME]. */
         val register: Registration? = null,
         /** This process's own random id: the same server dialling again keeps its name, another can't take it. */
-        val instance: String? = null
+        val instance: String? = null,
+        /** Where it is in its life as it joins: a server still starting isn't sent players until it's ready. */
+        val state: Lifecycle = Lifecycle.READY
     ) : ServerFrame
 
     /** This server is shutting down: a server that registered itself comes off the proxy at once. */
@@ -257,10 +300,20 @@ sealed interface ServerFrame {
     @SerialName("leaving")
     data object Leaving : ServerFrame
 
-    /** Whether this server takes players now (a match running: not). */
+    /** Whether this server takes players now (a match running: not), where it is in its life, and whether it's idle. */
     @Serializable
     @SerialName("status")
-    data class Status(val accepting: Boolean) : ServerFrame
+    data class Status(
+        val accepting: Boolean = true,
+        val state: Lifecycle = Lifecycle.READY,
+        val idle: Boolean = false,
+        val startupMillis: Long? = null
+    ) : ServerFrame
+
+    /** Asks the hub to send every player on this server to its group's fallback: it's stopping. */
+    @Serializable
+    @SerialName("evacuate")
+    data object Evacuate : ServerFrame
 
     /** Every channel and map this server listens to now, replacing what it said before. */
     @Serializable
@@ -314,7 +367,9 @@ sealed interface ServerFrame {
         val server: String? = null,
         val data: JsonElement? = null,
         val group: String? = null,
-        val balance: Balance? = null
+        val balance: Balance? = null,
+        /** How long it may wait for an instance with room (or a server that's starting) before it fails. */
+        val waitMillis: Long? = null
     ) : ServerFrame
 
     @Serializable

@@ -76,11 +76,11 @@ class GroupsTest {
     fun `servers say their group and room, and everyone hears what changes`() {
         val (_, lobby) = join("lobby")
         join("arena-1", "arena", 2)
-        assertEquals(ServerState("arena-1", true, "arena", 2), lobby.of<HubFrame.Server>().single().server)
+        assertEquals(ServerState("arena-1", true, "arena", 2, state = Lifecycle.READY), lobby.of<HubFrame.Server>().single().server)
         place("a" to "arena-1")
         hub.tick()
         val changed = lobby.of<HubFrame.Servers>().single().servers
-        assertEquals(listOf(ServerState("arena-1", true, "arena", 2, players = 1)), changed)
+        assertEquals(listOf(ServerState("arena-1", true, "arena", 2, players = 1, state = Lifecycle.READY)), changed)
         hub.tick()
         assertEquals(1, lobby.of<HubFrame.Servers>().size, "nothing changed")
         assertEquals("lobby", ServerState("lobby", true).groupName, "a server with no group is a group of one")

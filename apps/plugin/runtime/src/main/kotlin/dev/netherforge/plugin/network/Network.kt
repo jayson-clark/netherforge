@@ -8,6 +8,7 @@ import dev.netherforge.format.project.ProjectSnapshot
 import dev.netherforge.network.Access
 import dev.netherforge.network.Balance
 import dev.netherforge.network.HubFrame
+import dev.netherforge.network.Lifecycle
 import dev.netherforge.network.MapCause
 import dev.netherforge.network.MapOp
 import dev.netherforge.network.NetworkNames
@@ -28,6 +29,7 @@ import dev.netherforge.plugin.binding.NetworkPlayerEvent
 import dev.netherforge.plugin.binding.NetworkPlayerSwitchEvent
 import dev.netherforge.plugin.binding.NetworkRequestEvent
 import dev.netherforge.plugin.binding.NetworkServerEvent
+import dev.netherforge.plugin.binding.NetworkStateEvent
 import dev.netherforge.plugin.binding.PlayerArriveEvent
 import dev.netherforge.plugin.http.RequestRate
 import dev.netherforge.plugin.lua.CallResult
@@ -68,7 +70,11 @@ class Network(
     private val ticks: () -> Long,
     private val online: (UUID) -> PlayerRef?,
     private val snapshot: () -> ProjectSnapshot?,
-    private val log: RuntimeLog
+    private val log: RuntimeLog,
+    /** Shows text on a player's action bar: a waiting send's place, when the script shows none. */
+    private val actionbar: (UUID, String) -> Unit = { _, _ -> },
+    /** Stops the server: the end of `/nf shutdown`. */
+    private val shutdownServer: (String) -> Unit = {}
 ) : RuntimeService {
     override val name get() = "network"
 
@@ -85,6 +91,19 @@ class Network(
     private val requests = HashMap<Long, Waiting<Any?>>()
     private val writes = HashMap<Long, Pair<MapOp, Waiting<Any?>>>()
     private val sends = HashMap<Long, Waiting<String>>()
+
+    /** What a waiting send shows while it waits: the script's function, or its players' action bars. */
+    private class OnWait(val scope: Scope?, val callback: LuaRef?, val players: List<UUID>, val target: String)
+
+    private val showing = HashMap<Long, OnWait>()
+
+    /** The holds on this server being ready, by id, with their scopes. */
+    private val holds = HashMap<Long, Scope>()
+    private var nextHold = 1L
+
+    /** The state scripts last heard (`network_state`), and since when the server has been empty. */
+    private var heard: Lifecycle? = null
+    private var emptySince: Long? = null
     private val rate by lazy { RequestRate(config.messagesPerMinute) }
     private var listenChanged = true
     private var listened: Pair<List<String>, List<String>>? = null
@@ -254,7 +273,9 @@ class Network(
         server: String?,
         data: JsonElement?,
         group: String? = null,
-        balance: Balance? = null
+        balance: Balance? = null,
+        waitSeconds: Double? = null,
+        onWait: Pair<Scope, LuaRef>? = null
     ): CompletionStage<String> {
         refusal(namespace)?.let { return CompletableFuture.failedFuture(WorkFailed(it)) }
         val grants = link().grants
@@ -265,14 +286,24 @@ class Network(
         }
         val id = link().nextId()
         val future = CompletableFuture<String>()
+        val wait = waitSeconds?.coerceIn(0.0, MAX_WAIT_SECONDS)
+        val waitTicks = ((wait ?: 0.0) * TICKS_PER_SECOND).toLong()
         sends[id] =
             Waiting(
                 future,
-                ticks() + SEND_TIMEOUT_SECONDS * TICKS_PER_SECOND,
+                ticks() + waitTicks + SEND_TIMEOUT_SECONDS * TICKS_PER_SECOND,
                 "the proxy didn't move them within $SEND_TIMEOUT_SECONDS seconds"
             )
-        if (!link().send(ServerFrame.Send(id, players, server, data, group, balance))) {
+        if (wait != null) {
+            val here = players.mapNotNull { runCatching { UUID.fromString(it) }.getOrNull() }.filter { online(it) != null }
+            showing[id] = OnWait(onWait?.first, onWait?.second, here, server ?: group ?: "")
+        } else {
+            onWait?.let { scripts.unref(it.second) }
+        }
+        val waitMillis = wait?.let { (it * 1000).toLong() }
+        if (!link().send(ServerFrame.Send(id, players, server, data, group, balance, waitMillis))) {
             sends.remove(id)
+            showing.remove(id)?.callback?.let(scripts::unref)
             return CompletableFuture.failedFuture(WorkFailed(notConnected()))
         }
         return future
@@ -302,6 +333,7 @@ class Network(
         link.tick(now)
         for (item in link.drain(config.messagesPerTick, now, log::info, log::warn)) received(item)
         if (listenChanged && link.connected) listen()
+        life(now)
         timeOut(now)
         arrive(now)
         answerPeers()
@@ -341,7 +373,16 @@ class Network(
             is HubFrame.MapSnapshot -> snapshot(frame)
             is HubFrame.MapChanged -> changed(frame)
             is HubFrame.MapResult -> writes.remove(frame.id)?.let { (op, waiting) -> written(frame, op, waiting) }
-            is HubFrame.SendResult -> sends.remove(frame.id)?.let { waiting ->
+            is HubFrame.SendWaiting -> waited(frame)
+            is HubFrame.Drain -> {
+                log.info(
+                    if (frame.draining) "The network's admin API drains this server" else "The network's admin API ends its draining"
+                )
+                link().setDraining(frame.draining)
+            }
+            is HubFrame.SendResult -> sends.remove(frame.id).also {
+                showing.remove(frame.id)?.callback?.let(scripts::unref)
+            }?.let { waiting ->
                 if (frame.error != null) {
                     waiting.future.completeExceptionally(WorkFailed(frame.error!!))
                 } else {
@@ -365,6 +406,76 @@ class Network(
             )
             else -> Unit
         }
+    }
+
+    /** A send waits at [frame]'s place: its script hears it, or its players see it. */
+    private fun waited(frame: HubFrame.SendWaiting) {
+        val shown = showing[frame.id] ?: return
+        if (shown.callback != null && shown.scope != null) {
+            when (val result = scripts.callKept(shown.scope, shown.callback, listOf(frame.position.toLong()))) {
+                is CallResult.Failed -> warnOnce("on_wait", "A send's on_wait failed: ${result.failure.message}")
+                else -> Unit
+            }
+            return
+        }
+        for (player in shown.players) actionbar(player, "<gray>Waiting for <yellow>${shown.target}</yellow>… <white>#${frame.position}")
+    }
+
+    // ---- this server's life ---------------------------------------------------------
+
+    /** A hold on this server being ready, until it's released or [scope] ends. */
+    fun hold(scope: Scope): LuaHandle.NetworkHold {
+        val id = nextHold++
+        if (link().state == Lifecycle.STARTING) holds[id] = scope
+        return LuaHandle.NetworkHold(id)
+    }
+
+    fun release(hold: LuaHandle.NetworkHold) {
+        holds.remove(hold.id)
+    }
+
+    fun isReleased(hold: LuaHandle.NetworkHold) = hold.id !in holds
+
+    /** Starts `/nf shutdown`: [afterEmpty], it waits up to [timeoutSeconds] for the server to empty first. */
+    fun shutdown(afterEmpty: Boolean, timeoutSeconds: Long) {
+        val link = link()
+        if (link.shutdown != null) return
+        log.info(
+            "Shutting down: draining" + if (afterEmpty) ", then waiting up to $timeoutSeconds seconds for the server to empty" else ""
+        )
+        link.beginShutdown(NetworkLink.Shutdown(afterEmpty, ticks() + timeoutSeconds * TICKS_PER_SECOND))
+    }
+
+    /** Once a tick: ready when nothing holds it back, idle when empty long enough, and `/nf shutdown`'s steps. */
+    private fun life(now: Long) {
+        val link = link()
+        if (link.state == Lifecycle.STARTING && holds.isEmpty()) {
+            val started = java.lang.management.ManagementFactory.getRuntimeMXBean().startTime
+            val millis = (System.currentTimeMillis() - started).coerceAtLeast(0)
+            link.ready(millis)
+            log.info("Ready ${"%.1f".format(millis / 1000.0)} seconds after the server's process started")
+        }
+        val previous = heard
+        if (previous != link.state) {
+            heard = link.state
+            if (previous != null) scripts.emit(Events.NF_NETWORK_STATE, null, NetworkStateEvent(link.state.word, previous.word))
+        }
+        val empty = joinedAt.isEmpty()
+        emptySince = if (empty) emptySince ?: now else null
+        val idleAfter = config.idleAfterSeconds * TICKS_PER_SECOND
+        link.setIdle(idleAfter > 0 && emptySince?.let { now - it >= idleAfter } == true)
+
+        val plan = link.shutdown ?: return
+        if (link.state != Lifecycle.STOPPING) {
+            if (plan.afterEmpty && !empty && now < plan.deadline) return
+            log.info(if (empty) "Shutting down: the server is empty" else "Shutting down: sending its players to the group's fallback")
+            link.stopping(now)
+            return
+        }
+        val since = plan.stoppingSince ?: now
+        if (!empty && now - since < EVACUATE_TICKS && link.connected) return
+        link.shutdown = null
+        shutdownServer("NetherForge: /nf shutdown")
     }
 
     private fun answer(frame: HubFrame.Requested) {
@@ -572,6 +683,11 @@ class Network(
     }
 
     override fun scopeReleased(scope: Scope) {
+        holds.entries.removeAll { it.value == scope }
+        for ((id, shown) in showing.entries.filter { it.value.scope == scope }) {
+            shown.callback?.let(scripts::unref)
+            showing[id] = OnWait(null, null, shown.players, shown.target)
+        }
         for ((key, entry) in answers.entries.filter { it.value.first == scope }) {
             answers.remove(key)
             scripts.unref(entry.second)
@@ -580,6 +696,9 @@ class Network(
 
     override fun stop() {
         failAll(WorkFailed("the project stopped"))
+        for (shown in showing.values) shown.callback?.let(scripts::unref)
+        showing.clear()
+        holds.clear()
         for ((_, callback) in answers.values) scripts.unref(callback)
         answers.clear()
         // The next session says what it listens to; until then, nothing.
@@ -588,7 +707,8 @@ class Network(
 
     override fun liveness() = listOf(
         liveness<LuaHandle.NetworkChannel> { true },
-        liveness<LuaHandle.NetworkMap> { true }
+        liveness<LuaHandle.NetworkMap> { true },
+        liveness<LuaHandle.NetworkHold> { true }
     )
 
     /** With the server in no network, each package that declares it has a warning saying so. */
@@ -618,6 +738,12 @@ class Network(
         const val TICKS_PER_SECOND = 20L
         const val MILLIS_PER_TICK = 50L
         const val SEND_TIMEOUT_SECONDS = 30L
+
+        /** How long a send may wait for room, at most (the hub's limit). */
+        const val MAX_WAIT_SECONDS = 600.0
+
+        /** How long `/nf shutdown` gives the hub to move the server's players before it stops anyway. */
+        const val EVACUATE_TICKS = 15 * TICKS_PER_SECOND
 
         /** How long a player sent here may take to arrive before what was sent with them is let go. */
         const val ARRIVAL_TICKS = 60 * TICKS_PER_SECOND

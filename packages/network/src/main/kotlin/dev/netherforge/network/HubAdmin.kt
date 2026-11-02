@@ -18,7 +18,8 @@ import java.util.concurrent.Executors
  * - `POST /v1/servers` `{ "name", "address": "host:port", "group"?, "credential"? }`: adds a server to the proxy, for a
  *   server that joins with that credential (any, when left out) as an instance of that group. Again with a new address
  *   moves it.
- * - `DELETE /v1/servers/<name>`: takes it off the proxy, disconnecting it.
+ * - `DELETE /v1/servers/<name>`: takes it off the proxy, disconnecting it (its players sent to its group's fallback first).
+ * - `POST /v1/servers/<name>/drain` (`{ "draining": false }` to stop): asks the server to take no new players.
  *
  * Plain HTTP, like the hub's own port: keep it on the servers' network, or put TLS in front.
  */
@@ -40,6 +41,12 @@ class HubAdmin(private val hub: Hub, private val bind: InetSocketAddress, privat
         val capacity: Int? = null,
         val accepting: Boolean = true,
         val players: Int = 0,
+        /** `starting`, `ready`, `draining` or `stopping`; none when it isn't connected. */
+        val state: String? = null,
+        val idle: Boolean = false,
+        val startupMillis: Long? = null,
+        /** Sends waiting for it (or its group) to have room. */
+        val waiting: Int = 0,
         /** `config` (the proxy's own), `registered` (it added itself) or `admin` (this API added it). */
         val source: String,
         val address: String? = null
@@ -47,6 +54,9 @@ class HubAdmin(private val hub: Hub, private val bind: InetSocketAddress, privat
 
     @Serializable
     data class Servers(val servers: List<ServerView>)
+
+    @Serializable
+    data class Drain(val draining: Boolean = true)
 
     @Serializable
     data class Answer(val name: String? = null, val error: String? = null)
@@ -87,6 +97,17 @@ class HubAdmin(private val hub: Hub, private val bind: InetSocketAddress, privat
         when {
             rest.isEmpty() && exchange.requestMethod == "GET" -> list(exchange)
             rest.isEmpty() && exchange.requestMethod == "POST" -> add(exchange)
+            rest.endsWith("/drain") && exchange.requestMethod == "POST" -> {
+                val name = rest.removeSuffix("/drain")
+                val body = exchange.requestBody.use { it.readNBytes(MAX_BODY) }.toString(Charsets.UTF_8)
+                val draining = try {
+                    if (body.isBlank()) true else json.decodeFromString(Drain.serializer(), body).draining
+                } catch (e: Exception) {
+                    return answer(exchange, 400, Answer(error = "the body isn't { \"draining\": true|false }: ${e.message}"))
+                }
+                val why = hub.drain(name, draining)
+                if (why == null) answer(exchange, 200, Answer(name = name)) else answer(exchange, 404, Answer(error = why))
+            }
             rest.isNotEmpty() && exchange.requestMethod == "DELETE" -> {
                 val why = hub.adminRemove(rest)
                 if (why == null) answer(exchange, 200, Answer(name = rest)) else answer(exchange, 404, Answer(error = why))
@@ -97,6 +118,7 @@ class HubAdmin(private val hub: Hub, private val bind: InetSocketAddress, privat
 
     private fun list(exchange: HttpExchange) {
         val registered = hub.registered().associateBy { it.name }
+        val waiting = hub.waiting()
         val views = hub.states().map { state ->
             val entry = registered[state.name]
             ServerView(
@@ -106,6 +128,10 @@ class HubAdmin(private val hub: Hub, private val bind: InetSocketAddress, privat
                 capacity = state.capacity,
                 accepting = state.accepting,
                 players = state.players,
+                state = state.state?.word,
+                idle = state.idle,
+                startupMillis = state.startupMillis,
+                waiting = (waiting[state.name.lowercase()] ?: 0) + (state.group?.let { waiting[it.lowercase()] } ?: 0),
                 source = when {
                     entry == null -> "config"
                     entry.byAdmin -> "admin"

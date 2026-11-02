@@ -6,6 +6,7 @@ import dev.netherforge.network.Grants
 import dev.netherforge.network.GroupSettings
 import dev.netherforge.network.HubAdmin
 import dev.netherforge.network.NetworkLimits
+import dev.netherforge.network.NetworkNames
 import dev.netherforge.network.Protocol
 import dev.netherforge.network.Share
 import java.nio.file.Files
@@ -33,6 +34,9 @@ data class HubSettings(
     val adminBind: String = "127.0.0.1",
     val adminPort: Int? = null,
     val adminToken: String? = null,
+    /** Where the hub POSTs its events (`webhook.url`), signed with `webhook.secret`; none without a URL. */
+    val webhookUrl: java.net.URI? = null,
+    val webhookSecret: String? = null,
     /**
      * Whether a server's resource packs come off a player as they move to another server, so one server's (a lobby's
      * hidden HUD, its replaced sprites) never follows them to the next. Default true; a file written before this
@@ -72,7 +76,14 @@ data class HubSettings(
                     val balance = text("group.$group.balance")?.let { word ->
                         Balance.of(word) ?: throw IllegalArgumentException("$file's group.$group.balance \"$word\" isn't least or fill")
                     }
-                    GroupSettings(balance = balance ?: Balance.LEAST)
+                    val fallback = text("group.$group.fallback")?.also {
+                        require(NetworkNames.isServer(it)) { "$file's group.$group.fallback \"$it\" isn't a group's or server's name" }
+                    }
+                    GroupSettings(
+                        balance = balance ?: Balance.LEAST,
+                        fallback = fallback ?: GroupSettings.DEFAULT_FALLBACK,
+                        maxWaiting = positive("group.$group.max-waiting")?.toInt() ?: GroupSettings.DEFAULT_MAX_WAITING
+                    )
                 }
             return HubSettings(
                 bind = text("bind") ?: "0.0.0.0",
@@ -88,6 +99,16 @@ data class HubSettings(
                     requestTimeoutMillis = positive("request-timeout-seconds")?.let { it * 1000 } ?: defaults.requestTimeoutMillis,
                     unregisterAfterMillis = positive("unregister-after-seconds")?.let { it * 1000 } ?: defaults.unregisterAfterMillis
                 ),
+                webhookUrl = text("webhook.url")?.let { url ->
+                    val uri = try {
+                        java.net.URI(url)
+                    } catch (e: Exception) {
+                        throw IllegalArgumentException("$file's webhook.url \"$url\" isn't a URL")
+                    }
+                    require(uri.scheme == "http" || uri.scheme == "https") { "$file's webhook.url \"$url\" isn't http(s)" }
+                    uri
+                },
+                webhookSecret = text("webhook.secret"),
                 adminBind = text("admin.bind") ?: "127.0.0.1",
                 adminPort = positive("admin.port")?.toInt(),
                 adminToken = text("admin.token")?.also {
@@ -127,6 +148,16 @@ data class HubSettings(
                 |# players to as one ({ group = "arena" }). How the hub picks the instance: least (the one with the fewest
                 |# players that has room, the default) or fill (the fullest with room, so players end up together).
                 |#   group.arena.balance=fill
+                |# Where an instance's players go when it stops (a group or server; lobby unless you say), and how many
+                |# sends may wait at once for an instance with room (a send that asks to wait, while one starts).
+                |#   group.arena.fallback=lobby
+                |#   group.arena.max-waiting=500
+                |
+                |# A URL the hub POSTs events to, for whatever starts and stops your servers: server_ready, server_idle,
+                |# server_gone and group_wanted (players waiting for a group with no room: start an instance). Each is
+                |# JSON, signed with webhook.secret in X-NetherForge-Signature (sha256=<hex HMAC of the body>).
+                |webhook.url=
+                |webhook.secret=
                 |
                 |# The most one value may be as JSON: a message, a request or its reply, a map's value, a sent player's data.
                 |max-value-bytes=${limits.maxValueBytes}
