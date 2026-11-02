@@ -157,7 +157,9 @@ data class PlayerState(
     val name: String,
     val server: String? = null,
     /** The proxy they're on, when the hub runs on its own (with several proxies, which one). */
-    val proxy: String? = null
+    val proxy: String? = null,
+    /** The SHA-1 of the project's resource pack their game loaded last, as the server it loaded on said. */
+    val pack: String? = null
 )
 
 /** What the hub sends a server. */
@@ -182,8 +184,15 @@ sealed interface HubFrame {
         val maxValueBytes: Int = NetworkLimits.DEFAULT_MAX_VALUE_BYTES,
         val grants: Grants = Grants.TRUSTED,
         /** The network's policy for this server's role (`policy.<role>` in `hub.properties`), as JSON; null for none. */
-        val policy: String? = null
+        val policy: String? = null,
+        /** Whether the proxy keeps a player's resource packs as they switch servers: a pack they loaded need not be sent again. */
+        val keepsPacks: Boolean = false
     ) : HubFrame
+
+    /** Player [id]'s game loaded the resource pack [pack] (its SHA-1). */
+    @Serializable
+    @SerialName("player_pack")
+    data class PlayerPack(val id: String, val pack: String) : HubFrame
 
     /** The hello wasn't accepted, and why; the hub closes the connection after it. */
     @Serializable
@@ -344,6 +353,11 @@ sealed interface ServerFrame {
         /** `proxy` for a proxy joining a hub that runs on its own; a server says none. */
         val role: String? = null
     ) : ServerFrame
+
+    /** [player]'s game loaded this server's resource pack, whose SHA-1 is [sha1]. */
+    @Serializable
+    @SerialName("pack_loaded")
+    data class PackLoaded(val player: String, val sha1: String) : ServerFrame
 
     /** This server is shutting down: a server that registered itself comes off the proxy at once. */
     @Serializable

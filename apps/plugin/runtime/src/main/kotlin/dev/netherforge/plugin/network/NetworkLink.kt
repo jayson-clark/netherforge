@@ -201,6 +201,10 @@ class NetworkLink(
     var maxValueBytes = NetworkLimits.DEFAULT_MAX_VALUE_BYTES
         private set
 
+    /** Whether the proxy keeps players' resource packs as they switch servers, as the welcome said. */
+    var keepsPacks = false
+        private set
+
     /** The policy the network's hub sends for this server's role (its welcome's), as JSON; null for none. */
     @Volatile
     var hubPolicy: String? = null
@@ -337,7 +341,7 @@ class NetworkLink(
                         continue
                     }
                     // A server's link coming or going is an event; the rest of what changes of servers is only state.
-                    if (frame is HubFrame.Servers) {
+                    if (frame is HubFrame.Servers || frame is HubFrame.PlayerPack) {
                         apply(frame, tick)
                         continue
                     }
@@ -362,6 +366,7 @@ class NetworkLink(
         maxValueBytes = welcome.maxValueBytes
         grants = welcome.grants
         hubPolicy = welcome.policy
+        keepsPacks = welcome.keepsPacks
         players.clear()
         for (player in welcome.players) players[player.id] = player
         servers.clear()
@@ -376,6 +381,7 @@ class NetworkLink(
             is HubFrame.PlayerMoved -> players[frame.id]?.let { players[frame.id] = it.copy(server = frame.server) }
             is HubFrame.Server -> servers[frame.server.name] = frame.server
             is HubFrame.Servers -> for (server in frame.servers) servers[server.name] = server
+            is HubFrame.PlayerPack -> players[frame.id]?.let { players[frame.id] = it.copy(pack = frame.pack) }
             is HubFrame.Arriving -> arrivals[frame.player] = Arrival(frame.from, frame.data, tick)
             is HubFrame.ArrivalCancelled -> arrivals.remove(frame.player)
             else -> Unit

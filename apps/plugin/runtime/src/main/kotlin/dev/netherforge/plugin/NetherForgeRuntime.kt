@@ -88,7 +88,17 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
     val source = ProjectFiles(config.project, config.resolvesPackages, config.packageCache, config.bundles)
 
     /** The resource pack: the last good build, the server that serves it, and what each player was sent. */
-    val packs = Packs(config.pack, config.stateDirectory, log, platform, source::readBytes)
+    val packs = Packs(
+        config.pack,
+        config.stateDirectory,
+        log,
+        platform,
+        source::readBytes,
+        onMain = { mainThread.execute(it) },
+        loadedElsewhere = { player -> network.takeIf { it.connected && it.keepsPacks }?.players?.get(player.toString())?.pack }
+    ).also { packs ->
+        packs.onLoaded = { player, sha1 -> network.send(dev.netherforge.network.ServerFrame.PackLoaded(player.toString(), sha1)) }
+    }
 
     /**
      * This server's place in its network (`nf.network`), for the plugin's life: the connection to the hub (a dev server

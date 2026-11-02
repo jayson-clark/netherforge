@@ -51,8 +51,27 @@ class Packs(
     private val stateDirectory: Path,
     private val log: RuntimeLog,
     private val platform: Platform,
-    private val readBytes: (String) -> ByteArray?
+    private val readBytes: (String) -> ByteArray?,
+    /** Runs on the main thread: an upload's end, sending the pack to who's waiting for it. */
+    private val onMain: (Runnable) -> Unit = { it.run() },
+    /**
+     * The hash of the project's pack [player]'s game has loaded already, as the network knows (from the server they
+     * came from, when the proxy keeps packs on a switch); null when it doesn't know. One that matches isn't sent again.
+     */
+    private val loadedElsewhere: (UUID) -> String? = { null }
 ) {
+    /** A pack's game said it loaded: the network hears it, for the next server they go to. */
+    var onLoaded: ((player: UUID, sha1: String) -> Unit)? = null
+
+    private val storage = config.storage?.let(::PackStorage)
+
+    /** Packs in the store (or there already), by SHA-1: until one is, nobody's sent it. */
+    private val uploaded: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    private val uploading: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    private val uploads by lazy {
+        java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "NetherForge pack upload").apply { isDaemon = true } }
+    }
+
     /** One build: the zip, its hash and where players fetch it. */
     class Built(val bytes: ByteArray, val sha1: String, val url: String?)
 
@@ -149,6 +168,28 @@ class Packs(
      * pack's, which only the plugin's own server can serve (an owner's URL is for the project's one zip).
      */
     private fun publish(bytes: ByteArray, sha1: String, name: String = ""): String? {
+        val store = storage
+        if (store != null) {
+            val url = config.storage!!.urlOf(sha1)
+            if (sha1 !in uploaded && uploading.add(sha1)) {
+                uploads.execute {
+                    val outcome = runCatching { store.upload(sha1, bytes) }
+                    onMain(
+                        Runnable {
+                            uploading -= sha1
+                            outcome.onSuccess { fresh ->
+                                uploaded += sha1
+                                log.info(
+                                    if (fresh) "Uploaded the resource pack $sha1 to $url" else "The resource pack $sha1 is stored already"
+                                )
+                                sendAll()
+                            }.onFailure { log.error("Couldn't upload the resource pack $sha1 to its store", it) }
+                        }
+                    )
+                }
+            }
+            return url
+        }
         if (!config.enabled) return null
         if (name.isEmpty()) {
             config.externalUrl?.let { url ->
@@ -188,6 +229,13 @@ class Packs(
         val pack = built ?: return false
         val url = pack.url ?: return false
         if (sent[player] == pack.sha1) return false
+        if (storage != null && pack.sha1 !in uploaded) return false
+        // Loaded already on the server they came from (the proxy kept it): nothing to download, nothing to reload.
+        if (player !in sent && loadedElsewhere(player) == pack.sha1) {
+            sent[player] = pack.sha1
+            statuses.getOrPut(player) { HashMap() }[PACK_ID] = LOADED
+            return false
+        }
         val first = player !in sent
         if (!platform.resourcePacks.send(player, PackOffer(PACK_ID, url, pack.sha1, config.required, config.prompt, replacing = first))) {
             return false
@@ -210,6 +258,7 @@ class Packs(
     fun push(player: UUID, name: String): Boolean {
         val pack = onDemand[name] ?: return false
         val url = pack.url ?: return false
+        if (storage != null && pack.sha1 !in uploaded) return false
         val theirs = pushed.getOrPut(player) { HashMap() }
         if (theirs[name] == pack.sha1) return true
         if (!platform.resourcePacks.send(player, PackOffer(packId(name), url, pack.sha1, false, null, replacing = false))) return false
@@ -241,12 +290,14 @@ class Packs(
             statuses[player]?.remove(pack)
         } else {
             statuses.getOrPut(player) { HashMap() }[pack] = status
+            if (pack == PACK_ID && status == LOADED) sent[player]?.let { onLoaded?.invoke(player, it) }
             onStatus?.invoke(player, name, status)
         }
     }
 
     /** The plugin is stopping: the server goes. */
     fun stop() {
+        if (storage != null) uploads.shutdownNow()
         server?.stop()
         server = null
         sent.clear()
@@ -339,6 +390,9 @@ class Packs(
     }
 
     companion object {
+        /** What the game says of a pack it has loaded. */
+        const val LOADED = "loaded"
+
         /** One pack per server, sent under one id, so a new one replaces the old on the client. */
         val PACK_ID: UUID = UUID.nameUUIDFromBytes("netherforge:resource-pack".encodeToByteArray())
 

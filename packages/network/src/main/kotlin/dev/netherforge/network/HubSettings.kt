@@ -247,7 +247,8 @@ data class HubSettings(
                 |
                 |# Whether the resource packs a server sent a player come off as they move to another server, so a
                 |# lobby's (its hidden HUD, its replaced sprites) never follows them into a game. The next server sends
-                |# its own as they join (NetherForge servers do). Off, Velocity leaves them on until a server replaces them.
+                |# its own as they join (NetherForge servers do). Off, Velocity leaves them on until a server replaces them,
+                |# and a NetherForge server whose pack the player loaded already (the hub remembers) doesn't send it again.
                 |clear-resource-packs=true
                 |
             """.trimMargin()

@@ -69,6 +69,11 @@ release is cut.
   second login through another proxy is refused or takes over
   (`duplicate-login`), and the admin API lists proxies and drains one before
   it restarts.
+- **Resource packs from shared storage.** `resource-pack.storage` uploads
+  packs to S3-compatible storage under their hash (once, whichever server
+  builds one first) and sends players the store's URL. With
+  `clear-resource-packs=false`, the hub remembers which pack each player has
+  loaded, and a server whose pack they have doesn't send it again.
 - **Signed and published bundles.** `netherforge keygen`, `build --sign`
   and `sign` (a network countersigning what it checked) put Ed25519
   signatures in a bundle's manifest; a server with

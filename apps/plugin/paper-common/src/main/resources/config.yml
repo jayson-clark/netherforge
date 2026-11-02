@@ -28,6 +28,19 @@ resource-pack:
   required: false
   # MiniMessage shown on the download prompt.
   prompt: ''
+  # Upload packs to S3-compatible storage (AWS, Cloudflare R2, MinIO) and send
+  # players its URL instead of serving them here: named by their hash, so
+  # servers running the same pack share one upload. The keys can also come from
+  # AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.
+  # storage:
+  #   type: s3
+  #   endpoint: https://<account>.r2.cloudflarestorage.com
+  #   bucket: packs
+  #   prefix: ''
+  #   region: auto
+  #   public-url: https://packs.example.com/
+  #   access-key: ''
+  #   secret-key: ''
 
 # When the plugin warns that a script is slowing the server down: in the
 # console and in the editor's problems, naming where it's slow. A script is

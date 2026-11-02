@@ -8,6 +8,7 @@ import dev.netherforge.plugin.http.HttpConfig
 import dev.netherforge.plugin.lua.SandboxLimits
 import dev.netherforge.plugin.network.NetworkConfig
 import dev.netherforge.plugin.pack.PackConfig
+import dev.netherforge.plugin.pack.PackStorageConfig
 import dev.netherforge.plugin.schedule.ScheduleConfig
 import dev.netherforge.plugin.screen.ScreensConfig
 import dev.netherforge.plugin.script.FilesConfig
@@ -259,7 +260,21 @@ data class RuntimeConfig(
                 publicUrl = section.text("public-url") ?: "http://$host:$port",
                 externalUrl = section.text("external-url"),
                 required = section.boolean("required") ?: false,
-                prompt = section.text("prompt")
+                prompt = section.text("prompt"),
+                storage = section.section("storage").takeIf { it.text("type") == "s3" }?.let { storage ->
+                    PackStorageConfig(
+                        endpoint = storage.text("endpoint") ?: error("resource-pack.storage.endpoint is empty: the store's address"),
+                        bucket = storage.text("bucket") ?: error("resource-pack.storage.bucket is empty"),
+                        prefix = storage.text("prefix") ?: "",
+                        region = storage.text("region") ?: "auto",
+                        publicUrl =
+                        storage.text("public-url") ?: error("resource-pack.storage.public-url is empty: where players fetch packs"),
+                        accessKey = storage.text("access-key") ?: System.getenv("AWS_ACCESS_KEY_ID")
+                            ?: error("resource-pack.storage needs access-key (or AWS_ACCESS_KEY_ID)"),
+                        secretKey = storage.text("secret-key") ?: System.getenv("AWS_SECRET_ACCESS_KEY")
+                            ?: error("resource-pack.storage needs secret-key (or AWS_SECRET_ACCESS_KEY)")
+                    )
+                }
             )
         }
 

@@ -75,6 +75,33 @@ same machine, so **set `public-url` on a real server**. With `external-url`,
 upload the new `resource-pack.zip` each time it changes; a player whose
 download doesn't match the latest one rejects it.
 
+**From shared storage.** With many servers, serving each pack from each
+server is many open ports. Upload them to an S3-compatible store instead (AWS,
+Cloudflare R2, MinIO), and players fetch them from there:
+
+```yaml
+resource-pack:
+  storage:
+    type: s3
+    endpoint: https://<account>.r2.cloudflarestorage.com
+    bucket: packs
+    public-url: https://packs.example.com/ # where players fetch from: the bucket's public address or a CDN
+    access-key: … # or AWS_ACCESS_KEY_ID
+    secret-key: … # or AWS_SECRET_ACCESS_KEY
+```
+
+Packs are named by their hash, so servers running the same bundle share one
+upload, and a pack that's in the store already isn't uploaded again. A player
+is sent a pack once it's there.
+
+**Across a network.** The hub remembers which pack each player's game has
+loaded, so a server whose pack is the one they already have doesn't send it
+again: no download, no reloading screen. That needs the proxy to keep packs as
+players switch servers (`clear-resource-packs=false` in the hub's
+`hub.properties`); a NetherForge server with a different pack then replaces
+theirs as it sends its own (a server without NetherForge leaves the last one
+on).
+
 `/nf pack` shows the resource pack's size and the URL players are sent, and
 `/nf pack send <player>` sends it again.
 

@@ -66,7 +66,9 @@ class Hub(
     /** What whatever runs the servers may want to hear of (the webhook); called off the hub's lock. */
     private val events: (HubEvent) -> Unit = {},
     /** The network's policy for each role's servers, as JSON, sent in their welcome. */
-    policies: Map<String, String> = emptyMap()
+    policies: Map<String, String> = emptyMap(),
+    /** Whether the proxy keeps players' resource packs as they switch (`clear-resource-packs=false`). */
+    private val keepsPacks: Boolean = false
 ) {
     @Volatile
     private var policies: Map<String, String> = policies
@@ -283,7 +285,7 @@ class Hub(
 
     private fun moved(id: String, name: String, server: String, through: String? = null) {
         val previous = players[id]
-        val now = PlayerState(id, name, server, through ?: previous?.proxy)
+        val now = PlayerState(id, name, server, through ?: previous?.proxy, previous?.pack)
         players[id] = now
         if (previous == null) {
             cameFrom.remove(id)
@@ -690,7 +692,7 @@ class Hub(
             log.info("NetherForge hub: $server connected from ${peer.address} with $how")
             // Sealed from the welcome on, under the name the server said (the one its keys are bound to).
             peer.secure(Channel.hub(proven, nonce, frame.nonce, frame.server, frame.credential))
-            send(HubFrame.Welcome(server, servers(), visible(this), limits.maxValueBytes, grants, policies[grants.role]))
+            send(HubFrame.Welcome(server, servers(), visible(this), limits.maxValueBytes, grants, policies[grants.role], keepsPacks))
             val state = state(server, players.values.count { it.server == server })
             for (other in byName.values) if (other !== this) other.send(HubFrame.Server(state))
             told = told + (server to state)
@@ -808,6 +810,18 @@ class Hub(
                     evacuate(this)
                 }
                 is ServerFrame.Leaving -> leaving = true
+                is ServerFrame.PackLoaded -> players[frame.player]?.let { player ->
+                    if (player.pack != frame.sha1 && frame.sha1.length == 40) {
+                        players[player.id] = player.copy(pack = frame.sha1)
+                        for (session in byName.values) {
+                            if (session.grants.presence ||
+                                player.server == session.name
+                            ) {
+                                session.send(HubFrame.PlayerPack(player.id, frame.sha1))
+                            }
+                        }
+                    }
+                }
                 is ServerFrame.Listen -> listen(frame)
                 is ServerFrame.Publish -> {
                     if (!checked(frame.channel, frame.value)) return
