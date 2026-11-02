@@ -34,14 +34,20 @@ interface Peer {
  *
  * Delivery is at most once and in order between two servers (one connection each, relayed in the order read). A
  * server that isn't connected misses what's published meanwhile; requests to it fail at once.
+ *
+ * A server joins with the network's shared [secret] (it's trusted with everything) or a [Credential] of its own, whose
+ * [Grants] the hub holds every frame from it to: what it may publish, ask, answer, read and write, whose players it
+ * sees, and where it may send them. A refusal is answered as any failure is, saying it's forbidden, and never reaches
+ * another server.
  */
 class Hub(
-    private val secret: String,
+    private val secret: String?,
     private val proxy: HubProxy,
     private val log: HubLog,
     private val limits: NetworkLimits = NetworkLimits(),
     private val store: MapStore? = null,
-    private val clock: () -> Long = System::currentTimeMillis
+    private val clock: () -> Long = System::currentTimeMillis,
+    credentials: Collection<Credential> = emptyList()
 ) {
     private val lock = Any()
     private val sessions = LinkedHashSet<Session>()
@@ -51,12 +57,16 @@ class Hub(
     private val routes = HashMap<Long, Route>()
     private var nextRoute = 1L
     private var lastSave = clock()
+    private var credentials: Map<String, Credential> = credentials.associateBy { it.id }
+
+    /** The server each online player was on before the one they're on now: where `back` sends them. */
+    private val cameFrom = HashMap<String, String>()
 
     /** A request on its way: who asked under which id, who must answer, and until when. */
     private class Route(val origin: Session, val originId: Long, val target: Session, val deadline: Long)
 
     init {
-        require(secret.isNotBlank()) { "a hub needs a secret" }
+        require(secret == null || secret.isNotBlank()) { "a hub's shared secret can't be blank" }
         try {
             store?.load()?.let(maps::restore)
         } catch (e: Exception) {
@@ -76,23 +86,56 @@ class Hub(
     /** The servers connected now, by name. */
     fun linked(): List<String> = synchronized(lock) { byName.keys.toList() }
 
+    /** Each server connected now, with the credential it joined with (null: the shared secret) and its grants. */
+    fun connections(): List<Connection> = synchronized(lock) {
+        byName.values.map { Connection(it.name!!, it.credential, it.grants, it.peer.address) }
+    }
+
+    data class Connection(val server: String, val credential: String?, val grants: Grants, val address: String)
+
+    /** The credentials servers may join with now. */
+    fun credentials(): List<Credential> = synchronized(lock) { credentials.values.toList() }
+
+    /**
+     * Replaces the credentials servers may join with: a server whose credential is gone (revoked) or changed is
+     * disconnected at once, and one whose grants changed dials again under the new ones.
+     */
+    fun setCredentials(all: Collection<Credential>) {
+        val dropped = synchronized(lock) {
+            val next = all.associateBy { it.id }
+            credentials = next
+            byName.values.filter { session -> session.credential != null && next[session.credential] != session.joinedWith }
+        }
+        for (session in dropped) {
+            val why = if (session.credential !in credentials) "its credential was revoked" else "its credential changed"
+            log.info("NetherForge hub: disconnected ${session.name}: $why")
+            session.peer.close(why)
+            session.closed()
+        }
+    }
+
     /** Everything in [map], for the proxy's own commands. */
     fun entries(map: String): Map<String, JsonElement> = synchronized(lock) { maps.entries(map) }
 
     /** The proxy says player [id] ([name]) is now on [server]: they joined the network, or moved. */
     fun playerMoved(id: String, name: String, server: String) = synchronized(lock) {
         val previous = players[id]
-        players[id] = PlayerState(id, name, server)
+        val now = PlayerState(id, name, server)
+        players[id] = now
         if (previous == null) {
-            broadcast(HubFrame.PlayerJoined(PlayerState(id, name, server)))
+            cameFrom.remove(id)
+            for (session in byName.values) session.presence(null, now)
         } else if (previous.server != server) {
-            broadcast(HubFrame.PlayerMoved(id, server, previous.server))
+            previous.server?.let { cameFrom[id] = it }
+            for (session in byName.values) session.presence(previous, now)
         }
     }
 
     /** The proxy says player [id] left the network. */
     fun playerLeft(id: String) = synchronized(lock) {
-        if (players.remove(id) != null) broadcast(HubFrame.PlayerLeft(id))
+        val previous = players.remove(id) ?: return@synchronized
+        cameFrom.remove(id)
+        for (session in byName.values) session.presence(previous, null)
     }
 
     /** Once a second or so: expired keys, requests nobody answered, connections that never said hello, saving. */
@@ -152,6 +195,10 @@ class Hub(
 
     private fun servers() = proxy.servers().map { ServerState(it, it in byName) }
 
+    /** Who [session] may see: everyone, or with no presence only those on it. */
+    private fun visible(session: Session): List<PlayerState> =
+        if (session.grants.presence) players.values.toList() else players.values.filter { it.server == session.name }
+
     /** The proxy's spelling of [name], when it has such a server (names are matched ignoring case, as Velocity does). */
     private fun serverNamed(name: String) = proxy.servers().firstOrNull { it.equals(name, ignoreCase = true) }
 
@@ -163,6 +210,11 @@ class Hub(
         /** The server's name once its hello is accepted. */
         var name: String? = null
             private set
+
+        /** The credential it joined with (null: the network's shared secret), as it was then, and what it may do. */
+        internal var credential: String? = null
+        internal var joinedWith: Credential? = null
+        internal var grants: Grants = Grants.TRUSTED
 
         internal var channels: Set<String> = emptySet()
         internal var maps: Set<String> = emptySet()
@@ -212,8 +264,21 @@ class Hub(
                 )
             }
             if (!Auth.isNonce(frame.nonce)) return refuse("its hello has no nonce of its own")
-            if (!Auth.verify(secret, nonce, frame.server, frame.nonce, frame.proof)) {
-                return refuse("its secret isn't the hub's (network.secret in its config.yml must be the proxy plugin's)")
+            val credential = frame.credential?.let { id ->
+                credentials[id] ?: return refuse("it uses the credential \"$id\", which the hub doesn't have (revoked, or never added)")
+            }
+            val proven = if (credential != null) credential.secret else secret
+            if (proven == null) {
+                return refuse("it uses the network's shared secret, and this hub has none: give it a credential (/nfhub credentials add)")
+            }
+            if (!Auth.verify(proven, nonce, frame.server, frame.nonce, frame.credential, frame.proof)) {
+                return refuse(
+                    if (credential != null) {
+                        "its secret isn't credential \"${credential.id}\"'s (network.credential in its config.yml)"
+                    } else {
+                        "its secret isn't the hub's (network.secret in its config.yml must be the proxy plugin's)"
+                    }
+                )
             }
             val server = serverNamed(frame.server)
                 ?: return refuse(
@@ -225,13 +290,50 @@ class Hub(
                 previous.closed()
             }
             name = server
+            this.credential = credential?.id
+            joinedWith = credential
+            grants = credential?.grants ?: Grants.TRUSTED
             byName[server] = this
-            log.info("NetherForge hub: $server connected from ${peer.address}")
+            val how = if (credential == null) "the shared secret" else "credential ${credential.id} (${grants.describe()})"
+            log.info("NetherForge hub: $server connected from ${peer.address} with $how")
             // Sealed from the welcome on, under the name the server said (the one its keys are bound to).
-            peer.secure(Channel.hub(secret, nonce, frame.nonce, frame.server))
-            send(HubFrame.Welcome(server, servers(), players.values.toList(), limits.maxValueBytes))
+            peer.secure(Channel.hub(proven, nonce, frame.nonce, frame.server, frame.credential))
+            send(HubFrame.Welcome(server, servers(), visible(this), limits.maxValueBytes, grants))
             for (other in byName.values) if (other !== this) other.send(HubFrame.Server(ServerState(server, true)))
         }
+
+        /**
+         * Under the lock: a player went from [before] to [after] (null: not in the network). A server with presence
+         * hears every move; one without hears a player join when they come to it and leave when they go.
+         */
+        internal fun presence(before: PlayerState?, after: PlayerState?) {
+            if (grants.presence) {
+                when {
+                    before == null && after != null -> send(HubFrame.PlayerJoined(after))
+                    after == null && before != null -> send(HubFrame.PlayerLeft(before.id))
+                    after != null -> send(HubFrame.PlayerMoved(after.id, after.server!!, before?.server))
+                }
+                return
+            }
+            val was = before?.server == name
+            val isHere = after?.server == name
+            if (isHere && !was) send(HubFrame.PlayerJoined(after!!))
+            if (was && !isHere) send(HubFrame.PlayerLeft(before!!.id))
+        }
+
+        /** Why this server may not do [access] on [full], or null when it may. */
+        private fun forbidden(full: String, access: Access): String? {
+            if (grants.allows(full, access)) return null
+            val verb = when (access) {
+                Access.READ -> "listen to"
+                Access.WRITE -> "write to"
+                Access.REQUEST -> "ask on"
+                Access.ANSWER -> "answer on"
+            }
+            return "network.forbidden: ${credentialName()} may not $verb \"$full\" (its owns and shares in the hub's credentials)"
+        }
+
+        private fun credentialName() = "credential \"$credential\" (${grants.role})"
 
         private fun refuse(why: String) {
             log.warn("NetherForge hub: refused a connection from ${peer.address}: $why")
@@ -248,9 +350,15 @@ class Hub(
                 is ServerFrame.Listen -> listen(frame)
                 is ServerFrame.Publish -> {
                     if (!checked(frame.channel, frame.value)) return null
+                    forbidden(frame.channel, Access.WRITE)?.let {
+                        send(HubFrame.Problem(it))
+                        return null
+                    }
                     val targets = if (frame.to == null) byName.values else listOfNotNull(serverNamed(frame.to)?.let(byName::get))
                     val message = HubFrame.Message(frame.channel, from, frame.value)
-                    for (target in targets) if (frame.channel in target.channels) target.send(message)
+                    for (target in targets) {
+                        if (frame.channel in target.channels && target.grants.allows(frame.channel, Access.READ)) target.send(message)
+                    }
                 }
                 is ServerFrame.Request -> request(frame, from)
                 is ServerFrame.Reply -> {
@@ -274,9 +382,15 @@ class Hub(
         }
 
         private fun listen(frame: ServerFrame.Listen) {
-            channels = frame.channels.filter(NetworkNames::isFull).toSet()
+            val asked = frame.channels.filter(NetworkNames::isFull)
+            channels = asked.filter { grants.allows(it, Access.READ) || grants.allows(it, Access.ANSWER) }.toSet()
             val before = maps
-            maps = frame.maps.filter(NetworkNames::isFull).toSet()
+            val askedMaps = frame.maps.filter(NetworkNames::isFull)
+            maps = askedMaps.filter { grants.allows(it, Access.READ) }.toSet()
+            val refused = (asked - channels) + (askedMaps - maps)
+            if (refused.isNotEmpty()) {
+                send(HubFrame.Problem("network.forbidden: ${credentialName()} may not listen to ${refused.joinToString { "\"$it\"" }}"))
+            }
             for (map in maps - before) send(HubFrame.MapSnapshot(map, this@Hub.maps.entries(map)))
         }
 
@@ -285,9 +399,12 @@ class Hub(
             if (!NetworkNames.isFull(frame.channel)) return fail("\"${frame.channel}\" isn't a channel")
             val size = Protocol.size(frame.value)
             if (size > limits.maxValueBytes) return fail("the request is $size bytes, over the network's limit of ${limits.maxValueBytes}")
+            forbidden(frame.channel, Access.REQUEST)?.let { return fail(it) }
             val target = serverNamed(frame.to)?.let(byName::get)
                 ?: return fail("${frame.to} isn't connected to the network")
-            if (frame.channel !in target.channels) return fail("nothing on ${target.name} answers requests on \"${frame.channel}\"")
+            if (frame.channel !in target.channels || !target.grants.allows(frame.channel, Access.ANSWER)) {
+                return fail("nothing on ${target.name} answers requests on \"${frame.channel}\"")
+            }
             val id = nextRoute++
             routes[id] = Route(this, frame.id, target, clock() + limits.requestTimeoutMillis)
             target.send(HubFrame.Requested(id, frame.channel, from, frame.value))
@@ -301,6 +418,7 @@ class Hub(
             ) {
                 return send(HubFrame.MapResult(frame.id, error = "a key is 1 to ${NetworkNames.MAX_KEY_LENGTH} characters"))
             }
+            forbidden(frame.map, Access.WRITE)?.let { return send(HubFrame.MapResult(frame.id, error = it)) }
             when (val outcome = this@Hub.maps.write(frame)) {
                 is SharedMaps.Outcome.Refused -> send(HubFrame.MapResult(frame.id, error = outcome.why))
                 is SharedMaps.Outcome.Unchanged -> send(HubFrame.MapResult(frame.id, outcome.result))
@@ -322,6 +440,12 @@ class Hub(
             val size = Protocol.size(frame.data)
             if (size > limits.maxValueBytes) return fail("the data is $size bytes, over the network's limit of ${limits.maxValueBytes}")
             if (player.server == server) return fail("they're already on $server")
+            if (!grants.trusted && player.server != from) {
+                return fail("network.forbidden: ${credentialName()} may only send players who are on $from")
+            }
+            if (!grants.maySendTo(server, null, cameFrom[player.id])) {
+                return fail("network.forbidden: ${credentialName()} may not send players to $server")
+            }
             val target = byName[server]
             target?.send(HubFrame.Arriving(player.id, from, frame.data))
             return {

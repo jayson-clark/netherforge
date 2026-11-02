@@ -1,11 +1,14 @@
 package dev.netherforge.plugin.network
 
+import dev.netherforge.network.Credential
+import dev.netherforge.network.Grants
 import dev.netherforge.network.Hub
 import dev.netherforge.network.HubLog
 import dev.netherforge.network.HubProxy
 import dev.netherforge.network.HubServer
 import dev.netherforge.network.NetworkLimits
 import dev.netherforge.network.PlayerState
+import dev.netherforge.network.Share
 import dev.netherforge.plugin.TestServer
 import dev.netherforge.plugin.platform.GameEvent
 import java.net.InetAddress
@@ -59,11 +62,22 @@ class NetworkTest {
         hubServer.stop()
     }
 
-    private fun server(name: String, script: String, requires: String = """{ "network": true }""", extra: Map<String, Any> = emptyMap()) =
-        TestServer(
-            mapOf(TestServer.MANIFEST to TestServer.manifest(requires = requires), "modules/t/init.lua" to script) + extra,
-            network = NetworkConfig(enabled = true, port = hubServer.port, serverName = name, secret = SECRET)
-        ).also { servers += it }
+    private fun server(
+        name: String,
+        script: String,
+        requires: String = """{ "network": true }""",
+        extra: Map<String, Any> = emptyMap(),
+        credential: Credential? = null
+    ) = TestServer(
+        mapOf(TestServer.MANIFEST to TestServer.manifest(requires = requires), "modules/t/init.lua" to script) + extra,
+        network = NetworkConfig(
+            enabled = true,
+            port = hubServer.port,
+            serverName = name,
+            secret = credential?.secret ?: SECRET,
+            credential = credential?.id
+        )
+    ).also { servers += it }
 
     /** Ticks every server until [done], as servers would while the network catches up. */
     private fun tickUntil(done: () -> Boolean) {
@@ -343,6 +357,51 @@ class NetworkTest {
         assertTrue(lobby.logs[1].contains("package \"test\" doesn't depend on \"shop\", so it can't use \"shop:sales\""), lobby.logs[1])
         assertTrue(lobby.logs[2].contains("\"Bad Name\" isn't a name"), lobby.logs[2])
         assertTrue(lobby.logs[3].contains("a function can't be written as JSON"), lobby.logs[3])
+    }
+
+    @Test
+    fun `a server with a credential knows its role, and what it may not do is refused at the script's line`() {
+        val credential = Credential(
+            "survival-cred",
+            "survival-secret-0123456789",
+            Grants.preset("standard", shared = listOf(Share.parse("test:news(read)"), Share.parse("test:ask(request)")))
+        )
+        hub.setCredentials(listOf(credential))
+        val lobby = server(
+            "lobby",
+            """
+            nf.network.channel("news"):on("message", function(event) log("lobby heard " .. event.value) end)
+            nf.network.channel("ask"):on("request", function(event) event.reply = "yes" end)
+            """
+        )
+        val survival = server(
+            "survival",
+            """
+            nf.network.channel("news"):on("message", function(event) log("survival heard " .. event.value) end)
+            nf.on("network_connect", function()
+              local role = nf.network.server_role()
+              log(role.role .. " " .. tostring(role.trusted) .. " " .. role.shares[1].name .. " " .. role.shares[1].access[1])
+              local ok, err = pcall(function() nf.network.channel("news"):publish("fake") end)
+              log(tostring(ok) .. " " .. err)
+              ok, err = pcall(function() nf.network.map("scores"):set("k", 1) end)
+              log(tostring(ok) .. " " .. err)
+              nf.task(function()
+                log("answer " .. tostring(nf.network.channel("ask"):request("lobby", "?")))
+              end)
+            end)
+            """,
+            credential = credential
+        )
+        connected()
+        tickUntil { survival.logs.size == 4 }
+        assertEquals("standard false test:news read", survival.logs[0])
+        assertTrue(survival.logs[1].startsWith("false ") && survival.logs[1].contains("network.forbidden"), survival.logs[1])
+        assertTrue(survival.logs[1].contains("may not write to \"test:news\""), survival.logs[1])
+        assertTrue(survival.logs[2].contains("network.forbidden") && survival.logs[2].contains("test:scores"), survival.logs[2])
+        assertEquals("answer yes", survival.logs[3])
+        assertEquals("trusted", hub.connections().single { it.server == "lobby" }.grants.role)
+        assertEquals("survival-cred", hub.connections().single { it.server == "survival" }.credential)
+        assertTrue(lobby.errors.isEmpty(), lobby.errors.toString())
     }
 
     @Test

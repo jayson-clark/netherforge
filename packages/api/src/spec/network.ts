@@ -37,6 +37,15 @@ export const nfNetwork: LuaClass = {
       returns: [{ type: 'string?' }],
     },
     {
+      name: 'server_role',
+      doc: "What this server may do in the network, as the hub says: a server that joined with the network's shared secret is `trusted` and may do anything; one that joined with a credential of its own (`network.credential` in `config.yml`) has its credential's role, the namespaces whose channels and maps it owns, what the network shares with it of others', whether it sees players on other servers, and where it may send players. A call it may not make is an error at the script's line saying `network.forbidden` (a channel's or map's), or fails with `network.forbidden` in `err` (sending a player), and never reaches another server. `nil` until this server has connected.",
+      requires: 'network',
+      params: [],
+      returns: [{ type: 'NetworkRole?' }],
+      example:
+        'local role = nf.network.server_role()\nif role and not role.trusted then\n  log("this server is " .. role.role .. ", owning " .. table.concat(role.owns, ", "))\nend',
+    },
+    {
       name: 'is_connected',
       doc: "Whether this server is connected to its network's hub now. `network_connect` and `network_disconnect` say when that changes.",
       requires: 'network',
@@ -330,6 +339,54 @@ export const networkShapes: LuaClass[] = [
     },
     { name: 'players', type: 'integer', doc: 'How many players are on it.' },
   ]),
+  shape('NetworkRole', 'What this server may do in the network, from `nf.network.server_role`.', [
+    {
+      name: 'role',
+      type: '"trusted"|"standard"|"isolated"',
+      doc: "Its credential's role: `trusted` (everything), `standard` (its own namespaces and what's shared with it, seeing everyone) or `isolated` (only what's shared with it, seeing only its own players).",
+    },
+    {
+      name: 'trusted',
+      type: 'boolean',
+      doc: 'Whether it may do anything: every channel and map, every player.',
+    },
+    {
+      name: 'owns',
+      type: 'string[]',
+      doc: 'The namespaces whose channels and maps it has whole: reading, writing, asking and answering.',
+    },
+    {
+      name: 'shares',
+      type: 'NetworkShare[]',
+      doc: "What the network shares with it of channels and maps it doesn't own.",
+    },
+    {
+      name: 'presence',
+      type: 'boolean',
+      doc: "Whether it sees players on other servers. Without, `players()` and the `network_player_*` events are only this server's: a player joins as they come here and quits as they go.",
+    },
+    {
+      name: 'send_to',
+      type: 'string[]?',
+      doc: 'Where it may send players, when it may not send them anywhere: server names, and `"back"` for wherever the player came from. A server that isn\'t trusted sends only players who are on it.',
+    },
+  ]),
+  shape(
+    'NetworkShare',
+    'A channel or map shared with this server, from `nf.network.server_role`.',
+    [
+      {
+        name: 'name',
+        type: 'string',
+        doc: 'Its full name, `namespace:name`, or a pattern ending in `*` for every name starting so (`events:*`).',
+      },
+      {
+        name: 'access',
+        type: '("read"|"write"|"request"|"answer")[]',
+        doc: 'What it may do: `read` (hear its messages, keep a copy of the map), `write` (publish, write the map; reading comes with it), `request` (ask on it) and `answer` (be asked on it).',
+      },
+    ],
+  ),
   shape('NetworkPlayer', 'A player online in the network.', [
     {
       name: 'id',

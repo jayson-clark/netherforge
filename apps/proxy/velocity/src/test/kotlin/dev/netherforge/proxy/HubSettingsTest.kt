@@ -20,7 +20,7 @@ class HubSettingsTest {
         val said = ArrayList<String>()
         val first = HubSettings.read(file) { said += it }
         assertTrue(Files.exists(file))
-        assertEquals(64, first.secret.length)
+        assertEquals(64, first.secret!!.length)
         assertEquals("0.0.0.0", first.bind)
         assertEquals(Protocol.DEFAULT_PORT, first.port)
         assertEquals(NetworkLimits(), first.limits)
@@ -51,11 +51,22 @@ class HubSettingsTest {
     }
 
     @Test
-    fun `a missing or short secret is refused, never run without`() {
+    fun `a short secret is refused, and none means only credentials join`() {
         Files.createDirectories(file.parent)
         file.writeText("port=26000\n")
-        assertTrue(assertFailsWith<IllegalStateException> { HubSettings.read(file) {} }.message!!.contains("has no secret"))
+        assertEquals(null, HubSettings.read(file) {}.secret)
         file.writeText("secret=short\n")
         assertTrue(assertFailsWith<IllegalArgumentException> { HubSettings.read(file) {} }.message!!.contains("shorter than 16"))
+    }
+
+    @Test
+    fun `what's shared with each role is read, and a share that isn't one says so`() {
+        Files.createDirectories(file.parent)
+        file.writeText("share.standard=lobby:return(request), events:*(read)\nshare.isolated=\n")
+        val settings = HubSettings.read(file) {}
+        assertEquals(listOf("lobby:return(request)", "events:*(read)"), settings.roleShares["standard"]!!.map { it.toString() })
+        assertEquals(emptyList(), settings.roleShares["isolated"])
+        file.writeText("share.standard=lobby(read)\n")
+        assertTrue(assertFailsWith<IllegalArgumentException> { HubSettings.read(file) {} }.message!!.contains("share.standard"))
     }
 }

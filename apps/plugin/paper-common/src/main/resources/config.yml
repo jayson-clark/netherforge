@@ -172,7 +172,11 @@ wasm:
 # (Velocity) runs NetherForge's proxy plugin, the network's hub; its
 # plugins/netherforge/hub.properties has the port and the secret. Set hub to the
 # proxy's address and that port, server-name to this server's name in
-# velocity.toml's [servers], and secret to the hub's. What each package may send
+# velocity.toml's [servers], and secret to the hub's (a trusted server, which
+# may do anything). A server can instead join with a credential of its own
+# (/nfhub credentials add on the proxy prints one): set credential's id and
+# secret, and leave secret empty; the hub then holds it to what the credential
+# allows (nf.network.server_role() says what). What each package may send
 # a minute (messages, requests, map writes, players sent) is
 # messages-per-minute; a request waits request-timeout-seconds for its answer.
 # What arrives is handed to scripts messages-per-tick a tick, at most
@@ -184,6 +188,9 @@ network:
   hub: 127.0.0.1:25590
   server-name: ''
   secret: ''
+  credential:
+    id: ''
+    secret: ''
   messages-per-minute: 1200
   request-timeout-seconds: 10
   messages-per-tick: 1000

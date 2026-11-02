@@ -15,8 +15,13 @@ data class NetworkConfig(
     val port: Int = Protocol.DEFAULT_PORT,
     /** This server's name as the proxy names it (`velocity.toml`'s `[servers]`). */
     val serverName: String? = null,
-    /** The hub's secret, from its `hub.properties`. */
+    /**
+     * The secret this server proves: its [credential]'s (`network.credential.secret`), or the hub's shared one
+     * (`network.secret`, from its `hub.properties`) when it has no credential.
+     */
     val secret: String? = null,
+    /** This server's credential's id (`network.credential.id`, from `/nfhub credentials add`); null: the shared secret. */
+    val credential: String? = null,
     /** What each package may send a minute: messages, requests, map writes and players sent. */
     val messagesPerMinute: Int = 1200,
     /** How long a request waits for its answer, here (the hub has its own, longer, limit). */
@@ -31,7 +36,10 @@ data class NetworkConfig(
         !enabled -> null
         serverName == null -> "network.server-name is empty: set it to this server's name in the proxy's config"
         !NetworkNames.isServer(serverName) -> "network.server-name \"$serverName\" isn't a server name (letters, digits, _ . -)"
-        secret == null -> "network.secret is empty: copy it from the proxy's plugins/netherforge/hub.properties"
+        credential != null && !NetworkNames.isCredential(credential) -> "network.credential.id \"$credential\" isn't a credential id"
+        credential != null && secret == null -> "network.credential.secret is empty: it's what /nfhub credentials add printed"
+        secret == null ->
+            "network.secret is empty: copy it from the proxy's plugins/netherforge/hub.properties, or give the server a credential"
         port !in 1..65535 -> "network.hub's port $port isn't a port"
         else -> null
     }

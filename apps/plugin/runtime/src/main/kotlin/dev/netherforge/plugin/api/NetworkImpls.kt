@@ -10,7 +10,9 @@ import dev.netherforge.plugin.binding.NetworkMapApi
 import dev.netherforge.plugin.binding.NetworkMapWriteOptions
 import dev.netherforge.plugin.binding.NetworkPlayer
 import dev.netherforge.plugin.binding.NetworkPublishOptions
+import dev.netherforge.plugin.binding.NetworkRole
 import dev.netherforge.plugin.binding.NetworkServer
+import dev.netherforge.plugin.binding.NetworkShare
 import dev.netherforge.plugin.binding.NfNetworkApi
 import dev.netherforge.plugin.binding.PlayerOrString
 import dev.netherforge.plugin.lua.LuaApiException
@@ -33,6 +35,19 @@ internal class NfNetworkImpl(private val session: ProjectSession) : NfNetworkApi
     override fun serverName(caller: Caller): String? = link.name
 
     override fun isConnected(caller: Caller): Boolean = link.connected
+
+    override fun serverRole(caller: Caller): NetworkRole? {
+        if (!link.connected) return null
+        val grants = link.grants
+        return NetworkRole(
+            role = grants.role,
+            trusted = grants.trusted,
+            owns = grants.owns,
+            shares = grants.shares.map { share -> NetworkShare(share.name, share.access.sortedBy { it.ordinal }.map { it.word }) },
+            presence = grants.presence,
+            sendTo = grants.sendTo
+        )
+    }
 
     override fun servers(caller: Caller): List<NetworkServer> {
         val counts = link.players.values.groupingBy { it.server }.eachCount()

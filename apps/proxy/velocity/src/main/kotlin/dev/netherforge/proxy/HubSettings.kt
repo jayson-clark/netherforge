@@ -1,22 +1,29 @@
 package dev.netherforge.proxy
 
 import dev.netherforge.network.Auth
+import dev.netherforge.network.Grants
 import dev.netherforge.network.NetworkLimits
 import dev.netherforge.network.Protocol
+import dev.netherforge.network.Share
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Properties
 
 /**
- * The hub's settings, `plugins/netherforge/hub.properties` on the proxy: where it listens, the secret every server
- * proves it knows, and the network's limits. Written with a new random secret the first time the proxy starts, so
- * a hub is never open without one. A value that isn't one (a negative number) is the default.
+ * The hub's settings, `plugins/netherforge/hub.properties` on the proxy: where it listens, the shared secret a
+ * trusted server may join with, what the network shares with less trusted servers (`share.<role>`), and the
+ * network's limits. Written with a new random secret the first time the proxy starts, so a hub is never open without
+ * one; an owner who wants every server to have its own credential empties it. A value that isn't one (a negative
+ * number) is the default.
  */
 data class HubSettings(
     val bind: String,
     val port: Int,
-    val secret: String,
+    /** The shared secret, which joins a server as `trusted`; null when the owner turned it off. */
+    val secret: String?,
     val limits: NetworkLimits,
+    /** What's shared with every credential of a role (`share.standard`, `share.isolated`). */
+    val roleShares: Map<String, List<Share>> = emptyMap(),
     /**
      * Whether a server's resource packs come off a player as they move to another server, so one server's (a lobby's
      * hidden HUD, its replaced sprites) never follows them to the next. Default true; a file written before this
@@ -41,12 +48,20 @@ data class HubSettings(
             fun positive(key: String) = text(key)?.toLongOrNull()?.takeIf { it > 0 }
             fun flag(key: String) = text(key)?.lowercase()?.let { it == "true" }
             val defaults = NetworkLimits()
-            val secret = text("secret") ?: error("$file has no secret: set one (or delete the file for a new one)")
-            require(secret.length >= MIN_SECRET) { "$file's secret is shorter than $MIN_SECRET characters" }
+            val secret = text("secret")
+            require(secret == null || secret.length >= MIN_SECRET) { "$file's secret is shorter than $MIN_SECRET characters" }
+            val roleShares = Grants.ROLES.filter { it != Grants.TRUSTED_ROLE }.associateWith { role ->
+                try {
+                    Share.parseList(text("share.$role"))
+                } catch (e: IllegalArgumentException) {
+                    throw IllegalArgumentException("$file's share.$role: ${e.message}")
+                }
+            }
             return HubSettings(
                 bind = text("bind") ?: "0.0.0.0",
                 port = positive("port")?.toInt() ?: Protocol.DEFAULT_PORT,
                 secret = secret,
+                roleShares = roleShares,
                 limits = NetworkLimits(
                     maxValueBytes = positive("max-value-bytes")?.toInt() ?: defaults.maxValueBytes,
                     maxKeysPerPackage = positive("max-keys-per-package")?.toInt() ?: defaults.maxKeysPerPackage,
@@ -72,8 +87,17 @@ data class HubSettings(
                 |bind=0.0.0.0
                 |port=${Protocol.DEFAULT_PORT}
                 |
-                |# What every server proves it knows (never sent as it is). Anyone with it can join the network.
+                |# What a server proves it knows (never sent as it is) to join as a trusted server, which may do anything.
+                |# Anyone with it can join the network. Servers can have credentials of their own instead, each with what
+                |# it may do (/nfhub credentials add, credentials.properties); empty this to allow only those.
                 |secret=$secret
+                |
+                |# What the network shares with servers whose credential has a less trusted role, besides their own
+                |# namespaces: channels and maps by full name (or namespace:* for all of one), each with what they may do
+                |# (read, write, request, answer; joined with +). For example:
+                |#   share.standard=lobby:return(request), events:announcements(read)
+                |share.standard=
+                |share.isolated=
                 |
                 |# The most one value may be as JSON: a message, a request or its reply, a map's value, a sent player's data.
                 |max-value-bytes=${limits.maxValueBytes}

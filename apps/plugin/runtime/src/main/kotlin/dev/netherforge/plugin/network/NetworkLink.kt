@@ -1,6 +1,7 @@
 package dev.netherforge.plugin.network
 
 import dev.netherforge.network.Auth
+import dev.netherforge.network.Grants
 import dev.netherforge.network.Hub
 import dev.netherforge.network.HubClient
 import dev.netherforge.network.HubFrame
@@ -94,6 +95,10 @@ class NetworkLink(
     val servers = LinkedHashMap<String, Boolean>()
     var maxValueBytes = NetworkLimits.DEFAULT_MAX_VALUE_BYTES
         private set
+
+    /** What the hub lets this server do, as its welcome said; trusted until it has said. */
+    var grants: Grants = Grants.TRUSTED
+        private set
     val arrivals = HashMap<String, Arrival>()
 
     /** The last failure logged, and when, so a hub that's down is said once, not every few seconds. */
@@ -142,8 +147,16 @@ class NetworkLink(
         when (mode) {
             Mode.OFF -> if (config.enabled) log("NetherForge isn't joining its network: ${config.problem()}")
             Mode.REMOTE -> {
-                log("Joining the network as ${config.serverName} through its hub at ${config.host}:${config.port}")
-                link = HubClient(config.host, config.port, config.serverName!!, config.secret!!, listener).also { it.start() }
+                val how = config.credential?.let { " with the credential $it" }.orEmpty()
+                log("Joining the network as ${config.serverName} through its hub at ${config.host}:${config.port}$how")
+                link = HubClient(
+                    config.host,
+                    config.port,
+                    config.serverName!!,
+                    config.secret!!,
+                    listener,
+                    credential = config.credential
+                ).also { it.start() }
             }
             Mode.LOCAL -> {
                 val proxy = LocalProxy(alone!!)
@@ -221,6 +234,7 @@ class NetworkLink(
         connected = true
         lastFailure = null
         maxValueBytes = welcome.maxValueBytes
+        grants = welcome.grants
         players.clear()
         for (player in welcome.players) players[player.id] = player
         servers.clear()

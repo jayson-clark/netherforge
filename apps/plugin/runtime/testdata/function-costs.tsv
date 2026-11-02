@@ -884,6 +884,7 @@ nf.network.map	8
 nf.network.players	6
 nf.network.send_player	38
 nf.network.server_name	6
+nf.network.server_role	6
 nf.network.servers	6
 nf.on	215
 nf.once	129

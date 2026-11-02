@@ -53,7 +53,9 @@ class HubClient(
     private val server: String,
     private val secret: String,
     private val listener: HubListener,
-    private val maxQueued: Int = 50_000
+    private val maxQueued: Int = 50_000,
+    /** The credential [secret] is (null: the network's shared secret). */
+    private val credential: String? = null
 ) : HubLink {
     private val running = AtomicBoolean(false)
     private var thread: Thread? = null
@@ -130,11 +132,12 @@ class HubClient(
             return false
         }
         val nonce = Auth.newNonce()
-        out.write(Protocol.encode(ServerFrame.Hello(Protocol.VERSION, server, Auth.proof(secret, challenge.nonce, server, nonce), nonce)))
+        val proof = Auth.proof(secret, challenge.nonce, server, nonce, credential)
+        out.write(Protocol.encode(ServerFrame.Hello(Protocol.VERSION, server, proof, nonce, credential)))
         out.write("\n")
         out.flush()
         // Everything from the welcome on is sealed: a hub that can open and seal with these keys holds the secret.
-        val channel = Channel.server(secret, challenge.nonce, nonce, server)
+        val channel = Channel.server(secret, challenge.nonce, nonce, server, credential)
         reader.limit = Protocol.MAX_SEALED_LINE
         val answer = reader.readLine()
             ?: return false.also { listener.failed("the network's hub closed the connection before answering") }
@@ -223,7 +226,13 @@ class HubClient(
  * servers are the test's), and what the runtime's own tests connect servers with. Everything happens on the calling
  * thread: [send] is the hub receiving, and the hub's frames reach [listener] as it sends them.
  */
-class LocalLink(private val hub: Hub, private val server: String, private val secret: String, private val listener: HubListener) : HubLink {
+class LocalLink(
+    private val hub: Hub,
+    private val server: String,
+    private val secret: String,
+    private val listener: HubListener,
+    private val credential: String? = null
+) : HubLink {
     private var session: Hub.Session? = null
     private var nonce: String? = null
 
@@ -261,7 +270,7 @@ class LocalLink(private val hub: Hub, private val server: String, private val se
         val session = hub.open(peer)
         this.session = session
         val own = Auth.newNonce()
-        session.receive(ServerFrame.Hello(Protocol.VERSION, server, Auth.proof(secret, nonce!!, server, own), own))
+        session.receive(ServerFrame.Hello(Protocol.VERSION, server, Auth.proof(secret, nonce!!, server, own, credential), own, credential))
     }
 
     override fun stop() = peer.close("the server is stopping")

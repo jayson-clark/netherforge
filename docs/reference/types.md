@@ -3028,6 +3028,28 @@ A server of the network, from `nf.network.servers`.
 | `connected` | `boolean` | Whether NetherForge on it is connected to the hub now (a server without NetherForge never is). |
 | `players` | `integer` | How many players are on it. |
 
+### NetworkRole {#networkrole}
+
+What this server may do in the network, from `nf.network.server_role`.
+
+| Field | Type | |
+| --- | --- | --- |
+| `role` | `"trusted"\|"standard"\|"isolated"` | Its credential's role: `trusted` (everything), `standard` (its own namespaces and what's shared with it, seeing everyone) or `isolated` (only what's shared with it, seeing only its own players). |
+| `trusted` | `boolean` | Whether it may do anything: every channel and map, every player. |
+| `owns` | `string[]` | The namespaces whose channels and maps it has whole: reading, writing, asking and answering. |
+| `shares` | [`NetworkShare`](types.md#networkshare)`[]` | What the network shares with it of channels and maps it doesn't own. |
+| `presence` | `boolean` | Whether it sees players on other servers. Without, `players()` and the `network_player_*` events are only this server's: a player joins as they come here and quits as they go. |
+| `send_to` | `string[]?` | Where it may send players, when it may not send them anywhere: server names, and `"back"` for wherever the player came from. A server that isn't trusted sends only players who are on it. |
+
+### NetworkShare {#networkshare}
+
+A channel or map shared with this server, from `nf.network.server_role`.
+
+| Field | Type | |
+| --- | --- | --- |
+| `name` | `string` | Its full name, `namespace:name`, or a pattern ending in `*` for every name starting so (`events:*`). |
+| `access` | `("read"\|"write"\|"request"\|"answer")[]` | What it may do: `read` (hear its messages, keep a copy of the map), `write` (publish, write the map; reading comes with it), `request` (ask on it) and `answer` (be asked on it). |
+
 ### NetworkPlayer {#networkplayer}
 
 A player online in the network.

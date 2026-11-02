@@ -255,22 +255,26 @@ network:
   hub: 127.0.0.1:25590
   server-name: ''
   secret: ''
+  credential:
+    id: ''
+    secret: ''
   messages-per-minute: 1200
   request-timeout-seconds: 10
   messages-per-tick: 1000
   max-queued-messages: 10000
 ```
 
-| Key                       | Meaning                                                                                                                                               | Default           |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `enabled`                 | Whether this server joins its network.                                                                                                                | `false`           |
-| `hub`                     | The proxy's address and the hub's port (`port` in `hub.properties`): `host:port`, or a host alone for port 25590.                                     | `127.0.0.1:25590` |
-| `server-name`             | This server's name as the proxy names it (`velocity.toml`'s `[servers]`). The hub refuses a name the proxy doesn't have.                              |                   |
-| `secret`                  | The hub's `secret`, from `hub.properties`. It's proved, never sent.                                                                                   |                   |
-| `messages-per-minute`     | What each package may send a minute: messages, requests, map writes and players sent. Past it, `publish` and `set` return `false`, and the rest fail. | `1200`            |
-| `request-timeout-seconds` | How long a request waits for its answer before it fails.                                                                                              | `10`              |
-| `messages-per-tick`       | What arrives that's handed to scripts each tick (messages, requests, changes, players coming and going); the rest waits for the next.                 | `1000`            |
-| `max-queued-messages`     | What may wait for scripts; past it, the server stops reading from the hub until they catch up, so nothing is dropped.                                 | `10000`           |
+| Key                       | Meaning                                                                                                                                                                                        | Default           |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `enabled`                 | Whether this server joins its network.                                                                                                                                                         | `false`           |
+| `hub`                     | The proxy's address and the hub's port (`port` in `hub.properties`): `host:port`, or a host alone for port 25590.                                                                              | `127.0.0.1:25590` |
+| `server-name`             | This server's name as the proxy names it (`velocity.toml`'s `[servers]`). The hub refuses a name the proxy doesn't have.                                                                       |                   |
+| `secret`                  | The hub's `secret`, from `hub.properties`: the server joins as trusted. It's proved, never sent.                                                                                               |                   |
+| `credential`              | This server's own credential (`id` and `secret`, from `/nfhub credentials add`), in place of `secret`: the hub holds it to its role. See [credentials](./network.md#servers-with-credentials). |                   |
+| `messages-per-minute`     | What each package may send a minute: messages, requests, map writes and players sent. Past it, `publish` and `set` return `false`, and the rest fail.                                          | `1200`            |
+| `request-timeout-seconds` | How long a request waits for its answer before it fails.                                                                                                                                       | `10`              |
+| `messages-per-tick`       | What arrives that's handed to scripts each tick (messages, requests, changes, players coming and going); the rest waits for the next.                                                          | `1000`            |
+| `max-queued-messages`     | What may wait for scripts; past it, the server stops reading from the hub until they catch up, so nothing is dropped.                                                                          | `10000`           |
 
 The server logs when it joins and when it loses the hub, and dials again by
 itself. `/nf network` shows how it's in its network: connected or not, every
@@ -284,16 +288,17 @@ scripts can be tried with no proxy.
 `plugins/`. On its first start it writes `plugins/netherforge/hub.properties`
 with a new secret:
 
-| Key                       | Meaning                                                                                                     | Default            |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------ |
-| `bind`, `port`            | Where the hub listens. Keep the port to your servers (a firewall), as you do theirs.                        | `0.0.0.0`, `25590` |
-| `secret`                  | What every server proves it knows. Anyone with it can join the network.                                     | made for you       |
-| `max-value-bytes`         | The most one value may be as JSON: a message, a request or its answer, a map's value, a sent player's data. | `65536`            |
-| `max-keys-per-package`    | Keys one package may keep across its shared maps.                                                           | `10000`            |
-| `max-bytes-per-package`   | Bytes of values one package may keep across its shared maps.                                                | `16777216`         |
-| `request-timeout-seconds` | How long the hub waits for a server to answer a request.                                                    | `30`               |
-| `max-queued-frames`       | What may wait to be sent to one server; past it, the server is too slow and the hub drops its connection.   | `50000`            |
-| `clear-resource-packs`    | Whether the resource packs a server sent a player come off as they move to another server.                  | `true`             |
+| Key                                | Meaning                                                                                                     | Default            |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------ |
+| `bind`, `port`                     | Where the hub listens. Keep the port to your servers (a firewall), as you do theirs.                        | `0.0.0.0`, `25590` |
+| `secret`                           | What a trusted server proves it knows. Anyone with it can join the network. Empty: only credentials join.   | made for you       |
+| `share.standard`, `share.isolated` | What the network shares with every credential of that role: `lobby:return(request), events:*(read)`.        | none               |
+| `max-value-bytes`                  | The most one value may be as JSON: a message, a request or its answer, a map's value, a sent player's data. | `65536`            |
+| `max-keys-per-package`             | Keys one package may keep across its shared maps.                                                           | `10000`            |
+| `max-bytes-per-package`            | Bytes of values one package may keep across its shared maps.                                                | `16777216`         |
+| `request-timeout-seconds`          | How long the hub waits for a server to answer a request.                                                    | `30`               |
+| `max-queued-frames`                | What may wait to be sent to one server; past it, the server is too slow and the hub drops its connection.   | `50000`            |
+| `clear-resource-packs`             | Whether the resource packs a server sent a player come off as they move to another server.                  | `true`             |
 
 **Resource packs across the network.** Velocity keeps the resource packs a
 server sent a player when they move to another server, until that server
@@ -307,8 +312,12 @@ even the same one; turn it off for a network whose servers share one pack.
 
 Shared maps are saved in `plugins/netherforge/maps.json` on the proxy, every
 few seconds while they change and when it stops. Back it up with the proxy.
-`/nfhub` (permission `netherforge.admin`) lists the proxy's servers and which
-are connected.
+`/nfhub` (permission `netherforge.admin`) lists the proxy's servers, which
+are connected and with which credential. Servers' own credentials are in
+`plugins/netherforge/credentials.properties`, managed with
+`/nfhub credentials add|revoke|list|reload` (see
+[credentials](./network.md#servers-with-credentials)); keep that file as
+private as `hub.properties`.
 
 ## Web routes
 

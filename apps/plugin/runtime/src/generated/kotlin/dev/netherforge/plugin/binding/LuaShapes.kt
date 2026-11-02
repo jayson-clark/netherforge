@@ -7418,6 +7418,76 @@ data class NetworkServer(val name: String, val connected: Boolean, val players: 
     }
 }
 
+/** What this server may do in the network, from `nf.network.server_role`. */
+data class NetworkRole(val role: String, val trusted: Boolean, val owns: List<String>, val shares: List<NetworkShare>, val presence: Boolean, val sendTo: List<String>? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<NetworkRole>("NetworkRole") {
+        val roleCodec = LuaChoice(listOf("trusted", "standard", "isolated"))
+        val trustedCodec = LuaCodecs.BOOLEAN
+        val ownsCodec = LuaList(LuaCodecs.STRING)
+        val sharesCodec = LuaList(NetworkShare.Codec)
+        val presenceCodec = LuaCodecs.BOOLEAN
+        val sendToCodec = LuaOptional(LuaList(LuaCodecs.STRING))
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "role" to roleCodec,
+            "trusted" to trustedCodec,
+            "owns" to ownsCodec,
+            "shares" to sharesCodec,
+            "presence" to presenceCodec,
+            "send_to" to sendToCodec
+        )
+
+        override fun read(fields: ShapeReader) = NetworkRole(
+            role = fields.field("role", roleCodec),
+            trusted = fields.field("trusted", trustedCodec),
+            owns = fields.field("owns", ownsCodec),
+            shares = fields.field("shares", sharesCodec),
+            presence = fields.field("presence", presenceCodec),
+            sendTo = fields.field("send_to", sendToCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: NetworkRole) {
+            fields.field("role", value.role, roleCodec)
+            fields.field("trusted", value.trusted, trustedCodec)
+            fields.field("owns", value.owns, ownsCodec)
+            fields.field("shares", value.shares, sharesCodec)
+            fields.field("presence", value.presence, presenceCodec)
+            fields.field("send_to", value.sendTo, sendToCodec)
+        }
+    }
+}
+
+/** A channel or map shared with this server, from `nf.network.server_role`. */
+data class NetworkShare(val name: String, val access: List<String>) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<NetworkShare>("NetworkShare") {
+        val nameCodec = LuaCodecs.STRING
+        val accessCodec = LuaList(LuaChoice(listOf("read", "write", "request", "answer")))
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "name" to nameCodec,
+            "access" to accessCodec
+        )
+
+        override fun read(fields: ShapeReader) = NetworkShare(
+            name = fields.field("name", nameCodec),
+            access = fields.field("access", accessCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: NetworkShare) {
+            fields.field("name", value.name, nameCodec)
+            fields.field("access", value.access, accessCodec)
+        }
+    }
+}
+
 /** A player online in the network. */
 data class NetworkPlayer(val id: String, val name: String, val server: String? = null) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)

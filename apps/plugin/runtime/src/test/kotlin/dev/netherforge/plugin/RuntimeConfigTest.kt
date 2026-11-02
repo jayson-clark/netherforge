@@ -185,6 +185,17 @@ class RuntimeConfigTest {
         assertTrue(NetworkConfig(enabled = true, secret = "x").problem()!!.contains("network.server-name is empty"))
         assertTrue(NetworkConfig(enabled = true, serverName = "lobby").problem()!!.contains("network.secret is empty"))
         assertTrue(NetworkConfig(enabled = true, serverName = "a b", secret = "x").problem()!!.contains("isn't a server name"))
+
+        val withCredential = section + ("credential" to mapOf("id" to "arena", "secret" to "arena-secret"))
+        val credential = read(mapOf("project" to "p", "network" to withCredential))!!.network
+        assertEquals(expected.copy(secret = "arena-secret", credential = "arena"), credential)
+        assertTrue(
+            NetworkConfig(
+                enabled = true,
+                serverName = "lobby",
+                credential = "arena"
+            ).problem()!!.contains("network.credential.secret is empty")
+        )
     }
 
     @Test

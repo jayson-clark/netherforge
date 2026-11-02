@@ -5,6 +5,7 @@ import dev.netherforge.format.ProblemCodes
 import dev.netherforge.format.project.PackagePaths
 import dev.netherforge.format.project.ProjectManifest
 import dev.netherforge.format.project.ProjectSnapshot
+import dev.netherforge.network.Access
 import dev.netherforge.network.HubFrame
 import dev.netherforge.network.MapCause
 import dev.netherforge.network.MapOp
@@ -171,12 +172,33 @@ class Network(
         else -> "this server isn't connected to the network's hub"
     }
 
+    /**
+     * Throws, at the script's line, when the hub has said this server's credential may not do [access] on [full]
+     * ([what] naming the call). Before the hub has said (not connected yet), the hub itself refuses.
+     */
+    fun forbid(full: String, access: Access, what: String) {
+        val link = link()
+        if (!link.connected || link.grants.allows(full, access)) return
+        val verb = when (access) {
+            Access.READ -> "listen to"
+            Access.WRITE -> "write to"
+            Access.REQUEST -> "ask on"
+            Access.ANSWER -> "answer on"
+        }
+        throw LuaApiException(
+            "$what: network.forbidden: this server's credential (${link.grants.role}) may not $verb \"$full\": the network's " +
+                "owner shares it in the hub's credentials or hub.properties (nf.network.server_role() says what this server may do)"
+        )
+    }
+
     fun publish(namespace: String, channel: String, value: JsonElement, server: String?): Boolean {
+        forbid(channel, Access.WRITE, "channel:publish")
         if (!link().connected || !allowed(namespace)) return false
         return link().send(ServerFrame.Publish(channel, value, server))
     }
 
     fun request(namespace: String, channel: String, server: String, value: JsonElement): CompletionStage<Any?> {
+        forbid(channel, Access.REQUEST, "channel:request")
         refusal(namespace)?.let { return CompletableFuture.failedFuture(WorkFailed(it)) }
         val id = link().nextId()
         val future = CompletableFuture<Any?>()
@@ -205,6 +227,7 @@ class Network(
             throw LuaApiException("bad argument 'key' (1 to ${NetworkNames.MAX_KEY_LENGTH} characters, none a control character)")
         }
         if (expires != null && expires < 1) throw LuaApiException("bad argument 'options.expires' (at least 1 tick expected, got $expires)")
+        forbid(map, Access.WRITE, "map:${op.name.lowercase()}")
         val waits = op == MapOp.ADD || op == MapOp.INSERT
         refusal(namespace)?.let { return if (waits) CompletableFuture.failedFuture(WorkFailed(it)) else null }
         val id = link().nextId()
@@ -220,6 +243,12 @@ class Network(
 
     fun send(namespace: String, player: String, server: String, data: JsonElement?): CompletionStage<Boolean> {
         refusal(namespace)?.let { return CompletableFuture.failedFuture(WorkFailed(it)) }
+        val grants = link().grants
+        if (!grants.trusted && link().players[player]?.server.let { it != null && it != link().name }) {
+            return CompletableFuture.failedFuture(
+                WorkFailed("network.forbidden: this server's credential (${grants.role}) may only send players who are on it")
+            )
+        }
         val id = link().nextId()
         val future = CompletableFuture<Boolean>()
         sends[id] =
@@ -394,11 +423,33 @@ class Network(
     /** Tells the hub what this session listens to, when it changed. */
     private fun listen() {
         listenChanged = false
+        val grants = link().grants
         val channels = channels.filter {
             val handle = LuaHandle.NetworkChannel(it)
-            scripts.listening(handle, Events.NETWORKCHANNEL_MESSAGE) || scripts.listening(handle, Events.NETWORKCHANNEL_REQUEST)
+            val messages = scripts.listening(handle, Events.NETWORKCHANNEL_MESSAGE) && grants.allows(it, Access.READ)
+            val requests = scripts.listening(handle, Events.NETWORKCHANNEL_REQUEST) && grants.allows(it, Access.ANSWER)
+            if (!messages &&
+                !requests &&
+                (scripts.listening(handle, Events.NETWORKCHANNEL_MESSAGE) || scripts.listening(handle, Events.NETWORKCHANNEL_REQUEST))
+            ) {
+                warnOnce(
+                    "forbidden:$it",
+                    "network.forbidden: this server's credential (${grants.role}) may not listen to \"$it\", so its handlers there hear nothing"
+                )
+            }
+            messages || requests
         }
-        val now = channels to mirrors.keys.toList()
+        val maps = mirrors.keys.filter { map ->
+            grants.allows(map, Access.READ).also { allowed ->
+                if (!allowed) {
+                    warnOnce(
+                        "forbidden:$map",
+                        "network.forbidden: this server's credential (${grants.role}) may not read the map \"$map\", so its copy stays empty"
+                    )
+                }
+            }
+        }
+        val now = channels to maps
         if (now == listened) return
         if (link().send(ServerFrame.Listen(now.first, now.second))) listened = now
     }

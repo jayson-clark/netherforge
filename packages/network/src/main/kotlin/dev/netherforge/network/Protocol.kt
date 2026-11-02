@@ -11,8 +11,9 @@ import kotlinx.serialization.json.JsonElement
  * ways, the few answers ([Reply], [MapResult], [SendResult]) carry their own ids, and the hub relays a request it
  * didn't make, under an id of its own.
  *
- * The handshake: the hub speaks first with a [Challenge] (a nonce); the server answers [Hello] with its name, a nonce
- * of its own and [Auth.proof] of the shared secret over both, never the secret itself; the hub answers [Welcome] (and
+ * The handshake: the hub speaks first with a [Challenge] (a nonce); the server answers [Hello] with its name, the
+ * credential it uses (none: the network's shared secret), a nonce of its own and [Auth.proof] of that credential's
+ * secret over both, never the secret itself; the hub answers [Welcome] (and
  * from then on anything) or [Refused] and closes. From the [Welcome] on, every line both ways is sealed ([Channel],
  * keys derived from the secret and both nonces), so the traffic is private and unaltered, and a server knows its
  * hub holds the secret too. A server that hears nothing for [IDLE_MILLIS] drops the connection and
@@ -20,7 +21,7 @@ import kotlinx.serialization.json.JsonElement
  */
 object Protocol {
     /** This protocol's version: a hub refuses a [Hello] of another, saying which it speaks. */
-    const val VERSION = 2
+    const val VERSION = 3
 
     /** The port a hub listens on unless its owner says otherwise. */
     const val DEFAULT_PORT = 25590
@@ -89,8 +90,9 @@ sealed interface HubFrame {
     data class Challenge(val version: Int, val nonce: String) : HubFrame
 
     /**
-     * The hello was accepted: the network as it is now, and the most a value may be ([NetworkLimits.maxValueBytes],
-     * so the server can refuse one at the script's line). Everything after it is a change to it.
+     * The hello was accepted: the network as it is now (as far as [grants] let this server see it), the most a value
+     * may be ([NetworkLimits.maxValueBytes]) and what this server may do ([grants]), so the server can refuse a value
+     * or a call at the script's line. Everything after it is a change to it.
      */
     @Serializable
     @SerialName("welcome")
@@ -98,7 +100,8 @@ sealed interface HubFrame {
         val server: String,
         val servers: List<ServerState>,
         val players: List<PlayerState>,
-        val maxValueBytes: Int = NetworkLimits.DEFAULT_MAX_VALUE_BYTES
+        val maxValueBytes: Int = NetworkLimits.DEFAULT_MAX_VALUE_BYTES,
+        val grants: Grants = Grants.TRUSTED
     ) : HubFrame
 
     /** The hello wasn't accepted, and why; the hub closes the connection after it. */
@@ -183,10 +186,14 @@ sealed interface HubFrame {
 /** What a server sends the hub. */
 @Serializable
 sealed interface ServerFrame {
-    /** The answer to a [HubFrame.Challenge]: this server's name (as the proxy names it) and [Auth.proof]. */
+    /**
+     * The answer to a [HubFrame.Challenge]: this server's name (as the proxy names it), the [credential] it proves
+     * (null: the network's shared secret) and [Auth.proof].
+     */
     @Serializable
     @SerialName("hello")
-    data class Hello(val version: Int, val server: String, val proof: String, val nonce: String = "") : ServerFrame
+    data class Hello(val version: Int, val server: String, val proof: String, val nonce: String = "", val credential: String? = null) :
+        ServerFrame
 
     /** Every channel and map this server listens to now, replacing what it said before. */
     @Serializable

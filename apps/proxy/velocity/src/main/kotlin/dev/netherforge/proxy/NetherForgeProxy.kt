@@ -12,11 +12,16 @@ import com.velocitypowered.api.plugin.annotation.DataDirectory
 import com.velocitypowered.api.proxy.ConnectionRequestBuilder
 import com.velocitypowered.api.proxy.ProxyServer
 import com.velocitypowered.api.proxy.player.ResourcePackInfo
+import dev.netherforge.network.Auth
+import dev.netherforge.network.CredentialEntry
+import dev.netherforge.network.CredentialsFile
 import dev.netherforge.network.FileMapStore
+import dev.netherforge.network.Grants
 import dev.netherforge.network.Hub
 import dev.netherforge.network.HubLog
 import dev.netherforge.network.HubProxy
 import dev.netherforge.network.HubServer
+import dev.netherforge.network.NetworkNames
 import dev.netherforge.network.PlayerState
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
@@ -40,6 +45,8 @@ class NetherForgeProxy @Inject constructor(
     private var hub: Hub? = null
     private var server: HubServer? = null
     private var clearResourcePacks = true
+    private var settings: HubSettings? = null
+    private val credentialsFile by lazy { CredentialsFile(folder.resolve(CredentialsFile.FILE)) }
 
     @Subscribe
     fun onInitialize(event: ProxyInitializeEvent) {
@@ -54,7 +61,20 @@ class NetherForgeProxy @Inject constructor(
 
             override fun warn(message: String) = logger.warn(message)
         }
-        val hub = Hub(settings.secret, VelocityProxy(), log, settings.limits, FileMapStore(folder.resolve("maps.json")))
+        val credentials = try {
+            credentialsFile.read().map { it.credential(settings.roleShares) }
+        } catch (e: Exception) {
+            logger.error("NetherForge: couldn't read ${credentialsFile.file}; the network's hub isn't running", e)
+            return
+        }
+        val hub = Hub(
+            settings.secret,
+            VelocityProxy(),
+            log,
+            settings.limits,
+            FileMapStore(folder.resolve("maps.json")),
+            credentials = credentials
+        )
         val server = HubServer(hub, InetSocketAddress(settings.bind, settings.port), log, settings.limits)
         try {
             server.start()
@@ -64,8 +84,12 @@ class NetherForgeProxy @Inject constructor(
         }
         this.hub = hub
         this.server = server
+        this.settings = settings
         clearResourcePacks = settings.clearResourcePacks
-        logger.info("NetherForge: the network's hub is listening on ${settings.bind}:${server.port}")
+        logger.info(
+            "NetherForge: the network's hub is listening on ${settings.bind}:${server.port}, with ${credentials.size} credentials" +
+                if (settings.secret == null) " and no shared secret" else ""
+        )
         proxy.commandManager.register(proxy.commandManager.metaBuilder("nfhub").plugin(this).build(), StatusCommand())
     }
 
@@ -122,22 +146,116 @@ class NetherForgeProxy @Inject constructor(
 
     private fun plain(component: Component) = PlainTextComponentSerializer.plainText().serialize(component)
 
+    /**
+     * `/nfhub`: what's connected. `/nfhub credentials add <id> [role] [owns,...] [--to-file]`, `revoke <id>`,
+     * `list`, `reload`: the servers' own credentials, kept in `credentials.properties`.
+     */
     private inner class StatusCommand : SimpleCommand {
         override fun hasPermission(invocation: SimpleCommand.Invocation) = invocation.source().hasPermission("netherforge.admin")
 
-        override fun execute(invocation: SimpleCommand.Invocation) {
-            val hub = hub
-            val text = if (hub == null) {
-                "NetherForge's network hub isn't running (see the proxy's log)."
-            } else {
-                val linked = hub.linked().toSet()
-                val lines = proxy.allServers.map { registered ->
-                    val name = registered.serverInfo.name
-                    "  $name: ${if (name in linked) "connected" else "not connected"}, ${registered.playersConnected.size} online"
-                }
-                "NetherForge network hub on port ${server?.port}:\n" + lines.joinToString("\n")
+        override fun suggest(invocation: SimpleCommand.Invocation): List<String> {
+            val args = invocation.arguments()
+            return when (args.size) {
+                0, 1 -> listOf("credentials").filter { it.startsWith(args.firstOrNull().orEmpty()) }
+                2 -> listOf("add", "revoke", "list", "reload").filter { it.startsWith(args[1]) }
+                3 -> if (args[1] == "revoke") hub?.credentials()?.map { it.id }.orEmpty().filter { it.startsWith(args[2]) } else emptyList()
+                4 -> if (args[1] == "add") Grants.ROLES.filter { it.startsWith(args[3]) } else emptyList()
+                else -> emptyList()
             }
+        }
+
+        override fun execute(invocation: SimpleCommand.Invocation) {
+            val args = invocation.arguments()
+            val text = if (args.firstOrNull() == "credentials") credentials(args.drop(1)) else status()
             invocation.source().sendMessage(Component.text(text))
+        }
+
+        private fun status(): String {
+            val hub = hub ?: return "NetherForge's network hub isn't running (see the proxy's log)."
+            val linked = hub.connections().associateBy { it.server }
+            val lines = proxy.allServers.map { registered ->
+                val name = registered.serverInfo.name
+                val connection = linked[name]
+                val how = when {
+                    connection == null -> "not connected"
+                    connection.credential == null -> "connected (shared secret)"
+                    else -> "connected (${connection.credential}: ${connection.grants.role})"
+                }
+                "  $name: $how, ${registered.playersConnected.size} online"
+            }
+            return "NetherForge network hub on port ${server?.port}:\n" + lines.joinToString("\n")
+        }
+
+        private fun credentials(args: List<String>): String {
+            val hub = hub ?: return "NetherForge's network hub isn't running (see the proxy's log)."
+            val settings = settings!!
+            return try {
+                when (args.firstOrNull()) {
+                    "list" -> {
+                        val all = hub.credentials()
+                        if (all.isEmpty()) {
+                            "No credentials: servers join with the shared secret. Add one with /nfhub credentials add <id> [role]."
+                        } else {
+                            val connected = hub.connections().groupBy { it.credential }
+                            "Credentials:\n" + all.joinToString("\n") { credential ->
+                                val on = connected[credential.id].orEmpty().map { it.server }
+                                "  ${credential.id}: ${credential.grants.describe()}" +
+                                    if (on.isEmpty()) "" else "; connected: ${on.joinToString()}"
+                            }
+                        }
+                    }
+                    "add" -> {
+                        val id = args.getOrNull(1) ?: return "Usage: /nfhub credentials add <id> [role] [owns,...] [--to-file]"
+                        if (!NetworkNames.isCredential(id)) return "\"$id\" isn't a credential id: letters, digits, _ . -"
+                        val words = args.drop(2).filter { it != "--to-file" }
+                        val role = words.getOrNull(0) ?: Grants.STANDARD_ROLE
+                        if (role !in Grants.ROLES) return "\"$role\" isn't a role: trusted, standard or isolated"
+                        val owns = words.getOrNull(1)?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+                        owns.firstOrNull { !NetworkNames.isNamespace(it) }?.let { return "\"$it\" isn't a namespace" }
+                        val entries = credentialsFile.read()
+                        if (entries.any {
+                                it.id == id
+                            }
+                        ) {
+                            return "There's a credential \"$id\" already: revoke it first to issue a new secret."
+                        }
+                        val entry = CredentialEntry(id, Auth.newSecret(), role, owns)
+                        credentialsFile.write(entries + entry)
+                        hub.setCredentials((entries + entry).map { it.credential(settings.roleShares) })
+                        logger.info("NetherForge: added the credential $id (${entry.credential(settings.roleShares).grants.describe()})")
+                        val config = "network:\n  credential:\n    id: $id\n    secret: ${entry.secret}"
+                        if ("--to-file" in args) {
+                            val issued = folder.resolve("issued").resolve("$id.yml")
+                            java.nio.file.Files.createDirectories(issued.parent)
+                            java.nio.file.Files.writeString(issued, config + "\n")
+                            "Added the credential $id ($role). Its config is in $issued: hand it to the server, then delete it."
+                        } else {
+                            "Added the credential $id ($role). It's shown only now; put it in the server's plugins/NetherForge/config.yml:\n$config"
+                        }
+                    }
+                    "revoke" -> {
+                        val id = args.getOrNull(1) ?: return "Usage: /nfhub credentials revoke <id>"
+                        val entries = credentialsFile.read()
+                        if (entries.none { it.id == id }) return "There's no credential \"$id\"."
+                        val left = entries.filter { it.id != id }
+                        credentialsFile.write(left)
+                        hub.setCredentials(left.map { it.credential(settings.roleShares) })
+                        logger.info("NetherForge: revoked the credential $id")
+                        "Revoked $id: servers using it were disconnected, and can't join again with it."
+                    }
+                    "reload" -> {
+                        val fresh = HubSettings.read(folder.resolve(HubSettings.FILE)) { logger.info(it) }
+                        val all = credentialsFile.read().map { it.credential(fresh.roleShares) }
+                        this@NetherForgeProxy.settings = settings.copy(roleShares = fresh.roleShares)
+                        hub.setCredentials(all)
+                        "Read ${all.size} credentials (and hub.properties' shares); servers whose grants changed dial again."
+                    }
+                    else -> "Usage: /nfhub credentials add <id> [role] [owns,...] [--to-file] | revoke <id> | list | reload"
+                }
+            } catch (e: Exception) {
+                logger.warn("NetherForge: /nfhub credentials failed", e)
+                "That failed: ${e.message}"
+            }
         }
     }
 }

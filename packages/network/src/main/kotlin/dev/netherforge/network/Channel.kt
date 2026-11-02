@@ -60,22 +60,32 @@ class Channel private constructor(private val sealing: SecretKeySpec, private va
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val TAG_BITS = 128
 
-        /** The hub's end of the connection with [server], whose challenge was [hubNonce] and hello [serverNonce]. */
-        fun hub(secret: String, hubNonce: String, serverNonce: String, server: String): Channel = Channel(
-            sealing = key(secret, hubNonce, serverNonce, server, "hub to server"),
-            opening = key(secret, hubNonce, serverNonce, server, "server to hub")
+        /**
+         * The hub's end of the connection with [server], whose challenge was [hubNonce] and hello [serverNonce], under
+         * [secret] (its [credential]'s, or the network's shared one when null).
+         */
+        fun hub(secret: String, hubNonce: String, serverNonce: String, server: String, credential: String? = null): Channel = Channel(
+            sealing = key(secret, hubNonce, serverNonce, server, credential, "hub to server"),
+            opening = key(secret, hubNonce, serverNonce, server, credential, "server to hub")
         )
 
         /** [server]'s end of its connection to the hub. */
-        fun server(secret: String, hubNonce: String, serverNonce: String, server: String): Channel = Channel(
-            sealing = key(secret, hubNonce, serverNonce, server, "server to hub"),
-            opening = key(secret, hubNonce, serverNonce, server, "hub to server")
+        fun server(secret: String, hubNonce: String, serverNonce: String, server: String, credential: String? = null): Channel = Channel(
+            sealing = key(secret, hubNonce, serverNonce, server, credential, "server to hub"),
+            opening = key(secret, hubNonce, serverNonce, server, credential, "hub to server")
         )
 
         /** HKDF-SHA256 (RFC 5869): extract with both nonces as the salt, then one block of expand for [direction]. */
-        private fun key(secret: String, hubNonce: String, serverNonce: String, server: String, direction: String): SecretKeySpec {
+        private fun key(
+            secret: String,
+            hubNonce: String,
+            serverNonce: String,
+            server: String,
+            credential: String?,
+            direction: String
+        ): SecretKeySpec {
             val prk = hmac("$hubNonce\n$serverNonce".toByteArray(Charsets.UTF_8), secret.toByteArray(Charsets.UTF_8))
-            val info = "netherforge network v${Protocol.VERSION}: $direction\n$server".toByteArray(Charsets.UTF_8)
+            val info = "netherforge network v${Protocol.VERSION}: $direction\n$server\n${credential.orEmpty()}".toByteArray(Charsets.UTF_8)
             return SecretKeySpec(hmac(prk, info + byteArrayOf(1)), "AES")
         }
 

@@ -8,7 +8,7 @@ A table of functions: call them with a dot.
 
 | | Functions |
 | --- | --- |
-| [Functions](#functions) | [`server_name`](#server_name) [`is_connected`](#is_connected) [`servers`](#servers) [`players`](#players) [`find_player`](#find_player) [`channel`](#channel) [`map`](#map) [`send_player`](#send_player) |
+| [Functions](#functions) | [`server_name`](#server_name) [`server_role`](#server_role) [`is_connected`](#is_connected) [`servers`](#servers) [`players`](#players) [`find_player`](#find_player) [`channel`](#channel) [`map`](#map) [`send_player`](#send_player) |
 
 ## Functions {#functions}
 
@@ -19,6 +19,21 @@ This server's name in the network, as the proxy names it (`network.server-name` 
 *Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
 
 **Returns** `string?`
+
+### `nf.network.server_role()` {#server_role}
+
+What this server may do in the network, as the hub says: a server that joined with the network's shared secret is `trusted` and may do anything; one that joined with a credential of its own (`network.credential` in `config.yml`) has its credential's role, the namespaces whose channels and maps it owns, what the network shares with it of others', whether it sees players on other servers, and where it may send players. A call it may not make is an error at the script's line saying `network.forbidden` (a channel's or map's), or fails with `network.forbidden` in `err` (sending a player), and never reaches another server. `nil` until this server has connected.
+
+*Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
+
+**Returns** [`NetworkRole`](types.md#networkrole)`?`
+
+```lua
+local role = nf.network.server_role()
+if role and not role.trusted then
+  log("this server is " .. role.role .. ", owning " .. table.concat(role.owns, ", "))
+end
+```
 
 ### `nf.network.is_connected()` {#is_connected}
 

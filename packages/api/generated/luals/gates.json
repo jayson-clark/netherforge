@@ -96,6 +96,10 @@
     "requires": "network"
   },
   {
+    "function": "nf.network.server_role",
+    "requires": "network"
+  },
+  {
     "function": "nf.network.is_connected",
     "requires": "network"
   },

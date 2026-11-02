@@ -338,6 +338,76 @@ server writes a map), `network_join` and `network_quit` cover the rest; see
 servers and players moving between them, run a
 [dev network](#a-dev-network-in-the-editor).
 
+## Servers with credentials
+
+The shared secret lets a server in as **trusted**: it may publish on any
+channel, write any map, and send any player anywhere. That's right for a
+network of your own servers. For a server running someone else's project, or
+one you'd rather keep to its own business, give it a **credential** of its
+own instead: an id and a secret that only it uses, with a **role** the hub
+holds it to (the hub, never the server, decides).
+
+| Role       | May                                                                                                                           |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `trusted`  | Everything, as with the shared secret.                                                                                        |
+| `standard` | Its own namespaces' channels and maps, whatever the network shares with standard servers, and see everyone.                   |
+| `isolated` | Only what the network shares with isolated servers. Sees only its own players, and sends them only back where they came from. |
+
+On the proxy, add one with `/nfhub credentials add <id> [role] [namespaces]`:
+
+```
+/nfhub credentials add arena standard arena,arena_stats
+```
+
+It prints the secret once (or, with `--to-file`, writes it to
+`plugins/netherforge/issued/<id>.yml` for a provisioning tool to pick up),
+and keeps the credential in `plugins/netherforge/credentials.properties`. The
+server joins with it instead of `secret`:
+
+```yaml
+network:
+  enabled: true
+  hub: proxy.internal:25590
+  server-name: arena-1
+  credential:
+    id: arena
+    secret: 9b0e…
+```
+
+A credential can be shared by every server of a kind (all your arena
+servers). `/nfhub credentials list` shows them and who's connected with each,
+and `/nfhub credentials revoke <id>` drops its servers at once and refuses it
+from then on. To turn the shared secret off altogether, empty `secret` in
+`hub.properties`.
+
+**What a credential owns and is shared.** The namespaces it **owns** (the
+packages it runs) are its whole: it reads, writes, asks and answers on their
+channels and maps. Of others', it has only what the network **shares**, in
+`hub.properties` for every credential of a role:
+
+```properties
+share.standard=lobby:return(request), events:announcements(read)
+share.isolated=lobby:return(request)
+```
+
+and in `credentials.properties` for one alone (`arena.shares=...`). Each
+share is a channel's or map's full name (or `namespace:*` for all of one),
+with what it may do, joined with `+`: `read` (hear a channel's messages,
+keep a copy of a map), `write` (publish on it, write the map; reading comes
+with it), `request` (ask on it), and `answer` (be asked on it). A credential
+can also set `presence` (whether it sees players on other servers) and
+`send-to` (where it may send its players: server names, `back`, or `*`).
+After editing either file by hand, `/nfhub credentials reload`; servers whose
+grants changed dial again under the new ones.
+
+**What scripts see.** `nf.network.server_role()` says what this server may
+do. A call it may not make never reaches another server: publishing, asking
+or writing where it may not is an error at the script's line naming
+`network.forbidden`, and sending a player it may not fails with
+`network.forbidden` in `err`. A handler on a channel it may not listen to
+hears nothing, and the server's log says why. A less trusted server only
+sends players who are on it.
+
 ## Limits
 
 The server's owner limits what its packages send (`network:` in
@@ -352,8 +422,9 @@ server may fall before the hub drops it.
 
 ## Security
 
-- **Joining** takes the hub's secret, proved per connection without sending
-  it, and a server name the proxy has. Keep the hub's port to your servers.
+- **Joining** takes the hub's secret or a credential's, proved per connection
+  without sending it, and a server name the proxy has. Keep the hub's port to
+  your servers.
 - **The traffic** between servers and hub is encrypted and authenticated
   (AES-256-GCM, with keys derived from the secret for each connection), so it
   can't be read or changed on the way, and a server only talks to a hub that
@@ -363,6 +434,7 @@ server may fall before the hub drops it.
   channels and maps (and those of packages they depend on).
 - **The hub** checks every value's size and every package's share of the
   maps, and drops a server that stops reading what it's sent.
-- **Every server is trusted** once it's in: a server can publish on any
-  channel and write any map. The network is one owner's servers. Don't give
-  the secret to a server you don't run.
+- **A server with the shared secret is trusted**: it can publish on any
+  channel, write any map and send any player. Don't give the secret to a
+  server you don't run; give it a [credential](#servers-with-credentials),
+  whose role the hub enforces on every frame it sends.

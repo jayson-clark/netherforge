@@ -8918,6 +8918,10 @@ namespaces["nf.network"] = function(scope, ns)
     return prim["nf.network.server_name"](scope)
   end
 
+  function ns.server_role()
+    return prim["nf.network.server_role"](scope)
+  end
+
   function ns.is_connected()
     return prim["nf.network.is_connected"](scope)
   end

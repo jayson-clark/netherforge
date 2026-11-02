@@ -321,7 +321,8 @@ data class RuntimeConfig(
                 host = hub?.first ?: defaults.host,
                 port = hub?.second ?: defaults.port,
                 serverName = section.text("server-name")?.trim(),
-                secret = section.text("secret")?.trim(),
+                secret = section.section("credential").text("secret")?.trim() ?: section.text("secret")?.trim(),
+                credential = section.section("credential").text("id")?.trim(),
                 messagesPerMinute = positive("messages-per-minute", defaults.messagesPerMinute),
                 requestTimeoutSeconds = positive("request-timeout-seconds", defaults.requestTimeoutSeconds),
                 messagesPerTick = positive("messages-per-tick", defaults.messagesPerTick),
@@ -340,7 +341,8 @@ data class RuntimeConfig(
                 host = hub.first,
                 port = hub.second,
                 serverName = properties(Bridge.NETWORK_SERVER_PROPERTY)?.trim(),
-                secret = env(Bridge.NETWORK_SECRET_ENV)?.trim()
+                secret = env(Bridge.NETWORK_SECRET_ENV)?.trim(),
+                credential = null
             )
         }
 

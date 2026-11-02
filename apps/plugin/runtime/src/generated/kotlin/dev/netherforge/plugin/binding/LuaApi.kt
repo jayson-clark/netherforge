@@ -1273,6 +1273,17 @@ interface NfNetworkApi {
     fun serverName(caller: Caller): String?
 
     /**
+     * What this server may do in the network, as the hub says: a server that joined with the network's
+     * shared secret is `trusted` and may do anything; one that joined with a credential of its own
+     * (`network.credential` in `config.yml`) has its credential's role, the namespaces whose channels and
+     * maps it owns, what the network shares with it of others', whether it sees players on other servers,
+     * and where it may send players. A call it may not make is an error at the script's line saying
+     * `network.forbidden` (a channel's or map's), or fails with `network.forbidden` in `err` (sending a
+     * player), and never reaches another server. `nil` until this server has connected.
+     */
+    fun serverRole(caller: Caller): NetworkRole?
+
+    /**
      * Whether this server is connected to its network's hub now. `network_connect` and
      * `network_disconnect` say when that changes.
      */
