@@ -27,6 +27,8 @@ data class HubSettings(
     val rolePolicies: Map<String, String> = emptyMap(),
     /** Each group's settings (`group.<name>.balance`), by the group's name. */
     val groups: Map<String, GroupSettings> = emptyMap(),
+    /** Where the players of a group without its own `group.<name>.fallback` go when their server stops (`fallback`). */
+    val fallback: String = GroupSettings.DEFAULT_FALLBACK,
     /** Where the admin API listens (`admin.bind`, `admin.port`): off without a port. Its clients are in `admin.properties`. */
     val adminBind: String = "127.0.0.1",
     val adminPort: Int? = null,
@@ -82,18 +84,21 @@ data class HubSettings(
                     throw IllegalArgumentException("$file's share.$role: ${e.message}")
                 }
             }
+            val fallback = text("fallback")?.also {
+                require(NetworkNames.isServer(it)) { "$file's fallback \"$it\" isn't a group's or server's name" }
+            } ?: GroupSettings.DEFAULT_FALLBACK
             val groups = properties.stringPropertyNames().filter { it.startsWith("group.") }
                 .map { it.removePrefix("group.").substringBeforeLast('.') }.toSortedSet()
                 .associateWith { group ->
                     val balance = text("group.$group.balance")?.let { word ->
                         Balance.of(word) ?: throw IllegalArgumentException("$file's group.$group.balance \"$word\" isn't least or fill")
                     }
-                    val fallback = text("group.$group.fallback")?.also {
+                    val own = text("group.$group.fallback")?.also {
                         require(NetworkNames.isServer(it)) { "$file's group.$group.fallback \"$it\" isn't a group's or server's name" }
                     }
                     GroupSettings(
                         balance = balance ?: Balance.LEAST,
-                        fallback = fallback ?: GroupSettings.DEFAULT_FALLBACK,
+                        fallback = own ?: fallback,
                         maxWaiting = positive("group.$group.max-waiting")?.toInt() ?: GroupSettings.DEFAULT_MAX_WAITING
                     )
                 }
@@ -110,6 +115,7 @@ data class HubSettings(
                     role to Files.readString(policyFile)
                 }.toMap(),
                 groups = groups,
+                fallback = fallback,
                 limits = NetworkLimits(
                     maxValueBytes = positive("max-value-bytes")?.toInt() ?: defaults.maxValueBytes,
                     maxKeysPerPackage = positive("max-keys-per-package")?.toInt() ?: defaults.maxKeysPerPackage,
@@ -192,10 +198,13 @@ data class HubSettings(
                 |# players to as one ({ group = "arena" }). How the hub picks the instance: least (the one with the fewest
                 |# players that has room, the default) or fill (the fullest with room, so players end up together).
                 |#   group.arena.balance=fill
-                |# Where an instance's players go when it stops (a group or server; lobby unless you say), and how many
-                |# sends may wait at once for an instance with room (a send that asks to wait, while one starts).
+                |# Where an instance's players go when it stops or drains (a group or server), and how many sends may wait
+                |# at once for an instance with room (a send that asks to wait, while one starts).
                 |#   group.arena.fallback=lobby
                 |#   group.arena.max-waiting=500
+                |# Where the players of every group without a fallback of its own go (lobby unless you say): groups made
+                |# while the network runs (one per game, say) have none.
+                |#   fallback=lobby
                 |
                 |# A URL the hub POSTs events to, for whatever starts and stops your servers: server_ready, server_idle,
                 |# server_gone and group_wanted (players waiting for a group with no room: start an instance). Each is

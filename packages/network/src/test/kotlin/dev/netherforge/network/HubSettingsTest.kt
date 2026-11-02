@@ -84,6 +84,16 @@ class HubSettingsTest {
         file.writeText("group.arena.fallback=hub\ngroup.arena.max-waiting=20\nwebhook.url=https://ops.example.com/nf\nwebhook.secret=s\n")
         val settings = HubSettings.read(file) {}
         assertEquals(GroupSettings(fallback = "hub", maxWaiting = 20), settings.groups["arena"])
+        assertEquals(GroupSettings.DEFAULT_FALLBACK, settings.fallback)
+        // The network's fallback is every group's that doesn't name its own.
+        file.writeText("fallback=hub\ngroup.arena.balance=fill\ngroup.mini.fallback=lobby\n")
+        val defaulted = HubSettings.read(file) {}
+        assertEquals("hub", defaulted.fallback)
+        assertEquals("hub", defaulted.groups["arena"]!!.fallback)
+        assertEquals("lobby", defaulted.groups["mini"]!!.fallback)
+        file.writeText("fallback=not a name\n")
+        val refused = assertFailsWith<IllegalArgumentException> { HubSettings.read(file) {} }
+        assertTrue(refused.message!!.contains("isn't a group's or server's name"))
         assertEquals("https://ops.example.com/nf", settings.webhookUrl.toString())
         file.writeText("webhook.url=ftp://x\n")
         assertTrue(assertFailsWith<IllegalArgumentException> { HubSettings.read(file) {} }.message!!.contains("isn't http(s)"))

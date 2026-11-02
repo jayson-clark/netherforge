@@ -142,6 +142,27 @@ class LifecycleTest {
     }
 
     @Test
+    fun `a group with no fallback of its own sends its players to the network's`() {
+        val proxy = FakeProxy().apply { names += listOf("hub-1", "kart-7", "kart-8") }
+        val hub = Hub("s3cret", proxy, Quiet, clock = { time }, fallback = "hub").also { proxy.hub = it }
+        fun join(name: String, group: String) = LocalLink(hub, name, "s3cret", Recorder(), group = group).also { it.start() }
+        join("hub-1", "hub")
+        join("lobby", "lobby")
+        // A group made while the network runs: nothing in hub.properties names it.
+        val kart = join("kart-7", "kart")
+        hub.playerMoved("q", "Q", "kart-7")
+        kart.send(ServerFrame.Evacuate)
+        assertEquals(listOf("q" to "hub-1"), proxy.sends)
+
+        // Read again with hub.properties: a group's own still wins.
+        hub.setGroups(mapOf("kart" to GroupSettings(fallback = "lobby")), fallback = "hub")
+        val again = join("kart-8", "kart")
+        hub.playerMoved("r", "R", "kart-8")
+        again.send(ServerFrame.Evacuate)
+        assertEquals("r" to "lobby", proxy.sends.last())
+    }
+
+    @Test
     fun `idle servers and servers going are heard by the webhook, and the admin API can drain one`() {
         val (miniLink, mini) = join("arena-2", "mini")
         miniLink.send(ServerFrame.Status(idle = true))

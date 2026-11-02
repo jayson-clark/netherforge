@@ -11,6 +11,11 @@ release is cut.
 
 ### Added
 
+- **A network-wide fallback group.** `fallback=<group>` in `hub.properties`
+  is where the players of every group without its own
+  `group.<name>.fallback` go when their server stops or drains, so groups made
+  while the network runs (one per game) need no settings, and a network with
+  no `lobby` keeps its players. Default `lobby`, as before.
 - **Game data without the editor.** `netherforge game-data <version>`
   (with `--accept-eula`) downloads the version's plugin and its Paper build,
   starts Paper headless, exports the game data `check` and `test` read into

@@ -63,6 +63,8 @@ class Hub(
     private val clock: () -> Long = System::currentTimeMillis,
     credentials: Collection<Credential> = emptyList(),
     groups: Map<String, GroupSettings> = emptyMap(),
+    /** Where the players of a group with no settings of its own go when their server stops (`fallback`). */
+    fallback: String = GroupSettings.DEFAULT_FALLBACK,
     /** What whatever runs the servers may want to hear of (the webhook); called off the hub's lock. */
     private val events: (HubEvent) -> Unit = {},
     /** The network's policy for each role's servers, as JSON, sent in their welcome. */
@@ -99,6 +101,7 @@ class Hub(
 
     /** The owner's settings for each group, by its name in lowercase. */
     private var groups: Map<String, GroupSettings> = groups.mapKeys { it.key.lowercase() }
+    private var fallback: String = fallback
 
     /** Players on their way to each server and not there yet: counted as there when picking an instance. */
     private val incoming = HashMap<String, Int>()
@@ -288,8 +291,11 @@ class Hub(
         }
     }
 
-    /** Replaces the owner's settings for groups. */
-    fun setGroups(all: Map<String, GroupSettings>) = synchronized(lock) { groups = all.mapKeys { it.key.lowercase() } }
+    /** Replaces the owner's settings for groups, and where a group without its own fallback sends its players. */
+    fun setGroups(all: Map<String, GroupSettings>, fallback: String = this.fallback) = synchronized(lock) {
+        groups = all.mapKeys { it.key.lowercase() }
+        this.fallback = fallback
+    }
 
     /** Every server of the network as the hub knows it now: its group, its room, its players. */
     fun states(): List<ServerState> = synchronized(lock) { servers() }
@@ -1707,16 +1713,16 @@ class Hub(
     private fun evacuate(session: Session) {
         val name = session.name ?: return
         val group = session.group ?: name
-        val fallback = groups[group.lowercase()]?.fallback ?: GroupSettings.DEFAULT_FALLBACK
+        val to = groups[group.lowercase()]?.fallback ?: fallback
         val on = players.values.filter { it.server == name }
         if (on.isEmpty()) return
-        log.info("NetherForge hub: sending ${on.size} players from $name to $fallback")
+        log.info("NetherForge hub: sending ${on.size} players from $name to $to")
         for (player in on) {
-            val frame = ServerFrame.Send(-1, listOf(player.id), group = fallback)
+            val frame = ServerFrame.Send(-1, listOf(player.id), group = to)
             when (val placement = place(session, frame, name, byHub = true)) {
                 is Placement.Go -> go(session, frame, name, placement)
-                is Placement.Failed -> log.warn("NetherForge hub: couldn't send ${player.name} from $name to $fallback: ${placement.why}")
-                is Placement.Later -> log.warn("NetherForge hub: couldn't send ${player.name} from $name to $fallback: ${placement.why}")
+                is Placement.Failed -> log.warn("NetherForge hub: couldn't send ${player.name} from $name to $to: ${placement.why}")
+                is Placement.Later -> log.warn("NetherForge hub: couldn't send ${player.name} from $name to $to: ${placement.why}")
             }
         }
     }

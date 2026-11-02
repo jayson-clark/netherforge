@@ -130,6 +130,7 @@ class NetherForgeProxy @Inject constructor(
             FileMapStore(folder.resolve("maps.json")),
             credentials = credentials,
             groups = settings.groups,
+            fallback = settings.fallback,
             policies = settings.rolePolicies,
             keepsPacks = !settings.clearResourcePacks,
             audit = AuditLog(folder.resolve("audit.log"))::append,
@@ -733,8 +734,9 @@ class NetherForgeProxy @Inject constructor(
                     "reload" -> {
                         val fresh = HubSettings.read(folder.resolve(HubSettings.FILE)) { logger.info(it) }
                         val all = credentialsFile.read().map { it.credential(fresh.roleShares) }
-                        this@NetherForgeProxy.settings = settings.copy(roleShares = fresh.roleShares, groups = fresh.groups)
-                        hub.setGroups(fresh.groups)
+                        this@NetherForgeProxy.settings =
+                            settings.copy(roleShares = fresh.roleShares, groups = fresh.groups, fallback = fresh.fallback)
+                        hub.setGroups(fresh.groups, fresh.fallback)
                         hub.setCredentials(all)
                         "Read ${all.size} credentials (and hub.properties' shares and groups); servers whose grants changed dial again."
                     }

@@ -555,7 +555,9 @@ end)
 `/nf drain` (or the hub's admin API, `POST /v1/servers/<name>/drain`, or
 `nf.network.set_draining(true)`) drains it; `/nf drain off` undoes it.
 `/nf shutdown` drains it, sends the players left to its group's **fallback**
-(`group.<name>.fallback` in `hub.properties`, `lobby` unless you say), and
+(`group.<name>.fallback` in `hub.properties`, or the network's `fallback` for
+a group without its own, such as one made while the network runs; `lobby`
+unless you say), and
 stops the server. With `--after-empty` it waits for the server to empty
 first, up to `--timeout` seconds (60). `network_state` tells scripts each
 change. The log says how long the server took from its process starting to
