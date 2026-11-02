@@ -3215,6 +3215,41 @@ What `nf.test.network_server` takes, the first time it names a server. A key tha
 | --- | --- | --- |
 | `group` | `string?` | The group it's an instance of, as `network.group` says on a server. |
 | `capacity` | `integer?` | How many players it takes; any number when left out. |
+| `state` | `"starting"\|"ready"\|"draining"\|"stopping"\|nil` | Where it is in its life as it joins; `ready` when left out. |
+| `accepting` | `boolean?` | Whether it takes players; `true` when left out. |
+
+### TestNetworkStatus {#testnetworkstatus}
+
+What `nf.test.network_status` says of another server. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `state` | `"starting"\|"ready"\|"draining"\|"stopping"\|nil` | Where it is in its life; as it was when left out. |
+| `accepting` | `boolean?` | Whether it takes players; as it was when left out. |
+
+### TestNetworkRole {#testnetworkrole}
+
+This server's role in the test's network, for `nf.test.network_role`. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `role` | `"trusted"\|"standard"\|"isolated"` | The preset: what it may do unless the rest says more. |
+| `owns` | `string[]?` | The namespaces whose channels and maps it has whole. |
+| `shares` | `string[]?` | What's shared with it of others', as `hub.properties` spells it: `"lobby:return(request)"`, `"events:*(read)"`. |
+| `presence` | `boolean?` | Whether it sees other servers' players; the preset's when left out. |
+| `send_to` | `string[]?` | Where it may send players; the preset's when left out. |
+| `moderation` | `boolean?` | Whether it may ban and mute across the network. |
+
+### TestNetworkReport {#testnetworkreport}
+
+A report the test's network has, from `nf.test.network_reports`.
+
+| Field | Type | |
+| --- | --- | --- |
+| `player` | `string` | The reported player's name. |
+| `reason` | `string` | Why. |
+| `details` | `any` | What else it said, if anything. |
+| `by` | `string?` | Who reported them, if a player did. |
 
 ### TestNetworkMessage {#testnetworkmessage}
 

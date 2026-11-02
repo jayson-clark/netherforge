@@ -867,6 +867,58 @@ class ScriptTestRunnerTest {
     }
 
     @Test
+    fun `a test plays a group starting, holds this server to a role, and moderates its network`() {
+        val (events, _) = run(
+            mapOf(
+                "netherforge.json" to
+                    manifest.replace(
+                        "\"minecraft\": \"26.3\"",
+                        "\"minecraft\": \"26.3\",\n  \"requires\": { \"network\": true, \"moderation\": true }"
+                    ),
+                "tests/net_test.lua" to """
+                    nf.test.case("a player waits for the arena to start, then goes", function()
+                      nf.test.network_server("arena-1", { group = "arena", state = "starting" })
+                      local ann = nf.test.player("Ann")
+                      local went, place
+                      nf.task(function()
+                        went = nf.network.send_player(ann, { group = "arena", wait = 30, on_wait = function(p) place = p end })
+                      end)
+                      nf.test.advance(2)
+                      assert(went == nil and place == 1, tostring(place))
+                      nf.test.network_status("arena-1", { state = "ready" })
+                      nf.test.advance(2)
+                      assert(went == "arena-1", tostring(went))
+                    end)
+
+                    nf.test.case("a standard server is held to its role", function()
+                      nf.test.network_role({ role = "standard", owns = { "other" } })
+                      nf.test.advance(1)
+                      assert(nf.network.server_role().role == "standard")
+                      local ok, err = pcall(function() nf.network.channel("chat"):publish("hi") end)
+                      assert(not ok and err:find("network.forbidden"), tostring(err))
+                    end)
+
+                    nf.test.case("bans, mutes and reports go to the network's hub", function()
+                      nf.test.network_server("lobby")
+                      nf.test.network_join("lobby", "Bea")
+                      nf.test.advance(1)
+                      local banned
+                      nf.task(function() banned = nf.network.ban("Bea", { reason = "griefing" }) end)
+                      nf.test.advance(2)
+                      assert(banned == true)
+                      assert(nf.network.is_banned("Bea"))
+                      nf.network.report("Bea", "rude", { said = "x" })
+                      nf.test.advance(1)
+                      local reports = nf.test.network_reports()
+                      assert(#reports == 1 and reports[1].player == "Bea" and reports[1].details.said == "x")
+                    end)
+                """
+            )
+        )
+        expectStatuses(events, Status.PASSED, Status.PASSED, Status.PASSED)
+    }
+
+    @Test
     fun `a test makes web requests through the routes, and plays a login through its callback`() {
         val (events, _) = run(
             mapOf(

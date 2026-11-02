@@ -12,7 +12,7 @@ A table of functions: call them with a dot.
 | [Players and their input](#players-and-their-input) | [`player`](#player) [`raise`](#raise) [`click`](#click) [`release`](#release) [`input`](#input) [`shown`](#shown) |
 | [Worldgen](#worldgen) | [`terrain`](#terrain) |
 | [Web connections](#web-connections) | [`connections`](#connections) [`accept`](#accept) [`receive`](#receive) [`sent`](#sent) [`disconnect`](#disconnect) [`request`](#request) [`oauth_token`](#oauth_token) |
-| [Server networks](#server-networks) | [`network_server`](#network_server) [`network_publish`](#network_publish) [`network_received`](#network_received) [`network_answer`](#network_answer) [`network_request`](#network_request) [`network_write`](#network_write) [`network_join`](#network_join) [`network_quit`](#network_quit) [`network_send`](#network_send) |
+| [Server networks](#server-networks) | [`network_server`](#network_server) [`network_status`](#network_status) [`network_role`](#network_role) [`network_reports`](#network_reports) [`network_publish`](#network_publish) [`network_received`](#network_received) [`network_answer`](#network_answer) [`network_request`](#network_request) [`network_write`](#network_write) [`network_join`](#network_join) [`network_quit`](#network_quit) [`network_send`](#network_send) |
 | [WebAssembly](#webassembly) | [`stub_wasm`](#stub_wasm) |
 
 ## Tests and time {#tests-and-time}
@@ -301,6 +301,52 @@ nf.test.case("chat reaches the lobby", function()
   assert(said[1].value.text == "Ann: hi")
 end)
 ```
+
+### `nf.test.network_status(server, status)` {#network_status}
+
+Another server of the test's network says where it is in its life and whether it takes players, as `set_accepting` and `/nf drain` would there: players sent to its group wait for it while it's `starting` or full (a send with `wait`), and go once it's `ready`. Heard by the next tick.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `server` | `string` | The other server, as `network_server` added it. |
+| `status` | [`TestNetworkStatus`](types.md#testnetworkstatus) | What it says. |
+
+```lua
+nf.test.case("a player waits for the arena to start", function()
+  nf.test.network_server("arena-1", { group = "arena", state = "starting" })
+  local ann = nf.test.player("Ann")
+  local went
+  nf.task(function() went = nf.network.send_player(ann, { group = "arena", wait = 30 }) end)
+  nf.test.advance(2)
+  assert(went == nil)
+  nf.test.network_status("arena-1", { state = "ready" })
+  nf.test.advance(2)
+  assert(went == "arena-1")
+end)
+```
+
+### `nf.test.network_role(role)` {#network_role}
+
+This server joins the test's network again with a credential of the role given, as a server running someone else's project might: what it may publish, ask, answer, read, write and send is then held to it, and `nf.network.server_role()` says it. The test's other servers stay trusted. By the next tick.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `role` | [`TestNetworkRole`](types.md#testnetworkrole) | The role, and what it owns and is shared. |
+
+```lua
+nf.test.case("a standard server can't publish on the lobby's channel", function()
+  nf.test.network_role({ role = "standard", owns = { "test" } })
+  nf.test.advance(1)
+  local ok, err = pcall(function() nf.network.channel("lobby:chat"):publish("hi") end)
+  assert(not ok and string.find(tostring(err), "network.forbidden"))
+end)
+```
+
+### `nf.test.network_reports()` {#network_reports}
+
+The reports scripts made with `nf.network.report` in this test, oldest first, as the network's hub keeps them.
+
+**Returns** [`TestNetworkReport`](types.md#testnetworkreport)`[]`
 
 ### `nf.test.network_publish(server, channel, value)` {#network_publish}
 

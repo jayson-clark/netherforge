@@ -111,6 +111,10 @@ unmute`, and the admin API's `moderation` scope. `nf.network.report` sends
   `hub.properties`): servers and players by group, tick times, frames, map
   usage, what waits. `nf.network.servers()` and `groups()` give each
   server's `tick_milliseconds`.
+- **Script tests for networks.** `nf.test.network_server` takes an instance's
+  `state` and `accepting`, `nf.test.network_status` changes them,
+  `nf.test.network_role` joins the test's server under a role, and
+  `nf.test.network_reports` gives what scripts reported.
 - **Groups of servers.** `network.group` and `network.capacity` make a server
   an instance of a group. `send_player` and the new `send_players` (a party,
   landing together) take `{ group = "arena" }`, and the hub picks the

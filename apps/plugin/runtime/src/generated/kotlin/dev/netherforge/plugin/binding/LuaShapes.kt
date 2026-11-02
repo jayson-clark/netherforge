@@ -8892,28 +8892,144 @@ data class TextSize(val width: Double, val height: Double) : LuaShape {
  * What `nf.test.network_server` takes, the first time it names a server. A key that isn't one of these
  * is an error.
  */
-data class TestNetworkServerOptions(val group: String? = null, val capacity: Long? = null) : LuaShape {
+data class TestNetworkServerOptions(val group: String? = null, val capacity: Long? = null, val state: String? = null, val accepting: Boolean? = null) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)
 
     object Codec : ShapeCodec<TestNetworkServerOptions>("TestNetworkServerOptions") {
         val groupCodec = LuaOptional(LuaCodecs.STRING)
         val capacityCodec = LuaOptional(LuaCodecs.INTEGER)
+        val stateCodec = LuaOptional(LuaChoice(listOf("starting", "ready", "draining", "stopping")))
+        val acceptingCodec = LuaOptional(LuaCodecs.BOOLEAN)
 
         override val pinned = false
 
         override val fields: Map<String, LuaCodec<*>> = mapOf(
             "group" to groupCodec,
-            "capacity" to capacityCodec
+            "capacity" to capacityCodec,
+            "state" to stateCodec,
+            "accepting" to acceptingCodec
         )
 
         override fun read(fields: ShapeReader) = TestNetworkServerOptions(
             group = fields.field("group", groupCodec),
-            capacity = fields.field("capacity", capacityCodec)
+            capacity = fields.field("capacity", capacityCodec),
+            state = fields.field("state", stateCodec),
+            accepting = fields.field("accepting", acceptingCodec)
         )
 
         override fun write(fields: ShapeWriter, value: TestNetworkServerOptions) {
             fields.field("group", value.group, groupCodec)
             fields.field("capacity", value.capacity, capacityCodec)
+            fields.field("state", value.state, stateCodec)
+            fields.field("accepting", value.accepting, acceptingCodec)
+        }
+    }
+}
+
+/** What `nf.test.network_status` says of another server. A key that isn't one of these is an error. */
+data class TestNetworkStatus(val state: String? = null, val accepting: Boolean? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<TestNetworkStatus>("TestNetworkStatus") {
+        val stateCodec = LuaOptional(LuaChoice(listOf("starting", "ready", "draining", "stopping")))
+        val acceptingCodec = LuaOptional(LuaCodecs.BOOLEAN)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "state" to stateCodec,
+            "accepting" to acceptingCodec
+        )
+
+        override fun read(fields: ShapeReader) = TestNetworkStatus(
+            state = fields.field("state", stateCodec),
+            accepting = fields.field("accepting", acceptingCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: TestNetworkStatus) {
+            fields.field("state", value.state, stateCodec)
+            fields.field("accepting", value.accepting, acceptingCodec)
+        }
+    }
+}
+
+/**
+ * This server's role in the test's network, for `nf.test.network_role`. A key that isn't one of these
+ * is an error.
+ */
+data class TestNetworkRole(val role: String, val owns: List<String>? = null, val shares: List<String>? = null, val presence: Boolean? = null, val sendTo: List<String>? = null, val moderation: Boolean? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<TestNetworkRole>("TestNetworkRole") {
+        val roleCodec = LuaChoice(listOf("trusted", "standard", "isolated"))
+        val ownsCodec = LuaOptional(LuaList(LuaCodecs.STRING))
+        val sharesCodec = LuaOptional(LuaList(LuaCodecs.STRING))
+        val presenceCodec = LuaOptional(LuaCodecs.BOOLEAN)
+        val sendToCodec = LuaOptional(LuaList(LuaCodecs.STRING))
+        val moderationCodec = LuaOptional(LuaCodecs.BOOLEAN)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "role" to roleCodec,
+            "owns" to ownsCodec,
+            "shares" to sharesCodec,
+            "presence" to presenceCodec,
+            "send_to" to sendToCodec,
+            "moderation" to moderationCodec
+        )
+
+        override fun read(fields: ShapeReader) = TestNetworkRole(
+            role = fields.field("role", roleCodec),
+            owns = fields.field("owns", ownsCodec),
+            shares = fields.field("shares", sharesCodec),
+            presence = fields.field("presence", presenceCodec),
+            sendTo = fields.field("send_to", sendToCodec),
+            moderation = fields.field("moderation", moderationCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: TestNetworkRole) {
+            fields.field("role", value.role, roleCodec)
+            fields.field("owns", value.owns, ownsCodec)
+            fields.field("shares", value.shares, sharesCodec)
+            fields.field("presence", value.presence, presenceCodec)
+            fields.field("send_to", value.sendTo, sendToCodec)
+            fields.field("moderation", value.moderation, moderationCodec)
+        }
+    }
+}
+
+/** A report the test's network has, from `nf.test.network_reports`. */
+data class TestNetworkReport(val player: String, val reason: String, val details: Any? = null, val by: String? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<TestNetworkReport>("TestNetworkReport") {
+        val playerCodec = LuaCodecs.STRING
+        val reasonCodec = LuaCodecs.STRING
+        val detailsCodec = LuaCodecs.DYNAMIC
+        val byCodec = LuaOptional(LuaCodecs.STRING)
+
+        override val pinned = true
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "player" to playerCodec,
+            "reason" to reasonCodec,
+            "details" to detailsCodec,
+            "by" to byCodec
+        )
+
+        override fun read(fields: ShapeReader) = TestNetworkReport(
+            player = fields.field("player", playerCodec),
+            reason = fields.field("reason", reasonCodec),
+            details = fields.field("details", detailsCodec),
+            by = fields.field("by", byCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: TestNetworkReport) {
+            fields.field("player", value.player, playerCodec)
+            fields.field("reason", value.reason, reasonCodec)
+            fields.field("details", value.details, detailsCodec)
+            fields.field("by", value.by, byCodec)
         }
     }
 }

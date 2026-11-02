@@ -9280,6 +9280,18 @@ namespaces["nf.test"] = function(scope, ns)
     prim["nf.test.network_quit"](scope, name)
   end
 
+  function ns.network_status(server, status)
+    prim["nf.test.network_status"](scope, server, status)
+  end
+
+  function ns.network_role(role)
+    prim["nf.test.network_role"](scope, role)
+  end
+
+  function ns.network_reports()
+    return prim["nf.test.network_reports"](scope)
+  end
+
   function ns.network_send(server, name, data)
     return prim["nf.test.network_send"](scope, server, name, data)
   end

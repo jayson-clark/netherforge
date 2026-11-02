@@ -336,8 +336,9 @@ class NetworkLink(
             if (mode == Mode.REMOTE) room.release()
             when (item) {
                 is Inbound.Connected -> {
+                    // In order with what came before it (a local network joined again under a role: its disconnect first).
+                    welcomed(item.welcome)
                     if (mode == Mode.REMOTE) {
-                        welcomed(item.welcome)
                         info("Joined the network as ${item.welcome.server}: ${item.welcome.servers.count { it.linked }} servers connected")
                     }
                 }
@@ -430,17 +431,38 @@ class NetworkLink(
      * The test's server [name], added to the network the first time it's named (an instance of [group] taking
      * [capacity] players, then). Only in a local network.
      */
-    fun peer(name: String, group: String? = null, capacity: Int? = null): TestPeer {
+    fun peer(
+        name: String,
+        group: String? = null,
+        capacity: Int? = null,
+        state: Lifecycle = Lifecycle.READY,
+        accepting: Boolean = true
+    ): TestPeer {
         val hub = hub ?: error("only a local network has the test's servers")
         peers[name]?.let { return it }
         proxy!!.peers += name
-        val peer = TestPeer(name, hub, group, capacity)
+        val peer = TestPeer(name, hub, group, capacity, state, accepting)
         peers[name] = peer
         peer.start()
         return peer
     }
 
     fun peers(): Collection<TestPeer> = peers.values
+
+    /**
+     * This server joins the local network again with a credential of [grants] (a test's `nf.test.network_role`): the
+     * hub holds it to them from then on. Only in a local network.
+     */
+    fun joinAs(grants: Grants) {
+        val hub = hub ?: error("only a local network can change this server's role")
+        val roleSecret = Auth.newSecret()
+        hub.setCredentials(listOf(dev.netherforge.network.Credential(TEST_CREDENTIAL, roleSecret, grants)))
+        link?.stop()
+        link = LocalLink(hub, alone!!, roleSecret, listener, TEST_CREDENTIAL, state = { state }).also { it.start() }
+    }
+
+    /** What scripts reported in a local network. */
+    fun reports(): List<dev.netherforge.network.Report> = hub?.reports()?.reversed().orEmpty()
 
     /** A player joins (or moves to) [server] of a local network, as the proxy says it. */
     fun place(id: String, player: String, server: String) {
@@ -452,8 +474,22 @@ class NetworkLink(
     }
 
     /** Another server of a test's network, played by the test: what it hears is kept, requests to it queued. */
-    inner class TestPeer internal constructor(val name: String, hub: Hub, group: String?, capacity: Int?) : HubListener {
-        private val link = LocalLink(hub, name, secret, this, group = group, capacity = capacity)
+    inner class TestPeer internal constructor(
+        val name: String,
+        hub: Hub,
+        group: String?,
+        capacity: Int?,
+        private var lifecycle: Lifecycle,
+        private var accepting: Boolean
+    ) : HubListener {
+        private val link = LocalLink(hub, name, secret, this, group = group, capacity = capacity, state = { lifecycle })
+
+        /** It says where it is in its life and whether it takes players, as `nf.test.network_status` has it. */
+        fun status(state: Lifecycle?, accepting: Boolean?) {
+            state?.let { lifecycle = it }
+            accepting?.let { this.accepting = it }
+            link.send(ServerFrame.Status(this.accepting, lifecycle))
+        }
         val received = ArrayList<HubFrame.Message>()
         val requests = ArrayDeque<HubFrame.Requested>()
 
@@ -461,7 +497,10 @@ class NetworkLink(
         val replies = HashMap<Long, HubFrame.Reply>()
         private val channels = LinkedHashSet<String>()
 
-        internal fun start() = link.start()
+        internal fun start() {
+            link.start()
+            if (!accepting) link.send(ServerFrame.Status(false, lifecycle))
+        }
 
         /** Listens to [channel] from now on. */
         fun listen(channel: String) {
@@ -545,6 +584,9 @@ class NetworkLink(
         const val TEST_NETWORK = "test"
 
         private const val TICK_REPORT_TICKS = 100L
+
+        /** The credential `nf.test.network_role` joins with. */
+        private const val TEST_CREDENTIAL = "test-role"
 
         private const val FAILURE_EVERY_NANOS = 5 * 60 * 1_000_000_000L
     }

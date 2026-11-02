@@ -1835,6 +1835,19 @@ function nf.test.network_join(server, name) end
 ---@param name string The player's name.
 function nf.test.network_quit(name) end
 
+--- Another server of the test's network says where it is in its life and whether it takes players, as `set_accepting` and `/nf drain` would there: players sent to its group wait for it while it's `starting` or full (a send with `wait`), and go once it's `ready`. Heard by the next tick.
+---@param server string The other server, as `network_server` added it.
+---@param status TestNetworkStatus What it says.
+function nf.test.network_status(server, status) end
+
+--- This server joins the test's network again with a credential of the role given, as a server running someone else's project might: what it may publish, ask, answer, read, write and send is then held to it, and `nf.network.server_role()` says it. The test's other servers stay trusted. By the next tick.
+---@param role TestNetworkRole The role, and what it owns and is shared.
+function nf.test.network_role(role) end
+
+--- The reports scripts made with `nf.network.report` in this test, oldest first, as the network's hub keeps them.
+---@return TestNetworkReport[]
+function nf.test.network_reports() end
+
 --- Another server sends a player here with `data`, as `nf.network.send_player` there would: they join this server (`player_join`) and, the tick after, its `player_arrive` handlers hear `data`. They needn't be in the network yet.
 ---@param server string The other server's name, as `nf.test.network_server` added it.
 ---@param name string The player's name.
@@ -8439,6 +8452,29 @@ function Event:uncancel() end
 ---@class TestNetworkServerOptions
 ---@field group string? The group it's an instance of, as `network.group` says on a server.
 ---@field capacity integer? How many players it takes; any number when left out.
+---@field state "starting"|"ready"|"draining"|"stopping"|nil Where it is in its life as it joins; `ready` when left out.
+---@field accepting boolean? Whether it takes players; `true` when left out.
+
+--- What `nf.test.network_status` says of another server. A key that isn't one of these is an error.
+---@class TestNetworkStatus
+---@field state "starting"|"ready"|"draining"|"stopping"|nil Where it is in its life; as it was when left out.
+---@field accepting boolean? Whether it takes players; as it was when left out.
+
+--- This server's role in the test's network, for `nf.test.network_role`. A key that isn't one of these is an error.
+---@class TestNetworkRole
+---@field role "trusted"|"standard"|"isolated" The preset: what it may do unless the rest says more.
+---@field owns string[]? The namespaces whose channels and maps it has whole.
+---@field shares string[]? What's shared with it of others', as `hub.properties` spells it: `"lobby:return(request)"`, `"events:*(read)"`.
+---@field presence boolean? Whether it sees other servers' players; the preset's when left out.
+---@field send_to string[]? Where it may send players; the preset's when left out.
+---@field moderation boolean? Whether it may ban and mute across the network.
+
+--- A report the test's network has, from `nf.test.network_reports`.
+---@class TestNetworkReport
+---@field player string The reported player's name.
+---@field reason string Why.
+---@field details any What else it said, if anything.
+---@field by string? Who reported them, if a player did.
 
 --- A message another server of a test's network heard, from `nf.test.network_received`.
 ---@class TestNetworkMessage

@@ -189,7 +189,7 @@ export const FUNCTION_GROUPS: Record<string, Group[]> = {
     group('Web connections', 'connections accept receive sent disconnect request oauth_token'),
     group(
       'Server networks',
-      'network_server network_publish network_received network_answer network_request network_write network_join network_quit network_send',
+      'network_server network_status network_role network_reports network_publish network_received network_answer network_request network_write network_join network_quit network_send',
     ),
     group('WebAssembly', 'stub_wasm'),
   ],

@@ -1728,6 +1728,26 @@ interface NfTestApi {
     fun networkQuit(caller: Caller, name: String)
 
     /**
+     * Another server of the test's network says where it is in its life and whether it takes players, as
+     * `set_accepting` and `/nf drain` would there: players sent to its group wait for it while it's
+     * `starting` or full (a send with `wait`), and go once it's `ready`. Heard by the next tick.
+     */
+    fun networkStatus(caller: Caller, server: String, status: TestNetworkStatus)
+
+    /**
+     * This server joins the test's network again with a credential of the role given, as a server running
+     * someone else's project might: what it may publish, ask, answer, read, write and send is then held to
+     * it, and `nf.network.server_role()` says it. The test's other servers stay trusted. By the next tick.
+     */
+    fun networkRole(caller: Caller, role: TestNetworkRole)
+
+    /**
+     * The reports scripts made with `nf.network.report` in this test, oldest first, as the network's hub
+     * keeps them.
+     */
+    fun networkReports(caller: Caller): List<TestNetworkReport>
+
+    /**
      * Another server sends a player here with `data`, as `nf.network.send_player` there would: they join
      * this server (`player_join`) and, the tick after, its `player_arrive` handlers hear `data`. They
      * needn't be in the network yet.
