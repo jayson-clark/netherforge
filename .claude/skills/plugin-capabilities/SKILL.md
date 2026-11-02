@@ -312,11 +312,50 @@ Servers behind one Velocity proxy, talking through a **hub** the proxy runs. Thr
   credentials and admins). Its proxy is a `RemoteProxy`: the proxy plugin, with `remote.hub` in `hub.properties`, joins
   as a client with the `proxy` role (a `proxy`-role credential or the shared secret), sends `ProxyServers`,
   `ProxyPresence` (whole, on joining), `ProxyPlayer`/`ProxyPlayerLeft` and `ProxyLogin`, and does the hub's
-  `ProxyMove`, `ProxyRegister`, `ProxyMessage`, `ProxyKick`. One proxy at a time (a new one replaces it); with none,
-  the hub has no servers. `HubSettings` lives in `:network` for both.
-- **The editor's dev networks**: a dev server started with `-Dnetherforge.network.hub` (and `.server`, and the secret
-  in `NETHERFORGE_NETWORK_SECRET`, never on the command line) is in that network whatever `config.yml` says; the
-  owner's limits stay (`RuntimeConfig.devNetwork`). The editor runs the proxy and the servers (tauri-backend's "Dev
+  `ProxyMove`, `ProxyRegister`, `ProxyMessage`, `ProxyKick`. Several proxies may join at once (each player's
+  `PlayerState.proxy` says which holds them; a player logging in on a second is refused or takes over, as
+  `duplicate-login` says; `/v1/proxies` lists
+  them and drains one); with none, the hub has no servers. `HubSettings` lives in `:network` for both.
+- **Credentials and roles** (`CredentialsFile`, `credentials.properties` beside `hub.properties`; `/nfhub credentials`):
+  a server proves its credential's secret instead of the shared one, and the credential's `Grants` (a role's preset:
+  `trusted` everything, `standard` its `owns` namespaces and what `share.<role>` grants, `isolated` only what's shared and
+  its own players, `proxy` for a remote proxy; plus `presence`, `send-to`, `moderation`) are what the hub holds
+  **every frame** to: anything else is `network.forbidden` to the sender and never reaches another server. A credential
+  may pin a `group` and allow registering (`register`, `names`, `addresses`). Revoking drops its servers at once. The
+  shared secret is `trusted`. `nf.network.server_role()` says what the server may do.
+- **Groups** (`network.group`, `network.capacity`; `GroupSettings` from `group.<name>.*`): instances of one game.
+  Sending to a group picks an instance accepting players with room (`least` or `fill`; `send_players` keeps a party
+  together); a send can wait (`wait`, `on_wait`, the hub's `max-waiting`) or fall back (`fallback`). Publishing and
+  requesting to a group reach its instances.
+- **Registration** (`network.register.address`, `server-name: auto` numbering `<group>-<n>`; or `HubAdmin`'s
+  `POST /v1/servers`): a server not in `velocity.toml` adds itself through `HubProxy.register`, and comes off as it
+  stops or after `unregister-after-seconds`.
+- **Lifecycle** (`Lifecycle`: `starting`, `ready`, `draining`, `stopping`): `nf.network.hold_ready` (a `NetworkHold`, `NetworkHoldImpl`)
+  keeps a server `starting`; draining (`set_draining`, `/nf drain`, the admin API) stops sends to it; `/nf shutdown`
+  drains, moves players and stops. `HubEvents` POSTs each change to the owner's webhook, signed. `network.wait-for-hub-
+seconds` (`NetworkLink.awaitWelcome`) and `require-hub` (`ProjectSession.waitsForHub`) hold the project until the hub
+  answers.
+- **The admin API** (`HubAdmin`, `admin.properties` as `AdminClientsFile`, `AdminScope`s per client, never a server's
+  credential; constant-time token compare): HTTP and JSON plus SSE `/v1/events`; servers, players, sends, messages,
+  kicks, publishing and requests answered by an admin client (`{admin=...}`), moderation, placement hooks per group and
+  holding a login until one answers.
+- **Moderation** (`Moderation`: the hub's own maps `netherforge:bans`/`mutes`, outside every package's limits, saved
+  with the rest; reports): `nf.network.ban`/`mute`/... need the credential's `moderation` (and `requires.moderation`);
+  the proxy refuses a banned login; `RuntimeGameEvents` holds back a muted player's chat; `/nfhub disable` takes a server
+  or group off. The proxy writes moderation, credential and admin changes to `AuditLog` (`audit.log`).
+- **Metrics** (`metrics/ServerMetrics`, `metrics:` in `config.yml`, and the hub's `metrics.port`, both through
+  `Prometheus`): Prometheus's text format at `/metrics`, off without a port.
+- **Outside the network but beside it**: `control/LocalHttp` (`Control`), a Unix socket or loopback port with a token
+  file, for whoever runs the server (`/state`, `/events`, `/drain`, `/shutdown`, `/save` with pause, `/resume`,
+  `/worlds/load|unload`); `policy.json` (format's `Policy`, `runtime.policy`, also sent by the hub as `policy.<role>`)
+  allows and denies requirement kinds and lowers limits (`RuntimeConfig.under(policy)`); bundles are signed
+  (`BundleSignatures`, `bundles.require-signature`/`trusted-keys`) and fetched by URL and hash (`BundleFetch`); packs
+  can live in S3-compatible storage (`pack/PackStorage`) and aren't sent again to a player who has them
+  (`PackLoaded`, `keepsPacks`); a bundle may carry its pack, built (`BundleManifest.resourcePack`, `Packs.bundled`).
+- **The editor's dev networks**: a dev server started with `-Dnetherforge.network.hub` (and `.server`, `.group`,
+  `.capacity`, `.credential`, and the secret in `NETHERFORGE_NETWORK_SECRET`, never on the command line) is in that
+  network whatever `config.yml` says; the owner's limits stay (`RuntimeConfig.devNetwork`). A server whose dev role
+  isn't `trusted` joins with a `dev-<name>` credential the editor writes to the proxy's `credentials.properties`. The editor runs the proxy and the servers (tauri-backend's "Dev
   networks"). A remote link's reader interrupted while it queues (the link stopping) drops what it was saying.
 - **The runtime's `network/`**: `NetworkLink` (`runtime.network`, the plugin's life: a reload doesn't reconnect) is
   the link and what the hub said (presence, servers, arrivals), applied on the main thread as it's drained. Its
@@ -339,9 +378,13 @@ Servers behind one Velocity proxy, talking through a **hub** the proxy runs. Thr
   (`NetworkLimits`: value size, which a server checks too, at the script's line, from the welcome's
   `maxValueBytes`; maps per package; how long the hub routes a request; how far behind a server may fall).
 - **Tests**: `HubTest` (the hub through local links and once over TCP: handshake and refusals, relaying, requests and
-  their failures, maps with expiry, limits and saving, presence and sending), `HubSettingsTest`, `NetworkTest` (a hub
-  on loopback and two `TestServer`s with `network = NetworkConfig(...)`: every part from scripts, a lost hub,
-  mistakes, the requirement, `/nf network`), and the runner's `ScriptTestRunnerTest` for `nf.test.network_*`.
+  their failures, maps with expiry, limits and saving, presence and sending), `HubSettingsTest`, `CredentialsTest`,
+  `GroupsTest`, `RegistrationTest`, `LifecycleTest`, `AdminApiTest`, `RemoteProxyTest`, `ModerationTest`, `ChannelTest`
+  (all `:network`); `NetworkTest` (a hub on loopback and two `TestServer`s with `network = NetworkConfig(...)`: every
+  part from scripts, a lost hub, mistakes, the requirement, `/nf network`), `WaitForHubTest`, `ModerationNetworkTest`,
+  `PackSharingTest`; and the runner's `ScriptTestRunnerTest` for `nf.test.network_*` (`network_server` with `state`
+  and `accepting`, `network_status`, `network_role`, `network_reports`). Velocity, S3 and PostgreSQL themselves aren't
+  run in tests.
 
 ## Plugin interop (Vault and PlaceholderAPI)
 
@@ -451,10 +494,13 @@ sends).
   per instance and in all, each call held to a time limit, counts per package; traps and timeouts close the
   instance.
 - **Networks** (`nf.network`, see "Networks" above): behind `requires.network`; a server joins only with the hub's
-  secret (proved per connection, never sent) and a name the proxy has; a package reaches only its own channels and
-  maps and its dependencies'; values are size-checked by the server and the hub, each package's map storage capped,
-  sends rate-limited per package; a server that stops reading is dropped. Every server in the network is trusted with
-  every channel and map: the network is one owner's servers. Traffic is sealed (`Channel`: AES-256-GCM, a key per
+  secret or a credential's (proved per connection, never sent) and a name the proxy has (or one its credential may
+  register); a package reaches only its own channels and maps and its dependencies'; values are size-checked by the
+  server and the hub, each package's map storage capped, sends rate-limited per package; a server that stops reading
+  is dropped. A server with the shared secret or a `trusted` credential is trusted with every channel and map; one with
+  a `standard` or `isolated` credential (another owner's, or code the network doesn't vouch for) is held by the hub
+  to its grants on every frame, so it can't read, write, answer or send outside them, whatever its scripts do. The
+  admin API's clients are scoped and never servers; moderation is a grant of its own. Traffic is sealed (`Channel`: AES-256-GCM, a key per
   direction from HKDF over the secret and both nonces, a counter nonce per line), so it can't be read, altered or
   replayed, and a server only accepts a hub that can seal its welcome; strangers before their hello are capped
   (`HubServer.MAX_PENDING`, per address too) and timed out.
