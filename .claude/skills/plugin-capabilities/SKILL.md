@@ -338,7 +338,8 @@ Servers behind one Velocity proxy, talking through a **hub** the proxy runs. Thr
 seconds` (`NetworkLink.awaitWelcome`) and `require-hub` (`ProjectSession.waitsForHub`) hold the project until the hub
   answers.
 - **The admin API** (`HubAdmin`, `admin.properties` as `AdminClientsFile`, `AdminScope`s per client, never a server's
-  credential; constant-time token compare): HTTP and JSON plus SSE `/v1/events`; servers, players, sends, messages,
+  credential; constant-time token compare): HTTP and JSON plus SSE `/v1/events` (first `hello` with `Hub.started`/`instance`, then `server_connected` and
+  `server_disconnected` for every server as its session is welcomed and closed, beside `server` for changes); servers, players, sends, messages,
   kicks, publishing and requests answered by an admin client (`{admin=...}`), moderation, placement hooks per group and
   holding a login until one answers.
 - **Moderation** (`Moderation`: the hub's own maps `netherforge:bans`/`mutes`, outside every package's limits, saved

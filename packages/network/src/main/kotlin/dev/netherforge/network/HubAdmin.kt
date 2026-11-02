@@ -76,7 +76,9 @@ class HubAdmin(
         val waiting: Int = 0,
         /** `config` (the proxy's own), `registered` (it added itself) or `admin` (this API added it). */
         val source: String,
-        val address: String? = null
+        val address: String? = null,
+        /** When it connected to the hub (Unix milliseconds); none when it isn't connected. */
+        val connectedSince: Long? = null
     )
 
     @Serializable
@@ -369,6 +371,7 @@ class HubAdmin(
     private fun list(exchange: HttpExchange) {
         val registered = hub.registered().associateBy { it.name }
         val waiting = hub.waiting()
+        val since = hub.connectedSince()
         val views = hub.states().map { state ->
             val entry = registered[state.name]
             ServerView(
@@ -387,7 +390,8 @@ class HubAdmin(
                     entry.byAdmin -> "admin"
                     else -> "registered"
                 },
-                address = entry?.let { "${it.host}:${it.port}" }
+                address = entry?.let { "${it.host}:${it.port}" },
+                connectedSince = since[state.name]
             )
         }
         answer(exchange, 200, Servers(views))

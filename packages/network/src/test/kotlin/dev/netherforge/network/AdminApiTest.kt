@@ -152,9 +152,30 @@ class AdminApiTest {
         hub.playerMoved("u-2", "Bea", "lobby")
         hub.playerMoved("u-2", "Bea", "arena-1")
         hub.playerLeft("u-2")
+        assertEquals("hello", events.next().first, "a stream starts with the hub's hello")
         assertEquals("player_joined", events.next().first)
         assertEquals("player_moved" to """{"t":"player_moved","id":"u-2","server":"arena-1","previous":"lobby"}""", events.next())
         assertEquals("player_left", events.next().first)
+    }
+
+    @Test
+    fun `a stream says which hub it is, and hears every server connect and disconnect`() {
+        val events = stream()
+        val hello = events.next()
+        assertEquals("hello", hello.first)
+        assertTrue(hello.second.contains("\"instance\":\"${hub.instance}\"") && hello.second.contains("\"started\":${hub.started}"))
+
+        val (arena, _) = join("arena-1", group = "arena")
+        val connected = events.next()
+        assertEquals("server_connected", connected.first, "a server connecting ready is heard of")
+        assertTrue(connected.second.contains("\"group\":\"arena\"") && connected.second.contains("\"since\":"), connected.second)
+        val listed = call("GET", "/v1/servers").second
+        assertTrue(listed.contains("\"name\":\"arena-1\",\"connected\":true"), listed)
+        assertTrue(Regex("\"connectedSince\":\\d+").containsMatchIn(listed), listed)
+
+        arena.stop()
+        assertEquals("server_disconnected", events.next("server_disconnected").first)
+        assertTrue(!call("GET", "/v1/servers").second.contains("connectedSince"))
     }
 
     @Test
@@ -245,7 +266,7 @@ class AdminApiTest {
     @Test
     fun `a revoked client's streams end`() {
         val events = stream("?place=arena")
-        Thread.sleep(200)
+        events.next("hello")
         hub.detach("ops")
         join("lobby").first.send(ServerFrame.Send(1, listOf("nobody"), group = "arena"))
         assertTrue(events.poll(500, TimeUnit.MILLISECONDS) == null, "it isn't asked any more")

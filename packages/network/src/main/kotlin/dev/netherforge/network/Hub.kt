@@ -88,6 +88,10 @@ class Hub(
     private val routes = HashMap<Long, Route>()
     private var nextRoute = 1L
     private var lastSave = clock()
+
+    /** When this hub started (Unix milliseconds), and an id that's new on every start: a client tells a restart by them. */
+    val started = clock()
+    val instance: String = java.util.UUID.randomUUID().toString()
     private var credentials: Map<String, Credential> = credentials.associateBy { it.id }
 
     /** The server each online player was on before the one they're on now: where `back` sends them. */
@@ -170,6 +174,11 @@ class Hub(
             it.closed()
         }
         return null
+    }
+
+    /** When each connected server connected (Unix milliseconds), by name. */
+    fun connectedSince(): Map<String, Long> = synchronized(lock) {
+        byName.mapNotNull { (name, session) -> session.connectedSince?.let { name to it } }.toMap()
     }
 
     /** The servers that registered themselves, for the proxy's own commands. */
@@ -489,6 +498,9 @@ class Hub(
         val nonce = Auth.newNonce()
         internal val openedAt = clock()
 
+        /** When it was welcomed as a server (Unix milliseconds); null before. */
+        internal var connectedSince: Long? = null
+
         /** The server's name once its hello is accepted. */
         var name: String? = null
             private set
@@ -567,6 +579,7 @@ class Hub(
                 val state = state(name, players.values.count { it.server == name })
                 broadcast(HubFrame.Server(state))
                 told = told + (name to state)
+                tellAdmins(AdminScope.SERVERS_READ, AdminEvent.ServerDisconnected(state))
                 registered[name]?.takeIf { !it.byAdmin }?.let { entry ->
                     if (leaving) unregister(name, "it shut down") else entry.goneSince = clock()
                 }
@@ -701,6 +714,7 @@ class Hub(
             capacity = frame.capacity
             accepting = true
             state = frame.state
+            connectedSince = clock()
             byName[server] = this
             val how = if (credential == null) "the shared secret" else "credential ${credential.id} (${grants.describe()})"
             log.info("NetherForge hub: $server connected from ${peer.address} with $how")
@@ -710,6 +724,7 @@ class Hub(
             val state = state(server, players.values.count { it.server == server })
             for (other in byName.values) if (other !== this) other.send(HubFrame.Server(state))
             told = told + (server to state)
+            tellAdmins(AdminScope.SERVERS_READ, AdminEvent.ServerConnected(state, connectedSince!!))
             dispatch()
         }
 
@@ -1069,6 +1084,7 @@ class Hub(
     fun attach(client: String, scopes: Set<AdminScope>, channels: Set<String> = emptySet(), place: Set<String> = emptySet()): AdminStream =
         synchronized(lock) {
             val stream = AdminStream(client, scopes)
+            stream.push(AdminEvent.Hello(started, instance))
             if (AdminScope.CHANNELS_READ in scopes) stream.channels = channels.filter(NetworkNames::isFull).toSet()
             if (AdminScope.PLACEMENT in scopes) {
                 for (group in place) hooks.getOrPut(group.lowercase()) { ArrayList() } += stream

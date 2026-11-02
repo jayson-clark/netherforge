@@ -620,8 +620,13 @@ allow; `/nfhub admins revoke <id>` ends it and its streams.
 | `placement`        | Deciding where players sent to a group, or logging in, go.                                                                            |
 
 **The stream.** `GET /v1/events` stays open and sends what the client's scopes
-allow: `player_joined`, `player_moved`, `player_left`, `server`, and with
-`?listen=lobby:news,lobby:queue` messages on those channels. A script asks a
+allow: `player_joined`, `player_moved`, `player_left`, `server_connected` and
+`server_disconnected` (every server, as it joins or leaves the hub, with its
+state, group, capacity and players), `server` (a change to a connected one),
+and with `?listen=lobby:news,lobby:queue` messages on those channels. Its first
+event is `hello`, with the hub's `started` time and an `instance` id that's new
+on every start, so a client reconnecting knows whether the hub restarted.
+`GET /v1/servers` gives each connected server's `connectedSince`. A script asks a
 service as it asks a server, by its client id:
 
 ```lua

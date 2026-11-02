@@ -118,6 +118,21 @@ class AdminClientsFile(val file: Path) {
  */
 @Serializable
 sealed interface AdminEvent {
+    /** The stream's first event: when the hub started, and an id new on every start, so a client knows it restarted. */
+    @Serializable
+    @SerialName("hello")
+    data class Hello(val started: Long, val instance: String) : AdminEvent
+
+    /** A server joined the hub, [since] then (Unix milliseconds): whatever state it's in. */
+    @Serializable
+    @SerialName("server_connected")
+    data class ServerConnected(val server: ServerState, val since: Long) : AdminEvent
+
+    /** A server's connection to the hub ended (it stopped, or was lost). */
+    @Serializable
+    @SerialName("server_disconnected")
+    data class ServerDisconnected(val server: ServerState) : AdminEvent
+
     @Serializable
     @SerialName("player_joined")
     data class PlayerJoined(val player: PlayerState) : AdminEvent
@@ -130,7 +145,7 @@ sealed interface AdminEvent {
     @SerialName("player_left")
     data class PlayerLeft(val id: String) : AdminEvent
 
-    /** A server connected, went, or changed (its state, room, players). */
+    /** A server the hub already reported changed (its state, room, players); see [ServerConnected] and [ServerDisconnected]. */
     @Serializable
     @SerialName("server")
     data class Server(val server: ServerState) : AdminEvent
@@ -161,6 +176,9 @@ sealed interface AdminEvent {
 
     companion object {
         fun name(event: AdminEvent): String = when (event) {
+            is Hello -> "hello"
+            is ServerConnected -> "server_connected"
+            is ServerDisconnected -> "server_disconnected"
             is PlayerJoined -> "player_joined"
             is PlayerMoved -> "player_moved"
             is PlayerLeft -> "player_left"
