@@ -49,11 +49,21 @@ class ControlTest {
         }
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
         while (!answer.isDone) {
-            check(System.nanoTime() < deadline) { "timed out" }
+            check(System.nanoTime() < deadline) { "$method $path timed out\n${whatWasGoingOn(server)}" }
             if (ticking) server.tick()
             Thread.sleep(5)
         }
         return answer.join()
+    }
+
+    /** The server's log and where its threads were: what a timed-out request was waiting for. */
+    private fun whatWasGoingOn(server: TestServer): String {
+        val threads = Thread.getAllStackTraces().entries
+            .filter { (thread, _) -> thread.name.startsWith("NetherForge") || thread == Thread.currentThread() }
+            .joinToString("\n") { (thread, stack) ->
+                "${thread.name} (${thread.state}):\n" + stack.take(25).joinToString("\n") { "    at $it" }
+            }
+        return "log:\n${server.platform.log.lines.joinToString("\n")}\nthreads:\n$threads"
     }
 
     @Test
