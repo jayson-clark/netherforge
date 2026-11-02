@@ -75,6 +75,35 @@ same machine, so **set `public-url` on a real server**. With `external-url`,
 upload the new `resource-pack.zip` each time it changes; a player whose
 download doesn't match the latest one rejects it.
 
+**From shared storage.** With many servers, serving each pack from each
+server is many open ports. Upload them to an S3-compatible store instead (AWS,
+Cloudflare R2, MinIO), and players fetch them from there:
+
+```yaml
+resource-pack:
+  storage:
+    type: s3
+    endpoint: https://<account>.r2.cloudflarestorage.com
+    bucket: packs
+    public-url: https://packs.example.com/ # where players fetch from: the bucket's public address or a CDN
+    access-key: … # or AWS_ACCESS_KEY_ID
+    secret-key: … # or AWS_SECRET_ACCESS_KEY
+```
+
+Packs are named by their hash, so servers running the same bundle share one
+upload, and a pack that's in the store already isn't uploaded again. A player
+is sent a pack once it's there. `prefix:` puts them under a folder of the
+bucket; `netherforge publish --packs-to s3://<bucket>/<prefix>` uploads a
+bundle's pack there before any server runs it.
+
+**Across a network.** The hub remembers which pack each player's game has
+loaded, so a server whose pack is the one they already have doesn't send it
+again: no download, no reloading screen. That needs the proxy to keep packs as
+players switch servers (`clear-resource-packs=false` in the hub's
+`hub.properties`); a NetherForge server with a different pack then replaces
+theirs as it sends its own (a server without NetherForge leaves the last one
+on).
+
 `/nf pack` shows the resource pack's size and the URL players are sent, and
 `/nf pack send <player>` sends it again.
 
@@ -255,22 +284,39 @@ network:
   hub: 127.0.0.1:25590
   server-name: ''
   secret: ''
+  credential:
+    id: ''
+    secret: ''
+  group: ''
+  capacity: 0
+  register:
+    address: ''
+  idle-after-seconds: 0
+  wait-for-hub-seconds: 0
+  require-hub: false
   messages-per-minute: 1200
   request-timeout-seconds: 10
   messages-per-tick: 1000
   max-queued-messages: 10000
 ```
 
-| Key                       | Meaning                                                                                                                                               | Default           |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `enabled`                 | Whether this server joins its network.                                                                                                                | `false`           |
-| `hub`                     | The proxy's address and the hub's port (`port` in `hub.properties`): `host:port`, or a host alone for port 25590.                                     | `127.0.0.1:25590` |
-| `server-name`             | This server's name as the proxy names it (`velocity.toml`'s `[servers]`). The hub refuses a name the proxy doesn't have.                              |                   |
-| `secret`                  | The hub's `secret`, from `hub.properties`. It's proved, never sent.                                                                                   |                   |
-| `messages-per-minute`     | What each package may send a minute: messages, requests, map writes and players sent. Past it, `publish` and `set` return `false`, and the rest fail. | `1200`            |
-| `request-timeout-seconds` | How long a request waits for its answer before it fails.                                                                                              | `10`              |
-| `messages-per-tick`       | What arrives that's handed to scripts each tick (messages, requests, changes, players coming and going); the rest waits for the next.                 | `1000`            |
-| `max-queued-messages`     | What may wait for scripts; past it, the server stops reading from the hub until they catch up, so nothing is dropped.                                 | `10000`           |
+| Key                       | Meaning                                                                                                                                                                                                                                                   | Default              |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| `enabled`                 | Whether this server joins its network.                                                                                                                                                                                                                    | `false`              |
+| `hub`                     | The proxy's address and the hub's port (`port` in `hub.properties`): `host:port`, or a host alone for port 25590.                                                                                                                                         | `127.0.0.1:25590`    |
+| `server-name`             | This server's name as the proxy names it (`velocity.toml`'s `[servers]`). The hub refuses a name the proxy doesn't have.                                                                                                                                  |                      |
+| `secret`                  | The hub's `secret`, from `hub.properties`: the server joins as trusted. It's proved, never sent.                                                                                                                                                          |                      |
+| `credential`              | This server's own credential (`id` and `secret`, from `/nfhub credentials add`), in place of `secret`: the hub holds it to its role. See [credentials](./network.md#servers-with-credentials).                                                            |                      |
+| `group`                   | The group this server is an instance of (`arena`), which scripts send players to as one. See [groups](./network.md#groups-several-copies-of-one-game).                                                                                                    | none: a group of one |
+| `capacity`                | How many players it takes; the hub sends a group's players only to instances with room. `0` for any number.                                                                                                                                               | `0`                  |
+| `register.address`        | Where the proxy reaches this server when it isn't in `velocity.toml`: it adds itself to the proxy as it joins (`host:port`, or a port alone). `server-name` may then be `auto`. See [adding servers](./network.md#adding-servers-while-the-network-runs). | none                 |
+| `idle-after-seconds`      | How long the server may be empty before the hub hears it's idle (its webhook's `server_idle`). `0`: never.                                                                                                                                                | `0`                  |
+| `wait-for-hub-seconds`    | How long the server waits as it starts for the hub to welcome it (what it may do, the network's policy for it) before starting its project. `0`: it doesn't wait.                                                                                         | `0`                  |
+| `require-hub`             | Run the project only once the hub has welcomed this server: one that can't reach its hub runs nothing rather than run without the network's policy, and starts by itself when the hub is there.                                                           | `false`              |
+| `messages-per-minute`     | What each package may send a minute: messages, requests, map writes and players sent. Past it, `publish` and `set` return `false`, and the rest fail.                                                                                                     | `1200`               |
+| `request-timeout-seconds` | How long a request waits for its answer before it fails.                                                                                                                                                                                                  | `10`                 |
+| `messages-per-tick`       | What arrives that's handed to scripts each tick (messages, requests, changes, players coming and going); the rest waits for the next.                                                                                                                     | `1000`               |
+| `max-queued-messages`     | What may wait for scripts; past it, the server stops reading from the hub until they catch up, so nothing is dropped.                                                                                                                                     | `10000`              |
 
 The server logs when it joins and when it loses the hub, and dials again by
 itself. `/nf network` shows how it's in its network: connected or not, every
@@ -284,16 +330,24 @@ scripts can be tried with no proxy.
 `plugins/`. On its first start it writes `plugins/netherforge/hub.properties`
 with a new secret:
 
-| Key                       | Meaning                                                                                                     | Default            |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------ |
-| `bind`, `port`            | Where the hub listens. Keep the port to your servers (a firewall), as you do theirs.                        | `0.0.0.0`, `25590` |
-| `secret`                  | What every server proves it knows. Anyone with it can join the network.                                     | made for you       |
-| `max-value-bytes`         | The most one value may be as JSON: a message, a request or its answer, a map's value, a sent player's data. | `65536`            |
-| `max-keys-per-package`    | Keys one package may keep across its shared maps.                                                           | `10000`            |
-| `max-bytes-per-package`   | Bytes of values one package may keep across its shared maps.                                                | `16777216`         |
-| `request-timeout-seconds` | How long the hub waits for a server to answer a request.                                                    | `30`               |
-| `max-queued-frames`       | What may wait to be sent to one server; past it, the server is too slow and the hub drops its connection.   | `50000`            |
-| `clear-resource-packs`    | Whether the resource packs a server sent a player come off as they move to another server.                  | `true`             |
+| Key                                                 | Meaning                                                                                                                                                           | Default            |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `bind`, `port`                                      | Where the hub listens. Keep the port to your servers (a firewall), as you do theirs.                                                                              | `0.0.0.0`, `25590` |
+| `secret`                                            | What a trusted server proves it knows. Anyone with it can join the network. Empty: only credentials join.                                                         | made for you       |
+| `share.standard`, `share.isolated`                  | What the network shares with every credential of that role: `lobby:return(request), events:*(read)`.                                                              | none               |
+| `group.<name>.balance`                              | How the hub picks an instance of that group to send players to: `least` or `fill`.                                                                                | `least`            |
+| `group.<name>.fallback`, `group.<name>.max-waiting` | Where an instance's players go when it stops, and how many sends may wait for the group at once.                                                                  | `lobby`, `500`     |
+| `fallback`                                          | Where the players of a group without its own `group.<name>.fallback` go (groups made while the network runs have none).                                           | `lobby`            |
+| `webhook.url`, `webhook.secret`                     | Where the hub POSTs `server_ready`, `server_idle`, `server_gone` and `group_wanted`, signed with the secret.                                                      | none               |
+| `max-value-bytes`                                   | The most one value may be as JSON: a message, a request or its answer, a map's value, a sent player's data.                                                       | `65536`            |
+| `max-keys-per-package`                              | Keys one package may keep across its shared maps.                                                                                                                 | `10000`            |
+| `max-bytes-per-package`                             | Bytes of values one package may keep across its shared maps.                                                                                                      | `16777216`         |
+| `request-timeout-seconds`                           | How long the hub waits for a server to answer a request.                                                                                                          | `30`               |
+| `max-queued-frames`                                 | What may wait to be sent to one server; past it, the server is too slow and the hub drops its connection.                                                         | `50000`            |
+| `unregister-after-seconds`                          | How long a server that added itself may be gone without shutting down cleanly before it comes off the proxy.                                                      | `60`               |
+| `admin.bind`, `admin.port`                          | The [admin API](./network.md#the-hubs-admin-api), for services outside the servers; off without a port. Its clients are in `admin.properties` (`/nfhub admins`).  | `127.0.0.1`, off   |
+| `placement-timeout-millis`                          | How long the hub waits for a service placing a group's players; past it, that service's stream is closed and the next one, or the group's balancing, places them. | `2000`             |
+| `clear-resource-packs`                              | Whether the resource packs a server sent a player come off as they move to another server.                                                                        | `true`             |
 
 **Resource packs across the network.** Velocity keeps the resource packs a
 server sent a player when they move to another server, until that server
@@ -307,8 +361,143 @@ even the same one; turn it off for a network whose servers share one pack.
 
 Shared maps are saved in `plugins/netherforge/maps.json` on the proxy, every
 few seconds while they change and when it stops. Back it up with the proxy.
-`/nfhub` (permission `netherforge.admin`) lists the proxy's servers and which
-are connected.
+`/nfhub` (permission `netherforge.admin`) lists the proxy's servers, which
+are connected and with which credential. Servers' own credentials are in
+`plugins/netherforge/credentials.properties`, managed with
+`/nfhub credentials add|revoke|list|reload` (see
+[credentials](./network.md#servers-with-credentials)); keep that file as
+private as `hub.properties`.
+
+## Worlds at run time
+
+```yaml
+worlds:
+  import-root: imports # relative to the server's folder; off turns importing off
+  max-loaded: 0 # the most worlds loaded at once, the server's own included; 0 for any number
+```
+
+A server that hosts different worlds over its life (one player's island, then
+another's) loads and unloads them as it runs instead of restarting:
+`nf.worlds.import("islands/7f2c", "island_7f2c")` makes a world from a folder
+a tool put under `import-root` (laid out as a [map](../format/worlds.md#maps) is),
+and `world:unload` saves it and lets it go, its players moved to another
+world first. Scripts set a world up in `world_load` and tidy up in
+`world_unload`. Paper loads a world on the main thread, so a load is a short
+pause in the tick: the log says how long each one that took 50 ms or more
+took.
+
+## A policy over what projects require
+
+A project says what it needs (`requires` in its `netherforge.json`), and you
+accept that by running it. A server that runs projects other people wrote
+needs rules that apply whatever a project asks for: `policy.json` beside
+`config.yml` in `plugins/NetherForge/`:
+
+```json
+{
+  "requires": {
+    "allow": ["network", "db", "http"],
+    "deny": ["moderation", "plugins"],
+    "http": ["api.example.com", "*.cdn.example.com"],
+    "refused": "refuse"
+  },
+  "limits": {
+    "script-memory-mb": 256,
+    "instruction-budget": 200000,
+    "call-milliseconds": 500,
+    "network-messages-per-minute": 600,
+    "http-requests-per-minute": 30
+  }
+}
+```
+
+| Key                | Means                                                                                                                                                                                                                                  |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `requires.allow`   | The only kinds a project (or any package it uses) may require: `console`, `moderation`, `db`, `web`, `bots`, `wasm`, `network`, `http`, `plugins`.                                                                                     |
+| `requires.deny`    | Kinds none may.                                                                                                                                                                                                                        |
+| `requires.http`    | The only hosts one may declare for `http` (`*.example.com` for any under it), whatever it lists.                                                                                                                                       |
+| `requires.refused` | `refuse` (a project the policy refuses doesn't load) or `degrade` (it loads, and the refused calls fail, as an undeclared requirement's do).                                                                                           |
+| `limits`           | Limits that replace the server's own where they're lower: scripts' memory together, a script's instruction budget (whatever its file says), how long one call may run, and each package's network messages and HTTP requests a minute. |
+
+The server's log, `/nf requires` and the problem `runtime.policy` say which
+package requires what, and which rule of the policy refused it. A policy that
+can't be read stops every project, rather than letting them all through. A
+network can send each role's servers a policy too (`policy.<role>` in the
+hub's `hub.properties`): the server holds its projects to both, the stricter
+of each, and starts the project again when the network's changes. To have the
+network's policy from the first moment, set `network.wait-for-hub-seconds`
+(the server waits that long for the hub as it starts) and `network.require-hub`
+(it runs nothing until the hub has welcomed it). A project's
+author can check before publishing that it runs under a network's policy:
+
+```sh
+netherforge check --policy policy.json
+```
+
+## Metrics
+
+```yaml
+metrics:
+  port: 9225 # off when 0
+  bind: 127.0.0.1 # 0.0.0.0 for a scraper on another machine
+```
+
+The server serves its numbers for Prometheus at `/metrics`, gathered once a
+second: `netherforge_tps` and `netherforge_tick_milliseconds` (how it keeps
+up), `netherforge_runtime_tick_milliseconds` (NetherForge's share, average and
+worst), `netherforge_players`, `netherforge_entities` and `netherforge_chunks`
+by world, `netherforge_centities`, by package `netherforge_scripts`,
+`netherforge_script_milliseconds` and `netherforge_script_bytes`, and
+`netherforge_network_sent_total` and `netherforge_network_heard_total`, its
+`netherforge_state` and `netherforge_startup_milliseconds`. Everything is
+counted, nothing listed, so collecting them costs nothing a server would
+notice. The hub has metrics of its own (`metrics.port` in `hub.properties`):
+servers and players by group, each server's tick time, frames, what each
+package keeps in maps, requests and sends waiting, admin streams and proxies.
+The proxy plugin serves its own beside them, and alone when it's joined to a
+hub that runs on its own (`remote.hub`), each labelled `proxy` with its
+`remote.name`: `netherforge_proxy_players`, `netherforge_proxy_servers` (by
+`source`, `config` or `runtime`), `netherforge_proxy_logins_total`,
+`netherforge_proxy_logins_refused_total` (by `reason`: `banned`, `draining`,
+`hub`, `denied`, `initial_server` when the server a login was placed on didn't
+take it, `no_server` when no server was chosen for it at all)), `netherforge_proxy_moves_total`,
+`netherforge_proxy_move_failures_total` (by `reason`), and with a remote hub
+`netherforge_proxy_hub_connected` and `netherforge_proxy_hub_reconnects_total`.
+
+## The control endpoint
+
+The tool that runs the server (a container's sidecar, a host's agent) can read
+its state and tell it what to do without a player or the console, through a
+small HTTP endpoint that's never reachable from elsewhere:
+
+```yaml
+control:
+  socket: /run/netherforge/control.sock # a Unix socket: whoever may open the file may use it
+  port: 0 # or a TCP port on 127.0.0.1, with the token in token-file
+  token-file: control.token # in the plugin's folder; made for you
+  stall-seconds: 10 # no tick completed for this long: the server is stalled
+```
+
+| Request                                                                    | Does                                                                                                                                                                                                                                                     |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /state`                                                               | Its [state](./network.md#a-servers-life-starting-ready-draining-stopping), its players, how long it's been empty, its project and version, its worlds; `last_tick` (Unix milliseconds of the last completed tick), `tick_ms` (its length) and `stalled`. |
+| `GET /events`                                                              | A stream (Server-Sent Events) of `state`, `player_join`, `player_quit`, `world_load`, `world_unload`, `writes` and `stalled` (no tick for `stall-seconds`).                                                                                              |
+| `GET /healthz`                                                             | 200 while ticks complete, 503 before the first and once stalled. Needs no token, for probes.                                                                                                                                                             |
+| `POST /drain` `{ "draining": false }` to undo                              | As `/nf drain`.                                                                                                                                                                                                                                          |
+| `POST /shutdown` `{ "after_empty": true, "timeout": 60 }`                  | As `/nf shutdown`.                                                                                                                                                                                                                                       |
+| `POST /save` `{ "pause": true, "timeout": 300 }`                           | Saves every world and flushes it to disk; with `pause`, writes stop (the server's `save-off`, world by world) until `POST /resume` or the timeout.                                                                                                       |
+| `POST /resume`                                                             | Writes go on.                                                                                                                                                                                                                                            |
+| `POST /worlds/load` `{ "name", "folder"?, "terrain"? }`                    | Loads a saved world, or with `folder` imports one from the import root (as `nf.worlds.import`).                                                                                                                                                          |
+| `POST /worlds/unload` `{ "name", "save"?, "delete"?, "move_players_to"? }` | Unloads one of the project's worlds, its players moved out first (as `world:unload`).                                                                                                                                                                    |
+
+So a tool copies a consistent world with `POST /save {"pause": true}`, the
+copy, then `POST /resume`; if it never resumes, the timeout does. Every action
+is in the server's log, with where it came from.
+
+The endpoint answers from threads of its own, so a server whose main thread is
+stuck (an endless script, a deadlock) still answers: that's why its health
+comes from ticks. Point a liveness probe (or an Agones health sidecar) at
+`/healthz`.
 
 ## Web routes
 
@@ -475,3 +664,17 @@ performance:
 | `warn-ms`         | Milliseconds a tick, on average, above which a script is slow. 0 turns it off.                               | `10`    |
 | `warn-ticks`      | How many ticks that average is over (1 to 100).                                                              | `20`    |
 | `max-ms-per-tick` | Milliseconds a script's code may run in a tick before its timers and tick handlers wait for the next. 0 off. | `25`    |
+
+## Exporting the game data
+
+`export-game-data:` names a file (absolute, or relative to the server's
+folder) the plugin writes the game's data to once the server has started:
+the registries, tags, block states and collision shapes `netherforge check`
+and `netherforge test` read, as the editor's dev server exports them. It needs
+no project. `netherforge game-data <version>` starts a server just for this (see
+[Testing](testing.md#what-it-needs)), so this is for tools that already
+run one.
+
+```yaml
+export-game-data: game-data.json
+```

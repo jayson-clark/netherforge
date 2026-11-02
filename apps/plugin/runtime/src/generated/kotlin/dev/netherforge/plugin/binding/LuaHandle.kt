@@ -58,6 +58,7 @@ sealed interface LuaHandle {
             "WasmInstance" -> WasmInstance(keyValues[0] as Long)
             "WasmProcess" -> WasmProcess(keyValues[0] as Long, keyValues[1] as String)
             "NetworkChannel" -> NetworkChannel(keyValues[0] as String)
+            "NetworkHold" -> NetworkHold(keyValues[0] as Long)
             "NetworkMap" -> NetworkMap(keyValues[0] as String)
             "Cutscene" -> Cutscene(keyValues[0] as Long, keyValues[1] as String)
             "Screen" -> Screen(keyValues[0] as String, keyValues[1] as String)
@@ -654,6 +655,25 @@ sealed interface LuaHandle {
 
         /** NetworkChannel handles. */
         object Codec : HandleCodec<NetworkChannel>("NetworkChannel", setOf("NetworkChannel"))
+    }
+
+    /**
+     * A hold on this server being ready, from `nf.network.hold_ready`: while any is held, the server stays
+     * `starting`.
+     */
+    class NetworkHold(val id: Long) : LuaHandle {
+        override val luaClass: String get() = "NetworkHold"
+
+        override val keyValues: List<Any> get() = listOf(id)
+
+        override fun equals(other: Any?): Boolean = other is NetworkHold && other.id == id
+
+        override fun hashCode(): Int = 31 * "NetworkHold".hashCode() + id.hashCode()
+
+        override fun toString(): String = "$luaClass($id)"
+
+        /** NetworkHold handles. */
+        object Codec : HandleCodec<NetworkHold>("NetworkHold", setOf("NetworkHold"))
     }
 
     /** A map the whole network shares, from `nf.network.map`: string keys, any values. */

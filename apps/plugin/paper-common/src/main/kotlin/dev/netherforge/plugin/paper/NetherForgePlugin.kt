@@ -1,6 +1,7 @@
 package dev.netherforge.plugin.paper
 
 import dev.netherforge.plugin.Folia
+import dev.netherforge.plugin.GameDataExport
 import dev.netherforge.plugin.NetherForgeRuntime
 import dev.netherforge.plugin.RuntimeConfig
 import dev.netherforge.plugin.ServerAddress
@@ -54,25 +55,49 @@ class NetherForgePlugin :
             return
         }
         saveDefaultConfig()
+        val settings = config.plain()
+        export = GameDataExport.read(settings, server.worldContainer.toPath())
         val config = RuntimeConfig.read(
             pluginFolder = dataFolder.toPath(),
-            settings = config.plain(),
+            settings = settings,
             server = ServerAddress(server.worldContainer.toPath(), server.ip)
         )
-        if (config == null) {
+        if (config == null && export == null) {
             logger.warning(RuntimeConfig.NO_PROJECT)
             return
         }
 
         val platform = PaperPlatform(this, version)
         this.platform = platform
-        runtime = NetherForgeRuntime(platform, config)
+        runtime = config?.let { NetherForgeRuntime(platform, it) }
         server.pluginManager.registerEvents(this, this)
+    }
+
+    /** What to do with the game's data as the server starts: [GameDataExport]. */
+    private var export: GameDataExport? = null
+
+    /** Writes the game's data where [export] says, and stops the server when it says to. */
+    private fun exportGameData(export: GameDataExport) {
+        try {
+            val bundle = export.write(platform ?: return)
+            logger.info("Wrote the game data of Minecraft ${bundle.minecraft} to ${export.file.toAbsolutePath()}")
+        } catch (e: Exception) {
+            logger.log(Level.SEVERE, "Couldn't write the game data to ${export.file.toAbsolutePath()}", e)
+        }
+        if (export.thenStop) {
+            logger.info("Stopping: the game data was all this start was for (-D${GameDataExport.PROPERTY})")
+            server.shutdown()
+        }
     }
 
     /** The server has loaded its worlds and every plugin: the runtime starts. */
     @EventHandler
     fun onServerLoad(event: ServerLoadEvent) {
+        export?.let { export ->
+            this.export = null
+            exportGameData(export)
+            if (export.thenStop) return
+        }
         val runtime = runtime ?: return
         if (started) return
         started = true

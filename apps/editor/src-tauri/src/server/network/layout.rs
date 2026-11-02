@@ -29,8 +29,57 @@ pub struct NetworkLayout {
     pub enabled: bool,
     /// The open project's server's name in the network.
     pub name: String,
+    /// The open project's server's group, capacity and role.
+    #[serde(default)]
+    pub options: ServerOptions,
     /// The network's other servers.
     pub servers: Vec<NetworkServer>,
+}
+
+/// A dev network's server as a production network would run it: an instance
+/// of `group` taking `capacity` players, joining with a credential of `role`
+/// (`trusted` when none) that owns its project's namespace. As format's
+/// `WorkspaceServerOptions`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ServerOptions {
+    pub group: Option<String>,
+    pub capacity: Option<u32>,
+    pub role: Option<String>,
+}
+
+/// The roles a server can join a network with: the hub's presets.
+pub const ROLES: [&str; 3] = ["trusted", "standard", "isolated"];
+
+impl ServerOptions {
+    /// Refuses options the hub wouldn't take, saying which server's.
+    pub fn validate(&self, server: &str) -> Result<()> {
+        if let Some(group) = &self.group
+            && !is_server_name(group)
+        {
+            bail!(
+                Invalid,
+                "Server \"{server}\"'s group \"{group}\" can't name a group: use lowercase letters, digits, _ and - (at most 32)"
+            );
+        }
+        if self.capacity == Some(0) {
+            bail!(Invalid, "Server \"{server}\" takes at least one player");
+        }
+        if let Some(role) = &self.role
+            && !ROLES.contains(&role.as_str())
+        {
+            bail!(
+                Invalid,
+                "Server \"{server}\"'s role \"{role}\" isn't trusted, standard or isolated"
+            );
+        }
+        Ok(())
+    }
+
+    /// Whether the server joins with a credential of its own: a role that isn't `trusted`.
+    pub fn credentialed(&self) -> bool {
+        self.role.as_deref().is_some_and(|role| role != "trusted")
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -41,6 +90,8 @@ pub struct NetworkServer {
     /// The project folder it runs: relative to the open project's (`../lobby`),
     /// absolute, or `.` for the open project itself.
     pub project: String,
+    #[serde(default)]
+    pub options: ServerOptions,
 }
 
 impl Default for NetworkLayout {
@@ -48,6 +99,7 @@ impl Default for NetworkLayout {
         Self {
             enabled: false,
             name: "main".into(),
+            options: ServerOptions::default(),
             servers: Vec::new(),
         }
     }
@@ -68,8 +120,10 @@ impl NetworkLayout {
     /// with no project, too many servers.
     pub fn validate(&self) -> Result<()> {
         let mut names = vec![self.name.as_str()];
+        self.options.validate(&self.name)?;
         for server in &self.servers {
             names.push(&server.name);
+            server.options.validate(&server.name)?;
             if server.project.trim().is_empty() {
                 bail!(
                     Invalid,
@@ -181,11 +235,13 @@ mod tests {
         NetworkLayout {
             enabled: true,
             name: name.into(),
+            options: ServerOptions::default(),
             servers: servers
                 .iter()
                 .map(|(name, project)| NetworkServer {
                     name: (*name).into(),
                     project: (*project).into(),
+                    options: ServerOptions::default(),
                 })
                 .collect(),
         }
@@ -199,6 +255,33 @@ mod tests {
         for bad in ["", ".", "..", "Lobby", "a.b", "a b", "a/b", &"x".repeat(33)] {
             assert!(!is_server_name(bad), "{bad}");
         }
+    }
+
+    #[test]
+    fn options_are_a_group_a_capacity_and_a_role_the_hub_takes() {
+        let options =
+            |group: Option<&str>, capacity: Option<u32>, role: Option<&str>| ServerOptions {
+                group: group.map(String::from),
+                capacity,
+                role: role.map(String::from),
+            };
+        assert!(
+            options(Some("arena"), Some(16), Some("standard"))
+                .validate("a")
+                .is_ok()
+        );
+        assert!(options(None, None, None).validate("a").is_ok());
+        assert!(options(Some("Arena"), None, None).validate("a").is_err());
+        assert!(options(None, Some(0), None).validate("a").is_err());
+        assert!(options(None, None, Some("admin")).validate("a").is_err());
+        assert!(!options(None, None, Some("trusted")).credentialed());
+        assert!(options(None, None, Some("isolated")).credentialed());
+        // A layout without options reads as before.
+        let read: NetworkLayout = serde_json::from_str(
+            r#"{"enabled":true,"name":"main","servers":[{"name":"lobby","project":"."}]}"#,
+        )
+        .unwrap();
+        assert_eq!(read.servers[0].options, ServerOptions::default());
     }
 
     #[test]

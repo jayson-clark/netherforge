@@ -55,7 +55,7 @@ internal fun createWorld(session: ProjectSession, name: String, options: WorldCr
 }
 
 /** The id of the project terrain [reference] names, as the generators are named: an error naming what there is when it names none. */
-private fun projectTerrain(session: ProjectSession, reference: String): String {
+internal fun projectTerrain(session: ProjectSession, reference: String): String {
     val id = session.names.resource(TerrainKind, reference)
     if (!session.worldGenerators.has(id)) {
         val known = session.worldGenerators.ids().filter { session.names.usable(TerrainKind, it) }

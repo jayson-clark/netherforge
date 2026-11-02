@@ -19,6 +19,30 @@ interface HubProxy {
      * aren't (already there, the server is down, another plugin cancelled it). From any thread.
      */
     fun send(id: String, server: String): CompletionStage<String?>
+
+    /** Adds [name] at [host]:[port] to the proxy's servers, as a server registers itself. Null once it has, or why not. */
+    fun register(name: String, host: String, port: Int): String? = "this proxy can't add servers while it runs"
+
+    /**
+     * [name] is added again at the same [host]:[port]: any part of the proxy that lacks it (a proxy of several that
+     * joined later) gets it; the rest change nothing.
+     */
+    fun fill(name: String, host: String, port: Int) {}
+
+    /** Takes [name] (one [register] added) off the proxy's servers. */
+    fun unregister(name: String) {}
+
+    /**
+     * Shows player [id] [text] (MiniMessage) as [kind]: `chat`, `title` (with [subtitle]) or `actionbar`. Null once
+     * shown, or why not.
+     */
+    fun message(id: String, kind: String, text: String, subtitle: String?): String? = "this proxy can't show players messages"
+
+    /** Disconnects player [id] from the network with [message]. Null once done, or why not. */
+    fun kick(id: String, message: String): String? = "this proxy can't kick players"
+
+    /** Whether [name] is one of the proxy's own servers (its config's), which no server may register over. */
+    fun isFixed(name: String): Boolean = true
 }
 
 /** Where the hub writes what happened: the proxy's log. */
@@ -39,7 +63,16 @@ data class NetworkLimits(
     /** Frames waiting to be written to one server; past it the server is too slow and is dropped. */
     val maxQueuedFrames: Int = 50_000,
     /** How long a request waits for the server asked before the hub answers it failed. */
-    val requestTimeoutMillis: Long = 30_000
+    val requestTimeoutMillis: Long = 30_000,
+    /** How long a server that registered itself may be gone (not a clean shutdown) before it comes off the proxy. */
+    val unregisterAfterMillis: Long = 60_000,
+    /** How long the hub waits for an admin client to place players before the group's own balancing does. */
+    val placementTimeoutMillis: Long = 2_000,
+    /**
+     * A player logging in through one proxy while they're online through another: refused (false), or the new login
+     * takes over and the old one is kicked (true).
+     */
+    val takeOverDuplicateLogins: Boolean = false
 ) {
     companion object {
         const val DEFAULT_MAX_VALUE_BYTES = 64 * 1024

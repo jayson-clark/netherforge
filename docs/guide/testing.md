@@ -216,19 +216,34 @@ don't run (exit 2), and the message says so. `--game-data <file>` runs on an
 export you name instead (the editor keeps its own at
 `<data folder>/minecraft/<version>/server/game-data.json`).
 
+Without the editor, `netherforge game-data <version> --accept-eula` exports it
+into that same cache: it downloads the version's plugin jar from its NetherForge
+release and the Paper build that jar names, starts Paper headless with Java 25
+or newer, exports and stops. Running Minecraft's server means accepting
+[Minecraft's EULA](https://aka.ms/MinecraftEULA), which `--accept-eula` says
+you do. `--out <file>` writes it elsewhere. The first run downloads and patches
+Minecraft's server, which takes a while; it's kept in the data folder
+(`game-data-server/<version>/`, beside Paper in `paper/`), so later runs take
+seconds. A server you run yourself can write it at every start too:
+`export-game-data: <file>` in its `config.yml`.
+
 ### In CI
 
 The command is on npm, and it downloads the test runner itself. A CI machine
-has no editor, so give it the game data with `--game-data`: a copy of the
-editor's export, committed or cached.
+has no editor, so export the game data first, or give it a copy with
+`--game-data`.
 
 ```yaml
 - uses: actions/setup-node@v5
   with: { node-version: 22 }
 - uses: actions/setup-java@v5
   with: { distribution: temurin, java-version: '25' }
-- run: npx @netherforge/cli@1.0.0 test --junit test-results.xml --game-data ci/game-data.json
+- run: npx @netherforge/cli@1.0.0 game-data 26.3 --accept-eula
+- run: npx @netherforge/cli@1.0.0 test --junit test-results.xml
 ```
+
+Set `NETHERFORGE_DATA_DIR` to a folder your CI caches (with
+`actions/cache`) to skip the downloads on later runs.
 
 ## In the editor
 

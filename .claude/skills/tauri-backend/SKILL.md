@@ -412,7 +412,7 @@ other servers, each running a project folder of its own. Start and Stop
 (`server_start`/`server_stop`, `AppState::stop_servers`) run all of it when the
 layout is `enabled`.
 
-- **The layout** (`layout.rs`): `{ enabled, name, servers: [{ name, project }] }`,
+- **The layout** (`layout.rs`): `{ enabled, name, options, servers: [{ name, project, options }] }`,
   the user's on this computer, in `<config>/networks.json` keyed by the
   canonical root like trust. Names are `[a-z0-9_-]{1,32}` (a folder name and a
   `velocity.toml` key; never `proxy`, the proxy's member name), at most 8 other
@@ -440,9 +440,20 @@ layout is `enabled`.
   `paper/velocity-<v>-<build>.jar`; 512 MB; no bridge; `-Dnetherforge.project`
   only so a leftover is recognised). One `ServerManager` per member: the same
   lifecycle, generations, stop and leftovers as the main server.
+- **Options** (`ServerOptions`: `group`, `capacity`, `role`, `validate`d as
+  the hub would take them; a workspace's from its file's `network.options`, as
+  `WorkspaceServer.options`): `network::membership` makes each member's
+  `Membership` with its group and capacity, and for a role that isn't
+  `trusted` a `setup::DevCredential` (`dev-<name>`, a new secret each start,
+  owning the project's namespace from `project::Opened.namespace`, its group),
+  which `ProxyRole.credentials` hands to `setup::credentials`: the hub's
+  `plugins/netherforge/credentials.properties`, written whole each start and
+  removed when there are none.
 - **Joining a server**: `-Dnetherforge.network.hub=127.0.0.1:<port>`,
-  `-Dnetherforge.network.server=<name>` and `NETHERFORGE_NETWORK_SECRET` (the
-  plugin's dev-only override of `config.yml`'s `network:`), and
+  `-Dnetherforge.network.server=<name>` (and `.group`, `.capacity`,
+  `.credential` when it has them) and `NETHERFORGE_NETWORK_SECRET` (the
+  credential's secret, or the hub's; the plugin's dev-only override of
+  `config.yml`'s `network:`), and
   `setup::paper_member`: `server-ip=127.0.0.1`, `online-mode=false`,
   `config/paper-global.yml`'s `proxies.velocity` on with the forwarding secret
   (Paper writes its defaults around a file holding only that), marked with
@@ -464,7 +475,7 @@ layout is `enabled`.
 - **Tests**: unit tests per module, `runs_a_network_and_reloads_its_other_servers`
   (the fake server as proxy and peer), two contract cases, and the ignored
   `runs_a_real_network` (real Java, Paper, Velocity and the repo's jars: both
-  servers connected per `/nfhub`).
+  servers connected per `/nfhub`, the lobby with a `standard` credential in a group).
 
 ## lua-language-server
 

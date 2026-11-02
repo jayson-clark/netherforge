@@ -7,6 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
+import { createHash } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
 import { GAME_DATA_SCHEMA } from '@netherforge/format/constants'
@@ -56,6 +57,30 @@ describe('check', () => {
     expect(outcome.code).toBe(0)
     expect(outcome.out).toEqual(['No problems.'])
     expect(outcome.err.join('\n')).toContain("ids weren't checked")
+  })
+
+  it("with --policy, says what a network's policy refuses of what the project and its packages require", async () => {
+    const policy = path.join(tmp, 'policy.json')
+    writeFileSync(
+      policy,
+      JSON.stringify({ requires: { deny: ['bots'], http: ['cdn.example.com'] } }),
+    )
+    const refused = await run(['check', project, '--policy', policy], env)
+    expect(refused.code).toBe(1)
+    const lines = refused.out.join('\n')
+    expect(lines).toContain(
+      'requires bots, which the server\'s policy refuses (requires.deny lists "bots")',
+    )
+    expect(lines).toContain('http:api.example.com')
+    writeFileSync(
+      policy,
+      JSON.stringify({ requires: { allow: ['db', 'web', 'bots', 'wasm', 'http'] } }),
+    )
+    expect((await run(['check', project, '--policy', policy], env)).out.at(-1)).toBe('No problems.')
+    writeFileSync(policy, '{ "requires": { "deny": ["teleport"] } }')
+    expect((await run(['check', project, '--policy', policy], env)).out.join('\n')).toContain(
+      "The policy can't be read",
+    )
   })
 
   it('reports problems as file:line:column: severity: message (at path) and fails', async () => {
@@ -189,6 +214,32 @@ describe('build', () => {
     expect(bundle.packages.library.hash).toBe(lock.packages.library.hash)
     for (const name of ['showcase', 'library'])
       expect(readFileSync(path.join(out, name, 'fonts/default.json'), 'utf8')).toBe(font)
+  })
+
+  it("builds the project's resource pack into the bundle with the game's data, the same bytes each time", async () => {
+    const out = path.join(project, '..', 'bundle')
+    const none = await run(['build', project, '--out', out], env)
+    expect(none.out[1]).toMatch(/^No resource pack in the bundle: no game data/)
+    expect(existsSync(path.join(out, 'resource-pack.zip'))).toBe(false)
+
+    const game = path.join(tmp, 'game-data.json')
+    writeFileSync(
+      game,
+      JSON.stringify({ minecraft: '26.3', packFormat: [75, 0], schema: GAME_DATA_SCHEMA }),
+    )
+    const built = await run(['build', project, '--out', out, '--game-data', game], env)
+    expect(built).toMatchObject({ code: 0 })
+    expect(built.out[1]).toMatch(
+      /^Built its resource pack \(pack format 75\.0, SHA-1 [0-9a-f]{40}\)\.$/,
+    )
+    const zip = readFileSync(path.join(out, 'resource-pack.zip'))
+    const sha1 = createHash('sha1').update(zip).digest('hex')
+    const bundle = JSON.parse(readFileSync(path.join(out, 'netherforge-bundle.json'), 'utf8'))
+    expect(bundle.resourcePack).toEqual({ sha1, format: [75, 0] })
+    expect(zip.includes(Buffer.from('pack.mcmeta'))).toBe(true)
+
+    await run(['build', project, '--out', out, '--game-data', game], env)
+    expect(readFileSync(path.join(out, 'resource-pack.zip')).equals(zip)).toBe(true)
   })
 
   it('builds into build/<namespace>-<version> by default', async () => {

@@ -12,7 +12,7 @@ A table of functions: call them with a dot.
 | [Players and their input](#players-and-their-input) | [`player`](#player) [`raise`](#raise) [`click`](#click) [`release`](#release) [`input`](#input) [`shown`](#shown) |
 | [Worldgen](#worldgen) | [`terrain`](#terrain) |
 | [Web connections](#web-connections) | [`connections`](#connections) [`accept`](#accept) [`receive`](#receive) [`sent`](#sent) [`disconnect`](#disconnect) [`request`](#request) [`oauth_token`](#oauth_token) |
-| [Server networks](#server-networks) | [`network_server`](#network_server) [`network_publish`](#network_publish) [`network_received`](#network_received) [`network_answer`](#network_answer) [`network_request`](#network_request) [`network_write`](#network_write) [`network_join`](#network_join) [`network_quit`](#network_quit) [`network_send`](#network_send) |
+| [Server networks](#server-networks) | [`network_server`](#network_server) [`network_status`](#network_status) [`network_role`](#network_role) [`network_reports`](#network_reports) [`network_publish`](#network_publish) [`network_received`](#network_received) [`network_answer`](#network_answer) [`network_request`](#network_request) [`network_write`](#network_write) [`network_join`](#network_join) [`network_quit`](#network_quit) [`network_send`](#network_send) |
 | [WebAssembly](#webassembly) | [`stub_wasm`](#stub_wasm) |
 
 ## Tests and time {#tests-and-time}
@@ -73,7 +73,7 @@ Raises a server-wide event as the server would, to the scripts: whoever listens 
 
 | Parameter | Type | |
 | --- | --- | --- |
-| `event` | `"tick"\|"player_join"\|"player_resource_pack_status"\|"player_quit"\|"player_chat"\|"player_interact"\|"player_interact_entity"\|"player_move"\|"player_teleport"\|"player_change_world"\|"player_death"\|"player_respawn"\|"player_drop_item"\|"player_pickup_item"\|"player_use_item"\|"player_consume_item"\|"player_swap_hands"\|"player_sneak"\|"player_command"\|"block_break"\|"block_place"\|"entity_damage"\|"entity_death"\|"entity_spawn"\|"world_dusk"\|"world_dawn"\|"player_input"\|"player_change_slot"\|"player_swing"\|"player_sprint"\|"player_fly"\|"player_jump"\|"player_change_game_mode"\|"player_change_food"\|"player_gain_experience"\|"player_change_level"\|"player_kick"\|"player_complete_advancement"\|"player_stop_using_item"\|"player_break_item"\|"entity_heal"\|"projectile_launch"\|"projectile_hit"\|"entity_shoot_bow"\|"entity_target"\|"entity_explode"\|"block_explode"\|"entity_combust"\|"entity_change_effect"\|"block_ignite"\|"block_burn"\|"block_spread"\|"block_flow"\|"block_grow"\|"block_fade"\|"block_form"\|"leaves_decay"\|"piston_extend"\|"piston_retract"\|"block_redstone"\|"sign_change"\|"block_start_break"\|"block_drop_item"\|"weather_change"\|"thunder_change"\|"lightning_strike"\|"chunk_load"\|"chunk_generated"\|"chunk_unload"\|"world_load"\|"world_unload"\|"entity_mount"\|"entity_dismount"\|"vehicle_move"\|"vehicle_damage"\|"vehicle_destroy"\|"player_open_inventory"\|"player_close_inventory"\|"player_click_inventory"\|"player_drag_inventory"\|"player_craft"\|"player_prepare_craft"\|"player_prepare_anvil"\|"player_prepare_smithing"\|"player_prepare_grindstone"\|"player_enchant_item"\|"furnace_smelt"\|"server_list_ping"\|"centity_click"\|"recipe_craft"\|"item_view"\|"centity_natural_spawn"\|"menu_open"\|"menu_close"\|"menu_click"\|"dialog_press"\|"setting_changed"\|"network_connect"\|"network_disconnect"\|"network_server_connect"\|"network_server_disconnect"\|"network_player_join"\|"network_player_switch"\|"network_player_quit"\|"player_arrive"` | The event's name, as `nf.on` takes it. |
+| `event` | `"tick"\|"player_join"\|"player_resource_pack_status"\|"player_quit"\|"player_chat"\|"player_interact"\|"player_interact_entity"\|"player_move"\|"player_teleport"\|"player_change_world"\|"player_death"\|"player_respawn"\|"player_drop_item"\|"player_pickup_item"\|"player_use_item"\|"player_consume_item"\|"player_swap_hands"\|"player_sneak"\|"player_command"\|"block_break"\|"block_place"\|"entity_damage"\|"entity_death"\|"entity_spawn"\|"world_dusk"\|"world_dawn"\|"player_input"\|"player_change_slot"\|"player_swing"\|"player_sprint"\|"player_fly"\|"player_jump"\|"player_change_game_mode"\|"player_change_food"\|"player_gain_experience"\|"player_change_level"\|"player_kick"\|"player_complete_advancement"\|"player_stop_using_item"\|"player_break_item"\|"entity_heal"\|"projectile_launch"\|"projectile_hit"\|"entity_shoot_bow"\|"entity_target"\|"entity_explode"\|"block_explode"\|"entity_combust"\|"entity_change_effect"\|"block_ignite"\|"block_burn"\|"block_spread"\|"block_flow"\|"block_grow"\|"block_fade"\|"block_form"\|"leaves_decay"\|"piston_extend"\|"piston_retract"\|"block_redstone"\|"sign_change"\|"block_start_break"\|"block_drop_item"\|"weather_change"\|"thunder_change"\|"lightning_strike"\|"chunk_load"\|"chunk_generated"\|"chunk_unload"\|"world_load"\|"world_unload"\|"entity_mount"\|"entity_dismount"\|"vehicle_move"\|"vehicle_damage"\|"vehicle_destroy"\|"player_open_inventory"\|"player_close_inventory"\|"player_click_inventory"\|"player_drag_inventory"\|"player_craft"\|"player_prepare_craft"\|"player_prepare_anvil"\|"player_prepare_smithing"\|"player_prepare_grindstone"\|"player_enchant_item"\|"furnace_smelt"\|"server_list_ping"\|"centity_click"\|"recipe_craft"\|"item_view"\|"centity_natural_spawn"\|"menu_open"\|"menu_close"\|"menu_click"\|"dialog_press"\|"setting_changed"\|"network_connect"\|"network_disconnect"\|"network_state"\|"network_server_connect"\|"network_server_disconnect"\|"network_player_join"\|"network_player_switch"\|"network_player_quit"\|"player_arrive"` | The event's name, as `nf.on` takes it. |
 | `payload` (optional) | `table` | The payload: its fields by name. Leave it out for an event that has none. |
 
 **Returns** [`RaisedEvent`](types.md#raisedevent): Whether a handler cancelled it, and the event as the handlers left it.
@@ -282,13 +282,14 @@ nf.test.oauth_token(flow, { access_token = "abc", refresh_token = "def", expires
 
 ## Server networks {#server-networks}
 
-### `nf.test.network_server(name)` {#network_server}
+### `nf.test.network_server(name, options?)` {#network_server}
 
 Adds another server to the test's network. In a test this server is part of a network of its own, named `"test"`, whose hub is a real one in the test: every other server is one the test adds and plays, with `network_publish`, `network_received`, `network_answer`, `network_write`, `network_join` and `network_send`. Adding one that's there does nothing; the network starts with none.
 
 | Parameter | Type | |
 | --- | --- | --- |
 | `name` | `string` | Its name in the network (`"lobby"`). |
+| `options` (optional) | [`TestNetworkServerOptions`](types.md#testnetworkserveroptions) | Its group and room, when it's an instance of a group. |
 
 ```lua
 nf.test.case("chat reaches the lobby", function()
@@ -300,6 +301,52 @@ nf.test.case("chat reaches the lobby", function()
   assert(said[1].value.text == "Ann: hi")
 end)
 ```
+
+### `nf.test.network_status(server, status)` {#network_status}
+
+Another server of the test's network says where it is in its life and whether it takes players, as `set_accepting` and `/nf drain` would there: players sent to its group wait for it while it's `starting` or full (a send with `wait`), and go once it's `ready`. Heard by the next tick.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `server` | `string` | The other server, as `network_server` added it. |
+| `status` | [`TestNetworkStatus`](types.md#testnetworkstatus) | What it says. |
+
+```lua
+nf.test.case("a player waits for the arena to start", function()
+  nf.test.network_server("arena-1", { group = "arena", state = "starting" })
+  local ann = nf.test.player("Ann")
+  local went
+  nf.task(function() went = nf.network.send_player(ann, { group = "arena", wait = 30 }) end)
+  nf.test.advance(2)
+  assert(went == nil)
+  nf.test.network_status("arena-1", { state = "ready" })
+  nf.test.advance(2)
+  assert(went == "arena-1")
+end)
+```
+
+### `nf.test.network_role(role)` {#network_role}
+
+This server joins the test's network again with a credential of the role given, as a server running someone else's project might: what it may publish, ask, answer, read, write and send is then held to it, and `nf.network.server_role()` says it. The test's other servers stay trusted. By the next tick.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `role` | [`TestNetworkRole`](types.md#testnetworkrole) | The role, and what it owns and is shared. |
+
+```lua
+nf.test.case("a standard server can't publish on the lobby's channel", function()
+  nf.test.network_role({ role = "standard", owns = { "test" } })
+  nf.test.advance(1)
+  local ok, err = pcall(function() nf.network.channel("lobby:chat"):publish("hi") end)
+  assert(not ok and string.find(tostring(err), "network.forbidden"))
+end)
+```
+
+### `nf.test.network_reports()` {#network_reports}
+
+The reports scripts made with `nf.network.report` in this test, oldest first, as the network's hub keeps them.
+
+**Returns** [`TestNetworkReport`](types.md#testnetworkreport)`[]`
 
 ### `nf.test.network_publish(server, channel, value)` {#network_publish}
 

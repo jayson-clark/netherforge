@@ -119,6 +119,15 @@ shows each server's state and console, and takes commands for the proxy and
 each server; your project's server keeps the Console panel. Stop stops them
 all.
 
+Under each server's project, three fields run it as a production network
+would. **Group** makes it an instance of a [group](#groups-several-copies-of-one-game) (two
+`arena` servers running the same project, players sent to `arena` balanced
+between them), **players** is its capacity, and **role** is what the hub lets
+it do: `trusted` (the default) is everything; `standard` or `isolated` gives
+it a credential of its own, owning its project's namespace, so you see what
+the hub [refuses](#servers-with-credentials) before it's refused in production.
+A workspace keeps them in its file's `network.options`.
+
 `examples/network` is a project made to run this way: a lobby, an arena and a
 market (the same project, its part picked by each server's name), busy with
 bots, using every part of `nf.network`. Its README says how to start it.
@@ -283,8 +292,8 @@ has and whether NetherForge on it is connected. `network_server_connect` and
 
 ```lua
 nf.task(function()
-  local moved, err = nf.network.send_player(player, "arena", { team = "red", kit = "archer" })
-  if not moved then
+  local server, err = nf.network.send_player(player, "arena", { team = "red", kit = "archer" })
+  if not server then
     player:send_message("<red>Can't go: " .. err)
   end
 end)
@@ -306,7 +315,52 @@ by name or UUID: the lobby can send a player who's in another game. It fails
 when they aren't online, the proxy has no such server, they're already there,
 or the proxy couldn't move them (the server is down or full, a proxy plugin
 cancelled it). Only players sent by a script arrive with `player_arrive`; any
-switch is heard as `network_player_switch`.
+switch is heard as `network_player_switch`. It gives the server they're on
+their way to.
+
+## Groups: several copies of one game
+
+A network that runs several copies of a game (three arena servers) makes each
+an **instance** of a **group**: in each one's `config.yml`, `network.group`
+names the group and `network.capacity` how many players it takes.
+
+```yaml
+network:
+  server-name: arena-3
+  group: arena
+  capacity: 16
+```
+
+Scripts then send players, publish and ask by group, and the hub picks the
+instance:
+
+```lua
+-- To an arena with room; the party lands together on one instance.
+nf.network.send_player(player, { group = "arena", data = { team = "red" } })
+nf.network.send_players(party.members, { group = "arena", data = { party = party.id } })
+
+-- To every instance, or to one of them.
+nf.network.channel("events"):publish({ kind = "restart" }, { group = "arena" })
+local status = nf.network.channel("status"):request({ group = "arena" }, "?")
+```
+
+Which instance a send goes to is the group's **balancing**: `least` (the
+instance with the fewest players that has room, the default) or `fill` (the
+fullest that still has room, so players end up together). The network's owner
+sets it per group in `hub.properties` (`group.arena.balance=fill`), and a
+send can ask for the other (`{ group = "arena", balance = "fill" }`). Players
+already on their way count, so two sends at once don't overfill an instance.
+An instance that doesn't take players now (a match is running) says so with
+`nf.network.set_accepting(false)`, and is passed over until it says `true`;
+it can still be sent players by name. A request to a group goes to one
+instance that answers on the channel, each in turn.
+
+`nf.network.group()` is this server's group, and `nf.network.groups()` every
+group with its instances, players and room; `nf.network.players({ group =
+"arena" })` is who's playing it. A server with no group is a group of one,
+named as the server is, so `{ group = "lobby" }` reaches the lobby either way.
+A credential can be for a group (`<id>.group=arena` in
+`credentials.properties`), putting every server that uses it in that group.
 
 ## Testing
 
@@ -331,12 +385,380 @@ nf.test.case("an arriving player gets their kit", function()
 end)
 ```
 
-`network_publish`, `network_answer` (how another server answers requests),
+`nf.test.network_server("arena-1", { group = "arena", capacity = 8 })` adds
+an instance of a group (with `state = "starting"` one that isn't ready yet,
+and `nf.test.network_status` to change that, for sends that wait).
+`nf.test.network_role({ role = "standard", owns = { "shop" } })` joins this
+server under a role, so what it may not do fails as on a real network;
+bans and mutes work in a test as on a network (its hub is a real one), and
+`nf.test.network_reports()` is what scripts reported. `network_publish`, `network_answer` (how another server answers requests),
 `network_request` (another server asks this one), `network_write` (another
 server writes a map), `network_join` and `network_quit` cover the rest; see
 [`nf.test`](../reference/nf.test.md#server-networks). To try it with real
 servers and players moving between them, run a
 [dev network](#a-dev-network-in-the-editor).
+
+## Servers with credentials
+
+The shared secret lets a server in as **trusted**: it may publish on any
+channel, write any map, and send any player anywhere. That's right for a
+network of your own servers. For a server running someone else's project, or
+one you'd rather keep to its own business, give it a **credential** of its
+own instead: an id and a secret that only it uses, with a **role** the hub
+holds it to (the hub, never the server, decides).
+
+| Role       | May                                                                                                                           |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `trusted`  | Everything, as with the shared secret.                                                                                        |
+| `standard` | Its own namespaces' channels and maps, whatever the network shares with standard servers, and see everyone.                   |
+| `isolated` | Only what the network shares with isolated servers. Sees only its own players, and sends them only back where they came from. |
+
+On the proxy, add one with `/nfhub credentials add <id> [role] [namespaces]`:
+
+```
+/nfhub credentials add arena standard arena,arena_stats
+```
+
+It prints the secret once (or, with `--to-file`, writes it to
+`plugins/netherforge/issued/<id>.yml` for a provisioning tool to pick up),
+and keeps the credential in `plugins/netherforge/credentials.properties`. The
+server joins with it instead of `secret`:
+
+```yaml
+network:
+  enabled: true
+  hub: proxy.internal:25590
+  server-name: arena-1
+  credential:
+    id: arena
+    secret: 9b0e…
+```
+
+A credential can be shared by every server of a kind (all your arena
+servers). `/nfhub credentials list` shows them and who's connected with each,
+and `/nfhub credentials revoke <id>` drops its servers at once and refuses it
+from then on. To turn the shared secret off altogether, empty `secret` in
+`hub.properties`.
+
+**What a credential owns and is shared.** The namespaces it **owns** (the
+packages it runs) are its whole: it reads, writes, asks and answers on their
+channels and maps. Of others', it has only what the network **shares**, in
+`hub.properties` for every credential of a role:
+
+```properties
+share.standard=lobby:return(request), events:announcements(read)
+share.isolated=lobby:return(request)
+```
+
+and in `credentials.properties` for one alone (`arena.shares=...`). Each
+share is a channel's or map's full name (or `namespace:*` for all of one),
+with what it may do, joined with `+`: `read` (hear a channel's messages,
+keep a copy of a map), `write` (publish on it, write the map; reading comes
+with it), `request` (ask on it), and `answer` (be asked on it). A credential
+can also set `presence` (whether it sees players on other servers) and
+`send-to` (where it may send its players: server names, `back`, or `*`).
+After editing either file by hand, `/nfhub credentials reload`; servers whose
+grants changed dial again under the new ones.
+
+**What its projects may require.** `policy.standard=policy-standard.json` in
+`hub.properties` sends that [policy](./server-config.md#a-policy-over-what-projects-require)
+to every server joining with a `standard` credential (and likewise for the
+other roles): the server holds its projects to it, as well as to its own.
+
+**What scripts see.** `nf.network.server_role()` says what this server may
+do. A call it may not make never reaches another server: publishing, asking
+or writing where it may not is an error at the script's line naming
+`network.forbidden`, and sending a player it may not fails with
+`network.forbidden` in `err`. A handler on a channel it may not listen to
+hears nothing, and the server's log says why. A less trusted server only
+sends players who are on it.
+
+## Adding servers while the network runs
+
+Servers in `velocity.toml` are there from the proxy's start. A network that
+starts servers on demand adds them as they come up, in one of two ways (a
+network uses one or the other).
+
+**A server adds itself.** It sets where the proxy reaches it, and joins with
+a credential allowed to register (or the shared secret):
+
+```yaml
+network:
+  enabled: true
+  hub: hub.internal:25590
+  server-name: auto # or a fixed name; auto is <group>-<n>: arena-3
+  group: arena
+  register:
+    address: 10.0.0.12:25601 # or a port alone: the address the hub sees it connect from
+  credential:
+    id: arena
+    secret: 9b0e…
+```
+
+The proxy adds it to its servers as it joins, and takes it off when it shuts
+down, or when it's been gone `unregister-after-seconds` (`hub.properties`, 60
+unless you say) without coming back; a server that dials again in time keeps
+its name. Names are unique: a second server registering a name in use is
+refused while the first is connected, and nothing can register over a server
+in `velocity.toml`. A credential only registers if it's allowed to, and only
+as the names and addresses it allows, in `credentials.properties`:
+
+```properties
+arena.register=true
+arena.names=arena-*
+arena.addresses=10.0.0.0/8
+arena.group=arena
+```
+
+**Something else adds it.** An orchestrator that starts servers (Kubernetes
+with Agones, say) already knows when one is ready and where it is. The hub's
+[admin API](#the-hubs-admin-api) lets it add and remove them, as a client
+with the `servers:write` scope:
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" -d '{"name":"arena-7","address":"10.0.0.7:25565","group":"arena","credential":"arena"}' \
+  http://127.0.0.1:25591/v1/servers                      # add (again, with a new address: move)
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:25591/v1/servers   # list
+curl -H "Authorization: Bearer $TOKEN" -X DELETE http://127.0.0.1:25591/v1/servers/arena-7   # remove
+```
+
+A server added this way joins with its plain `server-name` and no
+`register`; when the API named a `credential`, only that one may join under
+the name, and it's an instance of the API's `group` unless it says its own. It
+stays on the proxy until the API removes it, whether it's connected or not.
+Removing one disconnects it from the hub. `/nfhub` marks the servers added
+either way.
+
+## A server's life: starting, ready, draining, stopping
+
+Every server is in one of four states, which the hub knows and
+`nf.network.state()` says:
+
+| State      | Means                                                                                     |
+| ---------- | ----------------------------------------------------------------------------------------- |
+| `starting` | Its project is loading, or a script holds it back. Its group doesn't send it players yet. |
+| `ready`    | Taking players.                                                                           |
+| `draining` | Taking no new players, even by name, while it finishes what it's doing.                   |
+| `stopping` | Shutting down: its players are being sent to its group's fallback.                        |
+
+A server is `ready` once its project has loaded and its modules have run a
+tick. A script that needs longer (a world to copy, a match to set up) holds
+it back:
+
+```lua
+local hold = nf.network.hold_ready()
+nf.worlds.copy("arena", "match", function(world)
+  hold:release() -- ready the tick after the last hold goes
+end)
+```
+
+`/nf drain` (or the hub's admin API, `POST /v1/servers/<name>/drain`, or
+`nf.network.set_draining(true)`) drains it; `/nf drain off` undoes it.
+`/nf shutdown` drains it, sends the players left to its group's **fallback**
+(`group.<name>.fallback` in `hub.properties`, or the network's `fallback` for
+a group without its own, such as one made while the network runs; `lobby`
+unless you say), and
+stops the server. With `--after-empty` it waits for the server to empty
+first, up to `--timeout` seconds (60). `network_state` tells scripts each
+change. The log says how long the server took from its process starting to
+`ready`, and `/nf network` and the hub's admin API show it: a number to keep
+low when servers start on demand.
+
+**Waiting for a server to start.** A send can wait for an instance with room,
+rather than fail:
+
+```lua
+nf.network.send_player(player, {
+  group = "arena",
+  wait = 90, -- seconds
+  on_wait = function(position) player:send_actionbar("Queue: #" .. position) end,
+})
+```
+
+The hub queues it (first come, first served, at most `group.<name>.max-waiting`
+at once), tells its **webhook** the group is wanted, and sends the player as
+soon as an instance is ready with room. They stay where they are meanwhile;
+without `on_wait`, they see their place on their action bar.
+
+**The webhook.** Whatever starts and stops your servers hears what it needs
+from the hub's webhook (`webhook.url` in `hub.properties`): `server_ready`,
+`server_idle` (empty longer than its `network.idle-after-seconds`: stop it),
+`server_gone` and `group_wanted` (sends waiting for a group with no room:
+start an instance). Each is a JSON `POST` signed with `webhook.secret`
+(`X-NetherForge-Signature: sha256=<hex HMAC-SHA256 of the body>`).
+
+## The hub's admin API
+
+Services outside the network's servers (an orchestrator, a matchmaker, a
+social service, a moderation tool) see the network and act on it through the
+hub's admin API: HTTP and JSON, with a stream of what happens as
+[Server-Sent Events](https://developer.mozilla.org/docs/Web/API/Server-sent_events).
+Turn it on in `hub.properties`, and give each service a client of its own:
+
+```properties
+admin.bind=127.0.0.1
+admin.port=25591
+```
+
+```
+/nfhub admins add matchmaker presence:read,players:send,placement
+```
+
+That prints the client's token once, and keeps it in
+`plugins/netherforge/admin.properties`. Every request sends it as
+`Authorization: Bearer <token>`, and may do only what the client's scopes
+allow; `/nfhub admins revoke <id>` ends it and its streams.
+
+| Scope              | Allows                                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `servers:read`     | `GET /v1/servers` (each with its group, state, players and room), and server changes streamed.                                        |
+| `servers:write`    | `POST /v1/servers`, `DELETE /v1/servers/<name>`, `POST /v1/servers/<name>/drain`.                                                     |
+| `presence:read`    | `GET /v1/players`, and joins, moves and leaves streamed.                                                                              |
+| `players:send`     | `POST /v1/players/<id or name>/send` `{ "server" \| "group", "balance", "data", "wait" }`.                                            |
+| `players:message`  | `POST /v1/players/<id or name>/message` `{ "kind": "chat" \| "title" \| "actionbar", "text" }`, shown by the proxy wherever they are. |
+| `players:kick`     | `POST /v1/players/<id or name>/kick` `{ "message" }`.                                                                                 |
+| `channels:publish` | `POST /v1/channels/publish` `{ "channel": "lobby:news", "value", "server", "group" }`.                                                |
+| `channels:read`    | Messages on the channels its stream listens to, and requests addressed to it.                                                         |
+| `placement`        | Deciding where players sent to a group, or logging in, go.                                                                            |
+
+**The stream.** `GET /v1/events` stays open and sends what the client's scopes
+allow: `player_joined`, `player_moved`, `player_left`, `server_connected` and
+`server_disconnected` (every server, as it joins or leaves the hub, with its
+state, group, capacity and players), `server` (a change to a connected one),
+and with `?listen=lobby:news,lobby:queue` messages on those channels. Its first
+event is `hello`, with the hub's `started` time and an `instance` id that's new
+on every start, so a client reconnecting knows whether the hub restarted.
+`GET /v1/servers` gives each connected server's `connectedSince`. A script asks a
+service as it asks a server, by its client id:
+
+```lua
+local match = nf.network.channel("match"):request({ admin = "matchmaker" }, { player = player:id() })
+```
+
+It arrives on the stream as `request`, with an `id`; the service answers with
+`POST /v1/requests/<id>/reply` `{ "value": ... }` (or `{ "error": ... }`).
+
+**Placement.** A stream opened with `?place=arena` (or `?place=*login` for
+players logging in) decides where those players go. For each send, the hub
+sends `place` with the players and an `id`, and the service answers
+`POST /v1/placements/<id>` with one of:
+
+- `{ "server": "arena-3" }`: they go there.
+- `{ "hold": "Finding you a match…" }`: they wait where they are, seeing the
+  status on their action bar (or the send's `on_wait` hears it), until the
+  service answers again or the send's `wait` runs out. A player logging in
+  waits on the loading screen, 30 seconds at most.
+- `{ "fail": "No matches tonight" }`: the send fails with that; a login is
+  turned away with it.
+
+One stream places a group at a time, the oldest open; another opened for it
+takes over when the first goes. A stream that doesn't answer within
+`placement-timeout-millis` (2 seconds) is taken for gone and closed (a client
+whose network vanished, as a killed pod's does, can leave its connection open
+for many minutes), and the placement goes to the group's next stream; with none
+left, the group's own balancing places them, so the network keeps working
+without the service. A service whose stream ends should open a new one.
+
+## Running the hub on its own
+
+The hub runs inside the proxy plugin unless you say otherwise, and that's all
+a network with one proxy needs. To restart or move the proxy without the hub
+(and every server's network calls) going with it, run the hub on its own:
+
+```sh
+java -jar NetherForge-<version>-hub.jar
+```
+
+It reads `hub.properties`, `credentials.properties` and `admin.properties`
+from the folder it runs in, as the proxy plugin does, and reads the credential
+and admin files again within seconds whenever they change. Its command line
+manages them:
+
+```sh
+java -jar NetherForge-<version>-hub.jar credentials add velocity proxy   # the proxy's own credential
+java -jar NetherForge-<version>-hub.jar credentials add arena standard arena
+java -jar NetherForge-<version>-hub.jar admins add matchmaker presence:read,players:send
+```
+
+The proxy then joins it as a client, with a credential whose role is
+`proxy`, set in its own `plugins/netherforge/hub.properties`:
+
+```properties
+remote.hub=hub.internal:25590
+remote.name=velocity-1
+remote.credential.id=velocity
+remote.credential.secret=…
+```
+
+Servers join the hub as before (`network.hub` is the hub's address now, not
+the proxy's). The proxy tells the hub its servers and who's on them, and does
+what it asks: moving players, adding servers that register, messages and
+kicks. While no proxy is connected the hub has no servers and moves nobody,
+and servers keep running with their network calls failing; when the proxy is
+back it says who's online again, and everything picks up.
+
+**Several proxies.** Any number of proxies can join a hub running on its own,
+each with its own `remote.name`, and players come in through any of them:
+the hub knows who's online through which (`player.proxy` in scripts, `proxy`
+in the admin API's players), sends each player's moves, messages and kicks to
+the proxy they're on, and adds a server that registers on every proxy. A
+player logging in through a second proxy while online through another is
+refused, or with `duplicate-login=takeover` in `hub.properties` takes over,
+the old session kicked. Before restarting a proxy, drain it with the admin
+API (`POST /v1/proxies/<name>/drain`): it takes no new logins, so players
+come in through the others. `GET /v1/proxies` lists them with their players,
+and `synced` for each: whether it has every server added at run time. A proxy
+joining (a restart, a new replica) gets the hub's whole list of those servers
+first, and holds logins until it has them (five seconds at most); adding a
+server again at the same address fills in any proxy that lacks it.
+
+**Shared maps in a database.** With `store.url` (a PostgreSQL JDBC URL, and
+`store.user`, `store.password`), the hub keeps the network's maps there
+instead of in `maps.json`, so it can restart or move to another machine
+without losing them. One hub at a time uses a database.
+
+## Moderating the network
+
+**Bans and mutes for the whole network** are kept by the hub, with the
+reason, who did it and when they run out, saved with the network's maps. A
+banned player is turned away by the proxy before they reach any server; a
+muted player's chat is held back by every server's NetherForge (they're told
+why). From the proxy:
+
+```
+/nfhub ban Ann griefing
+/nfhub mute Bea spam
+/nfhub unban Ann
+```
+
+From scripts, with `"requires": { "moderation": true }` and a server allowed
+to moderate (a trusted server, or a credential with `moderation=true`):
+
+```lua
+nf.task(function()
+  local done, err = nf.network.ban(player, { reason = "Fly hacks", expires = nf.server.unix_time() + 7 * 86400000 })
+end)
+nf.network.mute("Bea", { reason = "Spam" })
+if nf.network.is_banned(name) then ... end
+```
+
+The admin API has them too, with the `moderation` scope (`/v1/bans`,
+`/v1/mutes`).
+
+**Reports.** `nf.network.report(player, reason, details, by)` reports a player
+to whoever moderates the network: the hub keeps the last thousand
+(`/nfhub reports`, `GET /v1/reports`) and tells its webhook (`report`).
+
+**Taking a server or group off the network.** `/nfhub disable arena cheat
+found` (or the admin API's `POST /v1/servers/<name>/disable`) drains every
+instance of `arena`, sends their players to the group's fallback, disconnects
+them from the hub and refuses them until `/nfhub enable arena`. It's kept with
+the maps, so a restart doesn't let them back.
+
+**The audit log.** The hub writes every moderation action, every server
+taken off or let back, and every change of credentials and admin clients to
+`audit.log` beside `hub.properties`: one JSON line each, with when, who and
+what.
 
 ## Limits
 
@@ -352,8 +774,9 @@ server may fall before the hub drops it.
 
 ## Security
 
-- **Joining** takes the hub's secret, proved per connection without sending
-  it, and a server name the proxy has. Keep the hub's port to your servers.
+- **Joining** takes the hub's secret or a credential's, proved per connection
+  without sending it, and a server name the proxy has. Keep the hub's port to
+  your servers.
 - **The traffic** between servers and hub is encrypted and authenticated
   (AES-256-GCM, with keys derived from the secret for each connection), so it
   can't be read or changed on the way, and a server only talks to a hub that
@@ -363,6 +786,7 @@ server may fall before the hub drops it.
   channels and maps (and those of packages they depend on).
 - **The hub** checks every value's size and every package's share of the
   maps, and drops a server that stops reading what it's sent.
-- **Every server is trusted** once it's in: a server can publish on any
-  channel and write any map. The network is one owner's servers. Don't give
-  the secret to a server you don't run.
+- **A server with the shared secret is trusted**: it can publish on any
+  channel, write any map and send any player. Don't give the secret to a
+  server you don't run; give it a [credential](#servers-with-credentials),
+  whose role the hub enforces on every frame it sends.

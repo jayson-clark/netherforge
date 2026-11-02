@@ -87,11 +87,13 @@ class SharedMaps(private val limits: NetworkLimits, private val now: () -> Long)
         val previous = entries[key]
         val keysAfter = keys.getOrDefault(namespace, 0) + (if (previous == null) 1 else 0)
         val bytesAfter = bytes.getOrDefault(namespace, 0) + size - (previous?.bytes ?: 0)
-        if (keysAfter > limits.maxKeysPerPackage) {
+        // The hub's own maps (bans, mutes) aren't a package's: no package's limit holds them.
+        val limited = !Moderation.isReserved(map)
+        if (limited && keysAfter > limits.maxKeysPerPackage) {
             if (entries.isEmpty()) maps.remove(map)
             return "package \"$namespace\" already keeps ${limits.maxKeysPerPackage} keys in its maps, the network's limit"
         }
-        if (bytesAfter > limits.maxBytesPerPackage) {
+        if (limited && bytesAfter > limits.maxBytesPerPackage) {
             if (entries.isEmpty()) maps.remove(map)
             return "package \"$namespace\" would keep $bytesAfter bytes in its maps, " +
                 "over the network's limit of ${limits.maxBytesPerPackage}"
@@ -116,6 +118,9 @@ class SharedMaps(private val limits: NetworkLimits, private val now: () -> Long)
 
     /** Whether there's anything to save, clearing it. */
     fun takeDirty(): Boolean = dirty.also { dirty = false }
+
+    /** What each package keeps across its maps: keys and bytes. */
+    fun usage(): Map<String, Pair<Int, Long>> = (keys.keys + bytes.keys).associateWith { (keys[it] ?: 0) to (bytes[it] ?: 0L) }
 
     /** Everything, as it's saved. */
     fun snapshot(): SavedMaps = SavedMaps(

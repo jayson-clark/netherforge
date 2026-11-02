@@ -126,6 +126,7 @@ class HubServer(
     private inner class Connection(private val socket: Socket) : Peer {
         override val address: String = socket.remoteSocketAddress.toString().removePrefix("/")
         val host = (socket.remoteSocketAddress as? InetSocketAddress)?.address
+        override val remoteHost: String? get() = host?.hostAddress
 
         /** Whether its hello was accepted: a server of the network, no longer a stranger. */
         @Volatile var welcomed = false
@@ -224,7 +225,9 @@ class HubServer(
             } finally {
                 open.set(false)
                 connections -= this
-                closeSocket()
+                // The writer closes the socket once it has sent what's queued (a refusal, saying why): closing it here
+                // could cut that off.
+                if (writer == null) closeSocket()
                 session.closed()
             }
         }

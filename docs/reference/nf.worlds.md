@@ -8,7 +8,7 @@ A table of functions: call them with a dot.
 
 | | Functions |
 | --- | --- |
-| [Functions](#functions) | [`all`](#all) [`get`](#get) [`create`](#create) [`load`](#load) [`copy`](#copy) [`default`](#default) |
+| [Functions](#functions) | [`all`](#all) [`get`](#get) [`create`](#create) [`load`](#load) [`copy`](#copy) [`import`](#import) [`default`](#default) |
 
 ## Functions {#functions}
 
@@ -79,6 +79,31 @@ nf.task(function()
   if spawn then
     player:teleport(spawn)
   end
+end)
+```
+
+### `nf.worlds.import(folder, name, options?, callback?)` {#import}
+
+Makes a new world from a world's files a tool put on the server (one player's island, fetched from storage): the folder is inside the server owner's import root (`worlds.import-root` in `config.yml`), laid out as a map is. Its files are copied, then the server loads the copy as a world named `name`, the project's from then on (as for `nf.worlds.copy`), and `world_load` is heard: set its game rules and spawn limits there, or on the world this gives. With `options.terrain`, chunks it doesn't have yet are made by that project terrain (a void around an island). Importing off on the server, a folder outside the root or not there, a name that isn't an id or that a world already has, or the server holding `worlds.max-loaded` worlds already, is an error at once; a copy that can't be made fails. It works off the main thread, so its world arrives later: give `callback`, which is called with `world, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `world, err`. Without a callback outside a task, it's an error. When it fails, `world` is `nil` and `err` says why.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `folder` | `string` | The folder, relative to the import root: `"islands/7f2c"`. |
+| `name` | `string` | The new world's name: `"island_7f2c"`. |
+| `options` (optional) | [`WorldImportOptions`](types.md#worldimportoptions) | How its new chunks are made. |
+| `callback` (optional) | `fun(world: `[`World`](world.md)`?, err: string?)` | Called on the main thread once it's done, as this script's code, with the new world (or `nil` and why not). Not called if the script has stopped by then. |
+
+**Returns** [`World`](world.md)`?`: Only without a callback, in a task: the new world, or `nil`., `string?`: Why it failed, when it did; `nil` when it worked.
+
+```lua
+local owner = "7f2c"
+nf.task(function()
+  local island, err = nf.worlds.import("islands/" .. owner, "island_" .. owner, { terrain = "void" })
+  if not island then
+    log("no island: " .. err)
+    return
+  end
+  island:set_game_rule("pvp", false)
 end)
 ```
 

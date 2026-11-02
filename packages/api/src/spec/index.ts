@@ -34,7 +34,7 @@ import { botClass, botShapes } from './bots.ts'
 import { connectionShapes, httpShapes, httpStreamClass, webSocketClass } from './http.ts'
 import { oauthFlowClass, routeClass, webResponseClass, webShapes } from './web.ts'
 import { wasmInstanceClass, wasmProcessClass, wasmShapes } from './wasm.ts'
-import { networkChannelClass, networkMapClass, networkShapes } from './network.ts'
+import { networkChannelClass, networkHoldClass, networkMapClass, networkShapes } from './network.ts'
 import { networkEventShapes } from './networkEvents.ts'
 import { blockShapes, customBlockClass, projectBlockClass } from './blocks.ts'
 import { lootShapes } from './loot.ts'
@@ -134,6 +134,7 @@ const classes = [
   wasmInstanceClass,
   wasmProcessClass,
   networkChannelClass,
+  networkHoldClass,
   networkMapClass,
   cutsceneClass,
   screenClass,

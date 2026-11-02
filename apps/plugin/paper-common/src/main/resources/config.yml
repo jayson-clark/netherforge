@@ -8,6 +8,13 @@
 # -Dnetherforge.project=<folder> instead.
 project: ''
 
+# Write the game's data (registries, tags, block states, collision shapes:
+# what the editor's dev server exports) to this file at every start, for
+# `netherforge check` and `netherforge test` on a machine with no editor (put it
+# at --game-data, or in the editor's cache). Empty: not written. Needs no
+# project. `netherforge game-data <minecraft version>` does this for you.
+export-game-data: ''
+
 # How players get the project's resource pack (everything under resource_packs/). The
 # plugin builds it, and by default serves it itself over HTTP and sends it to
 # players as they join. The editor's dev server ignores this section and
@@ -28,6 +35,19 @@ resource-pack:
   required: false
   # MiniMessage shown on the download prompt.
   prompt: ''
+  # Upload packs to S3-compatible storage (AWS, Cloudflare R2, MinIO) and send
+  # players its URL instead of serving them here: named by their hash, so
+  # servers running the same pack share one upload. The keys can also come from
+  # AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.
+  # storage:
+  #   type: s3
+  #   endpoint: https://<account>.r2.cloudflarestorage.com
+  #   bucket: packs
+  #   prefix: ''
+  #   region: auto
+  #   public-url: https://packs.example.com/
+  #   access-key: ''
+  #   secret-key: ''
 
 # When the plugin warns that a script is slowing the server down: in the
 # console and in the editor's problems, naming where it's slow. A script is
@@ -172,7 +192,26 @@ wasm:
 # (Velocity) runs NetherForge's proxy plugin, the network's hub; its
 # plugins/netherforge/hub.properties has the port and the secret. Set hub to the
 # proxy's address and that port, server-name to this server's name in
-# velocity.toml's [servers], and secret to the hub's. What each package may send
+# velocity.toml's [servers], and secret to the hub's (a trusted server, which
+# may do anything). A server can instead join with a credential of its own
+# (/nfhub credentials add on the proxy prints one): set credential's id and
+# secret, and leave secret empty; the hub then holds it to what the credential
+# allows (nf.network.server_role() says what). A server that's one of several
+# copies of a game sets group (arena) and how many players it takes
+# (capacity, 0 for any): scripts can then send players to the group, and the
+# hub picks the instance. A server the proxy's velocity.toml doesn't list
+# adds itself to the proxy as it joins, and comes off as it stops: set
+# register.address to where the proxy reaches it (host:port, or a port alone
+# for the address the hub sees), with a credential allowed to register (or the
+# shared secret); server-name may then be auto, numbered in its group
+# (arena-3). After idle-after-seconds empty (0: never), the hub hears this
+# server is idle (its webhook, for whatever stops servers). /nf drain stops
+# new players coming; /nf shutdown [--after-empty] [--timeout <s>] drains,
+# sends the players left to the group's fallback, and stops. With
+# wait-for-hub-seconds, the server waits that long as it starts for the hub
+# (what it may do, the network's policy for it) before starting its project;
+# with require-hub, the project doesn't run at all until the hub has welcomed
+# it, and starts by itself when it does. What each package may send
 # a minute (messages, requests, map writes, players sent) is
 # messages-per-minute; a request waits request-timeout-seconds for its answer.
 # What arrives is handed to scripts messages-per-tick a tick, at most
@@ -184,10 +223,61 @@ network:
   hub: 127.0.0.1:25590
   server-name: ''
   secret: ''
+  credential:
+    id: ''
+    secret: ''
+  group: ''
+  capacity: 0
+  register:
+    address: ''
+  idle-after-seconds: 0
+  wait-for-hub-seconds: 0
+  require-hub: false
   messages-per-minute: 1200
   request-timeout-seconds: 10
   messages-per-tick: 1000
   max-queued-messages: 10000
+
+# Bundles signed by who made them (netherforge build --sign) or a network that
+# checked them (netherforge sign): with require-signature, only a bundle
+# signed by one of trusted-keys (ed25519:... as netherforge keygen prints)
+# runs. A signature that doesn't match its bundle is refused either way.
+# project above can also be a bundle's URL, as netherforge publish prints it
+# (https://.../name-1.0.0.nfbundle#sha256=...): fetched once and checked.
+bundles:
+  require-signature: false
+  trusted-keys: []
+
+# Worlds at run time: nf.worlds.import makes a world from a folder a tool put
+# under import-root (relative to the server's folder; off to turn it off),
+# and at most max-loaded worlds are loaded at once, the server's own
+# included (0 for any number).
+worlds:
+  import-root: imports
+  max-loaded: 0
+
+# Metrics for Prometheus at http://<bind>:<port>/metrics: TPS and tick time,
+# players, entities, centities and chunks, each package's script cost and
+# memory and network traffic, the server's state and start-up time. Off
+# without a port; bind 0.0.0.0 to let a scraper elsewhere reach it.
+metrics:
+  port: 0
+  bind: 127.0.0.1
+
+# A local control endpoint for the tool that runs this server (a container's
+# sidecar, a host's agent): GET /state and /events (a stream of changes), POST
+# GET /healthz (200 while ticks complete, for probes; needs no token), POST
+# /drain, /shutdown, /save (with "pause": true, writes stop until /resume or
+# its timeout, so the worlds can be copied whole), /resume, and /worlds/load
+# and /worlds/unload. Only on a Unix
+# socket (whoever may open the file may use it) or on 127.0.0.1 with the
+# token in token-file (made for you). Off unless socket or port is set.
+control:
+  socket: ''
+  port: 0
+  token-file: control.token
+  # No tick completed for this long: /healthz fails and /events says stalled.
+  stall-seconds: 10
 
 # MySQL and PostgreSQL servers that scripts may use, each under a name:
 # nf.db("network"). A script names a connection and never sees its host or

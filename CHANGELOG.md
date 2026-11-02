@@ -11,6 +11,140 @@ release is cut.
 
 ### Added
 
+- **A network-wide fallback group.** `fallback=<group>` in `hub.properties`
+  is where the players of every group without its own
+  `group.<name>.fallback` go when their server stops or drains, so groups made
+  while the network runs (one per game) need no settings, and a network with
+  no `lobby` keeps its players. Default `lobby`, as before.
+- **Game data without the editor.** `netherforge game-data <version>`
+  (with `--accept-eula`) downloads the version's plugin and its Paper build,
+  starts Paper headless, exports the game data `check` and `test` read into
+  the same per-user cache the editor uses (or `--out`), and stops: what CI
+  needs to run a project's tests. A server can also write it at every start
+  with `export-game-data: <file>` in `config.yml`.
+- **Server credentials and roles.** A network's servers can join with
+  credentials of their own (`/nfhub credentials add <id> [role]
+[namespaces]`, kept in the proxy's `credentials.properties`), each with a
+  role the hub enforces on every frame: `trusted` (everything, as the shared
+  secret still is), `standard` (its own namespaces' channels and maps, and
+  what the network shares with it) or `isolated` (only what's shared, its own
+  players, sending them only back where they came from). Shares
+  (`share.standard=lobby:return(request)` in `hub.properties`) grant `read`,
+  `write`, `request` and `answer`. Revoking a credential drops its servers at
+  once. `nf.network.server_role()` says what a server may do; what it may not
+  is refused with `network.forbidden` and never reaches another server.
+- **Servers added while the network runs.** A server not in `velocity.toml`
+  adds itself to the proxy as it joins (`network.register.address`, and
+  `server-name: auto` for `<group>-<n>`) and comes off as it shuts down, or
+  after `unregister-after-seconds` gone; a credential registers only with
+  `register=true`, as the `names` and `addresses` it allows. Or an
+  orchestrator adds and removes servers through the hub's admin API.
+- **The hub's admin API.** HTTP and JSON (`admin.port` in `hub.properties`)
+  for services outside the servers, each a client with its own token and
+  scopes (`/nfhub admins add`, `admin.properties`): servers (list, add,
+  remove, drain), presence, sending players, chat, titles and action bars
+  shown by the proxy, kicks, publishing on channels, and a Server-Sent Events
+  stream of joins, moves, leaves, server changes and channel messages.
+  Scripts ask a service as they ask a server
+  (`channel:request({ admin = "matchmaker" }, ...)`). A service can place a
+  group's players, or logins: a server, a hold with a status, or a failure,
+  with the group's own balancing when it doesn't answer in time.
+- **A server's life.** Every server is `starting`, `ready`, `draining` or
+  `stopping` (`nf.network.state()`, `network_state`), and only a ready one
+  gets new players. `nf.network.hold_ready()` keeps it starting until a
+  script is set up; `/nf drain`, `set_draining` and the admin API drain it;
+  `/nf shutdown [--after-empty] [--timeout <s>]` sends its players to the
+  group's fallback and stops it. A send can `wait` for an instance with room
+  (queued in order, its place on the player's action bar or `on_wait`), and
+  the hub's new webhook hears `server_ready`, `server_idle`
+  (`network.idle-after-seconds`), `server_gone` and `group_wanted`. The time
+  from start to ready is logged.
+- **A local control endpoint.** `control:` in `config.yml` (a Unix socket, or
+  `127.0.0.1` with a token) lets the tool running a server read its state
+  (`GET /state`, a stream of changes at `GET /events`) and drain it, shut it
+  down, save it, and pause writes for a consistent copy until `POST /resume`
+  or a timeout.
+- **Worlds imported at run time.** `nf.worlds.import(folder, name)` makes a
+  world from a folder a tool put under `worlds.import-root` (a player's
+  island), with a project terrain for its new chunks; `worlds.max-loaded`
+  caps how many are loaded at once, and the log says how long a slow load
+  took. The control endpoint loads and unloads worlds too
+  (`POST /worlds/load`, `/worlds/unload`).
+- **The hub on its own.** `NetherForge-<version>-hub.jar` runs the network's
+  hub apart from the proxy, with the same files (read again when they change)
+  and a command line for credentials and admin clients; the proxy plugin
+  joins it with `remote.hub` and a `proxy`-role credential, telling it who's
+  where and doing what it asks. `store.url` keeps the shared maps in
+  PostgreSQL. Several proxies can join one hub: each player's moves,
+  messages and kicks go through the proxy they're on (`player.proxy`), a
+  second login through another proxy is refused or takes over
+  (`duplicate-login`), and the admin API lists proxies and drains one before
+  it restarts.
+- **Network-wide moderation.** The hub keeps bans (applied by the proxy
+  before a player reaches any server) and mutes (every server holds back a
+  muted player's chat), with the reason, who and until when:
+  `nf.network.ban/unban/mute/unmute/is_banned/is_muted` (with `moderation`
+  declared and a credential allowed to moderate), `/nfhub ban|mute|unban|
+unmute`, and the admin API's `moderation` scope. `nf.network.report` sends
+  reports to the hub (`/nfhub reports`, the webhook's `report`).
+  `/nfhub disable <server|group>` takes one off the network until `enable`.
+  The hub writes moderation, credential and admin changes to `audit.log`.
+- **Resource packs from shared storage.** `resource-pack.storage` uploads
+  packs to S3-compatible storage under their hash (once, whichever server
+  builds one first) and sends players the store's URL. With
+  `clear-resource-packs=false`, the hub remembers which pack each player has
+  loaded, and a server whose pack they have doesn't send it again.
+- **Dev networks run servers as production does.** Each server of the
+  editor's dev network (and of a workspace's, in `network.options`) can have
+  a group, a capacity and a role; a role other than `trusted` joins with a
+  credential of its own, owning its project's namespace, so the hub holds it
+  to that role on your computer too.
+- **Resource packs built into bundles.** With the game's data,
+  `netherforge build` makes the project's resource pack into the bundle
+  (`resource-pack.zip`, its SHA-1 and pack format in the manifest's
+  `resourcePack`), and a server of that pack format sends it rather than
+  building its own. `netherforge publish --packs-to s3://…` uploads it where
+  `resource-pack.storage` keeps packs.
+- **Signed and published bundles.** `netherforge keygen`, `build --sign`
+  and `sign` (a network countersigning what it checked) put Ed25519
+  signatures in a bundle's manifest; a server with
+  `bundles.require-signature` runs only one signed by its `trusted-keys`, and
+  refuses a signature that doesn't match on any server
+  (`runtime.bundle-signature`). `build --archive` makes one `.nfbundle` file,
+  and `netherforge publish --to s3://…` builds, signs and uploads it with its
+  listing to S3-compatible storage; `project:` takes the URL it prints
+  (`…#sha256=…`), fetched once and checked. `netherforge.json` gets an
+  optional `listing` (description, authors, icon, screenshots, tags,
+  players), checked by `netherforge check`.
+- **A policy over what projects require.** `policy.json` beside `config.yml`
+  allows and denies requirement kinds and HTTP hosts whatever a project
+  asks for, and lowers limits (script memory and budget, call time, network
+  and HTTP rates). A project it refuses doesn't load, or with `degrade` loads
+  with the refused calls failing, and `runtime.policy` says which rule. A
+  network sends each role's servers a policy too (`policy.<role>` in
+  `hub.properties`), and `netherforge check --policy policy.json` tells an
+  author whether a project runs under one. `network.wait-for-hub-seconds` and
+  `network.require-hub` keep a project from running before the network's
+  policy is known.
+- **Metrics.** `metrics.port` in `config.yml` serves a server's numbers for
+  Prometheus: TPS and tick time, players, entities, centities and chunks,
+  each package's script cost, memory and network traffic, its state and
+  start-up time. The hub serves its own (`metrics.port` in
+  `hub.properties`): servers and players by group, tick times, frames, map
+  usage, what waits. `nf.network.servers()` and `groups()` give each
+  server's `tick_milliseconds`.
+- **Script tests for networks.** `nf.test.network_server` takes an instance's
+  `state` and `accepting`, `nf.test.network_status` changes them,
+  `nf.test.network_role` joins the test's server under a role, and
+  `nf.test.network_reports` gives what scripts reported.
+- **Groups of servers.** `network.group` and `network.capacity` make a server
+  an instance of a group. `send_player` and the new `send_players` (a party,
+  landing together) take `{ group = "arena" }`, and the hub picks the
+  instance with room: `least` players, or `fill` (`group.<name>.balance` in
+  `hub.properties`, or per send). `publish` and `request` take a group too.
+  `nf.network.group()`, `groups()`, `players({ group = ... })` and
+  `set_accepting(false)` (an instance passed over while a match runs).
+
 - **Natural spawning in water.** `"placement": "water"` in a centity's
   `spawning` block makes it appear in water (waterlogged blocks and kelp too,
   never lava, and not under a solid block) instead of on the ground, anywhere
@@ -97,6 +231,12 @@ release is cut.
 
 ### Changed
 
+- **The network's protocol is version 3**: update NetherForge on the proxy
+  and on every server together. `nf.network.send_player` now gives the server
+  the player is on their way to (still truthy where it gave `true`), and
+  `nf.network.servers()` gives each server's group, room and whether it takes
+  players.
+
 - **The network's hub takes a server's resource packs off a player as they
   move to another server** (`clear-resource-packs` in `hub.properties`, on by
   default), so a lobby's pack (its hidden HUD) no longer follows them into a
@@ -107,6 +247,19 @@ release is cut.
   battery) while you work in it.
 
 ### Fixed
+
+- **A dead admin stream no longer holds up logins.** A service placing
+  players whose network vanished (a killed pod) left its stream open for about
+  15 minutes, and every login offered to it waited out the placement timeout
+  and got no server. A stream that doesn't answer a placement in time is now
+  closed, and the placement goes to the group's next stream, or its own
+  balancing.
+- **The proxy counts logins it has no server for.**
+  `netherforge_proxy_logins_refused_total` has the reason `no_server` for a
+  login Velocity turns away because no server was chosen ("There are no
+  available servers").
+- A server the hub refused over TCP heard the connection close without the
+  reason: the hub now sends the refusal before closing.
 
 - **A hidden centity node shown again appears where it is**, rather than
   easing in from the centity's position; hiding one no longer shrinks it

@@ -16,6 +16,7 @@ import dev.netherforge.plugin.async.WorkFailed
 import dev.netherforge.plugin.binding.LuaHandle
 import dev.netherforge.plugin.binding.notInProject
 import dev.netherforge.plugin.lua.LuaApiException
+import dev.netherforge.plugin.platform.FileWork
 import dev.netherforge.plugin.platform.Platform
 import dev.netherforge.plugin.platform.WorldManagerOps
 import dev.netherforge.plugin.platform.WorldSettings
@@ -64,6 +65,7 @@ internal class ManagedWorlds(
     private val namespace: String,
     /** The project's own folder (the configured one, or the project's inside a bundle). */
     private val project: () -> Path,
+    private val config: WorldsConfig = WorldsConfig(),
     private val snapshot: () -> ProjectSnapshot?
 ) : RuntimeService {
     override val name get() = "managed worlds"
@@ -95,6 +97,23 @@ internal class ManagedWorlds(
         return name in created || name in snapshot()?.manifest?.managedWorlds.orEmpty()
     }
 
+    /** A world more is loaded within `worlds.max-loaded`, or an error saying it isn't. */
+    private fun checkRoom() {
+        val most = config.maxLoaded
+        if (most > 0 && platform.worlds.names().size >= most) {
+            throw LuaApiException("the server has $most worlds loaded, its most (worlds.max-loaded in config.yml): unload one first")
+        }
+    }
+
+    /** [load] timed, and logged when it took long enough to notice. */
+    private fun timed(name: String, load: () -> Boolean): Boolean {
+        val started = System.nanoTime()
+        val loaded = load()
+        val millis = (System.nanoTime() - started) / 1_000_000
+        if (loaded && millis >= SLOW_LOAD_MILLIS) log.info("Loaded world \"$name\" in $millis ms")
+        return loaded
+    }
+
     private fun checkNewName(name: String) {
         if (!Names.isId(name)) throw LuaApiException("\"$name\" can't be a new world's name (${Names.ID_RULE})")
         // Before the files: a copy's files can be in place while it's still being loaded.
@@ -110,6 +129,7 @@ internal class ManagedWorlds(
      */
     fun create(name: String, settings: WorldSettings): Boolean {
         checkNewName(name)
+        checkRoom()
         val dimension = settings.dimensionType
         if (dimension != null && dimension !in ops.dimensionTypes()) {
             throw LuaApiException("the server has no dimension type \"$dimension\": $RESTART")
@@ -200,11 +220,46 @@ internal class ManagedWorlds(
         val ops = ops
         val owned = created[name]
         if (!ops.isSaved(name)) return false
+        checkRoom()
         val dimension = owned?.dimensionType
         if (dimension != null && dimension !in ops.dimensionTypes()) {
             throw LuaApiException("world \"$name\" was made with dimension type \"$dimension\", which the server doesn't have: $RESTART")
         }
-        return ops.load(name, owned?.environment ?: NORMAL, owned?.terrain)
+        return timed(name) { ops.load(name, owned?.environment ?: NORMAL, owned?.terrain) }
+    }
+
+    /**
+     * Imports the world in [folder] (under `worlds.import-root`, where a tool put it: a world's files, as a map's are)
+     * as a new world [name], the project's from now on, whose new chunks [terrain] makes (a project terrain's id; the
+     * game's own when null): its files copied on a worker, then loaded on the main thread. A mistake (no import root,
+     * a folder outside it or not there, a name that's taken) throws at once.
+     */
+    fun import(folder: String, name: String, terrain: String?): CompletionStage<LuaHandle.World> {
+        val root = config.importRoot
+            ?: throw LuaApiException("importing worlds is off on this server (worlds.import-root in config.yml)")
+        val source = root.resolve(folder).normalize()
+        if (!source.startsWith(root) || source == root) throw LuaApiException("\"$folder\" isn't a folder inside the import root")
+        if (!java.nio.file.Files.isDirectory(source)) throw LuaApiException("there's no folder \"$folder\" in the import root ($root)")
+        checkNewName(name)
+        checkRoom()
+        return copyIn(ops.copy(source, name), name, terrain, "folder \"$folder\"")
+    }
+
+    /** [work] puts [name]'s files in place, then it's loaded (with [terrain]) as the project's: what [copy] and [import] share. */
+    private fun copyIn(work: FileWork, name: String, terrain: String?, from: String): CompletionStage<LuaHandle.World> {
+        copying += name
+        own(name, Store.OwnedWorld(NORMAL, terrain))
+        return async.submit(files) { work.run() }.handleAsync({ _, failure ->
+            copying -= name
+            val why = when {
+                failure != null -> "couldn't copy its files (${failure.message})"
+                !timed(name) { ops.load(name, NORMAL, terrain) } -> "the server couldn't load the copy"
+                else -> return@handleAsync LuaHandle.World(name)
+            }
+            forget(name)
+            log.warn("Couldn't copy $from into world \"$name\": $why")
+            throw WorkFailed("couldn't copy $from into world \"$name\": $why")
+        }, async.mainThread)
     }
 
     /**
@@ -218,20 +273,9 @@ internal class ManagedWorlds(
         val known = snapshot()?.models(MapKind).orEmpty()
         if (map !in known) throw LuaApiException(notInProject("map", map, known.keys.toList()))
         checkNewName(name)
+        checkRoom()
         val work = ops.copy(project().resolve(snapshot()!!.placeOf(MapKind, map).location).normalize(), name)
-        copying += name
-        own(name, Store.OwnedWorld(NORMAL))
-        return async.submit(files) { work.run() }.handleAsync({ _, failure ->
-            copying -= name
-            val why = when {
-                failure != null -> "couldn't copy its files (${failure.message})"
-                !ops.load(name, NORMAL) -> "the server couldn't load the copy"
-                else -> return@handleAsync LuaHandle.World(name)
-            }
-            forget(name)
-            log.warn("Couldn't copy map \"$map\" into world \"$name\": $why")
-            throw WorkFailed("couldn't copy map \"$map\" into world \"$name\": $why")
-        }, async.mainThread)
+        return copyIn(work, name, null, "map \"$map\"")
     }
 
     /**
@@ -286,6 +330,9 @@ internal class ManagedWorlds(
     private companion object {
         /** The environment of a world nobody here made, and of every copy of a map. */
         const val NORMAL = "normal"
+
+        /** A load slower than this is said in the log. */
+        const val SLOW_LOAD_MILLIS = 50L
 
         /** The workers' lane for worlds' files. */
         const val FILES = "world files"

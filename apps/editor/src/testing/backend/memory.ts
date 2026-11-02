@@ -472,7 +472,11 @@ export class MemoryBackend implements Backend {
     const file = readLeniently<{
       name?: string
       projects?: string[]
-      network?: { arrival?: string; servers?: Record<string, string> }
+      network?: {
+        arrival?: string
+        servers?: Record<string, string>
+        options?: Record<string, { group?: string; capacity?: number; role?: string }>
+      }
     }>(this.workspaceTexts.get(dir))
     const under = [...this.projects.entries()]
       .filter(([root, files]) => root.startsWith(`${dir}/`) && files.has('netherforge.json'))
@@ -519,7 +523,16 @@ export class MemoryBackend implements Backend {
             arrival: file.network.arrival ?? '',
             servers: Object.entries(file.network.servers ?? {})
               .sort(([a], [b]) => (a < b ? -1 : 1))
-              .map(([name, project]) => ({ name, project })),
+              .map(([name, project]) => ({
+                name,
+                project,
+                options: {
+                  group: null,
+                  capacity: null,
+                  role: null,
+                  ...file.network?.options?.[name],
+                },
+              })),
           }
         : null,
     }
@@ -1486,8 +1499,24 @@ export class MemoryBackend implements Backend {
     const root = this.openRoot
     if (!root) fail('noProject', 'No project is open')
     const names = [layout.name]
+    // As the backend's ServerOptions::validate.
+    const options = (server: string, it: NetworkLayout['options']) => {
+      if (it?.group != null && !SERVER_NAME.test(it.group))
+        fail(
+          'invalid',
+          `Server "${server}"'s group "${it.group}" can't name a group: use lowercase letters, digits, _ and - (at most 32)`,
+        )
+      if (it?.capacity === 0) fail('invalid', `Server "${server}" takes at least one player`)
+      if (it?.role != null && !['trusted', 'standard', 'isolated'].includes(it.role))
+        fail(
+          'invalid',
+          `Server "${server}"'s role "${it.role}" isn't trusted, standard or isolated`,
+        )
+    }
+    options(layout.name, layout.options)
     for (const server of layout.servers) {
       names.push(server.name)
+      options(server.name, server.options)
       if (!server.project.trim())
         fail('invalid', `Server "${server.name}" runs no project: pick its folder`)
     }

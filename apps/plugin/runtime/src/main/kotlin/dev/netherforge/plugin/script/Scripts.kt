@@ -140,7 +140,11 @@ class Scripts internal constructor(
     }
 
     /** A new scope whose globals are what [owner]'s surface gets: `this`, the centity instance, menu window or dialog; nothing for a module. */
-    fun open(owner: ScopeOwner, budget: Int): Scope {
+    /** The most a scope's budget may be (the server's policy); null for whatever its file says. */
+    var maxBudget: Int? = null
+
+    fun open(owner: ScopeOwner, asked: Int): Scope {
+        val budget = maxBudget?.let { minOf(asked, it) } ?: asked
         val host = requireNotNull(host) { "no Lua state" }
         val scope = Scope(nextId++, owner, budget, owner.resource?.let { PackagePaths.split(it.id).first } ?: home())
         scopes[scope.id] = scope

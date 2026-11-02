@@ -75,6 +75,18 @@ test` and the editor's Tests panel run them with `:plugin:test-runner`
      block or item a template names has to be in it.
      The runtime half (`testing/ScriptTests`, `NfTestImpl`, the `testOnly`
      namespace, `RaisableEvents`) is in the plugin-runtime and lua-api skills.
+     A script test's network is a `Hub` in the JVM (`NetworkLink` `LOCAL`,
+     ready at once, its other servers `TestPeer`s): `nf.test.network_server`
+     (with `state` and `accepting`), `network_status`, `network_role` (the
+     test server joining again as a role, through `NetworkLink.joinAs`) and
+     `network_reports` drive it.
+   - `packages/network` (`:network`) and `apps/hub` (`:hub`): JUnit on the hub
+     alone (`HubTest`, `CredentialsTest`, `GroupsTest`, `LifecycleTest`,
+     `AdminApiTest` over the JDK's HTTP client, `RemoteProxyTest`, ...),
+     through local links or loopback TCP, with an injected clock. Velocity,
+     PostgreSQL and S3 are never run: the proxy plugin's half is the hub's
+     `HubProxy`, played by the tests; S3 uploads are tested against a
+     loopback `HttpServer` recording what's PUT.
    - `apps/editor/src`: Vitest + Testing Library. Assert on behaviour, not DOM
      snapshots; find things by role and name (`getByRole`), never test ids or
      `querySelector`: a control a test can't name is an a11y bug to fix in the
@@ -600,6 +612,7 @@ The Paper run's server log is `apps/plugin/integration/build/integration/<minecr
 pnpm test                 # everything fast: Gradle check, vitest, cargo test
 node tools/gradle.mjs :format:allTests
 node tools/gradle.mjs :plugin:runtime:test
+node tools/gradle.mjs :network:test :hub:test
 pnpm test:integration   # every version, the `full` scope
 node tools/gradle.mjs :plugin:integration:integrationTest-26.2 -Pnetherforge.integration.scope=pr   # what a PR runs on 26.2
 pnpm test:e2e

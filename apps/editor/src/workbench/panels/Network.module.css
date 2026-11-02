@@ -295,3 +295,21 @@
   color: var(--muted);
   font-size: var(--font-size-xs);
 }
+.options {
+  display: flex;
+  gap: 4px;
+}
+.optionInput {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 3px 6px;
+  font-family: var(--mono);
+  font-size: var(--font-size-sm);
+}
+.optionInput:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}

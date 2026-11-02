@@ -2,6 +2,7 @@
 
 package dev.netherforge.format
 
+import dev.netherforge.format.block.plan
 import dev.netherforge.format.editor.CanonicalResult
 import dev.netherforge.format.editor.GitFetchRequest
 import dev.netherforge.format.editor.PackageInputs
@@ -149,6 +150,69 @@ fun loadProject(filesJson: String, packagesJson: String?, gameDataJson: String?,
         MapPackages(packagesJson)
     )
     return encode(ProjectOutline.serializer(), outlineOf(snapshot))
+}
+
+/** One file of a resource pack's layout, as [resourcePackLayout] gives it: its [text], a project file to [copy], or [base64] bytes. */
+@kotlinx.serialization.Serializable
+class PackLayoutFile(val text: String? = null, val copy: String? = null, val base64: String? = null)
+
+/** What [resourcePackLayout] gives: the pack [format] and its [files] by path, or why there's none ([reason]). */
+@kotlinx.serialization.Serializable
+class PackLayoutResult(val format: List<Int>? = null, val files: Map<String, PackLayoutFile> = emptyMap(), val reason: String? = null)
+
+/**
+ * The project's resource pack as a server would build it as players join (every pack but the `onDemand` ones, the
+ * project's blocks and videos), laid out for `netherforge build` to zip into the bundle: from the project in
+ * [filesJson] and [packagesJson] as [loadProject] takes them, the game's data ([gameDataJson], which says the pack
+ * format) and PNGs' sizes ([sizesJson]).
+ */
+@OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+fun resourcePackLayout(filesJson: String, packagesJson: String?, gameDataJson: String?, sizesJson: String?): String {
+    val result = PackLayoutResult.serializer()
+    val game =
+        gameDataJson?.let(::gameData) ?: return encode(result, PackLayoutResult(reason = "no game data, so the pack format isn't known"))
+    val format = game.resourcePackFormat ?: return encode(result, PackLayoutResult(reason = "the game data doesn't say the pack format"))
+    val files = CanonicalJson.json.decodeFromString<Map<String, String?>>(filesJson)
+    val size = sizesJson?.let(::sizes).orEmpty()
+    val snapshot = Projects.load(MapProjectSource(files, sizes = size), game, MapPackages(packagesJson))
+    val videos = dev.netherforge.format.resourcepack.VideoSound.of(snapshot)
+    val blocks = snapshot.everywhere(dev.netherforge.format.block.BlockKind)
+    if (snapshot.everywhere(dev.netherforge.format.resourcepack.ResourcePackKind).isEmpty() && blocks.isEmpty() && videos.isEmpty()) {
+        return encode(result, PackLayoutResult(reason = "the project has no resource packs, blocks or videos"))
+    }
+    val joined = snapshot.compiledResourcePacks.values.filter { !it.onDemand }
+    val description = snapshot.manifest?.name?.takeIf { it.isNotBlank() } ?: "NetherForge"
+    val plan = dev.netherforge.format.block.BlockKind.plan(blocks, snapshot.namespace, game)
+    val layout = dev.netherforge.format.resourcepack.PackLayout.build(joined, format, description, plan, snapshot.vanilla, videos) { path ->
+        size[path]?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
+    }
+    val out = layout.mapValues { (_, entry) ->
+        when (entry) {
+            is dev.netherforge.format.resourcepack.PackLayout.Entry.Text -> PackLayoutFile(text = entry.text)
+            is dev.netherforge.format.resourcepack.PackLayout.Entry.Copy -> PackLayoutFile(copy = entry.projectPath)
+            is dev.netherforge.format.resourcepack.PackLayout.Entry.Bytes -> PackLayoutFile(
+                base64 = kotlin.io.encoding.Base64.encode(entry.bytes)
+            )
+        }
+    }
+    return encode(result, PackLayoutResult(format, out))
+}
+
+/**
+ * What [policyText] (a `policy.json`) refuses of the project in [filesJson] and the packages in [packagesJson], as
+ * [loadProject] takes them: problems, as JSON; one saying why when the policy isn't one. `netherforge check --policy`.
+ */
+fun checkPolicy(policyText: String, filesJson: String, packagesJson: String?): String {
+    val problems = kotlinx.serialization.builtins.ListSerializer(Problem.serializer())
+    val policy = dev.netherforge.format.project.Policy.parse(policyText).getOrElse {
+        return encode(
+            problems,
+            listOf(Problem(Severity.ERROR, "policy.json", "The policy can't be read: ${it.message}", code = "runtime.policy"))
+        )
+    }
+    val files = CanonicalJson.json.decodeFromString<Map<String, String?>>(filesJson)
+    val snapshot = Projects.load(MapProjectSource(files), null, MapPackages(packagesJson))
+    return encode(problems, policy.check(snapshot))
 }
 
 /** What a WebAssembly module's [bytes] say about it, as a `WasmInfo`: what a host passes [loadProject] for it. */

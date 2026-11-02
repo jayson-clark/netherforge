@@ -20,5 +20,7 @@ data class PackConfig(
     /** Players who decline it are disconnected. */
     val required: Boolean = false,
     /** MiniMessage shown on the client's prompt. */
-    val prompt: String? = null
+    val prompt: String? = null,
+    /** Upload packs to an S3-compatible store and send its URL, instead of serving them here. */
+    val storage: PackStorageConfig? = null
 )

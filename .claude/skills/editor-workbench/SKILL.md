@@ -46,7 +46,11 @@ Part of the editor's guide: the editor-ui skill has the layers, the registry, th
   server, with a `StatusDot` (`panels/ServerStatus.tsx`, shared with the
   Console), name and project fields that commit on Enter or blur, a folder
   picker, Trust folder, a console button and Remove, then a dashed Add server
-  card. A refused change shows as `error` (the field keeps the text). Start and
+  card. Under each server's project (and this project's, while the network is
+  on) `panels/ServerOptions.tsx`'s `ServerOptionsFields`: group, capacity and
+  a role select, `cleanOptions` leaving out what's empty and `trusted` (the
+  layout's `options`; the memory backend validates them as Rust's
+  `ServerOptions::validate`). A refused change shows as `error` (the field keeps the text). Start and
   Stop are the run store's (the backend runs the whole network). The memory
   backend plays the members (`testNetworkOutput` adds a line).
 - **Workspaces in the shell.** `core/store/workspaceFile.ts` (`createWorkspaceFile`, in
@@ -60,7 +64,8 @@ Part of the editor's guide: the editor-ui skill has the layers, the registry, th
   (`focusMember`). `askToTrust`/`askToUntrust` and the trust banner speak of the workspace when
   there is one. The Network panel for a project in a workspace is `panels/WorkspaceNetwork.tsx`:
   the file's network as cards (proxy, then the arrival server, then by name) with the name
-  (renaming moves `arrival` along), the project (a select of the members), the arrival toggle, the
+  (renaming moves `arrival` and its `network.options` entry along; `withOptions` leaves an empty
+  `options` out), the project (a select of the members), the same `ServerOptionsFields`, the arrival toggle, the
   console button and Remove; **Set up a network** (`suggestNetwork`: a server per member that isn't
   a package, arriving on `hub`/`lobby` or the first) and **Add server**; the switch is this
   computer's (`workspaceSetNetworkEnabled`).

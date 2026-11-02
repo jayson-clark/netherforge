@@ -40,6 +40,8 @@ struct FileNetwork {
     arrival: String,
     #[serde(default)]
     servers: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    options: std::collections::BTreeMap<String, crate::server::network::layout::ServerOptions>,
 }
 
 /// One of a workspace's projects.
@@ -63,6 +65,8 @@ pub struct WorkspaceServer {
     pub name: String,
     /// The member it runs, as the file names it.
     pub project: String,
+    /// Its group, capacity and role (the file's `network.options`).
+    pub options: crate::server::network::layout::ServerOptions,
 }
 
 /// A workspace's dev network, from its file.
@@ -252,12 +256,16 @@ pub fn read(root: &Path, trusted: bool) -> Option<WorkspaceInfo> {
         name,
         trusted,
         members,
-        network: file.network.map(|network| WorkspaceNetworkInfo {
+        network: file.network.map(|mut network| WorkspaceNetworkInfo {
             arrival: network.arrival,
             servers: network
                 .servers
                 .into_iter()
-                .map(|(name, project)| WorkspaceServer { name, project })
+                .map(|(name, project)| WorkspaceServer {
+                    options: network.options.remove(&name).unwrap_or_default(),
+                    name,
+                    project,
+                })
                 .collect(),
         }),
     })

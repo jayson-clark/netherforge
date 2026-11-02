@@ -26,6 +26,11 @@ object NetworkNames {
 
     fun isName(name: String) = NAME.matches(name)
 
+    fun isNamespace(name: String) = NAMESPACE.matches(name)
+
+    /** A credential's id: what a server says in its hello, and `/nfhub credentials` names. */
+    fun isCredential(id: String) = SERVER.matches(id)
+
     /** Whether [full] is `namespace:name`. */
     fun isFull(full: String): Boolean {
         val colon = full.indexOf(':')
@@ -39,8 +44,9 @@ object NetworkNames {
 }
 
 /**
- * The shared secret, proved without sending it: the server answers the hub's nonce with HMAC-SHA256 of the nonce and
- * its own name under the secret, so a proof is good for one connection and one name.
+ * A secret, proved without sending it: the server answers the hub's nonce with HMAC-SHA256 of the nonce, its own
+ * name and the credential it uses under the secret (the network's shared one, or its credential's), so a proof is
+ * good for one connection, one name and one credential.
  */
 object Auth {
     private val random = SecureRandom()
@@ -50,16 +56,19 @@ object Auth {
 
     fun newNonce(): String = hex(ByteArray(24).also(random::nextBytes))
 
-    /** The hello's proof of [secret]: over the hub's [nonce], the [server]'s name and the server's own [serverNonce]. */
-    fun proof(secret: String, nonce: String, server: String, serverNonce: String): String {
+    /**
+     * The hello's proof of [secret]: over the hub's [nonce], the [server]'s name, the server's own [serverNonce] and
+     * the [credential] it says it uses (null: the network's shared secret).
+     */
+    fun proof(secret: String, nonce: String, server: String, serverNonce: String, credential: String? = null): String {
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
-        return hex(mac.doFinal("hello\n$nonce\n$server\n$serverNonce".toByteArray(Charsets.UTF_8)))
+        return hex(mac.doFinal("hello\n$nonce\n$server\n$serverNonce\n${credential.orEmpty()}".toByteArray(Charsets.UTF_8)))
     }
 
     /** Whether [proof] is [proof] of [secret], compared in constant time. */
-    fun verify(secret: String, nonce: String, server: String, serverNonce: String, proof: String): Boolean =
-        MessageDigest.isEqual(proof(secret, nonce, server, serverNonce).toByteArray(), proof.toByteArray())
+    fun verify(secret: String, nonce: String, server: String, serverNonce: String, credential: String?, proof: String): Boolean =
+        MessageDigest.isEqual(proof(secret, nonce, server, serverNonce, credential).toByteArray(), proof.toByteArray())
 
     /** Whether [nonce] is one a server may send: what [newNonce] makes (hex, 32 to 64 digits). */
     fun isNonce(nonce: String): Boolean = nonce.length in 32..64 && nonce.all { it in '0'..'9' || it in 'a'..'f' }

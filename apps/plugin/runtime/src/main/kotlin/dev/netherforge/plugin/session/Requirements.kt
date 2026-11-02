@@ -38,7 +38,9 @@ class Requirements(
     private val log: RuntimeLog,
     private val snapshot: () -> ProjectSnapshot,
     private val calling: () -> String,
-    private val callingHidden: () -> Boolean
+    private val callingHidden: () -> Boolean,
+    /** The server's policy over what projects may require, if it has one. */
+    private val policy: () -> dev.netherforge.format.project.Policy? = { null }
 ) : RuntimeService {
     override val name = "requirements"
 
@@ -50,6 +52,9 @@ class Requirements(
     override fun define(project: SessionProject) {
         combined = Requirement.combined(project.snapshot)
     }
+
+    /** What the policy refuses of what the project requires: warnings, since a refusal that stops it never gets here. */
+    override fun problems(): List<dev.netherforge.format.Problem> = policy()?.takeUnless { it.stops }?.check(snapshot()).orEmpty()
 
     override fun start() {
         log.info(
@@ -81,6 +86,9 @@ class Requirements(
     }
 
     private fun check(requirement: Requirement, what: String, namespace: String, hidden: Boolean, snapshot: ProjectSnapshot) {
+        policy()?.refuses(requirement.id)?.let { why ->
+            throw LuaApiException("$what needs ${requirement.id}, which the server's policy refuses ($why)")
+        }
         if (hidden) {
             everyoneOrRefuse(what, requirement.id, snapshot) { requirement.grantedBy(it?.requires) }
             return

@@ -6,7 +6,7 @@
 -- project's modules: "Lua.runtime.path": ["modules/?.lua", "modules/?/init.lua"].
 -- The sandbox removes io, os, package, load, loadstring, dofile, loadfile, debug, collectgarbage, warn, java.
 
----@alias nf.Event "tick"|"unload"|"player_join"|"player_resource_pack_status"|"player_quit"|"player_chat"|"player_interact"|"player_interact_entity"|"player_move"|"player_teleport"|"player_change_world"|"player_death"|"player_respawn"|"player_drop_item"|"player_pickup_item"|"player_use_item"|"player_consume_item"|"player_swap_hands"|"player_sneak"|"player_command"|"block_break"|"block_place"|"entity_damage"|"entity_death"|"entity_spawn"|"world_dusk"|"world_dawn"|"player_input"|"player_change_slot"|"player_swing"|"player_sprint"|"player_fly"|"player_jump"|"player_change_game_mode"|"player_change_food"|"player_gain_experience"|"player_change_level"|"player_kick"|"player_complete_advancement"|"player_stop_using_item"|"player_break_item"|"entity_heal"|"projectile_launch"|"projectile_hit"|"entity_shoot_bow"|"entity_target"|"entity_explode"|"block_explode"|"entity_combust"|"entity_change_effect"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"world_load"|"world_unload"|"entity_mount"|"entity_dismount"|"vehicle_move"|"vehicle_damage"|"vehicle_destroy"|"player_open_inventory"|"player_close_inventory"|"player_click_inventory"|"player_drag_inventory"|"player_craft"|"player_prepare_craft"|"player_prepare_anvil"|"player_prepare_smithing"|"player_prepare_grindstone"|"player_enchant_item"|"furnace_smelt"|"server_list_ping"|"centity_click"|"recipe_craft"|"item_view"|"centity_natural_spawn"|"menu_open"|"menu_close"|"menu_click"|"dialog_press"|"setting_changed"|"network_connect"|"network_disconnect"|"network_server_connect"|"network_server_disconnect"|"network_player_join"|"network_player_switch"|"network_player_quit"|"player_arrive"|string
+---@alias nf.Event "tick"|"unload"|"player_join"|"player_resource_pack_status"|"player_quit"|"player_chat"|"player_interact"|"player_interact_entity"|"player_move"|"player_teleport"|"player_change_world"|"player_death"|"player_respawn"|"player_drop_item"|"player_pickup_item"|"player_use_item"|"player_consume_item"|"player_swap_hands"|"player_sneak"|"player_command"|"block_break"|"block_place"|"entity_damage"|"entity_death"|"entity_spawn"|"world_dusk"|"world_dawn"|"player_input"|"player_change_slot"|"player_swing"|"player_sprint"|"player_fly"|"player_jump"|"player_change_game_mode"|"player_change_food"|"player_gain_experience"|"player_change_level"|"player_kick"|"player_complete_advancement"|"player_stop_using_item"|"player_break_item"|"entity_heal"|"projectile_launch"|"projectile_hit"|"entity_shoot_bow"|"entity_target"|"entity_explode"|"block_explode"|"entity_combust"|"entity_change_effect"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"world_load"|"world_unload"|"entity_mount"|"entity_dismount"|"vehicle_move"|"vehicle_damage"|"vehicle_destroy"|"player_open_inventory"|"player_close_inventory"|"player_click_inventory"|"player_drag_inventory"|"player_craft"|"player_prepare_craft"|"player_prepare_anvil"|"player_prepare_smithing"|"player_prepare_grindstone"|"player_enchant_item"|"furnace_smelt"|"server_list_ping"|"centity_click"|"recipe_craft"|"item_view"|"centity_natural_spawn"|"menu_open"|"menu_close"|"menu_click"|"dialog_press"|"setting_changed"|"network_connect"|"network_disconnect"|"network_state"|"network_server_connect"|"network_server_disconnect"|"network_player_join"|"network_player_switch"|"network_player_quit"|"player_arrive"|string
 ---@alias Centity.Event "spawn"|"remove"|"tick"|"click"|"animation_start"|"animation_end"|"chunk_load"|"chunk_unload"|"hit"|"bounce"|"stick"|"flight_end"|"damage"|"death"|"land"|"bump"|"touch"|"path_end"|"buff_add"|"buff_end"|string
 ---@alias Node.Event "click"|"collide"|"wake"|"sleep"
 ---@alias Entity.Event "damage"|"interact"|"hit"|"explode"|"combust"|"mount"|"dismount"
@@ -207,6 +207,7 @@ nf = {}
 ---@overload fun(event: "setting_changed", handler: fun(event: SettingChangedEvent)): Subscription
 ---@overload fun(event: "network_connect", handler: fun(event: NetworkConnectEvent)): Subscription
 ---@overload fun(event: "network_disconnect", handler: fun(event: NetworkDisconnectEvent)): Subscription
+---@overload fun(event: "network_state", handler: fun(event: NetworkStateEvent)): Subscription
 ---@overload fun(event: "network_server_connect", handler: fun(event: NetworkServerEvent)): Subscription
 ---@overload fun(event: "network_server_disconnect", handler: fun(event: NetworkServerEvent)): Subscription
 ---@overload fun(event: "network_player_join", handler: fun(event: NetworkPlayerEvent)): Subscription
@@ -319,6 +320,7 @@ function nf.on(event, handler, options) end
 ---@overload fun(event: "setting_changed", handler: fun(event: SettingChangedEvent)): Subscription
 ---@overload fun(event: "network_connect", handler: fun(event: NetworkConnectEvent)): Subscription
 ---@overload fun(event: "network_disconnect", handler: fun(event: NetworkDisconnectEvent)): Subscription
+---@overload fun(event: "network_state", handler: fun(event: NetworkStateEvent)): Subscription
 ---@overload fun(event: "network_server_connect", handler: fun(event: NetworkServerEvent)): Subscription
 ---@overload fun(event: "network_server_disconnect", handler: fun(event: NetworkServerEvent)): Subscription
 ---@overload fun(event: "network_player_join", handler: fun(event: NetworkPlayerEvent)): Subscription
@@ -345,7 +347,7 @@ function nf.after(ticks, callback) end
 ---@return Task
 function nf.every(ticks, callback) end
 
---- Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.send_player`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.
+--- Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.worlds.import`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.ban`, `nf.network.unban`, `nf.network.mute`, `nf.network.unmute`, `nf.network.send_player`, `nf.network.send_players`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.
 ---@param callback async fun(...: any) The task: plain Lua that may wait.
 ---@param ... any Passed to `callback`.
 ---@return Task # Call `:cancel()` on it to end it early.
@@ -472,6 +474,7 @@ function nf.wait_until(predicate, timeout) end
 ---@overload fun(handle: nf, event: "setting_changed", filter?: fun(event: SettingChangedEvent): boolean): SettingChangedEvent
 ---@overload fun(handle: nf, event: "network_connect", filter?: fun(event: NetworkConnectEvent): boolean): NetworkConnectEvent
 ---@overload fun(handle: nf, event: "network_disconnect", filter?: fun(event: NetworkDisconnectEvent): boolean): NetworkDisconnectEvent
+---@overload fun(handle: nf, event: "network_state", filter?: fun(event: NetworkStateEvent): boolean): NetworkStateEvent
 ---@overload fun(handle: nf, event: "network_server_connect", filter?: fun(event: NetworkServerEvent): boolean): NetworkServerEvent
 ---@overload fun(handle: nf, event: "network_server_disconnect", filter?: fun(event: NetworkServerEvent): boolean): NetworkServerEvent
 ---@overload fun(handle: nf, event: "network_player_join", filter?: fun(event: NetworkPlayerEvent): boolean): NetworkPlayerEvent
@@ -809,6 +812,17 @@ function nf.worlds.load(name) end
 ---@overload async fun(map: MapId, name: string): World?, string?
 ---@overload fun(map: MapId, name: string, callback: fun(world: World?, err: string?))
 function nf.worlds.copy(map, name, callback) end
+
+--- Makes a new world from a world's files a tool put on the server (one player's island, fetched from storage): the folder is inside the server owner's import root (`worlds.import-root` in `config.yml`), laid out as a map is. Its files are copied, then the server loads the copy as a world named `name`, the project's from then on (as for `nf.worlds.copy`), and `world_load` is heard: set its game rules and spawn limits there, or on the world this gives. With `options.terrain`, chunks it doesn't have yet are made by that project terrain (a void around an island). Importing off on the server, a folder outside the root or not there, a name that isn't an id or that a world already has, or the server holding `worlds.max-loaded` worlds already, is an error at once; a copy that can't be made fails. It works off the main thread, so its world arrives later: give `callback`, which is called with `world, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `world, err`. Without a callback outside a task, it's an error. When it fails, `world` is `nil` and `err` says why.
+---@param folder string The folder, relative to the import root: `"islands/7f2c"`.
+---@param name string The new world's name: `"island_7f2c"`.
+---@param options? WorldImportOptions How its new chunks are made.
+---@param callback? fun(world: World?, err: string?) Called on the main thread once it's done, as this script's code, with the new world (or `nil` and why not). Not called if the script has stopped by then.
+---@return World? # Only without a callback, in a task: the new world, or `nil`.
+---@return string? # Why it failed, when it did; `nil` when it worked.
+---@overload async fun(folder: string, name: string, options?: WorldImportOptions): World?, string?
+---@overload fun(folder: string, name: string, options?: WorldImportOptions, callback: fun(world: World?, err: string?))
+function nf.worlds.import(folder, name, options, callback) end
 
 --- The server's main world: where things go when nothing says which.
 ---@return World
@@ -1424,20 +1438,66 @@ nf.network = {}
 ---@return string?
 function nf.network.server_name() end
 
+--- What this server may do in the network, as the hub says: a server that joined with the network's shared secret is `trusted` and may do anything; one that joined with a credential of its own (`network.credential` in `config.yml`) has its credential's role, the namespaces whose channels and maps it owns, what the network shares with it of others', whether it sees players on other servers, and where it may send players. A call it may not make is an error at the script's line saying `network.forbidden` (a channel's or map's), or fails with `network.forbidden` in `err` (sending a player), and never reaches another server. `nil` until this server has connected.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@return NetworkRole?
+function nf.network.server_role() end
+
+--- This server's group: the game or role it's one copy of (`network.group` in `config.yml`, `"arena"`), which other servers send players and requests to (`{ group = "arena" }`) and the hub picks an instance of. A server with no group is a group of one, named as the server is, so this is `server_name()` then. `nil` on a server that isn't part of a network.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@return string?
+function nf.network.group() end
+
+--- Says whether this server takes players now: one that doesn't (a match is running) is passed over when players are sent to its group, though they can still be sent to it by name. It's said to the hub at once, and again whenever this server reconnects. Every server takes players until it says otherwise.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@param accepting boolean Whether it takes players.
+function nf.network.set_accepting(accepting) end
+
+--- Where this server is in its life: `starting` until its project has loaded and its modules have started (and nothing holds it back: `hold_ready`), then `ready`; `draining` when it's asked to take no new players (`/nf drain`, the hub's admin API, `set_draining`), and `stopping` as `/nf shutdown` sends its players elsewhere. Only a `ready` server is sent players by its group; a `draining` or `stopping` one gets none, even by name. `network_state` says when it changes.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@return "starting"|"ready"|"draining"|"stopping"
+function nf.network.state() end
+
+--- Keeps this server `starting` (so its group sends it no players) until the hold is released: for a world to be made, a map loaded, a match set up. The server is `ready` once every hold is released, the first tick after. Holds go with the script that took them. Once a server is ready it stays so: a hold taken later does nothing.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@return NetworkHold
+function nf.network.hold_ready() end
+
+--- Drains this server (`true`): it takes no new players, even sent by name, while it finishes what it's doing; or (`false`) makes it `ready` again. As `/nf drain` does. `/nf shutdown` drains too, and can't be undone.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@param draining boolean Whether to drain.
+function nf.network.set_draining(draining) end
+
+--- Whether this server is draining or stopping: taking no new players.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@return boolean
+function nf.network.is_draining() end
+
+--- Whether this server takes players now, as `set_accepting` last said.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@return boolean
+function nf.network.is_accepting() end
+
 --- Whether this server is connected to its network's hub now. `network_connect` and `network_disconnect` say when that changes.
 --- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
 ---@return boolean
 function nf.network.is_connected() end
 
---- Every server of the network, as the proxy names them, with whether NetherForge on each is connected and how many players are on it. Empty while this server isn't connected.
+--- Every server of the network, as the proxy names them, with whether NetherForge on each is connected, how many players are on it, its group and its room. Empty while this server isn't connected. Players and room are as the hub last said, once a second at most.
 --- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
 ---@return NetworkServer[]
 function nf.network.servers() end
 
---- Everyone online in the network, on any server, this one included, as the proxy last said. Empty while this server isn't connected.
+--- Every group of the network, with its instances: each server with a group is an instance of it, and each server with none is a group of one. Empty while this server isn't connected.
 --- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@return NetworkGroup[]
+function nf.network.groups() end
+
+--- Everyone online in the network, on any server, this one included, as the proxy last said; or only those of one server or group. Empty while this server isn't connected. On a server that doesn't see other servers' players (`server_role().presence`), only its own.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@param options? NetworkPlayersOptions Only one server's or group's players.
 ---@return NetworkPlayer[]
-function nf.network.players() end
+function nf.network.players(options) end
 
 --- A player online anywhere in the network, by name (any case) or UUID; `nil` when nobody by that name or UUID is.
 --- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
@@ -1457,17 +1517,92 @@ function nf.network.channel(name) end
 ---@return NetworkMap
 function nf.network.map(name) end
 
---- Sends a player to another server of the network, through the proxy, with `data` for that server's scripts: its `player_arrive` handlers hear it once they've joined there. The player may be on any server, this one or another. It fails (`nil, err`) when this server isn't connected, the player isn't online, the proxy has no such server, they're already there, or the proxy couldn't move them (the server is down or full, a proxy plugin cancelled it). It works off the main thread, so its moved arrives later: give `callback`, which is called with `moved, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `moved, err`. Without a callback outside a task, it's an error. When it fails, `moved` is `nil` and `err` says why.
+--- Bans a player from the whole network: the proxy turns them away before they reach any server, until it runs out or `unban`, and kicks them now when they're online. Kept by the network's hub, with the reason, who did it and when. Needs `moderation` declared, and a server whose credential may moderate (`moderation=true` on the hub; a trusted server may). It fails (`nil, err`) when this server isn't connected or may not moderate, or `expires` is past. It works off the main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+--- Needs `"requires": { "moderation": true }` in `netherforge.json`: without it, calling it is an error.
+---@param player Player|string Who: a player on this server, or anyone by name (online in the network) or UUID.
+---@param options? NetworkSanctionOptions Why, and until when.
+---@param callback? fun(done: boolean?, err: string?) Called on the main thread once it's done, as this script's code, with `true` once the hub has it (or `nil` and why not). Not called if the script has stopped by then.
+---@return boolean? # Only without a callback, in a task: `true` once the hub has it, or `nil`.
+---@return string? # Why it failed, when it did; `nil` when it worked.
+---@overload async fun(player: Player|string, options?: NetworkSanctionOptions): boolean?, string?
+---@overload fun(player: Player|string, options?: NetworkSanctionOptions, callback: fun(done: boolean?, err: string?))
+function nf.network.ban(player, options, callback) end
+
+--- Lifts a player's network ban. It fails when they weren't banned, or as `ban` does. It works off the main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+--- Needs `"requires": { "moderation": true }` in `netherforge.json`: without it, calling it is an error.
+---@param player Player|string Who, by name or UUID.
+---@param callback? fun(done: boolean?, err: string?) Called on the main thread once it's done, as this script's code, with `true` once the hub has lifted it (or `nil` and why not). Not called if the script has stopped by then.
+---@return boolean? # Only without a callback, in a task: `true` once the hub has lifted it, or `nil`.
+---@return string? # Why it failed, when it did; `nil` when it worked.
+---@overload async fun(player: Player|string): boolean?, string?
+---@overload fun(player: Player|string, callback: fun(done: boolean?, err: string?))
+function nf.network.unban(player, callback) end
+
+--- Mutes a player across the network: every server's NetherForge holds back their chat (they're told why), until it runs out or `unmute`. As `ban` for what it needs and when it fails. It works off the main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+--- Needs `"requires": { "moderation": true }` in `netherforge.json`: without it, calling it is an error.
+---@param player Player|string Who: a player on this server, or anyone by name or UUID.
+---@param options? NetworkSanctionOptions Why, and until when.
+---@param callback? fun(done: boolean?, err: string?) Called on the main thread once it's done, as this script's code, with `true` once the hub has it (or `nil` and why not). Not called if the script has stopped by then.
+---@return boolean? # Only without a callback, in a task: `true` once the hub has it, or `nil`.
+---@return string? # Why it failed, when it did; `nil` when it worked.
+---@overload async fun(player: Player|string, options?: NetworkSanctionOptions): boolean?, string?
+---@overload fun(player: Player|string, options?: NetworkSanctionOptions, callback: fun(done: boolean?, err: string?))
+function nf.network.mute(player, options, callback) end
+
+--- Lifts a player's network mute. It fails when they weren't muted, or as `ban` does. It works off the main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+--- Needs `"requires": { "moderation": true }` in `netherforge.json`: without it, calling it is an error.
+---@param player Player|string Who, by name or UUID.
+---@param callback? fun(done: boolean?, err: string?) Called on the main thread once it's done, as this script's code, with `true` once the hub has lifted it (or `nil` and why not). Not called if the script has stopped by then.
+---@return boolean? # Only without a callback, in a task: `true` once the hub has lifted it, or `nil`.
+---@return string? # Why it failed, when it did; `nil` when it worked.
+---@overload async fun(player: Player|string): boolean?, string?
+---@overload fun(player: Player|string, callback: fun(done: boolean?, err: string?))
+function nf.network.unmute(player, callback) end
+
+--- Whether a player is banned from the network now, as this server's copy of the hub's bans says.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@param player Player|string Who, by name (online in the network) or UUID.
+---@return boolean
+function nf.network.is_banned(player) end
+
+--- Whether a player is muted across the network now.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@param player Player|string Who, by name (online in the network) or UUID.
+---@return boolean
+function nf.network.is_muted(player) end
+
+--- Reports a player to whoever moderates the network: the hub keeps it (`/nfhub reports`, the admin API) and tells its webhook. Goes at once, without waiting.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@param player Player|string Who is reported: a player on this server, or anyone by name or UUID.
+---@param reason string Why, in a few words (at most 500 characters).
+---@param details? any What else to say: where, what was said. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line.
+---@param by? Player? Who reports them, when a player does.
+---@return boolean # `false` when it didn't go: this server isn't connected.
+function nf.network.report(player, reason, details, by) end
+
+--- Sends a player to another server of the network, through the proxy, with `data` for that server's scripts: its `player_arrive` handlers hear it once they've joined there. The player may be on any server, this one or another (a server whose credential isn't trusted sends only its own). Sent to a group, the hub picks the instance as the group's balancing says (`least`: the one with the fewest players that has room; `fill`: the fullest that still has room) or `target.balance`, passing over instances that don't take players now (`set_accepting`) or are full (`network.capacity`). It fails (`nil, err`) when this server isn't connected, the player isn't online, there's no such server or group, no instance has room, they're already there, or the proxy couldn't move them (the server is down, a proxy plugin cancelled it). It works off the main thread, so its server arrives later: give `callback`, which is called with `server, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `server, err`. Without a callback outside a task, it's an error. When it fails, `server` is `nil` and `err` says why.
 --- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
 ---@param player Player|string Who: a player on this server, or anyone online in the network by name or UUID.
----@param server NetworkServerName The server's name in the network, as the proxy names it (`"lobby"`); `nf.network.servers()` lists them.
----@param data? any What arrives with them, as `event.data` there. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line.
----@param callback? fun(moved: boolean?, err: string?) Called on the main thread once it's done, as this script's code, with `true` once they are on their way there (or `nil` and why not). Not called if the script has stopped by then.
----@return boolean? # Only without a callback, in a task: `true` once they are on their way there, or `nil`.
+---@param target NetworkServerName|NetworkSendOptions A server's name in the network, as the proxy names it (`"lobby"`; `nf.network.servers()` lists them), or a table naming a server or a group (`{ group = "arena" }`), when the hub picks the instance.
+---@param data? any What arrives with them, as `event.data` there; `target.data` when left out. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line.
+---@param callback? fun(server: string?, err: string?) Called on the main thread once it's done, as this script's code, with the server they are on their way to (or `nil` and why not). Not called if the script has stopped by then.
+---@return string? # Only without a callback, in a task: the server they are on their way to, or `nil`.
 ---@return string? # Why it failed, when it did; `nil` when it worked.
----@overload async fun(player: Player|string, server: NetworkServerName, data?: any): boolean?, string?
----@overload fun(player: Player|string, server: NetworkServerName, data?: any, callback: fun(moved: boolean?, err: string?))
-function nf.network.send_player(player, server, data, callback) end
+---@overload async fun(player: Player|string, target: NetworkServerName|NetworkSendOptions, data?: any): string?, string?
+---@overload fun(player: Player|string, target: NetworkServerName|NetworkSendOptions, data?: any, callback: fun(server: string?, err: string?))
+function nf.network.send_player(player, target, data, callback) end
+
+--- Sends several players together, as `send_player` sends one: to one server, or to one instance of a group with room for all of them, so a party lands together. Players already there stay. It fails as `send_player` does; when the proxy couldn't move some of them, `err` names each with why (the others are on their way). It works off the main thread, so its server arrives later: give `callback`, which is called with `server, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `server, err`. Without a callback outside a task, it's an error. When it fails, `server` is `nil` and `err` says why.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@param players (Player|string)[] Who: players on this server, or anyone online in the network by name or UUID.
+---@param target NetworkServerName|NetworkSendOptions A server's name in the network, as the proxy names it (`"lobby"`; `nf.network.servers()` lists them), or a table naming a server or a group (`{ group = "arena" }`), when the hub picks the instance.
+---@param data? any What arrives with them, as `event.data` there; `target.data` when left out. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line.
+---@param callback? fun(server: string?, err: string?) Called on the main thread once it's done, as this script's code, with the server they are on their way to (or `nil` and why not). Not called if the script has stopped by then.
+---@return string? # Only without a callback, in a task: the server they are on their way to, or `nil`.
+---@return string? # Why it failed, when it did; `nil` when it worked.
+---@overload async fun(players: (Player|string)[], target: NetworkServerName|NetworkSendOptions, data?: any): string?, string?
+---@overload fun(players: (Player|string)[], target: NetworkServerName|NetworkSendOptions, data?: any, callback: fun(server: string?, err: string?))
+function nf.network.send_players(players, target, data, callback) end
 
 --- Dates and durations as text, in the same unit as `nf.server.unix_time()`: milliseconds. For timers, use ticks (`nf.after`, `nf.wait`); this is for showing and reading clock times and lengths of time.
 ---@class nf.time
@@ -1577,7 +1712,7 @@ function nf.test.advance(ticks) end
 function nf.test.player(name) end
 
 --- Raises a server-wide event as the server would, to the scripts: whoever listens to `event` with `nf.on` hears it, and, for an event the server raises about a player, an entity or a world, the handlers on that handle (`player:on("chat")`) hear it first, in the order the server uses. Each can `stop()` or `cancel()` it or set its writable fields. The few events the runtime stages itself (a death, damage, a click on a centity) reach `nf.on` handlers only. `payload` is what the event carries, the same table its handlers read (`event.player`, `event.message`): a field the event does not have is an error naming the fields. What the server would then do with a cancelled event is not simulated: read the result.
----@param event "tick"|"player_join"|"player_resource_pack_status"|"player_quit"|"player_chat"|"player_interact"|"player_interact_entity"|"player_move"|"player_teleport"|"player_change_world"|"player_death"|"player_respawn"|"player_drop_item"|"player_pickup_item"|"player_use_item"|"player_consume_item"|"player_swap_hands"|"player_sneak"|"player_command"|"block_break"|"block_place"|"entity_damage"|"entity_death"|"entity_spawn"|"world_dusk"|"world_dawn"|"player_input"|"player_change_slot"|"player_swing"|"player_sprint"|"player_fly"|"player_jump"|"player_change_game_mode"|"player_change_food"|"player_gain_experience"|"player_change_level"|"player_kick"|"player_complete_advancement"|"player_stop_using_item"|"player_break_item"|"entity_heal"|"projectile_launch"|"projectile_hit"|"entity_shoot_bow"|"entity_target"|"entity_explode"|"block_explode"|"entity_combust"|"entity_change_effect"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"world_load"|"world_unload"|"entity_mount"|"entity_dismount"|"vehicle_move"|"vehicle_damage"|"vehicle_destroy"|"player_open_inventory"|"player_close_inventory"|"player_click_inventory"|"player_drag_inventory"|"player_craft"|"player_prepare_craft"|"player_prepare_anvil"|"player_prepare_smithing"|"player_prepare_grindstone"|"player_enchant_item"|"furnace_smelt"|"server_list_ping"|"centity_click"|"recipe_craft"|"item_view"|"centity_natural_spawn"|"menu_open"|"menu_close"|"menu_click"|"dialog_press"|"setting_changed"|"network_connect"|"network_disconnect"|"network_server_connect"|"network_server_disconnect"|"network_player_join"|"network_player_switch"|"network_player_quit"|"player_arrive" The event's name, as `nf.on` takes it.
+---@param event "tick"|"player_join"|"player_resource_pack_status"|"player_quit"|"player_chat"|"player_interact"|"player_interact_entity"|"player_move"|"player_teleport"|"player_change_world"|"player_death"|"player_respawn"|"player_drop_item"|"player_pickup_item"|"player_use_item"|"player_consume_item"|"player_swap_hands"|"player_sneak"|"player_command"|"block_break"|"block_place"|"entity_damage"|"entity_death"|"entity_spawn"|"world_dusk"|"world_dawn"|"player_input"|"player_change_slot"|"player_swing"|"player_sprint"|"player_fly"|"player_jump"|"player_change_game_mode"|"player_change_food"|"player_gain_experience"|"player_change_level"|"player_kick"|"player_complete_advancement"|"player_stop_using_item"|"player_break_item"|"entity_heal"|"projectile_launch"|"projectile_hit"|"entity_shoot_bow"|"entity_target"|"entity_explode"|"block_explode"|"entity_combust"|"entity_change_effect"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"world_load"|"world_unload"|"entity_mount"|"entity_dismount"|"vehicle_move"|"vehicle_damage"|"vehicle_destroy"|"player_open_inventory"|"player_close_inventory"|"player_click_inventory"|"player_drag_inventory"|"player_craft"|"player_prepare_craft"|"player_prepare_anvil"|"player_prepare_smithing"|"player_prepare_grindstone"|"player_enchant_item"|"furnace_smelt"|"server_list_ping"|"centity_click"|"recipe_craft"|"item_view"|"centity_natural_spawn"|"menu_open"|"menu_close"|"menu_click"|"dialog_press"|"setting_changed"|"network_connect"|"network_disconnect"|"network_state"|"network_server_connect"|"network_server_disconnect"|"network_player_join"|"network_player_switch"|"network_player_quit"|"player_arrive" The event's name, as `nf.on` takes it.
 ---@param payload? table The payload: its fields by name. Leave it out for an event that has none.
 ---@return RaisedEvent # Whether a handler cancelled it, and the event as the handlers left it.
 function nf.test.raise(event, payload) end
@@ -1655,7 +1790,8 @@ function nf.test.stub_wasm(module, stub) end
 
 --- Adds another server to the test's network. In a test this server is part of a network of its own, named `"test"`, whose hub is a real one in the test: every other server is one the test adds and plays, with `network_publish`, `network_received`, `network_answer`, `network_write`, `network_join` and `network_send`. Adding one that's there does nothing; the network starts with none.
 ---@param name string Its name in the network (`"lobby"`).
-function nf.test.network_server(name) end
+---@param options? TestNetworkServerOptions Its group and room, when it's an instance of a group.
+function nf.test.network_server(name, options) end
 
 --- Another server publishes `value` on a channel, to every server listening: this one's `message` handlers hear it at the next tick (`nf.test.advance(1)`).
 ---@param server string The other server's name, as `nf.test.network_server` added it.
@@ -1698,6 +1834,19 @@ function nf.test.network_join(server, name) end
 --- A player on another server leaves the network: `network_player_quit` is heard at the next tick.
 ---@param name string The player's name.
 function nf.test.network_quit(name) end
+
+--- Another server of the test's network says where it is in its life and whether it takes players, as `set_accepting` and `/nf drain` would there: players sent to its group wait for it while it's `starting` or full (a send with `wait`), and go once it's `ready`. Heard by the next tick.
+---@param server string The other server, as `network_server` added it.
+---@param status TestNetworkStatus What it says.
+function nf.test.network_status(server, status) end
+
+--- This server joins the test's network again with a credential of the role given, as a server running someone else's project might: what it may publish, ask, answer, read, write and send is then held to it, and `nf.network.server_role()` says it. The test's other servers stay trusted. By the next tick.
+---@param role TestNetworkRole The role, and what it owns and is shared.
+function nf.test.network_role(role) end
+
+--- The reports scripts made with `nf.network.report` in this test, oldest first, as the network's hub keeps them.
+---@return TestNetworkReport[]
+function nf.test.network_reports() end
 
 --- Another server sends a player here with `data`, as `nf.network.send_player` there would: they join this server (`player_join`) and, the tick after, its `player_arrive` handlers hear `data`. They needn't be in the network yet.
 ---@param server string The other server's name, as `nf.test.network_server` added it.
@@ -5631,21 +5780,21 @@ local NetworkChannel = {}
 ---@return string
 function NetworkChannel:name() end
 
---- Publishes `value` on the channel: every server listening hears it as a `message` event, this one included, or only `options.server`. It goes at once, through the hub; nothing waits for it. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line.
+--- Publishes `value` on the channel: every server listening hears it as a `message` event, this one included, or only `options.server`, or only the instances of `options.group`. It goes at once, through the hub; nothing waits for it. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line.
 ---@param value any What to send.
----@param options? NetworkPublishOptions Which server alone, if not every one.
+---@param options? NetworkPublishOptions Which server or group alone, if not every one.
 ---@return boolean # `false` when it didn't go: this server isn't connected, or its package went over `network.messages-per-minute`.
 function NetworkChannel:publish(value, options) end
 
---- Asks `server` on this channel: its `request` handlers answer, and the answer comes back here. It fails (`nil, err`) when this server isn't connected, that server isn't, nothing there handles requests on the channel, a handler there errored, or no answer came within `network.request-timeout-seconds`. A handler that answers `nil` gives `nil` with no `err`. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line. It works off the main thread, so its reply arrives later: give `callback`, which is called with `reply, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `reply, err`. Without a callback outside a task, it's an error. When it fails, `reply` is `nil` and `err` says why.
----@param server NetworkServerName The server's name in the network, as the proxy names it (`"lobby"`); `nf.network.servers()` lists them.
+--- Asks a server on this channel, or one instance of a group: its `request` handlers answer, and the answer comes back here. It fails (`nil, err`) when this server isn't connected, that server isn't (or no instance of the group is), nothing there handles requests on the channel, a handler there errored, or no answer came within `network.request-timeout-seconds`. A handler that answers `nil` gives `nil` with no `err`. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line. It works off the main thread, so its reply arrives later: give `callback`, which is called with `reply, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `reply, err`. Without a callback outside a task, it's an error. When it fails, `reply` is `nil` and `err` says why.
+---@param target NetworkServerName|NetworkTarget A server's name in the network (`"lobby"`), or a table naming a server or a group (`{ group = "arena" }`): then one instance of the group that answers on the channel is asked, each in turn.
 ---@param data any What to ask with: their handlers read it as `event.value`.
 ---@param callback? fun(reply: any?, err: string?) Called on the main thread once it's done, as this script's code, with the answer, what that server's handlers assigned to `event.reply` (or `nil` and why not). Not called if the script has stopped by then.
 ---@return any? # Only without a callback, in a task: the answer, what that server's handlers assigned to `event.reply`, or `nil`.
 ---@return string? # Why it failed, when it did; `nil` when it worked.
----@overload async fun(self: NetworkChannel, server: NetworkServerName, data: any): any?, string?
----@overload fun(self: NetworkChannel, server: NetworkServerName, data: any, callback: fun(reply: any?, err: string?))
-function NetworkChannel:request(server, data, callback) end
+---@overload async fun(self: NetworkChannel, target: NetworkServerName|NetworkTarget, data: any): any?, string?
+---@overload fun(self: NetworkChannel, target: NetworkServerName|NetworkTarget, data: any, callback: fun(reply: any?, err: string?))
+function NetworkChannel:request(target, data, callback) end
 
 --- Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
 ---@param event NetworkChannel.Event The event's name.
@@ -5663,6 +5812,17 @@ function NetworkChannel:on(event, handler, options) end
 ---@overload fun(self: NetworkChannel, event: "message", handler: fun(event: NetworkMessageEvent)): Subscription
 ---@overload fun(self: NetworkChannel, event: "request", handler: fun(event: NetworkRequestEvent)): Subscription
 function NetworkChannel:once(event, handler) end
+
+--- A hold on this server being ready, from `nf.network.hold_ready`: while any is held, the server stays `starting`. It goes with the script that took it.
+---@class NetworkHold
+local NetworkHold = {}
+
+--- Lets go of the hold. The server is ready the tick after its last hold goes. Releasing it again does nothing.
+function NetworkHold:release() end
+
+--- Whether it has been let go of.
+---@return boolean
+function NetworkHold:is_released() end
 
 --- A map the whole network shares, from `nf.network.map`: string keys, any values. Reads (`get`, `all`) answer at once from this server's copy. Writes go to the hub, which makes them in the order they arrive and tells every server that has the map: `set` and `delete` don't wait, and this server's copy has the new value once the hub has made the change (the next tick or so, when `change` is heard); `add` and `insert` wait for the hub's answer, so they're safe when two servers write one key at once. A key may expire. The hub keeps them for the whole network, saved on the proxy, within the limits of its `hub.properties` (how many keys and bytes each package may keep).
 ---@class NetworkMap
@@ -7594,6 +7754,10 @@ function Event:uncancel() end
 ---@field structures boolean? Whether villages, temples and the like generate. Default `true`.
 ---@field keep_spawn_loaded boolean? Whether the chunks around its spawn stay loaded with nobody near. Default `false`.
 
+--- How `nf.worlds.import` makes the world it imports. A key that isn't one of these is an error.
+---@class WorldImportOptions
+---@field terrain string? One of the project's terrains (as the calling package names it), which makes the chunks the world doesn't have yet; the game's own when left out.
+
 --- How `world:unload` lets a world go. A key that isn't one of these is an error.
 ---@class WorldUnloadOptions
 ---@field save boolean? Whether it saves first. Default `true`; `false` throws away what changed since the last save (with `delete`, nothing is saved either way).
@@ -8006,16 +8170,70 @@ function Event:uncancel() end
 ---@field name string Its name, as the proxy names it.
 ---@field connected boolean Whether NetherForge on it is connected to the hub now (a server without NetherForge never is).
 ---@field players integer How many players are on it.
+---@field group string Its group (`network.group` in its `config.yml`), or its own name when it has none.
+---@field capacity integer? How many players it takes (`network.capacity`); `nil` for any number.
+---@field accepting boolean Whether it takes players now (`set_accepting` there).
+---@field state "starting"|"ready"|"draining"|"stopping"|nil Where it is in its life (`nf.network.state()` there); `nil` when it isn't connected.
+---@field idle boolean Whether it has been empty longer than its `network.idle-after-seconds`.
+---@field tick_milliseconds number? Its average tick time lately, in milliseconds (50 is a full tick at 20 a second), as it last said (every few seconds); `nil` before it has.
+
+--- A group of the network and its instances, from `nf.network.groups`.
+---@class NetworkGroup
+---@field name string Its name.
+---@field players integer How many players are on its instances together.
+---@field capacity integer? How many its instances take together; `nil` when one of them takes any number.
+---@field instances NetworkServer[] Its servers, by name.
+
+--- What `nf.network.players` takes. A key that isn't one of these is an error.
+---@class NetworkPlayersOptions
+---@field server string? Only this server's players.
+---@field group string? Only the players on this group's instances.
+
+--- A server, a group or an admin client, where a request goes. A key that isn't one of these is an error; it names one of them.
+---@class NetworkTarget
+---@field server string? A server, by its name in the network.
+---@field group string? A group: one of its instances is asked.
+---@field admin string? A service connected to the hub's admin API, by its client id (a matchmaker): it answers in place of a server.
+
+--- Where `send_player` and `send_players` send players. A key that isn't one of these is an error; it names a server or a group.
+---@class NetworkSendOptions
+---@field server string? A server, by its name in the network.
+---@field group string? A group: the hub picks the instance with room.
+---@field balance "least"|"fill"|nil How the hub picks the group's instance for this send: `least` (the fewest players) or `fill` (the fullest with room); the group's own when left out (`group.<name>.balance` in the hub's `hub.properties`, `least` unless its owner says).
+---@field data any What arrives with them, when `data` isn't given.
+---@field wait number? Seconds it may wait, when there's no instance with room yet (none is ready, all are full, the server is starting): the hub holds it, first come first served, tells whatever runs the servers that the group is wanted (its webhook), and sends them as soon as one has room. They stay where they are meanwhile. At most 600; it fails after that, saying why it waited.
+---@field on_wait fun(position: integer, status: string?)? Called while it waits, each time its place in the queue changes (1 is next), or with `status` when a service placing the group's players holds them (`position` 0). Without it, each player waiting who's on this server sees their place, or the status, on their action bar.
+
+--- How `nf.network.ban` and `mute` sanction. A key that isn't one of these is an error.
+---@class NetworkSanctionOptions
+---@field reason string? Why: shown to them, and kept with it.
+---@field expires integer? When it runs out, as Unix time in milliseconds (like `nf.server.unix_time()`); never when left out.
+
+--- What this server may do in the network, from `nf.network.server_role`.
+---@class NetworkRole
+---@field role "trusted"|"standard"|"isolated" Its credential's role: `trusted` (everything), `standard` (its own namespaces and what's shared with it, seeing everyone) or `isolated` (only what's shared with it, seeing only its own players).
+---@field trusted boolean Whether it may do anything: every channel and map, every player.
+---@field owns string[] The namespaces whose channels and maps it has whole: reading, writing, asking and answering.
+---@field shares NetworkShare[] What the network shares with it of channels and maps it doesn't own.
+---@field presence boolean Whether it sees players on other servers. Without, `players()` and the `network_player_*` events are only this server's: a player joins as they come here and quits as they go.
+---@field send_to string[]? Where it may send players, when it may not send them anywhere: server names, and `"back"` for wherever the player came from. A server that isn't trusted sends only players who are on it.
+
+--- A channel or map shared with this server, from `nf.network.server_role`.
+---@class NetworkShare
+---@field name string Its full name, `namespace:name`, or a pattern ending in `*` for every name starting so (`events:*`).
+---@field access ("read"|"write"|"request"|"answer")[] What it may do: `read` (hear its messages, keep a copy of the map), `write` (publish, write the map; reading comes with it), `request` (ask on it) and `answer` (be asked on it).
 
 --- A player online in the network.
 ---@class NetworkPlayer
 ---@field id string Their UUID, as a string: the same as `player:id()` on their server.
 ---@field name string Their name.
 ---@field server string? The server they're on; `nil` for a moment while the proxy is moving them.
+---@field proxy string? The proxy they came in through, when the network's hub runs on its own (with several proxies, which one); `nil` otherwise.
 
 --- What `channel:publish` takes. A key that isn't one of these is an error.
 ---@class NetworkPublishOptions
 ---@field server string? Only this server hears it (if it listens), by its name in the network; every server listening when left out.
+---@field group string? Only this group's instances hear it (those listening).
 
 --- What `map:set`, `add` and `insert` take. A key that isn't one of these is an error.
 ---@class NetworkMapWriteOptions
@@ -8054,6 +8272,11 @@ function Event:uncancel() end
 --- This server lost its connection to the network's hub.
 ---@class NetworkDisconnectEvent: Event
 ---@field detail string What happened, in words, for the log.
+
+--- This server went from one state of its life to the next.
+---@class NetworkStateEvent: Event
+---@field state "starting"|"ready"|"draining"|"stopping" Where it is now.
+---@field previous "starting"|"ready"|"draining"|"stopping" Where it was.
 
 --- Another server of the network connected or disconnected.
 ---@class NetworkServerEvent: Event
@@ -8224,6 +8447,34 @@ function Event:uncancel() end
 ---@class TextSize
 ---@field width number Its widest line: every character and the gap after it.
 ---@field height number Its lines, a quarter of a block each at scale 1.
+
+--- What `nf.test.network_server` takes, the first time it names a server. A key that isn't one of these is an error.
+---@class TestNetworkServerOptions
+---@field group string? The group it's an instance of, as `network.group` says on a server.
+---@field capacity integer? How many players it takes; any number when left out.
+---@field state "starting"|"ready"|"draining"|"stopping"|nil Where it is in its life as it joins; `ready` when left out.
+---@field accepting boolean? Whether it takes players; `true` when left out.
+
+--- What `nf.test.network_status` says of another server. A key that isn't one of these is an error.
+---@class TestNetworkStatus
+---@field state "starting"|"ready"|"draining"|"stopping"|nil Where it is in its life; as it was when left out.
+---@field accepting boolean? Whether it takes players; as it was when left out.
+
+--- This server's role in the test's network, for `nf.test.network_role`. A key that isn't one of these is an error.
+---@class TestNetworkRole
+---@field role "trusted"|"standard"|"isolated" The preset: what it may do unless the rest says more.
+---@field owns string[]? The namespaces whose channels and maps it has whole.
+---@field shares string[]? What's shared with it of others', as `hub.properties` spells it: `"lobby:return(request)"`, `"events:*(read)"`.
+---@field presence boolean? Whether it sees other servers' players; the preset's when left out.
+---@field send_to string[]? Where it may send players; the preset's when left out.
+---@field moderation boolean? Whether it may ban and mute across the network.
+
+--- A report the test's network has, from `nf.test.network_reports`.
+---@class TestNetworkReport
+---@field player string The reported player's name.
+---@field reason string Why.
+---@field details any What else it said, if anything.
+---@field by string? Who reported them, if a player did.
 
 --- A message another server of a test's network heard, from `nf.test.network_received`.
 ---@class TestNetworkMessage

@@ -185,12 +185,15 @@ pub fn plan(
     let proxy_dir = network.join("proxy");
     let secrets = setup::secrets(&proxy_dir)?;
     let hub_port = setup::free_port()?;
-    let main = Membership {
-        name: layout.name.clone(),
-        port: setup::free_port()?,
+    let mut credentials = Vec::new();
+    let main = membership(
+        &layout.name,
+        &layout.options,
+        project::inspect(root).ok().and_then(|it| it.namespace),
         hub_port,
-        secrets: secrets.clone(),
-    };
+        &secrets,
+        &mut credentials,
+    )?;
     let mut servers = vec![(main.name.clone(), main.port)];
     let mut members = Vec::new();
     // Every folder first, then trust: a server that isn't there is the first thing to fix.
@@ -216,12 +219,14 @@ pub fn plan(
             );
         }
         let opened = project::inspect(&project)?;
-        let membership = Membership {
-            name: server.name.clone(),
-            port: setup::free_port()?,
+        let membership = membership(
+            &server.name,
+            &server.options,
+            opened.namespace,
             hub_port,
-            secrets: secrets.clone(),
-        };
+            &secrets,
+            &mut credentials,
+        )?;
         servers.push((membership.name.clone(), membership.port));
         members.push(MemberPlan {
             name: server.name.clone(),
@@ -259,11 +264,44 @@ pub fn plan(
                     hub_port,
                     servers,
                     secrets,
+                    credentials,
                 }),
             },
         },
     );
     Ok(NetworkPlan { main, members })
+}
+
+/// Server [name]'s place in the network: a free port, its group and capacity
+/// from [options], and (for a role that isn't `trusted`) a credential of its
+/// own, owning [namespace], added to [credentials] for the hub.
+fn membership(
+    name: &str,
+    options: &layout::ServerOptions,
+    namespace: Option<String>,
+    hub_port: u16,
+    secrets: &setup::Secrets,
+    credentials: &mut Vec<setup::DevCredential>,
+) -> Result<Membership> {
+    options.validate(name)?;
+    let credential = match options.role.as_deref() {
+        Some(role) if options.credentialed() => {
+            let credential = setup::dev_credential(name, role, namespace, options.group.clone());
+            let pair = (credential.id.clone(), credential.secret.clone());
+            credentials.push(credential);
+            Some(pair)
+        }
+        _ => None,
+    };
+    Ok(Membership {
+        name: name.to_string(),
+        port: setup::free_port()?,
+        hub_port,
+        secrets: secrets.clone(),
+        group: options.group.clone(),
+        capacity: options.capacity,
+        credential,
+    })
 }
 
 /// What Start runs for a workspace's dev network: every server it names, and which one the editor
@@ -315,6 +353,7 @@ pub fn plan_workspace(
     ordered.sort_by_key(|s| s.name != network.arrival);
     let mut servers = Vec::new();
     let mut members = Vec::new();
+    let mut credentials = Vec::new();
     for server in &ordered {
         if !layout::is_server_name(&server.name) || server.name == layout::PROXY {
             bail!(
@@ -333,12 +372,14 @@ pub fn plan_workspace(
             )
         })?;
         let opened = project::inspect(&project)?;
-        let membership = Membership {
-            name: server.name.clone(),
-            port: setup::free_port()?,
+        let membership = membership(
+            &server.name,
+            &server.options,
+            opened.namespace,
             hub_port,
-            secrets: secrets.clone(),
-        };
+            &secrets,
+            &mut credentials,
+        )?;
         servers.push((membership.name.clone(), membership.port));
         members.push(MemberPlan {
             name: server.name.clone(),
@@ -380,6 +421,7 @@ pub fn plan_workspace(
                     hub_port,
                     servers,
                     secrets,
+                    credentials,
                 }),
             },
         },
@@ -934,6 +976,68 @@ mod tests {
             .collect()
     }
 
+    #[test]
+    fn a_server_with_a_role_joins_with_a_credential_owning_its_namespace() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dirs = AppDirs::in_one(tmp.path());
+        let tools = Arc::new(fake_tools(tmp.path(), &dirs));
+        let root = project(&tmp.path().join("main"), "Main");
+        let arena = project(&tmp.path().join("arena"), "Arena");
+        trust::set(&dirs.trust_file(), &arena, true).unwrap();
+        let options = layout::ServerOptions {
+            group: Some("arena".into()),
+            capacity: Some(16),
+            role: Some("isolated".into()),
+        };
+        let layout = NetworkLayout {
+            enabled: true,
+            name: "main".into(),
+            options: layout::ServerOptions {
+                group: Some("lobby".into()),
+                ..Default::default()
+            },
+            servers: vec![layout::NetworkServer {
+                name: "arena-1".into(),
+                project: "../arena".into(),
+                options,
+            }],
+        };
+        let planned = plan(
+            &dirs,
+            &tools,
+            &root,
+            "Main",
+            &layout,
+            &Settings::default(),
+            true,
+        )
+        .unwrap();
+        assert_eq!(planned.main.group.as_deref(), Some("lobby"));
+        assert_eq!(planned.main.credential, None, "trusted: the hub's secret");
+        let Role::Proxy(proxy) = &planned.members[0].config.role else {
+            panic!("the proxy first")
+        };
+        assert_eq!(proxy.credentials.len(), 1);
+        let credential = &proxy.credentials[0];
+        assert_eq!(
+            (
+                credential.id.as_str(),
+                credential.role.as_str(),
+                credential.owns.as_deref(),
+                credential.group.as_deref()
+            ),
+            ("dev-arena-1", "isolated", Some("arena"), Some("arena"))
+        );
+        let Role::Peer { membership, .. } = &planned.members[1].config.role else {
+            panic!("then the server")
+        };
+        assert_eq!(membership.capacity, Some(16));
+        assert_eq!(
+            membership.credential,
+            Some((credential.id.clone(), credential.secret.clone()))
+        );
+    }
+
     #[tokio::test]
     async fn runs_a_network_and_reloads_its_other_servers() {
         let tmp = tempfile::tempdir().unwrap();
@@ -944,9 +1048,11 @@ mod tests {
         let layout = NetworkLayout {
             enabled: true,
             name: "main".into(),
+            options: Default::default(),
             servers: vec![layout::NetworkServer {
                 name: "lobby".into(),
                 project: "../lobby".into(),
+                options: Default::default(),
             }],
         };
         let settings = Settings {
@@ -1071,9 +1177,16 @@ mod tests {
         let layout = NetworkLayout {
             enabled: true,
             name: "main".into(),
+            options: Default::default(),
             servers: vec![layout::NetworkServer {
                 name: "lobby".into(),
                 project: "../lobby".into(),
+                // A server of a group, with a credential of its own: the real hub has to take it.
+                options: layout::ServerOptions {
+                    group: Some("lobbies".into()),
+                    capacity: Some(20),
+                    role: Some("standard".into()),
+                },
             }],
         };
         let settings = Settings {
@@ -1141,7 +1254,10 @@ mod tests {
             network.command("proxy", "nfhub").await.unwrap();
             tokio::time::sleep(Duration::from_secs(1)).await;
             let said = output_of(&sink, "proxy").join("\n");
-            if said.contains("main: connected") && said.contains("lobby: connected") {
+            if said.contains("main: connected (shared secret)")
+                && said
+                    .contains("lobby: connected (dev-lobby: standard) in lobbies, 0 of 20 online")
+            {
                 break;
             }
             if std::time::Instant::now() > deadline {

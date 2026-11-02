@@ -71,7 +71,13 @@ data class ProjectManifest(
      * The commands that write the project's generated files (`node tools/items.mjs`), run in order from the project's
      * folder by `netherforge generate`, which then formats the project. Never by the server.
      */
-    val generate: List<String>? = null
+    val generate: List<String>? = null,
+    /**
+     * How the project is listed where it's published (`netherforge publish` puts it in the listing beside the bundle):
+     * a description, its authors, an icon and screenshots (the project's own PNG files), tags, and how many players it
+     * takes. Nothing a server reads.
+     */
+    val listing: ProjectListing? = null
 ) {
     /** Whether [id], a resource of [kind], is one this project exports. */
     fun exports(kind: KindSpec<*, *>, id: String): Boolean = exports?.get(kind.folder)?.contains(id) == true
@@ -241,3 +247,22 @@ object FormatVersion {
     /** What this build reads and writes. A project in any other version is refused, never migrated. */
     const val CURRENT = 1
 }
+
+/** How a project is listed: see [ProjectManifest.listing]. */
+@Serializable
+data class ProjectListing(
+    /** What it is, in a sentence or a few: at most 500 characters. */
+    val description: String? = null,
+    val authors: List<String>? = null,
+    /** A PNG in the project (`listing/icon.png`), square. */
+    val icon: String? = null,
+    /** PNGs in the project, in the order they're shown. */
+    val screenshots: List<String>? = null,
+    /** Lowercase words or words-with-dashes (`minigame`, `pvp`), at most 10. */
+    val tags: List<String>? = null,
+    /** How many players it takes: the fewest it plays with, and the most. */
+    val players: ListingPlayers? = null
+)
+
+@Serializable
+data class ListingPlayers(val min: Int? = null, val max: Int? = null)

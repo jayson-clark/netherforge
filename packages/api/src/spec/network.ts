@@ -14,12 +14,28 @@ const CHANNEL: Param = { name: 'name', type: 'string', doc: NAME_DOC, names: 'ch
 
 const MAP: Param = { name: 'name', type: 'string', doc: NAME_DOC, names: 'network_map' }
 
-/** A server's name, wherever a function takes one. */
-const SERVER: Param = {
-  name: 'server',
-  type: 'string',
-  doc: 'The server\'s name in the network, as the proxy names it (`"lobby"`); `nf.network.servers()` lists them.',
+/** Where `send_player` and `send_players` send players. */
+const TARGET: Param = {
+  name: 'target',
+  type: 'string|NetworkSendOptions',
+  doc: 'A server\'s name in the network, as the proxy names it (`"lobby"`; `nf.network.servers()` lists them), or a table naming a server or a group (`{ group = "arena" }`), when the hub picks the instance.',
   names: 'server',
+}
+
+/** Where a request goes. */
+const REQUEST_TARGET: Param = {
+  name: 'target',
+  type: 'string|NetworkTarget',
+  doc: 'A server\'s name in the network (`"lobby"`), or a table naming a server or a group (`{ group = "arena" }`): then one instance of the group that answers on the channel is asked, each in turn.',
+  names: 'server',
+}
+
+/** How a send's data is documented. */
+const SEND_DATA: Param = {
+  name: 'data',
+  type: 'any',
+  doc: `What arrives with them, as \`event.data\` there; \`target.data\` when left out. ${VALUES}`,
+  optional: true,
 }
 
 /** `nf.network`: the other servers of the network this server is part of. */
@@ -37,6 +53,67 @@ export const nfNetwork: LuaClass = {
       returns: [{ type: 'string?' }],
     },
     {
+      name: 'server_role',
+      doc: "What this server may do in the network, as the hub says: a server that joined with the network's shared secret is `trusted` and may do anything; one that joined with a credential of its own (`network.credential` in `config.yml`) has its credential's role, the namespaces whose channels and maps it owns, what the network shares with it of others', whether it sees players on other servers, and where it may send players. A call it may not make is an error at the script's line saying `network.forbidden` (a channel's or map's), or fails with `network.forbidden` in `err` (sending a player), and never reaches another server. `nil` until this server has connected.",
+      requires: 'network',
+      params: [],
+      returns: [{ type: 'NetworkRole?' }],
+      example:
+        'local role = nf.network.server_role()\nif role and not role.trusted then\n  log("this server is " .. role.role .. ", owning " .. table.concat(role.owns, ", "))\nend',
+    },
+    {
+      name: 'group',
+      doc: 'This server\'s group: the game or role it\'s one copy of (`network.group` in `config.yml`, `"arena"`), which other servers send players and requests to (`{ group = "arena" }`) and the hub picks an instance of. A server with no group is a group of one, named as the server is, so this is `server_name()` then. `nil` on a server that isn\'t part of a network.',
+      requires: 'network',
+      params: [],
+      returns: [{ type: 'string?' }],
+    },
+    {
+      name: 'set_accepting',
+      doc: "Says whether this server takes players now: one that doesn't (a match is running) is passed over when players are sent to its group, though they can still be sent to it by name. It's said to the hub at once, and again whenever this server reconnects. Every server takes players until it says otherwise.",
+      requires: 'network',
+      params: [{ name: 'accepting', type: 'boolean', doc: 'Whether it takes players.' }],
+      returns: [],
+      example: 'nf.on("match_started", function()\n  nf.network.set_accepting(false)\nend)',
+    },
+    {
+      name: 'state',
+      doc: "Where this server is in its life: `starting` until its project has loaded and its modules have started (and nothing holds it back: `hold_ready`), then `ready`; `draining` when it's asked to take no new players (`/nf drain`, the hub's admin API, `set_draining`), and `stopping` as `/nf shutdown` sends its players elsewhere. Only a `ready` server is sent players by its group; a `draining` or `stopping` one gets none, even by name. `network_state` says when it changes.",
+      requires: 'network',
+      params: [],
+      returns: [{ type: '"starting"|"ready"|"draining"|"stopping"' }],
+    },
+    {
+      name: 'hold_ready',
+      doc: 'Keeps this server `starting` (so its group sends it no players) until the hold is released: for a world to be made, a map loaded, a match set up. The server is `ready` once every hold is released, the first tick after. Holds go with the script that took them. Once a server is ready it stays so: a hold taken later does nothing.',
+      requires: 'network',
+      params: [],
+      returns: [{ type: 'NetworkHold' }],
+      example:
+        'local hold = nf.network.hold_ready()\nnf.worlds.copy("arena", "match", function(world)\n  hold:release()\nend)',
+    },
+    {
+      name: 'set_draining',
+      doc: "Drains this server (`true`): it takes no new players, even sent by name, while it finishes what it's doing; or (`false`) makes it `ready` again. As `/nf drain` does. `/nf shutdown` drains too, and can't be undone.",
+      requires: 'network',
+      params: [{ name: 'draining', type: 'boolean', doc: 'Whether to drain.' }],
+      returns: [],
+    },
+    {
+      name: 'is_draining',
+      doc: 'Whether this server is draining or stopping: taking no new players.',
+      requires: 'network',
+      params: [],
+      returns: [{ type: 'boolean' }],
+    },
+    {
+      name: 'is_accepting',
+      doc: 'Whether this server takes players now, as `set_accepting` last said.',
+      requires: 'network',
+      params: [],
+      returns: [{ type: 'boolean' }],
+    },
+    {
       name: 'is_connected',
       doc: "Whether this server is connected to its network's hub now. `network_connect` and `network_disconnect` say when that changes.",
       requires: 'network',
@@ -45,7 +122,7 @@ export const nfNetwork: LuaClass = {
     },
     {
       name: 'servers',
-      doc: "Every server of the network, as the proxy names them, with whether NetherForge on each is connected and how many players are on it. Empty while this server isn't connected.",
+      doc: "Every server of the network, as the proxy names them, with whether NetherForge on each is connected, how many players are on it, its group and its room. Empty while this server isn't connected. Players and room are as the hub last said, once a second at most.",
       requires: 'network',
       params: [],
       returns: [{ type: 'NetworkServer[]' }],
@@ -53,11 +130,28 @@ export const nfNetwork: LuaClass = {
         'for _, server in ipairs(nf.network.servers()) do\n  log(server.name, server.connected and "up" or "down", server.players .. " online")\nend',
     },
     {
-      name: 'players',
-      doc: "Everyone online in the network, on any server, this one included, as the proxy last said. Empty while this server isn't connected.",
+      name: 'groups',
+      doc: "Every group of the network, with its instances: each server with a group is an instance of it, and each server with none is a group of one. Empty while this server isn't connected.",
       requires: 'network',
       params: [],
+      returns: [{ type: 'NetworkGroup[]' }],
+      example:
+        'for _, group in ipairs(nf.network.groups()) do\n  log(group.name, group.players .. " playing on " .. #group.instances .. " servers")\nend',
+    },
+    {
+      name: 'players',
+      doc: "Everyone online in the network, on any server, this one included, as the proxy last said; or only those of one server or group. Empty while this server isn't connected. On a server that doesn't see other servers' players (`server_role().presence`), only its own.",
+      requires: 'network',
+      params: [
+        {
+          name: 'options',
+          type: 'NetworkPlayersOptions',
+          doc: "Only one server's or group's players.",
+          optional: true,
+        },
+      ],
       returns: [{ type: 'NetworkPlayer[]' }],
+      example: 'local playing = #nf.network.players({ group = "arena" })',
     },
     {
       name: 'find_player',
@@ -85,8 +179,118 @@ export const nfNetwork: LuaClass = {
       returns: [{ type: 'NetworkMap' }],
     },
     asyncFunction({
+      name: 'ban',
+      doc: "Bans a player from the whole network: the proxy turns them away before they reach any server, until it runs out or `unban`, and kicks them now when they're online. Kept by the network's hub, with the reason, who did it and when. Needs `moderation` declared, and a server whose credential may moderate (`moderation=true` on the hub; a trusted server may). It fails (`nil, err`) when this server isn't connected or may not moderate, or `expires` is past.",
+      requires: 'moderation',
+      params: [
+        {
+          name: 'player',
+          type: 'Player|string',
+          doc: 'Who: a player on this server, or anyone by name (online in the network) or UUID.',
+        },
+        {
+          name: 'options',
+          type: 'NetworkSanctionOptions',
+          doc: 'Why, and until when.',
+          optional: true,
+        },
+      ],
+      value: { name: 'done', type: 'boolean', doc: '`true` once the hub has it' },
+      example:
+        'local function ban_cheater(name)\n  nf.task(function()\n    local done, err = nf.network.ban(name, { reason = "Fly hacks", expires = nf.server.unix_time() + 7 * 86400000 })\n    if not done then\n      log("couldn\'t ban: " .. err)\n    end\n  end)\nend\n\nreturn ban_cheater',
+    }),
+    asyncFunction({
+      name: 'unban',
+      doc: "Lifts a player's network ban. It fails when they weren't banned, or as `ban` does.",
+      requires: 'moderation',
+      params: [{ name: 'player', type: 'Player|string', doc: 'Who, by name or UUID.' }],
+      value: { name: 'done', type: 'boolean', doc: '`true` once the hub has lifted it' },
+    }),
+    asyncFunction({
+      name: 'mute',
+      doc: "Mutes a player across the network: every server's NetherForge holds back their chat (they're told why), until it runs out or `unmute`. As `ban` for what it needs and when it fails.",
+      requires: 'moderation',
+      params: [
+        {
+          name: 'player',
+          type: 'Player|string',
+          doc: 'Who: a player on this server, or anyone by name or UUID.',
+        },
+        {
+          name: 'options',
+          type: 'NetworkSanctionOptions',
+          doc: 'Why, and until when.',
+          optional: true,
+        },
+      ],
+      value: { name: 'done', type: 'boolean', doc: '`true` once the hub has it' },
+    }),
+    asyncFunction({
+      name: 'unmute',
+      doc: "Lifts a player's network mute. It fails when they weren't muted, or as `ban` does.",
+      requires: 'moderation',
+      params: [{ name: 'player', type: 'Player|string', doc: 'Who, by name or UUID.' }],
+      value: { name: 'done', type: 'boolean', doc: '`true` once the hub has lifted it' },
+    }),
+    {
+      name: 'is_banned',
+      doc: "Whether a player is banned from the network now, as this server's copy of the hub's bans says.",
+      requires: 'network',
+      params: [
+        {
+          name: 'player',
+          type: 'Player|string',
+          doc: 'Who, by name (online in the network) or UUID.',
+        },
+      ],
+      returns: [{ type: 'boolean' }],
+    },
+    {
+      name: 'is_muted',
+      doc: 'Whether a player is muted across the network now.',
+      requires: 'network',
+      params: [
+        {
+          name: 'player',
+          type: 'Player|string',
+          doc: 'Who, by name (online in the network) or UUID.',
+        },
+      ],
+      returns: [{ type: 'boolean' }],
+    },
+    {
+      name: 'report',
+      doc: 'Reports a player to whoever moderates the network: the hub keeps it (`/nfhub reports`, the admin API) and tells its webhook. Goes at once, without waiting.',
+      requires: 'network',
+      params: [
+        {
+          name: 'player',
+          type: 'Player|string',
+          doc: 'Who is reported: a player on this server, or anyone by name or UUID.',
+        },
+        { name: 'reason', type: 'string', doc: 'Why, in a few words (at most 500 characters).' },
+        {
+          name: 'details',
+          type: 'any',
+          doc: `What else to say: where, what was said. ${VALUES}`,
+          optional: true,
+        },
+        {
+          name: 'by',
+          type: 'Player?',
+          doc: 'Who reports them, when a player does.',
+          optional: true,
+        },
+      ],
+      returns: [
+        { type: 'boolean', doc: "`false` when it didn't go: this server isn't connected." },
+      ],
+      example:
+        'local function report(player, reason)\n  nf.network.report(player, reason, { server = nf.network.server_name() })\nend\n\nreturn report',
+    },
+    asyncFunction({
       name: 'send_player',
-      doc: "Sends a player to another server of the network, through the proxy, with `data` for that server's scripts: its `player_arrive` handlers hear it once they've joined there. The player may be on any server, this one or another. It fails (`nil, err`) when this server isn't connected, the player isn't online, the proxy has no such server, they're already there, or the proxy couldn't move them (the server is down or full, a proxy plugin cancelled it).",
+      doc: "Sends a player to another server of the network, through the proxy, with `data` for that server's scripts: its `player_arrive` handlers hear it once they've joined there. The player may be on any server, this one or another (a server whose credential isn't trusted sends only its own). Sent to a group, the hub picks the instance as the group's balancing says (`least`: the one with the fewest players that has room; `fill`: the fullest that still has room) or `target.balance`, passing over instances that don't take players now (`set_accepting`) or are full (`network.capacity`). It fails (`nil, err`) when this server isn't connected, the player isn't online, there's no such server or group, no instance has room, they're already there, or the proxy couldn't move them (the server is down, a proxy plugin cancelled it).",
       requires: 'network',
       params: [
         {
@@ -94,17 +298,29 @@ export const nfNetwork: LuaClass = {
           type: 'Player|string',
           doc: 'Who: a player on this server, or anyone online in the network by name or UUID.',
         },
-        SERVER,
-        {
-          name: 'data',
-          type: 'any',
-          doc: `What arrives with them, as \`event.data\` there. ${VALUES}`,
-          optional: true,
-        },
+        TARGET,
+        SEND_DATA,
       ],
-      value: { name: 'moved', type: 'boolean', doc: '`true` once they are on their way there' },
+      value: { name: 'server', type: 'string', doc: 'the server they are on their way to' },
       example:
-        'nf.task(function()\n  local moved, err = nf.network.send_player(player, "arena", { team = "red" })\n  if not moved then\n    player:send_message("<red>Can\'t go: " .. err)\n  end\nend)',
+        'nf.task(function()\n  local server, err = nf.network.send_player(player, { group = "arena", data = { team = "red" } })\n  if not server then\n    player:send_message("<red>Can\'t go: " .. err)\n  end\nend)',
+    }),
+    asyncFunction({
+      name: 'send_players',
+      doc: "Sends several players together, as `send_player` sends one: to one server, or to one instance of a group with room for all of them, so a party lands together. Players already there stay. It fails as `send_player` does; when the proxy couldn't move some of them, `err` names each with why (the others are on their way).",
+      requires: 'network',
+      params: [
+        {
+          name: 'players',
+          type: '(Player|string)[]',
+          doc: 'Who: players on this server, or anyone online in the network by name or UUID.',
+        },
+        TARGET,
+        SEND_DATA,
+      ],
+      value: { name: 'server', type: 'string', doc: 'the server they are on their way to' },
+      example:
+        'local function start_match(players)\n  nf.task(function()\n    local server, err = nf.network.send_players(players, { group = "arena", data = { mode = "duel" } })\n    if not server then\n      for _, player in ipairs(players) do\n        player:send_message("<red>No room: " .. err)\n      end\n    end\n  end)\nend\n\nreturn start_match',
     }),
   ],
 }
@@ -142,13 +358,13 @@ export const networkChannelClass: LuaClass = {
     },
     {
       name: 'publish',
-      doc: `Publishes \`value\` on the channel: every server listening hears it as a \`message\` event, this one included, or only \`options.server\`. It goes at once, through the hub; nothing waits for it. ${VALUES}`,
+      doc: `Publishes \`value\` on the channel: every server listening hears it as a \`message\` event, this one included, or only \`options.server\`, or only the instances of \`options.group\`. It goes at once, through the hub; nothing waits for it. ${VALUES}`,
       params: [
         { name: 'value', type: 'any', doc: 'What to send.' },
         {
           name: 'options',
           type: 'NetworkPublishOptions',
-          doc: 'Which server alone, if not every one.',
+          doc: 'Which server or group alone, if not every one.',
           optional: true,
         },
       ],
@@ -162,9 +378,9 @@ export const networkChannelClass: LuaClass = {
     },
     asyncFunction({
       name: 'request',
-      doc: `Asks \`server\` on this channel: its \`request\` handlers answer, and the answer comes back here. It fails (\`nil, err\`) when this server isn't connected, that server isn't, nothing there handles requests on the channel, a handler there errored, or no answer came within \`network.request-timeout-seconds\`. A handler that answers \`nil\` gives \`nil\` with no \`err\`. ${VALUES}`,
+      doc: `Asks a server on this channel, or one instance of a group: its \`request\` handlers answer, and the answer comes back here. It fails (\`nil, err\`) when this server isn't connected, that server isn't (or no instance of the group is), nothing there handles requests on the channel, a handler there errored, or no answer came within \`network.request-timeout-seconds\`. A handler that answers \`nil\` gives \`nil\` with no \`err\`. ${VALUES}`,
       params: [
-        SERVER,
+        REQUEST_TARGET,
         {
           name: 'data',
           type: 'any',
@@ -184,6 +400,29 @@ export const networkChannelClass: LuaClass = {
       'channel',
       'local alerts = nf.network.channel("alerts")\nalerts:on("message", function(event)\n  nf.server.broadcast("<red>" .. event.value.text)\nend)',
     ),
+  ],
+}
+
+/** A hold on this server's being ready, from `nf.network.hold_ready`. */
+export const networkHoldClass: LuaClass = {
+  name: 'NetworkHold',
+  doc: 'A hold on this server being ready, from `nf.network.hold_ready`: while any is held, the server stays `starting`. It goes with the script that took it.',
+  methods: true,
+  handle: { key: [{ name: 'id', type: 'integer' }] },
+  fields: [],
+  functions: [
+    {
+      name: 'release',
+      doc: 'Lets go of the hold. The server is ready the tick after its last hold goes. Releasing it again does nothing.',
+      params: [],
+      returns: [],
+    },
+    {
+      name: 'is_released',
+      doc: 'Whether it has been let go of.',
+      params: [],
+      returns: [{ type: 'boolean' }],
+    },
   ],
 }
 
@@ -329,7 +568,156 @@ export const networkShapes: LuaClass[] = [
       doc: 'Whether NetherForge on it is connected to the hub now (a server without NetherForge never is).',
     },
     { name: 'players', type: 'integer', doc: 'How many players are on it.' },
+    {
+      name: 'group',
+      type: 'string',
+      doc: 'Its group (`network.group` in its `config.yml`), or its own name when it has none.',
+    },
+    {
+      name: 'capacity',
+      type: 'integer?',
+      doc: 'How many players it takes (`network.capacity`); `nil` for any number.',
+    },
+    {
+      name: 'accepting',
+      type: 'boolean',
+      doc: 'Whether it takes players now (`set_accepting` there).',
+    },
+    {
+      name: 'state',
+      type: '"starting"|"ready"|"draining"|"stopping"|nil',
+      doc: "Where it is in its life (`nf.network.state()` there); `nil` when it isn't connected.",
+    },
+    {
+      name: 'idle',
+      type: 'boolean',
+      doc: 'Whether it has been empty longer than its `network.idle-after-seconds`.',
+    },
+    {
+      name: 'tick_milliseconds',
+      type: 'number?',
+      doc: 'Its average tick time lately, in milliseconds (50 is a full tick at 20 a second), as it last said (every few seconds); `nil` before it has.',
+    },
   ]),
+  shape('NetworkGroup', 'A group of the network and its instances, from `nf.network.groups`.', [
+    { name: 'name', type: 'string', doc: 'Its name.' },
+    { name: 'players', type: 'integer', doc: 'How many players are on its instances together.' },
+    {
+      name: 'capacity',
+      type: 'integer?',
+      doc: 'How many its instances take together; `nil` when one of them takes any number.',
+    },
+    { name: 'instances', type: 'NetworkServer[]', doc: 'Its servers, by name.' },
+  ]),
+  shape(
+    'NetworkPlayersOptions',
+    "What `nf.network.players` takes. A key that isn't one of these is an error.",
+    [
+      { name: 'server', type: 'string?', doc: "Only this server's players." },
+      { name: 'group', type: 'string?', doc: "Only the players on this group's instances." },
+    ],
+  ),
+  shape(
+    'NetworkTarget',
+    "A server, a group or an admin client, where a request goes. A key that isn't one of these is an error; it names one of them.",
+    [
+      { name: 'server', type: 'string?', doc: 'A server, by its name in the network.' },
+      { name: 'group', type: 'string?', doc: 'A group: one of its instances is asked.' },
+      {
+        name: 'admin',
+        type: 'string?',
+        doc: "A service connected to the hub's admin API, by its client id (a matchmaker): it answers in place of a server.",
+      },
+    ],
+  ),
+  shape(
+    'NetworkSendOptions',
+    "Where `send_player` and `send_players` send players. A key that isn't one of these is an error; it names a server or a group.",
+    [
+      { name: 'server', type: 'string?', doc: 'A server, by its name in the network.' },
+      {
+        name: 'group',
+        type: 'string?',
+        doc: 'A group: the hub picks the instance with room.',
+      },
+      {
+        name: 'balance',
+        type: '"least"|"fill"|nil',
+        doc: "How the hub picks the group's instance for this send: `least` (the fewest players) or `fill` (the fullest with room); the group's own when left out (`group.<name>.balance` in the hub's `hub.properties`, `least` unless its owner says).",
+      },
+      { name: 'data', type: 'any', doc: "What arrives with them, when `data` isn't given." },
+      {
+        name: 'wait',
+        type: 'number?',
+        doc: "Seconds it may wait, when there's no instance with room yet (none is ready, all are full, the server is starting): the hub holds it, first come first served, tells whatever runs the servers that the group is wanted (its webhook), and sends them as soon as one has room. They stay where they are meanwhile. At most 600; it fails after that, saying why it waited.",
+      },
+      {
+        name: 'on_wait',
+        type: 'fun(position: integer, status: string?)?',
+        doc: "Called while it waits, each time its place in the queue changes (1 is next), or with `status` when a service placing the group's players holds them (`position` 0). Without it, each player waiting who's on this server sees their place, or the status, on their action bar.",
+      },
+    ],
+  ),
+  shape(
+    'NetworkSanctionOptions',
+    "How `nf.network.ban` and `mute` sanction. A key that isn't one of these is an error.",
+    [
+      { name: 'reason', type: 'string?', doc: 'Why: shown to them, and kept with it.' },
+      {
+        name: 'expires',
+        type: 'integer?',
+        doc: 'When it runs out, as Unix time in milliseconds (like `nf.server.unix_time()`); never when left out.',
+      },
+    ],
+  ),
+  shape('NetworkRole', 'What this server may do in the network, from `nf.network.server_role`.', [
+    {
+      name: 'role',
+      type: '"trusted"|"standard"|"isolated"',
+      doc: "Its credential's role: `trusted` (everything), `standard` (its own namespaces and what's shared with it, seeing everyone) or `isolated` (only what's shared with it, seeing only its own players).",
+    },
+    {
+      name: 'trusted',
+      type: 'boolean',
+      doc: 'Whether it may do anything: every channel and map, every player.',
+    },
+    {
+      name: 'owns',
+      type: 'string[]',
+      doc: 'The namespaces whose channels and maps it has whole: reading, writing, asking and answering.',
+    },
+    {
+      name: 'shares',
+      type: 'NetworkShare[]',
+      doc: "What the network shares with it of channels and maps it doesn't own.",
+    },
+    {
+      name: 'presence',
+      type: 'boolean',
+      doc: "Whether it sees players on other servers. Without, `players()` and the `network_player_*` events are only this server's: a player joins as they come here and quits as they go.",
+    },
+    {
+      name: 'send_to',
+      type: 'string[]?',
+      doc: 'Where it may send players, when it may not send them anywhere: server names, and `"back"` for wherever the player came from. A server that isn\'t trusted sends only players who are on it.',
+    },
+  ]),
+  shape(
+    'NetworkShare',
+    'A channel or map shared with this server, from `nf.network.server_role`.',
+    [
+      {
+        name: 'name',
+        type: 'string',
+        doc: 'Its full name, `namespace:name`, or a pattern ending in `*` for every name starting so (`events:*`).',
+      },
+      {
+        name: 'access',
+        type: '("read"|"write"|"request"|"answer")[]',
+        doc: 'What it may do: `read` (hear its messages, keep a copy of the map), `write` (publish, write the map; reading comes with it), `request` (ask on it) and `answer` (be asked on it).',
+      },
+    ],
+  ),
   shape('NetworkPlayer', 'A player online in the network.', [
     {
       name: 'id',
@@ -342,6 +730,11 @@ export const networkShapes: LuaClass[] = [
       type: 'string?',
       doc: "The server they're on; `nil` for a moment while the proxy is moving them.",
     },
+    {
+      name: 'proxy',
+      type: 'string?',
+      doc: "The proxy they came in through, when the network's hub runs on its own (with several proxies, which one); `nil` otherwise.",
+    },
   ]),
   shape(
     'NetworkPublishOptions',
@@ -351,6 +744,11 @@ export const networkShapes: LuaClass[] = [
         name: 'server',
         type: 'string?',
         doc: 'Only this server hears it (if it listens), by its name in the network; every server listening when left out.',
+      },
+      {
+        name: 'group',
+        type: 'string?',
+        doc: "Only this group's instances hear it (those listening).",
       },
     ],
   ),

@@ -1,0 +1,37 @@
+[
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"PvP\" isn't a tag: lowercase letters, digits and -, at most 32",
+    "path": "$.listing.tags[0]",
+    "code": "project.listing"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"../outside.png\" isn't a PNG's path in the project (listing/icon.png)",
+    "path": "$.listing.screenshots[0]",
+    "code": "project.listing"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "players.max is 2, less than min",
+    "path": "$.listing.players.max",
+    "code": "project.listing"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "There's no listing/icon.png in the project",
+    "path": "$.listing.icon",
+    "code": "project.listing"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "There's no ../outside.png in the project",
+    "path": "$.listing.screenshots[0]",
+    "code": "project.listing"
+  }
+]

@@ -1,6 +1,7 @@
 package dev.netherforge.plugin.network
 
 import dev.netherforge.network.Auth
+import dev.netherforge.network.Grants
 import dev.netherforge.network.Hub
 import dev.netherforge.network.HubClient
 import dev.netherforge.network.HubFrame
@@ -8,10 +9,12 @@ import dev.netherforge.network.HubLink
 import dev.netherforge.network.HubListener
 import dev.netherforge.network.HubLog
 import dev.netherforge.network.HubProxy
+import dev.netherforge.network.Lifecycle
 import dev.netherforge.network.LocalLink
 import dev.netherforge.network.NetworkLimits
 import dev.netherforge.network.PlayerState
 import dev.netherforge.network.ServerFrame
+import dev.netherforge.network.ServerState
 import kotlinx.serialization.json.JsonElement
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -53,12 +56,16 @@ class NetworkLink(
         else -> Mode.OFF
     }
 
-    /** This server's name in the network, or null when it isn't in one. */
-    val name: String? = when (mode) {
+    /**
+     * This server's name in the network, or null when it isn't in one. A server named `auto` (registering itself) has
+     * the name the hub gave it from its first welcome on.
+     */
+    var name: String? = when (mode) {
         Mode.REMOTE -> config.serverName
         Mode.LOCAL -> alone
         Mode.OFF -> null
     }
+        private set
 
     /** What came in, for the main thread. */
     sealed interface Inbound {
@@ -91,8 +98,140 @@ class NetworkLink(
     var connected = false
         private set
     val players = LinkedHashMap<String, PlayerState>()
-    val servers = LinkedHashMap<String, Boolean>()
+    val servers = LinkedHashMap<String, ServerState>()
+
+    /** Whether this server takes players now (`nf.network.set_accepting`): said to the hub, and again on each welcome. */
+    var accepting = true
+        private set
+
+    /**
+     * Where this server is in its life: starting until its project has run a tick with nothing holding it back
+     * ([ready]), then ready, then draining or stopping. Read by the link's own thread for the hello.
+     */
+    @Volatile
+    var state: Lifecycle = if (alone == TEST_NETWORK) Lifecycle.READY else Lifecycle.STARTING
+        private set
+
+    /** Whether it has been empty longer than `network.idle-after-seconds`, and how long it took to be ready. */
+    var idle = false
+        private set
+    var startupMillis: Long? = null
+        private set
+
+    /** `/nf shutdown` under way: whether it waits for the server to empty, until [deadline] (a tick), and when it sent its players away. */
+    class Shutdown(val afterEmpty: Boolean, val deadline: Long) {
+        var stoppingSince: Long? = null
+    }
+
+    var shutdown: Shutdown? = null
+
+    /** Ready, [startupMillis] after the server's process started; only once. */
+    fun ready(startupMillis: Long) {
+        if (state != Lifecycle.STARTING) return
+        state = Lifecycle.READY
+        this.startupMillis = startupMillis
+        status()
+    }
+
+    /** Draining ([draining]) or ready again; a server shutting down stays as it is. */
+    fun setDraining(draining: Boolean) {
+        if (shutdown != null) return
+        state = when {
+            draining && (state == Lifecycle.READY || state == Lifecycle.STARTING) -> Lifecycle.DRAINING
+            !draining && state == Lifecycle.DRAINING -> Lifecycle.READY
+            else -> return
+        }
+        status()
+    }
+
+    /** Begins `/nf shutdown`: draining now, then stopping. */
+    fun beginShutdown(plan: Shutdown) {
+        shutdown = plan
+        if (state != Lifecycle.STOPPING) state = Lifecycle.DRAINING
+        status()
+    }
+
+    /** Stopping: the hub sends every player here to the group's fallback. */
+    fun stopping(tick: Long) {
+        state = Lifecycle.STOPPING
+        shutdown?.stoppingSince = tick
+        status()
+        send(ServerFrame.Evacuate)
+    }
+
+    fun setIdle(idle: Boolean) {
+        if (this.idle == idle) return
+        this.idle = idle
+        status()
+    }
+
+    /** The server's tick time as last said to the hub. */
+    private var tickMillis: Double? = null
+
+    /** Every few seconds: the server's average tick time to the hub, for `groups()` and the hub's metrics. */
+    fun reportTick(tick: Long, millis: Double) {
+        if (tick % TICK_REPORT_TICKS != 0L || !connected) return
+        tickMillis = millis
+        status()
+    }
+
+    /** Says to the hub what this server is now. */
+    private fun status() {
+        link?.send(ServerFrame.Status(accepting, state, idle, startupMillis, tickMillis))
+    }
+
+    /** This server's group: `network.group`, or its own name (a group of one). */
+    val group: String? get() = (if (mode == Mode.REMOTE) config.group else null) ?: name
+
+    /**
+     * Each server's players: counted from who's online where when this server sees everyone (at once, as the proxy
+     * says), else as the hub last said (once a second at most).
+     */
+    fun counts(): Map<String, Int> = if (grants.presence) {
+        players.values.mapNotNull { it.server }.groupingBy { it }.eachCount()
+    } else {
+        servers.values.associate { it.name to it.players }
+    }
+
+    fun setAccepting(accepting: Boolean) {
+        if (this.accepting == accepting) return
+        this.accepting = accepting
+        status()
+    }
     var maxValueBytes = NetworkLimits.DEFAULT_MAX_VALUE_BYTES
+        private set
+
+    /** The hub's first welcome, for a server that waits for it before its project starts ([awaitWelcome]). */
+    private val firstWelcome = java.util.concurrent.CompletableFuture<HubFrame.Welcome>()
+
+    /**
+     * Waits up to [seconds] for the hub's first welcome, on the main thread as the server starts, and takes what it says
+     * of this server (its grants, the network's policy) at once: the project then starts under it. False when it didn't
+     * come in time.
+     */
+    fun awaitWelcome(seconds: Int): Boolean {
+        if (mode != Mode.REMOTE || seconds <= 0) return connected
+        val welcome = try {
+            firstWelcome.get(seconds.toLong(), java.util.concurrent.TimeUnit.SECONDS)
+        } catch (_: java.util.concurrent.TimeoutException) {
+            return false
+        }
+        // Its Connected is drained later as ever (saying it again changes nothing).
+        welcomed(welcome)
+        return true
+    }
+
+    /** Whether the proxy keeps players' resource packs as they switch servers, as the welcome said. */
+    var keepsPacks = false
+        private set
+
+    /** The policy the network's hub sends for this server's role (its welcome's), as JSON; null for none. */
+    @Volatile
+    var hubPolicy: String? = null
+        private set
+
+    /** What the hub lets this server do, as its welcome said; trusted until it has said. */
+    var grants: Grants = Grants.TRUSTED
         private set
     val arrivals = HashMap<String, Arrival>()
 
@@ -105,6 +244,7 @@ class NetworkLink(
             // A local link connects as it starts, on the main thread: the network is there before the first tick, whose
             // drain raises `network_connect`.
             if (mode == Mode.LOCAL) welcomed(welcome)
+            firstWelcome.complete(welcome)
             queue(Inbound.Connected(welcome))
         }
 
@@ -142,8 +282,20 @@ class NetworkLink(
         when (mode) {
             Mode.OFF -> if (config.enabled) log("NetherForge isn't joining its network: ${config.problem()}")
             Mode.REMOTE -> {
-                log("Joining the network as ${config.serverName} through its hub at ${config.host}:${config.port}")
-                link = HubClient(config.host, config.port, config.serverName!!, config.secret!!, listener).also { it.start() }
+                val how = config.credential?.let { " with the credential $it" }.orEmpty()
+                log("Joining the network as ${config.serverName} through its hub at ${config.host}:${config.port}$how")
+                link = HubClient(
+                    config.host,
+                    config.port,
+                    config.serverName!!,
+                    config.secret!!,
+                    listener,
+                    credential = config.credential,
+                    group = config.group,
+                    capacity = config.capacity,
+                    register = config.register,
+                    state = { state }
+                ).also { it.start() }
             }
             Mode.LOCAL -> {
                 val proxy = LocalProxy(alone!!)
@@ -151,12 +303,14 @@ class NetworkLink(
                 proxy.hub = hub
                 this.proxy = proxy
                 this.hub = hub
-                link = LocalLink(hub, alone, secret, listener).also { it.start() }
+                link = LocalLink(hub, alone, secret, listener, state = { state }).also { it.start() }
             }
         }
     }
 
     fun stop() {
+        // A clean shutdown: a server that added itself to the proxy comes off it at once.
+        if (connected) link?.leave()
         link?.stop()
         link = null
         hub?.close()
@@ -182,8 +336,9 @@ class NetworkLink(
             if (mode == Mode.REMOTE) room.release()
             when (item) {
                 is Inbound.Connected -> {
+                    // In order with what came before it (a local network joined again under a role: its disconnect first).
+                    welcomed(item.welcome)
                     if (mode == Mode.REMOTE) {
-                        welcomed(item.welcome)
                         info("Joined the network as ${item.welcome.server}: ${item.welcome.servers.count { it.linked }} servers connected")
                     }
                 }
@@ -207,6 +362,15 @@ class NetworkLink(
                         players.remove(frame.id)?.let { out += Inbound.Left(it) }
                         continue
                     }
+                    // A server's link coming or going is an event; the rest of what changes of servers is only state.
+                    if (frame is HubFrame.Servers || frame is HubFrame.PlayerPack) {
+                        apply(frame, tick)
+                        continue
+                    }
+                    if (frame is HubFrame.Server && servers[frame.server.name]?.linked == frame.server.linked) {
+                        apply(frame, tick)
+                        continue
+                    }
                     apply(frame, tick)
                 }
                 is Inbound.Left -> Unit
@@ -219,19 +383,27 @@ class NetworkLink(
     /** The network as [welcome] says it is: connected, with everyone and every server in it. */
     private fun welcomed(welcome: HubFrame.Welcome) {
         connected = true
+        name = welcome.server
         lastFailure = null
         maxValueBytes = welcome.maxValueBytes
+        grants = welcome.grants
+        hubPolicy = welcome.policy
+        keepsPacks = welcome.keepsPacks
         players.clear()
         for (player in welcome.players) players[player.id] = player
         servers.clear()
-        for (server in welcome.servers) servers[server.name] = server.linked
+        for (server in welcome.servers) servers[server.name] = server
+        // The hello said the state; the rest of what it is, again.
+        status()
     }
 
     private fun apply(frame: HubFrame, tick: Long) {
         when (frame) {
             is HubFrame.PlayerJoined -> players[frame.player.id] = frame.player
             is HubFrame.PlayerMoved -> players[frame.id]?.let { players[frame.id] = it.copy(server = frame.server) }
-            is HubFrame.Server -> servers[frame.server.name] = frame.server.linked
+            is HubFrame.Server -> servers[frame.server.name] = frame.server
+            is HubFrame.Servers -> for (server in frame.servers) servers[server.name] = server
+            is HubFrame.PlayerPack -> players[frame.id]?.let { players[frame.id] = it.copy(pack = frame.pack) }
             is HubFrame.Arriving -> arrivals[frame.player] = Arrival(frame.from, frame.data, tick)
             is HubFrame.ArrivalCancelled -> arrivals.remove(frame.player)
             else -> Unit
@@ -255,18 +427,42 @@ class NetworkLink(
 
     private val peers = LinkedHashMap<String, TestPeer>()
 
-    /** The test's server [name], added to the network the first time it's named. Only in a local network. */
-    fun peer(name: String): TestPeer {
+    /**
+     * The test's server [name], added to the network the first time it's named (an instance of [group] taking
+     * [capacity] players, then). Only in a local network.
+     */
+    fun peer(
+        name: String,
+        group: String? = null,
+        capacity: Int? = null,
+        state: Lifecycle = Lifecycle.READY,
+        accepting: Boolean = true
+    ): TestPeer {
         val hub = hub ?: error("only a local network has the test's servers")
         peers[name]?.let { return it }
         proxy!!.peers += name
-        val peer = TestPeer(name, hub)
+        val peer = TestPeer(name, hub, group, capacity, state, accepting)
         peers[name] = peer
         peer.start()
         return peer
     }
 
     fun peers(): Collection<TestPeer> = peers.values
+
+    /**
+     * This server joins the local network again with a credential of [grants] (a test's `nf.test.network_role`): the
+     * hub holds it to them from then on. Only in a local network.
+     */
+    fun joinAs(grants: Grants) {
+        val hub = hub ?: error("only a local network can change this server's role")
+        val roleSecret = Auth.newSecret()
+        hub.setCredentials(listOf(dev.netherforge.network.Credential(TEST_CREDENTIAL, roleSecret, grants)))
+        link?.stop()
+        link = LocalLink(hub, alone!!, roleSecret, listener, TEST_CREDENTIAL, state = { state }).also { it.start() }
+    }
+
+    /** What scripts reported in a local network. */
+    fun reports(): List<dev.netherforge.network.Report> = hub?.reports()?.reversed().orEmpty()
 
     /** A player joins (or moves to) [server] of a local network, as the proxy says it. */
     fun place(id: String, player: String, server: String) {
@@ -278,8 +474,22 @@ class NetworkLink(
     }
 
     /** Another server of a test's network, played by the test: what it hears is kept, requests to it queued. */
-    inner class TestPeer internal constructor(val name: String, hub: Hub) : HubListener {
-        private val link = LocalLink(hub, name, secret, this)
+    inner class TestPeer internal constructor(
+        val name: String,
+        hub: Hub,
+        group: String?,
+        capacity: Int?,
+        private var lifecycle: Lifecycle,
+        private var accepting: Boolean
+    ) : HubListener {
+        private val link = LocalLink(hub, name, secret, this, group = group, capacity = capacity, state = { lifecycle })
+
+        /** It says where it is in its life and whether it takes players, as `nf.test.network_status` has it. */
+        fun status(state: Lifecycle?, accepting: Boolean?) {
+            state?.let { lifecycle = it }
+            accepting?.let { this.accepting = it }
+            link.send(ServerFrame.Status(this.accepting, lifecycle))
+        }
         val received = ArrayList<HubFrame.Message>()
         val requests = ArrayDeque<HubFrame.Requested>()
 
@@ -287,7 +497,10 @@ class NetworkLink(
         val replies = HashMap<Long, HubFrame.Reply>()
         private val channels = LinkedHashSet<String>()
 
-        internal fun start() = link.start()
+        internal fun start() {
+            link.start()
+            if (!accepting) link.send(ServerFrame.Status(false, lifecycle))
+        }
 
         /** Listens to [channel] from now on. */
         fun listen(channel: String) {
@@ -366,7 +579,15 @@ class NetworkLink(
         override fun warn(message: String) = Unit
     }
 
-    private companion object {
-        const val FAILURE_EVERY_NANOS = 5 * 60 * 1_000_000_000L
+    companion object {
+        /** A script test run's network: its server is ready from the start, since a test runs before any tick. */
+        const val TEST_NETWORK = "test"
+
+        private const val TICK_REPORT_TICKS = 100L
+
+        /** The credential `nf.test.network_role` joins with. */
+        private const val TEST_CREDENTIAL = "test-role"
+
+        private const val FAILURE_EVERY_NANOS = 5 * 60 * 1_000_000_000L
     }
 }

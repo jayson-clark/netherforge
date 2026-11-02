@@ -18,6 +18,7 @@ import { cx } from '@/ui/cx'
 import { Icon } from '@/ui/Icon'
 import { Empty } from '@/ui/text'
 import styles from './Network.module.css'
+import { ServerOptionsFields } from './ServerOptions'
 import { ServerStatus, StatusDot } from './ServerStatus'
 import { WorkspaceNetworkPanel } from './WorkspaceNetwork'
 
@@ -148,6 +149,13 @@ function ProjectNetworkPanel() {
           <p className={styles.meta}>
             {layout.enabled ? 'Players arrive here' : 'Runs alone while the network is off'}
           </p>
+          {layout.enabled && (
+            <ServerOptionsFields
+              server={layout.name}
+              options={layout.options}
+              onChange={(options) => save({ ...layout, options })}
+            />
+          )}
           <ServerStatus phase={own.phase} connected={own.bridgeConnected} />
         </li>
         {layout.servers.map((server, index) => (
@@ -242,6 +250,11 @@ function ServerCard({
           onClick={onBrowse}
         />
       </div>
+      <ServerOptionsFields
+        server={server.name}
+        options={server.options}
+        onChange={(options) => onChange({ options })}
+      />
       {check?.problem ? (
         <p className={styles.problem}>
           <Icon name="warning" /> {check.problem}
@@ -303,11 +316,13 @@ export function CommitInput({
   value,
   onCommit,
   className,
+  placeholder,
 }: {
   label: string
   value: string
   onCommit: (value: string) => void
   className?: string
+  placeholder?: string
 }) {
   const [text, setText] = useState(value)
   const [shown, setShown] = useState(value)
@@ -322,6 +337,7 @@ export function CommitInput({
     <input
       className={className}
       aria-label={label}
+      placeholder={placeholder}
       value={text}
       spellCheck={false}
       data-commit={text === value ? 'clean' : 'draft'}

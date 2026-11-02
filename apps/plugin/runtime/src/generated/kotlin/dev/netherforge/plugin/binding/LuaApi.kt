@@ -88,6 +88,7 @@ interface LuaApi {
     val wasmInstance: WasmInstanceApi
     val wasmProcess: WasmProcessApi
     val networkChannel: NetworkChannelApi
+    val networkHold: NetworkHoldApi
     val networkMap: NetworkMapApi
     val cutscene: CutsceneApi
     val screen: ScreenApi
@@ -325,6 +326,22 @@ interface NfWorldsApi {
      * outside a task, it's an error. When it fails, `world` is `nil` and `err` says why.
      */
     fun copy(caller: Caller, map: String, name: String): CompletionStage<LuaHandle.World>
+
+    /**
+     * Makes a new world from a world's files a tool put on the server (one player's island, fetched from
+     * storage): the folder is inside the server owner's import root (`worlds.import-root` in
+     * `config.yml`), laid out as a map is. Its files are copied, then the server loads the copy as a world
+     * named `name`, the project's from then on (as for `nf.worlds.copy`), and `world_load` is heard: set
+     * its game rules and spawn limits there, or on the world this gives. With `options.terrain`, chunks it
+     * doesn't have yet are made by that project terrain (a void around an island). Importing off on the
+     * server, a folder outside the root or not there, a name that isn't an id or that a world already has,
+     * or the server holding `worlds.max-loaded` worlds already, is an error at once; a copy that can't be
+     * made fails. It works off the main thread, so its world arrives later: give `callback`, which is
+     * called with `world, err` once it's done, or call it inside a task (`nf.task`) without one, and it
+     * waits and returns `world, err`. Without a callback outside a task, it's an error. When it fails,
+     * `world` is `nil` and `err` says why.
+     */
+    fun import(caller: Caller, folder: String, name: String, options: WorldImportOptions?): CompletionStage<LuaHandle.World>
 
     /** The server's main world: where things go when nothing says which. */
     fun default(caller: Caller): LuaHandle.World
@@ -1273,22 +1290,87 @@ interface NfNetworkApi {
     fun serverName(caller: Caller): String?
 
     /**
+     * What this server may do in the network, as the hub says: a server that joined with the network's
+     * shared secret is `trusted` and may do anything; one that joined with a credential of its own
+     * (`network.credential` in `config.yml`) has its credential's role, the namespaces whose channels and
+     * maps it owns, what the network shares with it of others', whether it sees players on other servers,
+     * and where it may send players. A call it may not make is an error at the script's line saying
+     * `network.forbidden` (a channel's or map's), or fails with `network.forbidden` in `err` (sending a
+     * player), and never reaches another server. `nil` until this server has connected.
+     */
+    fun serverRole(caller: Caller): NetworkRole?
+
+    /**
+     * This server's group: the game or role it's one copy of (`network.group` in `config.yml`, `"arena"`),
+     * which other servers send players and requests to (`{ group = "arena" }`) and the hub picks an
+     * instance of. A server with no group is a group of one, named as the server is, so this is
+     * `server_name()` then. `nil` on a server that isn't part of a network.
+     */
+    fun group(caller: Caller): String?
+
+    /**
+     * Says whether this server takes players now: one that doesn't (a match is running) is passed over
+     * when players are sent to its group, though they can still be sent to it by name. It's said to the
+     * hub at once, and again whenever this server reconnects. Every server takes players until it says
+     * otherwise.
+     */
+    fun setAccepting(caller: Caller, accepting: Boolean)
+
+    /**
+     * Where this server is in its life: `starting` until its project has loaded and its modules have
+     * started (and nothing holds it back: `hold_ready`), then `ready`; `draining` when it's asked to take
+     * no new players (`/nf drain`, the hub's admin API, `set_draining`), and `stopping` as `/nf shutdown`
+     * sends its players elsewhere. Only a `ready` server is sent players by its group; a `draining` or
+     * `stopping` one gets none, even by name. `network_state` says when it changes.
+     */
+    fun state(caller: Caller): String
+
+    /**
+     * Keeps this server `starting` (so its group sends it no players) until the hold is released: for a
+     * world to be made, a map loaded, a match set up. The server is `ready` once every hold is released,
+     * the first tick after. Holds go with the script that took them. Once a server is ready it stays so: a
+     * hold taken later does nothing.
+     */
+    fun holdReady(caller: Caller): LuaHandle.NetworkHold
+
+    /**
+     * Drains this server (`true`): it takes no new players, even sent by name, while it finishes what it's
+     * doing; or (`false`) makes it `ready` again. As `/nf drain` does. `/nf shutdown` drains too, and
+     * can't be undone.
+     */
+    fun setDraining(caller: Caller, draining: Boolean)
+
+    /** Whether this server is draining or stopping: taking no new players. */
+    fun isDraining(caller: Caller): Boolean
+
+    /** Whether this server takes players now, as `set_accepting` last said. */
+    fun isAccepting(caller: Caller): Boolean
+
+    /**
      * Whether this server is connected to its network's hub now. `network_connect` and
      * `network_disconnect` say when that changes.
      */
     fun isConnected(caller: Caller): Boolean
 
     /**
-     * Every server of the network, as the proxy names them, with whether NetherForge on each is connected
-     * and how many players are on it. Empty while this server isn't connected.
+     * Every server of the network, as the proxy names them, with whether NetherForge on each is connected,
+     * how many players are on it, its group and its room. Empty while this server isn't connected. Players
+     * and room are as the hub last said, once a second at most.
      */
     fun servers(caller: Caller): List<NetworkServer>
 
     /**
-     * Everyone online in the network, on any server, this one included, as the proxy last said. Empty
-     * while this server isn't connected.
+     * Every group of the network, with its instances: each server with a group is an instance of it, and
+     * each server with none is a group of one. Empty while this server isn't connected.
      */
-    fun players(caller: Caller): List<NetworkPlayer>
+    fun groups(caller: Caller): List<NetworkGroup>
+
+    /**
+     * Everyone online in the network, on any server, this one included, as the proxy last said; or only
+     * those of one server or group. Empty while this server isn't connected. On a server that doesn't see
+     * other servers' players (`server_role().presence`), only its own.
+     */
+    fun players(caller: Caller, options: NetworkPlayersOptions?): List<NetworkPlayer>
 
     /**
      * A player online anywhere in the network, by name (any case) or UUID; `nil` when nobody by that name
@@ -1313,16 +1395,80 @@ interface NfNetworkApi {
     fun map(caller: Caller, name: String): LuaHandle.NetworkMap
 
     /**
+     * Bans a player from the whole network: the proxy turns them away before they reach any server, until
+     * it runs out or `unban`, and kicks them now when they're online. Kept by the network's hub, with the
+     * reason, who did it and when. Needs `moderation` declared, and a server whose credential may moderate
+     * (`moderation=true` on the hub; a trusted server may). It fails (`nil, err`) when this server isn't
+     * connected or may not moderate, or `expires` is past. It works off the main thread, so its done
+     * arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a
+     * task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a
+     * task, it's an error. When it fails, `done` is `nil` and `err` says why.
+     */
+    fun ban(caller: Caller, player: PlayerOrString, options: NetworkSanctionOptions?): CompletionStage<Boolean>
+
+    /**
+     * Lifts a player's network ban. It fails when they weren't banned, or as `ban` does. It works off the
+     * main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's
+     * done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`.
+     * Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+     */
+    fun unban(caller: Caller, player: PlayerOrString): CompletionStage<Boolean>
+
+    /**
+     * Mutes a player across the network: every server's NetherForge holds back their chat (they're told
+     * why), until it runs out or `unmute`. As `ban` for what it needs and when it fails. It works off the
+     * main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's
+     * done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`.
+     * Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+     */
+    fun mute(caller: Caller, player: PlayerOrString, options: NetworkSanctionOptions?): CompletionStage<Boolean>
+
+    /**
+     * Lifts a player's network mute. It fails when they weren't muted, or as `ban` does. It works off the
+     * main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's
+     * done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`.
+     * Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+     */
+    fun unmute(caller: Caller, player: PlayerOrString): CompletionStage<Boolean>
+
+    /** Whether a player is banned from the network now, as this server's copy of the hub's bans says. */
+    fun isBanned(caller: Caller, player: PlayerOrString): Boolean
+
+    /** Whether a player is muted across the network now. */
+    fun isMuted(caller: Caller, player: PlayerOrString): Boolean
+
+    /**
+     * Reports a player to whoever moderates the network: the hub keeps it (`/nfhub reports`, the admin
+     * API) and tells its webhook. Goes at once, without waiting.
+     */
+    fun report(caller: Caller, player: PlayerOrString, reason: String, details: LuaValue, by: LuaHandle.Player?): Boolean
+
+    /**
      * Sends a player to another server of the network, through the proxy, with `data` for that server's
      * scripts: its `player_arrive` handlers hear it once they've joined there. The player may be on any
-     * server, this one or another. It fails (`nil, err`) when this server isn't connected, the player
-     * isn't online, the proxy has no such server, they're already there, or the proxy couldn't move them
-     * (the server is down or full, a proxy plugin cancelled it). It works off the main thread, so its
-     * moved arrives later: give `callback`, which is called with `moved, err` once it's done, or call it
-     * inside a task (`nf.task`) without one, and it waits and returns `moved, err`. Without a callback
-     * outside a task, it's an error. When it fails, `moved` is `nil` and `err` says why.
+     * server, this one or another (a server whose credential isn't trusted sends only its own). Sent to a
+     * group, the hub picks the instance as the group's balancing says (`least`: the one with the fewest
+     * players that has room; `fill`: the fullest that still has room) or `target.balance`, passing over
+     * instances that don't take players now (`set_accepting`) or are full (`network.capacity`). It fails
+     * (`nil, err`) when this server isn't connected, the player isn't online, there's no such server or
+     * group, no instance has room, they're already there, or the proxy couldn't move them (the server is
+     * down, a proxy plugin cancelled it). It works off the main thread, so its server arrives later: give
+     * `callback`, which is called with `server, err` once it's done, or call it inside a task (`nf.task`)
+     * without one, and it waits and returns `server, err`. Without a callback outside a task, it's an
+     * error. When it fails, `server` is `nil` and `err` says why.
      */
-    fun sendPlayer(caller: Caller, player: PlayerOrString, server: String, data: LuaValue): CompletionStage<Boolean>
+    fun sendPlayer(caller: Caller, player: PlayerOrString, target: StringOrNetworkSendOptions, data: LuaValue): CompletionStage<String>
+
+    /**
+     * Sends several players together, as `send_player` sends one: to one server, or to one instance of a
+     * group with room for all of them, so a party lands together. Players already there stay. It fails as
+     * `send_player` does; when the proxy couldn't move some of them, `err` names each with why (the others
+     * are on their way). It works off the main thread, so its server arrives later: give `callback`, which
+     * is called with `server, err` once it's done, or call it inside a task (`nf.task`) without one, and
+     * it waits and returns `server, err`. Without a callback outside a task, it's an error. When it fails,
+     * `server` is `nil` and `err` says why.
+     */
+    fun sendPlayers(caller: Caller, players: List<PlayerOrString>, target: StringOrNetworkSendOptions, data: LuaValue): CompletionStage<String>
 }
 
 /**
@@ -1534,7 +1680,7 @@ interface NfTestApi {
      * plays, with `network_publish`, `network_received`, `network_answer`, `network_write`, `network_join`
      * and `network_send`. Adding one that's there does nothing; the network starts with none.
      */
-    fun networkServer(caller: Caller, name: String)
+    fun networkServer(caller: Caller, name: String, options: TestNetworkServerOptions?)
 
     /**
      * Another server publishes `value` on a channel, to every server listening: this one's `message`
@@ -1580,6 +1726,26 @@ interface NfTestApi {
 
     /** A player on another server leaves the network: `network_player_quit` is heard at the next tick. */
     fun networkQuit(caller: Caller, name: String)
+
+    /**
+     * Another server of the test's network says where it is in its life and whether it takes players, as
+     * `set_accepting` and `/nf drain` would there: players sent to its group wait for it while it's
+     * `starting` or full (a send with `wait`), and go once it's `ready`. Heard by the next tick.
+     */
+    fun networkStatus(caller: Caller, server: String, status: TestNetworkStatus)
+
+    /**
+     * This server joins the test's network again with a credential of the role given, as a server running
+     * someone else's project might: what it may publish, ask, answer, read, write and send is then held to
+     * it, and `nf.network.server_role()` says it. The test's other servers stay trusted. By the next tick.
+     */
+    fun networkRole(caller: Caller, role: TestNetworkRole)
+
+    /**
+     * The reports scripts made with `nf.network.report` in this test, oldest first, as the network's hub
+     * keeps them.
+     */
+    fun networkReports(caller: Caller): List<TestNetworkReport>
 
     /**
      * Another server sends a player here with `data`, as `nf.network.send_player` there would: they join
@@ -5441,30 +5607,45 @@ interface NetworkChannelApi {
 
     /**
      * Publishes `value` on the channel: every server listening hears it as a `message` event, this one
-     * included, or only `options.server`. It goes at once, through the hub; nothing waits for it. Anything
-     * a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans,
-     * `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which
-     * another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64
-     * KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an
-     * error at the script's line.
+     * included, or only `options.server`, or only the instances of `options.group`. It goes at once,
+     * through the hub; nothing waits for it. Anything a `data()` table can hold, sent as JSON with the
+     * same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles
+     * to entities and worlds (by UUID and name, which another server may not have). At most
+     * `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a
+     * value over it, or one that can't be written as JSON, is an error at the script's line.
      */
     fun publish(self: LuaHandle.NetworkChannel, value: LuaValue, options: NetworkPublishOptions?): Boolean
 
     /**
-     * Asks `server` on this channel: its `request` handlers answer, and the answer comes back here. It
-     * fails (`nil, err`) when this server isn't connected, that server isn't, nothing there handles
-     * requests on the channel, a handler there errored, or no answer came within
-     * `network.request-timeout-seconds`. A handler that answers `nil` gives `nil` with no `err`. Anything
-     * a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans,
-     * `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which
-     * another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64
-     * KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an
-     * error at the script's line. It works off the main thread, so its reply arrives later: give
-     * `callback`, which is called with `reply, err` once it's done, or call it inside a task (`nf.task`)
-     * without one, and it waits and returns `reply, err`. Without a callback outside a task, it's an
-     * error. When it fails, `reply` is `nil` and `err` says why.
+     * Asks a server on this channel, or one instance of a group: its `request` handlers answer, and the
+     * answer comes back here. It fails (`nil, err`) when this server isn't connected, that server isn't
+     * (or no instance of the group is), nothing there handles requests on the channel, a handler there
+     * errored, or no answer came within `network.request-timeout-seconds`. A handler that answers `nil`
+     * gives `nil` with no `err`. Anything a `data()` table can hold, sent as JSON with the same codec:
+     * tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities
+     * and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON
+     * (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that
+     * can't be written as JSON, is an error at the script's line. It works off the main thread, so its
+     * reply arrives later: give `callback`, which is called with `reply, err` once it's done, or call it
+     * inside a task (`nf.task`) without one, and it waits and returns `reply, err`. Without a callback
+     * outside a task, it's an error. When it fails, `reply` is `nil` and `err` says why.
      */
-    fun request(self: LuaHandle.NetworkChannel, server: String, data: LuaValue): CompletionStage<Any?>
+    fun request(self: LuaHandle.NetworkChannel, target: StringOrNetworkTarget, data: LuaValue): CompletionStage<Any?>
+}
+
+/**
+ * A hold on this server being ready, from `nf.network.hold_ready`: while any is held, the server stays
+ * `starting`. It goes with the script that took it.
+ */
+interface NetworkHoldApi {
+    /**
+     * Lets go of the hold. The server is ready the tick after its last hold goes. Releasing it again does
+     * nothing.
+     */
+    fun release(self: LuaHandle.NetworkHold)
+
+    /** Whether it has been let go of. */
+    fun isReleased(self: LuaHandle.NetworkHold): Boolean
 }
 
 /**

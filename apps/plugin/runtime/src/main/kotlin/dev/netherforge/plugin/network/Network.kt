@@ -5,7 +5,10 @@ import dev.netherforge.format.ProblemCodes
 import dev.netherforge.format.project.PackagePaths
 import dev.netherforge.format.project.ProjectManifest
 import dev.netherforge.format.project.ProjectSnapshot
+import dev.netherforge.network.Access
+import dev.netherforge.network.Balance
 import dev.netherforge.network.HubFrame
+import dev.netherforge.network.Lifecycle
 import dev.netherforge.network.MapCause
 import dev.netherforge.network.MapOp
 import dev.netherforge.network.NetworkNames
@@ -26,6 +29,7 @@ import dev.netherforge.plugin.binding.NetworkPlayerEvent
 import dev.netherforge.plugin.binding.NetworkPlayerSwitchEvent
 import dev.netherforge.plugin.binding.NetworkRequestEvent
 import dev.netherforge.plugin.binding.NetworkServerEvent
+import dev.netherforge.plugin.binding.NetworkStateEvent
 import dev.netherforge.plugin.binding.PlayerArriveEvent
 import dev.netherforge.plugin.http.RequestRate
 import dev.netherforge.plugin.lua.CallResult
@@ -66,7 +70,11 @@ class Network(
     private val ticks: () -> Long,
     private val online: (UUID) -> PlayerRef?,
     private val snapshot: () -> ProjectSnapshot?,
-    private val log: RuntimeLog
+    private val log: RuntimeLog,
+    /** Shows text on a player's action bar: a waiting send's place, when the script shows none. */
+    private val actionbar: (UUID, String) -> Unit = { _, _ -> },
+    /** Stops the server: the end of `/nf shutdown`. */
+    private val shutdownServer: (String) -> Unit = {}
 ) : RuntimeService {
     override val name get() = "network"
 
@@ -82,7 +90,20 @@ class Network(
     private val mirrors = LinkedHashMap<String, Mirror>()
     private val requests = HashMap<Long, Waiting<Any?>>()
     private val writes = HashMap<Long, Pair<MapOp, Waiting<Any?>>>()
-    private val sends = HashMap<Long, Waiting<Boolean>>()
+    private val sends = HashMap<Long, Waiting<String>>()
+
+    /** What a waiting send shows while it waits: the script's function, or its players' action bars. */
+    private class OnWait(val scope: Scope?, val callback: LuaRef?, val players: List<UUID>, val target: String)
+
+    private val showing = HashMap<Long, OnWait>()
+
+    /** The holds on this server being ready, by id, with their scopes. */
+    private val holds = HashMap<Long, Scope>()
+    private var nextHold = 1L
+
+    /** The state scripts last heard (`network_state`), and since when the server has been empty. */
+    private var heard: Lifecycle? = null
+    private var emptySince: Long? = null
     private val rate by lazy { RequestRate(config.messagesPerMinute) }
     private var listenChanged = true
     private var listened: Pair<List<String>, List<String>>? = null
@@ -92,6 +113,62 @@ class Network(
 
     override fun start() {
         scripts.counting(Events.NETWORKCHANNEL_MESSAGE, Events.NETWORKCHANNEL_REQUEST) { listenChanged = true }
+        // The network's bans and mutes: this server's copies, to enforce (a muted player's chat) and to answer from.
+        if (link().mode != NetworkLink.Mode.OFF) {
+            mirror(dev.netherforge.network.Moderation.BANS)
+            mirror(dev.netherforge.network.Moderation.MUTES)
+        }
+    }
+
+    /** A server in a network watches chat: a player muted across it may say something. */
+    override val needsWatched: Set<dev.netherforge.plugin.platform.WatchedEvent>
+        get() = if (link().mode == NetworkLink.Mode.OFF) emptySet() else setOf(dev.netherforge.plugin.platform.WatchedEvent.PLAYER_CHAT)
+
+    /** [player]'s network ban or mute now ([map] says which), as this server's copy has it; null for none. */
+    fun sanction(map: String, player: String): dev.netherforge.network.Sanction? {
+        val value = mirrors[map]?.entries?.get(player) ?: return null
+        val sanction = runCatching { Protocol.json.decodeFromJsonElement(dev.netherforge.network.Sanction.serializer(), value) }.getOrNull()
+        return sanction?.takeIf { s -> s.until.let { it == null || it > System.currentTimeMillis() } }
+    }
+
+    /** What a muted player is told when their chat is held back; null when they aren't muted. */
+    fun muted(player: UUID): String? = sanction(dev.netherforge.network.Moderation.MUTES, player.toString())?.let { mute ->
+        "<red>You're muted on this network" + mute.reason?.let { ": $it" }.orEmpty()
+    }
+
+    private val moderations = HashMap<Long, Waiting<Boolean>>()
+
+    /** Bans, unbans, mutes or unmutes [player] ([name]) network-wide, as package [namespace] asks. */
+    fun moderate(
+        namespace: String,
+        action: dev.netherforge.network.ModerationAction,
+        player: String,
+        name: String,
+        reason: String?,
+        until: Long?
+    ): CompletionStage<Boolean> {
+        refusal(namespace)?.let { return CompletableFuture.failedFuture(WorkFailed(it)) }
+        val grants = link().grants
+        if (!grants.moderates) {
+            return CompletableFuture.failedFuture(
+                WorkFailed(
+                    "network.forbidden: this server's credential (${grants.role}) may not moderate the network (moderation=true on the hub)"
+                )
+            )
+        }
+        val id = link().nextId()
+        val future = CompletableFuture<Boolean>()
+        moderations[id] = Waiting(future, ticks() + config.requestTimeoutSeconds * TICKS_PER_SECOND, "the network's hub didn't answer")
+        if (!link().send(ServerFrame.Moderate(id, action, player, name, reason, "package $namespace", until))) {
+            moderations.remove(id)
+            return CompletableFuture.failedFuture(WorkFailed(notConnected()))
+        }
+        return future
+    }
+
+    fun report(namespace: String, player: String, name: String, reason: String, details: JsonElement?, by: String?): Boolean {
+        if (!link().connected || !allowed(namespace)) return false
+        return link().send(ServerFrame.Report(player, name, reason, details, by))
     }
 
     // ---- names -----------------------------------------------------------------
@@ -147,9 +224,22 @@ class Network(
         return value
     }
 
+    /** What each package sent and heard, for the metrics: counted on the main thread. */
+    private val sentByPackage = HashMap<String, Long>()
+    private val heardByPackage = HashMap<String, Long>()
+
+    fun sentCounts(): Map<String, Long> = HashMap(sentByPackage)
+
+    fun heardCounts(): Map<String, Long> = HashMap(heardByPackage)
+
+    private fun heardBy(full: String) = heardByPackage.merge(NetworkNames.namespaceOf(full), 1, Long::plus)
+
     /** Whether [namespace] may send one more this minute; says so in the log when it may not. */
     private fun allowed(namespace: String): Boolean {
-        if (rate.tryStart(namespace)) return true
+        if (rate.tryStart(namespace)) {
+            sentByPackage.merge(namespace, 1, Long::plus)
+            return true
+        }
         warnOnce(
             "rate:$namespace",
             "package \"$namespace\" sent more than ${config.messagesPerMinute} times to the network in a minute, the server's limit " +
@@ -171,17 +261,47 @@ class Network(
         else -> "this server isn't connected to the network's hub"
     }
 
-    fun publish(namespace: String, channel: String, value: JsonElement, server: String?): Boolean {
-        if (!link().connected || !allowed(namespace)) return false
-        return link().send(ServerFrame.Publish(channel, value, server))
+    /**
+     * Throws, at the script's line, when the hub has said this server's credential may not do [access] on [full]
+     * ([what] naming the call). Before the hub has said (not connected yet), the hub itself refuses.
+     */
+    fun forbid(full: String, access: Access, what: String) {
+        val link = link()
+        if (!link.connected || link.grants.allows(full, access)) return
+        val verb = when (access) {
+            Access.READ -> "listen to"
+            Access.WRITE -> "write to"
+            Access.REQUEST -> "ask on"
+            Access.ANSWER -> "answer on"
+        }
+        throw LuaApiException(
+            "$what: network.forbidden: this server's credential (${link.grants.role}) may not $verb \"$full\": the network's " +
+                "owner shares it in the hub's credentials or hub.properties (nf.network.server_role() says what this server may do)"
+        )
     }
 
-    fun request(namespace: String, channel: String, server: String, value: JsonElement): CompletionStage<Any?> {
+    fun publish(namespace: String, channel: String, value: JsonElement, server: String?, group: String? = null): Boolean {
+        forbid(channel, Access.WRITE, "channel:publish")
+        if (!link().connected || !allowed(namespace)) return false
+        return link().send(ServerFrame.Publish(channel, value, server, group))
+    }
+
+    /** Asks [server] on [channel], or (with [group]) one instance of the group. */
+    fun request(
+        namespace: String,
+        channel: String,
+        server: String?,
+        value: JsonElement,
+        group: String? = null,
+        admin: String? = null
+    ): CompletionStage<Any?> {
+        forbid(channel, Access.REQUEST, "channel:request")
         refusal(namespace)?.let { return CompletableFuture.failedFuture(WorkFailed(it)) }
         val id = link().nextId()
         val future = CompletableFuture<Any?>()
-        requests[id] = Waiting(future, ticks() + config.requestTimeoutSeconds * TICKS_PER_SECOND, "$server didn't answer on \"$channel\"")
-        if (!link().send(ServerFrame.Request(id, channel, server, value))) {
+        val who = server ?: admin?.let { "the admin client $it" } ?: "no instance of $group"
+        requests[id] = Waiting(future, ticks() + config.requestTimeoutSeconds * TICKS_PER_SECOND, "$who didn't answer on \"$channel\"")
+        if (!link().send(ServerFrame.Request(id, channel, server, value, group, admin))) {
             requests.remove(id)
             return CompletableFuture.failedFuture(WorkFailed(notConnected()))
         }
@@ -205,6 +325,7 @@ class Network(
             throw LuaApiException("bad argument 'key' (1 to ${NetworkNames.MAX_KEY_LENGTH} characters, none a control character)")
         }
         if (expires != null && expires < 1) throw LuaApiException("bad argument 'options.expires' (at least 1 tick expected, got $expires)")
+        forbid(map, Access.WRITE, "map:${op.name.lowercase()}")
         val waits = op == MapOp.ADD || op == MapOp.INSERT
         refusal(namespace)?.let { return if (waits) CompletableFuture.failedFuture(WorkFailed(it)) else null }
         val id = link().nextId()
@@ -218,18 +339,47 @@ class Network(
         return future
     }
 
-    fun send(namespace: String, player: String, server: String, data: JsonElement?): CompletionStage<Boolean> {
+    /**
+     * Sends [players] (UUIDs) together to [server], or to an instance of [group] the hub picks ([balance], or the
+     * group's own); completes with the server they're on their way to.
+     */
+    fun send(
+        namespace: String,
+        players: List<String>,
+        server: String?,
+        data: JsonElement?,
+        group: String? = null,
+        balance: Balance? = null,
+        waitSeconds: Double? = null,
+        onWait: Pair<Scope, LuaRef>? = null
+    ): CompletionStage<String> {
         refusal(namespace)?.let { return CompletableFuture.failedFuture(WorkFailed(it)) }
+        val grants = link().grants
+        if (!grants.trusted && players.any { player -> link().players[player]?.server.let { it != null && it != link().name } }) {
+            return CompletableFuture.failedFuture(
+                WorkFailed("network.forbidden: this server's credential (${grants.role}) may only send players who are on it")
+            )
+        }
         val id = link().nextId()
-        val future = CompletableFuture<Boolean>()
+        val future = CompletableFuture<String>()
+        val wait = waitSeconds?.coerceIn(0.0, MAX_WAIT_SECONDS)
+        val waitTicks = ((wait ?: 0.0) * TICKS_PER_SECOND).toLong()
         sends[id] =
             Waiting(
                 future,
-                ticks() + SEND_TIMEOUT_SECONDS * TICKS_PER_SECOND,
+                ticks() + waitTicks + SEND_TIMEOUT_SECONDS * TICKS_PER_SECOND,
                 "the proxy didn't move them within $SEND_TIMEOUT_SECONDS seconds"
             )
-        if (!link().send(ServerFrame.Send(id, player, server, data))) {
+        if (wait != null) {
+            val here = players.mapNotNull { runCatching { UUID.fromString(it) }.getOrNull() }.filter { online(it) != null }
+            showing[id] = OnWait(onWait?.first, onWait?.second, here, server ?: group ?: "")
+        } else {
+            onWait?.let { scripts.unref(it.second) }
+        }
+        val waitMillis = wait?.let { (it * 1000).toLong() }
+        if (!link().send(ServerFrame.Send(id, players, server, data, group, balance, waitMillis))) {
             sends.remove(id)
+            showing.remove(id)?.callback?.let(scripts::unref)
             return CompletableFuture.failedFuture(WorkFailed(notConnected()))
         }
         return future
@@ -259,6 +409,7 @@ class Network(
         link.tick(now)
         for (item in link.drain(config.messagesPerTick, now, log::info, log::warn)) received(item)
         if (listenChanged && link.connected) listen()
+        life(now)
         timeOut(now)
         arrive(now)
         answerPeers()
@@ -284,6 +435,7 @@ class Network(
     private fun frame(frame: HubFrame) {
         when (frame) {
             is HubFrame.Message -> if (frame.channel in channels) {
+                heardBy(frame.channel)
                 val handle = LuaHandle.NetworkChannel(frame.channel)
                 scripts.emit(Events.NETWORKCHANNEL_MESSAGE, handle, NetworkMessageEvent(handle, frame.value, frame.from))
             }
@@ -298,8 +450,24 @@ class Network(
             is HubFrame.MapSnapshot -> snapshot(frame)
             is HubFrame.MapChanged -> changed(frame)
             is HubFrame.MapResult -> writes.remove(frame.id)?.let { (op, waiting) -> written(frame, op, waiting) }
-            is HubFrame.SendResult -> sends.remove(frame.id)?.let { waiting ->
+            is HubFrame.SendWaiting -> waited(frame)
+            is HubFrame.ModerateResult -> moderations.remove(frame.id)?.let { waiting ->
                 if (frame.error != null) waiting.future.completeExceptionally(WorkFailed(frame.error!!)) else waiting.future.complete(true)
+            }
+            is HubFrame.Drain -> {
+                log.info(
+                    if (frame.draining) "The network's admin API drains this server" else "The network's admin API ends its draining"
+                )
+                link().setDraining(frame.draining)
+            }
+            is HubFrame.SendResult -> sends.remove(frame.id).also {
+                showing.remove(frame.id)?.callback?.let(scripts::unref)
+            }?.let { waiting ->
+                if (frame.error != null) {
+                    waiting.future.completeExceptionally(WorkFailed(frame.error!!))
+                } else {
+                    waiting.future.complete(frame.server ?: "")
+                }
             }
             is HubFrame.PlayerJoined -> scripts.emit(Events.NF_NETWORK_PLAYER_JOIN, null, NetworkPlayerEvent(player(frame.player)))
             is HubFrame.PlayerMoved -> {
@@ -320,7 +488,81 @@ class Network(
         }
     }
 
+    /** A send waits at [frame]'s place: its script hears it, or its players see it. */
+    private fun waited(frame: HubFrame.SendWaiting) {
+        val shown = showing[frame.id] ?: return
+        if (shown.callback != null && shown.scope != null) {
+            when (val result = scripts.callKept(shown.scope, shown.callback, listOf(frame.position.toLong(), frame.status))) {
+                is CallResult.Failed -> warnOnce("on_wait", "A send's on_wait failed: ${result.failure.message}")
+                else -> Unit
+            }
+            return
+        }
+        // A hold's status is the placing service's own text, MiniMessage as it wrote it.
+        val text = frame.status?.let { "<gray>$it" }
+            ?: "<gray>Waiting for <yellow>${shown.target}</yellow>… <white>#${frame.position}"
+        for (player in shown.players) actionbar(player, text)
+    }
+
+    // ---- this server's life ---------------------------------------------------------
+
+    /** A hold on this server being ready, until it's released or [scope] ends. */
+    fun hold(scope: Scope): LuaHandle.NetworkHold {
+        val id = nextHold++
+        if (link().state == Lifecycle.STARTING) holds[id] = scope
+        return LuaHandle.NetworkHold(id)
+    }
+
+    fun release(hold: LuaHandle.NetworkHold) {
+        holds.remove(hold.id)
+    }
+
+    fun isReleased(hold: LuaHandle.NetworkHold) = hold.id !in holds
+
+    /** Starts `/nf shutdown`: [afterEmpty], it waits up to [timeoutSeconds] for the server to empty first. */
+    fun shutdown(afterEmpty: Boolean, timeoutSeconds: Long) {
+        val link = link()
+        if (link.shutdown != null) return
+        log.info(
+            "Shutting down: draining" + if (afterEmpty) ", then waiting up to $timeoutSeconds seconds for the server to empty" else ""
+        )
+        link.beginShutdown(NetworkLink.Shutdown(afterEmpty, ticks() + timeoutSeconds * TICKS_PER_SECOND))
+    }
+
+    /** Once a tick: ready when nothing holds it back, idle when empty long enough, and `/nf shutdown`'s steps. */
+    private fun life(now: Long) {
+        val link = link()
+        if (link.state == Lifecycle.STARTING && holds.isEmpty()) {
+            val started = java.lang.management.ManagementFactory.getRuntimeMXBean().startTime
+            val millis = (System.currentTimeMillis() - started).coerceAtLeast(0)
+            link.ready(millis)
+            log.info("Ready ${"%.1f".format(millis / 1000.0)} seconds after the server's process started")
+        }
+        val previous = heard
+        if (previous != link.state) {
+            heard = link.state
+            if (previous != null) scripts.emit(Events.NF_NETWORK_STATE, null, NetworkStateEvent(link.state.word, previous.word))
+        }
+        val empty = joinedAt.isEmpty()
+        emptySince = if (empty) emptySince ?: now else null
+        val idleAfter = config.idleAfterSeconds * TICKS_PER_SECOND
+        link.setIdle(idleAfter > 0 && emptySince?.let { now - it >= idleAfter } == true)
+
+        val plan = link.shutdown ?: return
+        if (link.state != Lifecycle.STOPPING) {
+            if (plan.afterEmpty && !empty && now < plan.deadline) return
+            log.info(if (empty) "Shutting down: the server is empty" else "Shutting down: sending its players to the group's fallback")
+            link.stopping(now)
+            return
+        }
+        val since = plan.stoppingSince ?: now
+        if (!empty && now - since < EVACUATE_TICKS && link.connected) return
+        link.shutdown = null
+        shutdownServer("NetherForge: /nf shutdown")
+    }
+
     private fun answer(frame: HubFrame.Requested) {
+        heardBy(frame.channel)
         fun reply(value: JsonElement?, error: String? = null) {
             link().send(ServerFrame.Reply(frame.id, value, error))
         }
@@ -389,16 +631,41 @@ class Network(
     }
 
     /** The channels and maps this session told the hub it listens to, for `/nf network`. */
-    fun listening(): Pair<List<String>, List<String>> = listened ?: (emptyList<String>() to emptyList())
+    fun listening(): Pair<List<String>, List<String>> = (listened ?: (emptyList<String>() to emptyList())).let { (channels, maps) ->
+        // The hub's own maps (bans, mutes) are this server's, not its scripts'.
+        channels to maps.filterNot(dev.netherforge.network.Moderation::isReserved)
+    }
 
     /** Tells the hub what this session listens to, when it changed. */
     private fun listen() {
         listenChanged = false
+        val grants = link().grants
         val channels = channels.filter {
             val handle = LuaHandle.NetworkChannel(it)
-            scripts.listening(handle, Events.NETWORKCHANNEL_MESSAGE) || scripts.listening(handle, Events.NETWORKCHANNEL_REQUEST)
+            val messages = scripts.listening(handle, Events.NETWORKCHANNEL_MESSAGE) && grants.allows(it, Access.READ)
+            val requests = scripts.listening(handle, Events.NETWORKCHANNEL_REQUEST) && grants.allows(it, Access.ANSWER)
+            if (!messages &&
+                !requests &&
+                (scripts.listening(handle, Events.NETWORKCHANNEL_MESSAGE) || scripts.listening(handle, Events.NETWORKCHANNEL_REQUEST))
+            ) {
+                warnOnce(
+                    "forbidden:$it",
+                    "network.forbidden: this server's credential (${grants.role}) may not listen to \"$it\", so its handlers there hear nothing"
+                )
+            }
+            messages || requests
         }
-        val now = channels to mirrors.keys.toList()
+        val maps = mirrors.keys.filter { map ->
+            grants.allows(map, Access.READ).also { allowed ->
+                if (!allowed) {
+                    warnOnce(
+                        "forbidden:$map",
+                        "network.forbidden: this server's credential (${grants.role}) may not read the map \"$map\", so its copy stays empty"
+                    )
+                }
+            }
+        }
+        val now = channels to maps
         if (now == listened) return
         if (link().send(ServerFrame.Listen(now.first, now.second))) listened = now
     }
@@ -413,6 +680,7 @@ class Network(
         }
         expire(requests)
         expire(sends)
+        expire(moderations)
         for ((id, entry) in writes.filterValues { it.second.deadline <= now }) {
             writes.remove(id)
             entry.second.future.completeExceptionally(WorkFailed("${entry.second.what} within the time allowed"))
@@ -484,13 +752,15 @@ class Network(
     private fun failAll(failure: WorkFailed) {
         for (waiting in requests.values) waiting.future.completeExceptionally(failure)
         for (waiting in sends.values) waiting.future.completeExceptionally(failure)
+        for (waiting in moderations.values) waiting.future.completeExceptionally(failure)
+        moderations.clear()
         for ((_, waiting) in writes.values) waiting.future.completeExceptionally(failure)
         requests.clear()
         sends.clear()
         writes.clear()
     }
 
-    private fun player(state: PlayerState) = NetworkPlayer(state.id, state.name, state.server)
+    private fun player(state: PlayerState) = NetworkPlayer(state.id, state.name, state.server, state.proxy)
 
     private val warned = HashMap<String, Long>()
 
@@ -503,6 +773,11 @@ class Network(
     }
 
     override fun scopeReleased(scope: Scope) {
+        holds.entries.removeAll { it.value == scope }
+        for ((id, shown) in showing.entries.filter { it.value.scope == scope }) {
+            shown.callback?.let(scripts::unref)
+            showing[id] = OnWait(null, null, shown.players, shown.target)
+        }
         for ((key, entry) in answers.entries.filter { it.value.first == scope }) {
             answers.remove(key)
             scripts.unref(entry.second)
@@ -511,6 +786,9 @@ class Network(
 
     override fun stop() {
         failAll(WorkFailed("the project stopped"))
+        for (shown in showing.values) shown.callback?.let(scripts::unref)
+        showing.clear()
+        holds.clear()
         for ((_, callback) in answers.values) scripts.unref(callback)
         answers.clear()
         // The next session says what it listens to; until then, nothing.
@@ -519,7 +797,8 @@ class Network(
 
     override fun liveness() = listOf(
         liveness<LuaHandle.NetworkChannel> { true },
-        liveness<LuaHandle.NetworkMap> { true }
+        liveness<LuaHandle.NetworkMap> { true },
+        liveness<LuaHandle.NetworkHold> { true }
     )
 
     /** With the server in no network, each package that declares it has a warning saying so. */
@@ -549,6 +828,12 @@ class Network(
         const val TICKS_PER_SECOND = 20L
         const val MILLIS_PER_TICK = 50L
         const val SEND_TIMEOUT_SECONDS = 30L
+
+        /** How long a send may wait for room, at most (the hub's limit). */
+        const val MAX_WAIT_SECONDS = 600.0
+
+        /** How long `/nf shutdown` gives the hub to move the server's players before it stops anyway. */
+        const val EVACUATE_TICKS = 15 * TICKS_PER_SECOND
 
         /** How long a player sent here may take to arrive before what was sent with them is let go. */
         const val ARRIVAL_TICKS = 60 * TICKS_PER_SECOND

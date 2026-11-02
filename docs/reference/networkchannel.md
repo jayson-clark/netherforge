@@ -17,12 +17,12 @@ Its name, as the calling package names it: bare when it's the caller's own, `nam
 
 ### `networkchannel:publish(value, options?)` {#publish}
 
-Publishes `value` on the channel: every server listening hears it as a `message` event, this one included, or only `options.server`. It goes at once, through the hub; nothing waits for it. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line.
+Publishes `value` on the channel: every server listening hears it as a `message` event, this one included, or only `options.server`, or only the instances of `options.group`. It goes at once, through the hub; nothing waits for it. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line.
 
 | Parameter | Type | |
 | --- | --- | --- |
 | `value` | `any` | What to send. |
-| `options` (optional) | [`NetworkPublishOptions`](types.md#networkpublishoptions) | Which server alone, if not every one. |
+| `options` (optional) | [`NetworkPublishOptions`](types.md#networkpublishoptions) | Which server or group alone, if not every one. |
 
 **Returns** `boolean`: `false` when it didn't go: this server isn't connected, or its package went over `network.messages-per-minute`.
 
@@ -30,13 +30,13 @@ Publishes `value` on the channel: every server listening hears it as a `message`
 nf.network.channel("alerts"):publish({ text = "Restarting in 5 minutes" })
 ```
 
-### `networkchannel:request(server, data, callback?)` {#request}
+### `networkchannel:request(target, data, callback?)` {#request}
 
-Asks `server` on this channel: its `request` handlers answer, and the answer comes back here. It fails (`nil, err`) when this server isn't connected, that server isn't, nothing there handles requests on the channel, a handler there errored, or no answer came within `network.request-timeout-seconds`. A handler that answers `nil` gives `nil` with no `err`. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line. It works off the main thread, so its reply arrives later: give `callback`, which is called with `reply, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `reply, err`. Without a callback outside a task, it's an error. When it fails, `reply` is `nil` and `err` says why.
+Asks a server on this channel, or one instance of a group: its `request` handlers answer, and the answer comes back here. It fails (`nil, err`) when this server isn't connected, that server isn't (or no instance of the group is), nothing there handles requests on the channel, a handler there errored, or no answer came within `network.request-timeout-seconds`. A handler that answers `nil` gives `nil` with no `err`. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line. It works off the main thread, so its reply arrives later: give `callback`, which is called with `reply, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `reply, err`. Without a callback outside a task, it's an error. When it fails, `reply` is `nil` and `err` says why.
 
 | Parameter | Type | |
 | --- | --- | --- |
-| `server` | `string` | The server's name in the network, as the proxy names it (`"lobby"`); `nf.network.servers()` lists them. |
+| `target` | `string\|`[`NetworkTarget`](types.md#networktarget) | A server's name in the network (`"lobby"`), or a table naming a server or a group (`{ group = "arena" }`): then one instance of the group that answers on the channel is asked, each in turn. |
 | `data` | `any` | What to ask with: their handlers read it as `event.value`. |
 | `callback` (optional) | `fun(reply: any?, err: string?)` | Called on the main thread once it's done, as this script's code, with the answer, what that server's handlers assigned to `event.reply` (or `nil` and why not). Not called if the script has stopped by then. |
 

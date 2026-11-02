@@ -127,6 +127,12 @@ interface WorldManagerOps {
      * map). Null when no world by that name is loaded.
      */
     fun saveFiles(name: String): WorldFiles?
+
+    /**
+     * Whether the server writes a loaded world to disk (`save-off` for one world: autosaves and chunks it unloads),
+     * so a tool can copy its files whole while it runs. False when no world by that name is loaded.
+     */
+    fun setSaving(name: String, saving: Boolean): Boolean
 }
 
 /**

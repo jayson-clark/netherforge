@@ -96,11 +96,47 @@
     "requires": "network"
   },
   {
+    "function": "nf.network.server_role",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.group",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.set_accepting",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.state",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.hold_ready",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.set_draining",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.is_draining",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.is_accepting",
+    "requires": "network"
+  },
+  {
     "function": "nf.network.is_connected",
     "requires": "network"
   },
   {
     "function": "nf.network.servers",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.groups",
     "requires": "network"
   },
   {
@@ -120,7 +156,39 @@
     "requires": "network"
   },
   {
+    "function": "nf.network.ban",
+    "requires": "moderation"
+  },
+  {
+    "function": "nf.network.unban",
+    "requires": "moderation"
+  },
+  {
+    "function": "nf.network.mute",
+    "requires": "moderation"
+  },
+  {
+    "function": "nf.network.unmute",
+    "requires": "moderation"
+  },
+  {
+    "function": "nf.network.is_banned",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.is_muted",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.report",
+    "requires": "network"
+  },
+  {
     "function": "nf.network.send_player",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.send_players",
     "requires": "network"
   },
   {

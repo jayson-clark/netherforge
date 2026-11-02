@@ -1,8 +1,11 @@
 package dev.netherforge.plugin.api
 import dev.netherforge.format.game.BlockState
+import dev.netherforge.network.Grants
+import dev.netherforge.network.Lifecycle
 import dev.netherforge.network.MapOp
 import dev.netherforge.network.NetworkNames
 import dev.netherforge.network.ServerFrame
+import dev.netherforge.network.Share
 import dev.netherforge.plugin.binding.BlockPosition
 import dev.netherforge.plugin.binding.Caller
 import dev.netherforge.plugin.binding.IntegerOrChoice
@@ -19,6 +22,10 @@ import dev.netherforge.plugin.binding.TestClickOptions
 import dev.netherforge.plugin.binding.TestDisconnectOptions
 import dev.netherforge.plugin.binding.TestInputKeys
 import dev.netherforge.plugin.binding.TestNetworkMessage
+import dev.netherforge.plugin.binding.TestNetworkReport
+import dev.netherforge.plugin.binding.TestNetworkRole
+import dev.netherforge.plugin.binding.TestNetworkServerOptions
+import dev.netherforge.plugin.binding.TestNetworkStatus
 import dev.netherforge.plugin.binding.TestRequestOptions
 import dev.netherforge.plugin.binding.TestShownOptions
 import dev.netherforge.plugin.binding.TestWasmStub
@@ -200,20 +207,61 @@ internal class NfTestImpl(private val session: ProjectSession) : NfTestApi {
 
     private val link get() = session.runtime.network
 
-    /** The test's server [name], added to the network if it isn't in it yet. */
-    private fun peer(name: String): NetworkLink.TestPeer {
+    /** The test's server [name], added to the network if it isn't in it yet (an instance of [group] then). */
+    private fun peer(
+        name: String,
+        group: String? = null,
+        capacity: Int? = null,
+        state: Lifecycle = Lifecycle.READY,
+        accepting: Boolean = true
+    ): NetworkLink.TestPeer {
         harness
         if (!NetworkNames.isServer(name)) {
             throw LuaApiException("bad argument 'server' (a server's name expected: letters, digits, _ . -; got \"$name\")")
         }
         if (name == link.name) throw LuaApiException("bad argument 'server' (\"$name\" is this server)")
-        return link.peer(name)
+        return link.peer(name, group, capacity, state, accepting)
     }
 
     private fun full(caller: Caller, name: String, what: String) = session.network.resolve(caller.scope.namespace, name, what)
 
-    override fun networkServer(caller: Caller, name: String) {
-        peer(name)
+    override fun networkServer(caller: Caller, name: String, options: TestNetworkServerOptions?) {
+        val group = options?.group?.also { checkServer(it, "options.group") }
+        val capacity = options?.capacity?.also {
+            if (it <
+                1
+            ) {
+                throw LuaApiException("bad argument 'options.capacity' (at least 1 expected, got $it)")
+            }
+        }
+        val state = options?.state?.let { word -> Lifecycle.entries.first { it.word == word } } ?: Lifecycle.READY
+        peer(name, group, capacity?.toInt(), state, options?.accepting ?: true)
+    }
+
+    override fun networkStatus(caller: Caller, server: String, status: TestNetworkStatus) {
+        val state = status.state?.let { word -> Lifecycle.entries.first { it.word == word } }
+        peer(server).status(state, status.accepting)
+    }
+
+    override fun networkRole(caller: Caller, role: TestNetworkRole) {
+        harness
+        val shares = role.shares.orEmpty().map { share ->
+            try {
+                Share.parse(share)
+            } catch (e: IllegalArgumentException) {
+                throw LuaApiException("bad argument 'role.shares' (${e.message})")
+            }
+        }
+        val owns = role.owns.orEmpty()
+        owns.firstOrNull {
+            !NetworkNames.isNamespace(it)
+        }?.let { throw LuaApiException("bad argument 'role.owns' (\"$it\" isn't a namespace)") }
+        link.joinAs(Grants.preset(role.role, owns, shares, role.presence, role.sendTo, role.moderation ?: false))
+    }
+
+    override fun networkReports(caller: Caller): List<TestNetworkReport> {
+        harness
+        return link.reports().map { TestNetworkReport(it.name, it.reason, it.details, it.by) }
     }
 
     override fun networkPublish(caller: Caller, server: String, channel: String, value: LuaValue) {
@@ -283,7 +331,7 @@ internal class NfTestImpl(private val session: ProjectSession) : NfTestApi {
         val id = testId(name)
         // They're on the sending server first, as a player sent from it is.
         link.place(id, name, peer.name)
-        peer.send(ServerFrame.Send(0, id, link.name!!, json))
+        peer.send(ServerFrame.Send(0, listOf(id), link.name!!, json))
         val joined = session.platform.players.find(name) ?: throw LuaApiException("$name couldn't be sent here")
         return session.handle(joined)
     }

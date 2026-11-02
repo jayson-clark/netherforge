@@ -45,6 +45,8 @@ pub struct Opened {
     pub info: ProjectInfo,
     /// The target Minecraft version, if the manifest names a valid one.
     pub minecraft: Option<String>,
+    /// The manifest's namespace, if it names one.
+    pub namespace: Option<String>,
 }
 
 /// Checks [root] is a project and reads its manifest.
@@ -77,6 +79,7 @@ pub fn inspect(root: &Path) -> Result<Opened> {
         .unwrap_or_else(|| root.path().display().to_string());
     let name = field("name").unwrap_or(folder_name);
     let minecraft = field("minecraft").filter(|v| crate::minecraft::version::is_release(v));
+    let namespace = field("namespace");
     Ok(Opened {
         info: ProjectInfo {
             root: root.path().display().to_string(),
@@ -86,6 +89,7 @@ pub fn inspect(root: &Path) -> Result<Opened> {
         },
         root,
         minecraft,
+        namespace,
     })
 }
 

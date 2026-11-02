@@ -67,6 +67,7 @@ local OAuthFlow_is = accepts.OAuthFlow
 local WasmInstance_is = accepts.WasmInstance
 local WasmProcess_is = accepts.WasmProcess
 local NetworkChannel_is = accepts.NetworkChannel
+local NetworkHold_is = accepts.NetworkHold
 local NetworkMap_is = accepts.NetworkMap
 local Cutscene_is = accepts.Cutscene
 local Screen_is = accepts.Screen
@@ -6854,13 +6855,13 @@ do
     return prim["NetworkChannel.publish"](self_key, value, options)
   end
 
-  function NetworkChannel.request(self, server, data, callback)
+  function NetworkChannel.request(self, target, data, callback)
     local self_key = ids[self]
     if self_key == nil or not NetworkChannel_is[class_of(self)] then
       self_key = self_of(self, "NetworkChannel")
     end
     local waker, task, token, scope = async.begin("NetworkChannel:request", callback)
-    local wait_id = prim["NetworkChannel.request"](self_key, server, data, scope, waker)
+    local wait_id = prim["NetworkChannel.request"](self_key, target, data, scope, waker)
     if task ~= nil then
       local value, err = async.wait(task, token, wait_id)
       return value, err
@@ -6894,6 +6895,38 @@ do
       want(handler, "function", "handler")
     end
     return hand.NetworkChannel.once(self, event, handler)
+  end
+end
+
+-- NetworkHold ---------------------------------------------------------------
+
+do
+  local NetworkHold = class("NetworkHold")
+
+  function new.NetworkHold(id)
+    return prim["handles.new"]("NetworkHold", id)
+  end
+
+  ---@param handle table
+  ---@return integer id
+  function keys.NetworkHold(handle)
+    return prim["handles.key"](handle)
+  end
+
+  function NetworkHold.release(self)
+    local self_key = ids[self]
+    if self_key == nil or not NetworkHold_is[class_of(self)] then
+      self_key = self_of(self, "NetworkHold")
+    end
+    prim["NetworkHold.release"](self_key)
+  end
+
+  function NetworkHold.is_released(self)
+    local self_key = ids[self]
+    if self_key == nil or not NetworkHold_is[class_of(self)] then
+      self_key = self_of(self, "NetworkHold")
+    end
+    return prim["NetworkHold.is_released"](self_key)
   end
 end
 
@@ -8488,6 +8521,15 @@ namespaces["nf.worlds"] = function(scope, ns)
     end
   end
 
+  function ns.import(folder, name, options, callback)
+    local waker, task, token = async.begin("nf.worlds.import", callback)
+    local wait_id = prim["nf.worlds.import"](scope, folder, name, options, waker)
+    if task ~= nil then
+      local value, err = async.wait(task, token, wait_id)
+      return value, err
+    end
+  end
+
   function ns.default()
     return prim["nf.worlds.default"](scope)
   end
@@ -8918,6 +8960,38 @@ namespaces["nf.network"] = function(scope, ns)
     return prim["nf.network.server_name"](scope)
   end
 
+  function ns.server_role()
+    return prim["nf.network.server_role"](scope)
+  end
+
+  function ns.group()
+    return prim["nf.network.group"](scope)
+  end
+
+  function ns.set_accepting(accepting)
+    prim["nf.network.set_accepting"](scope, accepting)
+  end
+
+  function ns.state()
+    return prim["nf.network.state"](scope)
+  end
+
+  function ns.hold_ready()
+    return prim["nf.network.hold_ready"](scope)
+  end
+
+  function ns.set_draining(draining)
+    prim["nf.network.set_draining"](scope, draining)
+  end
+
+  function ns.is_draining()
+    return prim["nf.network.is_draining"](scope)
+  end
+
+  function ns.is_accepting()
+    return prim["nf.network.is_accepting"](scope)
+  end
+
   function ns.is_connected()
     return prim["nf.network.is_connected"](scope)
   end
@@ -8926,8 +9000,12 @@ namespaces["nf.network"] = function(scope, ns)
     return prim["nf.network.servers"](scope)
   end
 
-  function ns.players()
-    return prim["nf.network.players"](scope)
+  function ns.groups()
+    return prim["nf.network.groups"](scope)
+  end
+
+  function ns.players(options)
+    return prim["nf.network.players"](scope, options)
   end
 
   function ns.find_player(player)
@@ -8942,9 +9020,66 @@ namespaces["nf.network"] = function(scope, ns)
     return prim["nf.network.map"](scope, name)
   end
 
-  function ns.send_player(player, server, data, callback)
+  function ns.ban(player, options, callback)
+    local waker, task, token = async.begin("nf.network.ban", callback)
+    local wait_id = prim["nf.network.ban"](scope, player, options, waker)
+    if task ~= nil then
+      local value, err = async.wait(task, token, wait_id)
+      return value, err
+    end
+  end
+
+  function ns.unban(player, callback)
+    local waker, task, token = async.begin("nf.network.unban", callback)
+    local wait_id = prim["nf.network.unban"](scope, player, waker)
+    if task ~= nil then
+      local value, err = async.wait(task, token, wait_id)
+      return value, err
+    end
+  end
+
+  function ns.mute(player, options, callback)
+    local waker, task, token = async.begin("nf.network.mute", callback)
+    local wait_id = prim["nf.network.mute"](scope, player, options, waker)
+    if task ~= nil then
+      local value, err = async.wait(task, token, wait_id)
+      return value, err
+    end
+  end
+
+  function ns.unmute(player, callback)
+    local waker, task, token = async.begin("nf.network.unmute", callback)
+    local wait_id = prim["nf.network.unmute"](scope, player, waker)
+    if task ~= nil then
+      local value, err = async.wait(task, token, wait_id)
+      return value, err
+    end
+  end
+
+  function ns.is_banned(player)
+    return prim["nf.network.is_banned"](scope, player)
+  end
+
+  function ns.is_muted(player)
+    return prim["nf.network.is_muted"](scope, player)
+  end
+
+  function ns.report(player, reason, details, by)
+    return prim["nf.network.report"](scope, player, reason, details, by)
+  end
+
+  function ns.send_player(player, target, data, callback)
     local waker, task, token = async.begin("nf.network.send_player", callback)
-    local wait_id = prim["nf.network.send_player"](scope, player, server, data, waker)
+    local wait_id = prim["nf.network.send_player"](scope, player, target, data, waker)
+    if task ~= nil then
+      local value, err = async.wait(task, token, wait_id)
+      return value, err
+    end
+  end
+
+  function ns.send_players(players, target, data, callback)
+    local waker, task, token = async.begin("nf.network.send_players", callback)
+    local wait_id = prim["nf.network.send_players"](scope, players, target, data, waker)
     if task ~= nil then
       local value, err = async.wait(task, token, wait_id)
       return value, err
@@ -9113,8 +9248,8 @@ namespaces["nf.test"] = function(scope, ns)
     prim["nf.test.stub_wasm"](scope, module, stub)
   end
 
-  function ns.network_server(name)
-    prim["nf.test.network_server"](scope, name)
+  function ns.network_server(name, options)
+    prim["nf.test.network_server"](scope, name, options)
   end
 
   function ns.network_publish(server, channel, value)
@@ -9143,6 +9278,18 @@ namespaces["nf.test"] = function(scope, ns)
 
   function ns.network_quit(name)
     prim["nf.test.network_quit"](scope, name)
+  end
+
+  function ns.network_status(server, status)
+    prim["nf.test.network_status"](scope, server, status)
+  end
+
+  function ns.network_role(role)
+    prim["nf.test.network_role"](scope, role)
+  end
+
+  function ns.network_reports()
+    return prim["nf.test.network_reports"](scope)
   end
 
   function ns.network_send(server, name, data)

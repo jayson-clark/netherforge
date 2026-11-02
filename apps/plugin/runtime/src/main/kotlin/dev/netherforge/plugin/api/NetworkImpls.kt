@@ -1,22 +1,35 @@
 package dev.netherforge.plugin.api
 
+import dev.netherforge.network.Balance
+import dev.netherforge.network.Lifecycle
 import dev.netherforge.network.MapOp
+import dev.netherforge.network.Moderation
+import dev.netherforge.network.ModerationAction
 import dev.netherforge.network.NetworkNames
+import dev.netherforge.network.ServerState
 import dev.netherforge.plugin.async.WorkFailed
 import dev.netherforge.plugin.binding.Caller
 import dev.netherforge.plugin.binding.LuaHandle
 import dev.netherforge.plugin.binding.NetworkChannelApi
+import dev.netherforge.plugin.binding.NetworkGroup
 import dev.netherforge.plugin.binding.NetworkMapApi
 import dev.netherforge.plugin.binding.NetworkMapWriteOptions
 import dev.netherforge.plugin.binding.NetworkPlayer
+import dev.netherforge.plugin.binding.NetworkPlayersOptions
 import dev.netherforge.plugin.binding.NetworkPublishOptions
+import dev.netherforge.plugin.binding.NetworkRole
+import dev.netherforge.plugin.binding.NetworkSanctionOptions
 import dev.netherforge.plugin.binding.NetworkServer
+import dev.netherforge.plugin.binding.NetworkShare
 import dev.netherforge.plugin.binding.NfNetworkApi
 import dev.netherforge.plugin.binding.PlayerOrString
+import dev.netherforge.plugin.binding.StringOrNetworkSendOptions
+import dev.netherforge.plugin.binding.StringOrNetworkTarget
 import dev.netherforge.plugin.lua.LuaApiException
 import dev.netherforge.plugin.lua.LuaValue
 import dev.netherforge.plugin.session.ProjectSession
 import kotlinx.serialization.json.JsonElement
+import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
 
@@ -34,15 +47,78 @@ internal class NfNetworkImpl(private val session: ProjectSession) : NfNetworkApi
 
     override fun isConnected(caller: Caller): Boolean = link.connected
 
-    override fun servers(caller: Caller): List<NetworkServer> {
-        val counts = link.players.values.groupingBy { it.server }.eachCount()
-        return link.servers.map { (name, linked) -> NetworkServer(name, linked, (counts[name] ?: 0).toLong()) }
+    override fun serverRole(caller: Caller): NetworkRole? {
+        if (!link.connected) return null
+        val grants = link.grants
+        return NetworkRole(
+            role = grants.role,
+            trusted = grants.trusted,
+            owns = grants.owns,
+            shares = grants.shares.map { share -> NetworkShare(share.name, share.access.sortedBy { it.ordinal }.map { it.word }) },
+            presence = grants.presence,
+            sendTo = grants.sendTo
+        )
     }
 
-    override fun players(caller: Caller): List<NetworkPlayer> = link.players.values.map { NetworkPlayer(it.id, it.name, it.server) }
+    override fun group(caller: Caller): String? = link.group
+
+    override fun state(caller: Caller): String = link.state.word
+
+    override fun holdReady(caller: Caller): LuaHandle.NetworkHold = network.hold(caller.scope)
+
+    override fun setDraining(caller: Caller, draining: Boolean) = link.setDraining(draining)
+
+    override fun isDraining(caller: Caller): Boolean = link.state == Lifecycle.DRAINING || link.state == Lifecycle.STOPPING
+
+    override fun setAccepting(caller: Caller, accepting: Boolean) = link.setAccepting(accepting)
+
+    override fun isAccepting(caller: Caller): Boolean = link.accepting
+
+    override fun servers(caller: Caller): List<NetworkServer> {
+        val counts = link.counts()
+        return link.servers.values.map { server(it, counts) }
+    }
+
+    override fun groups(caller: Caller): List<NetworkGroup> {
+        val counts = link.counts()
+        return link.servers.values.groupBy { it.groupName }.map { (name, instances) ->
+            NetworkGroup(
+                name = name,
+                players = instances.sumOf { counts[it.name] ?: 0 }.toLong(),
+                capacity = if (instances.any { it.capacity == null }) null else instances.sumOf { it.capacity!! }.toLong(),
+                instances = instances.sortedBy { it.name }.map { server(it, counts) }
+            )
+        }.sortedBy { it.name }
+    }
+
+    private fun server(state: ServerState, counts: Map<String, Int>) = NetworkServer(
+        name = state.name,
+        connected = state.linked,
+        players = (counts[state.name] ?: 0).toLong(),
+        state = state.state?.word,
+        idle = state.idle,
+        tickMilliseconds = state.tickMillis,
+        group = state.groupName,
+        capacity = state.capacity?.toLong(),
+        accepting = state.accepting
+    )
+
+    override fun players(caller: Caller, options: NetworkPlayersOptions?): List<NetworkPlayer> {
+        options?.server?.let { checkServer(it, "options.server") }
+        options?.group?.let { checkServer(it, "options.group") }
+        return link.players.values.filter { player ->
+            (options?.server == null || player.server.equals(options.server, ignoreCase = true)) &&
+                (
+                    options?.group == null ||
+                        player.server?.let {
+                            link.servers[it]?.groupName ?: it
+                        }.equals(options.group, ignoreCase = true)
+                    )
+        }.map { NetworkPlayer(it.id, it.name, it.server, it.proxy) }
+    }
 
     override fun findPlayer(caller: Caller, player: String): NetworkPlayer? =
-        network.findPlayer(player)?.let { NetworkPlayer(it.id, it.name, it.server) }
+        network.findPlayer(player)?.let { NetworkPlayer(it.id, it.name, it.server, it.proxy) }
 
     override fun channel(caller: Caller, name: String): LuaHandle.NetworkChannel =
         network.channel(network.resolve(caller.scope.namespace, name, "nf.network.channel"))
@@ -50,16 +126,124 @@ internal class NfNetworkImpl(private val session: ProjectSession) : NfNetworkApi
     override fun map(caller: Caller, name: String): LuaHandle.NetworkMap =
         network.mirror(network.resolve(caller.scope.namespace, name, "nf.network.map")).handle
 
-    override fun sendPlayer(caller: Caller, player: PlayerOrString, server: String, data: LuaValue): CompletionStage<Boolean> {
-        if (!NetworkNames.isServer(server)) throw LuaApiException("bad argument 'server' (a server's name expected, got \"$server\")")
-        val json = if (data.isNil) null else network.checked(data.json("data"), "data")
-        val id = when (player) {
-            is PlayerOrString.Player -> player.value.id
-            is PlayerOrString.String -> network.findPlayer(player.value)?.id
-                ?: return CompletableFuture.failedFuture(WorkFailed("nobody called \"${player.value}\" is online in the network"))
-        }
-        return network.send(caller.scope.namespace, id, server, json)
+    override fun sendPlayer(
+        caller: Caller,
+        player: PlayerOrString,
+        target: StringOrNetworkSendOptions,
+        data: LuaValue
+    ): CompletionStage<String> = send(caller, listOf(player), target, data)
+
+    override fun sendPlayers(
+        caller: Caller,
+        players: List<PlayerOrString>,
+        target: StringOrNetworkSendOptions,
+        data: LuaValue
+    ): CompletionStage<String> {
+        if (players.isEmpty()) throw LuaApiException("bad argument 'players' (at least one player expected)")
+        return send(caller, players, target, data)
     }
+
+    private fun send(
+        caller: Caller,
+        players: List<PlayerOrString>,
+        target: StringOrNetworkSendOptions,
+        data: LuaValue
+    ): CompletionStage<String> {
+        val (server, group, options) = when (target) {
+            is StringOrNetworkSendOptions.String -> Triple(checkServer(target.value, "target"), null, null)
+            is StringOrNetworkSendOptions.NetworkSendOptions -> {
+                val options = target.value
+                if ((options.server == null) == (options.group == null)) {
+                    throw LuaApiException("bad argument 'target' (a table naming a server or a group expected, not both or neither)")
+                }
+                Triple(
+                    options.server?.let {
+                        checkServer(it, "target.server")
+                    },
+                    options.group?.let { checkServer(it, "target.group") },
+                    options
+                )
+            }
+        }
+        val balance = options?.balance?.let { word ->
+            Balance.of(word) ?: throw LuaApiException("bad argument 'target.balance' (\"least\" or \"fill\" expected, got \"$word\")")
+        }
+        val sent = if (data.isNil) options?.data?.takeUnless { it.isNil } else data
+        val json = sent?.let { network.checked(it.json("data"), "data") }
+        val ids = players.map { player ->
+            when (player) {
+                is PlayerOrString.Player -> player.value.id
+                is PlayerOrString.String -> network.findPlayer(player.value)?.id
+                    ?: return CompletableFuture.failedFuture(WorkFailed("nobody called \"${player.value}\" is online in the network"))
+            }
+        }
+        val wait = options?.wait?.also {
+            if (!it.isFinite() ||
+                it < 0
+            ) {
+                throw LuaApiException("bad argument 'target.wait' (seconds, at least 0, expected)")
+            }
+        }
+        val onWait = options?.onWait?.let { caller.scope to it.ref }
+        return network.send(caller.scope.namespace, ids, server, json, group, balance, wait, onWait)
+    }
+    // ---- moderation ----------------------------------------------------------------
+
+    /** [player] as the network knows them: their UUID and name; an error when nobody by that name is online. */
+    private fun who(player: PlayerOrString): Pair<String, String> = when (player) {
+        is PlayerOrString.Player ->
+            player.value.id to
+                (session.platform.players.get(UUID.fromString(player.value.id))?.name ?: player.value.id)
+        is PlayerOrString.String -> network.findPlayer(player.value)?.let { it.id to it.name }
+            ?: player.value.takeIf { runCatching { UUID.fromString(it) }.isSuccess }?.let { it to it }
+            ?: throw LuaApiException("nobody called \"${player.value}\" is online in the network: name them by UUID")
+    }
+
+    private fun sanction(
+        caller: Caller,
+        action: ModerationAction,
+        player: PlayerOrString,
+        options: NetworkSanctionOptions?
+    ): CompletionStage<Boolean> {
+        session.requirements.check(dev.netherforge.format.project.Requirement.Network, "nf.network.${action.word}")
+        val (id, name) = who(player)
+        return network.moderate(caller.scope.namespace, action, id, name, options?.reason, options?.expires)
+    }
+
+    override fun ban(caller: Caller, player: PlayerOrString, options: NetworkSanctionOptions?) =
+        sanction(caller, ModerationAction.BAN, player, options)
+
+    override fun unban(caller: Caller, player: PlayerOrString) = sanction(caller, ModerationAction.UNBAN, player, null)
+
+    override fun mute(caller: Caller, player: PlayerOrString, options: NetworkSanctionOptions?) =
+        sanction(caller, ModerationAction.MUTE, player, options)
+
+    override fun unmute(caller: Caller, player: PlayerOrString) = sanction(caller, ModerationAction.UNMUTE, player, null)
+
+    override fun isBanned(caller: Caller, player: PlayerOrString): Boolean = network.sanction(Moderation.BANS, who(player).first) != null
+
+    override fun isMuted(caller: Caller, player: PlayerOrString): Boolean = network.sanction(Moderation.MUTES, who(player).first) != null
+
+    override fun report(caller: Caller, player: PlayerOrString, reason: String, details: LuaValue, by: LuaHandle.Player?): Boolean {
+        if (reason.isBlank()) throw LuaApiException("bad argument 'reason' (a reason expected)")
+        val (id, name) = who(player)
+        val json = if (details.isNil) null else network.checked(details.json("details"), "details")
+        val reporter = by?.let { session.platform.players.get(UUID.fromString(it.id))?.name ?: it.id }
+        return network.report(caller.scope.namespace, id, name, reason.take(500), json, reporter)
+    }
+}
+
+/** [name] when it's a server's or group's name; an error naming [where] otherwise. */
+internal fun checkServer(name: String, where: String): String {
+    if (!NetworkNames.isServer(name)) throw LuaApiException("bad argument '$where' (a server's or group's name expected, got \"$name\")")
+    return name
+}
+
+/** `NetworkHold`: a hold on this server being ready. */
+internal class NetworkHoldImpl(private val session: ProjectSession) : dev.netherforge.plugin.binding.NetworkHoldApi {
+    override fun release(self: LuaHandle.NetworkHold) = session.network.release(self)
+
+    override fun isReleased(self: LuaHandle.NetworkHold): Boolean = session.network.isReleased(self)
 }
 
 /** `NetworkChannel`: a channel by its full name. */
@@ -69,18 +253,31 @@ internal class NetworkChannelImpl(private val session: ProjectSession) : Network
     override fun name(self: LuaHandle.NetworkChannel): String = network.spell(self.name, session.names.calling())
 
     override fun publish(self: LuaHandle.NetworkChannel, value: LuaValue, options: NetworkPublishOptions?): Boolean {
-        val server = options?.server
-        if (server != null && !NetworkNames.isServer(server)) {
-            throw LuaApiException("bad argument 'options.server' (a server's name expected, got \"$server\")")
-        }
+        val server = options?.server?.let { checkServer(it, "options.server") }
+        val group = options?.group?.let { checkServer(it, "options.group") }
+        if (server != null && group != null) throw LuaApiException("bad argument 'options' (a server or a group, not both)")
         val json = network.checked(value(value, "value"), "value")
-        return network.publish(session.names.calling(), self.name, json, server)
+        return network.publish(session.names.calling(), self.name, json, server, group)
     }
 
-    override fun request(self: LuaHandle.NetworkChannel, server: String, data: LuaValue): CompletionStage<Any?> {
-        if (!NetworkNames.isServer(server)) throw LuaApiException("bad argument 'server' (a server's name expected, got \"$server\")")
+    override fun request(self: LuaHandle.NetworkChannel, target: StringOrNetworkTarget, data: LuaValue): CompletionStage<Any?> {
+        val (server, group) = when (target) {
+            is StringOrNetworkTarget.String -> checkServer(target.value, "target") to null
+            is StringOrNetworkTarget.NetworkTarget -> {
+                val it = target.value
+                if (listOfNotNull(it.server, it.group, it.admin).size != 1) {
+                    throw LuaApiException("bad argument 'target' (a table naming one of a server, a group or an admin client expected)")
+                }
+                if (it.admin != null) {
+                    if (!NetworkNames.isCredential(it.admin)) throw LuaApiException("bad argument 'target.admin' (a client's id expected)")
+                    val json = network.checked(value(data, "data"), "data")
+                    return network.request(session.names.calling(), self.name, null, json, admin = it.admin)
+                }
+                it.server?.let { name -> checkServer(name, "target.server") } to it.group?.let { name -> checkServer(name, "target.group") }
+            }
+        }
         val json = network.checked(value(data, "data"), "data")
-        return network.request(session.names.calling(), self.name, server, json)
+        return network.request(session.names.calling(), self.name, server, json, group)
     }
 }
 

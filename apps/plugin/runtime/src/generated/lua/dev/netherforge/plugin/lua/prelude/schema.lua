@@ -109,6 +109,7 @@ local events = {
     ["setting_changed"] = { owner = "nf", cancellable = false, options = {}, writable = {} },
     ["network_connect"] = { owner = "nf", cancellable = false, options = {}, writable = {} },
     ["network_disconnect"] = { owner = "nf", cancellable = false, options = {}, writable = {} },
+    ["network_state"] = { owner = "nf", cancellable = false, options = {}, writable = {} },
     ["network_server_connect"] = { owner = "nf", cancellable = false, options = {}, writable = {} },
     ["network_server_disconnect"] = { owner = "nf", cancellable = false, options = {}, writable = {} },
     ["network_player_join"] = { owner = "nf", cancellable = false, options = {}, writable = {} },

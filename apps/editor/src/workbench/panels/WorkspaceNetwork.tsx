@@ -7,7 +7,11 @@
  */
 import { useEffect, useState } from 'react'
 import type { NetworkMember, ServerPhase, WorkspaceMember } from '@/core/backend/types'
-import { isWorkspaceServerName, type WorkspaceNetwork } from '@/core/format'
+import {
+  isWorkspaceServerName,
+  type WorkspaceNetwork,
+  type WorkspaceServerOptions,
+} from '@/core/format'
 import { useApp, useNetwork, useWorkspace, useWorkspaceFile } from '@/state/providers'
 import { Button, IconButton } from '@/ui/Button'
 import { cx } from '@/ui/cx'
@@ -16,6 +20,7 @@ import { Empty } from '@/ui/text'
 import { askNewServer } from '@/workbench/workspaceActions'
 import { CommitInput, ConsoleButton } from './Network'
 import styles from './Network.module.css'
+import { ServerOptionsFields } from './ServerOptions'
 import { ServerStatus, StatusDot } from './ServerStatus'
 
 /** A server name from a project's folder (`servers/chess` → `chess`), or null when it can't be one. */
@@ -35,6 +40,15 @@ export function suggestNetwork(members: WorkspaceMember[]): WorkspaceNetwork | n
   if (names.length === 0) return null
   const arrival = names.find((it) => it === 'hub' || it === 'lobby') ?? names[0]!
   return { arrival, servers }
+}
+
+/** [network] with [options], left out when there are none. */
+function withOptions(
+  network: WorkspaceNetwork,
+  options: Record<string, WorkspaceServerOptions>,
+): WorkspaceNetwork {
+  const { options: _old, ...rest } = network
+  return Object.keys(options).length > 0 ? { ...rest, options } : rest
 }
 
 export function WorkspaceNetworkPanel() {
@@ -83,19 +97,39 @@ export function WorkspaceNetworkPanel() {
       workspaceFile.setState({ error: `There's already a server named "${to}"` })
       return
     }
-    const servers = Object.fromEntries(
-      Object.entries(network.servers).map(([name, path]) => [name === from ? to : name, path]),
+    const renamed = <T,>(entries: Record<string, T>) =>
+      Object.fromEntries(
+        Object.entries(entries).map(([name, value]) => [name === from ? to : name, value]),
+      )
+    save(
+      withOptions(
+        {
+          arrival: network.arrival === from ? to : network.arrival,
+          servers: renamed(network.servers),
+        },
+        renamed(network.options ?? {}),
+      ),
     )
-    save({ arrival: network.arrival === from ? to : network.arrival, servers })
   }
   const setProject = (name: string, path: string) =>
     network && save({ ...network, servers: { ...network.servers, [name]: path } })
   const remove = (name: string) => {
     if (!network) return
     const { [name]: _gone, ...servers } = network.servers
+    const { [name]: _options, ...options } = network.options ?? {}
     const names = Object.keys(servers)
     if (names.length === 0) return save(null)
-    save({ arrival: network.arrival === name ? names[0]! : network.arrival, servers })
+    save(
+      withOptions(
+        { arrival: network.arrival === name ? names[0]! : network.arrival, servers },
+        options,
+      ),
+    )
+  }
+  const setOptions = (name: string, next: WorkspaceServerOptions | undefined) => {
+    if (!network) return
+    const { [name]: _old, ...options } = network.options ?? {}
+    save(withOptions(network, next ? { ...options, [name]: next } : options))
   }
   const add = () => {
     if (!network) return
@@ -200,6 +234,8 @@ export function WorkspaceNetworkPanel() {
                 member={memberOf(name)}
                 onRename={(to) => rename(name, to)}
                 onProject={(to) => setProject(name, to)}
+                options={network.options?.[name]}
+                onOptions={(next) => setOptions(name, next)}
                 onArrival={() => save({ ...network, arrival: name })}
                 onRemove={() => remove(name)}
                 onConsole={() => openConsole(name)}
@@ -241,6 +277,8 @@ function ServerCard({
   member,
   onRename,
   onProject,
+  options,
+  onOptions,
   onArrival,
   onRemove,
   onConsole,
@@ -253,6 +291,8 @@ function ServerCard({
   member: NetworkMember | undefined
   onRename: (to: string) => void
   onProject: (path: string) => void
+  options: WorkspaceServerOptions | undefined
+  onOptions: (next: WorkspaceServerOptions | undefined) => void
   onArrival: () => void
   onRemove: () => void
   onConsole: () => void
@@ -301,6 +341,11 @@ function ServerCard({
           ))}
         </select>
       </div>
+      <ServerOptionsFields
+        server={name}
+        options={options}
+        onChange={(next) => onOptions(next as WorkspaceServerOptions | undefined)}
+      />
       <p className={styles.meta}>{arrival ? 'Players arrive here' : ' '}</p>
       <ServerStatus phase={phase} connected={member?.state.bridgeConnected} />
     </li>

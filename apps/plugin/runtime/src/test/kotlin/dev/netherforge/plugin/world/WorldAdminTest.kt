@@ -158,6 +158,42 @@ class WorldAdminTest {
     }
 
     @Test
+    fun `a world a tool put in the import root is imported, within the server's limits`() {
+        val root = kotlin.io.path.createTempDirectory("imports")
+        Files.createDirectories(root.resolve("islands/7f2c"))
+        Files.writeString(root.resolve("islands/7f2c/level.dat"), "a level")
+        TestServer(
+            mapOf(
+                "modules/t/init.lua" to LuaChecks.command(
+                    """
+                    nf.worlds.import("islands/7f2c", "island_7f2c", nil, function(world, err)
+                      log("imported " .. world:name() .. " " .. tostring(world:is_managed()) .. " " .. tostring(err))
+                    end)
+                    fails("outside", function() nf.worlds.import("../etc", "x", nil, function() end) end, "isn't a folder inside the import root")
+                    fails("missing", function() nf.worlds.import("islands/none", "x", nil, function() end) end, "there's no folder \"islands/none\"")
+                    fails("no terrain", function() nf.worlds.import("islands/7f2c", "y", { terrain = "nope" }, function() end) end, "nope")
+                    """
+                )
+            ),
+            worlds = WorldsConfig(importRoot = root, maxLoaded = 3)
+        ).use { server ->
+            assertEquals(listOf("done"), server.runChecks())
+            server.tick()
+            assertEquals(listOf("done", "imported island_7f2c true nil"), server.output())
+            assertEquals(root.resolve("islands/7f2c"), server.platform.worldManager.copies.single().first)
+            // world, nether and the island: the server's most.
+            server.write("modules/t/init.lua", "log(select(2, pcall(nf.worlds.create, \"more\")))")
+            server.reload("modules/t/init.lua")
+            assertTrue(server.logs.last().contains("worlds.max-loaded"), server.logs.last())
+        }
+        TestServer(
+            mapOf("modules/t/init.lua" to "log(select(2, pcall(nf.worlds.import, \"a\", \"b\", nil, function() end)))")
+        ).use { server ->
+            assertTrue(server.logs.single().contains("importing worlds is off"), server.logs.single())
+        }
+    }
+
+    @Test
     fun `in a task, a copy waits and returns the world`() {
         TestServer(
             arenaMap + mapOf(

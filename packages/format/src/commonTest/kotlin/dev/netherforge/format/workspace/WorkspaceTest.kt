@@ -44,7 +44,12 @@ class WorkspaceTest {
               "projects": ["../escape", "servers/missing", "empty/*", "servers/*"],
               "network": {
                 "arrival": "lobby",
-                "servers": { "hub": "servers/hub", "Bad Name": "servers/chess", "ghost": "servers/missing" }
+                "servers": { "hub": "servers/hub", "Bad Name": "servers/chess", "ghost": "servers/missing" },
+                "options": {
+                  "hub": { "group": "lobby", "capacity": 50, "role": "standard" },
+                  "nowhere": { "group": "x" },
+                  "ghost": { "role": "admin" }
+                }
               }
             }
             """.trimIndent()
@@ -57,6 +62,8 @@ class WorkspaceTest {
                 "workspace.empty-pattern" to "$.projects[2]",
                 "workspace.server-name" to "$.network.servers[\"Bad Name\"]",
                 "workspace.server-project" to "$.network.servers.ghost",
+                "workspace.server-options" to "$.network.options.nowhere",
+                "workspace.server-options" to "$.network.options.ghost",
                 "workspace.arrival" to "$.network.arrival"
             ),
             codes(workspace)

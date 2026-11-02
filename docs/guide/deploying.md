@@ -90,6 +90,64 @@ Copy the folder to the server and point `project:` at it. Don't edit a bundle
 by hand: the plugin checks it and refuses a changed one, so build a new one
 instead. See [bundles](../format/packages.md#bundles).
 
+With the game's data for the project's `minecraft` version (the editor's
+cache, or `--game-data <file>`), the build also makes the project's resource
+pack, so a server running that version sends it rather than building it as it
+starts. Without it the build says so, and each server builds the pack itself.
+
+## Publishing and signing
+
+A bundle says it hasn't been changed; a **signature** says who made it. Make a
+key pair once, and sign as you build:
+
+```sh
+netherforge keygen ~/.netherforge/author.key        # prints the public key: ed25519:…
+netherforge build --sign ~/.netherforge/author.key
+```
+
+A network that runs other people's projects can **countersign** a bundle once
+it has checked it (`netherforge sign build/arena-1.4.0 --key network.key`),
+and have its servers trust only its own key, in `config.yml`:
+
+```yaml
+bundles:
+  require-signature: true
+  trusted-keys: ['ed25519:AbC…']
+```
+
+A server with `require-signature` runs only a bundle signed by one of
+`trusted-keys` (the problem `runtime.bundle-signature` says why not), and a
+signature that doesn't match its bundle is refused on any server.
+
+**Publishing.** `netherforge publish` builds, signs and archives the bundle
+(one `.nfbundle` file), and uploads it with its listing (the version, the
+archive's SHA-256, who signed it, and `listing` from `netherforge.json`, its
+pictures beside it) to S3-compatible storage: AWS, Cloudflare R2, MinIO and
+the like. Any static host serves it from there; there's no registry to run.
+
+```sh
+AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=… netherforge publish \
+  --to s3://packs/projects --endpoint https://<account>.r2.cloudflarestorage.com \
+  --public-url https://packs.example.com/projects/ --sign ~/.netherforge/author.key
+```
+
+It prints what a server's `project:` takes to run it from there:
+
+```yaml
+project: https://packs.example.com/projects/arena-1.4.0.nfbundle#sha256=3f1c…
+```
+
+The server downloads it once, checks the archive against that SHA-256 (so a
+file changed at the URL is refused, not run), unpacks it into
+`plugins/NetherForge/bundles/`, and runs it as any bundle, its signature
+checked as above. `netherforge build --archive` writes the same file without
+uploading it.
+
+With `--packs-to s3://bucket/prefix`, `publish` also uploads the bundle's
+resource pack where servers' [`resource-pack.storage`](server-config.md)
+keeps packs (the same bucket and `prefix`), named by its hash: servers running
+the bundle find it there and upload nothing.
+
 ## What a project asks of your server
 
 A project, and every package it depends on, declares in its

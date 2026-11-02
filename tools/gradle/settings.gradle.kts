@@ -41,6 +41,7 @@ include(":plugin:test-runner")
 include(":plugin:paper-common")
 include(":plugin:integration")
 include(":proxy:velocity")
+include(":hub")
 
 // This folder is only the build's root, kept out of the repo root along with
 // Gradle's caches and outputs. The projects live with the rest of their kind:
@@ -56,6 +57,7 @@ project(":plugin:paper-common").projectDir = repoRoot.resolve("apps/plugin/paper
 project(":plugin:integration").projectDir = repoRoot.resolve("apps/plugin/integration")
 project(":proxy").projectDir = repoRoot.resolve("apps/proxy")
 project(":proxy:velocity").projectDir = repoRoot.resolve("apps/proxy/velocity")
+project(":hub").projectDir = repoRoot.resolve("apps/hub")
 
 // One Paper adapter per folder, `apps/plugin/paper-<minecraft>`: adding a
 // version is adding a folder (see the minecraft-versions skill).

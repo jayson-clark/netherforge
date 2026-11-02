@@ -1,6 +1,7 @@
 package dev.netherforge.plugin
 
 import dev.netherforge.format.bridge.Bridge
+import dev.netherforge.network.Registration
 import dev.netherforge.plugin.http.HttpConfig
 import dev.netherforge.plugin.network.NetworkConfig
 import dev.netherforge.plugin.pack.PackConfig
@@ -185,6 +186,33 @@ class RuntimeConfigTest {
         assertTrue(NetworkConfig(enabled = true, secret = "x").problem()!!.contains("network.server-name is empty"))
         assertTrue(NetworkConfig(enabled = true, serverName = "lobby").problem()!!.contains("network.secret is empty"))
         assertTrue(NetworkConfig(enabled = true, serverName = "a b", secret = "x").problem()!!.contains("isn't a server name"))
+
+        val withCredential = section + ("credential" to mapOf("id" to "arena", "secret" to "arena-secret"))
+        val credential = read(mapOf("project" to "p", "network" to withCredential))!!.network
+        assertEquals(expected.copy(secret = "arena-secret", credential = "arena"), credential)
+        assertTrue(
+            NetworkConfig(
+                enabled = true,
+                serverName = "lobby",
+                credential = "arena"
+            ).problem()!!.contains("network.credential.secret is empty")
+        )
+
+        assertEquals(Registration("10.0.0.12", 25601), NetworkConfig.registration("10.0.0.12:25601"))
+        assertEquals(Registration(null, 25601), NetworkConfig.registration("25601"))
+        assertEquals(Registration("fd00::5", 25601), NetworkConfig.registration("[fd00::5]:25601"))
+        assertEquals(Registration("arena.internal", -1), NetworkConfig.registration("arena.internal"))
+        val registering = read(
+            mapOf(
+                "project" to "p",
+                "network" to section + mapOf("server-name" to "auto", "group" to "arena", "register" to mapOf("address" to "25601"))
+            )
+        )!!.network
+        assertEquals(Registration(null, 25601), registering.register)
+        assertNull(registering.problem())
+        assertTrue(registering.copy(group = null).problem()!!.contains("needs network.group"))
+        assertTrue(registering.copy(register = null).problem()!!.contains("only a server that registers itself"))
+        assertTrue(registering.copy(register = Registration("x", -1)).problem()!!.contains("isn't a port"))
     }
 
     @Test
@@ -209,7 +237,24 @@ class RuntimeConfigTest {
             network
         )
         assertNull(network.problem())
+        // A server of a group, with a role of its own: its credential, and the secret is the credential's.
+        val member = properties + mapOf(
+            Bridge.NETWORK_GROUP_PROPERTY to "arena",
+            Bridge.NETWORK_CAPACITY_PROPERTY to "16",
+            Bridge.NETWORK_CREDENTIAL_PROPERTY to "dev-lobby"
+        )
+        val grouped = RuntimeConfig.read(plugin, mapOf("network" to section), server, member::get, env::get)!!.network
+        assertEquals(Triple("arena", 16, "dev-lobby"), Triple(grouped.group, grouped.capacity, grouped.credential))
+        assertNull(grouped.problem())
         // A production server never reads them.
         assertEquals(false, read(mapOf("project" to "p"), properties - Bridge.PROJECT_PROPERTY)!!.network.enabled)
+    }
+
+    @Test
+    fun `bundles' signature rules are read`() {
+        val config = read(
+            mapOf("project" to "p", "bundles" to mapOf("require-signature" to true, "trusted-keys" to listOf(" ed25519:abc ")))
+        )!!
+        assertEquals(dev.netherforge.plugin.project.BundlesConfig(true, listOf("ed25519:abc")), config.bundles)
     }
 }

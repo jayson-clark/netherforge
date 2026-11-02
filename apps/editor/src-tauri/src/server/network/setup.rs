@@ -70,6 +70,71 @@ pub fn proxy(dir: &Path, plugin: &ProxyJar, plan: &ProxyPlan, secrets: &Secrets)
     install_proxy_plugin(dir, plugin)
 }
 
+/// A dev server's credential, when its role isn't `trusted`: what the hub's
+/// `credentials.properties` says of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DevCredential {
+    pub id: String,
+    pub secret: String,
+    pub role: String,
+    /// Its project's namespace, which it owns on the network.
+    pub owns: Option<String>,
+    pub group: Option<String>,
+}
+
+/// A new credential for server [name] with [role]: `dev-<name>`, a new secret each start.
+pub fn dev_credential(
+    name: &str,
+    role: &str,
+    owns: Option<String>,
+    group: Option<String>,
+) -> DevCredential {
+    DevCredential {
+        id: format!("dev-{name}"),
+        secret: random_secret(),
+        role: role.to_string(),
+        owns,
+        group,
+    }
+}
+
+const CREDENTIALS_FILE: &str = "credentials.properties";
+
+/// The hub's `credentials.properties`, written whole each start from
+/// [credentials]: none, no file (every server proves the hub's secret).
+pub fn credentials(dir: &Path, credentials: &[DevCredential]) -> Result<()> {
+    let file = dir.join("plugins").join(HUB_FOLDER).join(CREDENTIALS_FILE);
+    if credentials.is_empty() {
+        if file.exists() {
+            std::fs::remove_file(&file)
+                .context(|| format!("Couldn't remove {}", file.display()))?;
+        }
+        return Ok(());
+    }
+    std::fs::create_dir_all(file.parent().unwrap_or(dir))?;
+    write_atomic(&file, credentials_text(credentials).as_bytes())
+}
+
+fn credentials_text(credentials: &[DevCredential]) -> String {
+    let mut text = String::from(
+        "# Written by the NetherForge editor every time the dev network starts: a credential per server whose role isn't trusted.\n",
+    );
+    for credential in credentials {
+        let id = &credential.id;
+        text.push_str(&format!(
+            "{id}.secret={}\n{id}.role={}\n",
+            credential.secret, credential.role
+        ));
+        if let Some(owns) = &credential.owns {
+            text.push_str(&format!("{id}.owns={owns}\n"));
+        }
+        if let Some(group) = &credential.group {
+            text.push_str(&format!("{id}.group={group}\n"));
+        }
+    }
+    text
+}
+
 /// The secret in [file], or a new one written there.
 fn keep_or_make_secret(file: &Path) -> Result<String> {
     if let Some(secret) = std::fs::read_to_string(file)
@@ -318,6 +383,34 @@ mod tests {
             servers,
             motd: "NetherForge \"dev\" network",
         }
+    }
+
+    #[test]
+    fn writes_a_credential_for_each_server_whose_role_isnt_trusted_and_none_otherwise() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp
+            .path()
+            .join("plugins/netherforge/credentials.properties");
+        let credential = dev_credential(
+            "arena-1",
+            "standard",
+            Some("arena".into()),
+            Some("arena".into()),
+        );
+        assert_eq!(credential.id, "dev-arena-1");
+        assert!(credential.secret.len() >= 32);
+        credentials(tmp.path(), std::slice::from_ref(&credential)).unwrap();
+        let text = std::fs::read_to_string(&file).unwrap();
+        for line in [
+            format!("dev-arena-1.secret={}", credential.secret),
+            "dev-arena-1.role=standard".into(),
+            "dev-arena-1.owns=arena".into(),
+            "dev-arena-1.group=arena".into(),
+        ] {
+            assert!(text.lines().any(|it| it == line), "{line} in {text}");
+        }
+        credentials(tmp.path(), &[]).unwrap();
+        assert!(!file.exists());
     }
 
     #[test]

@@ -10,7 +10,7 @@ A table of functions: call them with a dot.
 | --- | --- |
 | [Timers and tasks](#timers-and-tasks) | [`after`](#after) [`every`](#every) [`task`](#task) [`wait`](#wait) [`wait_until`](#wait_until) [`wait_for`](#wait_for) [`instructions_left`](#instructions_left) |
 | [Data and settings](#data-and-settings) | [`data`](#data) [`db`](#db) [`config`](#config) |
-| [Events](#events) | [`on`](#on) [`once`](#once) [`emit`](#emit) and 106 events |
+| [Events](#events) | [`on`](#on) [`once`](#once) [`emit`](#emit) and 107 events |
 
 ## Namespaces
 
@@ -87,7 +87,7 @@ end)
 
 ### `nf.task(callback, ...)` {#task}
 
-Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.send_player`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.
+Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.worlds.import`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.ban`, `nf.network.unban`, `nf.network.mute`, `nf.network.unmute`, `nf.network.send_player`, `nf.network.send_players`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.
 
 | Parameter | Type | |
 | --- | --- | --- |
@@ -403,6 +403,7 @@ What `nf.on(event, handler)` listens for. See [Events](events.md) for how events
 | --- | --- | --- |
 | `network_connect` | [NetworkConnectEvent](types.md#networkconnectevent) | This server connected to its network's hub: at start-up, and again after the connection dropped and came back. `nf.network.servers()` and `nf.network.players()` are the network as it is now. What was published while it was away didn't reach it, so this is where to ask again for what it should know. |
 | `network_disconnect` | [NetworkDisconnectEvent](types.md#networkdisconnectevent) | This server lost its connection to the network's hub: the proxy restarted, or the network between them broke. It dials again by itself, and `network_connect` says when it's back; meanwhile `publish`, `set` and the rest return `false` or fail, and requests waiting for an answer fail. |
+| `network_state` | [NetworkStateEvent](types.md#networkstateevent) | This server went from one state of its life to the next (`nf.network.state()`): `ready` once its project has started and nothing holds it back (`nf.network.hold_ready`), `draining` when it's asked to take no new players (`/nf drain`, the hub's admin API, `set_draining`), `stopping` as `/nf shutdown` sends its players elsewhere. The place to stop a match from starting, or to tell players the server is going down. |
 | `network_server_connect` | [NetworkServerEvent](types.md#networkserverevent) | Another server of the network connected to the hub (it started, or came back after losing its connection): from now on it hears what's published and answers requests. |
 | `network_server_disconnect` | [NetworkServerEvent](types.md#networkserverevent) | Another server of the network lost its connection to the hub (it stopped, or the network between them broke). Requests to it fail until it's back. |
 | `network_player_join` | [NetworkPlayerEvent](types.md#networkplayerevent) | A player joined the network, on any server of it, this one included (where `player_join` is heard too). |

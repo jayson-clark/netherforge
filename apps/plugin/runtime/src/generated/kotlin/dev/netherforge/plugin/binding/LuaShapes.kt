@@ -5383,6 +5383,29 @@ data class WorldCreateOptions(val generator: String? = null, val terrain: String
     }
 }
 
+/** How `nf.worlds.import` makes the world it imports. A key that isn't one of these is an error. */
+data class WorldImportOptions(val terrain: String? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<WorldImportOptions>("WorldImportOptions") {
+        val terrainCodec = LuaOptional(LuaCodecs.STRING)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "terrain" to terrainCodec
+        )
+
+        override fun read(fields: ShapeReader) = WorldImportOptions(
+            terrain = fields.field("terrain", terrainCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: WorldImportOptions) {
+            fields.field("terrain", value.terrain, terrainCodec)
+        }
+    }
+}
+
 /** How `world:unload` lets a world go. A key that isn't one of these is an error. */
 data class WorldUnloadOptions(val save: Boolean? = null, val delete: Boolean? = null, val movePlayersTo: LuaHandle.World? = null) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)
@@ -7388,86 +7411,357 @@ data class WasmEndEvent(val process: LuaHandle.WasmProcess, val reason: String, 
 }
 
 /** A server of the network, from `nf.network.servers`. */
-data class NetworkServer(val name: String, val connected: Boolean, val players: Long) : LuaShape {
+data class NetworkServer(val name: String, val connected: Boolean, val players: Long, val group: String, val capacity: Long? = null, val accepting: Boolean, val state: String? = null, val idle: Boolean, val tickMilliseconds: Double? = null) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)
 
     object Codec : ShapeCodec<NetworkServer>("NetworkServer") {
         val nameCodec = LuaCodecs.STRING
         val connectedCodec = LuaCodecs.BOOLEAN
         val playersCodec = LuaCodecs.INTEGER
+        val groupCodec = LuaCodecs.STRING
+        val capacityCodec = LuaOptional(LuaCodecs.INTEGER)
+        val acceptingCodec = LuaCodecs.BOOLEAN
+        val stateCodec = LuaOptional(LuaChoice(listOf("starting", "ready", "draining", "stopping")))
+        val idleCodec = LuaCodecs.BOOLEAN
+        val tickMillisecondsCodec = LuaOptional(LuaCodecs.NUMBER)
 
         override val pinned = false
 
         override val fields: Map<String, LuaCodec<*>> = mapOf(
             "name" to nameCodec,
             "connected" to connectedCodec,
-            "players" to playersCodec
+            "players" to playersCodec,
+            "group" to groupCodec,
+            "capacity" to capacityCodec,
+            "accepting" to acceptingCodec,
+            "state" to stateCodec,
+            "idle" to idleCodec,
+            "tick_milliseconds" to tickMillisecondsCodec
         )
 
         override fun read(fields: ShapeReader) = NetworkServer(
             name = fields.field("name", nameCodec),
             connected = fields.field("connected", connectedCodec),
-            players = fields.field("players", playersCodec)
+            players = fields.field("players", playersCodec),
+            group = fields.field("group", groupCodec),
+            capacity = fields.field("capacity", capacityCodec),
+            accepting = fields.field("accepting", acceptingCodec),
+            state = fields.field("state", stateCodec),
+            idle = fields.field("idle", idleCodec),
+            tickMilliseconds = fields.field("tick_milliseconds", tickMillisecondsCodec)
         )
 
         override fun write(fields: ShapeWriter, value: NetworkServer) {
             fields.field("name", value.name, nameCodec)
             fields.field("connected", value.connected, connectedCodec)
             fields.field("players", value.players, playersCodec)
+            fields.field("group", value.group, groupCodec)
+            fields.field("capacity", value.capacity, capacityCodec)
+            fields.field("accepting", value.accepting, acceptingCodec)
+            fields.field("state", value.state, stateCodec)
+            fields.field("idle", value.idle, idleCodec)
+            fields.field("tick_milliseconds", value.tickMilliseconds, tickMillisecondsCodec)
+        }
+    }
+}
+
+/** A group of the network and its instances, from `nf.network.groups`. */
+data class NetworkGroup(val name: String, val players: Long, val capacity: Long? = null, val instances: List<NetworkServer>) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<NetworkGroup>("NetworkGroup") {
+        val nameCodec = LuaCodecs.STRING
+        val playersCodec = LuaCodecs.INTEGER
+        val capacityCodec = LuaOptional(LuaCodecs.INTEGER)
+        val instancesCodec = LuaList(NetworkServer.Codec)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "name" to nameCodec,
+            "players" to playersCodec,
+            "capacity" to capacityCodec,
+            "instances" to instancesCodec
+        )
+
+        override fun read(fields: ShapeReader) = NetworkGroup(
+            name = fields.field("name", nameCodec),
+            players = fields.field("players", playersCodec),
+            capacity = fields.field("capacity", capacityCodec),
+            instances = fields.field("instances", instancesCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: NetworkGroup) {
+            fields.field("name", value.name, nameCodec)
+            fields.field("players", value.players, playersCodec)
+            fields.field("capacity", value.capacity, capacityCodec)
+            fields.field("instances", value.instances, instancesCodec)
+        }
+    }
+}
+
+/** What `nf.network.players` takes. A key that isn't one of these is an error. */
+data class NetworkPlayersOptions(val server: String? = null, val group: String? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<NetworkPlayersOptions>("NetworkPlayersOptions") {
+        val serverCodec = LuaOptional(LuaCodecs.STRING)
+        val groupCodec = LuaOptional(LuaCodecs.STRING)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "server" to serverCodec,
+            "group" to groupCodec
+        )
+
+        override fun read(fields: ShapeReader) = NetworkPlayersOptions(
+            server = fields.field("server", serverCodec),
+            group = fields.field("group", groupCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: NetworkPlayersOptions) {
+            fields.field("server", value.server, serverCodec)
+            fields.field("group", value.group, groupCodec)
+        }
+    }
+}
+
+/**
+ * A server, a group or an admin client, where a request goes. A key that isn't one of these is an
+ * error; it names one of them.
+ */
+data class NetworkTarget(val server: String? = null, val group: String? = null, val admin: String? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<NetworkTarget>("NetworkTarget") {
+        val serverCodec = LuaOptional(LuaCodecs.STRING)
+        val groupCodec = LuaOptional(LuaCodecs.STRING)
+        val adminCodec = LuaOptional(LuaCodecs.STRING)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "server" to serverCodec,
+            "group" to groupCodec,
+            "admin" to adminCodec
+        )
+
+        override fun read(fields: ShapeReader) = NetworkTarget(
+            server = fields.field("server", serverCodec),
+            group = fields.field("group", groupCodec),
+            admin = fields.field("admin", adminCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: NetworkTarget) {
+            fields.field("server", value.server, serverCodec)
+            fields.field("group", value.group, groupCodec)
+            fields.field("admin", value.admin, adminCodec)
+        }
+    }
+}
+
+/**
+ * Where `send_player` and `send_players` send players. A key that isn't one of these is an error; it
+ * names a server or a group.
+ */
+data class NetworkSendOptions(val server: String? = null, val group: String? = null, val balance: String? = null, val data: LuaValue? = null, val wait: Double? = null, val onWait: LuaFunction? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<NetworkSendOptions>("NetworkSendOptions") {
+        val serverCodec = LuaOptional(LuaCodecs.STRING)
+        val groupCodec = LuaOptional(LuaCodecs.STRING)
+        val balanceCodec = LuaOptional(LuaChoice(listOf("least", "fill")))
+        val dataCodec = LuaOptional(LuaCodecs.VALUE)
+        val waitCodec = LuaOptional(LuaCodecs.NUMBER)
+        val onWaitCodec = LuaOptional(LuaCodecs.FUNCTION)
+
+        override val pinned = true
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "server" to serverCodec,
+            "group" to groupCodec,
+            "balance" to balanceCodec,
+            "data" to dataCodec,
+            "wait" to waitCodec,
+            "on_wait" to onWaitCodec
+        )
+
+        override fun read(fields: ShapeReader) = NetworkSendOptions(
+            server = fields.field("server", serverCodec),
+            group = fields.field("group", groupCodec),
+            balance = fields.field("balance", balanceCodec),
+            data = fields.field("data", dataCodec),
+            wait = fields.field("wait", waitCodec),
+            onWait = fields.field("on_wait", onWaitCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: NetworkSendOptions) {
+            fields.field("server", value.server, serverCodec)
+            fields.field("group", value.group, groupCodec)
+            fields.field("balance", value.balance, balanceCodec)
+            fields.field("data", value.data, dataCodec)
+            fields.field("wait", value.wait, waitCodec)
+            fields.field("on_wait", value.onWait, onWaitCodec)
+        }
+    }
+}
+
+/** How `nf.network.ban` and `mute` sanction. A key that isn't one of these is an error. */
+data class NetworkSanctionOptions(val reason: String? = null, val expires: Long? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<NetworkSanctionOptions>("NetworkSanctionOptions") {
+        val reasonCodec = LuaOptional(LuaCodecs.STRING)
+        val expiresCodec = LuaOptional(LuaCodecs.INTEGER)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "reason" to reasonCodec,
+            "expires" to expiresCodec
+        )
+
+        override fun read(fields: ShapeReader) = NetworkSanctionOptions(
+            reason = fields.field("reason", reasonCodec),
+            expires = fields.field("expires", expiresCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: NetworkSanctionOptions) {
+            fields.field("reason", value.reason, reasonCodec)
+            fields.field("expires", value.expires, expiresCodec)
+        }
+    }
+}
+
+/** What this server may do in the network, from `nf.network.server_role`. */
+data class NetworkRole(val role: String, val trusted: Boolean, val owns: List<String>, val shares: List<NetworkShare>, val presence: Boolean, val sendTo: List<String>? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<NetworkRole>("NetworkRole") {
+        val roleCodec = LuaChoice(listOf("trusted", "standard", "isolated"))
+        val trustedCodec = LuaCodecs.BOOLEAN
+        val ownsCodec = LuaList(LuaCodecs.STRING)
+        val sharesCodec = LuaList(NetworkShare.Codec)
+        val presenceCodec = LuaCodecs.BOOLEAN
+        val sendToCodec = LuaOptional(LuaList(LuaCodecs.STRING))
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "role" to roleCodec,
+            "trusted" to trustedCodec,
+            "owns" to ownsCodec,
+            "shares" to sharesCodec,
+            "presence" to presenceCodec,
+            "send_to" to sendToCodec
+        )
+
+        override fun read(fields: ShapeReader) = NetworkRole(
+            role = fields.field("role", roleCodec),
+            trusted = fields.field("trusted", trustedCodec),
+            owns = fields.field("owns", ownsCodec),
+            shares = fields.field("shares", sharesCodec),
+            presence = fields.field("presence", presenceCodec),
+            sendTo = fields.field("send_to", sendToCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: NetworkRole) {
+            fields.field("role", value.role, roleCodec)
+            fields.field("trusted", value.trusted, trustedCodec)
+            fields.field("owns", value.owns, ownsCodec)
+            fields.field("shares", value.shares, sharesCodec)
+            fields.field("presence", value.presence, presenceCodec)
+            fields.field("send_to", value.sendTo, sendToCodec)
+        }
+    }
+}
+
+/** A channel or map shared with this server, from `nf.network.server_role`. */
+data class NetworkShare(val name: String, val access: List<String>) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<NetworkShare>("NetworkShare") {
+        val nameCodec = LuaCodecs.STRING
+        val accessCodec = LuaList(LuaChoice(listOf("read", "write", "request", "answer")))
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "name" to nameCodec,
+            "access" to accessCodec
+        )
+
+        override fun read(fields: ShapeReader) = NetworkShare(
+            name = fields.field("name", nameCodec),
+            access = fields.field("access", accessCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: NetworkShare) {
+            fields.field("name", value.name, nameCodec)
+            fields.field("access", value.access, accessCodec)
         }
     }
 }
 
 /** A player online in the network. */
-data class NetworkPlayer(val id: String, val name: String, val server: String? = null) : LuaShape {
+data class NetworkPlayer(val id: String, val name: String, val server: String? = null, val proxy: String? = null) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)
 
     object Codec : ShapeCodec<NetworkPlayer>("NetworkPlayer") {
         val idCodec = LuaCodecs.STRING
         val nameCodec = LuaCodecs.STRING
         val serverCodec = LuaOptional(LuaCodecs.STRING)
+        val proxyCodec = LuaOptional(LuaCodecs.STRING)
 
         override val pinned = false
 
         override val fields: Map<String, LuaCodec<*>> = mapOf(
             "id" to idCodec,
             "name" to nameCodec,
-            "server" to serverCodec
+            "server" to serverCodec,
+            "proxy" to proxyCodec
         )
 
         override fun read(fields: ShapeReader) = NetworkPlayer(
             id = fields.field("id", idCodec),
             name = fields.field("name", nameCodec),
-            server = fields.field("server", serverCodec)
+            server = fields.field("server", serverCodec),
+            proxy = fields.field("proxy", proxyCodec)
         )
 
         override fun write(fields: ShapeWriter, value: NetworkPlayer) {
             fields.field("id", value.id, idCodec)
             fields.field("name", value.name, nameCodec)
             fields.field("server", value.server, serverCodec)
+            fields.field("proxy", value.proxy, proxyCodec)
         }
     }
 }
 
 /** What `channel:publish` takes. A key that isn't one of these is an error. */
-data class NetworkPublishOptions(val server: String? = null) : LuaShape {
+data class NetworkPublishOptions(val server: String? = null, val group: String? = null) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)
 
     object Codec : ShapeCodec<NetworkPublishOptions>("NetworkPublishOptions") {
         val serverCodec = LuaOptional(LuaCodecs.STRING)
+        val groupCodec = LuaOptional(LuaCodecs.STRING)
 
         override val pinned = false
 
         override val fields: Map<String, LuaCodec<*>> = mapOf(
-            "server" to serverCodec
+            "server" to serverCodec,
+            "group" to groupCodec
         )
 
         override fun read(fields: ShapeReader) = NetworkPublishOptions(
-            server = fields.field("server", serverCodec)
+            server = fields.field("server", serverCodec),
+            group = fields.field("group", groupCodec)
         )
 
         override fun write(fields: ShapeWriter, value: NetworkPublishOptions) {
             fields.field("server", value.server, serverCodec)
+            fields.field("group", value.group, groupCodec)
         }
     }
 }
@@ -7675,6 +7969,33 @@ data class NetworkDisconnectEvent(val detail: String) : LuaEvent {
 
         override fun write(fields: ShapeWriter, value: NetworkDisconnectEvent) {
             fields.field("detail", value.detail, detailCodec)
+        }
+    }
+}
+
+/** This server went from one state of its life to the next. */
+data class NetworkStateEvent(val state: String, val previous: String) : LuaEvent {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<NetworkStateEvent>("NetworkStateEvent") {
+        val stateCodec = LuaChoice(listOf("starting", "ready", "draining", "stopping"))
+        val previousCodec = LuaChoice(listOf("starting", "ready", "draining", "stopping"))
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "state" to stateCodec,
+            "previous" to previousCodec
+        )
+
+        override fun read(fields: ShapeReader) = NetworkStateEvent(
+            state = fields.field("state", stateCodec),
+            previous = fields.field("previous", previousCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: NetworkStateEvent) {
+            fields.field("state", value.state, stateCodec)
+            fields.field("previous", value.previous, previousCodec)
         }
     }
 }
@@ -8563,6 +8884,152 @@ data class TextSize(val width: Double, val height: Double) : LuaShape {
         override fun write(fields: ShapeWriter, value: TextSize) {
             fields.field("width", value.width, widthCodec)
             fields.field("height", value.height, heightCodec)
+        }
+    }
+}
+
+/**
+ * What `nf.test.network_server` takes, the first time it names a server. A key that isn't one of these
+ * is an error.
+ */
+data class TestNetworkServerOptions(val group: String? = null, val capacity: Long? = null, val state: String? = null, val accepting: Boolean? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<TestNetworkServerOptions>("TestNetworkServerOptions") {
+        val groupCodec = LuaOptional(LuaCodecs.STRING)
+        val capacityCodec = LuaOptional(LuaCodecs.INTEGER)
+        val stateCodec = LuaOptional(LuaChoice(listOf("starting", "ready", "draining", "stopping")))
+        val acceptingCodec = LuaOptional(LuaCodecs.BOOLEAN)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "group" to groupCodec,
+            "capacity" to capacityCodec,
+            "state" to stateCodec,
+            "accepting" to acceptingCodec
+        )
+
+        override fun read(fields: ShapeReader) = TestNetworkServerOptions(
+            group = fields.field("group", groupCodec),
+            capacity = fields.field("capacity", capacityCodec),
+            state = fields.field("state", stateCodec),
+            accepting = fields.field("accepting", acceptingCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: TestNetworkServerOptions) {
+            fields.field("group", value.group, groupCodec)
+            fields.field("capacity", value.capacity, capacityCodec)
+            fields.field("state", value.state, stateCodec)
+            fields.field("accepting", value.accepting, acceptingCodec)
+        }
+    }
+}
+
+/** What `nf.test.network_status` says of another server. A key that isn't one of these is an error. */
+data class TestNetworkStatus(val state: String? = null, val accepting: Boolean? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<TestNetworkStatus>("TestNetworkStatus") {
+        val stateCodec = LuaOptional(LuaChoice(listOf("starting", "ready", "draining", "stopping")))
+        val acceptingCodec = LuaOptional(LuaCodecs.BOOLEAN)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "state" to stateCodec,
+            "accepting" to acceptingCodec
+        )
+
+        override fun read(fields: ShapeReader) = TestNetworkStatus(
+            state = fields.field("state", stateCodec),
+            accepting = fields.field("accepting", acceptingCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: TestNetworkStatus) {
+            fields.field("state", value.state, stateCodec)
+            fields.field("accepting", value.accepting, acceptingCodec)
+        }
+    }
+}
+
+/**
+ * This server's role in the test's network, for `nf.test.network_role`. A key that isn't one of these
+ * is an error.
+ */
+data class TestNetworkRole(val role: String, val owns: List<String>? = null, val shares: List<String>? = null, val presence: Boolean? = null, val sendTo: List<String>? = null, val moderation: Boolean? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<TestNetworkRole>("TestNetworkRole") {
+        val roleCodec = LuaChoice(listOf("trusted", "standard", "isolated"))
+        val ownsCodec = LuaOptional(LuaList(LuaCodecs.STRING))
+        val sharesCodec = LuaOptional(LuaList(LuaCodecs.STRING))
+        val presenceCodec = LuaOptional(LuaCodecs.BOOLEAN)
+        val sendToCodec = LuaOptional(LuaList(LuaCodecs.STRING))
+        val moderationCodec = LuaOptional(LuaCodecs.BOOLEAN)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "role" to roleCodec,
+            "owns" to ownsCodec,
+            "shares" to sharesCodec,
+            "presence" to presenceCodec,
+            "send_to" to sendToCodec,
+            "moderation" to moderationCodec
+        )
+
+        override fun read(fields: ShapeReader) = TestNetworkRole(
+            role = fields.field("role", roleCodec),
+            owns = fields.field("owns", ownsCodec),
+            shares = fields.field("shares", sharesCodec),
+            presence = fields.field("presence", presenceCodec),
+            sendTo = fields.field("send_to", sendToCodec),
+            moderation = fields.field("moderation", moderationCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: TestNetworkRole) {
+            fields.field("role", value.role, roleCodec)
+            fields.field("owns", value.owns, ownsCodec)
+            fields.field("shares", value.shares, sharesCodec)
+            fields.field("presence", value.presence, presenceCodec)
+            fields.field("send_to", value.sendTo, sendToCodec)
+            fields.field("moderation", value.moderation, moderationCodec)
+        }
+    }
+}
+
+/** A report the test's network has, from `nf.test.network_reports`. */
+data class TestNetworkReport(val player: String, val reason: String, val details: Any? = null, val by: String? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<TestNetworkReport>("TestNetworkReport") {
+        val playerCodec = LuaCodecs.STRING
+        val reasonCodec = LuaCodecs.STRING
+        val detailsCodec = LuaCodecs.DYNAMIC
+        val byCodec = LuaOptional(LuaCodecs.STRING)
+
+        override val pinned = true
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "player" to playerCodec,
+            "reason" to reasonCodec,
+            "details" to detailsCodec,
+            "by" to byCodec
+        )
+
+        override fun read(fields: ShapeReader) = TestNetworkReport(
+            player = fields.field("player", playerCodec),
+            reason = fields.field("reason", reasonCodec),
+            details = fields.field("details", detailsCodec),
+            by = fields.field("by", byCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: TestNetworkReport) {
+            fields.field("player", value.player, playerCodec)
+            fields.field("reason", value.reason, reasonCodec)
+            fields.field("details", value.details, detailsCodec)
+            fields.field("by", value.by, byCodec)
         }
     }
 }

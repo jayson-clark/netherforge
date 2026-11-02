@@ -4,12 +4,16 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  mkdtempSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import os from 'node:os'
 import path from 'node:path'
 import * as nf from '@netherforge/format'
+import { archive, buildPack, put, signBundle, storage, type Storage } from './bundles.ts'
 import {
   BUNDLE_FILE,
   GAME_DATA_SCHEMA,
@@ -90,7 +94,7 @@ export function loadGameData(
     json: null,
     note:
       `No game data for Minecraft ${minecraft} (${file}), so block, item and entity ids weren't checked. ` +
-      'Start the dev server from the NetherForge editor once to export it, or pass --game-data <file>.',
+      `Start the dev server from the NetherForge editor once to export it, run netherforge game-data ${minecraft} --accept-eula, or pass --game-data <file>.`,
   }
 }
 
@@ -115,13 +119,18 @@ export function isCurrent(json: string): boolean {
 
 export function check(
   root: string,
-  options: { json?: boolean; gameData?: string; servers?: string[] },
+  options: { json?: boolean; gameData?: string; servers?: string[]; policy?: string },
   env: NodeJS.ProcessEnv = process.env,
 ): Outcome {
   const input = readProject(root)
   const game = loadGameData(input, options.gameData, env)
-  const outline = load(root, input, env, game.json)
-  const problems = [...outline.problems, ...networkProblems(input, options.servers)]
+  const packages = readPackages(root, packageCache(env), input)
+  const outline = load(root, input, env, game.json, packages)
+  const problems = [
+    ...outline.problems,
+    ...networkProblems(input, options.servers),
+    ...policyProblems(input, packages, options.policy),
+  ]
   const errors = problems.filter((it) => it.severity === 'error').length
   const warnings = problems.length - errors
   const code = errors > 0 ? 1 : 0
@@ -137,6 +146,34 @@ export function check(
       : `${errors} error${errors === 1 ? '' : 's'}, ${warnings} warning${warnings === 1 ? '' : 's'}.`,
   )
   return { out, err, code }
+}
+
+/**
+ * What the policy in [file] (a network's `policy.json`, as `--policy` names it) refuses of what the project and its
+ * packages require: whether the project would run under it.
+ */
+function policyProblems(
+  input: Record<string, string | null>,
+  packages: PackageInputs,
+  file?: string,
+): Problem[] {
+  if (!file) return []
+  let text: string
+  try {
+    text = readFileSync(file, 'utf8')
+  } catch (e) {
+    return [
+      {
+        severity: 'error',
+        file,
+        message: `The policy can't be read: ${(e as Error).message}`,
+        code: 'runtime.policy',
+      },
+    ]
+  }
+  return JSON.parse(
+    nf.checkPolicy(text, JSON.stringify(input), JSON.stringify(packages)),
+  ) as Problem[]
 }
 
 /**
@@ -225,10 +262,11 @@ export function lock(
  */
 export function build(
   root: string,
-  options: { out?: string },
+  options: { out?: string; sign?: string; archive?: boolean; gameData?: string },
   env: NodeJS.ProcessEnv = process.env,
 ): Outcome {
   const input = readProject(root)
+  const game = loadGameData(input, options.gameData, env)
   const outline = load(root, input, env)
   const errors = outline.problems.filter(
     (it) => it.severity === 'error' || it.code === 'lock.missing' || it.code === 'lock.stale',
@@ -268,7 +306,29 @@ export function build(
     packages[name] = { version: manifest.version, hash: hashPackage(path.join(out, name)) }
   }
   const { formatVersion } = JSON.parse(input[MANIFEST_FILE]!) as { formatVersion: number }
-  const bundle = { formatVersion, project: namespace, packages }
+  // The resource pack servers would build as players join, built now with the game's data, so a server needn't.
+  const layout = nf.resourcePackLayout(
+    JSON.stringify(input),
+    JSON.stringify(readPackages(root, packageCache(env), input)),
+    game.json,
+    JSON.stringify(pngSizes(root, Object.keys(input))),
+  )
+  const pack = buildPack(out, namespace, layout)
+  let resourcePack: { sha1: string; format: number[] } | undefined
+  let packLine: string
+  if ('zip' in pack) {
+    writeFileSync(path.join(out, 'resource-pack.zip'), pack.zip)
+    resourcePack = { sha1: pack.sha1, format: pack.format }
+    packLine = `Built its resource pack (pack format ${pack.format.join('.')}, SHA-1 ${pack.sha1}).`
+  } else {
+    packLine = `No resource pack in the bundle: ${pack.reason}. A server builds it as it starts.`
+  }
+  const bundle = {
+    formatVersion,
+    project: namespace,
+    packages,
+    ...(resourcePack ? { resourcePack } : {}),
+  }
   const written = JSON.parse(
     nf.canonicalize('bundle', BUNDLE_FILE, JSON.stringify(bundle)),
   ) as CanonicalResult
@@ -278,10 +338,141 @@ export function build(
   // Where it is, as short as it can say it: from here when it's under here.
   const here = path.relative(process.cwd(), out)
   const shown = here && !here.startsWith('..') && !path.isAbsolute(here) ? here : out
-  return {
-    out: [`Built ${shown}: ${namespace} ${version}${what}.`],
-    err: [],
-    code: 0,
+  const lines = [`Built ${shown}: ${namespace} ${version}${what}.`, packLine]
+  if (options.sign) {
+    try {
+      lines.push(`Signed as ${signBundle(out, path.resolve(options.sign))}.`)
+    } catch (e) {
+      return { out: lines, err: [`Not signed: ${(e as Error).message}`], code: 1 }
+    }
+  }
+  if (options.archive) {
+    const file = `${out}.nfbundle`
+    lines.push(`Archived ${shown}.nfbundle, sha256 ${archive(out, file)}.`)
+  }
+  return { out: lines, err: [], code: 0 }
+}
+
+/**
+ * Builds, signs and archives the bundle, and uploads it and its listing to [options.to] (S3-compatible storage): what
+ * a server then runs by URL. The listing (`<namespace>-<version>.json`) has the version, the archive's SHA-256 and
+ * size, who signed it, and the project's listing fields.
+ */
+export async function publish(
+  root: string,
+  options: {
+    to: string
+    endpoint?: string
+    sign?: string
+    publicUrl?: string
+    packsTo?: string
+    gameData?: string
+  },
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<Outcome> {
+  let store: Storage
+  try {
+    store = storage(options.to, options.endpoint, env)
+  } catch (e) {
+    return { out: [], err: [(e as Error).message], code: 2 }
+  }
+  const work = mkdtempSync(path.join(os.tmpdir(), 'netherforge-publish-'))
+  try {
+    const manifest = JSON.parse(readFileSync(path.join(root, MANIFEST_FILE), 'utf8')) as {
+      namespace: string
+      version: string
+      name?: string
+      listing?: { icon?: string; screenshots?: string[]; [key: string]: unknown }
+    }
+    const name = `${manifest.namespace}-${manifest.version}`
+    const out = path.join(work, name)
+    const built = build(
+      root,
+      { out, sign: options.sign, archive: true, gameData: options.gameData },
+      env,
+    )
+    if (built.code !== 0) return built
+    const file = `${out}.nfbundle`
+    const bytes = readFileSync(file)
+    const hash = createHash('sha256').update(bytes).digest('hex')
+    const key = (it: string) => (store.prefix ? `${store.prefix}/${it}` : it)
+    const base = (
+      options.publicUrl ??
+      `${store.endpoint}/${store.bucket}/${store.prefix ? store.prefix + '/' : ''}`
+    ).replace(/\/?$/, '/')
+    const url = `${base}${name}.nfbundle`
+    const bundle = JSON.parse(readFileSync(path.join(out, BUNDLE_FILE), 'utf8')) as {
+      signatures?: { key: string }[]
+    }
+    const listing = {
+      namespace: manifest.namespace,
+      name: manifest.name,
+      version: manifest.version,
+      url,
+      sha256: hash,
+      size: bytes.length,
+      signedBy: (bundle.signatures ?? []).map((it) => it.key),
+      listing: manifest.listing ?? null,
+    }
+    // The listing's pictures aren't the bundle's (no server needs them): beside it, the listing naming them by URL.
+    const pictures: [string, string][] = []
+    if (manifest.listing) {
+      const picture = (file: string) => {
+        const target = `${name}/${pictures.length}-${path.basename(file)}`
+        pictures.push([file, target])
+        return `${base}${target}`
+      }
+      listing.listing = {
+        ...manifest.listing,
+        ...(manifest.listing.icon ? { icon: picture(manifest.listing.icon) } : {}),
+        ...(manifest.listing.screenshots
+          ? { screenshots: manifest.listing.screenshots.map(picture) }
+          : {}),
+      }
+    }
+    // The bundle's resource pack, where servers fetch packs from (resource-pack.storage): they find it there, built.
+    const packed = (bundle as { resourcePack?: { sha1: string } }).resourcePack
+    let packs: Storage | undefined
+    if (options.packsTo) {
+      try {
+        packs = storage(options.packsTo, options.endpoint, env)
+      } catch (e) {
+        return { out: built.out, err: [(e as Error).message], code: 2 }
+      }
+    }
+    try {
+      if (packs && packed) {
+        const packKey = packs.prefix ? `${packs.prefix}/${packed.sha1}.zip` : `${packed.sha1}.zip`
+        await put(
+          packs,
+          packKey,
+          readFileSync(path.join(out, 'resource-pack.zip')),
+          'application/zip',
+        )
+      }
+      for (const [file, target] of pictures)
+        await put(store, key(target), readFileSync(path.join(root, file)), 'image/png')
+      await put(store, key(`${name}.nfbundle`), bytes, 'application/zip')
+      await put(
+        store,
+        key(`${name}.json`),
+        Buffer.from(JSON.stringify(listing, null, 2) + '\n'),
+        'application/json',
+      )
+    } catch (e) {
+      return { out: built.out, err: [`Not published: ${(e as Error).message}`], code: 1 }
+    }
+    return {
+      out: [
+        ...built.out,
+        `Published ${name}. A server runs it with:`,
+        `project: ${url}#sha256=${hash}`,
+      ],
+      err: [],
+      code: 0,
+    }
+  } finally {
+    rmSync(work, { recursive: true, force: true })
   }
 }
 

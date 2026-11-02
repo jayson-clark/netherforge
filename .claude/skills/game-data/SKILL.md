@@ -15,6 +15,14 @@ in the plugin jar. Every game fact comes from the game itself, at runtime.
 | Every registry and its tags (items, entity types, sounds, biomes, structures, features, loot tables…), block states, collision shapes, particle data kinds, pack format | the **server** | Plugin: the live server. Editor: the dev server exports it over the bridge (`export_game_data`) on first start for a version. |
 | Textures, block/item models, blockstate files, fonts (glyph widths), lang files                                                                                         | the **client** | Editor only: imported from the player's own Minecraft installs (Settings → Minecraft).                                        |
 
+Without the editor, `netherforge game-data <version> --accept-eula` (apps/cli `gameData.ts`) gets the server facts
+the same way: the version's plugin jar (`NETHERFORGE_PLUGIN_JAR`, beside the script, `<data>/plugins/`, or this
+release's), the Paper build its `paper.properties` names (cached in `<data>/paper/` as the editor's), and Paper run
+headless in `<data>/game-data-server/<version>/` with `-Dnetherforge.export-game-data=<file>` (runtime's
+`GameDataExport`: written once the server loads, then it stops; `config.yml`'s `export-game-data:` writes it at every
+start instead). The EULA is accepted only by `--accept-eula`, passed as `-Dcom.mojang.eula.agree=true`, never an
+`eula.txt`.
+
 Both land in the per-user cache: `<app data>/NetherForge/minecraft/<version>/{server,client}/`,
 shared by every project that targets that version. Never in a project, never
 in the repo.

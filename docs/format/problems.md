@@ -68,6 +68,10 @@ Error. A world in `worlds` names a terrain and a dimension, and a height the ter
 
 Error. A node in `allow.permissions` isn't a permission node. See [the project format](project.md).
 
+### `project.listing` {#project-listing}
+
+Error. Something of `listing` in `netherforge.json` isn't what a listing takes: a picture that isn't a PNG in the project, a tag, a count. See [the project format](project.md).
+
 ### `project.requires-host` {#project-requires-host}
 
 Error. A host in `requires.http` isn't a host name, or `*.` and one. See [the project format](project.md).
@@ -1652,6 +1656,10 @@ Error. A server in `network.servers` runs a folder that isn't one of the workspa
 
 Error. `network.arrival` isn't one of the network's servers. See [format/workspace.md](workspace.md).
 
+### `workspace.server-options` {#workspace-server-options}
+
+Error. An entry in `network.options` isn't one of the network's servers, or its group, capacity or role isn't one. See [format/workspace.md](workspace.md).
+
 ### `workspace.unknown-server` {#workspace-unknown-server}
 
 Warning. A script sends players to a server the workspace's dev network doesn't have. See [format/workspace.md](workspace.md).
@@ -1669,6 +1677,14 @@ Error. A server without the editor runs a project that has dependencies: it runs
 ### `runtime.bundle-hash` {#runtime-bundle-hash}
 
 Error. A package in a bundle isn't what the bundle says it is: a file was changed, added or removed. See [packages](packages.md).
+
+### `runtime.bundle-signature` {#runtime-bundle-signature}
+
+Error. A bundle's signature doesn't match it, or the server requires one by a key it trusts and the bundle has none. See [packages](packages.md).
+
+### `runtime.policy` {#runtime-policy}
+
+Error. A package requires something the server's policy (`policy.json`, or the network's for the server's role) refuses. See [packages](packages.md).
 
 ### `runtime.web-disabled` {#runtime-web-disabled}
 

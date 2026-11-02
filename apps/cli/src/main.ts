@@ -2,13 +2,15 @@ import { parseArgs } from 'node:util'
 import { readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { build, check, format, generate, lock, type Outcome } from './commands.ts'
+import { keygen, signBundle } from './bundles.ts'
+import { build, check, format, generate, lock, publish, type Outcome } from './commands.ts'
 import { findProjectRoot } from './project.ts'
 import { preview } from './preview.ts'
 import { gallery, render } from './render.ts'
 import { setup, setupWorkspace } from './setup.ts'
 import { findPlaceable, importSchematic, placeableAt, previewStructure } from './structures.ts'
 import { fetchJar, findJar, test } from './test.ts'
+import { exportGameData } from './gameData.ts'
 import { eachProject, isWorkspace, readWorkspace, workspaceAround } from './workspace.ts'
 
 declare const __NETHERFORGE_VERSION__: string
@@ -24,11 +26,12 @@ Usage:
       agents, and this command (.netherforge/bin/netherforge.mjs). Adds a
       .luarc.json when the project has none. Run it on a fresh clone, and
       again after changing netherforge.json, its dependencies or its names.
-  netherforge check  [dir] [--json] [--game-data <file>]
+  netherforge check  [dir] [--json] [--game-data <file>] [--policy <file>]
       Validate the whole project, as the editor's Problems panel does.
       Prints file:line: severity: message (at $.json.path), one per line.
       Exits 1 if there are errors. Ids are checked against the game data
-      the editor's dev server exported, when it has.
+      the editor's dev server exported, when it has. With --policy, also
+      what a network's policy.json refuses of what the project requires.
   netherforge format [dir] [--check]
       Rewrite project JSON in canonical form, as the editor saves it.
       With --check, change nothing and exit 1 if a file isn't canonical.
@@ -43,11 +46,30 @@ Usage:
       at the commit the lock pins until its git or rev changes; --update
       resolves every one afresh (a branch's newest commit). Git packages
       are fetched with your git into the editor's package cache.
-  netherforge build  [dir] [--out <folder>]
+  netherforge build  [dir] [--out <folder>] [--sign <key>] [--archive]
       Write a bundle: the project and the packages it depends on, for a
       production server to run (point the plugin's project setting at it).
       Default folder: build/<namespace>-<version> in the project. Refuses
-      a project with errors or an out-of-date netherforge.lock.
+      a project with errors or an out-of-date netherforge.lock. --sign
+      signs it with a private key (netherforge keygen); --archive also
+      writes it as one file, <folder>.nfbundle, and prints its SHA-256.
+      With the game's data (the editor's cache, or --game-data <file>),
+      the project's resource pack is built into the bundle too, so a
+      server with that pack format sends it rather than building it.
+  netherforge keygen <file>
+      Make an Ed25519 key pair for signing bundles: the private key in
+      <file>, the public key (what servers trust) in <file>.pub.
+  netherforge sign <bundle folder> --key <file>
+      Add a signature to a built bundle: a network countersigning what it
+      checked, so its servers trust only its key.
+  netherforge publish [dir] --to s3://bucket/prefix [--endpoint <url>]
+                      [--sign <key>] [--public-url <url>] [--packs-to <s3 url>]
+      Build, sign and archive the bundle, and upload it and its listing
+      (<namespace>-<version>.nfbundle and .json) to S3-compatible storage
+      (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION). Prints what a
+      server's project setting takes to run it from there. --packs-to
+      s3://bucket/prefix uploads the bundle's resource pack where servers'
+      resource-pack.storage fetches packs, so they find it there.
   netherforge preview terrain/<id>.json --out <file>.png [--seed <n>]
                      [--x <n>] [--z <n>] [--size <cells>] [--step <blocks>]
                      [--scale <pixels>] [--slice x|z --at <n> [--width <n>] [--top <y>]]
@@ -92,6 +114,16 @@ Usage:
   netherforge gallery [dir] [--out <folder>] [--size <pixels>]
       Draw every item, block and centity of the project into --out
       (default build/gallery), with an index.html showing them all.
+  netherforge game-data <minecraft version> [--out <file>] --accept-eula
+                     [--timeout <seconds>]
+      Export the game's data for a Minecraft version without the editor (on
+      CI, say), into the cache check and test read, or --out. Downloads the
+      version's plugin jar from this NetherForge's release (or
+      NETHERFORGE_PLUGIN_JAR) and the Paper build it names, starts Paper
+      headless with Java 25 or newer, exports and stops. Running Minecraft's
+      server needs you to accept its EULA: --accept-eula says you do.
+      --timeout bounds the run (default 600; the first start downloads and
+      patches Minecraft's server).
   netherforge test   [dir|file] [--json] [--junit <file>] [--filter <text>]
                      [--game-data <file>]
       Run the project's *_test.lua files on a fake server, each test on a
@@ -100,8 +132,8 @@ Usage:
       jar: the editor puts it in its data folder, and this command downloads
       it from the release the first time (see NETHERFORGE_TEST_JAR).
       The project runs on the real game data of its Minecraft version, the
-      dev server's export the editor caches (or --game-data <file>); without
-      it the tests don't run.
+      dev server's export the editor caches (or netherforge game-data puts
+      there, or --game-data <file>); without it the tests don't run.
       --json prints one JSON event per line, --junit also writes JUnit XML,
       --filter keeps the tests whose "file: name" contains the text. Giving a
       *_test.lua file runs only that file. Exits 1 if a test fails or errors,
@@ -123,6 +155,14 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
         json: { type: 'boolean' },
         check: { type: 'boolean' },
         'game-data': { type: 'string' },
+        policy: { type: 'string' },
+        sign: { type: 'string' },
+        archive: { type: 'boolean' },
+        key: { type: 'string' },
+        to: { type: 'string' },
+        endpoint: { type: 'string' },
+        'public-url': { type: 'string' },
+        'packs-to': { type: 'string' },
         out: { type: 'string' },
         update: { type: 'boolean' },
         junit: { type: 'string' },
@@ -145,6 +185,8 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
         as: { type: 'string' },
         build: { type: 'boolean' },
         replace: { type: 'boolean' },
+        'accept-eula': { type: 'boolean' },
+        timeout: { type: 'string' },
         help: { type: 'boolean', short: 'h' },
         version: { type: 'boolean', short: 'v' },
       },
@@ -205,6 +247,7 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
               json: values.json,
               gameData: values['game-data'],
               servers: workspace.servers ?? undefined,
+              policy: values.policy,
             },
             env,
           )
@@ -239,6 +282,48 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
     }
     return eachProject(workspace, run, command === 'test' ? (line) => console.log(line) : undefined)
   }
+  // The game's data needs no project either: a Minecraft version.
+  if (command === 'game-data') {
+    if (dir === '.')
+      return {
+        out: [],
+        err: ['Usage: netherforge game-data <minecraft version> [--out <file>] --accept-eula'],
+        code: 2,
+      }
+    const timeout = values.timeout === undefined ? undefined : Number(values.timeout)
+    if (timeout !== undefined && !(timeout > 0))
+      return { out: [], err: [`--timeout is seconds, not "${values.timeout}"`], code: 2 }
+    return exportGameData(
+      dir,
+      { out: values.out, acceptEula: values['accept-eula'], timeoutSeconds: timeout },
+      __NETHERFORGE_VERSION__,
+      env,
+      { say: (line) => process.stderr.write(`${line}\n`) },
+    )
+  }
+  // Keys and signatures need no project: a file, and a bundle's folder.
+  if (command === 'keygen') {
+    if (dir === '.') return { out: [], err: ['Usage: netherforge keygen <file>'], code: 2 }
+    const key = keygen(path.resolve(dir))
+    return {
+      out: [
+        `Wrote the private key to ${dir} (keep it secret) and its public key to ${dir}.pub:`,
+        key,
+      ],
+      err: [],
+      code: 0,
+    }
+  }
+  if (command === 'sign') {
+    if (!values.key)
+      return { out: [], err: ['Usage: netherforge sign <bundle folder> --key <file>'], code: 2 }
+    try {
+      const key = signBundle(path.resolve(dir), path.resolve(values.key))
+      return { out: [`Signed ${dir} as ${key}.`], err: [], code: 0 }
+    } catch (e) {
+      return { out: [], err: [`Not signed: ${(e as Error).message}`], code: 1 }
+    }
+  }
   // `netherforge import city.litematic` imports into the project this folder is in.
   const root = findProjectRoot(
     testFile
@@ -263,7 +348,11 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
       )
     }
     case 'check':
-      return check(root, { json: values.json, gameData: values['game-data'] }, env)
+      return check(
+        root,
+        { json: values.json, gameData: values['game-data'], policy: values.policy },
+        env,
+      )
     case 'format':
       return format(root, { check: values.check })
     case 'generate':
@@ -282,7 +371,35 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
     case 'lock':
       return lock(root, { update: values.update }, env)
     case 'build':
-      return build(root, { out: values.out }, env)
+      return build(
+        root,
+        {
+          out: values.out,
+          sign: values.sign,
+          archive: values.archive,
+          gameData: values['game-data'],
+        },
+        env,
+      )
+    case 'publish':
+      if (!values.to)
+        return {
+          out: [],
+          err: ['Usage: netherforge publish [dir] --to s3://bucket/prefix'],
+          code: 2,
+        }
+      return publish(
+        root,
+        {
+          to: values.to,
+          endpoint: values.endpoint,
+          sign: values.sign,
+          publicUrl: values['public-url'],
+          packsTo: values['packs-to'],
+          gameData: values['game-data'],
+        },
+        env,
+      )
     case 'preview': {
       const numbers: Record<string, number | undefined> = {}
       for (const key of [

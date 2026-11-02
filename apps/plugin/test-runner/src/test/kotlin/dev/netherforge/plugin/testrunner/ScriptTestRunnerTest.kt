@@ -827,6 +827,21 @@ class ScriptTestRunnerTest {
                       assert(total == 7 and net.scores:get("ann") == 7)
                     end)
 
+                    nf.test.case("a group's instances share players out", function()
+                      nf.test.network_server("arena-1", { group = "arena", capacity = 1 })
+                      nf.test.network_server("arena-2", { group = "arena", capacity = 1 })
+                      nf.test.advance(1)
+                      assert(nf.network.group() == "test")
+                      local groups = {}
+                      for _, group in ipairs(nf.network.groups()) do groups[group.name] = group end
+                      assert(#groups.arena.instances == 2 and groups.arena.capacity == 2, tostring(#groups.arena.instances))
+                      local ann = nf.test.player("Ann")
+                      local server, err
+                      nf.task(function() server, err = nf.network.send_player(ann, { group = "arena" }) end)
+                      nf.test.advance(2)
+                      assert(server == "arena-1", tostring(err))
+                    end)
+
                     nf.test.case("players come and go, and are sent both ways", function()
                       nf.test.network_join("lobby", "Bob")
                       nf.test.advance(1)
@@ -838,7 +853,7 @@ class ScriptTestRunnerTest {
                       local moved, err
                       nf.task(function() moved, err = nf.network.send_player(ann, "lobby") end)
                       nf.test.advance(2)
-                      assert(moved == true, tostring(err))
+                      assert(moved == "lobby", tostring(err))
                       assert(#nf.players.online() == 0, "sent away, they left this server")
                       assert(nf.network.find_player("Ann").server == "lobby")
                       nf.test.network_quit("Bob")
@@ -848,7 +863,59 @@ class ScriptTestRunnerTest {
                 """
             )
         )
-        expectStatuses(events, Status.PASSED, Status.PASSED, Status.PASSED, Status.PASSED)
+        expectStatuses(events, Status.PASSED, Status.PASSED, Status.PASSED, Status.PASSED, Status.PASSED)
+    }
+
+    @Test
+    fun `a test plays a group starting, holds this server to a role, and moderates its network`() {
+        val (events, _) = run(
+            mapOf(
+                "netherforge.json" to
+                    manifest.replace(
+                        "\"minecraft\": \"26.3\"",
+                        "\"minecraft\": \"26.3\",\n  \"requires\": { \"network\": true, \"moderation\": true }"
+                    ),
+                "tests/net_test.lua" to """
+                    nf.test.case("a player waits for the arena to start, then goes", function()
+                      nf.test.network_server("arena-1", { group = "arena", state = "starting" })
+                      local ann = nf.test.player("Ann")
+                      local went, place
+                      nf.task(function()
+                        went = nf.network.send_player(ann, { group = "arena", wait = 30, on_wait = function(p) place = p end })
+                      end)
+                      nf.test.advance(2)
+                      assert(went == nil and place == 1, tostring(place))
+                      nf.test.network_status("arena-1", { state = "ready" })
+                      nf.test.advance(2)
+                      assert(went == "arena-1", tostring(went))
+                    end)
+
+                    nf.test.case("a standard server is held to its role", function()
+                      nf.test.network_role({ role = "standard", owns = { "other" } })
+                      nf.test.advance(1)
+                      assert(nf.network.server_role().role == "standard")
+                      local ok, err = pcall(function() nf.network.channel("chat"):publish("hi") end)
+                      assert(not ok and err:find("network.forbidden"), tostring(err))
+                    end)
+
+                    nf.test.case("bans, mutes and reports go to the network's hub", function()
+                      nf.test.network_server("lobby")
+                      nf.test.network_join("lobby", "Bea")
+                      nf.test.advance(1)
+                      local banned
+                      nf.task(function() banned = nf.network.ban("Bea", { reason = "griefing" }) end)
+                      nf.test.advance(2)
+                      assert(banned == true)
+                      assert(nf.network.is_banned("Bea"))
+                      nf.network.report("Bea", "rude", { said = "x" })
+                      nf.test.advance(1)
+                      local reports = nf.test.network_reports()
+                      assert(#reports == 1 and reports[1].player == "Bea" and reports[1].details.said == "x")
+                    end)
+                """
+            )
+        )
+        expectStatuses(events, Status.PASSED, Status.PASSED, Status.PASSED)
     }
 
     @Test

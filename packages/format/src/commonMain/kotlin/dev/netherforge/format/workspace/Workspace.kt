@@ -38,8 +38,22 @@ data class WorkspaceNetwork(
     /** The server players arrive on when they join: one of [servers]. */
     val arrival: String,
     /** Each server's name in the network → the project it runs (one of the workspace's, as [WorkspaceFile.projects] names it). */
-    val servers: Map<String, String>
+    val servers: Map<String, String>,
+    /** What some servers are besides: by name (one of [servers]), the group, capacity and role each runs with. */
+    val options: Map<String, WorkspaceServerOptions> = emptyMap()
 )
+
+/**
+ * A dev network's server as a production network would run it: an instance of [group] taking [capacity] players, and
+ * joining with a credential of [role] (`trusted`, the default, `standard` or `isolated`) that owns its project's
+ * namespace, so the hub holds it to what that role may do.
+ */
+@Serializable
+data class WorkspaceServerOptions(val group: String? = null, val capacity: Int? = null, val role: String? = null) {
+    companion object {
+        val ROLES = listOf("trusted", "standard", "isolated")
+    }
+}
 
 /** `netherforge-workspace.json`. */
 object WorkspaceKind : DocumentKind<WorkspaceFile> {
@@ -158,6 +172,20 @@ object Workspaces {
                         path
                     )
                 }
+            }
+            for ((name, options) in network.options) {
+                val path = CanonicalJson.childPath("$.network.options", name)
+                val why = when {
+                    name !in network.servers -> "\"$name\" isn't one of the network's servers."
+                    options.group != null && !isServerName(options.group) ->
+                        "Server \"$name\"'s group \"${options.group}\" can't name a group: lowercase letters, digits, _ and - (at most 32)."
+                    options.capacity != null && options.capacity < 1 ->
+                        "Server \"$name\"'s capacity is ${options.capacity}: at least 1 player."
+                    options.role != null && options.role !in WorkspaceServerOptions.ROLES ->
+                        "Server \"$name\"'s role \"${options.role}\" isn't trusted, standard or isolated."
+                    else -> null
+                }
+                if (why != null) sink.report(ProblemCodes.WORKSPACE_SERVER_OPTIONS, why, path)
             }
             if (network.arrival !in network.servers) {
                 sink.report(

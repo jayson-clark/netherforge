@@ -131,6 +131,12 @@ object ProblemCodes {
             "A world in `worlds` names a terrain and a dimension, and a height the terrain names is outside that dimension's build limits."
         )
     val PROJECT_PERMISSION_NODE = error("project.permission-node", PROJECT, "A node in `allow.permissions` isn't a permission node.")
+    val PROJECT_LISTING =
+        error(
+            "project.listing",
+            PROJECT,
+            "Something of `listing` in `netherforge.json` isn't what a listing takes: a picture that isn't a PNG in the project, a tag, a count."
+        )
     val PROJECT_REQUIRES_HOST = error("project.requires-host", PROJECT, "A host in `requires.http` isn't a host name, or `*.` and one.")
     val PROJECT_REQUIRES_PLUGIN =
         error("project.requires-plugin", PROJECT, "A name in `requires.plugins` isn't a plugin's name in lowercase.")
@@ -1009,6 +1015,12 @@ object ProblemCodes {
             "A server in `network.servers` runs a folder that isn't one of the workspace's projects."
         )
     val WORKSPACE_ARRIVAL = error("workspace.arrival", WORKSPACE, "`network.arrival` isn't one of the network's servers.")
+    val WORKSPACE_SERVER_OPTIONS =
+        error(
+            "workspace.server-options",
+            WORKSPACE,
+            "An entry in `network.options` isn't one of the network's servers, or its group, capacity or role isn't one."
+        )
     val WORKSPACE_UNKNOWN_SERVER =
         warning(
             "workspace.unknown-server",
@@ -1035,6 +1047,18 @@ object ProblemCodes {
             "runtime.bundle-hash",
             PACKAGES,
             "A package in a bundle isn't what the bundle says it is: a file was changed, added or removed."
+        )
+    val RUNTIME_BUNDLE_SIGNATURE =
+        error(
+            "runtime.bundle-signature",
+            PACKAGES,
+            "A bundle's signature doesn't match it, or the server requires one by a key it trusts and the bundle has none."
+        )
+    val RUNTIME_POLICY =
+        error(
+            "runtime.policy",
+            PACKAGES,
+            "A package requires something the server's policy (`policy.json`, or the network's for the server's role) refuses."
         )
     val SETTINGS_FILE =
         warning("settings.file", SETTINGS, "A server's settings file isn't a JSON object, so the package's settings have their defaults.")
@@ -1128,7 +1152,8 @@ object ProblemCodes {
      */
     val reportedAtRuntime: Set<ProblemCode> = setOf(
         RUNTIME_WASM, TERRAIN_SCRIPT_FAILED, MIGRATION_FAILED, VIDEO_STALE, RUNTIME_MINECRAFT_UNSUPPORTED,
-        RUNTIME_UNBUNDLED, RUNTIME_BUNDLE_HASH, RUNTIME_PLUGIN_MISSING, RUNTIME_WEB_DISABLED, RUNTIME_NETWORK_DISABLED,
+        RUNTIME_UNBUNDLED, RUNTIME_BUNDLE_HASH, RUNTIME_BUNDLE_SIGNATURE, RUNTIME_POLICY, RUNTIME_PLUGIN_MISSING,
+        RUNTIME_WEB_DISABLED, RUNTIME_NETWORK_DISABLED,
         RUNTIME_BOTS_DISABLED, RUNTIME_BLOCKS, RUNTIME_TERRAIN, RUNTIME_DIMENSION_TYPE, RUNTIME_RESTART, RUNTIME_DATAPACK,
         SETTINGS_FILE, SETTINGS_VALUE, SETTINGS_UNKNOWN, SCRIPT_ERROR, SCRIPT_SLOW, PARTICLES_BUDGET, RUNTIME_PACK_FORMAT
     )

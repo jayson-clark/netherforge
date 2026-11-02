@@ -124,6 +124,7 @@ object RaisableEvents {
         "setting_changed" to Raisable(Events.NF_SETTING_CHANGED),
         "network_connect" to Raisable(Events.NF_NETWORK_CONNECT),
         "network_disconnect" to Raisable(Events.NF_NETWORK_DISCONNECT),
+        "network_state" to Raisable(Events.NF_NETWORK_STATE),
         "network_server_connect" to Raisable(Events.NF_NETWORK_SERVER_CONNECT),
         "network_server_disconnect" to Raisable(Events.NF_NETWORK_SERVER_DISCONNECT),
         "network_player_join" to Raisable(Events.NF_NETWORK_PLAYER_JOIN),

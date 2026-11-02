@@ -169,6 +169,15 @@ class FakeWorldManager(private val platform: FakePlatform) : WorldManagerOps {
     /** Every world saved for the editor. */
     val savedFiles = mutableListOf<String>()
 
+    /** Worlds whose writes are paused (`setSaving(false)`). */
+    val notSaving = mutableSetOf<String>()
+
+    override fun setSaving(name: String, saving: Boolean): Boolean {
+        if (name !in names) return false
+        if (saving) notSaving -= name else notSaving += name
+        return true
+    }
+
     override fun saveFiles(name: String): WorldFiles? {
         if (name !in names) return null
         savedFiles += name

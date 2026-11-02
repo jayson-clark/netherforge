@@ -140,6 +140,17 @@ Has the fields and methods of [Event](#event) too.
 | --- | --- | --- |
 | `detail` | `string` | What happened, in words, for the log. |
 
+### NetworkStateEvent {#networkstateevent}
+
+This server went from one state of its life to the next.
+
+Has the fields and methods of [Event](#event) too.
+
+| Field | Type | |
+| --- | --- | --- |
+| `state` | `"starting"\|"ready"\|"draining"\|"stopping"` | Where it is now. |
+| `previous` | `"starting"\|"ready"\|"draining"\|"stopping"` | Where it was. |
+
 ### NetworkServerEvent {#networkserverevent}
 
 Another server of the network connected or disconnected.
@@ -2193,6 +2204,14 @@ How `nf.worlds.create` makes a world. A key that isn't one of these is an error.
 | `structures` | `boolean?` | Whether villages, temples and the like generate. Default `true`. |
 | `keep_spawn_loaded` | `boolean?` | Whether the chunks around its spawn stay loaded with nobody near. Default `false`. |
 
+### WorldImportOptions {#worldimportoptions}
+
+How `nf.worlds.import` makes the world it imports. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `terrain` | `string?` | One of the project's terrains (as the calling package names it), which makes the chunks the world doesn't have yet; the game's own when left out. |
+
 ### WorldUnloadOptions {#worldunloadoptions}
 
 How `world:unload` lets a world go. A key that isn't one of these is an error.
@@ -3027,6 +3046,86 @@ A server of the network, from `nf.network.servers`.
 | `name` | `string` | Its name, as the proxy names it. |
 | `connected` | `boolean` | Whether NetherForge on it is connected to the hub now (a server without NetherForge never is). |
 | `players` | `integer` | How many players are on it. |
+| `group` | `string` | Its group (`network.group` in its `config.yml`), or its own name when it has none. |
+| `capacity` | `integer?` | How many players it takes (`network.capacity`); `nil` for any number. |
+| `accepting` | `boolean` | Whether it takes players now (`set_accepting` there). |
+| `state` | `"starting"\|"ready"\|"draining"\|"stopping"\|nil` | Where it is in its life (`nf.network.state()` there); `nil` when it isn't connected. |
+| `idle` | `boolean` | Whether it has been empty longer than its `network.idle-after-seconds`. |
+| `tick_milliseconds` | `number?` | Its average tick time lately, in milliseconds (50 is a full tick at 20 a second), as it last said (every few seconds); `nil` before it has. |
+
+### NetworkGroup {#networkgroup}
+
+A group of the network and its instances, from `nf.network.groups`.
+
+| Field | Type | |
+| --- | --- | --- |
+| `name` | `string` | Its name. |
+| `players` | `integer` | How many players are on its instances together. |
+| `capacity` | `integer?` | How many its instances take together; `nil` when one of them takes any number. |
+| `instances` | [`NetworkServer`](types.md#networkserver)`[]` | Its servers, by name. |
+
+### NetworkPlayersOptions {#networkplayersoptions}
+
+What `nf.network.players` takes. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `server` | `string?` | Only this server's players. |
+| `group` | `string?` | Only the players on this group's instances. |
+
+### NetworkTarget {#networktarget}
+
+A server, a group or an admin client, where a request goes. A key that isn't one of these is an error; it names one of them.
+
+| Field | Type | |
+| --- | --- | --- |
+| `server` | `string?` | A server, by its name in the network. |
+| `group` | `string?` | A group: one of its instances is asked. |
+| `admin` | `string?` | A service connected to the hub's admin API, by its client id (a matchmaker): it answers in place of a server. |
+
+### NetworkSendOptions {#networksendoptions}
+
+Where `send_player` and `send_players` send players. A key that isn't one of these is an error; it names a server or a group.
+
+| Field | Type | |
+| --- | --- | --- |
+| `server` | `string?` | A server, by its name in the network. |
+| `group` | `string?` | A group: the hub picks the instance with room. |
+| `balance` | `"least"\|"fill"\|nil` | How the hub picks the group's instance for this send: `least` (the fewest players) or `fill` (the fullest with room); the group's own when left out (`group.<name>.balance` in the hub's `hub.properties`, `least` unless its owner says). |
+| `data` | `any` | What arrives with them, when `data` isn't given. |
+| `wait` | `number?` | Seconds it may wait, when there's no instance with room yet (none is ready, all are full, the server is starting): the hub holds it, first come first served, tells whatever runs the servers that the group is wanted (its webhook), and sends them as soon as one has room. They stay where they are meanwhile. At most 600; it fails after that, saying why it waited. |
+| `on_wait` | `fun(position: integer, status: string?)?` | Called while it waits, each time its place in the queue changes (1 is next), or with `status` when a service placing the group's players holds them (`position` 0). Without it, each player waiting who's on this server sees their place, or the status, on their action bar. |
+
+### NetworkSanctionOptions {#networksanctionoptions}
+
+How `nf.network.ban` and `mute` sanction. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `reason` | `string?` | Why: shown to them, and kept with it. |
+| `expires` | `integer?` | When it runs out, as Unix time in milliseconds (like `nf.server.unix_time()`); never when left out. |
+
+### NetworkRole {#networkrole}
+
+What this server may do in the network, from `nf.network.server_role`.
+
+| Field | Type | |
+| --- | --- | --- |
+| `role` | `"trusted"\|"standard"\|"isolated"` | Its credential's role: `trusted` (everything), `standard` (its own namespaces and what's shared with it, seeing everyone) or `isolated` (only what's shared with it, seeing only its own players). |
+| `trusted` | `boolean` | Whether it may do anything: every channel and map, every player. |
+| `owns` | `string[]` | The namespaces whose channels and maps it has whole: reading, writing, asking and answering. |
+| `shares` | [`NetworkShare`](types.md#networkshare)`[]` | What the network shares with it of channels and maps it doesn't own. |
+| `presence` | `boolean` | Whether it sees players on other servers. Without, `players()` and the `network_player_*` events are only this server's: a player joins as they come here and quits as they go. |
+| `send_to` | `string[]?` | Where it may send players, when it may not send them anywhere: server names, and `"back"` for wherever the player came from. A server that isn't trusted sends only players who are on it. |
+
+### NetworkShare {#networkshare}
+
+A channel or map shared with this server, from `nf.network.server_role`.
+
+| Field | Type | |
+| --- | --- | --- |
+| `name` | `string` | Its full name, `namespace:name`, or a pattern ending in `*` for every name starting so (`events:*`). |
+| `access` | `("read"\|"write"\|"request"\|"answer")[]` | What it may do: `read` (hear its messages, keep a copy of the map), `write` (publish, write the map; reading comes with it), `request` (ask on it) and `answer` (be asked on it). |
 
 ### NetworkPlayer {#networkplayer}
 
@@ -3037,6 +3136,7 @@ A player online in the network.
 | `id` | `string` | Their UUID, as a string: the same as `player:id()` on their server. |
 | `name` | `string` | Their name. |
 | `server` | `string?` | The server they're on; `nil` for a moment while the proxy is moving them. |
+| `proxy` | `string?` | The proxy they came in through, when the network's hub runs on its own (with several proxies, which one); `nil` otherwise. |
 
 ### NetworkPublishOptions {#networkpublishoptions}
 
@@ -3045,6 +3145,7 @@ What `channel:publish` takes. A key that isn't one of these is an error.
 | Field | Type | |
 | --- | --- | --- |
 | `server` | `string?` | Only this server hears it (if it listens), by its name in the network; every server listening when left out. |
+| `group` | `string?` | Only this group's instances hear it (those listening). |
 
 ### NetworkMapWriteOptions {#networkmapwriteoptions}
 
@@ -3105,6 +3206,50 @@ Has the fields and methods of [Event](#event) too.
 | `map` | [`NetworkMap`](networkmap.md) | The map. |
 
 ## Testing
+
+### TestNetworkServerOptions {#testnetworkserveroptions}
+
+What `nf.test.network_server` takes, the first time it names a server. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `group` | `string?` | The group it's an instance of, as `network.group` says on a server. |
+| `capacity` | `integer?` | How many players it takes; any number when left out. |
+| `state` | `"starting"\|"ready"\|"draining"\|"stopping"\|nil` | Where it is in its life as it joins; `ready` when left out. |
+| `accepting` | `boolean?` | Whether it takes players; `true` when left out. |
+
+### TestNetworkStatus {#testnetworkstatus}
+
+What `nf.test.network_status` says of another server. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `state` | `"starting"\|"ready"\|"draining"\|"stopping"\|nil` | Where it is in its life; as it was when left out. |
+| `accepting` | `boolean?` | Whether it takes players; as it was when left out. |
+
+### TestNetworkRole {#testnetworkrole}
+
+This server's role in the test's network, for `nf.test.network_role`. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `role` | `"trusted"\|"standard"\|"isolated"` | The preset: what it may do unless the rest says more. |
+| `owns` | `string[]?` | The namespaces whose channels and maps it has whole. |
+| `shares` | `string[]?` | What's shared with it of others', as `hub.properties` spells it: `"lobby:return(request)"`, `"events:*(read)"`. |
+| `presence` | `boolean?` | Whether it sees other servers' players; the preset's when left out. |
+| `send_to` | `string[]?` | Where it may send players; the preset's when left out. |
+| `moderation` | `boolean?` | Whether it may ban and mute across the network. |
+
+### TestNetworkReport {#testnetworkreport}
+
+A report the test's network has, from `nf.test.network_reports`.
+
+| Field | Type | |
+| --- | --- | --- |
+| `player` | `string` | The reported player's name. |
+| `reason` | `string` | Why. |
+| `details` | `any` | What else it said, if anything. |
+| `by` | `string?` | Who reported them, if a player did. |
 
 ### TestNetworkMessage {#testnetworkmessage}
 

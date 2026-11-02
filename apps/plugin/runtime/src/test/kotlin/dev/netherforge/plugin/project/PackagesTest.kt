@@ -3,6 +3,7 @@ import dev.netherforge.format.ProblemCodes
 import dev.netherforge.format.project.BundleKind
 import dev.netherforge.format.project.BundleManifest
 import dev.netherforge.format.project.BundledPackage
+import dev.netherforge.format.project.BundledResourcePack
 import dev.netherforge.format.project.FormatVersion
 import dev.netherforge.format.project.LockFile
 import dev.netherforge.format.project.LockKind
@@ -11,12 +12,15 @@ import dev.netherforge.format.project.PackageSource
 import dev.netherforge.format.project.Packages
 import dev.netherforge.plugin.TestServer
 import dev.netherforge.plugin.data.ScriptData
+import dev.netherforge.plugin.pack.Packs
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.writeBytes
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /** A project and the packages it depends on, run together: their resources, their modules, `require` across them, bundles. */
@@ -214,6 +218,41 @@ class PackagesTest {
             assertFalse(server.runtime.session.running)
             val problem = server.runtime.currentProblems().single { it.code == ProblemCodes.RUNTIME_BUNDLE_HASH.code }
             assertEquals("$.packages.lib", problem.path)
+        }
+    }
+
+    @Test
+    fun `a bundle's own resource pack is sent as it was built when it's for the server's pack format, and built otherwise`() {
+        val pack = "resource_packs/fx/pack.json" to """{ "name": "FX", "description": "Sounds" }"""
+        val files = (project + pack).mapKeys { "test/${it.key}" } + lib.mapKeys { "lib/${it.key}" }
+        TestServer(files, start = false, resolvesPackages = false, writeManifest = false).use { server ->
+            val hashes = listOf("test", "lib").associateWith { ProjectFiles.hash(DiskProjectSource(server.project.resolve(it))) }
+            val zip = "the bundle's pack".encodeToByteArray()
+            server.project.resolve(BundledResourcePack.FILE).writeBytes(zip)
+            fun bundle(format: List<Int>, sha1: String = Packs.sha1(zip)) = server.project.resolve(BundleManifest.FILE_NAME).writeText(
+                BundleKind.write(
+                    BundleManifest(
+                        FormatVersion.CURRENT,
+                        "test",
+                        hashes.mapValues { BundledPackage("1.0.0", it.value) },
+                        resourcePack = BundledResourcePack(sha1, format)
+                    )
+                )
+            )
+            val format = server.platform.game.resourcePackFormat!!
+            bundle(format)
+            server.start()
+            assertEquals(Packs.sha1(zip), server.runtime.packs.built!!.sha1)
+
+            // Built for another game, or not the file it names: the server builds its own.
+            bundle(listOf(format[0] + 1, 0))
+            server.runtime.reloadAll()
+            val own = server.runtime.packs.built!!.sha1
+            assertNotEquals(Packs.sha1(zip), own)
+            bundle(format, sha1 = "0".repeat(40))
+            server.runtime.reloadAll()
+            assertEquals(own, server.runtime.packs.built!!.sha1)
+            assertTrue(server.platform.log.lines.any { "isn't the one it was built with" in it })
         }
     }
 

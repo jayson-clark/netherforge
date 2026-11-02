@@ -274,6 +274,10 @@ class LoadedPackage internal constructor(val resolved: ResolvedPackage, val snap
 }
 
 object Projects {
+    /** What a listing may say: its description's length, how many tags, and what a tag is. */
+    private const val MAX_DESCRIPTION = 500
+    private const val MAX_TAGS = 10
+    private val TAG = Regex("[a-z0-9][a-z0-9-]{0,31}")
 
     /**
      * A resource that read and was [KindSpec.validate]d on its own, waiting
@@ -512,6 +516,7 @@ object Projects {
         val manifestText = source.read(ProjectManifest.FILE_NAME)
         val (manifest, manifestProblems) = cache.keep(ProjectManifest.FILE_NAME, manifestText) { loadManifest(manifestText) }
         problems += manifestProblems
+        problems += listingFiles(manifest, files)
         val fontText = if (DefaultFontFile.FILE in files) source.read(DefaultFontFile.FILE) else null
         val (defaultFont, fontProblems) = when (fontText) {
             null -> null to emptyList()
@@ -970,7 +975,58 @@ object Projects {
             }
         }
         manifest.settings?.let { SettingsValidator.validate(it, sink) }
+        manifest.listing?.let { listing(it, sink) }
         return manifest to sink.problems
+    }
+
+    /** `listing`'s shape: what it says, whether or not its pictures are there ([listingFiles] says that). */
+    private fun listing(listing: ProjectListing, sink: ProblemSink) {
+        fun report(message: String, at: String) = sink.report(ProblemCodes.PROJECT_LISTING, message, at)
+        listing.description?.let {
+            if (it.length >
+                MAX_DESCRIPTION
+            ) {
+                report("The description is ${it.length} characters: at most $MAX_DESCRIPTION", "$.listing.description")
+            }
+        }
+        listing.authors?.forEachIndexed { index, author ->
+            if (author.isBlank()) report("An author is a name, not nothing", "$.listing.authors[$index]")
+        }
+        listing.tags?.let { tags ->
+            if (tags.size > MAX_TAGS) report("${tags.size} tags: at most $MAX_TAGS", "$.listing.tags")
+            tags.forEachIndexed { index, tag ->
+                if (!TAG.matches(tag)) report("\"$tag\" isn't a tag: lowercase letters, digits and -, at most 32", "$.listing.tags[$index]")
+            }
+        }
+        val pictures = listOfNotNull(listing.icon?.let { it to "$.listing.icon" }) +
+            listing.screenshots.orEmpty().mapIndexed { index, it -> it to "$.listing.screenshots[$index]" }
+        for ((picture, at) in pictures) {
+            if (!picture.endsWith(".png") || picture.startsWith("/") || picture.split('/').any { it == ".." || it.isEmpty() }) {
+                report("\"$picture\" isn't a PNG's path in the project (listing/icon.png)", at)
+            }
+        }
+        listing.players?.let { players ->
+            if ((players.min ?: 1) < 1) report("players.min is ${players.min}: at least 1", "$.listing.players.min")
+            if (players.max != null &&
+                players.max < (players.min ?: 1)
+            ) {
+                report("players.max is ${players.max}, less than min", "$.listing.players.max")
+            }
+        }
+    }
+
+    /** `listing`'s pictures that aren't among the project's [files]. */
+    private fun listingFiles(manifest: ProjectManifest?, files: Set<String>): List<Problem> {
+        val listing = manifest?.listing ?: return emptyList()
+        val sink = ProblemSink(ProjectManifest.FILE_NAME)
+        val pictures = listOfNotNull(listing.icon?.let { it to "$.listing.icon" }) +
+            listing.screenshots.orEmpty().mapIndexed { index, it -> it to "$.listing.screenshots[$index]" }
+        for ((picture, at) in pictures) {
+            if (picture.endsWith(".png") && picture !in files) {
+                sink.report(ProblemCodes.PROJECT_LISTING, "There's no $picture in the project", at)
+            }
+        }
+        return sink.problems
     }
 
     /** `client/vanilla.json` from its [text], and its problems: it was read from the target [minecraft] version's client, or it's stale. */

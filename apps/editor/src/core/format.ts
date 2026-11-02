@@ -306,6 +306,7 @@ export type {
   WasmInfo,
   WorkspaceFile,
   WorkspaceNetwork,
+  WorkspaceServerOptions,
   WorkspaceResult,
 } from '@netherforge/format/types'
 

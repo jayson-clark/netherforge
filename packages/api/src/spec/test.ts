@@ -302,7 +302,15 @@ export const nfTest = (nfEvents: EventSpec[]): LuaClass => ({
     {
       name: 'network_server',
       doc: 'Adds another server to the test\'s network. In a test this server is part of a network of its own, named `"test"`, whose hub is a real one in the test: every other server is one the test adds and plays, with `network_publish`, `network_received`, `network_answer`, `network_write`, `network_join` and `network_send`. Adding one that\'s there does nothing; the network starts with none.',
-      params: [{ name: 'name', type: 'string', doc: 'Its name in the network (`"lobby"`).' }],
+      params: [
+        { name: 'name', type: 'string', doc: 'Its name in the network (`"lobby"`).' },
+        {
+          name: 'options',
+          type: 'TestNetworkServerOptions',
+          doc: "Its group and room, when it's an instance of a group.",
+          optional: true,
+        },
+      ],
       returns: [],
       example:
         'nf.test.case("chat reaches the lobby", function()\n  nf.test.network_server("lobby")\n  local player = nf.test.player("Ann")\n  nf.test.raise("player_chat", { player = player, message = "hi", format = "" })\n  nf.test.advance(1)\n  local said = nf.test.network_received("lobby", "chat")\n  assert(said[1].value.text == "Ann: hi")\nend)',
@@ -406,6 +414,33 @@ export const nfTest = (nfEvents: EventSpec[]): LuaClass => ({
       returns: [],
     },
     {
+      name: 'network_status',
+      doc: "Another server of the test's network says where it is in its life and whether it takes players, as `set_accepting` and `/nf drain` would there: players sent to its group wait for it while it's `starting` or full (a send with `wait`), and go once it's `ready`. Heard by the next tick.",
+      params: [
+        { name: 'server', type: 'string', doc: 'The other server, as `network_server` added it.' },
+        { name: 'status', type: 'TestNetworkStatus', doc: 'What it says.' },
+      ],
+      returns: [],
+      example:
+        'nf.test.case("a player waits for the arena to start", function()\n  nf.test.network_server("arena-1", { group = "arena", state = "starting" })\n  local ann = nf.test.player("Ann")\n  local went\n  nf.task(function() went = nf.network.send_player(ann, { group = "arena", wait = 30 }) end)\n  nf.test.advance(2)\n  assert(went == nil)\n  nf.test.network_status("arena-1", { state = "ready" })\n  nf.test.advance(2)\n  assert(went == "arena-1")\nend)',
+    },
+    {
+      name: 'network_role',
+      doc: "This server joins the test's network again with a credential of the role given, as a server running someone else's project might: what it may publish, ask, answer, read, write and send is then held to it, and `nf.network.server_role()` says it. The test's other servers stay trusted. By the next tick.",
+      params: [
+        { name: 'role', type: 'TestNetworkRole', doc: 'The role, and what it owns and is shared.' },
+      ],
+      returns: [],
+      example:
+        'nf.test.case("a standard server can\'t publish on the lobby\'s channel", function()\n  nf.test.network_role({ role = "standard", owns = { "test" } })\n  nf.test.advance(1)\n  local ok, err = pcall(function() nf.network.channel("lobby:chat"):publish("hi") end)\n  assert(not ok and string.find(tostring(err), "network.forbidden"))\nend)',
+    },
+    {
+      name: 'network_reports',
+      doc: "The reports scripts made with `nf.network.report` in this test, oldest first, as the network's hub keeps them.",
+      params: [],
+      returns: [{ type: 'TestNetworkReport[]' }],
+    },
+    {
       name: 'network_send',
       doc: "Another server sends a player here with `data`, as `nf.network.send_player` there would: they join this server (`player_join`) and, the tick after, its `player_arrive` handlers hear `data`. They needn't be in the network yet.",
       params: [
@@ -422,6 +457,102 @@ export const nfTest = (nfEvents: EventSpec[]): LuaClass => ({
 
 /** What `nf.test.raise` returns, and what `nf.test.click` and `nf.test.input` take. */
 export const testShapes: LuaClass[] = [
+  {
+    name: 'TestNetworkServerOptions',
+    doc: "What `nf.test.network_server` takes, the first time it names a server. A key that isn't one of these is an error.",
+    methods: false,
+    functions: [],
+    fields: [
+      {
+        name: 'group',
+        type: 'string?',
+        doc: "The group it's an instance of, as `network.group` says on a server.",
+      },
+      {
+        name: 'capacity',
+        type: 'integer?',
+        doc: 'How many players it takes; any number when left out.',
+      },
+      {
+        name: 'state',
+        type: '"starting"|"ready"|"draining"|"stopping"|nil',
+        doc: 'Where it is in its life as it joins; `ready` when left out.',
+      },
+      {
+        name: 'accepting',
+        type: 'boolean?',
+        doc: 'Whether it takes players; `true` when left out.',
+      },
+    ],
+  },
+  {
+    name: 'TestNetworkStatus',
+    doc: "What `nf.test.network_status` says of another server. A key that isn't one of these is an error.",
+    methods: false,
+    functions: [],
+    fields: [
+      {
+        name: 'state',
+        type: '"starting"|"ready"|"draining"|"stopping"|nil',
+        doc: 'Where it is in its life; as it was when left out.',
+      },
+      {
+        name: 'accepting',
+        type: 'boolean?',
+        doc: 'Whether it takes players; as it was when left out.',
+      },
+    ],
+  },
+  {
+    name: 'TestNetworkRole',
+    doc: "This server's role in the test's network, for `nf.test.network_role`. A key that isn't one of these is an error.",
+    methods: false,
+    functions: [],
+    fields: [
+      {
+        name: 'role',
+        type: '"trusted"|"standard"|"isolated"',
+        doc: 'The preset: what it may do unless the rest says more.',
+      },
+      {
+        name: 'owns',
+        type: 'string[]?',
+        doc: 'The namespaces whose channels and maps it has whole.',
+      },
+      {
+        name: 'shares',
+        type: 'string[]?',
+        doc: 'What\'s shared with it of others\', as `hub.properties` spells it: `"lobby:return(request)"`, `"events:*(read)"`.',
+      },
+      {
+        name: 'presence',
+        type: 'boolean?',
+        doc: "Whether it sees other servers' players; the preset's when left out.",
+      },
+      {
+        name: 'send_to',
+        type: 'string[]?',
+        doc: "Where it may send players; the preset's when left out.",
+      },
+      {
+        name: 'moderation',
+        type: 'boolean?',
+        doc: 'Whether it may ban and mute across the network.',
+      },
+    ],
+  },
+  {
+    name: 'TestNetworkReport',
+    doc: "A report the test's network has, from `nf.test.network_reports`.",
+    methods: false,
+    functions: [],
+    fields: [
+      { name: 'player', type: 'string', doc: "The reported player's name." },
+      { name: 'reason', type: 'string', doc: 'Why.' },
+      { name: 'details', type: 'any', doc: 'What else it said, if anything.' },
+      { name: 'by', type: 'string?', doc: 'Who reported them, if a player did.' },
+    ],
+  },
   {
     name: 'TestNetworkMessage',
     doc: "A message another server of a test's network heard, from `nf.test.network_received`.",

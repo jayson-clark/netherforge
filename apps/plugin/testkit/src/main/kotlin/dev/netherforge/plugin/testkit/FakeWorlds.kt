@@ -173,6 +173,10 @@ class FakeWorlds(private val platform: FakePlatform) : WorldOps {
     /** Chunks something was put in (a record, a block): the fake's world is the same everywhere, so these are the ones that matter. */
     val touched = mutableSetOf<Triple<String, Int, Int>>()
 
+    override fun chunkCount(world: String): Int = loadedChunks(world).size
+
+    override fun entityCount(world: String): Int = platform.entities.all.keys.count { platform.entities.location(it)?.world == world }
+
     override fun loadedChunks(world: String): List<Pair<Int, Int>> {
         val chunks = touched.filter { it.first == world }.map { it.second to it.third } +
             blocks.keys.filter { it.world == world }.map { (it.x shr 4) to (it.z shr 4) } + listOf(0 to 0)

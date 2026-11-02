@@ -85,20 +85,37 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
     val files = ScriptFiles(config.dataDirectory, config.files)
 
     /** The project's files and its packages', wherever they are (a dev server's folders, a bundle). */
-    val source = ProjectFiles(config.project, config.resolvesPackages, config.packageCache)
+    val source = ProjectFiles(config.project, config.resolvesPackages, config.packageCache, config.bundles)
 
     /** The resource pack: the last good build, the server that serves it, and what each player was sent. */
-    val packs = Packs(config.pack, config.stateDirectory, log, platform, source::readBytes)
+    val packs = Packs(
+        config.pack,
+        config.stateDirectory,
+        log,
+        platform,
+        source::readBytes,
+        onMain = { mainThread.execute(it) },
+        loadedElsewhere = { player -> network.takeIf { it.connected && it.keepsPacks }?.players?.get(player.toString())?.pack },
+        prebuilt = { source.bundledPack }
+    ).also { packs ->
+        packs.onLoaded = { player, sha1 -> network.send(dev.netherforge.network.ServerFrame.PackLoaded(player.toString(), sha1)) }
+    }
 
     /**
      * This server's place in its network (`nf.network`), for the plugin's life: the connection to the hub (a dev server
      * not in a network, and a test run, are a network of their own, in this JVM) and what it said of the network.
      * Connected in [enable], closed in [disable].
      */
+    /** The Prometheus endpoint (`metrics:` in `config.yml`). */
+    val metrics by lazy { dev.netherforge.plugin.metrics.ServerMetrics(config.metrics, this) }
+
+    /** The local control endpoint (`control:` in `config.yml`), for the tool that runs this server. */
+    val control by lazy { dev.netherforge.plugin.control.Control(config.control, this) }
+
     val network = NetworkLink(
         config.network,
         alone = when {
-            config.testing != null -> "test"
+            config.testing != null -> NetworkLink.TEST_NETWORK
             config.bridge != null -> "dev"
             else -> null
         },
@@ -294,6 +311,8 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
             }
         }
         network.start { log.info(it) }
+        control.start()
+        metrics.start()
         config.bridge?.let { settings ->
             val connection = BridgeService(this, settings)
             debugger = Debugger(this, connection::dap)
@@ -314,6 +333,16 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
             ),
             admin
         )
+        val waiting = config.network.waitForHubSeconds
+        if (waiting > 0 && network.mode == NetworkLink.Mode.REMOTE) {
+            log.info("Waiting up to $waiting seconds for the network's hub before starting the project")
+            if (!network.awaitWelcome(waiting)) {
+                log.warn(
+                    "The network's hub didn't welcome this server within $waiting seconds" +
+                        if (config.network.requireHub) "; the project waits for it" else "; starting the project without it"
+                )
+            }
+        }
         open(Handover(store.instances.all(), emptyMap()))
         // Entities in chunks loaded before we were: no load event will announce them.
         session.entitiesLoaded(platform.entities.loadedTagged(), emptyList())
@@ -340,6 +369,8 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
             log.error("NetherForge couldn't close its database connections", e)
         }
         remote = null
+        control.stop()
+        metrics.stop()
         network.stop()
         // Work under way (files being copied, reports written) finishes; what it reported is logged.
         pool?.close()
@@ -412,6 +443,7 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
 
     /** One server tick: the session's, what it changed committed to the store, then the editor's status now and then. */
     fun tick() {
+        val started = System.nanoTime()
         ticks++
         mainThread.run(::tickFailed)
         // What the editor set since (breakpoints, a pause), before any script of this tick runs.
@@ -423,6 +455,21 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
             if (session.running) reload(session.snapshot.everywhere(ResourcePackKind).keys.map { packFile(it) })
         }
         store.commit()
+        // The network's policy for this server came, or changed, or the hub a project waits for is here: a new session.
+        if (network.connected && ticks % POLICY_CHECK_TICKS == 0L) {
+            if (session.waitsForHub) {
+                log.info("The network's hub is here; starting the project")
+                reloadAll()
+            } else if (network.hubPolicy != session.hubPolicy) {
+                val what = if (session.hubPolicy == null) "arrived" else "changed"
+                log.info("The network's policy for this server $what; starting the project again under it")
+                reloadAll()
+            }
+        }
+        metrics.record(System.nanoTime() - started)
+        metrics.tick(ticks)
+        network.reportTick(ticks, platform.performance.tickMilliseconds())
+        control.tick(ticks)
         if (ticks % STATUS_EVERY == 0L) {
             try {
                 sendStatus()
@@ -559,6 +606,9 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
     }
 
     companion object {
+        /** How often the runtime looks whether the network's policy changed. */
+        private const val POLICY_CHECK_TICKS = 20L
+
         /** The project documents that aren't resources whose saving some service follows. */
         private val FOLLOWED_DOCUMENTS = setOf(DefaultFontKind.id, VanillaKind.id)
 

@@ -8,6 +8,7 @@ import dev.netherforge.plugin.http.HttpConfig
 import dev.netherforge.plugin.lua.SandboxLimits
 import dev.netherforge.plugin.network.NetworkConfig
 import dev.netherforge.plugin.pack.PackConfig
+import dev.netherforge.plugin.pack.PackStorageConfig
 import dev.netherforge.plugin.schedule.ScheduleConfig
 import dev.netherforge.plugin.screen.ScreensConfig
 import dev.netherforge.plugin.script.FilesConfig
@@ -64,6 +65,20 @@ data class RuntimeConfig(
     val network: NetworkConfig = NetworkConfig(),
     /** `files:`: what each package may keep in `nf.files`. */
     val files: FilesConfig = FilesConfig(),
+    /** `worlds:`: where worlds are imported from, and how many may be loaded. */
+    val worlds: dev.netherforge.plugin.world.WorldsConfig = dev.netherforge.plugin.world.WorldsConfig(),
+    /**
+     * The owner's policy over what projects may require (`policy.json` beside `config.yml`), or null for none; or why it
+     * couldn't be read ([policyProblem]), in which case no project runs.
+     */
+    val policy: dev.netherforge.format.project.Policy? = null,
+    val policyProblem: String? = null,
+    /** `bundles:`: whether a bundle must be signed by a key the server trusts. */
+    val bundles: dev.netherforge.plugin.project.BundlesConfig = dev.netherforge.plugin.project.BundlesConfig(),
+    /** `metrics:`: the Prometheus endpoint, off unless it has a port. */
+    val metrics: dev.netherforge.plugin.metrics.MetricsConfig = dev.netherforge.plugin.metrics.MetricsConfig(),
+    /** `control:`: the local control endpoint for the tool that runs the server, off unless set. */
+    val control: dev.netherforge.plugin.control.ControlConfig = dev.netherforge.plugin.control.ControlConfig(),
     /**
      * Whether the project's dependencies are found where `netherforge.json`'s
      * paths point: on the editor's dev server (and in tests). A production
@@ -132,6 +147,36 @@ data class RuntimeConfig(
             val wasm = wasm(settings.section("wasm"))
             val network = network(settings.section("network"))
             val files = files(settings.section("files"))
+            val policyFile = pluginFolder.resolve(dev.netherforge.format.project.Policy.FILE_NAME)
+            val readPolicy = if (java.nio.file.Files.isRegularFile(policyFile)) {
+                dev.netherforge.format.project.Policy.parse(java.nio.file.Files.readString(policyFile))
+            } else {
+                null
+            }
+            val policy = readPolicy?.getOrNull()
+            val policyProblem = readPolicy?.exceptionOrNull()?.let { "$policyFile can't be read: ${it.message}" }
+            val worlds = settings.section("worlds").let { section ->
+                dev.netherforge.plugin.world.WorldsConfig(
+                    importRoot = (section.text("import-root")?.trim() ?: "imports").takeIf { it.isNotEmpty() && it != "off" }
+                        ?.let { server.directory.resolve(it).toAbsolutePath().normalize() },
+                    maxLoaded = section.int("max-loaded")?.takeIf { it > 0 } ?: 0
+                )
+            }
+            val metrics = settings.section("metrics").let { section ->
+                dev.netherforge.plugin.metrics.MetricsConfig(
+                    port = section.int("port")?.takeIf { it in 1..65535 },
+                    bind = section.text("bind")?.trim() ?: "127.0.0.1"
+                )
+            }
+            val control = settings.section("control").let { section ->
+                dev.netherforge.plugin.control.ControlConfig(
+                    socket = section.text("socket")?.trim()?.let { server.directory.resolve(it).toAbsolutePath().normalize() },
+                    port = section.int("port")?.takeIf { it in 1..65535 },
+                    tokenFile = pluginFolder.resolve(section.text("token-file")?.trim() ?: "control.token").toAbsolutePath().normalize(),
+                    stallSeconds = section.int("stall-seconds")?.takeIf { it > 0 }
+                        ?: dev.netherforge.plugin.control.ControlConfig.DEFAULT_STALL_SECONDS
+                )
+            }
             properties(Bridge.PROJECT_PROPERTY)?.takeIf { it.isNotBlank() }?.let { project ->
                 val port = properties(Bridge.PORT_PROPERTY)?.toIntOrNull()
                 return RuntimeConfig(
@@ -152,6 +197,11 @@ data class RuntimeConfig(
                     wasm = wasm,
                     network = devNetwork(network, properties, env),
                     files = files,
+                    control = control,
+                    worlds = worlds,
+                    metrics = metrics,
+                    policy = policy,
+                    policyProblem = policyProblem,
                     packageCache = properties(Bridge.PACKAGE_CACHE_PROPERTY)?.takeIf {
                         it.isNotBlank()
                     }?.let { Path.of(it).toAbsolutePath().normalize() },
@@ -159,8 +209,14 @@ data class RuntimeConfig(
                 )
             }
             val project = settings.text("project") ?: return null
+            // A bundle by URL (what `netherforge publish` prints): fetched once into the plugin's folder, run from there.
+            val projectFolder = if (dev.netherforge.plugin.project.BundleFetch.isReference(project)) {
+                dev.netherforge.plugin.project.BundleFetch.folder(project, pluginFolder.resolve("bundles")) { println(it) }
+            } else {
+                server.directory.resolve(project).toAbsolutePath().normalize()
+            }
             return RuntimeConfig(
-                project = server.directory.resolve(project).toAbsolutePath().normalize(),
+                project = projectFolder,
                 dataDirectory = pluginFolder.resolve("data"),
                 stateDirectory = pluginFolder,
                 pack = pack(settings.section("resource-pack"), server),
@@ -175,6 +231,17 @@ data class RuntimeConfig(
                 screens = screens,
                 wasm = wasm,
                 network = network,
+                control = control,
+                worlds = worlds,
+                metrics = metrics,
+                bundles = settings.section("bundles").let { section ->
+                    dev.netherforge.plugin.project.BundlesConfig(
+                        requireSignature = section.boolean("require-signature") ?: false,
+                        trustedKeys = (section["trusted-keys"] as? List<*>).orEmpty().mapNotNull { it?.toString()?.trim() }
+                    )
+                },
+                policy = policy,
+                policyProblem = policyProblem,
                 files = files,
                 resolvesPackages = false
             )
@@ -195,7 +262,21 @@ data class RuntimeConfig(
                 publicUrl = section.text("public-url") ?: "http://$host:$port",
                 externalUrl = section.text("external-url"),
                 required = section.boolean("required") ?: false,
-                prompt = section.text("prompt")
+                prompt = section.text("prompt"),
+                storage = section.section("storage").takeIf { it.text("type") == "s3" }?.let { storage ->
+                    PackStorageConfig(
+                        endpoint = storage.text("endpoint") ?: error("resource-pack.storage.endpoint is empty: the store's address"),
+                        bucket = storage.text("bucket") ?: error("resource-pack.storage.bucket is empty"),
+                        prefix = storage.text("prefix") ?: "",
+                        region = storage.text("region") ?: "auto",
+                        publicUrl =
+                        storage.text("public-url") ?: error("resource-pack.storage.public-url is empty: where players fetch packs"),
+                        accessKey = storage.text("access-key") ?: System.getenv("AWS_ACCESS_KEY_ID")
+                            ?: error("resource-pack.storage needs access-key (or AWS_ACCESS_KEY_ID)"),
+                        secretKey = storage.text("secret-key") ?: System.getenv("AWS_SECRET_ACCESS_KEY")
+                            ?: error("resource-pack.storage needs secret-key (or AWS_SECRET_ACCESS_KEY)")
+                    )
+                }
             )
         }
 
@@ -321,7 +402,14 @@ data class RuntimeConfig(
                 host = hub?.first ?: defaults.host,
                 port = hub?.second ?: defaults.port,
                 serverName = section.text("server-name")?.trim(),
-                secret = section.text("secret")?.trim(),
+                secret = section.section("credential").text("secret")?.trim() ?: section.text("secret")?.trim(),
+                credential = section.section("credential").text("id")?.trim(),
+                group = section.text("group")?.trim(),
+                capacity = section.int("capacity")?.takeIf { it > 0 },
+                register = NetworkConfig.registration(section.section("register").text("address")),
+                idleAfterSeconds = section.int("idle-after-seconds")?.takeIf { it > 0 } ?: 0,
+                waitForHubSeconds = section.int("wait-for-hub-seconds")?.takeIf { it > 0 } ?: 0,
+                requireHub = section.boolean("require-hub") ?: false,
                 messagesPerMinute = positive("messages-per-minute", defaults.messagesPerMinute),
                 requestTimeoutSeconds = positive("request-timeout-seconds", defaults.requestTimeoutSeconds),
                 messagesPerTick = positive("messages-per-tick", defaults.messagesPerTick),
@@ -340,7 +428,11 @@ data class RuntimeConfig(
                 host = hub.first,
                 port = hub.second,
                 serverName = properties(Bridge.NETWORK_SERVER_PROPERTY)?.trim(),
-                secret = env(Bridge.NETWORK_SECRET_ENV)?.trim()
+                secret = env(Bridge.NETWORK_SECRET_ENV)?.trim(),
+                // Its role's credential, when it isn't trusted; its group and capacity, as the editor's network has them.
+                credential = properties(Bridge.NETWORK_CREDENTIAL_PROPERTY)?.trim()?.takeIf { it.isNotEmpty() },
+                group = properties(Bridge.NETWORK_GROUP_PROPERTY)?.trim()?.takeIf { it.isNotEmpty() },
+                capacity = properties(Bridge.NETWORK_CAPACITY_PROPERTY)?.trim()?.toIntOrNull()?.takeIf { it > 0 }
             )
         }
 
@@ -384,3 +476,21 @@ data class RuntimeConfig(
  * address it's bound to (`server-ip`, empty for every interface).
  */
 data class ServerAddress(val directory: Path, val ip: String)
+
+/**
+ * This config with [policy]'s limits where they're lower: script memory, call time and instruction budget, the
+ * network's and HTTP's rates. What a session runs under.
+ */
+fun RuntimeConfig.under(policy: dev.netherforge.format.project.Policy?): RuntimeConfig {
+    val limits = policy?.limits ?: return this
+    fun lower(own: Int, theirs: Int?) = theirs?.let { minOf(own, it) } ?: own
+    return copy(
+        sandbox = sandbox.copy(
+            memoryMegabytes = lower(sandbox.memoryMegabytes, limits.scriptMemoryMb),
+            deadlineMillis = lower(sandbox.deadlineMillis, limits.callMillis),
+            maxBudget = limits.instructionBudget ?: sandbox.maxBudget
+        ),
+        network = network.copy(messagesPerMinute = lower(network.messagesPerMinute, limits.networkMessagesPerMinute)),
+        http = http.copy(requestsPerMinute = lower(http.requestsPerMinute, limits.httpRequestsPerMinute))
+    )
+}

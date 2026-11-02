@@ -160,6 +160,32 @@ sealed interface StringOrMenuTemplate {
     )
 }
 
+/** A `String|NetworkSendOptions`: whichever it was. */
+sealed interface StringOrNetworkSendOptions {
+    data class String(val value: kotlin.String) : StringOrNetworkSendOptions
+    data class NetworkSendOptions(val value: dev.netherforge.plugin.binding.NetworkSendOptions) : StringOrNetworkSendOptions
+
+    object Codec : LuaCodec<StringOrNetworkSendOptions> by LuaUnion(
+        listOf(
+            LuaUnion.Member<StringOrNetworkSendOptions, kotlin.String>(LuaCodecs.STRING, ::String) { (it as? String)?.value },
+            LuaUnion.Member<StringOrNetworkSendOptions, dev.netherforge.plugin.binding.NetworkSendOptions>(dev.netherforge.plugin.binding.NetworkSendOptions.Codec, ::NetworkSendOptions) { (it as? NetworkSendOptions)?.value }
+        )
+    )
+}
+
+/** A `String|NetworkTarget`: whichever it was. */
+sealed interface StringOrNetworkTarget {
+    data class String(val value: kotlin.String) : StringOrNetworkTarget
+    data class NetworkTarget(val value: dev.netherforge.plugin.binding.NetworkTarget) : StringOrNetworkTarget
+
+    object Codec : LuaCodec<StringOrNetworkTarget> by LuaUnion(
+        listOf(
+            LuaUnion.Member<StringOrNetworkTarget, kotlin.String>(LuaCodecs.STRING, ::String) { (it as? String)?.value },
+            LuaUnion.Member<StringOrNetworkTarget, dev.netherforge.plugin.binding.NetworkTarget>(dev.netherforge.plugin.binding.NetworkTarget.Codec, ::NetworkTarget) { (it as? NetworkTarget)?.value }
+        )
+    )
+}
+
 /** A `String|Number`: whichever it was. */
 sealed interface StringOrNumber {
     data class String(val value: kotlin.String) : StringOrNumber
