@@ -55,7 +55,10 @@ class HubClient(
     private val listener: HubListener,
     private val maxQueued: Int = 50_000,
     /** The credential [secret] is (null: the network's shared secret). */
-    private val credential: String? = null
+    private val credential: String? = null,
+    /** The group this server is an instance of, and how many players it takes. */
+    private val group: String? = null,
+    private val capacity: Int? = null
 ) : HubLink {
     private val running = AtomicBoolean(false)
     private var thread: Thread? = null
@@ -133,7 +136,7 @@ class HubClient(
         }
         val nonce = Auth.newNonce()
         val proof = Auth.proof(secret, challenge.nonce, server, nonce, credential)
-        out.write(Protocol.encode(ServerFrame.Hello(Protocol.VERSION, server, proof, nonce, credential)))
+        out.write(Protocol.encode(ServerFrame.Hello(Protocol.VERSION, server, proof, nonce, credential, group, capacity)))
         out.write("\n")
         out.flush()
         // Everything from the welcome on is sealed: a hub that can open and seal with these keys holds the secret.
@@ -231,7 +234,9 @@ class LocalLink(
     private val server: String,
     private val secret: String,
     private val listener: HubListener,
-    private val credential: String? = null
+    private val credential: String? = null,
+    private val group: String? = null,
+    private val capacity: Int? = null
 ) : HubLink {
     private var session: Hub.Session? = null
     private var nonce: String? = null
@@ -270,7 +275,8 @@ class LocalLink(
         val session = hub.open(peer)
         this.session = session
         val own = Auth.newNonce()
-        session.receive(ServerFrame.Hello(Protocol.VERSION, server, Auth.proof(secret, nonce!!, server, own, credential), own, credential))
+        val proof = Auth.proof(secret, nonce!!, server, own, credential)
+        session.receive(ServerFrame.Hello(Protocol.VERSION, server, proof, own, credential, group, capacity))
     }
 
     override fun stop() = peer.close("the server is stopping")

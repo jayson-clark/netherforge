@@ -47,7 +47,8 @@ class Hub(
     private val limits: NetworkLimits = NetworkLimits(),
     private val store: MapStore? = null,
     private val clock: () -> Long = System::currentTimeMillis,
-    credentials: Collection<Credential> = emptyList()
+    credentials: Collection<Credential> = emptyList(),
+    groups: Map<String, GroupSettings> = emptyMap()
 ) {
     private val lock = Any()
     private val sessions = LinkedHashSet<Session>()
@@ -62,6 +63,18 @@ class Hub(
     /** The server each online player was on before the one they're on now: where `back` sends them. */
     private val cameFrom = HashMap<String, String>()
 
+    /** The owner's settings for each group, by its name in lowercase. */
+    private var groups: Map<String, GroupSettings> = groups.mapKeys { it.key.lowercase() }
+
+    /** Players on their way to each server and not there yet: counted as there when picking an instance. */
+    private val incoming = HashMap<String, Int>()
+
+    /** Each server as the last [HubFrame.Servers] (or welcome) told everyone, to send only what changed. */
+    private var told: Map<String, ServerState> = emptyMap()
+
+    /** Turns, for spreading requests to a group across its instances. */
+    private var nextTurn = 0
+
     /** A request on its way: who asked under which id, who must answer, and until when. */
     private class Route(val origin: Session, val originId: Long, val target: Session, val deadline: Long)
 
@@ -73,6 +86,7 @@ class Hub(
             log.warn("NetherForge hub: couldn't read its saved maps (${e.message}); starting with none")
         }
         for (player in proxy.players()) players[player.id] = player
+        told = servers().associateBy { it.name }
     }
 
     /** A new connection from [peer]: it's challenged at once, and must say hello within [Protocol.HELLO_MILLIS]. */
@@ -113,6 +127,12 @@ class Hub(
             session.closed()
         }
     }
+
+    /** Replaces the owner's settings for groups. */
+    fun setGroups(all: Map<String, GroupSettings>) = synchronized(lock) { groups = all.mapKeys { it.key.lowercase() } }
+
+    /** Every server of the network as the hub knows it now: its group, its room, its players. */
+    fun states(): List<ServerState> = synchronized(lock) { servers() }
 
     /** Everything in [map], for the proxy's own commands. */
     fun entries(map: String): Map<String, JsonElement> = synchronized(lock) { maps.entries(map) }
@@ -157,6 +177,7 @@ class Hub(
             for (session in sessions.filter { it.name == null && now - it.openedAt > Protocol.HELLO_MILLIS }) {
                 session.peer.close("it didn't say hello in time")
             }
+            tellServers()
             if (now - lastSave >= SAVE_EVERY_MILLIS && maps.takeDirty()) {
                 lastSave = now
                 maps.snapshot()
@@ -193,7 +214,46 @@ class Hub(
         for (session in byName.values) if (change.map in session.maps) session.send(change)
     }
 
-    private fun servers() = proxy.servers().map { ServerState(it, it in byName) }
+    /** Under the lock: every server the proxy has, with what its NetherForge said of it and who's on it. */
+    private fun servers(): List<ServerState> {
+        val counts = players.values.groupingBy { it.server }.eachCount()
+        return proxy.servers().map { state(it, counts[it] ?: 0) }
+    }
+
+    private fun state(name: String, players: Int): ServerState {
+        val session = byName[name] ?: return ServerState(name, false, players = players)
+        return ServerState(name, true, session.group, session.capacity, session.accepting, players)
+    }
+
+    /** Under the lock: what changed of the servers since everyone was last told, to everyone. */
+    private fun tellServers() {
+        val now = servers().associateBy { it.name }
+        val changed = now.values.filter { told[it.name] != it }
+        told = now
+        if (changed.isNotEmpty()) broadcast(HubFrame.Servers(changed))
+    }
+
+    /** Under the lock: the connected instances of [group] (a server with no group is a group of one, its name). */
+    private fun members(group: String): List<Session> =
+        byName.values.filter { (it.group ?: it.name!!).equals(group, ignoreCase = true) }.sortedBy { it.name }
+
+    /** Players on [session]'s server and on their way to it. */
+    private fun occupancy(session: Session, counts: Map<String?, Int>) = (counts[session.name] ?: 0) + (incoming[session.name] ?: 0)
+
+    /**
+     * Under the lock: the instance of [group] to send [size] players to, as [balance] (or the group's own) picks it
+     * among those that take players and have room for them all; null when none has.
+     */
+    private fun pick(group: String, balance: Balance?, size: Int): Session? {
+        val counts = players.values.groupingBy { it.server }.eachCount()
+        val room = members(group).filter { session ->
+            session.accepting && session.capacity.let { it == null || occupancy(session, counts) + size <= it }
+        }
+        return when (balance ?: groups[group.lowercase()]?.balance ?: Balance.LEAST) {
+            Balance.LEAST -> room.minByOrNull { occupancy(it, counts) }
+            Balance.FILL -> room.maxByOrNull { occupancy(it, counts) }
+        }
+    }
 
     /** Who [session] may see: everyone, or with no presence only those on it. */
     private fun visible(session: Session): List<PlayerState> =
@@ -215,6 +275,11 @@ class Hub(
         internal var credential: String? = null
         internal var joinedWith: Credential? = null
         internal var grants: Grants = Grants.TRUSTED
+
+        /** The group it's an instance of (null: a group of one), how many players it takes, and whether it takes them now. */
+        internal var group: String? = null
+        internal var capacity: Int? = null
+        internal var accepting = true
 
         internal var channels: Set<String> = emptySet()
         internal var maps: Set<String> = emptySet()
@@ -247,7 +312,9 @@ class Hub(
             if (name != null && byName[name] === this) {
                 byName.remove(name)
                 log.info("NetherForge hub: $name disconnected")
-                broadcast(HubFrame.Server(ServerState(name, false)))
+                val state = state(name, players.values.count { it.server == name })
+                broadcast(HubFrame.Server(state))
+                told = told + (name to state)
             }
             for ((id, route) in routes.entries.filter { it.value.target === this || it.value.origin === this }) {
                 routes.remove(id)
@@ -280,6 +347,18 @@ class Hub(
                     }
                 )
             }
+            if (frame.group != null &&
+                !NetworkNames.isServer(frame.group)
+            ) {
+                return refuse("its group \"${frame.group}\" isn't a group's name")
+            }
+            if (frame.capacity != null && frame.capacity < 1) return refuse("its capacity ${frame.capacity} isn't at least 1")
+            val group = credential?.group?.let { bound ->
+                if (frame.group != null && !frame.group.equals(bound, ignoreCase = true)) {
+                    return refuse("its credential \"${credential.id}\" is for the group $bound, and it says it's in ${frame.group}")
+                }
+                bound
+            } ?: frame.group
             val server = serverNamed(frame.server)
                 ?: return refuse(
                     "the proxy has no server named \"${frame.server}\" (network.server-name in its config.yml must be the " +
@@ -293,13 +372,18 @@ class Hub(
             this.credential = credential?.id
             joinedWith = credential
             grants = credential?.grants ?: Grants.TRUSTED
+            this.group = group
+            capacity = frame.capacity
+            accepting = true
             byName[server] = this
             val how = if (credential == null) "the shared secret" else "credential ${credential.id} (${grants.describe()})"
             log.info("NetherForge hub: $server connected from ${peer.address} with $how")
             // Sealed from the welcome on, under the name the server said (the one its keys are bound to).
             peer.secure(Channel.hub(proven, nonce, frame.nonce, frame.server, frame.credential))
             send(HubFrame.Welcome(server, servers(), visible(this), limits.maxValueBytes, grants))
-            for (other in byName.values) if (other !== this) other.send(HubFrame.Server(ServerState(server, true)))
+            val state = state(server, players.values.count { it.server == server })
+            for (other in byName.values) if (other !== this) other.send(HubFrame.Server(state))
+            told = told + (server to state)
         }
 
         /**
@@ -347,6 +431,7 @@ class Hub(
             when (frame) {
                 is ServerFrame.Hello -> send(HubFrame.Problem("it already said hello"))
                 is ServerFrame.Ping -> send(HubFrame.Pong)
+                is ServerFrame.Status -> accepting = frame.accepting
                 is ServerFrame.Listen -> listen(frame)
                 is ServerFrame.Publish -> {
                     if (!checked(frame.channel, frame.value)) return null
@@ -354,7 +439,11 @@ class Hub(
                         send(HubFrame.Problem(it))
                         return null
                     }
-                    val targets = if (frame.to == null) byName.values else listOfNotNull(serverNamed(frame.to)?.let(byName::get))
+                    val targets = when {
+                        frame.to != null -> listOfNotNull(serverNamed(frame.to)?.let(byName::get))
+                        frame.group != null -> members(frame.group)
+                        else -> byName.values
+                    }
                     val message = HubFrame.Message(frame.channel, from, frame.value)
                     for (target in targets) {
                         if (frame.channel in target.channels && target.grants.allows(frame.channel, Access.READ)) target.send(message)
@@ -400,10 +489,24 @@ class Hub(
             val size = Protocol.size(frame.value)
             if (size > limits.maxValueBytes) return fail("the request is $size bytes, over the network's limit of ${limits.maxValueBytes}")
             forbidden(frame.channel, Access.REQUEST)?.let { return fail(it) }
-            val target = serverNamed(frame.to)?.let(byName::get)
-                ?: return fail("${frame.to} isn't connected to the network")
-            if (frame.channel !in target.channels || !target.grants.allows(frame.channel, Access.ANSWER)) {
-                return fail("nothing on ${target.name} answers requests on \"${frame.channel}\"")
+            fun answers(session: Session) = frame.channel in session.channels && session.grants.allows(frame.channel, Access.ANSWER)
+            val target = if (frame.group != null) {
+                val answering = members(frame.group).filter(::answers)
+                if (answering.isEmpty()) {
+                    return fail(
+                        if (members(frame.group).isEmpty()) {
+                            "no instance of ${frame.group} is connected to the network"
+                        } else {
+                            "nothing on any instance of ${frame.group} answers requests on \"${frame.channel}\""
+                        }
+                    )
+                }
+                answering[Math.floorMod(nextTurn++, answering.size)]
+            } else {
+                val to = frame.to ?: return fail("a request names a server or a group")
+                val target = serverNamed(to)?.let(byName::get) ?: return fail("$to isn't connected to the network")
+                if (!answers(target)) return fail("nothing on ${target.name} answers requests on \"${frame.channel}\"")
+                target
             }
             val id = nextRoute++
             routes[id] = Route(this, frame.id, target, clock() + limits.requestTimeoutMillis)
@@ -435,30 +538,67 @@ class Hub(
                 send(HubFrame.SendResult(frame.id, why))
                 return null
             }
-            val player = players[frame.player] ?: return fail("they aren't online in the network")
-            val server = serverNamed(frame.server) ?: return fail("the proxy has no server named \"${frame.server}\"")
+            if (frame.players.isEmpty()) return fail("there's nobody to send")
+            if ((frame.server == null) == (frame.group == null)) return fail("a send names a server or a group")
+            val party = frame.players.distinct().map { id ->
+                players[id]
+                    ?: return fail(if (frame.players.size == 1) "they aren't online in the network" else "$id isn't online in the network")
+            }
+            fun who(player: PlayerState) = if (party.size == 1) "they" else player.name
             val size = Protocol.size(frame.data)
             if (size > limits.maxValueBytes) return fail("the data is $size bytes, over the network's limit of ${limits.maxValueBytes}")
-            if (player.server == server) return fail("they're already on $server")
-            if (!grants.trusted && player.server != from) {
-                return fail("network.forbidden: ${credentialName()} may only send players who are on $from")
+            if (!grants.trusted) {
+                party.firstOrNull { it.server != from }?.let {
+                    return fail("network.forbidden: ${credentialName()} may only send players who are on $from")
+                }
             }
-            if (!grants.maySendTo(server, null, cameFrom[player.id])) {
-                return fail("network.forbidden: ${credentialName()} may not send players to $server")
+            val server = if (frame.server != null) {
+                serverNamed(frame.server) ?: return fail("the proxy has no server named \"${frame.server}\"")
+            } else {
+                val group = frame.group!!
+                val moving = party.count { player -> members(group).none { it.name == player.server } }
+                pick(group, frame.balance, moving.coerceAtLeast(1))?.name
+                    ?: serverNamed(group)?.takeIf { members(group).isEmpty() && byName[it] == null }
+                    ?: return fail(
+                        when {
+                            members(group).isEmpty() -> "the network has no group or server named \"$group\" connected"
+                            members(group).none { it.accepting } -> "no instance of $group takes players now"
+                            else -> "no instance of $group has room for ${if (party.size == 1) "them" else "${party.size} players"}"
+                        }
+                    )
             }
             val target = byName[server]
-            target?.send(HubFrame.Arriving(player.id, from, frame.data))
-            return {
-                val moved = try {
-                    proxy.send(player.id, server)
-                } catch (e: Exception) {
-                    java.util.concurrent.CompletableFuture.completedFuture(e.message ?: e.toString())
+            val moving = party.filter { it.server != server }
+            if (moving.isEmpty()) return fail(if (party.size == 1) "they're already on $server" else "they're all already on $server")
+            for (player in moving) {
+                if (!grants.maySendTo(server, target?.group ?: frame.group, cameFrom[player.id])) {
+                    return fail(
+                        "network.forbidden: ${credentialName()} may not send ${if (party.size == 1) "players" else player.name} to $server"
+                    )
                 }
-                moved.whenComplete { error, failure ->
-                    val why = failure?.let { it.message ?: it.toString() } ?: error
+            }
+            for (player in moving) target?.send(HubFrame.Arriving(player.id, from, frame.data))
+            incoming.merge(server, moving.size, Int::plus)
+            return {
+                val results = moving.map { player ->
+                    val moved = try {
+                        proxy.send(player.id, server)
+                    } catch (e: Exception) {
+                        java.util.concurrent.CompletableFuture.completedFuture(e.message ?: e.toString())
+                    }
+                    moved.toCompletableFuture().handle { error, failure -> failure?.let { it.message ?: it.toString() } ?: error }
+                }
+                java.util.concurrent.CompletableFuture.allOf(*results.toTypedArray()).whenComplete { _, _ ->
                     synchronized(lock) {
-                        if (why != null && target != null) target.send(HubFrame.ArrivalCancelled(player.id))
-                        send(HubFrame.SendResult(frame.id, why))
+                        incoming.computeIfPresent(server) { _, count -> (count - moving.size).takeIf { it > 0 } }
+                        val failed = moving.zip(results.map { it.join() }).filter { it.second != null }
+                        for ((player, _) in failed) target?.send(HubFrame.ArrivalCancelled(player.id))
+                        val why = when {
+                            failed.isEmpty() -> null
+                            party.size == 1 -> failed.single().second
+                            else -> failed.joinToString("; ") { (player, error) -> "${who(player)}: $error" }
+                        }
+                        send(HubFrame.SendResult(frame.id, why, server))
                     }
                 }
             }

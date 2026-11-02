@@ -302,7 +302,15 @@ export const nfTest = (nfEvents: EventSpec[]): LuaClass => ({
     {
       name: 'network_server',
       doc: 'Adds another server to the test\'s network. In a test this server is part of a network of its own, named `"test"`, whose hub is a real one in the test: every other server is one the test adds and plays, with `network_publish`, `network_received`, `network_answer`, `network_write`, `network_join` and `network_send`. Adding one that\'s there does nothing; the network starts with none.',
-      params: [{ name: 'name', type: 'string', doc: 'Its name in the network (`"lobby"`).' }],
+      params: [
+        { name: 'name', type: 'string', doc: 'Its name in the network (`"lobby"`).' },
+        {
+          name: 'options',
+          type: 'TestNetworkServerOptions',
+          doc: "Its group and room, when it's an instance of a group.",
+          optional: true,
+        },
+      ],
       returns: [],
       example:
         'nf.test.case("chat reaches the lobby", function()\n  nf.test.network_server("lobby")\n  local player = nf.test.player("Ann")\n  nf.test.raise("player_chat", { player = player, message = "hi", format = "" })\n  nf.test.advance(1)\n  local said = nf.test.network_received("lobby", "chat")\n  assert(said[1].value.text == "Ann: hi")\nend)',
@@ -422,6 +430,24 @@ export const nfTest = (nfEvents: EventSpec[]): LuaClass => ({
 
 /** What `nf.test.raise` returns, and what `nf.test.click` and `nf.test.input` take. */
 export const testShapes: LuaClass[] = [
+  {
+    name: 'TestNetworkServerOptions',
+    doc: "What `nf.test.network_server` takes, the first time it names a server. A key that isn't one of these is an error.",
+    methods: false,
+    functions: [],
+    fields: [
+      {
+        name: 'group',
+        type: 'string?',
+        doc: "The group it's an instance of, as `network.group` says on a server.",
+      },
+      {
+        name: 'capacity',
+        type: 'integer?',
+        doc: 'How many players it takes; any number when left out.',
+      },
+    ],
+  },
   {
     name: 'TestNetworkMessage',
     doc: "A message another server of a test's network heard, from `nf.test.network_received`.",

@@ -22,6 +22,10 @@ data class NetworkConfig(
     val secret: String? = null,
     /** This server's credential's id (`network.credential.id`, from `/nfhub credentials add`); null: the shared secret. */
     val credential: String? = null,
+    /** The group this server is an instance of (`network.group`): null for a group of one, its name. */
+    val group: String? = null,
+    /** How many players it takes (`network.capacity`): null for any number. */
+    val capacity: Int? = null,
     /** What each package may send a minute: messages, requests, map writes and players sent. */
     val messagesPerMinute: Int = 1200,
     /** How long a request waits for its answer, here (the hub has its own, longer, limit). */
@@ -41,6 +45,7 @@ data class NetworkConfig(
         secret == null ->
             "network.secret is empty: copy it from the proxy's plugins/netherforge/hub.properties, or give the server a credential"
         port !in 1..65535 -> "network.hub's port $port isn't a port"
+        group != null && !NetworkNames.isServer(group) -> "network.group \"$group\" isn't a group's name (letters, digits, _ . -)"
         else -> null
     }
 

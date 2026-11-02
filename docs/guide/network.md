@@ -283,8 +283,8 @@ has and whether NetherForge on it is connected. `network_server_connect` and
 
 ```lua
 nf.task(function()
-  local moved, err = nf.network.send_player(player, "arena", { team = "red", kit = "archer" })
-  if not moved then
+  local server, err = nf.network.send_player(player, "arena", { team = "red", kit = "archer" })
+  if not server then
     player:send_message("<red>Can't go: " .. err)
   end
 end)
@@ -306,7 +306,52 @@ by name or UUID: the lobby can send a player who's in another game. It fails
 when they aren't online, the proxy has no such server, they're already there,
 or the proxy couldn't move them (the server is down or full, a proxy plugin
 cancelled it). Only players sent by a script arrive with `player_arrive`; any
-switch is heard as `network_player_switch`.
+switch is heard as `network_player_switch`. It gives the server they're on
+their way to.
+
+## Groups: several copies of one game
+
+A network that runs several copies of a game (three arena servers) makes each
+an **instance** of a **group**: in each one's `config.yml`, `network.group`
+names the group and `network.capacity` how many players it takes.
+
+```yaml
+network:
+  server-name: arena-3
+  group: arena
+  capacity: 16
+```
+
+Scripts then send players, publish and ask by group, and the hub picks the
+instance:
+
+```lua
+-- To an arena with room; the party lands together on one instance.
+nf.network.send_player(player, { group = "arena", data = { team = "red" } })
+nf.network.send_players(party.members, { group = "arena", data = { party = party.id } })
+
+-- To every instance, or to one of them.
+nf.network.channel("events"):publish({ kind = "restart" }, { group = "arena" })
+local status = nf.network.channel("status"):request({ group = "arena" }, "?")
+```
+
+Which instance a send goes to is the group's **balancing**: `least` (the
+instance with the fewest players that has room, the default) or `fill` (the
+fullest that still has room, so players end up together). The network's owner
+sets it per group in `hub.properties` (`group.arena.balance=fill`), and a
+send can ask for the other (`{ group = "arena", balance = "fill" }`). Players
+already on their way count, so two sends at once don't overfill an instance.
+An instance that doesn't take players now (a match is running) says so with
+`nf.network.set_accepting(false)`, and is passed over until it says `true`;
+it can still be sent players by name. A request to a group goes to one
+instance that answers on the channel, each in turn.
+
+`nf.network.group()` is this server's group, and `nf.network.groups()` every
+group with its instances, players and room; `nf.network.players({ group =
+"arena" })` is who's playing it. A server with no group is a group of one,
+named as the server is, so `{ group = "lobby" }` reaches the lobby either way.
+A credential can be for a group (`<id>.group=arena` in
+`credentials.properties`), putting every server that uses it in that group.
 
 ## Testing
 
@@ -331,7 +376,8 @@ nf.test.case("an arriving player gets their kit", function()
 end)
 ```
 
-`network_publish`, `network_answer` (how another server answers requests),
+`nf.test.network_server("arena-1", { group = "arena", capacity = 8 })` adds
+an instance of a group. `network_publish`, `network_answer` (how another server answers requests),
 `network_request` (another server asks this one), `network_write` (another
 server writes a map), `network_join` and `network_quit` cover the rest; see
 [`nf.test`](../reference/nf.test.md#server-networks). To try it with real

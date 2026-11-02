@@ -1123,6 +1123,33 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         1
     }
 
+    fn("nf.network.group") { call ->
+        val lua = call.lua
+        val caller = marshal.caller(lua, 1)
+        marshal.requires("network", "nf.network.group")
+        val result = api.nfNetwork.group(caller)
+        call.push(result, CODEC_1)
+        1
+    }
+
+    fn("nf.network.set_accepting") { call ->
+        val lua = call.lua
+        val caller = marshal.caller(lua, 1)
+        marshal.requires("network", "nf.network.set_accepting")
+        val accepting = call.arg(2, "accepting", LuaCodecs.BOOLEAN)
+        api.nfNetwork.setAccepting(caller, accepting)
+        0
+    }
+
+    fn("nf.network.is_accepting") { call ->
+        val lua = call.lua
+        val caller = marshal.caller(lua, 1)
+        marshal.requires("network", "nf.network.is_accepting")
+        val result = api.nfNetwork.isAccepting(caller)
+        call.push(result, LuaCodecs.BOOLEAN)
+        1
+    }
+
     fn("nf.network.is_connected") { call ->
         val lua = call.lua
         val caller = marshal.caller(lua, 1)
@@ -1141,12 +1168,22 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         1
     }
 
+    fn("nf.network.groups") { call ->
+        val lua = call.lua
+        val caller = marshal.caller(lua, 1)
+        marshal.requires("network", "nf.network.groups")
+        val result = api.nfNetwork.groups(caller)
+        call.push(result, CODEC_56)
+        1
+    }
+
     fn("nf.network.players") { call ->
         val lua = call.lua
         val caller = marshal.caller(lua, 1)
         marshal.requires("network", "nf.network.players")
-        val result = api.nfNetwork.players(caller)
-        call.push(result, CODEC_56)
+        val options = call.arg(2, "options", CODEC_57)
+        val result = api.nfNetwork.players(caller, options)
+        call.push(result, CODEC_58)
         1
     }
 
@@ -1156,7 +1193,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         marshal.requires("network", "nf.network.find_player")
         val player = call.arg(2, "player", LuaCodecs.STRING)
         val result = api.nfNetwork.findPlayer(caller, player)
-        call.push(result, CODEC_57)
+        call.push(result, CODEC_59)
         1
     }
 
@@ -1185,10 +1222,22 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val caller = marshal.caller(lua, 1)
         marshal.requires("network", "nf.network.send_player")
         val player = call.arg(2, "player", PlayerOrString.Codec)
-        val server = call.arg(3, "server", LuaCodecs.STRING)
+        val target = call.arg(3, "target", StringOrNetworkSendOptions.Codec)
         val data = call.arg(4, "data", LuaCodecs.VALUE)
-        val result = api.nfNetwork.sendPlayer(caller, player, server, data)
-        lua.push(marshal.await("nf.network.send_player", caller.scope, result, call.keep(5), LuaCodecs.BOOLEAN).toLong())
+        val result = api.nfNetwork.sendPlayer(caller, player, target, data)
+        lua.push(marshal.await("nf.network.send_player", caller.scope, result, call.keep(5), LuaCodecs.STRING).toLong())
+        1
+    }
+
+    fn("nf.network.send_players") { call ->
+        val lua = call.lua
+        val caller = marshal.caller(lua, 1)
+        marshal.requires("network", "nf.network.send_players")
+        val players = call.arg(2, "players", CODEC_60)
+        val target = call.arg(3, "target", StringOrNetworkSendOptions.Codec)
+        val data = call.arg(4, "data", LuaCodecs.VALUE)
+        val result = api.nfNetwork.sendPlayers(caller, players, target, data)
+        lua.push(marshal.await("nf.network.send_players", caller.scope, result, call.keep(5), LuaCodecs.STRING).toLong())
         1
     }
 
@@ -1197,7 +1246,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val caller = marshal.caller(lua, 1)
         val time = call.arg(2, "time", LuaCodecs.INTEGER)
         val pattern = call.arg(3, "pattern", LuaCodecs.STRING)
-        val options = call.arg(4, "options", CODEC_58)
+        val options = call.arg(4, "options", CODEC_61)
         val result = api.nfTime.format(caller, time, pattern, options)
         call.push(result, LuaCodecs.STRING)
         1
@@ -1208,7 +1257,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val caller = marshal.caller(lua, 1)
         val text = call.arg(2, "text", LuaCodecs.STRING)
         val pattern = call.arg(3, "pattern", LuaCodecs.STRING)
-        val options = call.arg(4, "options", CODEC_58)
+        val options = call.arg(4, "options", CODEC_61)
         val result = api.nfTime.parse(caller, text, pattern, options)
         call.push(result, CODEC_29)
         1
@@ -1237,7 +1286,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val caller = marshal.caller(lua, 1)
         val x = call.arg(2, "x", LuaCodecs.NUMBER)
         val z = call.arg(3, "z", LuaCodecs.NUMBER)
-        val options = call.arg(4, "options", CODEC_59)
+        val options = call.arg(4, "options", CODEC_62)
         val result = api.nfRandom.noise2(caller, x, z, options)
         call.push(result, LuaCodecs.NUMBER)
         1
@@ -1249,7 +1298,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val x = call.arg(2, "x", LuaCodecs.NUMBER)
         val y = call.arg(3, "y", LuaCodecs.NUMBER)
         val z = call.arg(4, "z", LuaCodecs.NUMBER)
-        val options = call.arg(5, "options", CODEC_59)
+        val options = call.arg(5, "options", CODEC_62)
         val result = api.nfRandom.noise3(caller, x, y, z, options)
         call.push(result, LuaCodecs.NUMBER)
         1
@@ -1292,7 +1341,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("nf.test.raise") { call ->
         val lua = call.lua
         val caller = marshal.caller(lua, 1)
-        val event = call.arg(2, "event", CODEC_60)
+        val event = call.arg(2, "event", CODEC_63)
         val payload = call.arg(3, "payload", CODEC_17)
         val result = api.nfTest.raise(caller, event, payload)
         call.push(result, RaisedEvent.Codec)
@@ -1303,8 +1352,8 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val caller = marshal.caller(lua, 1)
         val player = call.arg(2, "player", LuaHandle.Player.Codec)
-        val button = call.arg(3, "button", CODEC_61)
-        val options = call.arg(4, "options", CODEC_62)
+        val button = call.arg(3, "button", CODEC_64)
+        val options = call.arg(4, "options", CODEC_65)
         val result = api.nfTest.click(caller, player, button, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -1333,9 +1382,9 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val caller = marshal.caller(lua, 1)
         val player = call.arg(2, "player", LuaHandle.Player.Codec)
         val slot = call.arg(3, "slot", IntegerOrChoice.Codec)
-        val options = call.arg(4, "options", CODEC_63)
+        val options = call.arg(4, "options", CODEC_66)
         val result = api.nfTest.shown(caller, player, slot, options)
-        call.push(result, CODEC_64)
+        call.push(result, CODEC_67)
         1
     }
 
@@ -1344,7 +1393,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val caller = marshal.caller(lua, 1)
         val url = call.arg(2, "url", CODEC_1)
         val result = api.nfTest.connections(caller, url)
-        call.push(result, CODEC_65)
+        call.push(result, CODEC_68)
         1
     }
 
@@ -1352,7 +1401,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val caller = marshal.caller(lua, 1)
         val connection = call.arg(2, "connection", LuaUnions.HttpStreamOrWebSocket)
-        val options = call.arg(3, "options", CODEC_66)
+        val options = call.arg(3, "options", CODEC_69)
         api.nfTest.accept(caller, connection, options)
         0
     }
@@ -1380,7 +1429,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val caller = marshal.caller(lua, 1)
         val method = call.arg(2, "method", LuaCodecs.STRING)
         val path = call.arg(3, "path", LuaCodecs.STRING)
-        val options = call.arg(4, "options", CODEC_67)
+        val options = call.arg(4, "options", CODEC_70)
         val result = api.nfTest.request(caller, method, path, options)
         call.push(result, TestWebResponse.Codec)
         1
@@ -1399,7 +1448,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val caller = marshal.caller(lua, 1)
         val connection = call.arg(2, "connection", LuaUnions.HttpStreamOrWebSocket)
-        val options = call.arg(3, "options", CODEC_68)
+        val options = call.arg(3, "options", CODEC_71)
         api.nfTest.disconnect(caller, connection, options)
         0
     }
@@ -1417,7 +1466,8 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val caller = marshal.caller(lua, 1)
         val name = call.arg(2, "name", LuaCodecs.STRING)
-        api.nfTest.networkServer(caller, name)
+        val options = call.arg(3, "options", CODEC_72)
+        api.nfTest.networkServer(caller, name, options)
         0
     }
 
@@ -1437,7 +1487,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val server = call.arg(2, "server", LuaCodecs.STRING)
         val channel = call.arg(3, "channel", CODEC_1)
         val result = api.nfTest.networkReceived(caller, server, channel)
-        call.push(result, CODEC_69)
+        call.push(result, CODEC_73)
         1
     }
 
@@ -1572,7 +1622,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Centity
         val name = call.arg(2, "name", LuaCodecs.STRING)
         val result = api.centity.node(self, name)
-        call.push(result, CODEC_70)
+        call.push(result, CODEC_74)
         1
     }
 
@@ -1580,7 +1630,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Centity
         val result = api.centity.nodes(self)
-        call.push(result, CODEC_71)
+        call.push(result, CODEC_75)
         1
     }
 
@@ -1588,7 +1638,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Centity
         val result = api.centity.roots(self)
-        call.push(result, CODEC_71)
+        call.push(result, CODEC_75)
         1
     }
 
@@ -1598,7 +1648,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val name = call.arg(2, "name", LuaCodecs.STRING)
         val definition = call.arg(3, "definition", CODEC_17)
         val result = api.centity.addNode(self, name, definition)
-        call.push(result, CODEC_70)
+        call.push(result, CODEC_74)
         1
     }
 
@@ -1614,7 +1664,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Centity
         val result = api.centity.bounds(self)
-        call.push(result, CODEC_72)
+        call.push(result, CODEC_76)
         1
     }
 
@@ -1622,7 +1672,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Centity
         val result = api.centity.location(self)
-        call.push(result, CODEC_73)
+        call.push(result, CODEC_77)
         1
     }
 
@@ -1736,7 +1786,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Centity
         val result = api.centity.stats(self)
-        call.push(result, CODEC_74)
+        call.push(result, CODEC_78)
         1
     }
 
@@ -1745,7 +1795,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Centity
         val source = call.arg(2, "source", LuaCodecs.STRING)
         val result = api.centity.modifiers(self, source)
-        call.push(result, CODEC_75)
+        call.push(result, CODEC_79)
         1
     }
 
@@ -1753,7 +1803,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Centity
         val source = call.arg(2, "source", LuaCodecs.STRING)
-        val modifiers = call.arg(3, "modifiers", CODEC_75)
+        val modifiers = call.arg(3, "modifiers", CODEC_79)
         val result = api.centity.setModifiers(self, source, modifiers)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -1800,7 +1850,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Centity
         val result = api.centity.buffs(self)
-        call.push(result, CODEC_76)
+        call.push(result, CODEC_80)
         1
     }
 
@@ -1842,7 +1892,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Centity
         val amount = call.arg(2, "amount", LuaCodecs.NUMBER)
-        val options = call.arg(3, "options", CODEC_77)
+        val options = call.arg(3, "options", CODEC_81)
         val result = api.centity.damage(self, amount, options)
         call.push(result, CODEC_35)
         1
@@ -1877,7 +1927,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Centity
         val result = api.centity.body(self)
-        call.push(result, CODEC_78)
+        call.push(result, CODEC_82)
         1
     }
 
@@ -2007,7 +2057,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Centity
         val target = call.arg(2, "target", LocationOrVec3OrEntityOrCentity.Codec)
-        val options = call.arg(3, "options", CODEC_79)
+        val options = call.arg(3, "options", CODEC_83)
         val result = api.centity.moveTo(self, target, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -2060,7 +2110,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Centity
         val name = call.arg(2, "name", LuaCodecs.STRING)
-        val options = call.arg(3, "options", CODEC_80)
+        val options = call.arg(3, "options", CODEC_84)
         val result = api.centity.playAnimation(self, name, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -2253,7 +2303,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Node
         val result = api.node.parent(self)
-        call.push(result, CODEC_70)
+        call.push(result, CODEC_74)
         1
     }
 
@@ -2261,7 +2311,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Node
         val result = api.node.children(self)
-        call.push(result, CODEC_71)
+        call.push(result, CODEC_75)
         1
     }
 
@@ -2271,7 +2321,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val name = call.arg(2, "name", LuaCodecs.STRING)
         val definition = call.arg(3, "definition", CODEC_17)
         val result = api.node.addChild(self, name, definition)
-        call.push(result, CODEC_70)
+        call.push(result, CODEC_74)
         1
     }
 
@@ -2323,7 +2373,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Node
         val translation = call.vec3(2)
-        val options = call.arg(5, "options", CODEC_81)
+        val options = call.arg(5, "options", CODEC_85)
         api.node.setTranslation(self, translation, options)
         0
     }
@@ -2332,7 +2382,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Node
         val rotation = call.vec3(2)
-        val options = call.arg(5, "options", CODEC_81)
+        val options = call.arg(5, "options", CODEC_85)
         api.node.setRotation(self, rotation, options)
         0
     }
@@ -2341,7 +2391,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Node
         val scale = call.vec3(2)
-        val options = call.arg(5, "options", CODEC_81)
+        val options = call.arg(5, "options", CODEC_85)
         api.node.setScale(self, scale, options)
         0
     }
@@ -2351,7 +2401,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Node
         val from = call.vec3(2)
         val to = call.vec3(5)
-        val options = call.arg(8, "options", CODEC_82)
+        val options = call.arg(8, "options", CODEC_86)
         val result = api.node.stretchBetween(self, from, to, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -2370,7 +2420,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Node
         val from = call.arg(2, "from", Vec3OrNodeOrEntity.Codec)
         val to = call.arg(3, "to", Vec3OrNodeOrEntity.Codec)
-        val options = call.arg(4, "options", CODEC_83)
+        val options = call.arg(4, "options", CODEC_87)
         val result = api.node.ropeBetween(self, from, to, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -2526,7 +2576,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Node
         val result = api.node.displayKind(self)
-        call.push(result, CODEC_84)
+        call.push(result, CODEC_88)
         1
     }
 
@@ -2589,14 +2639,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Node
         val result = api.node.displayAnchor(self)
-        call.push(result, CODEC_85)
+        call.push(result, CODEC_89)
         1
     }
 
     fn("Node.set_display_anchor") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Node
-        val anchor = call.arg(2, "anchor", CODEC_85)
+        val anchor = call.arg(2, "anchor", CODEC_89)
         val result = api.node.setDisplayAnchor(self, anchor)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -2623,7 +2673,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Node
         val result = api.node.displayText(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
@@ -2640,7 +2690,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Node
         val result = api.node.displayItem(self)
-        call.push(result, CODEC_64)
+        call.push(result, CODEC_67)
         1
     }
 
@@ -2674,7 +2724,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Node
         val result = api.node.displayTextStyle(self)
-        call.push(result, CODEC_87)
+        call.push(result, CODEC_91)
         1
     }
 
@@ -2725,14 +2775,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Node
         val result = api.node.brightness(self)
-        call.push(result, CODEC_88)
+        call.push(result, CODEC_92)
         1
     }
 
     fn("Node.set_brightness") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Node
-        val brightness = call.arg(2, "brightness", CODEC_88)
+        val brightness = call.arg(2, "brightness", CODEC_92)
         val result = api.node.setBrightness(self, brightness)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -2742,14 +2792,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Node
         val result = api.node.billboard(self)
-        call.push(result, CODEC_89)
+        call.push(result, CODEC_93)
         1
     }
 
     fn("Node.set_billboard") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Node
-        val billboard = call.arg(2, "billboard", CODEC_90)
+        val billboard = call.arg(2, "billboard", CODEC_94)
         val result = api.node.setBillboard(self, billboard)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -3017,7 +3067,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Entity
         val result = api.entity.location(self)
-        call.push(result, CODEC_73)
+        call.push(result, CODEC_77)
         1
     }
 
@@ -3167,7 +3217,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Entity
         val result = api.entity.name(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
@@ -3175,14 +3225,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Entity
         val result = api.entity.customName(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
     fn("Entity.set_custom_name") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Entity
-        val text = call.arg(2, "text", CODEC_86)
+        val text = call.arg(2, "text", CODEC_90)
         val result = api.entity.setCustomName(self, text)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -3372,7 +3422,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Entity
         val result = api.entity.passengers(self)
-        call.push(result, CODEC_91)
+        call.push(result, CODEC_95)
         1
     }
 
@@ -3398,7 +3448,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Entity
         val result = api.entity.vehicle(self)
-        call.push(result, CODEC_92)
+        call.push(result, CODEC_96)
         1
     }
 
@@ -3406,7 +3456,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Entity
         val result = api.entity.inventory(self)
-        call.push(result, CODEC_93)
+        call.push(result, CODEC_97)
         1
     }
 
@@ -3415,7 +3465,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Entity
         val maxDistance = call.arg(2, "max_distance", CODEC_35)
         val result = api.entity.targetBlock(self, maxDistance)
-        call.push(result, CODEC_94)
+        call.push(result, CODEC_98)
         1
     }
 
@@ -3424,7 +3474,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Entity
         val maxDistance = call.arg(2, "max_distance", CODEC_35)
         val result = api.entity.targetEntity(self, maxDistance)
-        call.push(result, CODEC_92)
+        call.push(result, CODEC_96)
         1
     }
 
@@ -3466,7 +3516,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Living
         val amount = call.arg(2, "amount", LuaCodecs.NUMBER)
-        val source = call.arg(3, "source", CODEC_92)
+        val source = call.arg(3, "source", CODEC_96)
         val result = api.living.damage(self, amount, source)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -3514,7 +3564,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Living
         val attribute = call.arg(2, "attribute", LuaCodecs.STRING)
         val result = api.living.attributeModifiers(self, attribute)
-        call.push(result, CODEC_95)
+        call.push(result, CODEC_99)
         1
     }
 
@@ -3524,8 +3574,8 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val attribute = call.arg(2, "attribute", LuaCodecs.STRING)
         val id = call.arg(3, "id", LuaCodecs.STRING)
         val amount = call.arg(4, "amount", LuaCodecs.NUMBER)
-        val operation = call.arg(5, "operation", CODEC_96)
-        val saved = call.arg(6, "saved", CODEC_97)
+        val operation = call.arg(5, "operation", CODEC_100)
+        val saved = call.arg(6, "saved", CODEC_101)
         val result = api.living.addAttributeModifier(self, attribute, id, amount, operation, saved)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -3545,7 +3595,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Living
         val result = api.living.effects(self)
-        call.push(result, CODEC_98)
+        call.push(result, CODEC_102)
         1
     }
 
@@ -3563,7 +3613,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Living
         val effect = call.arg(2, "effect", LuaCodecs.STRING)
         val ticks = call.arg(3, "ticks", LuaCodecs.INTEGER)
-        val options = call.arg(4, "options", CODEC_99)
+        val options = call.arg(4, "options", CODEC_103)
         val result = api.living.addEffect(self, effect, ticks, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -3581,17 +3631,17 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("Living.equipment") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Living
-        val slot = call.arg(2, "slot", CODEC_100)
+        val slot = call.arg(2, "slot", CODEC_104)
         val result = api.living.equipment(self, slot)
-        call.push(result, CODEC_64)
+        call.push(result, CODEC_67)
         1
     }
 
     fn("Living.set_equipment") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Living
-        val slot = call.arg(2, "slot", CODEC_100)
-        val item = call.arg(3, "item", CODEC_64)
+        val slot = call.arg(2, "slot", CODEC_104)
+        val item = call.arg(3, "item", CODEC_67)
         val result = api.living.setEquipment(self, slot, item)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -3601,14 +3651,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Mob
         val result = api.mob.target(self)
-        call.push(result, CODEC_92)
+        call.push(result, CODEC_96)
         1
     }
 
     fn("Mob.set_target") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Mob
-        val entity = call.arg(2, "entity", CODEC_92)
+        val entity = call.arg(2, "entity", CODEC_96)
         val result = api.mob.setTarget(self, entity)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -3635,7 +3685,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Mob
         val target = call.arg(2, "target", LocationOrVec3OrEntity.Codec)
-        val options = call.arg(3, "options", CODEC_101)
+        val options = call.arg(3, "options", CODEC_105)
         val result = api.mob.moveTo(self, target, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -3673,7 +3723,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Mob
         val result = api.mob.goals(self)
-        call.push(result, CODEC_102)
+        call.push(result, CODEC_106)
         1
     }
 
@@ -3689,7 +3739,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("Mob.clear_goals") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Mob
-        val options = call.arg(2, "options", CODEC_103)
+        val options = call.arg(2, "options", CODEC_107)
         val result = api.mob.clearGoals(self, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -3699,7 +3749,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.DroppedItem
         val result = api.droppedItem.item(self)
-        call.push(result, CODEC_64)
+        call.push(result, CODEC_67)
         1
     }
 
@@ -3733,14 +3783,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Mannequin
         val result = api.mannequin.skin(self)
-        call.push(result, CODEC_104)
+        call.push(result, CODEC_108)
         1
     }
 
     fn("Mannequin.set_skin") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Mannequin
-        val skin = call.arg(2, "skin", CODEC_104)
+        val skin = call.arg(2, "skin", CODEC_108)
         val result = api.mannequin.setSkin(self, skin)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -3750,14 +3800,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Mannequin
         val result = api.mannequin.description(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
     fn("Mannequin.set_description") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Mannequin
-        val text = call.arg(2, "text", CODEC_86)
+        val text = call.arg(2, "text", CODEC_90)
         val result = api.mannequin.setDescription(self, text)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -3784,14 +3834,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Mannequin
         val result = api.mannequin.mainHand(self)
-        call.push(result, CODEC_105)
+        call.push(result, CODEC_109)
         1
     }
 
     fn("Mannequin.set_main_hand") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Mannequin
-        val side = call.arg(2, "side", CODEC_61)
+        val side = call.arg(2, "side", CODEC_64)
         val result = api.mannequin.setMainHand(self, side)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -3801,14 +3851,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Mannequin
         val result = api.mannequin.pose(self)
-        call.push(result, CODEC_106)
+        call.push(result, CODEC_110)
         1
     }
 
     fn("Mannequin.set_pose") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Mannequin
-        val pose = call.arg(2, "pose", CODEC_107)
+        val pose = call.arg(2, "pose", CODEC_111)
         val result = api.mannequin.setPose(self, pose)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -3818,7 +3868,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Mannequin
         val result = api.mannequin.skinParts(self)
-        call.push(result, CODEC_108)
+        call.push(result, CODEC_112)
         1
     }
 
@@ -3844,7 +3894,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.stats(self)
-        call.push(result, CODEC_74)
+        call.push(result, CODEC_78)
         1
     }
 
@@ -3853,7 +3903,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Player
         val source = call.arg(2, "source", LuaCodecs.STRING)
         val result = api.player.modifiers(self, source)
-        call.push(result, CODEC_75)
+        call.push(result, CODEC_79)
         1
     }
 
@@ -3861,7 +3911,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val source = call.arg(2, "source", LuaCodecs.STRING)
-        val modifiers = call.arg(3, "modifiers", CODEC_75)
+        val modifiers = call.arg(3, "modifiers", CODEC_79)
         val result = api.player.setModifiers(self, source, modifiers)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -3908,7 +3958,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.buffs(self)
-        call.push(result, CODEC_76)
+        call.push(result, CODEC_80)
         1
     }
 
@@ -3924,7 +3974,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.displayName(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
@@ -3959,8 +4009,8 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val title = call.arg(2, "title", LuaCodecs.TEXT)
-        val subtitle = call.arg(3, "subtitle", CODEC_86)
-        val options = call.arg(4, "options", CODEC_109)
+        val subtitle = call.arg(3, "subtitle", CODEC_90)
+        val options = call.arg(4, "options", CODEC_113)
         val result = api.player.sendTitle(self, title, subtitle, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -3978,7 +4028,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val sound = call.arg(2, "sound", LuaCodecs.STRING)
-        val options = call.arg(3, "options", CODEC_110)
+        val options = call.arg(3, "options", CODEC_114)
         val result = api.player.playSound(self, sound, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -3998,7 +4048,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Player
         val particle = call.arg(2, "particle", LuaCodecs.STRING)
         val position = call.vec3(3)
-        val options = call.arg(6, "options", CODEC_111)
+        val options = call.arg(6, "options", CODEC_115)
         val result = api.player.spawnParticle(self, particle, position, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -4044,7 +4094,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.permissions(self)
-        call.push(result, CODEC_112)
+        call.push(result, CODEC_116)
         1
     }
 
@@ -4060,14 +4110,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.gameMode(self)
-        call.push(result, CODEC_113)
+        call.push(result, CODEC_117)
         1
     }
 
     fn("Player.set_game_mode") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
-        val gameMode = call.arg(2, "game_mode", CODEC_114)
+        val gameMode = call.arg(2, "game_mode", CODEC_118)
         val result = api.player.setGameMode(self, gameMode)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -4254,7 +4304,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         marshal.requires("moderation", "Player:kick")
-        val reason = call.arg(2, "reason", CODEC_86)
+        val reason = call.arg(2, "reason", CODEC_90)
         val result = api.player.kick(self, reason)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -4288,7 +4338,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         marshal.requires("moderation", "Player:ban")
-        val options = call.arg(2, "options", CODEC_115)
+        val options = call.arg(2, "options", CODEC_119)
         api.player.ban(self, options)
         0
     }
@@ -4323,7 +4373,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.enderChest(self)
-        call.push(result, CODEC_93)
+        call.push(result, CODEC_97)
         1
     }
 
@@ -4339,7 +4389,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val sky = call.arg(2, "sky", LuaCodecs.STRING)
-        val options = call.arg(3, "options", CODEC_116)
+        val options = call.arg(3, "options", CODEC_120)
         api.player.setSky(self, sky, options)
         0
     }
@@ -4347,7 +4397,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("Player.clear_sky") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
-        val options = call.arg(2, "options", CODEC_116)
+        val options = call.arg(2, "options", CODEC_120)
         api.player.clearSky(self, options)
         0
     }
@@ -4358,7 +4408,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val name = call.arg(2, "name", LuaCodecs.STRING)
         val size = call.arg(3, "size", LuaCodecs.INTEGER)
         val result = api.player.storage(self, name, size)
-        call.push(result, CODEC_93)
+        call.push(result, CODEC_97)
         1
     }
 
@@ -4374,14 +4424,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.heldItem(self)
-        call.push(result, CODEC_64)
+        call.push(result, CODEC_67)
         1
     }
 
     fn("Player.set_held_item") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
-        val item = call.arg(2, "item", CODEC_64)
+        val item = call.arg(2, "item", CODEC_67)
         val result = api.player.setHeldItem(self, item)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -4391,14 +4441,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.offHandItem(self)
-        call.push(result, CODEC_64)
+        call.push(result, CODEC_67)
         1
     }
 
     fn("Player.set_off_hand_item") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
-        val item = call.arg(2, "item", CODEC_64)
+        val item = call.arg(2, "item", CODEC_67)
         val result = api.player.setOffHandItem(self, item)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -4408,14 +4458,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.cursorItem(self)
-        call.push(result, CODEC_64)
+        call.push(result, CODEC_67)
         1
     }
 
     fn("Player.set_cursor_item") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
-        val item = call.arg(2, "item", CODEC_64)
+        val item = call.arg(2, "item", CODEC_67)
         val result = api.player.setCursorItem(self, item)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -4508,7 +4558,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Player
         val advancement = call.arg(2, "advancement", LuaCodecs.STRING)
         val result = api.player.advancementProgress(self, advancement)
-        call.push(result, CODEC_117)
+        call.push(result, CODEC_121)
         1
     }
 
@@ -4535,7 +4585,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val menu = call.arg(2, "menu", StringOrMenuTemplate.Codec)
-        val options = call.arg(3, "options", CODEC_118)
+        val options = call.arg(3, "options", CODEC_122)
         val result = api.player.openMenu(self, menu, options)
         call.push(result, CODEC_16)
         1
@@ -4586,7 +4636,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val dialog = call.arg(2, "dialog", StringOrDialog.Codec)
-        val options = call.arg(3, "options", CODEC_119)
+        val options = call.arg(3, "options", CODEC_123)
         val result = api.player.openDialog(self, dialog, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -4612,7 +4662,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.border(self)
-        call.push(result, CODEC_120)
+        call.push(result, CODEC_124)
         1
     }
 
@@ -4636,7 +4686,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.tabHeader(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
@@ -4653,7 +4703,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.tabFooter(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
@@ -4670,14 +4720,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.tabName(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
     fn("Player.set_tab_name") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
-        val text = call.arg(2, "text", CODEC_86)
+        val text = call.arg(2, "text", CODEC_90)
         val result = api.player.setTabName(self, text)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -4723,14 +4773,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.belowName(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
     fn("Player.set_below_name") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
-        val text = call.arg(2, "text", CODEC_86)
+        val text = call.arg(2, "text", CODEC_90)
         val result = api.player.setBelowName(self, text)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -4740,7 +4790,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.bossbars(self)
-        call.push(result, CODEC_121)
+        call.push(result, CODEC_125)
         1
     }
 
@@ -4749,7 +4799,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Player
         val pack = call.arg(2, "pack", CODEC_1)
         val result = api.player.resourcePackStatus(self, pack)
-        call.push(result, CODEC_122)
+        call.push(result, CODEC_126)
         1
     }
 
@@ -4794,8 +4844,8 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val entity = call.arg(2, "entity", LuaHandle.Entity.Codec)
-        val slot = call.arg(3, "slot", CODEC_100)
-        val item = call.arg(4, "item", CODEC_64)
+        val slot = call.arg(3, "slot", CODEC_104)
+        val item = call.arg(4, "item", CODEC_67)
         val result = api.player.sendEquipmentChange(self, entity, slot, item)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -4805,14 +4855,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.camera(self)
-        call.push(result, CODEC_92)
+        call.push(result, CODEC_96)
         1
     }
 
     fn("Player.set_camera") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
-        val entity = call.arg(2, "entity", CODEC_92)
+        val entity = call.arg(2, "entity", CODEC_96)
         val result = api.player.setCamera(self, entity)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -4822,7 +4872,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
         val result = api.player.compassTarget(self)
-        call.push(result, CODEC_73)
+        call.push(result, CODEC_77)
         1
     }
 
@@ -4838,7 +4888,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("Player.open_book") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Player
-        val pages = call.arg(2, "pages", CODEC_123)
+        val pages = call.arg(2, "pages", CODEC_127)
         val result = api.player.openBook(self, pages)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -4891,7 +4941,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Bot
         marshal.requires("bots", "Bot:walk_to")
         val position = call.vec3(2)
-        val options = call.arg(5, "options", CODEC_124)
+        val options = call.arg(5, "options", CODEC_128)
         val caller = marshal.caller(lua, 6)
         val result = api.bot.walkTo(self, position, options)
         lua.push(marshal.await("Bot:walk_to", caller.scope, result, call.keep(7), LuaCodecs.VEC3).toLong())
@@ -4971,7 +5021,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Bot
         marshal.requires("bots", "Bot:interact")
         val target = call.arg(2, "target", LuaUnions.EntityOrNode)
-        val options = call.arg(3, "options", CODEC_125)
+        val options = call.arg(3, "options", CODEC_129)
         val result = api.bot.interact(self, target, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -4981,7 +5031,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Bot
         marshal.requires("bots", "Bot:use_item")
-        val offHand = call.arg(2, "off_hand", CODEC_97)
+        val offHand = call.arg(2, "off_hand", CODEC_101)
         val result = api.bot.useItem(self, offHand)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5010,8 +5060,8 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Bot
         marshal.requires("bots", "Bot:use_block")
         val position = call.vec3(2)
-        val face = call.arg(5, "face", CODEC_126)
-        val offHand = call.arg(6, "off_hand", CODEC_97)
+        val face = call.arg(5, "face", CODEC_130)
+        val offHand = call.arg(6, "off_hand", CODEC_101)
         val result = api.bot.useBlock(self, position, face, offHand)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5041,7 +5091,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Bot
         marshal.requires("bots", "Bot:drop_item")
-        val stack = call.arg(2, "stack", CODEC_97)
+        val stack = call.arg(2, "stack", CODEC_101)
         val result = api.bot.dropItem(self, stack)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5052,7 +5102,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Bot
         marshal.requires("bots", "Bot:click_slot")
         val slot = call.arg(2, "slot", LuaCodecs.INTEGER)
-        val click = call.arg(3, "click", CODEC_127)
+        val click = call.arg(3, "click", CODEC_131)
         val result = api.bot.clickSlot(self, slot, click)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5129,7 +5179,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.World
         val result = api.world.environment(self)
-        call.push(result, CODEC_128)
+        call.push(result, CODEC_132)
         1
     }
 
@@ -5178,7 +5228,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.World
         val result = api.world.moonPhase(self)
-        call.push(result, CODEC_129)
+        call.push(result, CODEC_133)
         1
     }
 
@@ -5186,15 +5236,15 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.World
         val result = api.world.weather(self)
-        call.push(result, CODEC_130)
+        call.push(result, CODEC_134)
         1
     }
 
     fn("World.set_weather") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.World
-        val weather = call.arg(2, "weather", CODEC_131)
-        val options = call.arg(3, "options", CODEC_132)
+        val weather = call.arg(2, "weather", CODEC_135)
+        val options = call.arg(3, "options", CODEC_136)
         val result = api.world.setWeather(self, weather, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5212,7 +5262,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.World
         val sky = call.arg(2, "sky", LuaCodecs.STRING)
-        val options = call.arg(3, "options", CODEC_116)
+        val options = call.arg(3, "options", CODEC_120)
         val result = api.world.setSky(self, sky, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5221,7 +5271,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("World.clear_sky") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.World
-        val options = call.arg(2, "options", CODEC_116)
+        val options = call.arg(2, "options", CODEC_120)
         api.world.clearSky(self, options)
         0
     }
@@ -5230,7 +5280,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.World
         val result = api.world.spawnLocation(self)
-        call.push(result, CODEC_73)
+        call.push(result, CODEC_77)
         1
     }
 
@@ -5264,7 +5314,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.World
         val position = call.vec3(2)
         val result = api.world.block(self, position)
-        call.push(result, CODEC_94)
+        call.push(result, CODEC_98)
         1
     }
 
@@ -5273,9 +5323,9 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.World
         val from = call.vec3(2)
         val to = call.vec3(5)
-        val options = call.arg(8, "options", CODEC_133)
+        val options = call.arg(8, "options", CODEC_137)
         val result = api.world.blocks(self, from, to, options)
-        call.push(result, CODEC_134)
+        call.push(result, CODEC_138)
         1
     }
 
@@ -5285,7 +5335,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val start = call.vec3(2)
         val options = call.arg(5, "options", FloodOptions.Codec)
         val result = api.world.flood(self, start, options)
-        call.push(result, CODEC_135)
+        call.push(result, CODEC_139)
         1
     }
 
@@ -5294,7 +5344,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.World
         val position = call.vec3(2)
         val state = call.arg(5, "state", LuaCodecs.STRING)
-        val options = call.arg(6, "options", CODEC_136)
+        val options = call.arg(6, "options", CODEC_140)
         val result = api.world.setBlock(self, position, state, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5306,7 +5356,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val from = call.vec3(2)
         val to = call.vec3(5)
         val state = call.arg(8, "state", LuaCodecs.STRING)
-        val options = call.arg(9, "options", CODEC_136)
+        val options = call.arg(9, "options", CODEC_140)
         val result = api.world.fillBlocks(self, from, to, state, options)
         call.push(result, LuaCodecs.INTEGER)
         1
@@ -5318,7 +5368,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val from = call.vec3(2)
         val to = call.vec3(5)
         val state = call.arg(8, "state", LuaCodecs.STRING)
-        val options = call.arg(9, "options", CODEC_137)
+        val options = call.arg(9, "options", CODEC_141)
         val caller = marshal.caller(lua, 10)
         val result = api.world.fillGradually(self, from, to, state, options)
         lua.push(marshal.await("World:fill_gradually", caller.scope, result, call.keep(11), LuaCodecs.INTEGER).toLong())
@@ -5330,7 +5380,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.World
         val position = call.vec3(2)
         val result = api.world.highestBlock(self, position)
-        call.push(result, CODEC_94)
+        call.push(result, CODEC_98)
         1
     }
 
@@ -5356,7 +5406,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.World
         val id = call.arg(2, "id", LuaCodecs.STRING)
-        val options = call.arg(3, "options", CODEC_138)
+        val options = call.arg(3, "options", CODEC_142)
         val caller = marshal.caller(lua, 4)
         val result = api.world.locateBiome(self, id, options)
         lua.push(marshal.await("World:locate_biome", caller.scope, result, call.keep(5), LuaCodecs.VEC3).toLong())
@@ -5383,9 +5433,9 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("World.entities") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.World
-        val filter = call.arg(2, "filter", CODEC_139)
+        val filter = call.arg(2, "filter", CODEC_143)
         val result = api.world.entities(self, filter)
-        call.push(result, CODEC_91)
+        call.push(result, CODEC_95)
         1
     }
 
@@ -5394,9 +5444,9 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.World
         val kind = call.arg(2, "kind", LuaCodecs.STRING)
         val locationOrPosition = call.arg(3, "location_or_position", LocationOrVec3.Codec)
-        val options = call.arg(4, "options", CODEC_140)
+        val options = call.arg(4, "options", CODEC_144)
         val result = api.world.spawnEntity(self, kind, locationOrPosition, options)
-        call.push(result, CODEC_92)
+        call.push(result, CODEC_96)
         1
     }
 
@@ -5406,7 +5456,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val position = call.vec3(2)
         val item = call.arg(5, "item", LuaCodecs.ITEM)
         val result = api.world.spawnItem(self, position, item)
-        call.push(result, CODEC_141)
+        call.push(result, CODEC_145)
         1
     }
 
@@ -5415,7 +5465,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.World
         val particle = call.arg(2, "particle", LuaCodecs.STRING)
         val position = call.vec3(3)
-        val options = call.arg(6, "options", CODEC_111)
+        val options = call.arg(6, "options", CODEC_115)
         val result = api.world.spawnParticle(self, particle, position, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5426,7 +5476,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.World
         val sound = call.arg(2, "sound", LuaCodecs.STRING)
         val position = call.vec3(3)
-        val options = call.arg(6, "options", CODEC_110)
+        val options = call.arg(6, "options", CODEC_114)
         val result = api.world.playSound(self, sound, position, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5437,7 +5487,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.World
         val position = call.vec3(2)
         val power = call.arg(5, "power", LuaCodecs.NUMBER)
-        val options = call.arg(6, "options", CODEC_142)
+        val options = call.arg(6, "options", CODEC_146)
         val result = api.world.explode(self, position, power, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5447,7 +5497,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.World
         val position = call.vec3(2)
-        val options = call.arg(5, "options", CODEC_143)
+        val options = call.arg(5, "options", CODEC_147)
         val result = api.world.strikeLightning(self, position, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5459,9 +5509,9 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val from = call.vec3(2)
         val direction = call.vec3(5)
         val maxDistance = call.arg(8, "max_distance", LuaCodecs.NUMBER)
-        val options = call.arg(9, "options", CODEC_144)
+        val options = call.arg(9, "options", CODEC_148)
         val result = api.world.raycast(self, from, direction, maxDistance, options)
-        call.push(result, CODEC_145)
+        call.push(result, CODEC_149)
         1
     }
 
@@ -5470,9 +5520,9 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.World
         val min = call.vec3(2)
         val max = call.vec3(5)
-        val options = call.arg(8, "options", CODEC_146)
+        val options = call.arg(8, "options", CODEC_150)
         val result = api.world.overlapBox(self, min, max, options)
-        call.push(result, CODEC_147)
+        call.push(result, CODEC_151)
         1
     }
 
@@ -5481,9 +5531,9 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.World
         val center = call.vec3(2)
         val radius = call.arg(5, "radius", LuaCodecs.NUMBER)
-        val options = call.arg(6, "options", CODEC_146)
+        val options = call.arg(6, "options", CODEC_150)
         val result = api.world.overlapSphere(self, center, radius, options)
-        call.push(result, CODEC_147)
+        call.push(result, CODEC_151)
         1
     }
 
@@ -5494,9 +5544,9 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val direction = call.vec3(5)
         val length = call.arg(8, "length", LuaCodecs.NUMBER)
         val angle = call.arg(9, "angle", LuaCodecs.NUMBER)
-        val options = call.arg(10, "options", CODEC_146)
+        val options = call.arg(10, "options", CODEC_150)
         val result = api.world.overlapCone(self, origin, direction, length, angle, options)
-        call.push(result, CODEC_147)
+        call.push(result, CODEC_151)
         1
     }
 
@@ -5505,9 +5555,9 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.World
         val from = call.vec3(2)
         val to = call.vec3(5)
-        val options = call.arg(8, "options", CODEC_148)
+        val options = call.arg(8, "options", CODEC_152)
         val result = api.world.sweep(self, from, to, options)
-        call.push(result, CODEC_147)
+        call.push(result, CODEC_151)
         1
     }
 
@@ -5516,9 +5566,9 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.World
         val position = call.vec3(2)
         val radius = call.arg(5, "radius", LuaCodecs.NUMBER)
-        val options = call.arg(6, "options", CODEC_146)
+        val options = call.arg(6, "options", CODEC_150)
         val result = api.world.nearest(self, position, radius, options)
-        call.push(result, CODEC_149)
+        call.push(result, CODEC_153)
         1
     }
 
@@ -5544,7 +5594,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("World.spawn_limit") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.World
-        val category = call.arg(2, "category", CODEC_150)
+        val category = call.arg(2, "category", CODEC_154)
         val result = api.world.spawnLimit(self, category)
         call.push(result, CODEC_29)
         1
@@ -5553,7 +5603,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("World.set_spawn_limit") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.World
-        val category = call.arg(2, "category", CODEC_150)
+        val category = call.arg(2, "category", CODEC_154)
         val limit = call.arg(3, "limit", LuaCodecs.INTEGER)
         val result = api.world.setSpawnLimit(self, category, limit)
         call.push(result, LuaCodecs.BOOLEAN)
@@ -5563,7 +5613,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("World.spawn_interval") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.World
-        val category = call.arg(2, "category", CODEC_150)
+        val category = call.arg(2, "category", CODEC_154)
         val result = api.world.spawnInterval(self, category)
         call.push(result, CODEC_29)
         1
@@ -5572,7 +5622,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("World.set_spawn_interval") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.World
-        val category = call.arg(2, "category", CODEC_150)
+        val category = call.arg(2, "category", CODEC_154)
         val ticks = call.arg(3, "ticks", LuaCodecs.INTEGER)
         val result = api.world.setSpawnInterval(self, category, ticks)
         call.push(result, LuaCodecs.BOOLEAN)
@@ -5590,7 +5640,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("World.unload") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.World
-        val options = call.arg(2, "options", CODEC_151)
+        val options = call.arg(2, "options", CODEC_155)
         val result = api.world.unload(self, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5600,7 +5650,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.World
         val result = api.world.border(self)
-        call.push(result, CODEC_120)
+        call.push(result, CODEC_124)
         1
     }
 
@@ -5610,7 +5660,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val id = call.arg(2, "id", LuaCodecs.STRING)
         val from = call.vec3(3)
         val to = call.vec3(6)
-        val options = call.arg(9, "options", CODEC_152)
+        val options = call.arg(9, "options", CODEC_156)
         val result = api.world.saveStructure(self, id, from, to, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5621,7 +5671,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.World
         val id = call.arg(2, "id", LuaCodecs.STRING)
         val position = call.vec3(3)
-        val options = call.arg(6, "options", CODEC_153)
+        val options = call.arg(6, "options", CODEC_157)
         val result = api.world.placeStructure(self, id, position, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5632,7 +5682,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.World
         val id = call.arg(2, "id", LuaCodecs.STRING)
         val position = call.vec3(3)
-        val options = call.arg(6, "options", CODEC_154)
+        val options = call.arg(6, "options", CODEC_158)
         val caller = marshal.caller(lua, 7)
         val result = api.world.placeGradually(self, id, position, options)
         lua.push(marshal.await("World:place_gradually", caller.scope, result, call.keep(8), LuaCodecs.INTEGER).toLong())
@@ -5672,7 +5722,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.WorldBorder
         val size = call.arg(2, "size", LuaCodecs.NUMBER)
-        val options = call.arg(3, "options", CODEC_155)
+        val options = call.arg(3, "options", CODEC_159)
         val result = api.worldBorder.setSize(self, size, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5682,7 +5732,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.WorldBorder
         val result = api.worldBorder.damage(self)
-        call.push(result, CODEC_156)
+        call.push(result, CODEC_160)
         1
     }
 
@@ -5699,7 +5749,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.WorldBorder
         val result = api.worldBorder.warning(self)
-        call.push(result, CODEC_157)
+        call.push(result, CODEC_161)
         1
     }
 
@@ -5806,7 +5856,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Block
         val state = call.arg(2, "state", LuaCodecs.STRING)
-        val options = call.arg(3, "options", CODEC_136)
+        val options = call.arg(3, "options", CODEC_140)
         val result = api.block.setState(self, state, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5825,7 +5875,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("Block.break_naturally") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Block
-        val tool = call.arg(2, "tool", CODEC_64)
+        val tool = call.arg(2, "tool", CODEC_67)
         val result = api.block.breakNaturally(self, tool)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5844,7 +5894,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Block
         val result = api.block.inventory(self)
-        call.push(result, CODEC_93)
+        call.push(result, CODEC_97)
         1
     }
 
@@ -5852,7 +5902,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Block
         val result = api.block.custom(self)
-        call.push(result, CODEC_158)
+        call.push(result, CODEC_162)
         1
     }
 
@@ -5908,14 +5958,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.CustomBlock
         val result = api.customBlock.facing(self)
-        call.push(result, CODEC_159)
+        call.push(result, CODEC_163)
         1
     }
 
     fn("CustomBlock.set_facing") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.CustomBlock
-        val facing = call.arg(2, "facing", CODEC_160)
+        val facing = call.arg(2, "facing", CODEC_164)
         val result = api.customBlock.setFacing(self, facing)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -5949,9 +5999,9 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.ProjectBlock
         val location = call.arg(2, "location", LuaCodecs.LOCATION)
-        val options = call.arg(3, "options", CODEC_161)
+        val options = call.arg(3, "options", CODEC_165)
         val result = api.projectBlock.place(self, location, options)
-        call.push(result, CODEC_158)
+        call.push(result, CODEC_162)
         1
     }
 
@@ -5983,7 +6033,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Inventory
         val result = api.inventory.holder(self)
-        call.push(result, CODEC_162)
+        call.push(result, CODEC_166)
         1
     }
 
@@ -5992,7 +6042,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Inventory
         val index = call.arg(2, "index", LuaCodecs.INTEGER)
         val result = api.inventory.item(self, index)
-        call.push(result, CODEC_64)
+        call.push(result, CODEC_67)
         1
     }
 
@@ -6000,7 +6050,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Inventory
         val index = call.arg(2, "index", LuaCodecs.INTEGER)
-        val item = call.arg(3, "item", CODEC_64)
+        val item = call.arg(3, "item", CODEC_67)
         val result = api.inventory.setItem(self, index, item)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -6010,7 +6060,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Inventory
         val result = api.inventory.items(self)
-        call.push(result, CODEC_163)
+        call.push(result, CODEC_167)
         1
     }
 
@@ -6115,7 +6165,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.BossBar
         val result = api.bossBar.text(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
@@ -6166,14 +6216,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.BossBar
         val result = api.bossBar.color(self)
-        call.push(result, CODEC_164)
+        call.push(result, CODEC_168)
         1
     }
 
     fn("BossBar.set_color") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.BossBar
-        val color = call.arg(2, "color", CODEC_165)
+        val color = call.arg(2, "color", CODEC_169)
         val result = api.bossBar.setColor(self, color)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -6183,14 +6233,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.BossBar
         val result = api.bossBar.style(self)
-        call.push(result, CODEC_166)
+        call.push(result, CODEC_170)
         1
     }
 
     fn("BossBar.set_style") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.BossBar
-        val style = call.arg(2, "style", CODEC_167)
+        val style = call.arg(2, "style", CODEC_171)
         val result = api.bossBar.setStyle(self, style)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -6200,7 +6250,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.BossBar
         val centity = call.arg(2, "centity", LuaHandle.Centity.Codec)
-        val options = call.arg(3, "options", CODEC_168)
+        val options = call.arg(3, "options", CODEC_172)
         val result = api.bossBar.attach(self, centity, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -6233,7 +6283,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Sidebar
         val result = api.sidebar.title(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
@@ -6250,14 +6300,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Sidebar
         val result = api.sidebar.lines(self)
-        call.push(result, CODEC_123)
+        call.push(result, CODEC_127)
         1
     }
 
     fn("Sidebar.set_lines") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Sidebar
-        val lines = call.arg(2, "lines", CODEC_123)
+        val lines = call.arg(2, "lines", CODEC_127)
         val result = api.sidebar.setLines(self, lines)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -6335,7 +6385,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Team
         val result = api.team.members(self)
-        call.push(result, CODEC_91)
+        call.push(result, CODEC_95)
         1
     }
 
@@ -6343,7 +6393,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Team
         val result = api.team.displayName(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
@@ -6360,7 +6410,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Team
         val result = api.team.prefix(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
@@ -6377,7 +6427,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Team
         val result = api.team.suffix(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
@@ -6394,14 +6444,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Team
         val result = api.team.color(self)
-        call.push(result, CODEC_169)
+        call.push(result, CODEC_173)
         1
     }
 
     fn("Team.set_color") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Team
-        val color = call.arg(2, "color", CODEC_169)
+        val color = call.arg(2, "color", CODEC_173)
         val result = api.team.setColor(self, color)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -6445,14 +6495,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Team
         val result = api.team.nametags(self)
-        call.push(result, CODEC_170)
+        call.push(result, CODEC_174)
         1
     }
 
     fn("Team.set_nametags") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Team
-        val visibility = call.arg(2, "visibility", CODEC_171)
+        val visibility = call.arg(2, "visibility", CODEC_175)
         val result = api.team.setNametags(self, visibility)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -6462,14 +6512,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Team
         val result = api.team.collision(self)
-        call.push(result, CODEC_172)
+        call.push(result, CODEC_176)
         1
     }
 
     fn("Team.set_collision") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Team
-        val rule = call.arg(2, "rule", CODEC_173)
+        val rule = call.arg(2, "rule", CODEC_177)
         val result = api.team.setCollision(self, rule)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -6490,7 +6540,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val params = call.arg(3, "params", CODEC_17)
         val caller = marshal.caller(lua, 4)
         val result = api.database.query(self, sql, params)
-        lua.push(marshal.await("Database:query", caller.scope, result, call.keep(5), CODEC_174).toLong())
+        lua.push(marshal.await("Database:query", caller.scope, result, call.keep(5), CODEC_178).toLong())
         1
     }
 
@@ -6508,10 +6558,10 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("Database.transaction") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Database
-        val statements = call.arg(2, "statements", CODEC_175)
+        val statements = call.arg(2, "statements", CODEC_179)
         val caller = marshal.caller(lua, 3)
         val result = api.database.transaction(self, statements)
-        lua.push(marshal.await("Database:transaction", caller.scope, result, call.keep(4), CODEC_176).toLong())
+        lua.push(marshal.await("Database:transaction", caller.scope, result, call.keep(4), CODEC_180).toLong())
         1
     }
 
@@ -6535,7 +6585,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Menu
         val result = api.menu.template(self)
-        call.push(result, CODEC_177)
+        call.push(result, CODEC_181)
         1
     }
 
@@ -6583,7 +6633,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Menu
         val result = api.menu.title(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
@@ -6654,7 +6704,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Menu
         val index = call.arg(2, "index", LuaCodecs.INTEGER)
         val result = api.menu.item(self, index)
-        call.push(result, CODEC_64)
+        call.push(result, CODEC_67)
         1
     }
 
@@ -6662,7 +6712,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Menu
         val index = call.arg(2, "index", LuaCodecs.INTEGER)
-        val item = call.arg(3, "item", CODEC_64)
+        val item = call.arg(3, "item", CODEC_67)
         val result = api.menu.setItem(self, index, item)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -6681,14 +6731,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Menu
         val result = api.menu.items(self)
-        call.push(result, CODEC_163)
+        call.push(result, CODEC_167)
         1
     }
 
     fn("Menu.set_items") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Menu
-        val items = call.arg(2, "items", CODEC_163)
+        val items = call.arg(2, "items", CODEC_167)
         val result = api.menu.setItems(self, items)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -6698,7 +6748,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Menu
         val item = call.arg(2, "item", LuaCodecs.ITEM)
-        val indices = call.arg(3, "indices", CODEC_178)
+        val indices = call.arg(3, "indices", CODEC_182)
         val result = api.menu.fill(self, item, indices)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -6725,7 +6775,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Menu
         val player = call.arg(2, "player", LuaHandle.Player.Codec)
         val result = api.menu.cursorItem(self, player)
-        call.push(result, CODEC_64)
+        call.push(result, CODEC_67)
         1
     }
 
@@ -6733,7 +6783,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Menu
         val player = call.arg(2, "player", LuaHandle.Player.Codec)
-        val item = call.arg(3, "item", CODEC_64)
+        val item = call.arg(3, "item", CODEC_67)
         val result = api.menu.setCursorItem(self, player, item)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -6793,14 +6843,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Slot
         val result = api.slot.item(self)
-        call.push(result, CODEC_64)
+        call.push(result, CODEC_67)
         1
     }
 
     fn("Slot.set_item") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Slot
-        val item = call.arg(2, "item", CODEC_64)
+        val item = call.arg(2, "item", CODEC_67)
         val result = api.slot.setItem(self, item)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -6829,7 +6879,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("Slot.set_rule") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Slot
-        val rule = call.arg(2, "rule", CODEC_179)
+        val rule = call.arg(2, "rule", CODEC_183)
         val result = api.slot.setRule(self, rule)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -6839,7 +6889,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Slot
         val result = api.slot.rule(self)
-        call.push(result, CODEC_179)
+        call.push(result, CODEC_183)
         1
     }
 
@@ -6864,7 +6914,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Slot
         val result = api.slot.binding(self)
-        call.push(result, CODEC_180)
+        call.push(result, CODEC_184)
         1
     }
 
@@ -6904,7 +6954,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.MenuTemplate
         val result = api.menuTemplate.title(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
@@ -6929,7 +6979,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.MenuTemplate
         val index = call.arg(2, "index", LuaCodecs.INTEGER)
         val result = api.menuTemplate.item(self, index)
-        call.push(result, CODEC_64)
+        call.push(result, CODEC_67)
         1
     }
 
@@ -6937,7 +6987,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.MenuTemplate
         val result = api.menuTemplate.windows(self)
-        call.push(result, CODEC_181)
+        call.push(result, CODEC_185)
         1
     }
 
@@ -6969,7 +7019,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Dialog
         val result = api.dialog.title(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
@@ -7002,7 +7052,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Dialog
         val player = call.arg(2, "player", LuaHandle.Player.Codec)
-        val options = call.arg(3, "options", CODEC_119)
+        val options = call.arg(3, "options", CODEC_123)
         val result = api.dialog.openFor(self, player, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -7028,7 +7078,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Button
         val result = api.button.label(self)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
@@ -7053,7 +7103,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.ProjectItem
         val overrides = call.arg(2, "overrides", CODEC_17)
         val result = api.projectItem.create(self, overrides)
-        call.push(result, CODEC_64)
+        call.push(result, CODEC_67)
         1
     }
 
@@ -7093,7 +7143,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Effect
         val result = api.effect.location(self)
-        call.push(result, CODEC_73)
+        call.push(result, CODEC_77)
         1
     }
 
@@ -7128,7 +7178,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.HttpStream
         val result = api.httpStream.state(self)
-        call.push(result, CODEC_182)
+        call.push(result, CODEC_186)
         1
     }
 
@@ -7160,7 +7210,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.WebSocket
         val result = api.webSocket.state(self)
-        call.push(result, CODEC_182)
+        call.push(result, CODEC_186)
         1
     }
 
@@ -7278,7 +7328,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val arguments = call.arg(3, "arguments", CODEC_17)
         val caller = marshal.caller(lua, 4)
         val result = api.wasmInstance.call(self, name, arguments)
-        lua.push(marshal.await("WasmInstance:call", caller.scope, result, call.keep(5), CODEC_183).toLong())
+        lua.push(marshal.await("WasmInstance:call", caller.scope, result, call.keep(5), CODEC_187).toLong())
         1
     }
 
@@ -7313,7 +7363,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.WasmProcess
         val result = api.wasmProcess.state(self)
-        call.push(result, CODEC_184)
+        call.push(result, CODEC_188)
         1
     }
 
@@ -7354,7 +7404,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.NetworkChannel
         val value = call.arg(2, "value", LuaCodecs.VALUE)
-        val options = call.arg(3, "options", CODEC_185)
+        val options = call.arg(3, "options", CODEC_189)
         val result = api.networkChannel.publish(self, value, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -7363,10 +7413,10 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("NetworkChannel.request") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.NetworkChannel
-        val server = call.arg(2, "server", LuaCodecs.STRING)
+        val target = call.arg(2, "target", StringOrNetworkTarget.Codec)
         val data = call.arg(3, "data", LuaCodecs.VALUE)
         val caller = marshal.caller(lua, 4)
-        val result = api.networkChannel.request(self, server, data)
+        val result = api.networkChannel.request(self, target, data)
         lua.push(marshal.await("NetworkChannel:request", caller.scope, result, call.keep(5), LuaCodecs.DYNAMIC).toLong())
         1
     }
@@ -7400,7 +7450,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.NetworkMap
         val result = api.networkMap.all(self)
-        call.push(result, CODEC_186)
+        call.push(result, CODEC_190)
         1
     }
 
@@ -7409,7 +7459,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.NetworkMap
         val key = call.arg(2, "key", LuaCodecs.STRING)
         val value = call.arg(3, "value", LuaCodecs.VALUE)
-        val options = call.arg(4, "options", CODEC_187)
+        val options = call.arg(4, "options", CODEC_191)
         val result = api.networkMap.set(self, key, value, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -7429,7 +7479,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.NetworkMap
         val key = call.arg(2, "key", LuaCodecs.STRING)
         val amount = call.arg(3, "amount", LuaCodecs.NUMBER)
-        val options = call.arg(4, "options", CODEC_187)
+        val options = call.arg(4, "options", CODEC_191)
         val caller = marshal.caller(lua, 5)
         val result = api.networkMap.add(self, key, amount, options)
         lua.push(marshal.await("NetworkMap:add", caller.scope, result, call.keep(6), LuaCodecs.NUMBER).toLong())
@@ -7441,7 +7491,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.NetworkMap
         val key = call.arg(2, "key", LuaCodecs.STRING)
         val data = call.arg(3, "data", LuaCodecs.VALUE)
-        val options = call.arg(4, "options", CODEC_187)
+        val options = call.arg(4, "options", CODEC_191)
         val caller = marshal.caller(lua, 5)
         val result = api.networkMap.insert(self, key, data, options)
         lua.push(marshal.await("NetworkMap:insert", caller.scope, result, call.keep(6), LuaCodecs.BOOLEAN).toLong())
@@ -7642,7 +7692,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
     fn("Screen.polygon") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Screen
-        val points = call.arg(2, "points", CODEC_188)
+        val points = call.arg(2, "points", CODEC_192)
         val style = call.arg(3, "style", ShapeStyle.Codec)
         api.screen.polygon(self, points, style)
         0
@@ -7666,7 +7716,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val x = call.arg(2, "x", LuaCodecs.INTEGER)
         val y = call.arg(3, "y", LuaCodecs.INTEGER)
         val image = call.arg(4, "image", LuaCodecs.STRING)
-        val options = call.arg(5, "options", CODEC_189)
+        val options = call.arg(5, "options", CODEC_193)
         val result = api.screen.image(self, x, y, image, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -7689,7 +7739,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Screen
         val location = call.arg(2, "location", LuaCodecs.LOCATION)
-        val facing = call.arg(3, "facing", CODEC_190)
+        val facing = call.arg(3, "facing", CODEC_194)
         val result = api.screen.place(self, location, facing)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -7707,7 +7757,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Screen
         val result = api.screen.location(self)
-        call.push(result, CODEC_73)
+        call.push(result, CODEC_77)
         1
     }
 
@@ -7715,7 +7765,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Screen
         val result = api.screen.facing(self)
-        call.push(result, CODEC_191)
+        call.push(result, CODEC_195)
         1
     }
 
@@ -7793,9 +7843,9 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Screen
         val video = call.arg(2, "video", LuaCodecs.STRING)
-        val options = call.arg(3, "options", CODEC_192)
+        val options = call.arg(3, "options", CODEC_196)
         val result = api.screen.play(self, video, options)
-        call.push(result, CODEC_193)
+        call.push(result, CODEC_197)
         1
     }
 
@@ -7803,7 +7853,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Screen
         val result = api.screen.playback(self)
-        call.push(result, CODEC_193)
+        call.push(result, CODEC_197)
         1
     }
 
@@ -7827,7 +7877,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.Playback
         val result = api.playback.screen(self)
-        call.push(result, CODEC_194)
+        call.push(result, CODEC_198)
         1
     }
 
@@ -8008,7 +8058,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val lua = call.lua
         val self = call.self(1) as LuaHandle.File
         val result = api.file.children(self)
-        call.push(result, CODEC_195)
+        call.push(result, CODEC_199)
         1
     }
 
@@ -8134,7 +8184,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val name = call.arg(2, "name", LuaCodecs.STRING)
         val value = call.arg(3, "value", LuaCodecs.NUMBER)
         val max = call.arg(4, "max", LuaCodecs.NUMBER)
-        val options = call.arg(5, "options", CODEC_196)
+        val options = call.arg(5, "options", CODEC_200)
         val result = api.hud.fillBar(self, name, value, max, options)
         call.push(result, LuaCodecs.BOOLEAN)
         1
@@ -8157,7 +8207,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Hud
         val name = call.arg(2, "name", LuaCodecs.STRING)
         val result = api.hud.bar(self, name)
-        call.push(result, CODEC_197)
+        call.push(result, CODEC_201)
         1
     }
 
@@ -8176,7 +8226,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Hud
         val name = call.arg(2, "name", LuaCodecs.STRING)
         val result = api.hud.icons(self, name)
-        call.push(result, CODEC_198)
+        call.push(result, CODEC_202)
         1
     }
 
@@ -8195,7 +8245,7 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         val self = call.self(1) as LuaHandle.Hud
         val name = call.arg(2, "name", LuaCodecs.STRING)
         val result = api.hud.text(self, name)
-        call.push(result, CODEC_86)
+        call.push(result, CODEC_90)
         1
     }
 
@@ -8271,146 +8321,150 @@ private val CODEC_52 = LuaOptional(WasmRunOptions.Codec)
 private val CODEC_53 = LuaOptional(WasmStartOptions.Codec)
 private val CODEC_54 = LuaOptional(NetworkRole.Codec)
 private val CODEC_55 = LuaList(NetworkServer.Codec)
-private val CODEC_56 = LuaList(NetworkPlayer.Codec)
-private val CODEC_57 = LuaOptional(NetworkPlayer.Codec)
-private val CODEC_58 = LuaOptional(TimeOptions.Codec)
-private val CODEC_59 = LuaOptional(NoiseOptions.Codec)
-private val CODEC_60 = LuaChoice(listOf("tick", "player_join", "player_resource_pack_status", "player_quit", "player_chat", "player_interact", "player_interact_entity", "player_move", "player_teleport", "player_change_world", "player_death", "player_respawn", "player_drop_item", "player_pickup_item", "player_use_item", "player_consume_item", "player_swap_hands", "player_sneak", "player_command", "block_break", "block_place", "entity_damage", "entity_death", "entity_spawn", "world_dusk", "world_dawn", "player_input", "player_change_slot", "player_swing", "player_sprint", "player_fly", "player_jump", "player_change_game_mode", "player_change_food", "player_gain_experience", "player_change_level", "player_kick", "player_complete_advancement", "player_stop_using_item", "player_break_item", "entity_heal", "projectile_launch", "projectile_hit", "entity_shoot_bow", "entity_target", "entity_explode", "block_explode", "entity_combust", "entity_change_effect", "block_ignite", "block_burn", "block_spread", "block_flow", "block_grow", "block_fade", "block_form", "leaves_decay", "piston_extend", "piston_retract", "block_redstone", "sign_change", "block_start_break", "block_drop_item", "weather_change", "thunder_change", "lightning_strike", "chunk_load", "chunk_generated", "chunk_unload", "world_load", "world_unload", "entity_mount", "entity_dismount", "vehicle_move", "vehicle_damage", "vehicle_destroy", "player_open_inventory", "player_close_inventory", "player_click_inventory", "player_drag_inventory", "player_craft", "player_prepare_craft", "player_prepare_anvil", "player_prepare_smithing", "player_prepare_grindstone", "player_enchant_item", "furnace_smelt", "server_list_ping", "centity_click", "recipe_craft", "item_view", "centity_natural_spawn", "menu_open", "menu_close", "menu_click", "dialog_press", "setting_changed", "network_connect", "network_disconnect", "network_server_connect", "network_server_disconnect", "network_player_join", "network_player_switch", "network_player_quit", "player_arrive"))
-private val CODEC_61 = LuaChoice(listOf("left", "right"))
-private val CODEC_62 = LuaOptional(TestClickOptions.Codec)
-private val CODEC_63 = LuaOptional(TestShownOptions.Codec)
-private val CODEC_64 = LuaOptional(LuaCodecs.ITEM)
-private val CODEC_65 = LuaList(LuaUnions.HttpStreamOrWebSocket)
-private val CODEC_66 = LuaOptional(TestAcceptOptions.Codec)
-private val CODEC_67 = LuaOptional(TestRequestOptions.Codec)
-private val CODEC_68 = LuaOptional(TestDisconnectOptions.Codec)
-private val CODEC_69 = LuaList(TestNetworkMessage.Codec)
-private val CODEC_70 = LuaOptional(LuaHandle.Node.Codec)
-private val CODEC_71 = LuaList(LuaHandle.Node.Codec)
-private val CODEC_72 = LuaOptional(Bounds.Codec)
-private val CODEC_73 = LuaOptional(LuaCodecs.LOCATION)
-private val CODEC_74 = LuaMap(LuaCodecs.STRING, LuaCodecs.NUMBER)
-private val CODEC_75 = LuaOptional(LuaMap(LuaCodecs.STRING, LuaCodecs.NUMBER))
-private val CODEC_76 = LuaList(ActiveBuff.Codec)
-private val CODEC_77 = LuaOptional(CentityDamageOptions.Codec)
-private val CODEC_78 = LuaOptional(BodySettings.Codec)
-private val CODEC_79 = LuaOptional(CentityPathOptions.Codec)
-private val CODEC_80 = LuaOptional(AnimationOptions.Codec)
-private val CODEC_81 = LuaOptional(PoseOptions.Codec)
-private val CODEC_82 = LuaOptional(StretchOptions.Codec)
-private val CODEC_83 = LuaOptional(RopeOptions.Codec)
-private val CODEC_84 = LuaOptional(LuaChoice(listOf("block", "item", "model", "text", "rect", "image")))
-private val CODEC_85 = LuaOptional(LuaChoice(listOf("top_left", "top", "top_right", "left", "center", "right", "bottom_left", "bottom", "bottom_right")))
-private val CODEC_86 = LuaOptional(LuaCodecs.TEXT)
-private val CODEC_87 = LuaOptional(TextStyle.Codec)
-private val CODEC_88 = LuaOptional(Brightness.Codec)
-private val CODEC_89 = LuaOptional(LuaChoice(listOf("fixed", "vertical", "horizontal", "center")))
-private val CODEC_90 = LuaChoice(listOf("fixed", "vertical", "horizontal", "center"))
-private val CODEC_91 = LuaList(LuaHandle.Entity.Codec)
-private val CODEC_92 = LuaOptional(LuaHandle.Entity.Codec)
-private val CODEC_93 = LuaOptional(LuaHandle.Inventory.Codec)
-private val CODEC_94 = LuaOptional(LuaHandle.Block.Codec)
-private val CODEC_95 = LuaOptional(LuaList(AttributeModifier.Codec))
-private val CODEC_96 = LuaOptional(LuaChoice(listOf("add_value", "add_multiplied_base", "add_multiplied_total")))
-private val CODEC_97 = LuaOptional(LuaCodecs.BOOLEAN)
-private val CODEC_98 = LuaList(StatusEffect.Codec)
-private val CODEC_99 = LuaOptional(EffectOptions.Codec)
-private val CODEC_100 = LuaChoice(listOf("main_hand", "off_hand", "head", "chest", "legs", "feet", "body"))
-private val CODEC_101 = LuaOptional(PathOptions.Codec)
-private val CODEC_102 = LuaOptional(LuaList(MobGoal.Codec))
-private val CODEC_103 = LuaOptional(GoalClearOptions.Codec)
-private val CODEC_104 = LuaOptional(StringOrSkin.Codec)
-private val CODEC_105 = LuaOptional(LuaChoice(listOf("left", "right")))
-private val CODEC_106 = LuaOptional(LuaChoice(listOf("standing", "crouching", "swimming", "fall_flying", "sleeping")))
-private val CODEC_107 = LuaChoice(listOf("standing", "crouching", "swimming", "fall_flying", "sleeping"))
-private val CODEC_108 = LuaOptional(SkinParts.Codec)
-private val CODEC_109 = LuaOptional(TitleOptions.Codec)
-private val CODEC_110 = LuaOptional(SoundOptions.Codec)
-private val CODEC_111 = LuaOptional(ParticleOptions.Codec)
-private val CODEC_112 = LuaMap(LuaCodecs.STRING, LuaCodecs.BOOLEAN)
-private val CODEC_113 = LuaOptional(LuaChoice(listOf("survival", "creative", "adventure", "spectator")))
-private val CODEC_114 = LuaChoice(listOf("survival", "creative", "adventure", "spectator"))
-private val CODEC_115 = LuaOptional(BanOptions.Codec)
-private val CODEC_116 = LuaOptional(SkyOptions.Codec)
-private val CODEC_117 = LuaOptional(AdvancementProgress.Codec)
-private val CODEC_118 = LuaOptional(MenuOpenOptions.Codec)
-private val CODEC_119 = LuaOptional(DialogOpenOptions.Codec)
-private val CODEC_120 = LuaOptional(LuaHandle.WorldBorder.Codec)
-private val CODEC_121 = LuaList(LuaHandle.BossBar.Codec)
-private val CODEC_122 = LuaOptional(LuaChoice(listOf("loaded", "declined", "failed", "pending")))
-private val CODEC_123 = LuaList(LuaCodecs.TEXT)
-private val CODEC_124 = LuaOptional(BotWalkOptions.Codec)
-private val CODEC_125 = LuaOptional(BotInteractOptions.Codec)
-private val CODEC_126 = LuaOptional(LuaChoice(listOf("up", "down", "north", "south", "east", "west")))
-private val CODEC_127 = LuaOptional(LuaChoice(listOf("left", "right", "shift_left", "shift_right", "drop", "drop_all", "double", "swap_offhand")))
-private val CODEC_128 = LuaOptional(LuaChoice(listOf("normal", "nether", "end")))
-private val CODEC_129 = LuaOptional(LuaChoice(listOf("full_moon", "waning_gibbous", "last_quarter", "waning_crescent", "new_moon", "waxing_crescent", "first_quarter", "waxing_gibbous")))
-private val CODEC_130 = LuaOptional(LuaChoice(listOf("clear", "rain", "thunder")))
-private val CODEC_131 = LuaChoice(listOf("clear", "rain", "thunder"))
-private val CODEC_132 = LuaOptional(WeatherOptions.Codec)
-private val CODEC_133 = LuaOptional(BlockBoxOptions.Codec)
-private val CODEC_134 = LuaOptional(BlockBox.Codec)
-private val CODEC_135 = LuaOptional(FloodResult.Codec)
-private val CODEC_136 = LuaOptional(BlockSetOptions.Codec)
-private val CODEC_137 = LuaOptional(GradualFillOptions.Codec)
-private val CODEC_138 = LuaOptional(BiomeSearchOptions.Codec)
-private val CODEC_139 = LuaOptional(EntityFilter.Codec)
-private val CODEC_140 = LuaOptional(EntitySpawnOptions.Codec)
-private val CODEC_141 = LuaOptional(LuaHandle.DroppedItem.Codec)
-private val CODEC_142 = LuaOptional(ExplosionOptions.Codec)
-private val CODEC_143 = LuaOptional(LightningOptions.Codec)
-private val CODEC_144 = LuaOptional(RaycastOptions.Codec)
-private val CODEC_145 = LuaOptional(RaycastHit.Codec)
-private val CODEC_146 = LuaOptional(QueryOptions.Codec)
-private val CODEC_147 = LuaList(QueryHit.Codec)
-private val CODEC_148 = LuaOptional(SweepOptions.Codec)
-private val CODEC_149 = LuaOptional(QueryHit.Codec)
-private val CODEC_150 = LuaChoice(listOf("monster", "animal", "water_animal", "water_ambient", "water_underground_creature", "ambient", "axolotl"))
-private val CODEC_151 = LuaOptional(WorldUnloadOptions.Codec)
-private val CODEC_152 = LuaOptional(StructureSaveOptions.Codec)
-private val CODEC_153 = LuaOptional(StructurePlaceOptions.Codec)
-private val CODEC_154 = LuaOptional(GradualPlaceOptions.Codec)
-private val CODEC_155 = LuaOptional(BorderSizeOptions.Codec)
-private val CODEC_156 = LuaOptional(BorderDamage.Codec)
-private val CODEC_157 = LuaOptional(BorderWarning.Codec)
-private val CODEC_158 = LuaOptional(LuaHandle.CustomBlock.Codec)
-private val CODEC_159 = LuaOptional(LuaChoice(listOf("north", "east", "south", "west", "up", "down")))
-private val CODEC_160 = LuaChoice(listOf("north", "east", "south", "west", "up", "down"))
-private val CODEC_161 = LuaOptional(BlockPlaceOptions.Codec)
-private val CODEC_162 = LuaOptional(LuaUnions.EntityOrBlock)
-private val CODEC_163 = LuaMap(LuaCodecs.INTEGER, LuaCodecs.ITEM)
-private val CODEC_164 = LuaOptional(LuaChoice(listOf("pink", "blue", "red", "green", "yellow", "purple", "white")))
-private val CODEC_165 = LuaChoice(listOf("pink", "blue", "red", "green", "yellow", "purple", "white"))
-private val CODEC_166 = LuaOptional(LuaChoice(listOf("progress", "notched_6", "notched_10", "notched_12", "notched_20")))
-private val CODEC_167 = LuaChoice(listOf("progress", "notched_6", "notched_10", "notched_12", "notched_20"))
-private val CODEC_168 = LuaOptional(BossBarAttachOptions.Codec)
-private val CODEC_169 = LuaOptional(LuaChoice(listOf("black", "dark_blue", "dark_green", "dark_aqua", "dark_red", "dark_purple", "gold", "gray", "dark_gray", "blue", "green", "aqua", "red", "light_purple", "yellow", "white")))
-private val CODEC_170 = LuaOptional(LuaChoice(listOf("always", "never", "hide_for_other_teams", "hide_for_own_team")))
-private val CODEC_171 = LuaChoice(listOf("always", "never", "hide_for_other_teams", "hide_for_own_team"))
-private val CODEC_172 = LuaOptional(LuaChoice(listOf("always", "never", "push_other_teams", "push_own_team")))
-private val CODEC_173 = LuaChoice(listOf("always", "never", "push_other_teams", "push_own_team"))
-private val CODEC_174 = LuaList(LuaMap(LuaCodecs.STRING, LuaCodecs.DYNAMIC))
-private val CODEC_175 = LuaList(DatabaseStatement.Codec)
-private val CODEC_176 = LuaList(DatabaseResult.Codec)
-private val CODEC_177 = LuaOptional(LuaHandle.MenuTemplate.Codec)
-private val CODEC_178 = LuaOptional(LuaList(LuaCodecs.INTEGER))
-private val CODEC_179 = LuaOptional(SlotRule.Codec)
-private val CODEC_180 = LuaOptional(SlotBinding.Codec)
-private val CODEC_181 = LuaList(LuaHandle.Menu.Codec)
-private val CODEC_182 = LuaChoice(listOf("connecting", "open", "ended"))
-private val CODEC_183 = LuaList(LuaCodecs.DYNAMIC)
-private val CODEC_184 = LuaChoice(listOf("running", "ended"))
-private val CODEC_185 = LuaOptional(NetworkPublishOptions.Codec)
-private val CODEC_186 = LuaMap(LuaCodecs.STRING, LuaCodecs.DYNAMIC)
-private val CODEC_187 = LuaOptional(NetworkMapWriteOptions.Codec)
-private val CODEC_188 = LuaList(LuaCodecs.INTEGER)
-private val CODEC_189 = LuaOptional(ScreenImageOptions.Codec)
-private val CODEC_190 = LuaChoice(listOf("north", "south", "east", "west"))
-private val CODEC_191 = LuaOptional(LuaChoice(listOf("north", "south", "east", "west")))
-private val CODEC_192 = LuaOptional(VideoPlayOptions.Codec)
-private val CODEC_193 = LuaOptional(LuaHandle.Playback.Codec)
-private val CODEC_194 = LuaOptional(LuaHandle.Screen.Codec)
-private val CODEC_195 = LuaList(LuaHandle.File.Codec)
-private val CODEC_196 = LuaOptional(HudFillOptions.Codec)
-private val CODEC_197 = LuaOptional(HudBar.Codec)
-private val CODEC_198 = LuaOptional(LuaList(LuaCodecs.STRING))
+private val CODEC_56 = LuaList(NetworkGroup.Codec)
+private val CODEC_57 = LuaOptional(NetworkPlayersOptions.Codec)
+private val CODEC_58 = LuaList(NetworkPlayer.Codec)
+private val CODEC_59 = LuaOptional(NetworkPlayer.Codec)
+private val CODEC_60 = LuaList(PlayerOrString.Codec)
+private val CODEC_61 = LuaOptional(TimeOptions.Codec)
+private val CODEC_62 = LuaOptional(NoiseOptions.Codec)
+private val CODEC_63 = LuaChoice(listOf("tick", "player_join", "player_resource_pack_status", "player_quit", "player_chat", "player_interact", "player_interact_entity", "player_move", "player_teleport", "player_change_world", "player_death", "player_respawn", "player_drop_item", "player_pickup_item", "player_use_item", "player_consume_item", "player_swap_hands", "player_sneak", "player_command", "block_break", "block_place", "entity_damage", "entity_death", "entity_spawn", "world_dusk", "world_dawn", "player_input", "player_change_slot", "player_swing", "player_sprint", "player_fly", "player_jump", "player_change_game_mode", "player_change_food", "player_gain_experience", "player_change_level", "player_kick", "player_complete_advancement", "player_stop_using_item", "player_break_item", "entity_heal", "projectile_launch", "projectile_hit", "entity_shoot_bow", "entity_target", "entity_explode", "block_explode", "entity_combust", "entity_change_effect", "block_ignite", "block_burn", "block_spread", "block_flow", "block_grow", "block_fade", "block_form", "leaves_decay", "piston_extend", "piston_retract", "block_redstone", "sign_change", "block_start_break", "block_drop_item", "weather_change", "thunder_change", "lightning_strike", "chunk_load", "chunk_generated", "chunk_unload", "world_load", "world_unload", "entity_mount", "entity_dismount", "vehicle_move", "vehicle_damage", "vehicle_destroy", "player_open_inventory", "player_close_inventory", "player_click_inventory", "player_drag_inventory", "player_craft", "player_prepare_craft", "player_prepare_anvil", "player_prepare_smithing", "player_prepare_grindstone", "player_enchant_item", "furnace_smelt", "server_list_ping", "centity_click", "recipe_craft", "item_view", "centity_natural_spawn", "menu_open", "menu_close", "menu_click", "dialog_press", "setting_changed", "network_connect", "network_disconnect", "network_server_connect", "network_server_disconnect", "network_player_join", "network_player_switch", "network_player_quit", "player_arrive"))
+private val CODEC_64 = LuaChoice(listOf("left", "right"))
+private val CODEC_65 = LuaOptional(TestClickOptions.Codec)
+private val CODEC_66 = LuaOptional(TestShownOptions.Codec)
+private val CODEC_67 = LuaOptional(LuaCodecs.ITEM)
+private val CODEC_68 = LuaList(LuaUnions.HttpStreamOrWebSocket)
+private val CODEC_69 = LuaOptional(TestAcceptOptions.Codec)
+private val CODEC_70 = LuaOptional(TestRequestOptions.Codec)
+private val CODEC_71 = LuaOptional(TestDisconnectOptions.Codec)
+private val CODEC_72 = LuaOptional(TestNetworkServerOptions.Codec)
+private val CODEC_73 = LuaList(TestNetworkMessage.Codec)
+private val CODEC_74 = LuaOptional(LuaHandle.Node.Codec)
+private val CODEC_75 = LuaList(LuaHandle.Node.Codec)
+private val CODEC_76 = LuaOptional(Bounds.Codec)
+private val CODEC_77 = LuaOptional(LuaCodecs.LOCATION)
+private val CODEC_78 = LuaMap(LuaCodecs.STRING, LuaCodecs.NUMBER)
+private val CODEC_79 = LuaOptional(LuaMap(LuaCodecs.STRING, LuaCodecs.NUMBER))
+private val CODEC_80 = LuaList(ActiveBuff.Codec)
+private val CODEC_81 = LuaOptional(CentityDamageOptions.Codec)
+private val CODEC_82 = LuaOptional(BodySettings.Codec)
+private val CODEC_83 = LuaOptional(CentityPathOptions.Codec)
+private val CODEC_84 = LuaOptional(AnimationOptions.Codec)
+private val CODEC_85 = LuaOptional(PoseOptions.Codec)
+private val CODEC_86 = LuaOptional(StretchOptions.Codec)
+private val CODEC_87 = LuaOptional(RopeOptions.Codec)
+private val CODEC_88 = LuaOptional(LuaChoice(listOf("block", "item", "model", "text", "rect", "image")))
+private val CODEC_89 = LuaOptional(LuaChoice(listOf("top_left", "top", "top_right", "left", "center", "right", "bottom_left", "bottom", "bottom_right")))
+private val CODEC_90 = LuaOptional(LuaCodecs.TEXT)
+private val CODEC_91 = LuaOptional(TextStyle.Codec)
+private val CODEC_92 = LuaOptional(Brightness.Codec)
+private val CODEC_93 = LuaOptional(LuaChoice(listOf("fixed", "vertical", "horizontal", "center")))
+private val CODEC_94 = LuaChoice(listOf("fixed", "vertical", "horizontal", "center"))
+private val CODEC_95 = LuaList(LuaHandle.Entity.Codec)
+private val CODEC_96 = LuaOptional(LuaHandle.Entity.Codec)
+private val CODEC_97 = LuaOptional(LuaHandle.Inventory.Codec)
+private val CODEC_98 = LuaOptional(LuaHandle.Block.Codec)
+private val CODEC_99 = LuaOptional(LuaList(AttributeModifier.Codec))
+private val CODEC_100 = LuaOptional(LuaChoice(listOf("add_value", "add_multiplied_base", "add_multiplied_total")))
+private val CODEC_101 = LuaOptional(LuaCodecs.BOOLEAN)
+private val CODEC_102 = LuaList(StatusEffect.Codec)
+private val CODEC_103 = LuaOptional(EffectOptions.Codec)
+private val CODEC_104 = LuaChoice(listOf("main_hand", "off_hand", "head", "chest", "legs", "feet", "body"))
+private val CODEC_105 = LuaOptional(PathOptions.Codec)
+private val CODEC_106 = LuaOptional(LuaList(MobGoal.Codec))
+private val CODEC_107 = LuaOptional(GoalClearOptions.Codec)
+private val CODEC_108 = LuaOptional(StringOrSkin.Codec)
+private val CODEC_109 = LuaOptional(LuaChoice(listOf("left", "right")))
+private val CODEC_110 = LuaOptional(LuaChoice(listOf("standing", "crouching", "swimming", "fall_flying", "sleeping")))
+private val CODEC_111 = LuaChoice(listOf("standing", "crouching", "swimming", "fall_flying", "sleeping"))
+private val CODEC_112 = LuaOptional(SkinParts.Codec)
+private val CODEC_113 = LuaOptional(TitleOptions.Codec)
+private val CODEC_114 = LuaOptional(SoundOptions.Codec)
+private val CODEC_115 = LuaOptional(ParticleOptions.Codec)
+private val CODEC_116 = LuaMap(LuaCodecs.STRING, LuaCodecs.BOOLEAN)
+private val CODEC_117 = LuaOptional(LuaChoice(listOf("survival", "creative", "adventure", "spectator")))
+private val CODEC_118 = LuaChoice(listOf("survival", "creative", "adventure", "spectator"))
+private val CODEC_119 = LuaOptional(BanOptions.Codec)
+private val CODEC_120 = LuaOptional(SkyOptions.Codec)
+private val CODEC_121 = LuaOptional(AdvancementProgress.Codec)
+private val CODEC_122 = LuaOptional(MenuOpenOptions.Codec)
+private val CODEC_123 = LuaOptional(DialogOpenOptions.Codec)
+private val CODEC_124 = LuaOptional(LuaHandle.WorldBorder.Codec)
+private val CODEC_125 = LuaList(LuaHandle.BossBar.Codec)
+private val CODEC_126 = LuaOptional(LuaChoice(listOf("loaded", "declined", "failed", "pending")))
+private val CODEC_127 = LuaList(LuaCodecs.TEXT)
+private val CODEC_128 = LuaOptional(BotWalkOptions.Codec)
+private val CODEC_129 = LuaOptional(BotInteractOptions.Codec)
+private val CODEC_130 = LuaOptional(LuaChoice(listOf("up", "down", "north", "south", "east", "west")))
+private val CODEC_131 = LuaOptional(LuaChoice(listOf("left", "right", "shift_left", "shift_right", "drop", "drop_all", "double", "swap_offhand")))
+private val CODEC_132 = LuaOptional(LuaChoice(listOf("normal", "nether", "end")))
+private val CODEC_133 = LuaOptional(LuaChoice(listOf("full_moon", "waning_gibbous", "last_quarter", "waning_crescent", "new_moon", "waxing_crescent", "first_quarter", "waxing_gibbous")))
+private val CODEC_134 = LuaOptional(LuaChoice(listOf("clear", "rain", "thunder")))
+private val CODEC_135 = LuaChoice(listOf("clear", "rain", "thunder"))
+private val CODEC_136 = LuaOptional(WeatherOptions.Codec)
+private val CODEC_137 = LuaOptional(BlockBoxOptions.Codec)
+private val CODEC_138 = LuaOptional(BlockBox.Codec)
+private val CODEC_139 = LuaOptional(FloodResult.Codec)
+private val CODEC_140 = LuaOptional(BlockSetOptions.Codec)
+private val CODEC_141 = LuaOptional(GradualFillOptions.Codec)
+private val CODEC_142 = LuaOptional(BiomeSearchOptions.Codec)
+private val CODEC_143 = LuaOptional(EntityFilter.Codec)
+private val CODEC_144 = LuaOptional(EntitySpawnOptions.Codec)
+private val CODEC_145 = LuaOptional(LuaHandle.DroppedItem.Codec)
+private val CODEC_146 = LuaOptional(ExplosionOptions.Codec)
+private val CODEC_147 = LuaOptional(LightningOptions.Codec)
+private val CODEC_148 = LuaOptional(RaycastOptions.Codec)
+private val CODEC_149 = LuaOptional(RaycastHit.Codec)
+private val CODEC_150 = LuaOptional(QueryOptions.Codec)
+private val CODEC_151 = LuaList(QueryHit.Codec)
+private val CODEC_152 = LuaOptional(SweepOptions.Codec)
+private val CODEC_153 = LuaOptional(QueryHit.Codec)
+private val CODEC_154 = LuaChoice(listOf("monster", "animal", "water_animal", "water_ambient", "water_underground_creature", "ambient", "axolotl"))
+private val CODEC_155 = LuaOptional(WorldUnloadOptions.Codec)
+private val CODEC_156 = LuaOptional(StructureSaveOptions.Codec)
+private val CODEC_157 = LuaOptional(StructurePlaceOptions.Codec)
+private val CODEC_158 = LuaOptional(GradualPlaceOptions.Codec)
+private val CODEC_159 = LuaOptional(BorderSizeOptions.Codec)
+private val CODEC_160 = LuaOptional(BorderDamage.Codec)
+private val CODEC_161 = LuaOptional(BorderWarning.Codec)
+private val CODEC_162 = LuaOptional(LuaHandle.CustomBlock.Codec)
+private val CODEC_163 = LuaOptional(LuaChoice(listOf("north", "east", "south", "west", "up", "down")))
+private val CODEC_164 = LuaChoice(listOf("north", "east", "south", "west", "up", "down"))
+private val CODEC_165 = LuaOptional(BlockPlaceOptions.Codec)
+private val CODEC_166 = LuaOptional(LuaUnions.EntityOrBlock)
+private val CODEC_167 = LuaMap(LuaCodecs.INTEGER, LuaCodecs.ITEM)
+private val CODEC_168 = LuaOptional(LuaChoice(listOf("pink", "blue", "red", "green", "yellow", "purple", "white")))
+private val CODEC_169 = LuaChoice(listOf("pink", "blue", "red", "green", "yellow", "purple", "white"))
+private val CODEC_170 = LuaOptional(LuaChoice(listOf("progress", "notched_6", "notched_10", "notched_12", "notched_20")))
+private val CODEC_171 = LuaChoice(listOf("progress", "notched_6", "notched_10", "notched_12", "notched_20"))
+private val CODEC_172 = LuaOptional(BossBarAttachOptions.Codec)
+private val CODEC_173 = LuaOptional(LuaChoice(listOf("black", "dark_blue", "dark_green", "dark_aqua", "dark_red", "dark_purple", "gold", "gray", "dark_gray", "blue", "green", "aqua", "red", "light_purple", "yellow", "white")))
+private val CODEC_174 = LuaOptional(LuaChoice(listOf("always", "never", "hide_for_other_teams", "hide_for_own_team")))
+private val CODEC_175 = LuaChoice(listOf("always", "never", "hide_for_other_teams", "hide_for_own_team"))
+private val CODEC_176 = LuaOptional(LuaChoice(listOf("always", "never", "push_other_teams", "push_own_team")))
+private val CODEC_177 = LuaChoice(listOf("always", "never", "push_other_teams", "push_own_team"))
+private val CODEC_178 = LuaList(LuaMap(LuaCodecs.STRING, LuaCodecs.DYNAMIC))
+private val CODEC_179 = LuaList(DatabaseStatement.Codec)
+private val CODEC_180 = LuaList(DatabaseResult.Codec)
+private val CODEC_181 = LuaOptional(LuaHandle.MenuTemplate.Codec)
+private val CODEC_182 = LuaOptional(LuaList(LuaCodecs.INTEGER))
+private val CODEC_183 = LuaOptional(SlotRule.Codec)
+private val CODEC_184 = LuaOptional(SlotBinding.Codec)
+private val CODEC_185 = LuaList(LuaHandle.Menu.Codec)
+private val CODEC_186 = LuaChoice(listOf("connecting", "open", "ended"))
+private val CODEC_187 = LuaList(LuaCodecs.DYNAMIC)
+private val CODEC_188 = LuaChoice(listOf("running", "ended"))
+private val CODEC_189 = LuaOptional(NetworkPublishOptions.Codec)
+private val CODEC_190 = LuaMap(LuaCodecs.STRING, LuaCodecs.DYNAMIC)
+private val CODEC_191 = LuaOptional(NetworkMapWriteOptions.Codec)
+private val CODEC_192 = LuaList(LuaCodecs.INTEGER)
+private val CODEC_193 = LuaOptional(ScreenImageOptions.Codec)
+private val CODEC_194 = LuaChoice(listOf("north", "south", "east", "west"))
+private val CODEC_195 = LuaOptional(LuaChoice(listOf("north", "south", "east", "west")))
+private val CODEC_196 = LuaOptional(VideoPlayOptions.Codec)
+private val CODEC_197 = LuaOptional(LuaHandle.Playback.Codec)
+private val CODEC_198 = LuaOptional(LuaHandle.Screen.Codec)
+private val CODEC_199 = LuaList(LuaHandle.File.Codec)
+private val CODEC_200 = LuaOptional(HudFillOptions.Codec)
+private val CODEC_201 = LuaOptional(HudBar.Codec)
+private val CODEC_202 = LuaOptional(LuaList(LuaCodecs.STRING))

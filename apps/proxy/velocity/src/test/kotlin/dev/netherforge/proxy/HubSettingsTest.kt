@@ -1,5 +1,7 @@
 package dev.netherforge.proxy
 
+import dev.netherforge.network.Balance
+import dev.netherforge.network.GroupSettings
 import dev.netherforge.network.NetworkLimits
 import dev.netherforge.network.Protocol
 import java.nio.file.Files
@@ -68,5 +70,15 @@ class HubSettingsTest {
         assertEquals(emptyList(), settings.roleShares["isolated"])
         file.writeText("share.standard=lobby(read)\n")
         assertTrue(assertFailsWith<IllegalArgumentException> { HubSettings.read(file) {} }.message!!.contains("share.standard"))
+    }
+
+    @Test
+    fun `each group's balancing is read`() {
+        Files.createDirectories(file.parent)
+        file.writeText("group.arena.balance=fill\ngroup.lobby.balance=least\n")
+        val groups = HubSettings.read(file) {}.groups
+        assertEquals(mapOf("arena" to GroupSettings(Balance.FILL), "lobby" to GroupSettings(Balance.LEAST)), groups)
+        file.writeText("group.arena.balance=random\n")
+        assertTrue(assertFailsWith<IllegalArgumentException> { HubSettings.read(file) {} }.message!!.contains("isn't least or fill"))
     }
 }

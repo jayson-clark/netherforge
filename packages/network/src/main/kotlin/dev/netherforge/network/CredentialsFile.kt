@@ -16,13 +16,16 @@ data class CredentialEntry(
     val owns: List<String> = emptyList(),
     val shares: List<Share> = emptyList(),
     val presence: Boolean? = null,
-    val sendTo: List<String>? = null
+    val sendTo: List<String>? = null,
+    /** The group its servers are instances of, whatever they say. */
+    val group: String? = null
 ) {
     /** What it may do: its role's preset, with what the network shares with that role ([roleShares]) and its own. */
     fun credential(roleShares: Map<String, List<Share>>): Credential = Credential(
         id,
         secret,
-        Grants.preset(role, owns, roleShares[role].orEmpty() + shares, presence, sendTo)
+        Grants.preset(role, owns, roleShares[role].orEmpty() + shares, presence, sendTo),
+        group
     )
 }
 
@@ -64,7 +67,8 @@ class CredentialsFile(val file: Path) {
                 owns = owns,
                 shares = shares,
                 presence = text("presence")?.lowercase()?.let { it == "true" },
-                sendTo = list("send-to")
+                sendTo = list("send-to"),
+                group = text("group")?.also { require(NetworkNames.isServer(it)) { "$file: $id's group \"$it\" isn't a group's name" } }
             )
         }
     }
@@ -82,6 +86,7 @@ class CredentialsFile(val file: Path) {
                 if (entry.shares.isNotEmpty()) append("${entry.id}.shares=${entry.shares.joinToString(", ")}\n")
                 entry.presence?.let { append("${entry.id}.presence=$it\n") }
                 entry.sendTo?.let { append("${entry.id}.send-to=${it.joinToString(", ")}\n") }
+                entry.group?.let { append("${entry.id}.group=$it\n") }
             }
         }
         val temporary = file.resolveSibling("${file.fileName}.tmp")
@@ -109,7 +114,8 @@ class CredentialsFile(val file: Path) {
             |#   <id>.shares    more of others' for it alone: lobby:return(request), events:*(read)
             |#                  (read, write, request, answer; joined with +)
             |#   <id>.presence  true or false: whether it sees players on other servers
-            |#   <id>.send-to   where it may send its players: servers, back (where they came from), * (anywhere)
+            |#   <id>.send-to   where it may send its players: servers, groups, back (where they came from), * (anywhere)
+            |#   <id>.group     the group its servers are instances of (arena), whatever their config says
             |
         """.trimMargin()
     }

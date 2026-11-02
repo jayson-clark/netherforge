@@ -67,7 +67,9 @@ class NetworkTest {
         script: String,
         requires: String = """{ "network": true }""",
         extra: Map<String, Any> = emptyMap(),
-        credential: Credential? = null
+        credential: Credential? = null,
+        group: String? = null,
+        capacity: Int? = null
     ) = TestServer(
         mapOf(TestServer.MANIFEST to TestServer.manifest(requires = requires), "modules/t/init.lua" to script) + extra,
         network = NetworkConfig(
@@ -75,7 +77,9 @@ class NetworkTest {
             port = hubServer.port,
             serverName = name,
             secret = credential?.secret ?: SECRET,
-            credential = credential?.id
+            credential = credential?.id,
+            group = group,
+            capacity = capacity
         )
     ).also { servers += it }
 
@@ -271,7 +275,7 @@ class NetworkTest {
         tickUntil { survival.logs.any { it.startsWith("arrived") } }
         assertEquals(listOf("arrived Ann from lobby with archer"), survival.logs)
         assertEquals(listOf(ann.toString() to "survival"), proxy.sends)
-        assertTrue("sent true" in lobby.logs)
+        assertTrue("sent survival" in lobby.logs, lobby.logs.toString())
         assertTrue("nobody nobody called \"Nobody\" is online in the network" in lobby.logs, lobby.logs.toString())
         tickUntil { lobby.logs.any { it.startsWith("switch") } }
         assertTrue("switch Ann lobby -> survival" in lobby.logs)
@@ -357,6 +361,76 @@ class NetworkTest {
         assertTrue(lobby.logs[1].contains("package \"test\" doesn't depend on \"shop\", so it can't use \"shop:sales\""), lobby.logs[1])
         assertTrue(lobby.logs[2].contains("\"Bad Name\" isn't a name"), lobby.logs[2])
         assertTrue(lobby.logs[3].contains("a function can't be written as JSON"), lobby.logs[3])
+    }
+
+    @Test
+    fun `players, messages and requests go to a group, and the hub picks the instance`() {
+        val arena = """
+            nf.network.channel("state"):on("message", function(event) log("told " .. event.value) end)
+            nf.network.channel("state"):on("request", function(event) event.reply = nf.network.server_name() end)
+            nf.commands.register("close", function() nf.network.set_accepting(false) end)
+        """
+        val lobby = server(
+            "lobby",
+            """
+            nf.commands.register("groups", function()
+              for _, group in ipairs(nf.network.groups()) do
+                local names = {}
+                for _, instance in ipairs(group.instances) do names[#names + 1] = instance.name end
+                log("group " .. group.name .. " " .. group.players .. "/" .. tostring(group.capacity) .. " " .. table.concat(names, ","))
+              end
+              log("in arena " .. #nf.network.players({ group = "arena" }))
+            end)
+            nf.commands.register("send", function(event)
+              nf.task(function()
+                local server, err = nf.network.send_players({ "Ann", "Bea" }, { group = "arena", data = { party = 1 } })
+                log("party " .. tostring(server or err))
+              end)
+            end)
+            nf.commands.register("ask", function()
+              nf.network.channel("state"):publish("go", { group = "arena" })
+              nf.task(function()
+                local a = nf.network.channel("state"):request({ group = "arena" }, "?")
+                local b = nf.network.channel("state"):request({ group = "arena" }, "?")
+                log("answered " .. a .. " " .. b)
+              end)
+            end)
+            """
+        )
+        val survival = server("survival", arena, group = "arena", capacity = 4)
+        val creative = server("creative", arena, group = "arena", capacity = 4)
+        connected()
+        assertEquals(listOf("arena", "arena"), listOf(survival, creative).map { it.runtime.network.group })
+        for (name in listOf("Ann", "Bea")) hub.playerMoved(UUID.nameUUIDFromBytes(name.toByteArray()).toString(), name, "lobby")
+        hub.playerMoved("u-3", "Cid", "survival")
+        tickUntil { lobby.runtime.network.players.size == 3 }
+
+        lobby.platform.commands.runConsole("groups")
+        assertEquals(listOf("group arena 1/8 creative,survival", "group lobby 2/nil lobby", "in arena 1"), lobby.logs)
+
+        proxy.onSend = { id, server ->
+            hub.playerMoved(id, id, server)
+            null
+        }
+        lobby.platform.commands.runConsole("send")
+        tickUntil { lobby.logs.any { it.startsWith("party") } }
+        assertEquals("party creative", lobby.logs.last(), "the instance with the fewest players")
+
+        creative.platform.commands.runConsole("close")
+        survival.platform.commands.runConsole("close")
+        tickUntil { hub.states().filter { it.group == "arena" }.none { it.accepting } }
+        hub.playerMoved("u-4", "Dee", "lobby")
+        tickUntil { lobby.runtime.network.players.size == 4 }
+        val before = lobby.logs.size
+        lobby.platform.commands.runConsole("send")
+        tickUntil { lobby.logs.size > before }
+        assertEquals("party no instance of arena takes players now", lobby.logs.last())
+
+        lobby.platform.commands.runConsole("ask")
+        tickUntil { lobby.logs.last().startsWith("answered") }
+        assertTrue(lobby.logs.last() in setOf("answered creative survival", "answered survival creative"), "one each: ${lobby.logs.last()}")
+        tickUntil { "told go" in survival.logs && "told go" in creative.logs }
+        assertTrue("told go" !in lobby.logs)
     }
 
     @Test

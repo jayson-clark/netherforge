@@ -100,11 +100,27 @@
     "requires": "network"
   },
   {
+    "function": "nf.network.group",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.set_accepting",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.is_accepting",
+    "requires": "network"
+  },
+  {
     "function": "nf.network.is_connected",
     "requires": "network"
   },
   {
     "function": "nf.network.servers",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.groups",
     "requires": "network"
   },
   {
@@ -125,6 +141,10 @@
   },
   {
     "function": "nf.network.send_player",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.send_players",
     "requires": "network"
   },
   {

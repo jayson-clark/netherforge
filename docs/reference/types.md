@@ -3027,6 +3027,49 @@ A server of the network, from `nf.network.servers`.
 | `name` | `string` | Its name, as the proxy names it. |
 | `connected` | `boolean` | Whether NetherForge on it is connected to the hub now (a server without NetherForge never is). |
 | `players` | `integer` | How many players are on it. |
+| `group` | `string` | Its group (`network.group` in its `config.yml`), or its own name when it has none. |
+| `capacity` | `integer?` | How many players it takes (`network.capacity`); `nil` for any number. |
+| `accepting` | `boolean` | Whether it takes players now (`set_accepting` there). |
+
+### NetworkGroup {#networkgroup}
+
+A group of the network and its instances, from `nf.network.groups`.
+
+| Field | Type | |
+| --- | --- | --- |
+| `name` | `string` | Its name. |
+| `players` | `integer` | How many players are on its instances together. |
+| `capacity` | `integer?` | How many its instances take together; `nil` when one of them takes any number. |
+| `instances` | [`NetworkServer`](types.md#networkserver)`[]` | Its servers, by name. |
+
+### NetworkPlayersOptions {#networkplayersoptions}
+
+What `nf.network.players` takes. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `server` | `string?` | Only this server's players. |
+| `group` | `string?` | Only the players on this group's instances. |
+
+### NetworkTarget {#networktarget}
+
+A server or a group, where a request goes. A key that isn't one of these is an error; it names one of the two.
+
+| Field | Type | |
+| --- | --- | --- |
+| `server` | `string?` | A server, by its name in the network. |
+| `group` | `string?` | A group: one of its instances is asked. |
+
+### NetworkSendOptions {#networksendoptions}
+
+Where `send_player` and `send_players` send players. A key that isn't one of these is an error; it names a server or a group.
+
+| Field | Type | |
+| --- | --- | --- |
+| `server` | `string?` | A server, by its name in the network. |
+| `group` | `string?` | A group: the hub picks the instance with room. |
+| `balance` | `"least"\|"fill"\|nil` | How the hub picks the group's instance for this send: `least` (the fewest players) or `fill` (the fullest with room); the group's own when left out (`group.<name>.balance` in the hub's `hub.properties`, `least` unless its owner says). |
+| `data` | `any` | What arrives with them, when `data` isn't given. |
 
 ### NetworkRole {#networkrole}
 
@@ -3067,6 +3110,7 @@ What `channel:publish` takes. A key that isn't one of these is an error.
 | Field | Type | |
 | --- | --- | --- |
 | `server` | `string?` | Only this server hears it (if it listens), by its name in the network; every server listening when left out. |
+| `group` | `string?` | Only this group's instances hear it (those listening). |
 
 ### NetworkMapWriteOptions {#networkmapwriteoptions}
 
@@ -3127,6 +3171,15 @@ Has the fields and methods of [Event](#event) too.
 | `map` | [`NetworkMap`](networkmap.md) | The map. |
 
 ## Testing
+
+### TestNetworkServerOptions {#testnetworkserveroptions}
+
+What `nf.test.network_server` takes, the first time it names a server. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `group` | `string?` | The group it's an instance of, as `network.group` says on a server. |
+| `capacity` | `integer?` | How many players it takes; any number when left out. |
 
 ### TestNetworkMessage {#testnetworkmessage}
 

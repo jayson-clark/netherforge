@@ -157,7 +157,10 @@ data class Grants(
     }
 }
 
-/** A server's own way into the network: an [id] it says in its hello, the [secret] it proves, and its [grants]. */
-data class Credential(val id: String, val secret: String, val grants: Grants) {
-    override fun toString() = "Credential($id, ${grants.describe()})"
+/**
+ * A server's own way into the network: an [id] it says in its hello, the [secret] it proves, and its [grants]. A
+ * credential for a [group] (every instance of a game sharing one) puts its servers in that group whatever they say.
+ */
+data class Credential(val id: String, val secret: String, val grants: Grants, val group: String? = null) {
+    override fun toString() = "Credential($id, ${grants.describe()}${group?.let { ", group $it" }.orEmpty()})"
 }

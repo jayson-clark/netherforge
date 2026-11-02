@@ -13,6 +13,7 @@ import dev.netherforge.network.LocalLink
 import dev.netherforge.network.NetworkLimits
 import dev.netherforge.network.PlayerState
 import dev.netherforge.network.ServerFrame
+import dev.netherforge.network.ServerState
 import kotlinx.serialization.json.JsonElement
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -92,7 +93,30 @@ class NetworkLink(
     var connected = false
         private set
     val players = LinkedHashMap<String, PlayerState>()
-    val servers = LinkedHashMap<String, Boolean>()
+    val servers = LinkedHashMap<String, ServerState>()
+
+    /** Whether this server takes players now (`nf.network.set_accepting`): said to the hub, and again on each welcome. */
+    var accepting = true
+        private set
+
+    /** This server's group: `network.group`, or its own name (a group of one). */
+    val group: String? get() = (if (mode == Mode.REMOTE) config.group else null) ?: name
+
+    /**
+     * Each server's players: counted from who's online where when this server sees everyone (at once, as the proxy
+     * says), else as the hub last said (once a second at most).
+     */
+    fun counts(): Map<String, Int> = if (grants.presence) {
+        players.values.mapNotNull { it.server }.groupingBy { it }.eachCount()
+    } else {
+        servers.values.associate { it.name to it.players }
+    }
+
+    fun setAccepting(accepting: Boolean) {
+        if (this.accepting == accepting) return
+        this.accepting = accepting
+        send(ServerFrame.Status(accepting))
+    }
     var maxValueBytes = NetworkLimits.DEFAULT_MAX_VALUE_BYTES
         private set
 
@@ -155,7 +179,9 @@ class NetworkLink(
                     config.serverName!!,
                     config.secret!!,
                     listener,
-                    credential = config.credential
+                    credential = config.credential,
+                    group = config.group,
+                    capacity = config.capacity
                 ).also { it.start() }
             }
             Mode.LOCAL -> {
@@ -220,6 +246,15 @@ class NetworkLink(
                         players.remove(frame.id)?.let { out += Inbound.Left(it) }
                         continue
                     }
+                    // A server's link coming or going is an event; the rest of what changes of servers is only state.
+                    if (frame is HubFrame.Servers) {
+                        apply(frame, tick)
+                        continue
+                    }
+                    if (frame is HubFrame.Server && servers[frame.server.name]?.linked == frame.server.linked) {
+                        apply(frame, tick)
+                        continue
+                    }
                     apply(frame, tick)
                 }
                 is Inbound.Left -> Unit
@@ -238,14 +273,16 @@ class NetworkLink(
         players.clear()
         for (player in welcome.players) players[player.id] = player
         servers.clear()
-        for (server in welcome.servers) servers[server.name] = server.linked
+        for (server in welcome.servers) servers[server.name] = server
+        if (!accepting) link?.send(ServerFrame.Status(false))
     }
 
     private fun apply(frame: HubFrame, tick: Long) {
         when (frame) {
             is HubFrame.PlayerJoined -> players[frame.player.id] = frame.player
             is HubFrame.PlayerMoved -> players[frame.id]?.let { players[frame.id] = it.copy(server = frame.server) }
-            is HubFrame.Server -> servers[frame.server.name] = frame.server.linked
+            is HubFrame.Server -> servers[frame.server.name] = frame.server
+            is HubFrame.Servers -> for (server in frame.servers) servers[server.name] = server
             is HubFrame.Arriving -> arrivals[frame.player] = Arrival(frame.from, frame.data, tick)
             is HubFrame.ArrivalCancelled -> arrivals.remove(frame.player)
             else -> Unit
@@ -269,12 +306,15 @@ class NetworkLink(
 
     private val peers = LinkedHashMap<String, TestPeer>()
 
-    /** The test's server [name], added to the network the first time it's named. Only in a local network. */
-    fun peer(name: String): TestPeer {
+    /**
+     * The test's server [name], added to the network the first time it's named (an instance of [group] taking
+     * [capacity] players, then). Only in a local network.
+     */
+    fun peer(name: String, group: String? = null, capacity: Int? = null): TestPeer {
         val hub = hub ?: error("only a local network has the test's servers")
         peers[name]?.let { return it }
         proxy!!.peers += name
-        val peer = TestPeer(name, hub)
+        val peer = TestPeer(name, hub, group, capacity)
         peers[name] = peer
         peer.start()
         return peer
@@ -292,8 +332,8 @@ class NetworkLink(
     }
 
     /** Another server of a test's network, played by the test: what it hears is kept, requests to it queued. */
-    inner class TestPeer internal constructor(val name: String, hub: Hub) : HubListener {
-        private val link = LocalLink(hub, name, secret, this)
+    inner class TestPeer internal constructor(val name: String, hub: Hub, group: String?, capacity: Int?) : HubListener {
+        private val link = LocalLink(hub, name, secret, this, group = group, capacity = capacity)
         val received = ArrayList<HubFrame.Message>()
         val requests = ArrayDeque<HubFrame.Requested>()
 

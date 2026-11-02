@@ -262,18 +262,18 @@ class CredentialsTest {
         hub.playerMoved("u-1", "Ann", "lobby")
         hub.playerMoved("u-2", "Bea", "arena-1")
 
-        arenaLink.send(ServerFrame.Send(1, "u-1", "arena-1"))
+        arenaLink.send(ServerFrame.Send(1, listOf("u-1"), "arena-1"))
         assertTrue(arenaRecorder.of<HubFrame.SendResult>().single().error!!.contains("only send players who are on arena-1"))
-        arenaLink.send(ServerFrame.Send(2, "u-2", "lobby"))
+        arenaLink.send(ServerFrame.Send(2, listOf("u-2"), "lobby"))
         assertNull(arenaRecorder.of<HubFrame.SendResult>().last().error, "standard sends anywhere")
         hub.playerMoved("u-2", "Bea", "lobby")
 
-        lobbyLink.send(ServerFrame.Send(3, "u-1", "mini"))
+        lobbyLink.send(ServerFrame.Send(3, listOf("u-1"), "mini"))
         assertNull(lobby.of<HubFrame.SendResult>().single().error, "trusted sends anyone")
         hub.playerMoved("u-1", "Ann", "mini")
-        miniLink.send(ServerFrame.Send(4, "u-1", "arena-2"))
+        miniLink.send(ServerFrame.Send(4, listOf("u-1"), "arena-2"))
         assertTrue(miniRecorder.of<HubFrame.SendResult>().single().error!!.contains("may not send players to arena-2"))
-        miniLink.send(ServerFrame.Send(5, "u-1", "lobby"))
+        miniLink.send(ServerFrame.Send(5, listOf("u-1"), "lobby"))
         assertNull(miniRecorder.of<HubFrame.SendResult>().last().error, "isolated sends back where they came from")
         assertEquals(listOf("u-2" to "lobby", "u-1" to "mini", "u-1" to "lobby"), proxy.sends)
     }

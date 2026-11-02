@@ -176,7 +176,10 @@ wasm:
 # may do anything). A server can instead join with a credential of its own
 # (/nfhub credentials add on the proxy prints one): set credential's id and
 # secret, and leave secret empty; the hub then holds it to what the credential
-# allows (nf.network.server_role() says what). What each package may send
+# allows (nf.network.server_role() says what). A server that's one of several
+# copies of a game sets group (arena) and how many players it takes
+# (capacity, 0 for any): scripts can then send players to the group, and the
+# hub picks the instance. What each package may send
 # a minute (messages, requests, map writes, players sent) is
 # messages-per-minute; a request waits request-timeout-seconds for its answer.
 # What arrives is handed to scripts messages-per-tick a tick, at most
@@ -191,6 +194,8 @@ network:
   credential:
     id: ''
     secret: ''
+  group: ''
+  capacity: 0
   messages-per-minute: 1200
   request-timeout-seconds: 10
   messages-per-tick: 1000

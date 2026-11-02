@@ -282,13 +282,14 @@ nf.test.oauth_token(flow, { access_token = "abc", refresh_token = "def", expires
 
 ## Server networks {#server-networks}
 
-### `nf.test.network_server(name)` {#network_server}
+### `nf.test.network_server(name, options?)` {#network_server}
 
 Adds another server to the test's network. In a test this server is part of a network of its own, named `"test"`, whose hub is a real one in the test: every other server is one the test adds and plays, with `network_publish`, `network_received`, `network_answer`, `network_write`, `network_join` and `network_send`. Adding one that's there does nothing; the network starts with none.
 
 | Parameter | Type | |
 | --- | --- | --- |
 | `name` | `string` | Its name in the network (`"lobby"`). |
+| `options` (optional) | [`TestNetworkServerOptions`](types.md#testnetworkserveroptions) | Its group and room, when it's an instance of a group. |
 
 ```lua
 nf.test.case("chat reaches the lobby", function()

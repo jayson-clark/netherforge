@@ -73,9 +73,39 @@ object Protocol {
     fun size(value: JsonElement?): Int = if (value == null) 0 else json.encodeToString(JsonElement.serializer(), value).toByteArray().size
 }
 
-/** A server of the network as the hub knows it: one the proxy names, and whether NetherForge on it is connected. */
+/**
+ * A server of the network as the hub knows it: one the proxy names, whether NetherForge on it is connected, the
+ * [group] it's an instance of (null: a group of one, its own name), how many players it takes ([capacity], null for
+ * any), whether it takes players now, and how many are on it.
+ */
 @Serializable
-data class ServerState(val name: String, val linked: Boolean)
+data class ServerState(
+    val name: String,
+    val linked: Boolean,
+    val group: String? = null,
+    val capacity: Int? = null,
+    val accepting: Boolean = true,
+    val players: Int = 0
+) {
+    /** Its group's name: its [group], or its own [name] when it's a group of one. */
+    val groupName get() = group ?: name
+}
+
+/** How the hub picks an instance of a group to send players to. */
+@Serializable
+enum class Balance(val word: String) {
+    /** The instance with the fewest players that has room. */
+    @SerialName("least")
+    LEAST("least"),
+
+    /** The fullest instance that still has room, so players end up together. */
+    @SerialName("fill")
+    FILL("fill");
+
+    companion object {
+        fun of(word: String): Balance? = entries.firstOrNull { it.word == word }
+    }
+}
 
 /** A player online in the network: their UUID, name and the server they're on (null while they're between servers). */
 @Serializable
@@ -158,6 +188,11 @@ sealed interface HubFrame {
     @SerialName("server")
     data class Server(val server: ServerState) : HubFrame
 
+    /** Servers whose players, room or whether they take players changed: sent once a second at most, with what changed. */
+    @Serializable
+    @SerialName("servers")
+    data class Servers(val servers: List<ServerState>) : HubFrame
+
     /** [player] is on their way here from [from], sent by a script there with [data]. */
     @Serializable
     @SerialName("arriving")
@@ -171,7 +206,7 @@ sealed interface HubFrame {
     /** How this server's [ServerFrame.Send] [id] went: moved, or [error] saying why not. */
     @Serializable
     @SerialName("send_result")
-    data class SendResult(val id: Long, val error: String? = null) : HubFrame
+    data class SendResult(val id: Long, val error: String? = null, val server: String? = null) : HubFrame
 
     /** A refusal the hub sends instead of acting on a frame (over a limit, a frame it couldn't read), for the log. */
     @Serializable
@@ -188,27 +223,44 @@ sealed interface HubFrame {
 sealed interface ServerFrame {
     /**
      * The answer to a [HubFrame.Challenge]: this server's name (as the proxy names it), the [credential] it proves
-     * (null: the network's shared secret) and [Auth.proof].
+     * (null: the network's shared secret) and [Auth.proof], and what it is: the [group] it's an instance of and how
+     * many players it takes ([capacity]).
      */
     @Serializable
     @SerialName("hello")
-    data class Hello(val version: Int, val server: String, val proof: String, val nonce: String = "", val credential: String? = null) :
-        ServerFrame
+    data class Hello(
+        val version: Int,
+        val server: String,
+        val proof: String,
+        val nonce: String = "",
+        val credential: String? = null,
+        val group: String? = null,
+        val capacity: Int? = null
+    ) : ServerFrame
+
+    /** Whether this server takes players now (a match running: not). */
+    @Serializable
+    @SerialName("status")
+    data class Status(val accepting: Boolean) : ServerFrame
 
     /** Every channel and map this server listens to now, replacing what it said before. */
     @Serializable
     @SerialName("listen")
     data class Listen(val channels: List<String>, val maps: List<String>) : ServerFrame
 
-    /** Publishes [value] on [channel]: to every server listening, or only [to]. */
+    /** Publishes [value] on [channel]: to every server listening, or only [to], or only [group]'s instances. */
     @Serializable
     @SerialName("publish")
-    data class Publish(val channel: String, val value: JsonElement, val to: String? = null) : ServerFrame
+    data class Publish(val channel: String, val value: JsonElement, val to: String? = null, val group: String? = null) : ServerFrame
 
-    /** Asks server [to] on [channel]; the hub answers with a [HubFrame.Reply] to [id]. */
+    /**
+     * Asks server [to] on [channel], or one instance of [group] that answers on it (the hub picks); the hub answers
+     * with a [HubFrame.Reply] to [id].
+     */
     @Serializable
     @SerialName("request")
-    data class Request(val id: Long, val channel: String, val to: String, val value: JsonElement) : ServerFrame
+    data class Request(val id: Long, val channel: String, val to: String? = null, val value: JsonElement, val group: String? = null) :
+        ServerFrame
 
     /** This server's answer to a [HubFrame.Requested] [id]. */
     @Serializable
@@ -231,10 +283,20 @@ sealed interface ServerFrame {
         val expiresMillis: Long? = null
     ) : ServerFrame
 
-    /** Asks the proxy to move [player] (a UUID) to [server], and that server to hear they came with [data]. */
+    /**
+     * Asks the proxy to move [players] (UUIDs) together to [server], or to one instance of [group] with room for them
+     * all (picked by [balance], or the group's own), and that server to hear they came with [data].
+     */
     @Serializable
     @SerialName("send")
-    data class Send(val id: Long, val player: String, val server: String, val data: JsonElement? = null) : ServerFrame
+    data class Send(
+        val id: Long,
+        val players: List<String>,
+        val server: String? = null,
+        val data: JsonElement? = null,
+        val group: String? = null,
+        val balance: Balance? = null
+    ) : ServerFrame
 
     @Serializable
     @SerialName("ping")

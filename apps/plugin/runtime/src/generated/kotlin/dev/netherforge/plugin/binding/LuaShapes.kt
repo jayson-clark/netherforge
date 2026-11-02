@@ -7388,32 +7388,174 @@ data class WasmEndEvent(val process: LuaHandle.WasmProcess, val reason: String, 
 }
 
 /** A server of the network, from `nf.network.servers`. */
-data class NetworkServer(val name: String, val connected: Boolean, val players: Long) : LuaShape {
+data class NetworkServer(val name: String, val connected: Boolean, val players: Long, val group: String, val capacity: Long? = null, val accepting: Boolean) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)
 
     object Codec : ShapeCodec<NetworkServer>("NetworkServer") {
         val nameCodec = LuaCodecs.STRING
         val connectedCodec = LuaCodecs.BOOLEAN
         val playersCodec = LuaCodecs.INTEGER
+        val groupCodec = LuaCodecs.STRING
+        val capacityCodec = LuaOptional(LuaCodecs.INTEGER)
+        val acceptingCodec = LuaCodecs.BOOLEAN
 
         override val pinned = false
 
         override val fields: Map<String, LuaCodec<*>> = mapOf(
             "name" to nameCodec,
             "connected" to connectedCodec,
-            "players" to playersCodec
+            "players" to playersCodec,
+            "group" to groupCodec,
+            "capacity" to capacityCodec,
+            "accepting" to acceptingCodec
         )
 
         override fun read(fields: ShapeReader) = NetworkServer(
             name = fields.field("name", nameCodec),
             connected = fields.field("connected", connectedCodec),
-            players = fields.field("players", playersCodec)
+            players = fields.field("players", playersCodec),
+            group = fields.field("group", groupCodec),
+            capacity = fields.field("capacity", capacityCodec),
+            accepting = fields.field("accepting", acceptingCodec)
         )
 
         override fun write(fields: ShapeWriter, value: NetworkServer) {
             fields.field("name", value.name, nameCodec)
             fields.field("connected", value.connected, connectedCodec)
             fields.field("players", value.players, playersCodec)
+            fields.field("group", value.group, groupCodec)
+            fields.field("capacity", value.capacity, capacityCodec)
+            fields.field("accepting", value.accepting, acceptingCodec)
+        }
+    }
+}
+
+/** A group of the network and its instances, from `nf.network.groups`. */
+data class NetworkGroup(val name: String, val players: Long, val capacity: Long? = null, val instances: List<NetworkServer>) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<NetworkGroup>("NetworkGroup") {
+        val nameCodec = LuaCodecs.STRING
+        val playersCodec = LuaCodecs.INTEGER
+        val capacityCodec = LuaOptional(LuaCodecs.INTEGER)
+        val instancesCodec = LuaList(NetworkServer.Codec)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "name" to nameCodec,
+            "players" to playersCodec,
+            "capacity" to capacityCodec,
+            "instances" to instancesCodec
+        )
+
+        override fun read(fields: ShapeReader) = NetworkGroup(
+            name = fields.field("name", nameCodec),
+            players = fields.field("players", playersCodec),
+            capacity = fields.field("capacity", capacityCodec),
+            instances = fields.field("instances", instancesCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: NetworkGroup) {
+            fields.field("name", value.name, nameCodec)
+            fields.field("players", value.players, playersCodec)
+            fields.field("capacity", value.capacity, capacityCodec)
+            fields.field("instances", value.instances, instancesCodec)
+        }
+    }
+}
+
+/** What `nf.network.players` takes. A key that isn't one of these is an error. */
+data class NetworkPlayersOptions(val server: String? = null, val group: String? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<NetworkPlayersOptions>("NetworkPlayersOptions") {
+        val serverCodec = LuaOptional(LuaCodecs.STRING)
+        val groupCodec = LuaOptional(LuaCodecs.STRING)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "server" to serverCodec,
+            "group" to groupCodec
+        )
+
+        override fun read(fields: ShapeReader) = NetworkPlayersOptions(
+            server = fields.field("server", serverCodec),
+            group = fields.field("group", groupCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: NetworkPlayersOptions) {
+            fields.field("server", value.server, serverCodec)
+            fields.field("group", value.group, groupCodec)
+        }
+    }
+}
+
+/**
+ * A server or a group, where a request goes. A key that isn't one of these is an error; it names one
+ * of the two.
+ */
+data class NetworkTarget(val server: String? = null, val group: String? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<NetworkTarget>("NetworkTarget") {
+        val serverCodec = LuaOptional(LuaCodecs.STRING)
+        val groupCodec = LuaOptional(LuaCodecs.STRING)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "server" to serverCodec,
+            "group" to groupCodec
+        )
+
+        override fun read(fields: ShapeReader) = NetworkTarget(
+            server = fields.field("server", serverCodec),
+            group = fields.field("group", groupCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: NetworkTarget) {
+            fields.field("server", value.server, serverCodec)
+            fields.field("group", value.group, groupCodec)
+        }
+    }
+}
+
+/**
+ * Where `send_player` and `send_players` send players. A key that isn't one of these is an error; it
+ * names a server or a group.
+ */
+data class NetworkSendOptions(val server: String? = null, val group: String? = null, val balance: String? = null, val data: LuaValue? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<NetworkSendOptions>("NetworkSendOptions") {
+        val serverCodec = LuaOptional(LuaCodecs.STRING)
+        val groupCodec = LuaOptional(LuaCodecs.STRING)
+        val balanceCodec = LuaOptional(LuaChoice(listOf("least", "fill")))
+        val dataCodec = LuaOptional(LuaCodecs.VALUE)
+
+        override val pinned = true
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "server" to serverCodec,
+            "group" to groupCodec,
+            "balance" to balanceCodec,
+            "data" to dataCodec
+        )
+
+        override fun read(fields: ShapeReader) = NetworkSendOptions(
+            server = fields.field("server", serverCodec),
+            group = fields.field("group", groupCodec),
+            balance = fields.field("balance", balanceCodec),
+            data = fields.field("data", dataCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: NetworkSendOptions) {
+            fields.field("server", value.server, serverCodec)
+            fields.field("group", value.group, groupCodec)
+            fields.field("balance", value.balance, balanceCodec)
+            fields.field("data", value.data, dataCodec)
         }
     }
 }
@@ -7520,24 +7662,28 @@ data class NetworkPlayer(val id: String, val name: String, val server: String? =
 }
 
 /** What `channel:publish` takes. A key that isn't one of these is an error. */
-data class NetworkPublishOptions(val server: String? = null) : LuaShape {
+data class NetworkPublishOptions(val server: String? = null, val group: String? = null) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)
 
     object Codec : ShapeCodec<NetworkPublishOptions>("NetworkPublishOptions") {
         val serverCodec = LuaOptional(LuaCodecs.STRING)
+        val groupCodec = LuaOptional(LuaCodecs.STRING)
 
         override val pinned = false
 
         override val fields: Map<String, LuaCodec<*>> = mapOf(
-            "server" to serverCodec
+            "server" to serverCodec,
+            "group" to groupCodec
         )
 
         override fun read(fields: ShapeReader) = NetworkPublishOptions(
-            server = fields.field("server", serverCodec)
+            server = fields.field("server", serverCodec),
+            group = fields.field("group", groupCodec)
         )
 
         override fun write(fields: ShapeWriter, value: NetworkPublishOptions) {
             fields.field("server", value.server, serverCodec)
+            fields.field("group", value.group, groupCodec)
         }
     }
 }
@@ -8633,6 +8779,36 @@ data class TextSize(val width: Double, val height: Double) : LuaShape {
         override fun write(fields: ShapeWriter, value: TextSize) {
             fields.field("width", value.width, widthCodec)
             fields.field("height", value.height, heightCodec)
+        }
+    }
+}
+
+/**
+ * What `nf.test.network_server` takes, the first time it names a server. A key that isn't one of these
+ * is an error.
+ */
+data class TestNetworkServerOptions(val group: String? = null, val capacity: Long? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<TestNetworkServerOptions>("TestNetworkServerOptions") {
+        val groupCodec = LuaOptional(LuaCodecs.STRING)
+        val capacityCodec = LuaOptional(LuaCodecs.INTEGER)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "group" to groupCodec,
+            "capacity" to capacityCodec
+        )
+
+        override fun read(fields: ShapeReader) = TestNetworkServerOptions(
+            group = fields.field("group", groupCodec),
+            capacity = fields.field("capacity", capacityCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: TestNetworkServerOptions) {
+            fields.field("group", value.group, groupCodec)
+            fields.field("capacity", value.capacity, capacityCodec)
         }
     }
 }

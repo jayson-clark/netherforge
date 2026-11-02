@@ -19,6 +19,7 @@ import dev.netherforge.plugin.binding.TestClickOptions
 import dev.netherforge.plugin.binding.TestDisconnectOptions
 import dev.netherforge.plugin.binding.TestInputKeys
 import dev.netherforge.plugin.binding.TestNetworkMessage
+import dev.netherforge.plugin.binding.TestNetworkServerOptions
 import dev.netherforge.plugin.binding.TestRequestOptions
 import dev.netherforge.plugin.binding.TestShownOptions
 import dev.netherforge.plugin.binding.TestWasmStub
@@ -200,20 +201,28 @@ internal class NfTestImpl(private val session: ProjectSession) : NfTestApi {
 
     private val link get() = session.runtime.network
 
-    /** The test's server [name], added to the network if it isn't in it yet. */
-    private fun peer(name: String): NetworkLink.TestPeer {
+    /** The test's server [name], added to the network if it isn't in it yet (an instance of [group] then). */
+    private fun peer(name: String, group: String? = null, capacity: Int? = null): NetworkLink.TestPeer {
         harness
         if (!NetworkNames.isServer(name)) {
             throw LuaApiException("bad argument 'server' (a server's name expected: letters, digits, _ . -; got \"$name\")")
         }
         if (name == link.name) throw LuaApiException("bad argument 'server' (\"$name\" is this server)")
-        return link.peer(name)
+        return link.peer(name, group, capacity)
     }
 
     private fun full(caller: Caller, name: String, what: String) = session.network.resolve(caller.scope.namespace, name, what)
 
-    override fun networkServer(caller: Caller, name: String) {
-        peer(name)
+    override fun networkServer(caller: Caller, name: String, options: TestNetworkServerOptions?) {
+        val group = options?.group?.also { checkServer(it, "options.group") }
+        val capacity = options?.capacity?.also {
+            if (it <
+                1
+            ) {
+                throw LuaApiException("bad argument 'options.capacity' (at least 1 expected, got $it)")
+            }
+        }
+        peer(name, group, capacity?.toInt())
     }
 
     override fun networkPublish(caller: Caller, server: String, channel: String, value: LuaValue) {
@@ -283,7 +292,7 @@ internal class NfTestImpl(private val session: ProjectSession) : NfTestApi {
         val id = testId(name)
         // They're on the sending server first, as a player sent from it is.
         link.place(id, name, peer.name)
-        peer.send(ServerFrame.Send(0, id, link.name!!, json))
+        peer.send(ServerFrame.Send(0, listOf(id), link.name!!, json))
         val joined = session.platform.players.find(name) ?: throw LuaApiException("$name couldn't be sent here")
         return session.handle(joined)
     }

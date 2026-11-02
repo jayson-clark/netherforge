@@ -11,6 +11,25 @@ release is cut.
 
 ### Added
 
+- **Server credentials and roles.** A network's servers can join with
+  credentials of their own (`/nfhub credentials add <id> [role]
+[namespaces]`, kept in the proxy's `credentials.properties`), each with a
+  role the hub enforces on every frame: `trusted` (everything, as the shared
+  secret still is), `standard` (its own namespaces' channels and maps, and
+  what the network shares with it) or `isolated` (only what's shared, its own
+  players, sending them only back where they came from). Shares
+  (`share.standard=lobby:return(request)` in `hub.properties`) grant `read`,
+  `write`, `request` and `answer`. Revoking a credential drops its servers at
+  once. `nf.network.server_role()` says what a server may do; what it may not
+  is refused with `network.forbidden` and never reaches another server.
+- **Groups of servers.** `network.group` and `network.capacity` make a server
+  an instance of a group. `send_player` and the new `send_players` (a party,
+  landing together) take `{ group = "arena" }`, and the hub picks the
+  instance with room: `least` players, or `fill` (`group.<name>.balance` in
+  `hub.properties`, or per send). `publish` and `request` take a group too.
+  `nf.network.group()`, `groups()`, `players({ group = ... })` and
+  `set_accepting(false)` (an instance passed over while a match runs).
+
 - **Natural spawning in water.** `"placement": "water"` in a centity's
   `spawning` block makes it appear in water (waterlogged blocks and kelp too,
   never lava, and not under a solid block) instead of on the ground, anywhere
@@ -96,6 +115,12 @@ release is cut.
   (`event.from`); oversized pictures and videos in a package are refused.
 
 ### Changed
+
+- **The network's protocol is version 3**: update NetherForge on the proxy
+  and on every server together. `nf.network.send_player` now gives the server
+  the player is on their way to (still truthy where it gave `true`), and
+  `nf.network.servers()` gives each server's group, room and whether it takes
+  players.
 
 - **The network's hub takes a server's resource packs off a player as they
   move to another server** (`clear-resource-packs` in `hub.properties`, on by

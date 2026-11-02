@@ -827,6 +827,21 @@ class ScriptTestRunnerTest {
                       assert(total == 7 and net.scores:get("ann") == 7)
                     end)
 
+                    nf.test.case("a group's instances share players out", function()
+                      nf.test.network_server("arena-1", { group = "arena", capacity = 1 })
+                      nf.test.network_server("arena-2", { group = "arena", capacity = 1 })
+                      nf.test.advance(1)
+                      assert(nf.network.group() == "test")
+                      local groups = {}
+                      for _, group in ipairs(nf.network.groups()) do groups[group.name] = group end
+                      assert(#groups.arena.instances == 2 and groups.arena.capacity == 2, tostring(#groups.arena.instances))
+                      local ann = nf.test.player("Ann")
+                      local server, err
+                      nf.task(function() server, err = nf.network.send_player(ann, { group = "arena" }) end)
+                      nf.test.advance(2)
+                      assert(server == "arena-1", tostring(err))
+                    end)
+
                     nf.test.case("players come and go, and are sent both ways", function()
                       nf.test.network_join("lobby", "Bob")
                       nf.test.advance(1)
@@ -838,7 +853,7 @@ class ScriptTestRunnerTest {
                       local moved, err
                       nf.task(function() moved, err = nf.network.send_player(ann, "lobby") end)
                       nf.test.advance(2)
-                      assert(moved == true, tostring(err))
+                      assert(moved == "lobby", tostring(err))
                       assert(#nf.players.online() == 0, "sent away, they left this server")
                       assert(nf.network.find_player("Ann").server == "lobby")
                       nf.test.network_quit("Bob")
@@ -848,7 +863,7 @@ class ScriptTestRunnerTest {
                 """
             )
         )
-        expectStatuses(events, Status.PASSED, Status.PASSED, Status.PASSED, Status.PASSED)
+        expectStatuses(events, Status.PASSED, Status.PASSED, Status.PASSED, Status.PASSED, Status.PASSED)
     }
 
     @Test

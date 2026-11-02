@@ -82,7 +82,10 @@ class HubTest {
         assertTrue(link.connected)
         val welcome = assertNotNull(lobby.welcome)
         assertEquals("lobby", welcome.server)
-        assertEquals(listOf(ServerState("lobby", true), ServerState("survival", false), ServerState("creative", false)), welcome.servers)
+        assertEquals(
+            listOf(ServerState("lobby", true, players = 1), ServerState("survival", false), ServerState("creative", false)),
+            welcome.servers
+        )
         assertEquals(listOf(PlayerState("u-1", "Ann", "lobby")), welcome.players)
 
         val (_, survival) = join("Survival")
@@ -274,19 +277,19 @@ class HubTest {
         )
 
         survival.frames.clear()
-        lobbyLink.send(ServerFrame.Send(5, "u-1", "survival", JsonPrimitive("kit")))
+        lobbyLink.send(ServerFrame.Send(5, listOf("u-1"), "survival", JsonPrimitive("kit")))
         assertEquals(listOf("u-1" to "survival"), proxy.sends)
         assertEquals(HubFrame.Arriving("u-1", "lobby", JsonPrimitive("kit")), survival.frames.single())
-        assertEquals(HubFrame.SendResult(5, null), lobby.of<HubFrame.SendResult>().single())
+        assertEquals(HubFrame.SendResult(5, null, "survival"), lobby.of<HubFrame.SendResult>().single())
 
         proxy.answer = "the server is full"
-        lobbyLink.send(ServerFrame.Send(6, "u-1", "survival"))
+        lobbyLink.send(ServerFrame.Send(6, listOf("u-1"), "survival"))
         assertIs<HubFrame.ArrivalCancelled>(survival.frames.last())
         assertEquals("the server is full", lobby.of<HubFrame.SendResult>().last().error)
 
-        lobbyLink.send(ServerFrame.Send(7, "u-9", "survival"))
+        lobbyLink.send(ServerFrame.Send(7, listOf("u-9"), "survival"))
         assertEquals("they aren't online in the network", lobby.of<HubFrame.SendResult>().last().error)
-        lobbyLink.send(ServerFrame.Send(8, "u-1", "lobby"))
+        lobbyLink.send(ServerFrame.Send(8, listOf("u-1"), "lobby"))
         assertEquals("they're already on lobby", lobby.of<HubFrame.SendResult>().last().error)
     }
 

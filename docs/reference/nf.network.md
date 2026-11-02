@@ -8,7 +8,7 @@ A table of functions: call them with a dot.
 
 | | Functions |
 | --- | --- |
-| [Functions](#functions) | [`server_name`](#server_name) [`server_role`](#server_role) [`is_connected`](#is_connected) [`servers`](#servers) [`players`](#players) [`find_player`](#find_player) [`channel`](#channel) [`map`](#map) [`send_player`](#send_player) |
+| [Functions](#functions) | [`server_name`](#server_name) [`server_role`](#server_role) [`group`](#group) [`set_accepting`](#set_accepting) [`is_accepting`](#is_accepting) [`is_connected`](#is_connected) [`servers`](#servers) [`groups`](#groups) [`players`](#players) [`find_player`](#find_player) [`channel`](#channel) [`map`](#map) [`send_player`](#send_player) [`send_players`](#send_players) |
 
 ## Functions {#functions}
 
@@ -35,6 +35,38 @@ if role and not role.trusted then
 end
 ```
 
+### `nf.network.group()` {#group}
+
+This server's group: the game or role it's one copy of (`network.group` in `config.yml`, `"arena"`), which other servers send players and requests to (`{ group = "arena" }`) and the hub picks an instance of. A server with no group is a group of one, named as the server is, so this is `server_name()` then. `nil` on a server that isn't part of a network.
+
+*Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
+
+**Returns** `string?`
+
+### `nf.network.set_accepting(accepting)` {#set_accepting}
+
+Says whether this server takes players now: one that doesn't (a match is running) is passed over when players are sent to its group, though they can still be sent to it by name. It's said to the hub at once, and again whenever this server reconnects. Every server takes players until it says otherwise.
+
+*Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `accepting` | `boolean` | Whether it takes players. |
+
+```lua
+nf.on("match_started", function()
+  nf.network.set_accepting(false)
+end)
+```
+
+### `nf.network.is_accepting()` {#is_accepting}
+
+Whether this server takes players now, as `set_accepting` last said.
+
+*Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
+
+**Returns** `boolean`
+
 ### `nf.network.is_connected()` {#is_connected}
 
 Whether this server is connected to its network's hub now. `network_connect` and `network_disconnect` say when that changes.
@@ -45,7 +77,7 @@ Whether this server is connected to its network's hub now. `network_connect` and
 
 ### `nf.network.servers()` {#servers}
 
-Every server of the network, as the proxy names them, with whether NetherForge on each is connected and how many players are on it. Empty while this server isn't connected.
+Every server of the network, as the proxy names them, with whether NetherForge on each is connected, how many players are on it, its group and its room. Empty while this server isn't connected. Players and room are as the hub last said, once a second at most.
 
 *Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
 
@@ -57,13 +89,35 @@ for _, server in ipairs(nf.network.servers()) do
 end
 ```
 
-### `nf.network.players()` {#players}
+### `nf.network.groups()` {#groups}
 
-Everyone online in the network, on any server, this one included, as the proxy last said. Empty while this server isn't connected.
+Every group of the network, with its instances: each server with a group is an instance of it, and each server with none is a group of one. Empty while this server isn't connected.
 
 *Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
 
+**Returns** [`NetworkGroup`](types.md#networkgroup)`[]`
+
+```lua
+for _, group in ipairs(nf.network.groups()) do
+  log(group.name, group.players .. " playing on " .. #group.instances .. " servers")
+end
+```
+
+### `nf.network.players(options?)` {#players}
+
+Everyone online in the network, on any server, this one included, as the proxy last said; or only those of one server or group. Empty while this server isn't connected. On a server that doesn't see other servers' players (`server_role().presence`), only its own.
+
+*Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `options` (optional) | [`NetworkPlayersOptions`](types.md#networkplayersoptions) | Only one server's or group's players. |
+
 **Returns** [`NetworkPlayer`](types.md#networkplayer)`[]`
+
+```lua
+local playing = #nf.network.players({ group = "arena" })
+```
 
 ### `nf.network.find_player(player)` {#find_player}
 
@@ -118,26 +172,56 @@ A shared map: keys (strings) and values the hub keeps for the whole network, whi
 
 **Returns** [`NetworkMap`](networkmap.md)
 
-### `nf.network.send_player(player, server, data?, callback?)` {#send_player}
+### `nf.network.send_player(player, target, data?, callback?)` {#send_player}
 
-Sends a player to another server of the network, through the proxy, with `data` for that server's scripts: its `player_arrive` handlers hear it once they've joined there. The player may be on any server, this one or another. It fails (`nil, err`) when this server isn't connected, the player isn't online, the proxy has no such server, they're already there, or the proxy couldn't move them (the server is down or full, a proxy plugin cancelled it). It works off the main thread, so its moved arrives later: give `callback`, which is called with `moved, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `moved, err`. Without a callback outside a task, it's an error. When it fails, `moved` is `nil` and `err` says why.
+Sends a player to another server of the network, through the proxy, with `data` for that server's scripts: its `player_arrive` handlers hear it once they've joined there. The player may be on any server, this one or another (a server whose credential isn't trusted sends only its own). Sent to a group, the hub picks the instance as the group's balancing says (`least`: the one with the fewest players that has room; `fill`: the fullest that still has room) or `target.balance`, passing over instances that don't take players now (`set_accepting`) or are full (`network.capacity`). It fails (`nil, err`) when this server isn't connected, the player isn't online, there's no such server or group, no instance has room, they're already there, or the proxy couldn't move them (the server is down, a proxy plugin cancelled it). It works off the main thread, so its server arrives later: give `callback`, which is called with `server, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `server, err`. Without a callback outside a task, it's an error. When it fails, `server` is `nil` and `err` says why.
 
 *Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
 
 | Parameter | Type | |
 | --- | --- | --- |
 | `player` | [`Player`](player.md)`\|string` | Who: a player on this server, or anyone online in the network by name or UUID. |
-| `server` | `string` | The server's name in the network, as the proxy names it (`"lobby"`); `nf.network.servers()` lists them. |
-| `data` (optional) | `any` | What arrives with them, as `event.data` there. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line. |
-| `callback` (optional) | `fun(moved: boolean?, err: string?)` | Called on the main thread once it's done, as this script's code, with `true` once they are on their way there (or `nil` and why not). Not called if the script has stopped by then. |
+| `target` | `string\|`[`NetworkSendOptions`](types.md#networksendoptions) | A server's name in the network, as the proxy names it (`"lobby"`; `nf.network.servers()` lists them), or a table naming a server or a group (`{ group = "arena" }`), when the hub picks the instance. |
+| `data` (optional) | `any` | What arrives with them, as `event.data` there; `target.data` when left out. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line. |
+| `callback` (optional) | `fun(server: string?, err: string?)` | Called on the main thread once it's done, as this script's code, with the server they are on their way to (or `nil` and why not). Not called if the script has stopped by then. |
 
-**Returns** `boolean?`: Only without a callback, in a task: `true` once they are on their way there, or `nil`., `string?`: Why it failed, when it did; `nil` when it worked.
+**Returns** `string?`: Only without a callback, in a task: the server they are on their way to, or `nil`., `string?`: Why it failed, when it did; `nil` when it worked.
 
 ```lua
 nf.task(function()
-  local moved, err = nf.network.send_player(player, "arena", { team = "red" })
-  if not moved then
+  local server, err = nf.network.send_player(player, { group = "arena", data = { team = "red" } })
+  if not server then
     player:send_message("<red>Can't go: " .. err)
   end
 end)
+```
+
+### `nf.network.send_players(players, target, data?, callback?)` {#send_players}
+
+Sends several players together, as `send_player` sends one: to one server, or to one instance of a group with room for all of them, so a party lands together. Players already there stay. It fails as `send_player` does; when the proxy couldn't move some of them, `err` names each with why (the others are on their way). It works off the main thread, so its server arrives later: give `callback`, which is called with `server, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `server, err`. Without a callback outside a task, it's an error. When it fails, `server` is `nil` and `err` says why.
+
+*Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `players` | `(`[`Player`](player.md)`\|string)[]` | Who: players on this server, or anyone online in the network by name or UUID. |
+| `target` | `string\|`[`NetworkSendOptions`](types.md#networksendoptions) | A server's name in the network, as the proxy names it (`"lobby"`; `nf.network.servers()` lists them), or a table naming a server or a group (`{ group = "arena" }`), when the hub picks the instance. |
+| `data` (optional) | `any` | What arrives with them, as `event.data` there; `target.data` when left out. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line. |
+| `callback` (optional) | `fun(server: string?, err: string?)` | Called on the main thread once it's done, as this script's code, with the server they are on their way to (or `nil` and why not). Not called if the script has stopped by then. |
+
+**Returns** `string?`: Only without a callback, in a task: the server they are on their way to, or `nil`., `string?`: Why it failed, when it did; `nil` when it worked.
+
+```lua
+local function start_match(players)
+  nf.task(function()
+    local server, err = nf.network.send_players(players, { group = "arena", data = { mode = "duel" } })
+    if not server then
+      for _, player in ipairs(players) do
+        player:send_message("<red>No room: " .. err)
+      end
+    end
+  end)
+end
+
+return start_match
 ```

@@ -6,6 +6,7 @@ import dev.netherforge.format.project.PackagePaths
 import dev.netherforge.format.project.ProjectManifest
 import dev.netherforge.format.project.ProjectSnapshot
 import dev.netherforge.network.Access
+import dev.netherforge.network.Balance
 import dev.netherforge.network.HubFrame
 import dev.netherforge.network.MapCause
 import dev.netherforge.network.MapOp
@@ -83,7 +84,7 @@ class Network(
     private val mirrors = LinkedHashMap<String, Mirror>()
     private val requests = HashMap<Long, Waiting<Any?>>()
     private val writes = HashMap<Long, Pair<MapOp, Waiting<Any?>>>()
-    private val sends = HashMap<Long, Waiting<Boolean>>()
+    private val sends = HashMap<Long, Waiting<String>>()
     private val rate by lazy { RequestRate(config.messagesPerMinute) }
     private var listenChanged = true
     private var listened: Pair<List<String>, List<String>>? = null
@@ -191,19 +192,21 @@ class Network(
         )
     }
 
-    fun publish(namespace: String, channel: String, value: JsonElement, server: String?): Boolean {
+    fun publish(namespace: String, channel: String, value: JsonElement, server: String?, group: String? = null): Boolean {
         forbid(channel, Access.WRITE, "channel:publish")
         if (!link().connected || !allowed(namespace)) return false
-        return link().send(ServerFrame.Publish(channel, value, server))
+        return link().send(ServerFrame.Publish(channel, value, server, group))
     }
 
-    fun request(namespace: String, channel: String, server: String, value: JsonElement): CompletionStage<Any?> {
+    /** Asks [server] on [channel], or (with [group]) one instance of the group. */
+    fun request(namespace: String, channel: String, server: String?, value: JsonElement, group: String? = null): CompletionStage<Any?> {
         forbid(channel, Access.REQUEST, "channel:request")
         refusal(namespace)?.let { return CompletableFuture.failedFuture(WorkFailed(it)) }
         val id = link().nextId()
         val future = CompletableFuture<Any?>()
-        requests[id] = Waiting(future, ticks() + config.requestTimeoutSeconds * TICKS_PER_SECOND, "$server didn't answer on \"$channel\"")
-        if (!link().send(ServerFrame.Request(id, channel, server, value))) {
+        val who = server ?: "no instance of $group"
+        requests[id] = Waiting(future, ticks() + config.requestTimeoutSeconds * TICKS_PER_SECOND, "$who didn't answer on \"$channel\"")
+        if (!link().send(ServerFrame.Request(id, channel, server, value, group))) {
             requests.remove(id)
             return CompletableFuture.failedFuture(WorkFailed(notConnected()))
         }
@@ -241,23 +244,34 @@ class Network(
         return future
     }
 
-    fun send(namespace: String, player: String, server: String, data: JsonElement?): CompletionStage<Boolean> {
+    /**
+     * Sends [players] (UUIDs) together to [server], or to an instance of [group] the hub picks ([balance], or the
+     * group's own); completes with the server they're on their way to.
+     */
+    fun send(
+        namespace: String,
+        players: List<String>,
+        server: String?,
+        data: JsonElement?,
+        group: String? = null,
+        balance: Balance? = null
+    ): CompletionStage<String> {
         refusal(namespace)?.let { return CompletableFuture.failedFuture(WorkFailed(it)) }
         val grants = link().grants
-        if (!grants.trusted && link().players[player]?.server.let { it != null && it != link().name }) {
+        if (!grants.trusted && players.any { player -> link().players[player]?.server.let { it != null && it != link().name } }) {
             return CompletableFuture.failedFuture(
                 WorkFailed("network.forbidden: this server's credential (${grants.role}) may only send players who are on it")
             )
         }
         val id = link().nextId()
-        val future = CompletableFuture<Boolean>()
+        val future = CompletableFuture<String>()
         sends[id] =
             Waiting(
                 future,
                 ticks() + SEND_TIMEOUT_SECONDS * TICKS_PER_SECOND,
                 "the proxy didn't move them within $SEND_TIMEOUT_SECONDS seconds"
             )
-        if (!link().send(ServerFrame.Send(id, player, server, data))) {
+        if (!link().send(ServerFrame.Send(id, players, server, data, group, balance))) {
             sends.remove(id)
             return CompletableFuture.failedFuture(WorkFailed(notConnected()))
         }
@@ -328,7 +342,11 @@ class Network(
             is HubFrame.MapChanged -> changed(frame)
             is HubFrame.MapResult -> writes.remove(frame.id)?.let { (op, waiting) -> written(frame, op, waiting) }
             is HubFrame.SendResult -> sends.remove(frame.id)?.let { waiting ->
-                if (frame.error != null) waiting.future.completeExceptionally(WorkFailed(frame.error!!)) else waiting.future.complete(true)
+                if (frame.error != null) {
+                    waiting.future.completeExceptionally(WorkFailed(frame.error!!))
+                } else {
+                    waiting.future.complete(frame.server ?: "")
+                }
             }
             is HubFrame.PlayerJoined -> scripts.emit(Events.NF_NETWORK_PLAYER_JOIN, null, NetworkPlayerEvent(player(frame.player)))
             is HubFrame.PlayerMoved -> {

@@ -1,7 +1,9 @@
 package dev.netherforge.proxy
 
 import dev.netherforge.network.Auth
+import dev.netherforge.network.Balance
 import dev.netherforge.network.Grants
+import dev.netherforge.network.GroupSettings
 import dev.netherforge.network.NetworkLimits
 import dev.netherforge.network.Protocol
 import dev.netherforge.network.Share
@@ -24,6 +26,8 @@ data class HubSettings(
     val limits: NetworkLimits,
     /** What's shared with every credential of a role (`share.standard`, `share.isolated`). */
     val roleShares: Map<String, List<Share>> = emptyMap(),
+    /** Each group's settings (`group.<name>.balance`), by the group's name. */
+    val groups: Map<String, GroupSettings> = emptyMap(),
     /**
      * Whether a server's resource packs come off a player as they move to another server, so one server's (a lobby's
      * hidden HUD, its replaced sprites) never follows them to the next. Default true; a file written before this
@@ -57,11 +61,20 @@ data class HubSettings(
                     throw IllegalArgumentException("$file's share.$role: ${e.message}")
                 }
             }
+            val groups = properties.stringPropertyNames().filter { it.startsWith("group.") }
+                .map { it.removePrefix("group.").substringBeforeLast('.') }.toSortedSet()
+                .associateWith { group ->
+                    val balance = text("group.$group.balance")?.let { word ->
+                        Balance.of(word) ?: throw IllegalArgumentException("$file's group.$group.balance \"$word\" isn't least or fill")
+                    }
+                    GroupSettings(balance = balance ?: Balance.LEAST)
+                }
             return HubSettings(
                 bind = text("bind") ?: "0.0.0.0",
                 port = positive("port")?.toInt() ?: Protocol.DEFAULT_PORT,
                 secret = secret,
                 roleShares = roleShares,
+                groups = groups,
                 limits = NetworkLimits(
                     maxValueBytes = positive("max-value-bytes")?.toInt() ?: defaults.maxValueBytes,
                     maxKeysPerPackage = positive("max-keys-per-package")?.toInt() ?: defaults.maxKeysPerPackage,
@@ -98,6 +111,11 @@ data class HubSettings(
                 |#   share.standard=lobby:return(request), events:announcements(read)
                 |share.standard=
                 |share.isolated=
+                |
+                |# Groups: servers that are copies of one game (network.group in their config.yml), which scripts send
+                |# players to as one ({ group = "arena" }). How the hub picks the instance: least (the one with the fewest
+                |# players that has room, the default) or fill (the fullest with room, so players end up together).
+                |#   group.arena.balance=fill
                 |
                 |# The most one value may be as JSON: a message, a request or its reply, a map's value, a sent player's data.
                 |max-value-bytes=${limits.maxValueBytes}

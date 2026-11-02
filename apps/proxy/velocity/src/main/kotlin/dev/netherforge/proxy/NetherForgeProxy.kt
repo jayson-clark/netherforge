@@ -73,7 +73,8 @@ class NetherForgeProxy @Inject constructor(
             log,
             settings.limits,
             FileMapStore(folder.resolve("maps.json")),
-            credentials = credentials
+            credentials = credentials,
+            groups = settings.groups
         )
         val server = HubServer(hub, InetSocketAddress(settings.bind, settings.port), log, settings.limits)
         try {
@@ -173,15 +174,20 @@ class NetherForgeProxy @Inject constructor(
         private fun status(): String {
             val hub = hub ?: return "NetherForge's network hub isn't running (see the proxy's log)."
             val linked = hub.connections().associateBy { it.server }
+            val states = hub.states().associateBy { it.name }
             val lines = proxy.allServers.map { registered ->
                 val name = registered.serverInfo.name
                 val connection = linked[name]
+                val state = states[name]
                 val how = when {
                     connection == null -> "not connected"
                     connection.credential == null -> "connected (shared secret)"
                     else -> "connected (${connection.credential}: ${connection.grants.role})"
                 }
-                "  $name: $how, ${registered.playersConnected.size} online"
+                val group = state?.group?.let { " in $it" }.orEmpty()
+                val room = state?.capacity?.let { " of $it" }.orEmpty()
+                val closed = if (state != null && state.linked && !state.accepting) ", not taking players" else ""
+                "  $name: $how$group, ${registered.playersConnected.size}$room online$closed"
             }
             return "NetherForge network hub on port ${server?.port}:\n" + lines.joinToString("\n")
         }
@@ -246,9 +252,10 @@ class NetherForgeProxy @Inject constructor(
                     "reload" -> {
                         val fresh = HubSettings.read(folder.resolve(HubSettings.FILE)) { logger.info(it) }
                         val all = credentialsFile.read().map { it.credential(fresh.roleShares) }
-                        this@NetherForgeProxy.settings = settings.copy(roleShares = fresh.roleShares)
+                        this@NetherForgeProxy.settings = settings.copy(roleShares = fresh.roleShares, groups = fresh.groups)
+                        hub.setGroups(fresh.groups)
                         hub.setCredentials(all)
-                        "Read ${all.size} credentials (and hub.properties' shares); servers whose grants changed dial again."
+                        "Read ${all.size} credentials (and hub.properties' shares and groups); servers whose grants changed dial again."
                     }
                     else -> "Usage: /nfhub credentials add <id> [role] [owns,...] [--to-file] | revoke <id> | list | reload"
                 }

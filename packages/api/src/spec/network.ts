@@ -14,12 +14,28 @@ const CHANNEL: Param = { name: 'name', type: 'string', doc: NAME_DOC, names: 'ch
 
 const MAP: Param = { name: 'name', type: 'string', doc: NAME_DOC, names: 'network_map' }
 
-/** A server's name, wherever a function takes one. */
-const SERVER: Param = {
-  name: 'server',
-  type: 'string',
-  doc: 'The server\'s name in the network, as the proxy names it (`"lobby"`); `nf.network.servers()` lists them.',
+/** Where `send_player` and `send_players` send players. */
+const TARGET: Param = {
+  name: 'target',
+  type: 'string|NetworkSendOptions',
+  doc: 'A server\'s name in the network, as the proxy names it (`"lobby"`; `nf.network.servers()` lists them), or a table naming a server or a group (`{ group = "arena" }`), when the hub picks the instance.',
   names: 'server',
+}
+
+/** Where a request goes. */
+const REQUEST_TARGET: Param = {
+  name: 'target',
+  type: 'string|NetworkTarget',
+  doc: 'A server\'s name in the network (`"lobby"`), or a table naming a server or a group (`{ group = "arena" }`): then one instance of the group that answers on the channel is asked, each in turn.',
+  names: 'server',
+}
+
+/** How a send's data is documented. */
+const SEND_DATA: Param = {
+  name: 'data',
+  type: 'any',
+  doc: `What arrives with them, as \`event.data\` there; \`target.data\` when left out. ${VALUES}`,
+  optional: true,
 }
 
 /** `nf.network`: the other servers of the network this server is part of. */
@@ -46,6 +62,28 @@ export const nfNetwork: LuaClass = {
         'local role = nf.network.server_role()\nif role and not role.trusted then\n  log("this server is " .. role.role .. ", owning " .. table.concat(role.owns, ", "))\nend',
     },
     {
+      name: 'group',
+      doc: 'This server\'s group: the game or role it\'s one copy of (`network.group` in `config.yml`, `"arena"`), which other servers send players and requests to (`{ group = "arena" }`) and the hub picks an instance of. A server with no group is a group of one, named as the server is, so this is `server_name()` then. `nil` on a server that isn\'t part of a network.',
+      requires: 'network',
+      params: [],
+      returns: [{ type: 'string?' }],
+    },
+    {
+      name: 'set_accepting',
+      doc: "Says whether this server takes players now: one that doesn't (a match is running) is passed over when players are sent to its group, though they can still be sent to it by name. It's said to the hub at once, and again whenever this server reconnects. Every server takes players until it says otherwise.",
+      requires: 'network',
+      params: [{ name: 'accepting', type: 'boolean', doc: 'Whether it takes players.' }],
+      returns: [],
+      example: 'nf.on("match_started", function()\n  nf.network.set_accepting(false)\nend)',
+    },
+    {
+      name: 'is_accepting',
+      doc: 'Whether this server takes players now, as `set_accepting` last said.',
+      requires: 'network',
+      params: [],
+      returns: [{ type: 'boolean' }],
+    },
+    {
       name: 'is_connected',
       doc: "Whether this server is connected to its network's hub now. `network_connect` and `network_disconnect` say when that changes.",
       requires: 'network',
@@ -54,7 +92,7 @@ export const nfNetwork: LuaClass = {
     },
     {
       name: 'servers',
-      doc: "Every server of the network, as the proxy names them, with whether NetherForge on each is connected and how many players are on it. Empty while this server isn't connected.",
+      doc: "Every server of the network, as the proxy names them, with whether NetherForge on each is connected, how many players are on it, its group and its room. Empty while this server isn't connected. Players and room are as the hub last said, once a second at most.",
       requires: 'network',
       params: [],
       returns: [{ type: 'NetworkServer[]' }],
@@ -62,11 +100,28 @@ export const nfNetwork: LuaClass = {
         'for _, server in ipairs(nf.network.servers()) do\n  log(server.name, server.connected and "up" or "down", server.players .. " online")\nend',
     },
     {
-      name: 'players',
-      doc: "Everyone online in the network, on any server, this one included, as the proxy last said. Empty while this server isn't connected.",
+      name: 'groups',
+      doc: "Every group of the network, with its instances: each server with a group is an instance of it, and each server with none is a group of one. Empty while this server isn't connected.",
       requires: 'network',
       params: [],
+      returns: [{ type: 'NetworkGroup[]' }],
+      example:
+        'for _, group in ipairs(nf.network.groups()) do\n  log(group.name, group.players .. " playing on " .. #group.instances .. " servers")\nend',
+    },
+    {
+      name: 'players',
+      doc: "Everyone online in the network, on any server, this one included, as the proxy last said; or only those of one server or group. Empty while this server isn't connected. On a server that doesn't see other servers' players (`server_role().presence`), only its own.",
+      requires: 'network',
+      params: [
+        {
+          name: 'options',
+          type: 'NetworkPlayersOptions',
+          doc: "Only one server's or group's players.",
+          optional: true,
+        },
+      ],
       returns: [{ type: 'NetworkPlayer[]' }],
+      example: 'local playing = #nf.network.players({ group = "arena" })',
     },
     {
       name: 'find_player',
@@ -95,7 +150,7 @@ export const nfNetwork: LuaClass = {
     },
     asyncFunction({
       name: 'send_player',
-      doc: "Sends a player to another server of the network, through the proxy, with `data` for that server's scripts: its `player_arrive` handlers hear it once they've joined there. The player may be on any server, this one or another. It fails (`nil, err`) when this server isn't connected, the player isn't online, the proxy has no such server, they're already there, or the proxy couldn't move them (the server is down or full, a proxy plugin cancelled it).",
+      doc: "Sends a player to another server of the network, through the proxy, with `data` for that server's scripts: its `player_arrive` handlers hear it once they've joined there. The player may be on any server, this one or another (a server whose credential isn't trusted sends only its own). Sent to a group, the hub picks the instance as the group's balancing says (`least`: the one with the fewest players that has room; `fill`: the fullest that still has room) or `target.balance`, passing over instances that don't take players now (`set_accepting`) or are full (`network.capacity`). It fails (`nil, err`) when this server isn't connected, the player isn't online, there's no such server or group, no instance has room, they're already there, or the proxy couldn't move them (the server is down, a proxy plugin cancelled it).",
       requires: 'network',
       params: [
         {
@@ -103,17 +158,29 @@ export const nfNetwork: LuaClass = {
           type: 'Player|string',
           doc: 'Who: a player on this server, or anyone online in the network by name or UUID.',
         },
-        SERVER,
-        {
-          name: 'data',
-          type: 'any',
-          doc: `What arrives with them, as \`event.data\` there. ${VALUES}`,
-          optional: true,
-        },
+        TARGET,
+        SEND_DATA,
       ],
-      value: { name: 'moved', type: 'boolean', doc: '`true` once they are on their way there' },
+      value: { name: 'server', type: 'string', doc: 'the server they are on their way to' },
       example:
-        'nf.task(function()\n  local moved, err = nf.network.send_player(player, "arena", { team = "red" })\n  if not moved then\n    player:send_message("<red>Can\'t go: " .. err)\n  end\nend)',
+        'nf.task(function()\n  local server, err = nf.network.send_player(player, { group = "arena", data = { team = "red" } })\n  if not server then\n    player:send_message("<red>Can\'t go: " .. err)\n  end\nend)',
+    }),
+    asyncFunction({
+      name: 'send_players',
+      doc: "Sends several players together, as `send_player` sends one: to one server, or to one instance of a group with room for all of them, so a party lands together. Players already there stay. It fails as `send_player` does; when the proxy couldn't move some of them, `err` names each with why (the others are on their way).",
+      requires: 'network',
+      params: [
+        {
+          name: 'players',
+          type: '(Player|string)[]',
+          doc: 'Who: players on this server, or anyone online in the network by name or UUID.',
+        },
+        TARGET,
+        SEND_DATA,
+      ],
+      value: { name: 'server', type: 'string', doc: 'the server they are on their way to' },
+      example:
+        'local function start_match(players)\n  nf.task(function()\n    local server, err = nf.network.send_players(players, { group = "arena", data = { mode = "duel" } })\n    if not server then\n      for _, player in ipairs(players) do\n        player:send_message("<red>No room: " .. err)\n      end\n    end\n  end)\nend\n\nreturn start_match',
     }),
   ],
 }
@@ -151,13 +218,13 @@ export const networkChannelClass: LuaClass = {
     },
     {
       name: 'publish',
-      doc: `Publishes \`value\` on the channel: every server listening hears it as a \`message\` event, this one included, or only \`options.server\`. It goes at once, through the hub; nothing waits for it. ${VALUES}`,
+      doc: `Publishes \`value\` on the channel: every server listening hears it as a \`message\` event, this one included, or only \`options.server\`, or only the instances of \`options.group\`. It goes at once, through the hub; nothing waits for it. ${VALUES}`,
       params: [
         { name: 'value', type: 'any', doc: 'What to send.' },
         {
           name: 'options',
           type: 'NetworkPublishOptions',
-          doc: 'Which server alone, if not every one.',
+          doc: 'Which server or group alone, if not every one.',
           optional: true,
         },
       ],
@@ -171,9 +238,9 @@ export const networkChannelClass: LuaClass = {
     },
     asyncFunction({
       name: 'request',
-      doc: `Asks \`server\` on this channel: its \`request\` handlers answer, and the answer comes back here. It fails (\`nil, err\`) when this server isn't connected, that server isn't, nothing there handles requests on the channel, a handler there errored, or no answer came within \`network.request-timeout-seconds\`. A handler that answers \`nil\` gives \`nil\` with no \`err\`. ${VALUES}`,
+      doc: `Asks a server on this channel, or one instance of a group: its \`request\` handlers answer, and the answer comes back here. It fails (\`nil, err\`) when this server isn't connected, that server isn't (or no instance of the group is), nothing there handles requests on the channel, a handler there errored, or no answer came within \`network.request-timeout-seconds\`. A handler that answers \`nil\` gives \`nil\` with no \`err\`. ${VALUES}`,
       params: [
-        SERVER,
+        REQUEST_TARGET,
         {
           name: 'data',
           type: 'any',
@@ -338,7 +405,66 @@ export const networkShapes: LuaClass[] = [
       doc: 'Whether NetherForge on it is connected to the hub now (a server without NetherForge never is).',
     },
     { name: 'players', type: 'integer', doc: 'How many players are on it.' },
+    {
+      name: 'group',
+      type: 'string',
+      doc: 'Its group (`network.group` in its `config.yml`), or its own name when it has none.',
+    },
+    {
+      name: 'capacity',
+      type: 'integer?',
+      doc: 'How many players it takes (`network.capacity`); `nil` for any number.',
+    },
+    {
+      name: 'accepting',
+      type: 'boolean',
+      doc: 'Whether it takes players now (`set_accepting` there).',
+    },
   ]),
+  shape('NetworkGroup', 'A group of the network and its instances, from `nf.network.groups`.', [
+    { name: 'name', type: 'string', doc: 'Its name.' },
+    { name: 'players', type: 'integer', doc: 'How many players are on its instances together.' },
+    {
+      name: 'capacity',
+      type: 'integer?',
+      doc: 'How many its instances take together; `nil` when one of them takes any number.',
+    },
+    { name: 'instances', type: 'NetworkServer[]', doc: 'Its servers, by name.' },
+  ]),
+  shape(
+    'NetworkPlayersOptions',
+    "What `nf.network.players` takes. A key that isn't one of these is an error.",
+    [
+      { name: 'server', type: 'string?', doc: "Only this server's players." },
+      { name: 'group', type: 'string?', doc: "Only the players on this group's instances." },
+    ],
+  ),
+  shape(
+    'NetworkTarget',
+    "A server or a group, where a request goes. A key that isn't one of these is an error; it names one of the two.",
+    [
+      { name: 'server', type: 'string?', doc: 'A server, by its name in the network.' },
+      { name: 'group', type: 'string?', doc: 'A group: one of its instances is asked.' },
+    ],
+  ),
+  shape(
+    'NetworkSendOptions',
+    "Where `send_player` and `send_players` send players. A key that isn't one of these is an error; it names a server or a group.",
+    [
+      { name: 'server', type: 'string?', doc: 'A server, by its name in the network.' },
+      {
+        name: 'group',
+        type: 'string?',
+        doc: 'A group: the hub picks the instance with room.',
+      },
+      {
+        name: 'balance',
+        type: '"least"|"fill"|nil',
+        doc: "How the hub picks the group's instance for this send: `least` (the fewest players) or `fill` (the fullest with room); the group's own when left out (`group.<name>.balance` in the hub's `hub.properties`, `least` unless its owner says).",
+      },
+      { name: 'data', type: 'any', doc: "What arrives with them, when `data` isn't given." },
+    ],
+  ),
   shape('NetworkRole', 'What this server may do in the network, from `nf.network.server_role`.', [
     {
       name: 'role',
@@ -408,6 +534,11 @@ export const networkShapes: LuaClass[] = [
         name: 'server',
         type: 'string?',
         doc: 'Only this server hears it (if it listens), by its name in the network; every server listening when left out.',
+      },
+      {
+        name: 'group',
+        type: 'string?',
+        doc: "Only this group's instances hear it (those listening).",
       },
     ],
   ),

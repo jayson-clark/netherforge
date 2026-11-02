@@ -323,6 +323,8 @@ data class RuntimeConfig(
                 serverName = section.text("server-name")?.trim(),
                 secret = section.section("credential").text("secret")?.trim() ?: section.text("secret")?.trim(),
                 credential = section.section("credential").text("id")?.trim(),
+                group = section.text("group")?.trim(),
+                capacity = section.int("capacity")?.takeIf { it > 0 },
                 messagesPerMinute = positive("messages-per-minute", defaults.messagesPerMinute),
                 requestTimeoutSeconds = positive("request-timeout-seconds", defaults.requestTimeoutSeconds),
                 messagesPerTick = positive("messages-per-tick", defaults.messagesPerTick),

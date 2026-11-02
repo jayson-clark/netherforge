@@ -182,10 +182,16 @@ internal class AdminCommand(private val runtime: NetherForgeRuntime) : CommandHa
                 sender.reply("<gold>In the network as <yellow>${link.name}<gold> through its hub at ${config.host}:${config.port}: $state")
             }
         }
-        val counts = link.players.values.groupingBy { it.server }.eachCount()
-        for ((server, linked) in link.servers) {
-            val shown = if (linked) "<green>connected" else "<gray>not connected"
-            sender.reply("<yellow>$server <gray>$shown, ${counts[server] ?: 0} online")
+        if (link.mode == NetworkLink.Mode.REMOTE && link.connected && !link.grants.trusted) {
+            sender.reply("<gray>Its credential is <yellow>${runtime.config.network.credential}<gray>: ${link.grants.describe()}.")
+        }
+        val counts = link.counts()
+        for (server in link.servers.values) {
+            val shown = if (server.linked) "<green>connected" else "<gray>not connected"
+            val group = server.group?.let { " in <yellow>$it<gray>" }.orEmpty()
+            val room = server.capacity?.let { " of $it" }.orEmpty()
+            val closed = if (server.linked && !server.accepting) ", not taking players" else ""
+            sender.reply("<yellow>${server.name} <gray>$shown$group, ${counts[server.name] ?: 0}$room online$closed")
         }
         val session = runtime.session.network
         sender.reply("<gray>Listening to ${session.listening().first.size} channels and ${session.listening().second.size} maps.")
