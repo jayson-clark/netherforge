@@ -259,6 +259,7 @@ metrics:
 
 # A local control endpoint for the tool that runs this server (a container's
 # sidecar, a host's agent): GET /state and /events (a stream of changes), POST
+# GET /healthz (200 while ticks complete, for probes; needs no token), POST
 # /drain, /shutdown, /save (with "pause": true, writes stop until /resume or
 # its timeout, so the worlds can be copied whole), /resume, and /worlds/load
 # and /worlds/unload. Only on a Unix
@@ -268,6 +269,8 @@ control:
   socket: ''
   port: 0
   token-file: control.token
+  # No tick completed for this long: /healthz fails and /events says stalled.
+  stall-seconds: 10
 
 # MySQL and PostgreSQL servers that scripts may use, each under a name:
 # nf.db("network"). A script names a connection and never sees its host or

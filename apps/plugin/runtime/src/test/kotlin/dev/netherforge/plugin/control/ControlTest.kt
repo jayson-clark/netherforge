@@ -30,7 +30,8 @@ class ControlTest {
         method: String,
         path: String,
         body: String = "",
-        token: String? = null
+        token: String? = null,
+        ticking: Boolean = true
     ): Pair<Int, String> {
         val answer = CompletableFuture.supplyAsync {
             val family = if (address is UnixDomainSocketAddress) StandardProtocolFamily.UNIX else StandardProtocolFamily.INET
@@ -49,7 +50,7 @@ class ControlTest {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
         while (!answer.isDone) {
             check(System.nanoTime() < deadline) { "timed out" }
-            server.tick()
+            if (ticking) server.tick()
             Thread.sleep(5)
         }
         return answer.join()
@@ -130,6 +131,47 @@ class ControlTest {
                 server.tick()
                 Thread.sleep(5)
             }
+        }
+    }
+
+    @Test
+    fun `health comes from ticks, and a server whose ticks stop is stalled though it still answers`() {
+        val tokenFile = folder.resolve("health.token")
+        TestServer(
+            mapOf(TestServer.MANIFEST to TestServer.manifest()),
+            control = ControlConfig(port = freePort(), tokenFile = tokenFile, stallSeconds = 1)
+        ).use { server ->
+            val port = server.runtime.control.where.substringAfterLast(':').toInt()
+            val address = InetSocketAddress("127.0.0.1", port)
+            val token = Files.readString(tokenFile).trim()
+            assertEquals(503, call(server, address, "GET", "/healthz", ticking = false).first, "no tick yet")
+            server.platform.performance.lastTickMilliseconds = 7.25
+            repeat(10) { server.tick() }
+            assertEquals(200 to """{"healthy":true}""", call(server, address, "GET", "/healthz"), "probes need no token")
+            val state = call(server, address, "GET", "/state", token = token).second
+            assertTrue(Regex("\"last_tick\":\\d{13}").containsMatchIn(state) && state.contains("\"tick_ms\":7.25"), state)
+            assertTrue(state.contains("\"stalled\":false"), state)
+
+            val lines = LinkedBlockingQueue<String>()
+            Thread {
+                SocketChannel.open(StandardProtocolFamily.INET).use { channel ->
+                    channel.connect(address)
+                    val out = Channels.newOutputStream(channel)
+                    out.write("GET /events HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer $token\r\n\r\n".toByteArray())
+                    out.flush()
+                    BufferedReader(InputStreamReader(Channels.newInputStream(channel))).lineSequence().forEach { lines += it }
+                }
+            }.apply { isDaemon = true }.start()
+            // No more ticks: the main thread is "stuck".
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (lines.none { it == "event: stalled" }) {
+                check(System.nanoTime() < deadline) { "no stalled event: $lines" }
+                Thread.sleep(20)
+            }
+            assertEquals(503, call(server, address, "GET", "/healthz", ticking = false).first)
+            assertTrue(call(server, address, "GET", "/state", token = token, ticking = false).second.contains("\"stalled\":true"))
+            server.tick()
+            assertEquals(200, call(server, address, "GET", "/healthz", ticking = false).first, "ticking again, healthy again")
         }
     }
 

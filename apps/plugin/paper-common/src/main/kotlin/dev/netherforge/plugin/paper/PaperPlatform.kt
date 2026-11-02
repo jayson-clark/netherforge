@@ -107,10 +107,23 @@ class PaperPlatform(private val plugin: JavaPlugin, private val version: PaperVe
         }
     }
 
+    /** The length of the tick that ended last, as Paper measured it (ServerTickEndEvent). */
+    @Volatile
+    private var lastTick = 0.0
+
+    private val tickEnds = object : org.bukkit.event.Listener {
+        @org.bukkit.event.EventHandler
+        fun onTickEnd(event: com.destroystokyo.paper.event.server.ServerTickEndEvent) {
+            lastTick = event.tickDuration
+        }
+    }
+
     override val performance = object : PerformanceOps {
         override fun ticksPerSecond(): Double = Bukkit.getTPS()[0]
 
         override fun tickMilliseconds(): Double = Bukkit.getAverageTickTime()
+
+        override fun lastTickMilliseconds(): Double = lastTick
     }
 
     override val text = object : TextOps {
@@ -162,6 +175,7 @@ class PaperPlatform(private val plugin: JavaPlugin, private val version: PaperVe
         PaperItems.blockStates = blocks
         PaperItems.namespace = namespace
         plugin.server.pluginManager.registerEvents(recipes, plugin)
+        plugin.server.pluginManager.registerEvents(tickEnds, plugin)
         itemViews.events = events
         plugin.server.pluginManager.registerEvents(itemViews, plugin)
         itemViews.start()

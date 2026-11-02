@@ -27,9 +27,15 @@ data class ControlConfig(
     val socket: Path? = null,
     /** A loopback TCP port, for a tool that can't use a socket; requests carry the token in [tokenFile]. */
     val port: Int? = null,
-    val tokenFile: Path? = null
+    val tokenFile: Path? = null,
+    /** How long without a completed tick before the server is stalled: `/healthz` fails and `/events` says so. */
+    val stallSeconds: Int = DEFAULT_STALL_SECONDS
 ) {
     val enabled get() = socket != null || port != null
+
+    companion object {
+        const val DEFAULT_STALL_SECONDS = 10
+    }
 }
 
 /**
@@ -38,7 +44,8 @@ data class ControlConfig(
  * `127.0.0.1` with a token: never reachable from elsewhere. Every action is logged with where it came from.
  *
  * What it reports is a snapshot the main thread makes every few ticks; actions run on the main thread and are
- * answered once done.
+ * answered once done. Its health doesn't: when the last tick ended ([lastTick]) is kept every tick and read by the
+ * endpoint's own threads, so a main thread that's stuck (an endless script, a deadlock) shows as stalled, not healthy.
  */
 class Control(private val config: ControlConfig, private val runtime: NetherForgeRuntime) {
     private var http: LocalHttp? = null
@@ -55,6 +62,19 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
 
     /** Writes paused (`POST /save` with `pause`): until this tick at the latest. */
     private var pausedUntil: Long? = null
+
+    /** When the last tick ended (Unix milliseconds; 0 before the first), and how long it took. */
+    @Volatile
+    private var lastTick = 0L
+
+    @Volatile
+    private var tickMillis = 0.0
+
+    /** Watches for ticks stopping, off the main thread. */
+    private var watchdog: java.util.concurrent.ScheduledExecutorService? = null
+
+    /** Whether the last check found it stalled, so `stalled` is said once a stall. */
+    private var stalled = false
 
     /** When the server last had players on it, by tick. */
     private var emptySince: Long? = null
@@ -75,11 +95,16 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
             return
         }
         http = server
+        watchdog = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { task ->
+            Thread(task, "NetherForge control watchdog").apply { isDaemon = true }
+        }.also { it.scheduleWithFixedDelay(::watch, 1, 1, TimeUnit.SECONDS) }
         runtime.log.info("NetherForge's control endpoint is listening on $where")
     }
 
     fun stop() {
         if (pausedUntil != null) resume("the server is stopping")
+        watchdog?.shutdownNow()
+        watchdog = null
         http?.stop()
         http = null
         for (queue in listeners) queue.offer(END)
@@ -88,7 +113,10 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
 
     /** The main thread, every few ticks: a new snapshot, what changed to listeners, and an expired pause ended. */
     fun tick(tick: Long) {
-        if (http == null || tick % SNAPSHOT_TICKS != 0L) return
+        if (http == null) return
+        tickMillis = runtime.platform.performance.lastTickMilliseconds()
+        lastTick = System.currentTimeMillis()
+        if (tick % SNAPSHOT_TICKS != 0L) return
         val players = runtime.platform.players.online().map { it.name }.toSet()
         emptySince = if (players.isEmpty()) emptySince ?: tick else null
         val worlds = runtime.platform.worlds.names().toSet()
@@ -142,6 +170,35 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
         }
     }
 
+    /** Whether a tick has ended within [ControlConfig.stallSeconds]. */
+    private fun ticking(now: Long = System.currentTimeMillis()) = lastTick != 0L && now - lastTick < config.stallSeconds * 1000L
+
+    /** The watchdog's thread, every second: `stalled` once ticks stop (after the first), and back to ticking. */
+    private fun watch() {
+        if (lastTick == 0L) return
+        val now = ticking()
+        if (!now && !stalled) {
+            runtime.log.warn("NetherForge: no tick has completed for ${config.stallSeconds} seconds; the server is stalled")
+            tell(
+                "stalled",
+                buildJsonObject {
+                    put("last_tick", lastTick)
+                    put("seconds", (System.currentTimeMillis() - lastTick) / 1000)
+                }
+            )
+        }
+        stalled = !now
+    }
+
+    /** The snapshot, with the tick's health as it is now (the snapshot may be old if ticks stopped). */
+    private fun stateNow(): JsonObject = JsonObject(
+        state + buildJsonObject {
+            if (lastTick != 0L) put("last_tick", lastTick)
+            put("tick_ms", Math.round(tickMillis * 100) / 100.0)
+            put("stalled", lastTick != 0L && !ticking())
+        }
+    )
+
     private fun tell(event: String, data: JsonObject) {
         val text = "event: $event\ndata: $data\n\n"
         for (queue in listeners) if (!queue.offer(text)) listeners.remove(queue)
@@ -163,6 +220,14 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
     }
 
     private fun route(request: LocalHttp.Request, respond: LocalHttp.Responder) {
+        // Health is for probes, which may send no token, and says only whether the server ticks.
+        if (request.method == "GET" && request.path == "/healthz") {
+            return if (ticking()) {
+                respond.send(200, """{"healthy":true}""")
+            } else {
+                respond.send(503, """{"healthy":false,"why":"${if (lastTick == 0L) "starting" else "stalled"}"}""")
+            }
+        }
         token?.let { expected ->
             val given = request.header("authorization")?.removePrefix("Bearer ")?.trim().orEmpty()
             if (!MessageDigest.isEqual(given.toByteArray(), expected.toByteArray())) {
@@ -179,7 +244,7 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
         fun flag(key: String) = (body[key] as? JsonPrimitive)?.booleanOrNull
         fun number(key: String) = (body[key] as? JsonPrimitive)?.doubleOrNull
         when (request.method to request.path) {
-            "GET" to "/state" -> respond.send(200, state.toString())
+            "GET" to "/state" -> respond.send(200, stateNow().toString())
             "GET" to "/events" -> events(respond)
             "POST" to "/drain" -> {
                 val draining = flag("draining") ?: true
@@ -247,7 +312,7 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
         listeners += queue
         try {
             val out = respond.stream()
-            out.write("event: state\ndata: $state\n\n".toByteArray())
+            out.write("event: state\ndata: ${stateNow()}\n\n".toByteArray())
             out.flush()
             while (true) {
                 val next = queue.poll(PING_SECONDS, TimeUnit.SECONDS) ?: ": ping\n\n"

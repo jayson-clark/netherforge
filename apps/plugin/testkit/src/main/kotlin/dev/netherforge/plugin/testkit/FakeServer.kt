@@ -36,10 +36,13 @@ class FakePause(private val platform: FakePlatform) : PauseOps {
 class FakePerformance : PerformanceOps {
     var ticksPerSecond = 20.0
     var tickMilliseconds = 12.5
+    var lastTickMilliseconds = 12.5
 
     override fun ticksPerSecond() = ticksPerSecond
 
     override fun tickMilliseconds() = tickMilliseconds
+
+    override fun lastTickMilliseconds() = lastTickMilliseconds
 }
 
 /** MiniMessage's escaping, and a stripper that's good enough for tests: every tag goes, and an escaped one stays escaped, as MiniMessage's does. */

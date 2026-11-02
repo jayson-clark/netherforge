@@ -172,7 +172,9 @@ data class RuntimeConfig(
                 dev.netherforge.plugin.control.ControlConfig(
                     socket = section.text("socket")?.trim()?.let { server.directory.resolve(it).toAbsolutePath().normalize() },
                     port = section.int("port")?.takeIf { it in 1..65535 },
-                    tokenFile = pluginFolder.resolve(section.text("token-file")?.trim() ?: "control.token").toAbsolutePath().normalize()
+                    tokenFile = pluginFolder.resolve(section.text("token-file")?.trim() ?: "control.token").toAbsolutePath().normalize(),
+                    stallSeconds = section.int("stall-seconds")?.takeIf { it > 0 }
+                        ?: dev.netherforge.plugin.control.ControlConfig.DEFAULT_STALL_SECONDS
                 )
             }
             properties(Bridge.PROJECT_PROPERTY)?.takeIf { it.isNotBlank() }?.let { project ->

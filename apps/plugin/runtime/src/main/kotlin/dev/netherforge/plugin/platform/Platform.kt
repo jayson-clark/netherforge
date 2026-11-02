@@ -242,6 +242,9 @@ interface PerformanceOps {
 
     /** How long a tick has taken lately, in milliseconds, averaged over the last 100 ticks. */
     fun tickMilliseconds(): Double
+
+    /** How long the last completed tick took, in milliseconds. */
+    fun lastTickMilliseconds(): Double = tickMilliseconds()
 }
 
 /** MiniMessage helpers, with the adapter's own MiniMessage (glyph tags included). */

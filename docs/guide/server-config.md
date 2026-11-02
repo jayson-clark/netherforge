@@ -465,22 +465,29 @@ control:
   socket: /run/netherforge/control.sock # a Unix socket: whoever may open the file may use it
   port: 0 # or a TCP port on 127.0.0.1, with the token in token-file
   token-file: control.token # in the plugin's folder; made for you
+  stall-seconds: 10 # no tick completed for this long: the server is stalled
 ```
 
-| Request                                                                    | Does                                                                                                                                                   |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /state`                                                               | Its [state](./network.md#a-servers-life-starting-ready-draining-stopping), its players, how long it's been empty, its project and version, its worlds. |
-| `GET /events`                                                              | A stream (Server-Sent Events) of `state`, `player_join`, `player_quit`, `world_load`, `world_unload` and `writes`.                                     |
-| `POST /drain` `{ "draining": false }` to undo                              | As `/nf drain`.                                                                                                                                        |
-| `POST /shutdown` `{ "after_empty": true, "timeout": 60 }`                  | As `/nf shutdown`.                                                                                                                                     |
-| `POST /save` `{ "pause": true, "timeout": 300 }`                           | Saves every world and flushes it to disk; with `pause`, writes stop (the server's `save-off`, world by world) until `POST /resume` or the timeout.     |
-| `POST /resume`                                                             | Writes go on.                                                                                                                                          |
-| `POST /worlds/load` `{ "name", "folder"?, "terrain"? }`                    | Loads a saved world, or with `folder` imports one from the import root (as `nf.worlds.import`).                                                        |
-| `POST /worlds/unload` `{ "name", "save"?, "delete"?, "move_players_to"? }` | Unloads one of the project's worlds, its players moved out first (as `world:unload`).                                                                  |
+| Request                                                                    | Does                                                                                                                                                                                                                                                     |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /state`                                                               | Its [state](./network.md#a-servers-life-starting-ready-draining-stopping), its players, how long it's been empty, its project and version, its worlds; `last_tick` (Unix milliseconds of the last completed tick), `tick_ms` (its length) and `stalled`. |
+| `GET /events`                                                              | A stream (Server-Sent Events) of `state`, `player_join`, `player_quit`, `world_load`, `world_unload`, `writes` and `stalled` (no tick for `stall-seconds`).                                                                                              |
+| `GET /healthz`                                                             | 200 while ticks complete, 503 before the first and once stalled. Needs no token, for probes.                                                                                                                                                             |
+| `POST /drain` `{ "draining": false }` to undo                              | As `/nf drain`.                                                                                                                                                                                                                                          |
+| `POST /shutdown` `{ "after_empty": true, "timeout": 60 }`                  | As `/nf shutdown`.                                                                                                                                                                                                                                       |
+| `POST /save` `{ "pause": true, "timeout": 300 }`                           | Saves every world and flushes it to disk; with `pause`, writes stop (the server's `save-off`, world by world) until `POST /resume` or the timeout.                                                                                                       |
+| `POST /resume`                                                             | Writes go on.                                                                                                                                                                                                                                            |
+| `POST /worlds/load` `{ "name", "folder"?, "terrain"? }`                    | Loads a saved world, or with `folder` imports one from the import root (as `nf.worlds.import`).                                                                                                                                                          |
+| `POST /worlds/unload` `{ "name", "save"?, "delete"?, "move_players_to"? }` | Unloads one of the project's worlds, its players moved out first (as `world:unload`).                                                                                                                                                                    |
 
 So a tool copies a consistent world with `POST /save {"pause": true}`, the
 copy, then `POST /resume`; if it never resumes, the timeout does. Every action
 is in the server's log, with where it came from.
+
+The endpoint answers from threads of its own, so a server whose main thread is
+stuck (an endless script, a deadlock) still answers: that's why its health
+comes from ticks. Point a liveness probe (or an Agones health sidecar) at
+`/healthz`.
 
 ## Web routes
 

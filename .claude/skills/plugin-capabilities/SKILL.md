@@ -349,7 +349,8 @@ seconds` (`NetworkLink.awaitWelcome`) and `require-hub` (`ProjectSession.waitsFo
 - **Metrics** (`metrics/ServerMetrics`, `metrics:` in `config.yml`, and the hub's `metrics.port`, both through
   `Prometheus`): Prometheus's text format at `/metrics`, off without a port.
 - **Outside the network but beside it**: `control/LocalHttp` (`Control`), a Unix socket or loopback port with a token
-  file, for whoever runs the server (`/state`, `/events`, `/drain`, `/shutdown`, `/save` with pause, `/resume`,
+  file, for whoever runs the server (`/state` with `last_tick`/`tick_ms` kept every tick in volatiles and read off the
+  main thread, `/healthz` without a token, a watchdog thread's `stalled` after `stall-seconds`, `/events`, `/drain`, `/shutdown`, `/save` with pause, `/resume`,
   `/worlds/load|unload`); `policy.json` (format's `Policy`, `runtime.policy`, also sent by the hub as `policy.<role>`)
   allows and denies requirement kinds and lowers limits (`RuntimeConfig.under(policy)`); bundles are signed
   (`BundleSignatures`, `bundles.require-signature`/`trusted-keys`) and fetched by URL and hash (`BundleFetch`); packs
