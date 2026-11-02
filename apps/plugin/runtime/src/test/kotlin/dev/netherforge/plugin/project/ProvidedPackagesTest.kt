@@ -6,6 +6,7 @@ import dev.netherforge.format.project.BundleManifest
 import dev.netherforge.format.project.BundledPackage
 import dev.netherforge.format.project.FormatVersion
 import dev.netherforge.plugin.TestServer
+import java.nio.file.Path
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -42,7 +43,7 @@ class ProvidedPackagesTest {
             assertTrue(server.runtime.session.running, "${server.runtime.currentProblems()}")
             assertEquals(listOf("the server's"), server.logs)
             val grant = server.runtime.session.requirements.grants().single()
-            assertTrue(grant.startsWith("package bridge 1.4.0 (from ") && "server/bridge" in grant, grant)
+            assertTrue(grant.startsWith("package bridge 1.4.0 (from ") && Path.of("server", "bridge").toString() in grant, grant)
         }
         // The dev server resolves it as the editor does: the stand-in.
         TestServer(tree()).use { server -> assertEquals(listOf("stand-in"), server.logs) }

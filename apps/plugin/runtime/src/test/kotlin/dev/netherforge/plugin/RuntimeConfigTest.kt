@@ -172,9 +172,11 @@ class RuntimeConfigTest {
 
     @Test
     fun `packages provided are folders relative to the server, read on a production server only`() {
-        val settings = mapOf("project" to "p", "packages" to mapOf("provided" to listOf("/opt/packages/bridge", "packages/relay")))
+        // Absolute on every OS: "/opt/..." alone has no drive on Windows, so it would be resolved like a relative one.
+        val elsewhere = server.directory.root.resolve("opt/packages/bridge")
+        val settings = mapOf("project" to "p", "packages" to mapOf("provided" to listOf(elsewhere.toString(), "packages/relay")))
         assertEquals(
-            listOf(Path.of("/opt/packages/bridge"), server.directory.resolve("packages/relay").toAbsolutePath().normalize()),
+            listOf(elsewhere, server.directory.resolve("packages/relay").toAbsolutePath().normalize()),
             read(settings)!!.providedPackages
         )
         assertEquals(emptyList(), read(settings, mapOf(Bridge.PROJECT_PROPERTY to project.toString()))!!.providedPackages)
