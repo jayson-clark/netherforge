@@ -453,6 +453,15 @@ counted, nothing listed, so collecting them costs nothing a server would
 notice. The hub has metrics of its own (`metrics.port` in `hub.properties`):
 servers and players by group, each server's tick time, frames, what each
 package keeps in maps, requests and sends waiting, admin streams and proxies.
+The proxy plugin serves its own beside them, and alone when it's joined to a
+hub that runs on its own (`remote.hub`), each labelled `proxy` with its
+`remote.name`: `netherforge_proxy_players`, `netherforge_proxy_servers` (by
+`source`, `config` or `runtime`), `netherforge_proxy_logins_total`,
+`netherforge_proxy_logins_refused_total` (by `reason`: `banned`, `draining`,
+`hub`, `denied`, `initial_server` when the server a login was placed on didn't
+take it), `netherforge_proxy_moves_total`,
+`netherforge_proxy_move_failures_total` (by `reason`), and with a remote hub
+`netherforge_proxy_hub_connected` and `netherforge_proxy_hub_reconnects_total`.
 
 ## The control endpoint
 

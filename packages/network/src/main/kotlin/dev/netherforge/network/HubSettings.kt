@@ -239,7 +239,8 @@ data class HubSettings(
                 |# its token and scopes (/nfhub admins add). Keep it on localhost or your servers' network.
                 |admin.bind=127.0.0.1
                 |admin.port=
-                |# The hub's metrics, for Prometheus, at http://<metrics.bind>:<metrics.port>/metrics. Off without a port.
+                |# Metrics for Prometheus, at http://<metrics.bind>:<metrics.port>/metrics: the proxy's own (players,
+                |# logins, moves, its link to a remote hub), and the hub's when it runs one. Off without a port.
                 |metrics.bind=127.0.0.1
                 |metrics.port=
                 |# How long the hub waits for a client placing a group's players to answer, before the group's balancing.

@@ -347,7 +347,9 @@ seconds` (`NetworkLink.awaitWelcome`) and `require-hub` (`ProjectSession.waitsFo
   the proxy refuses a banned login; `RuntimeGameEvents` holds back a muted player's chat; `/nfhub disable` takes a server
   or group off. The proxy writes moderation, credential and admin changes to `AuditLog` (`audit.log`).
 - **Metrics** (`metrics/ServerMetrics`, `metrics:` in `config.yml`, and the hub's `metrics.port`, both through
-  `Prometheus`): Prometheus's text format at `/metrics`, off without a port.
+  `Prometheus`): Prometheus's text format at `/metrics`, off without a port. The proxy plugin's `ProxyMetrics`
+  (logins and refusals by reason, moves and failures, its link to a remote hub, labelled with `remote.name`) is served
+  on the same port whether or not it runs the hub, the hub's appended when it does.
 - **Outside the network but beside it**: `control/LocalHttp` (`Control`), a Unix socket or loopback port with a token
   file, for whoever runs the server (`/state` with `last_tick`/`tick_ms` kept every tick in volatiles and read off the
   main thread, `/healthz` without a token, a watchdog thread's `stalled` after `stall-seconds`, `/events`, `/drain`, `/shutdown`, `/save` with pause, `/resume`,

@@ -6,6 +6,7 @@ import com.velocitypowered.api.event.EventTask
 import com.velocitypowered.api.event.PostOrder
 import com.velocitypowered.api.event.Subscribe
 import com.velocitypowered.api.event.connection.DisconnectEvent
+import com.velocitypowered.api.event.player.KickedFromServerEvent
 import com.velocitypowered.api.event.player.PlayerChooseInitialServerEvent
 import com.velocitypowered.api.event.player.ServerConnectedEvent
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent
@@ -61,6 +62,9 @@ class NetherForgeProxy @Inject constructor(
     private var server: HubServer? = null
     private var admin: HubAdmin? = null
     private var metrics: com.sun.net.httpserver.HttpServer? = null
+
+    /** The proxy's own numbers (logins, moves, its link to a remote hub), served with the hub's when it runs one. */
+    private var counts = ProxyMetrics("proxy")
     private var clearResourcePacks = true
     private var settings: HubSettings? = null
     private val credentialsFile by lazy { CredentialsFile(folder.resolve(CredentialsFile.FILE)) }
@@ -105,6 +109,8 @@ class NetherForgeProxy @Inject constructor(
             override fun warn(message: String) = logger.warn(message)
         }
         clearResourcePacks = settings.clearResourcePacks
+        counts = ProxyMetrics(settings.remote?.name ?: "proxy")
+        serveMetrics(settings)
         settings.remote?.let { joining ->
             joinRemote(joining)
             proxy.commandManager.register(proxy.commandManager.metaBuilder("nfhub").plugin(this).build(), StatusCommand())
@@ -136,14 +142,6 @@ class NetherForgeProxy @Inject constructor(
             logger.error("NetherForge: the network's hub couldn't listen on ${settings.bind}:${settings.port}", e)
             return
         }
-        settings.metricsPort?.let { port ->
-            try {
-                metrics = dev.netherforge.network.Prometheus.serve(InetSocketAddress(settings.metricsBind, port)) { hub.metrics() }
-                logger.info("NetherForge: the hub's metrics are at http://${settings.metricsBind}:$port/metrics")
-            } catch (e: Exception) {
-                logger.error("NetherForge: the hub's metrics couldn't listen on ${settings.metricsBind}:$port", e)
-            }
-        }
         val adminPort = settings.adminPort
         if (adminPort != null) {
             try {
@@ -167,6 +165,21 @@ class NetherForgeProxy @Inject constructor(
         proxy.commandManager.register(proxy.commandManager.metaBuilder("nfhub").plugin(this).build(), StatusCommand())
     }
 
+    /** `/metrics` with `metrics.port`: the proxy's own numbers, and the hub's when it runs one. */
+    private fun serveMetrics(settings: HubSettings) {
+        val port = settings.metricsPort ?: return
+        try {
+            metrics = dev.netherforge.network.Prometheus.serve(InetSocketAddress(settings.metricsBind, port)) {
+                val fixed = proxy.configuration.servers.keys.map { it.lowercase() }.toSet()
+                val (config, runtime) = proxy.allServers.partition { it.serverInfo.name.lowercase() in fixed }
+                counts.text(proxy.playerCount, mapOf("config" to config.size, "runtime" to runtime.size)) + (hub?.metrics() ?: "")
+            }
+            logger.info("NetherForge: metrics are at http://${settings.metricsBind}:$port/metrics")
+        } catch (e: Exception) {
+            logger.error("NetherForge: metrics couldn't listen on ${settings.metricsBind}:$port", e)
+        }
+    }
+
     /** Joins the hub running on its own as its proxy: it hears this proxy's servers and players, and asks it to act. */
     private fun joinRemote(joining: HubSettings.Remote) {
         remoteSettings = joining
@@ -175,6 +188,7 @@ class NetherForgeProxy @Inject constructor(
         val listener = object : HubListener {
             override fun connected(welcome: HubFrame.Welcome) {
                 logger.info("NetherForge: joined the network's hub at ${joining.host}:${joining.port} as ${joining.name}")
+                counts.hubJoined()
                 reportServers(client)
                 client.send(ServerFrame.ProxyPresence(velocity.players()))
             }
@@ -221,6 +235,7 @@ class NetherForgeProxy @Inject constructor(
 
             override fun disconnected(why: String) {
                 logger.warn("NetherForge: lost the network's hub ($why); trying again")
+                counts.hubLost()
                 if (synced.isDone) synced = CompletableFuture()
                 for (waiting in logins.values) waiting.complete(HubFrame.LoginPlaced(-1))
                 logins.clear()
@@ -285,6 +300,7 @@ class NetherForgeProxy @Inject constructor(
             val left = player.appliedResourcePacks.filter { it.originalOrigin == ResourcePackInfo.Origin.DOWNSTREAM_SERVER }
             for (pack in left) player.removeResourcePacks(pack.id)
         }
+        if (event.previousServer.isPresent) counts.moved() else counts.loggedIn()
         hub?.playerMoved(player.uniqueId.toString(), player.username, event.server.serverInfo.name)
         remote?.send(ServerFrame.ProxyPlayer(PlayerState(player.uniqueId.toString(), player.username, event.server.serverInfo.name)))
     }
@@ -302,9 +318,39 @@ class NetherForgeProxy @Inject constructor(
         return EventTask.resumeWhenComplete(
             placed.thenAccept { place ->
                 place.server?.let { name -> proxy.getServer(name).ifPresent(event::setInitialServer) }
-                place.deny?.let { why -> event.player.disconnect(MiniMessage.miniMessage().deserialize(why)) }
+                place.deny?.let { why -> refuse(event, why) }
             }
         )
+    }
+
+    /** Turns away [event]'s player as the hub (or the service placing logins) says. */
+    private fun refuse(event: PlayerChooseInitialServerEvent, why: String) {
+        counts.refused(ProxyMetrics.LoginRefusal.HUB)
+        event.player.disconnect(MiniMessage.miniMessage().deserialize(why))
+    }
+
+    /** Last, so every plugin has had its say: a login refused is counted, with why. */
+    @Subscribe(order = PostOrder.LAST)
+    fun countLogin(event: com.velocitypowered.api.event.connection.LoginEvent) {
+        if (event.result.isAllowed) return
+        counts.refused(
+            when {
+                hub?.banOf(event.player.uniqueId.toString()) != null -> ProxyMetrics.LoginRefusal.BANNED
+                draining -> ProxyMetrics.LoginRefusal.DRAINING
+                else -> ProxyMetrics.LoginRefusal.DENIED
+            }
+        )
+    }
+
+    /** A server that didn't take a player connecting to it: their first (the login failed) or the next (a move did). */
+    @Subscribe(order = PostOrder.LAST)
+    fun countKick(event: KickedFromServerEvent) {
+        if (!event.kickedDuringServerConnect()) return
+        if (event.player.currentServer.isPresent) {
+            counts.moveFailed("server_refused")
+        } else {
+            counts.refused(ProxyMetrics.LoginRefusal.INITIAL_SERVER)
+        }
     }
 
     /** A proxy the hub drains takes no new logins: they join through another. */
@@ -353,7 +399,7 @@ class NetherForgeProxy @Inject constructor(
             ).thenAccept { place ->
                 logins.remove(id)
                 place.server?.let { name -> proxy.getServer(name).ifPresent(event::setInitialServer) }
-                place.deny?.let { why -> event.player.disconnect(MiniMessage.miniMessage().deserialize(why)) }
+                place.deny?.let { why -> refuse(event, why) }
             }
         )
     }
@@ -415,6 +461,14 @@ class NetherForgeProxy @Inject constructor(
                 if (result.isSuccessful) {
                     null
                 } else {
+                    counts.moveFailed(
+                        when (result.status) {
+                            ConnectionRequestBuilder.Status.ALREADY_CONNECTED -> "already_connected"
+                            ConnectionRequestBuilder.Status.CONNECTION_IN_PROGRESS -> "in_progress"
+                            ConnectionRequestBuilder.Status.CONNECTION_CANCELLED -> "cancelled"
+                            else -> "server_refused"
+                        }
+                    )
                     when (result.status) {
                         ConnectionRequestBuilder.Status.ALREADY_CONNECTED -> "they're already on $server"
                         ConnectionRequestBuilder.Status.CONNECTION_IN_PROGRESS -> "they're already on their way to a server"
