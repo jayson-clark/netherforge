@@ -201,6 +201,26 @@ class NetworkLink(
     var maxValueBytes = NetworkLimits.DEFAULT_MAX_VALUE_BYTES
         private set
 
+    /** The hub's first welcome, for a server that waits for it before its project starts ([awaitWelcome]). */
+    private val firstWelcome = java.util.concurrent.CompletableFuture<HubFrame.Welcome>()
+
+    /**
+     * Waits up to [seconds] for the hub's first welcome, on the main thread as the server starts, and takes what it says
+     * of this server (its grants, the network's policy) at once: the project then starts under it. False when it didn't
+     * come in time.
+     */
+    fun awaitWelcome(seconds: Int): Boolean {
+        if (mode != Mode.REMOTE || seconds <= 0) return connected
+        val welcome = try {
+            firstWelcome.get(seconds.toLong(), java.util.concurrent.TimeUnit.SECONDS)
+        } catch (_: java.util.concurrent.TimeoutException) {
+            return false
+        }
+        // Its Connected is drained later as ever (saying it again changes nothing).
+        welcomed(welcome)
+        return true
+    }
+
     /** Whether the proxy keeps players' resource packs as they switch servers, as the welcome said. */
     var keepsPacks = false
         private set
@@ -224,6 +244,7 @@ class NetworkLink(
             // A local link connects as it starts, on the main thread: the network is there before the first tick, whose
             // drain raises `network_connect`.
             if (mode == Mode.LOCAL) welcomed(welcome)
+            firstWelcome.complete(welcome)
             queue(Inbound.Connected(welcome))
         }
 

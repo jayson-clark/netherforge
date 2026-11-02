@@ -406,6 +406,8 @@ data class RuntimeConfig(
                 capacity = section.int("capacity")?.takeIf { it > 0 },
                 register = NetworkConfig.registration(section.section("register").text("address")),
                 idleAfterSeconds = section.int("idle-after-seconds")?.takeIf { it > 0 } ?: 0,
+                waitForHubSeconds = section.int("wait-for-hub-seconds")?.takeIf { it > 0 } ?: 0,
+                requireHub = section.boolean("require-hub") ?: false,
                 messagesPerMinute = positive("messages-per-minute", defaults.messagesPerMinute),
                 requestTimeoutSeconds = positive("request-timeout-seconds", defaults.requestTimeoutSeconds),
                 messagesPerTick = positive("messages-per-tick", defaults.messagesPerTick),

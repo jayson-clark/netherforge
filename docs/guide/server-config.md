@@ -290,6 +290,8 @@ network:
   register:
     address: ''
   idle-after-seconds: 0
+  wait-for-hub-seconds: 0
+  require-hub: false
   messages-per-minute: 1200
   request-timeout-seconds: 10
   messages-per-tick: 1000
@@ -307,6 +309,8 @@ network:
 | `capacity`                | How many players it takes; the hub sends a group's players only to instances with room. `0` for any number.                                                                                                                                               | `0`                  |
 | `register.address`        | Where the proxy reaches this server when it isn't in `velocity.toml`: it adds itself to the proxy as it joins (`host:port`, or a port alone). `server-name` may then be `auto`. See [adding servers](./network.md#adding-servers-while-the-network-runs). | none                 |
 | `idle-after-seconds`      | How long the server may be empty before the hub hears it's idle (its webhook's `server_idle`). `0`: never.                                                                                                                                                | `0`                  |
+| `wait-for-hub-seconds`    | How long the server waits as it starts for the hub to welcome it (what it may do, the network's policy for it) before starting its project. `0`: it doesn't wait.                                                                                         | `0`                  |
+| `require-hub`             | Run the project only once the hub has welcomed this server: one that can't reach its hub runs nothing rather than run without the network's policy, and starts by itself when the hub is there.                                                           | `false`              |
 | `messages-per-minute`     | What each package may send a minute: messages, requests, map writes and players sent. Past it, `publish` and `set` return `false`, and the rest fail.                                                                                                     | `1200`               |
 | `request-timeout-seconds` | How long a request waits for its answer before it fails.                                                                                                                                                                                                  | `10`                 |
 | `messages-per-tick`       | What arrives that's handed to scripts each tick (messages, requests, changes, players coming and going); the rest waits for the next.                                                                                                                     | `1000`               |
@@ -417,7 +421,10 @@ package requires what, and which rule of the policy refused it. A policy that
 can't be read stops every project, rather than letting them all through. A
 network can send each role's servers a policy too (`policy.<role>` in the
 hub's `hub.properties`): the server holds its projects to both, the stricter
-of each, and starts the project again when the network's changes. A project's
+of each, and starts the project again when the network's changes. To have the
+network's policy from the first moment, set `network.wait-for-hub-seconds`
+(the server waits that long for the hub as it starts) and `network.require-hub`
+(it runs nothing until the hub has welcomed it). A project's
 author can check before publishing that it runs under a network's policy:
 
 ```sh

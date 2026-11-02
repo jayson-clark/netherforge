@@ -57,6 +57,7 @@ import dev.netherforge.plugin.mob.MobGoals
 import dev.netherforge.plugin.mob.MobPaths
 import dev.netherforge.plugin.module.Modules
 import dev.netherforge.plugin.network.Network
+import dev.netherforge.plugin.network.NetworkLink
 import dev.netherforge.plugin.pack.PackService
 import dev.netherforge.plugin.particle.ParticleEffects
 import dev.netherforge.plugin.platform.EntityTag
@@ -132,6 +133,10 @@ class ProjectSession internal constructor(
 
     /** The network's policy this session was started with, as its hub sent it. */
     val hubPolicy: String? = runtime.network.hubPolicy
+
+    /** Refused only for want of the hub (`network.require-hub`): it starts once the hub is there. */
+    val waitsForHub: Boolean =
+        runtime.config.network.requireHub && runtime.network.mode == NetworkLink.Mode.REMOTE && !runtime.network.connected
 
     /** The owner's config, under [policy]'s limits. */
     val config = runtime.config.under(policy)
@@ -879,6 +884,10 @@ class ProjectSession internal constructor(
     private fun refusal(snapshot: ProjectSnapshot): Pair<String, Problem?>? {
         // A policy the owner wrote that can't be read: nothing runs, rather than everything.
         config.policyProblem?.let { return it to null }
+        if (waitsForHub) {
+            return "The project waits for the network's hub (network.require-hub): it starts once the hub welcomes this server" to
+                null
+        }
         policy?.takeIf { it.stops }?.check(snapshot)?.firstOrNull()?.let { return "${it.file}: ${it.message}" to it }
         // A bundle that isn't what it was built as, or dependencies a production server won't resolve.
         loadProblems.firstOrNull { it.severity == Severity.ERROR }?.let { return "${it.file}: ${it.message}" to null }

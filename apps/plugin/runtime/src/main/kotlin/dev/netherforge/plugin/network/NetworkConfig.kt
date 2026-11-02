@@ -32,6 +32,16 @@ data class NetworkConfig(
      * null when it's one of the proxy's own (`velocity.toml`). With [Registration.host] null, the address the hub sees.
      */
     val register: Registration? = null,
+    /**
+     * How long the server waits as it starts for the hub to welcome it (its grants, the network's policy for it) before
+     * it starts its project anyway (`network.wait-for-hub-seconds`); 0: it doesn't wait.
+     */
+    val waitForHubSeconds: Int = 0,
+    /**
+     * Whether the project runs only once the hub has welcomed it (`network.require-hub`): a server that can't reach its
+     * hub runs nothing rather than run without the network's policy. It starts by itself when the hub is there.
+     */
+    val requireHub: Boolean = false,
     /** How long this server may be empty before the hub hears it's idle (its webhook, `server_idle`); 0: never. */
     val idleAfterSeconds: Int = 0,
     /** What each package may send a minute: messages, requests, map writes and players sent. */

@@ -101,7 +101,9 @@ unmute`, and the admin API's `moderation` scope. `nf.network.report` sends
   with the refused calls failing, and `runtime.policy` says which rule. A
   network sends each role's servers a policy too (`policy.<role>` in
   `hub.properties`), and `netherforge check --policy policy.json` tells an
-  author whether a project runs under one.
+  author whether a project runs under one. `network.wait-for-hub-seconds` and
+  `network.require-hub` keep a project from running before the network's
+  policy is known.
 - **Metrics.** `metrics.port` in `config.yml` serves a server's numbers for
   Prometheus: TPS and tick time, players, entities, centities and chunks,
   each package's script cost, memory and network traffic, its state and
