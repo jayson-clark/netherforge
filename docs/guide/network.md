@@ -454,6 +454,68 @@ or writing where it may not is an error at the script's line naming
 hears nothing, and the server's log says why. A less trusted server only
 sends players who are on it.
 
+## Adding servers while the network runs
+
+Servers in `velocity.toml` are there from the proxy's start. A network that
+starts servers on demand adds them as they come up, in one of two ways (a
+network uses one or the other).
+
+**A server adds itself.** It sets where the proxy reaches it, and joins with
+a credential allowed to register (or the shared secret):
+
+```yaml
+network:
+  enabled: true
+  hub: hub.internal:25590
+  server-name: auto # or a fixed name; auto is <group>-<n>: arena-3
+  group: arena
+  register:
+    address: 10.0.0.12:25601 # or a port alone: the address the hub sees it connect from
+  credential:
+    id: arena
+    secret: 9b0e…
+```
+
+The proxy adds it to its servers as it joins, and takes it off when it shuts
+down, or when it's been gone `unregister-after-seconds` (`hub.properties`, 60
+unless you say) without coming back; a server that dials again in time keeps
+its name. Names are unique: a second server registering a name in use is
+refused while the first is connected, and nothing can register over a server
+in `velocity.toml`. A credential only registers if it's allowed to, and only
+as the names and addresses it allows, in `credentials.properties`:
+
+```properties
+arena.register=true
+arena.names=arena-*
+arena.addresses=10.0.0.0/8
+arena.group=arena
+```
+
+**Something else adds it.** An orchestrator that starts servers (Kubernetes
+with Agones, say) already knows when one is ready and where it is. The hub's
+**admin API** lets it add and remove them, with a token of its own, never a
+server's credential. Turn it on in `hub.properties`:
+
+```properties
+admin.bind=127.0.0.1
+admin.port=25591
+admin.token=…   # at least 24 characters
+```
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" -d '{"name":"arena-7","address":"10.0.0.7:25565","group":"arena","credential":"arena"}' \
+  http://127.0.0.1:25591/v1/servers                      # add (again, with a new address: move)
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:25591/v1/servers   # list
+curl -H "Authorization: Bearer $TOKEN" -X DELETE http://127.0.0.1:25591/v1/servers/arena-7   # remove
+```
+
+A server added this way joins with its plain `server-name` and no
+`register`; when the API named a `credential`, only that one may join under
+the name, and it's an instance of the API's `group` unless it says its own. It
+stays on the proxy until the API removes it, whether it's connected or not.
+Removing one disconnects it from the hub. `/nfhub` marks the servers added
+either way.
+
 ## Limits
 
 The server's owner limits what its packages send (`network:` in

@@ -179,7 +179,12 @@ wasm:
 # allows (nf.network.server_role() says what). A server that's one of several
 # copies of a game sets group (arena) and how many players it takes
 # (capacity, 0 for any): scripts can then send players to the group, and the
-# hub picks the instance. What each package may send
+# hub picks the instance. A server the proxy's velocity.toml doesn't list
+# adds itself to the proxy as it joins, and comes off as it stops: set
+# register.address to where the proxy reaches it (host:port, or a port alone
+# for the address the hub sees), with a credential allowed to register (or the
+# shared secret); server-name may then be auto, numbered in its group
+# (arena-3). What each package may send
 # a minute (messages, requests, map writes, players sent) is
 # messages-per-minute; a request waits request-timeout-seconds for its answer.
 # What arrives is handed to scripts messages-per-tick a tick, at most
@@ -196,6 +201,8 @@ network:
     secret: ''
   group: ''
   capacity: 0
+  register:
+    address: ''
   messages-per-minute: 1200
   request-timeout-seconds: 10
   messages-per-tick: 1000

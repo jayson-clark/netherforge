@@ -23,6 +23,9 @@ object Protocol {
     /** This protocol's version: a hub refuses a [Hello] of another, saying which it speaks. */
     const val VERSION = 3
 
+    /** A registering server's name that asks the hub for one: its group's, numbered (`arena-3`). */
+    const val AUTO_NAME = "auto"
+
     /** The port a hub listens on unless its owner says otherwise. */
     const val DEFAULT_PORT = 25590
 
@@ -90,6 +93,13 @@ data class ServerState(
     /** Its group's name: its [group], or its own [name] when it's a group of one. */
     val groupName get() = group ?: name
 }
+
+/**
+ * A server adding itself to the proxy as it joins (it isn't in `velocity.toml`): where the proxy reaches it. With no
+ * [host], the address the hub sees it connect from.
+ */
+@Serializable
+data class Registration(val host: String? = null, val port: Int)
 
 /** How the hub picks an instance of a group to send players to. */
 @Serializable
@@ -235,8 +245,17 @@ sealed interface ServerFrame {
         val nonce: String = "",
         val credential: String? = null,
         val group: String? = null,
-        val capacity: Int? = null
+        val capacity: Int? = null,
+        /** Adds this server to the proxy, which doesn't have it: [server] may then be [Protocol.AUTO_NAME]. */
+        val register: Registration? = null,
+        /** This process's own random id: the same server dialling again keeps its name, another can't take it. */
+        val instance: String? = null
     ) : ServerFrame
+
+    /** This server is shutting down: a server that registered itself comes off the proxy at once. */
+    @Serializable
+    @SerialName("leaving")
+    data object Leaving : ServerFrame
 
     /** Whether this server takes players now (a match running: not). */
     @Serializable

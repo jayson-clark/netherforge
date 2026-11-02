@@ -11,6 +11,9 @@ interface Peer {
     /** Where it connects from, for the log. */
     val address: String
 
+    /** The address it connects from, as an IP address: where a registering server is reached unless it says. */
+    val remoteHost: String? get() = null
+
     fun send(frame: HubFrame)
 
     /** Ends the connection; the peer calls [Hub.Session.closed] once it has. */
@@ -74,6 +77,69 @@ class Hub(
 
     /** Turns, for spreading requests to a group across its instances. */
     private var nextTurn = 0
+
+    /**
+     * The servers that added themselves to the proxy, by name: where it reaches them, the process that did ([instance],
+     * so the same one dialling again keeps its name), and since when it's been gone (null while connected).
+     */
+    private val registered = LinkedHashMap<String, Registered>()
+
+    /**
+     * A server on the proxy that isn't in its config: one that registered itself, or one the admin API added
+     * ([byAdmin]: it stays until the API takes it off, and only [credential], when given, may join under its name).
+     */
+    data class Registered(
+        val name: String,
+        val host: String,
+        val port: Int,
+        val instance: String?,
+        val credential: String?,
+        var goneSince: Long?,
+        val byAdmin: Boolean = false,
+        val group: String? = null
+    )
+
+    /**
+     * The admin API's: adds [name] at [host]:[port] to the proxy, for a server that will join with [credential] (any
+     * when null) as an instance of [group]. Null once it's added, or why not.
+     */
+    fun adminRegister(name: String, host: String, port: Int, group: String?, credential: String?): String? = synchronized(lock) {
+        if (!NetworkNames.isServer(name) || name == Protocol.AUTO_NAME) return "\"$name\" isn't a server's name"
+        if (group != null && !NetworkNames.isServer(group)) return "\"$group\" isn't a group's name"
+        if (port !in 1..65535) return "$port isn't a port"
+        if (credential != null && credential !in credentials) return "there's no credential \"$credential\""
+        val existing = registered.keys.firstOrNull { it.equals(name, ignoreCase = true) }?.let(registered::get)
+        if (existing == null && serverNamed(name)?.let(proxy::isFixed) == true) return "$name is one of the proxy's own servers"
+        if (existing != null && !existing.byAdmin) return "$name registered itself: it comes off the proxy as it goes"
+        val kept = existing?.name ?: name
+        if (existing == null || existing.host != host || existing.port != port) {
+            if (existing != null) proxy.unregister(existing.name)
+            proxy.register(kept, host, port)?.let { return "the proxy couldn't add it: $it" }
+        }
+        registered[kept] = Registered(kept, host, port, null, credential, null, byAdmin = true, group = group)
+        log.info("NetherForge hub: the admin API added $kept at $host:$port" + group?.let { " in $it" }.orEmpty())
+        tellServers()
+        null
+    }
+
+    /** The admin API's: takes [name] (a server not in the proxy's config) off the proxy, disconnecting it. Null once done, or why not. */
+    fun adminRemove(name: String): String? {
+        val session = synchronized(lock) {
+            val entry = registered.keys.firstOrNull { it.equals(name, ignoreCase = true) }?.let(registered::get)
+                ?: return if (serverNamed(name) != null) "$name is one of the proxy's own servers" else "there's no server named $name"
+            unregister(entry.name, "the admin API took it off")
+            tellServers()
+            byName[entry.name]
+        }
+        session?.let {
+            it.peer.close("it was taken off the network")
+            it.closed()
+        }
+        return null
+    }
+
+    /** The servers that registered themselves, for the proxy's own commands. */
+    fun registered(): List<Registered> = synchronized(lock) { registered.values.map { it.copy() } }
 
     /** A request on its way: who asked under which id, who must answer, and until when. */
     private class Route(val origin: Session, val originId: Long, val target: Session, val deadline: Long)
@@ -177,6 +243,9 @@ class Hub(
             for (session in sessions.filter { it.name == null && now - it.openedAt > Protocol.HELLO_MILLIS }) {
                 session.peer.close("it didn't say hello in time")
             }
+            for (entry in registered.values.filter { it.goneSince != null && now - it.goneSince!! >= limits.unregisterAfterMillis }) {
+                unregister(entry.name, "gone for ${limits.unregisterAfterMillis / 1000} seconds")
+            }
             tellServers()
             if (now - lastSave >= SAVE_EVERY_MILLIS && maps.takeDirty()) {
                 lastSave = now
@@ -223,6 +292,26 @@ class Hub(
     private fun state(name: String, players: Int): ServerState {
         val session = byName[name] ?: return ServerState(name, false, players = players)
         return ServerState(name, true, session.group, session.capacity, session.accepting, players)
+    }
+
+    /** Under the lock: takes a server that registered itself off the proxy. */
+    private fun unregister(name: String, why: String) {
+        registered.remove(name) ?: return
+        log.info("NetherForge hub: $name is off the proxy's servers: $why")
+        try {
+            proxy.unregister(name)
+        } catch (e: Exception) {
+            log.warn("NetherForge hub: the proxy couldn't take $name off its servers: ${e.message}")
+        }
+    }
+
+    /** Under the lock: `<group>-<n>`, the first not taken (the same [instance] gets back the name it had). */
+    private fun autoName(group: String, instance: String?): String {
+        registered.values.firstOrNull {
+            instance != null && it.instance == instance && it.name.startsWith("$group-")
+        }?.let { return it.name }
+        val taken = proxy.servers().map { it.lowercase() }.toSet() + registered.keys.map { it.lowercase() }
+        return generateSequence(1) { it + 1 }.map { "$group-$it" }.first { it.lowercase() !in taken }
     }
 
     /** Under the lock: what changed of the servers since everyone was last told, to everyone. */
@@ -281,6 +370,9 @@ class Hub(
         internal var capacity: Int? = null
         internal var accepting = true
 
+        /** It said it's shutting down: a server that registered itself comes off the proxy as it goes. */
+        internal var leaving = false
+
         internal var channels: Set<String> = emptySet()
         internal var maps: Set<String> = emptySet()
         private var closed = false
@@ -315,6 +407,9 @@ class Hub(
                 val state = state(name, players.values.count { it.server == name })
                 broadcast(HubFrame.Server(state))
                 told = told + (name to state)
+                registered[name]?.takeIf { !it.byAdmin }?.let { entry ->
+                    if (leaving) unregister(name, "it shut down") else entry.goneSince = clock()
+                }
             }
             for ((id, route) in routes.entries.filter { it.value.target === this || it.value.origin === this }) {
                 routes.remove(id)
@@ -359,10 +454,76 @@ class Hub(
                 }
                 bound
             } ?: frame.group
-            val server = serverNamed(frame.server)
+            val byAdmin = registered.values.firstOrNull { it.byAdmin && it.name.equals(frame.server, ignoreCase = true) }
+            if (byAdmin?.credential != null && byAdmin.credential != credential?.id) {
+                return refuse("${byAdmin.name} was added for the credential \"${byAdmin.credential}\", and it joins with another")
+            }
+            if (byAdmin != null &&
+                frame.register != null
+            ) {
+                return refuse("${byAdmin.name} was added by the admin API: it doesn't register itself")
+            }
+            val registering = frame.register
+            var said = frame.server
+            if (registering != null) {
+                val rule = if (credential == null) {
+                    RegisterRule.ANY
+                } else {
+                    credential.register
+                        ?: return refuse(
+                            "its credential \"${credential.id}\" may not register servers (register=true in credentials.properties)"
+                        )
+                }
+                val name = if (frame.server == Protocol.AUTO_NAME) {
+                    autoName(group ?: return refuse("an automatic name needs a group (network.group)"), frame.instance)
+                } else {
+                    frame.server
+                }
+                if (!rule.allowsName(
+                        name
+                    )
+                ) {
+                    return refuse("its credential may not register the name $name (only ${rule.names.joinToString()})")
+                }
+                val host = registering.host ?: peer.remoteHost ?: return refuse("it didn't say its address, and the hub can't tell it")
+                if (registering.port !in 1..65535) return refuse("its port ${registering.port} isn't a port")
+                if (!rule.allowsAddress(
+                        host
+                    )
+                ) {
+                    return refuse("its credential may not register the address $host (only ${rule.addresses.joinToString()})")
+                }
+                val existing = registered.keys.firstOrNull { it.equals(name, ignoreCase = true) }?.let(registered::get)
+                if (existing == null && serverNamed(name) != null && proxy.isFixed(serverNamed(name)!!)) {
+                    return refuse("$name is one of the proxy's own servers (velocity.toml): it can't be registered over")
+                }
+                if (existing != null &&
+                    existing.goneSince == null &&
+                    byName[existing.name] != null &&
+                    existing.instance != frame.instance
+                ) {
+                    return refuse("another server registered as $name is connected: pick another name, or stop that one")
+                }
+                if (existing == null || existing.host != host || existing.port != registering.port) {
+                    if (existing != null) {
+                        try {
+                            proxy.unregister(existing.name)
+                        } catch (_: Exception) {
+                        }
+                    }
+                    proxy.register(name, host, registering.port)?.let { why ->
+                        registered.remove(existing?.name)
+                        return refuse("the proxy couldn't add it: $why")
+                    }
+                    log.info("NetherForge hub: $name added itself to the proxy's servers at $host:${registering.port}")
+                }
+                said = existing?.name ?: name
+                registered[said] = Registered(said, host, registering.port, frame.instance, credential?.id, null)
+            }
+            val server = serverNamed(said)
                 ?: return refuse(
-                    "the proxy has no server named \"${frame.server}\" (network.server-name in its config.yml must be the " +
-                        "server's name in the proxy's config; it has ${proxy.servers().joinToString()})"
+                    "the proxy has no server named \"$said\" (network.server-name in its config.yml must be the " +
+                        "server's name in the proxy's config, or the server must register itself; it has ${proxy.servers().joinToString()})"
                 )
             byName[server]?.let { previous ->
                 previous.peer.close("$server connected again")
@@ -372,7 +533,7 @@ class Hub(
             this.credential = credential?.id
             joinedWith = credential
             grants = credential?.grants ?: Grants.TRUSTED
-            this.group = group
+            this.group = group ?: byAdmin?.group
             capacity = frame.capacity
             accepting = true
             byName[server] = this
@@ -432,6 +593,7 @@ class Hub(
                 is ServerFrame.Hello -> send(HubFrame.Problem("it already said hello"))
                 is ServerFrame.Ping -> send(HubFrame.Pong)
                 is ServerFrame.Status -> accepting = frame.accepting
+                is ServerFrame.Leaving -> leaving = true
                 is ServerFrame.Listen -> listen(frame)
                 is ServerFrame.Publish -> {
                     if (!checked(frame.channel, frame.value)) return null

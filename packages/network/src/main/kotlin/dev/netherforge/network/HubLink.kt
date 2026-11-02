@@ -21,6 +21,11 @@ interface HubLink {
     fun start()
 
     fun stop()
+
+    /** Says this server is shutting down ([ServerFrame.Leaving]), waiting a moment for it to go, before [stop]. */
+    fun leave() {
+        send(ServerFrame.Leaving)
+    }
 }
 
 /**
@@ -58,7 +63,11 @@ class HubClient(
     private val credential: String? = null,
     /** The group this server is an instance of, and how many players it takes. */
     private val group: String? = null,
-    private val capacity: Int? = null
+    private val capacity: Int? = null,
+    /** Where the proxy reaches this server, when it adds itself to the proxy's servers. */
+    private val register: Registration? = null,
+    /** This process's id: dialling again, it keeps its name. */
+    private val instance: String = Auth.newNonce()
 ) : HubLink {
     private val running = AtomicBoolean(false)
     private var thread: Thread? = null
@@ -92,6 +101,14 @@ class HubClient(
     }
 
     override fun send(frame: ServerFrame): Boolean = accepted && queue.offer(Protocol.encode(frame))
+
+    override fun leave() {
+        if (!send(ServerFrame.Leaving)) return
+        val deadline = System.nanoTime() + LEAVE_WAIT_NANOS
+        while (queue.isNotEmpty() && accepted && System.nanoTime() < deadline) Thread.sleep(10)
+        // The writer took it; a moment for it to be written.
+        Thread.sleep(50)
+    }
 
     private fun dial() {
         var backoff = MIN_BACKOFF_MILLIS
@@ -136,7 +153,9 @@ class HubClient(
         }
         val nonce = Auth.newNonce()
         val proof = Auth.proof(secret, challenge.nonce, server, nonce, credential)
-        out.write(Protocol.encode(ServerFrame.Hello(Protocol.VERSION, server, proof, nonce, credential, group, capacity)))
+        out.write(
+            Protocol.encode(ServerFrame.Hello(Protocol.VERSION, server, proof, nonce, credential, group, capacity, register, instance))
+        )
         out.write("\n")
         out.flush()
         // Everything from the welcome on is sealed: a hub that can open and seal with these keys holds the secret.
@@ -221,6 +240,7 @@ class HubClient(
         const val MAX_BACKOFF_MILLIS = 10_000L
         const val CONNECT_TIMEOUT_MILLIS = 5_000
         const val STOP_WAIT_MILLIS = 2_000L
+        const val LEAVE_WAIT_NANOS = 1_000_000_000L
     }
 }
 
@@ -236,7 +256,9 @@ class LocalLink(
     private val listener: HubListener,
     private val credential: String? = null,
     private val group: String? = null,
-    private val capacity: Int? = null
+    private val capacity: Int? = null,
+    private val register: Registration? = null,
+    private val instance: String = Auth.newNonce()
 ) : HubLink {
     private var session: Hub.Session? = null
     private var nonce: String? = null
@@ -276,7 +298,7 @@ class LocalLink(
         this.session = session
         val own = Auth.newNonce()
         val proof = Auth.proof(secret, nonce!!, server, own, credential)
-        session.receive(ServerFrame.Hello(Protocol.VERSION, server, proof, own, credential, group, capacity))
+        session.receive(ServerFrame.Hello(Protocol.VERSION, server, proof, own, credential, group, capacity, register, instance))
     }
 
     override fun stop() = peer.close("the server is stopping")

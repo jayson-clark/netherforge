@@ -12,12 +12,14 @@ import com.velocitypowered.api.plugin.annotation.DataDirectory
 import com.velocitypowered.api.proxy.ConnectionRequestBuilder
 import com.velocitypowered.api.proxy.ProxyServer
 import com.velocitypowered.api.proxy.player.ResourcePackInfo
+import com.velocitypowered.api.proxy.server.ServerInfo
 import dev.netherforge.network.Auth
 import dev.netherforge.network.CredentialEntry
 import dev.netherforge.network.CredentialsFile
 import dev.netherforge.network.FileMapStore
 import dev.netherforge.network.Grants
 import dev.netherforge.network.Hub
+import dev.netherforge.network.HubAdmin
 import dev.netherforge.network.HubLog
 import dev.netherforge.network.HubProxy
 import dev.netherforge.network.HubServer
@@ -44,6 +46,7 @@ class NetherForgeProxy @Inject constructor(
 ) {
     private var hub: Hub? = null
     private var server: HubServer? = null
+    private var admin: HubAdmin? = null
     private var clearResourcePacks = true
     private var settings: HubSettings? = null
     private val credentialsFile by lazy { CredentialsFile(folder.resolve(CredentialsFile.FILE)) }
@@ -83,6 +86,19 @@ class NetherForgeProxy @Inject constructor(
             logger.error("NetherForge: the network's hub couldn't listen on ${settings.bind}:${settings.port}", e)
             return
         }
+        if (settings.adminPort != null) {
+            val token = settings.adminToken
+            if (token == null) {
+                logger.warn("NetherForge: admin.port is set and admin.token isn't; the admin API is off")
+            } else {
+                try {
+                    admin = HubAdmin(hub, InetSocketAddress(settings.adminBind, settings.adminPort), token, log).also { it.start() }
+                    logger.info("NetherForge: the hub's admin API is listening on ${settings.adminBind}:${settings.adminPort}")
+                } catch (e: Exception) {
+                    logger.error("NetherForge: the hub's admin API couldn't listen on ${settings.adminBind}:${settings.adminPort}", e)
+                }
+            }
+        }
         this.hub = hub
         this.server = server
         this.settings = settings
@@ -96,6 +112,8 @@ class NetherForgeProxy @Inject constructor(
 
     @Subscribe
     fun onShutdown(event: ProxyShutdownEvent) {
+        admin?.stop()
+        admin = null
         server?.stop()
         server = null
         hub = null
@@ -124,6 +142,18 @@ class NetherForgeProxy @Inject constructor(
         override fun players(): List<PlayerState> = proxy.allPlayers.map { player ->
             PlayerState(player.uniqueId.toString(), player.username, player.currentServer.map { it.serverInfo.name }.orElse(null))
         }
+
+        override fun register(name: String, host: String, port: Int): String? {
+            if (proxy.getServer(name).isPresent) return "the proxy already has a server named $name"
+            proxy.registerServer(ServerInfo(name, InetSocketAddress.createUnresolved(host, port)))
+            return null
+        }
+
+        override fun unregister(name: String) {
+            proxy.getServer(name).ifPresent { proxy.unregisterServer(it.serverInfo) }
+        }
+
+        override fun isFixed(name: String): Boolean = proxy.configuration.servers.keys.any { it.equals(name, ignoreCase = true) }
 
         override fun send(id: String, server: String): CompletionStage<String?> {
             val player = proxy.getPlayer(UUID.fromString(id)).orElse(null)
@@ -175,8 +205,9 @@ class NetherForgeProxy @Inject constructor(
             val hub = hub ?: return "NetherForge's network hub isn't running (see the proxy's log)."
             val linked = hub.connections().associateBy { it.server }
             val states = hub.states().associateBy { it.name }
-            val lines = proxy.allServers.map { registered ->
-                val name = registered.serverInfo.name
+            val registered = hub.registered().associateBy { it.name }
+            val lines = proxy.allServers.map { server ->
+                val name = server.serverInfo.name
                 val connection = linked[name]
                 val state = states[name]
                 val how = when {
@@ -187,7 +218,8 @@ class NetherForgeProxy @Inject constructor(
                 val group = state?.group?.let { " in $it" }.orEmpty()
                 val room = state?.capacity?.let { " of $it" }.orEmpty()
                 val closed = if (state != null && state.linked && !state.accepting) ", not taking players" else ""
-                "  $name: $how$group, ${registered.playersConnected.size}$room online$closed"
+                val added = registered[name]?.let { if (it.byAdmin) " (added by the admin API)" else " (registered itself)" }.orEmpty()
+                "  $name$added: $how$group, ${server.playersConnected.size}$room online$closed"
             }
             return "NetherForge network hub on port ${server?.port}:\n" + lines.joinToString("\n")
         }

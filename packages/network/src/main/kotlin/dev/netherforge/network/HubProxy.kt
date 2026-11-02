@@ -19,6 +19,15 @@ interface HubProxy {
      * aren't (already there, the server is down, another plugin cancelled it). From any thread.
      */
     fun send(id: String, server: String): CompletionStage<String?>
+
+    /** Adds [name] at [host]:[port] to the proxy's servers, as a server registers itself. Null once it has, or why not. */
+    fun register(name: String, host: String, port: Int): String? = "this proxy can't add servers while it runs"
+
+    /** Takes [name] (one [register] added) off the proxy's servers. */
+    fun unregister(name: String) {}
+
+    /** Whether [name] is one of the proxy's own servers (its config's), which no server may register over. */
+    fun isFixed(name: String): Boolean = true
 }
 
 /** Where the hub writes what happened: the proxy's log. */
@@ -39,7 +48,9 @@ data class NetworkLimits(
     /** Frames waiting to be written to one server; past it the server is too slow and is dropped. */
     val maxQueuedFrames: Int = 50_000,
     /** How long a request waits for the server asked before the hub answers it failed. */
-    val requestTimeoutMillis: Long = 30_000
+    val requestTimeoutMillis: Long = 30_000,
+    /** How long a server that registered itself may be gone (not a clean shutdown) before it comes off the proxy. */
+    val unregisterAfterMillis: Long = 60_000
 ) {
     companion object {
         const val DEFAULT_MAX_VALUE_BYTES = 64 * 1024

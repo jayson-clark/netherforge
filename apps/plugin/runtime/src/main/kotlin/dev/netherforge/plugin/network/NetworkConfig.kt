@@ -2,6 +2,7 @@ package dev.netherforge.plugin.network
 
 import dev.netherforge.network.NetworkNames
 import dev.netherforge.network.Protocol
+import dev.netherforge.network.Registration
 
 /**
  * `network:` in `config.yml`: whether this server is part of a network, how it reaches the network's hub (the proxy
@@ -26,6 +27,11 @@ data class NetworkConfig(
     val group: String? = null,
     /** How many players it takes (`network.capacity`): null for any number. */
     val capacity: Int? = null,
+    /**
+     * Where the proxy reaches this server when it adds itself to the proxy's servers (`network.register.address`):
+     * null when it's one of the proxy's own (`velocity.toml`). With [Registration.host] null, the address the hub sees.
+     */
+    val register: Registration? = null,
     /** What each package may send a minute: messages, requests, map writes and players sent. */
     val messagesPerMinute: Int = 1200,
     /** How long a request waits for its answer, here (the hub has its own, longer, limit). */
@@ -46,10 +52,27 @@ data class NetworkConfig(
             "network.secret is empty: copy it from the proxy's plugins/netherforge/hub.properties, or give the server a credential"
         port !in 1..65535 -> "network.hub's port $port isn't a port"
         group != null && !NetworkNames.isServer(group) -> "network.group \"$group\" isn't a group's name (letters, digits, _ . -)"
+        serverName == Protocol.AUTO_NAME && register == null ->
+            "network.server-name is auto, which only a server that registers itself can be (network.register.address)"
+        serverName == Protocol.AUTO_NAME && group == null -> "network.server-name is auto, which needs network.group to number it from"
+        register != null && register.port !in 1..65535 -> "network.register.address's port ${register.port} isn't a port"
         else -> null
     }
 
     companion object {
+        /** `host:port`, or a port alone (the host the hub sees): what `network.register.address` says. */
+        fun registration(text: String?): Registration? {
+            val value = text?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            value.toIntOrNull()?.let { return Registration(null, it) }
+            // host:port, or [v6]:port; anything else has no port, which problem() says.
+            val colon = value.lastIndexOf(':')
+            val bracketed = value.startsWith("[")
+            val hasPort = colon > 0 && (if (bracketed) value[colon - 1] == ']' else value.count { it == ':' } == 1)
+            if (!hasPort) return Registration(value, -1)
+            val host = value.substring(0, colon).removePrefix("[").removeSuffix("]")
+            return Registration(host, value.substring(colon + 1).toIntOrNull() ?: -1)
+        }
+
         /** `host:port`, or a host alone (the default port): what `network.hub` says. */
         fun hub(text: String?): Pair<String, Int>? {
             val value = text?.trim()?.takeIf { it.isNotEmpty() } ?: return null

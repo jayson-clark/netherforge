@@ -55,12 +55,16 @@ class NetworkLink(
         else -> Mode.OFF
     }
 
-    /** This server's name in the network, or null when it isn't in one. */
-    val name: String? = when (mode) {
+    /**
+     * This server's name in the network, or null when it isn't in one. A server named `auto` (registering itself) has
+     * the name the hub gave it from its first welcome on.
+     */
+    var name: String? = when (mode) {
         Mode.REMOTE -> config.serverName
         Mode.LOCAL -> alone
         Mode.OFF -> null
     }
+        private set
 
     /** What came in, for the main thread. */
     sealed interface Inbound {
@@ -181,7 +185,8 @@ class NetworkLink(
                     listener,
                     credential = config.credential,
                     group = config.group,
-                    capacity = config.capacity
+                    capacity = config.capacity,
+                    register = config.register
                 ).also { it.start() }
             }
             Mode.LOCAL -> {
@@ -196,6 +201,8 @@ class NetworkLink(
     }
 
     fun stop() {
+        // A clean shutdown: a server that added itself to the proxy comes off it at once.
+        if (connected) link?.leave()
         link?.stop()
         link = null
         hub?.close()
@@ -267,6 +274,7 @@ class NetworkLink(
     /** The network as [welcome] says it is: connected, with everyone and every server in it. */
     private fun welcomed(welcome: HubFrame.Welcome) {
         connected = true
+        name = welcome.server
         lastFailure = null
         maxValueBytes = welcome.maxValueBytes
         grants = welcome.grants

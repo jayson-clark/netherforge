@@ -8,6 +8,7 @@ import dev.netherforge.network.HubProxy
 import dev.netherforge.network.HubServer
 import dev.netherforge.network.NetworkLimits
 import dev.netherforge.network.PlayerState
+import dev.netherforge.network.Registration
 import dev.netherforge.network.Share
 import dev.netherforge.plugin.TestServer
 import dev.netherforge.plugin.platform.GameEvent
@@ -35,7 +36,20 @@ class NetworkTest {
         /** What happens when the hub asks to move a player: null for done. */
         var onSend: (String, String) -> String? = { _, _ -> null }
 
-        override fun servers() = listOf("lobby", "survival", "creative")
+        val added = java.util.concurrent.ConcurrentHashMap<String, Pair<String, Int>>()
+
+        override fun servers() = listOf("lobby", "survival", "creative") + added.keys.sorted()
+
+        override fun register(name: String, host: String, port: Int): String? {
+            added[name] = host to port
+            return null
+        }
+
+        override fun unregister(name: String) {
+            added.remove(name)
+        }
+
+        override fun isFixed(name: String) = name in listOf("lobby", "survival", "creative")
 
         override fun players() = emptyList<PlayerState>()
 
@@ -69,7 +83,8 @@ class NetworkTest {
         extra: Map<String, Any> = emptyMap(),
         credential: Credential? = null,
         group: String? = null,
-        capacity: Int? = null
+        capacity: Int? = null,
+        register: Registration? = null
     ) = TestServer(
         mapOf(TestServer.MANIFEST to TestServer.manifest(requires = requires), "modules/t/init.lua" to script) + extra,
         network = NetworkConfig(
@@ -79,7 +94,8 @@ class NetworkTest {
             secret = credential?.secret ?: SECRET,
             credential = credential?.id,
             group = group,
-            capacity = capacity
+            capacity = capacity,
+            register = register
         )
     ).also { servers += it }
 
@@ -431,6 +447,23 @@ class NetworkTest {
         assertTrue(lobby.logs.last() in setOf("answered creative survival", "answered survival creative"), "one each: ${lobby.logs.last()}")
         tickUntil { "told go" in survival.logs && "told go" in creative.logs }
         assertTrue("told go" !in lobby.logs)
+    }
+
+    @Test
+    fun `a server adds itself to the proxy with a name the hub gives it, and comes off as it stops`() {
+        val arena = server(
+            "auto",
+            """nf.on("network_connect", function(event) log("joined as " .. event.server .. " " .. nf.network.server_name()) end)""",
+            group = "arena",
+            register = Registration(null, 25999)
+        )
+        connected()
+        tickUntil { arena.logs.isNotEmpty() }
+        assertEquals(listOf("joined as arena-1 arena-1"), arena.logs)
+        assertEquals("127.0.0.1" to 25999, proxy.added["arena-1"], "where the hub saw it connect from")
+        arena.close()
+        servers.remove(arena)
+        tickUntil { proxy.added.isEmpty() }
     }
 
     @Test

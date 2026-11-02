@@ -4,6 +4,7 @@ import dev.netherforge.network.Auth
 import dev.netherforge.network.Balance
 import dev.netherforge.network.Grants
 import dev.netherforge.network.GroupSettings
+import dev.netherforge.network.HubAdmin
 import dev.netherforge.network.NetworkLimits
 import dev.netherforge.network.Protocol
 import dev.netherforge.network.Share
@@ -28,6 +29,10 @@ data class HubSettings(
     val roleShares: Map<String, List<Share>> = emptyMap(),
     /** Each group's settings (`group.<name>.balance`), by the group's name. */
     val groups: Map<String, GroupSettings> = emptyMap(),
+    /** The admin API's address and token (`admin.bind`, `admin.port`, `admin.token`): off without a port. */
+    val adminBind: String = "127.0.0.1",
+    val adminPort: Int? = null,
+    val adminToken: String? = null,
     /**
      * Whether a server's resource packs come off a player as they move to another server, so one server's (a lobby's
      * hidden HUD, its replaced sprites) never follows them to the next. Default true; a file written before this
@@ -80,8 +85,14 @@ data class HubSettings(
                     maxKeysPerPackage = positive("max-keys-per-package")?.toInt() ?: defaults.maxKeysPerPackage,
                     maxBytesPerPackage = positive("max-bytes-per-package") ?: defaults.maxBytesPerPackage,
                     maxQueuedFrames = positive("max-queued-frames")?.toInt() ?: defaults.maxQueuedFrames,
-                    requestTimeoutMillis = positive("request-timeout-seconds")?.let { it * 1000 } ?: defaults.requestTimeoutMillis
+                    requestTimeoutMillis = positive("request-timeout-seconds")?.let { it * 1000 } ?: defaults.requestTimeoutMillis,
+                    unregisterAfterMillis = positive("unregister-after-seconds")?.let { it * 1000 } ?: defaults.unregisterAfterMillis
                 ),
+                adminBind = text("admin.bind") ?: "127.0.0.1",
+                adminPort = positive("admin.port")?.toInt(),
+                adminToken = text("admin.token")?.also {
+                    require(it.length >= HubAdmin.MIN_TOKEN) { "$file's admin.token is shorter than ${HubAdmin.MIN_TOKEN} characters" }
+                },
                 clearResourcePacks = flag("clear-resource-packs") ?: true
             )
         }
@@ -126,6 +137,16 @@ data class HubSettings(
                 |request-timeout-seconds=${limits.requestTimeoutMillis / 1000}
                 |# Frames waiting to be sent to one server; past it the server is too slow and is disconnected.
                 |max-queued-frames=${limits.maxQueuedFrames}
+                |# How long a server that added itself to the proxy (network.register in its config.yml) may be gone
+                |# without shutting down cleanly before it comes off the proxy's servers.
+                |unregister-after-seconds=${limits.unregisterAfterMillis / 1000}
+                |
+                |# The admin API: HTTP for what starts and stops your servers (an orchestrator) to add servers to the
+                |# proxy and take them off. Off without a port; every request needs Authorization: Bearer <admin.token>
+                |# (at least ${HubAdmin.MIN_TOKEN} characters). Keep it on localhost or your servers' network.
+                |admin.bind=127.0.0.1
+                |admin.port=
+                |admin.token=
                 |
                 |# Whether the resource packs a server sent a player come off as they move to another server, so a
                 |# lobby's (its hidden HUD, its replaced sprites) never follows them into a game. The next server sends

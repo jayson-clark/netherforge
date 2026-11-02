@@ -1,6 +1,7 @@
 package dev.netherforge.plugin
 
 import dev.netherforge.format.bridge.Bridge
+import dev.netherforge.network.Registration
 import dev.netherforge.plugin.http.HttpConfig
 import dev.netherforge.plugin.network.NetworkConfig
 import dev.netherforge.plugin.pack.PackConfig
@@ -196,6 +197,22 @@ class RuntimeConfigTest {
                 credential = "arena"
             ).problem()!!.contains("network.credential.secret is empty")
         )
+
+        assertEquals(Registration("10.0.0.12", 25601), NetworkConfig.registration("10.0.0.12:25601"))
+        assertEquals(Registration(null, 25601), NetworkConfig.registration("25601"))
+        assertEquals(Registration("fd00::5", 25601), NetworkConfig.registration("[fd00::5]:25601"))
+        assertEquals(Registration("arena.internal", -1), NetworkConfig.registration("arena.internal"))
+        val registering = read(
+            mapOf(
+                "project" to "p",
+                "network" to section + mapOf("server-name" to "auto", "group" to "arena", "register" to mapOf("address" to "25601"))
+            )
+        )!!.network
+        assertEquals(Registration(null, 25601), registering.register)
+        assertNull(registering.problem())
+        assertTrue(registering.copy(group = null).problem()!!.contains("needs network.group"))
+        assertTrue(registering.copy(register = null).problem()!!.contains("only a server that registers itself"))
+        assertTrue(registering.copy(register = Registration("x", -1)).problem()!!.contains("isn't a port"))
     }
 
     @Test

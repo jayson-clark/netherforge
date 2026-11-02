@@ -161,6 +161,75 @@ data class Grants(
  * A server's own way into the network: an [id] it says in its hello, the [secret] it proves, and its [grants]. A
  * credential for a [group] (every instance of a game sharing one) puts its servers in that group whatever they say.
  */
-data class Credential(val id: String, val secret: String, val grants: Grants, val group: String? = null) {
+data class Credential(
+    val id: String,
+    val secret: String,
+    val grants: Grants,
+    val group: String? = null,
+    /** Whether, and how, its servers may add themselves to the proxy; null: they may not. */
+    val register: RegisterRule? = null
+) {
     override fun toString() = "Credential($id, ${grants.describe()}${group?.let { ", group $it" }.orEmpty()})"
+}
+
+/**
+ * What servers registering themselves with a credential may be: names matching [names] (`arena-*`; any when empty),
+ * reached at addresses in [addresses] (IPs and CIDR ranges, `10.0.0.0/8`; any when empty).
+ */
+data class RegisterRule(val names: List<String> = emptyList(), val addresses: List<String> = emptyList()) {
+    fun allowsName(name: String) = names.isEmpty() ||
+        names.any { pattern ->
+            if (pattern.endsWith("*")) name.startsWith(pattern.dropLast(1), ignoreCase = true) else name.equals(pattern, ignoreCase = true)
+        }
+
+    /** Whether [host] is an address in [addresses]: an IP literal only, never a name to look up. */
+    fun allowsAddress(host: String): Boolean {
+        if (addresses.isEmpty()) return true
+        val ip = Cidr.literal(host) ?: return false
+        return addresses.any { Cidr.parse(it)?.contains(ip) == true }
+    }
+
+    companion object {
+        val ANY = RegisterRule()
+    }
+}
+
+/** An IP range, `10.0.0.0/8` (or one address), matched byte by byte. */
+class Cidr private constructor(private val network: ByteArray, private val bits: Int) {
+    fun contains(address: ByteArray): Boolean {
+        if (address.size != network.size) return false
+        for (i in 0 until bits) {
+            val mask = 0x80 ushr (i % 8)
+            if ((address[i / 8].toInt() and mask) != (network[i / 8].toInt() and mask)) return false
+        }
+        return true
+    }
+
+    companion object {
+        /** [text] as a range, or null when it isn't one. */
+        fun parse(text: String): Cidr? {
+            val slash = text.indexOf('/')
+            val address = literal(if (slash < 0) text else text.substring(0, slash)) ?: return null
+            val bits = if (slash < 0) address.size * 8 else text.substring(slash + 1).toIntOrNull() ?: return null
+            if (bits !in 0..address.size * 8) return null
+            return Cidr(address, bits)
+        }
+
+        /** [text]'s bytes when it's an IPv4 or IPv6 literal; null for anything else (a name is never looked up). */
+        fun literal(text: String): ByteArray? {
+            val plain = text.trim().removePrefix("[").removeSuffix("]")
+            val v4 = Regex("""(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})""").matchEntire(plain)
+            if (v4 != null) {
+                val parts = v4.groupValues.drop(1).map { it.toInt() }
+                if (parts.any { it > 255 }) return null
+                return ByteArray(4) { parts[it].toByte() }
+            }
+            if (':' !in plain || plain.any { !(it.isLetterOrDigit() || it == ':' || it == '.') }) return null
+            return try {
+                java.net.InetAddress.getByName(plain).address
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
 }

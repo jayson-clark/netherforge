@@ -22,6 +22,14 @@ release is cut.
   `write`, `request` and `answer`. Revoking a credential drops its servers at
   once. `nf.network.server_role()` says what a server may do; what it may not
   is refused with `network.forbidden` and never reaches another server.
+- **Servers added while the network runs.** A server not in `velocity.toml`
+  adds itself to the proxy as it joins (`network.register.address`, and
+  `server-name: auto` for `<group>-<n>`) and comes off as it shuts down, or
+  after `unregister-after-seconds` gone; a credential registers only with
+  `register=true`, as the `names` and `addresses` it allows. Or an
+  orchestrator adds and removes servers through the hub's new admin API
+  (`admin.port` and `admin.token` in `hub.properties`: `POST`, `GET` and
+  `DELETE /v1/servers`).
 - **Groups of servers.** `network.group` and `network.capacity` make a server
   an instance of a group. `send_player` and the new `send_players` (a party,
   landing together) take `{ group = "arena" }`, and the hub picks the

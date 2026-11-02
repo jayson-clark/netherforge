@@ -325,6 +325,7 @@ data class RuntimeConfig(
                 credential = section.section("credential").text("id")?.trim(),
                 group = section.text("group")?.trim(),
                 capacity = section.int("capacity")?.takeIf { it > 0 },
+                register = NetworkConfig.registration(section.section("register").text("address")),
                 messagesPerMinute = positive("messages-per-minute", defaults.messagesPerMinute),
                 requestTimeoutSeconds = positive("request-timeout-seconds", defaults.requestTimeoutSeconds),
                 messagesPerTick = positive("messages-per-tick", defaults.messagesPerTick),
