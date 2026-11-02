@@ -7411,7 +7411,7 @@ data class WasmEndEvent(val process: LuaHandle.WasmProcess, val reason: String, 
 }
 
 /** A server of the network, from `nf.network.servers`. */
-data class NetworkServer(val name: String, val connected: Boolean, val players: Long, val group: String, val capacity: Long? = null, val accepting: Boolean, val state: String? = null, val idle: Boolean) : LuaShape {
+data class NetworkServer(val name: String, val connected: Boolean, val players: Long, val group: String, val capacity: Long? = null, val accepting: Boolean, val state: String? = null, val idle: Boolean, val tickMilliseconds: Double? = null) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)
 
     object Codec : ShapeCodec<NetworkServer>("NetworkServer") {
@@ -7423,6 +7423,7 @@ data class NetworkServer(val name: String, val connected: Boolean, val players: 
         val acceptingCodec = LuaCodecs.BOOLEAN
         val stateCodec = LuaOptional(LuaChoice(listOf("starting", "ready", "draining", "stopping")))
         val idleCodec = LuaCodecs.BOOLEAN
+        val tickMillisecondsCodec = LuaOptional(LuaCodecs.NUMBER)
 
         override val pinned = false
 
@@ -7434,7 +7435,8 @@ data class NetworkServer(val name: String, val connected: Boolean, val players: 
             "capacity" to capacityCodec,
             "accepting" to acceptingCodec,
             "state" to stateCodec,
-            "idle" to idleCodec
+            "idle" to idleCodec,
+            "tick_milliseconds" to tickMillisecondsCodec
         )
 
         override fun read(fields: ShapeReader) = NetworkServer(
@@ -7445,7 +7447,8 @@ data class NetworkServer(val name: String, val connected: Boolean, val players: 
             capacity = fields.field("capacity", capacityCodec),
             accepting = fields.field("accepting", acceptingCodec),
             state = fields.field("state", stateCodec),
-            idle = fields.field("idle", idleCodec)
+            idle = fields.field("idle", idleCodec),
+            tickMilliseconds = fields.field("tick_milliseconds", tickMillisecondsCodec)
         )
 
         override fun write(fields: ShapeWriter, value: NetworkServer) {
@@ -7457,6 +7460,7 @@ data class NetworkServer(val name: String, val connected: Boolean, val players: 
             fields.field("accepting", value.accepting, acceptingCodec)
             fields.field("state", value.state, stateCodec)
             fields.field("idle", value.idle, idleCodec)
+            fields.field("tick_milliseconds", value.tickMilliseconds, tickMillisecondsCodec)
         }
     }
 }

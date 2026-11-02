@@ -398,7 +398,8 @@ class Hub(
             players,
             session.state,
             session.idle,
-            session.startupMillis
+            session.startupMillis,
+            session.tickMillis?.let { Math.round(it * 10) / 10.0 }
         )
     }
 
@@ -489,6 +490,7 @@ class Hub(
         internal var state = Lifecycle.READY
         internal var idle = false
         internal var startupMillis: Long? = null
+        internal var tickMillis: Double? = null
 
         /** Whether its group may send it new players. */
         internal val open get() = state == Lifecycle.READY && accepting
@@ -511,6 +513,7 @@ class Hub(
         fun receive(frame: ServerFrame) {
             synchronized(lock) {
                 if (closed) return
+                framesIn++
                 if (name == null) hello(frame) else handle(frame)
             }
             runLater()
@@ -843,6 +846,7 @@ class Hub(
             state = frame.state
             idle = frame.idle
             startupMillis = frame.startupMillis ?: startupMillis
+            tickMillis = frame.tickMillis ?: tickMillis
             if (state == Lifecycle.READY && !wasReady) emit(HubEvent.ServerReady(name!!, group, startupMillis))
             if (idle && !wasIdle) emit(HubEvent.ServerIdle(name!!, group))
             dispatch()
@@ -1022,6 +1026,47 @@ class Hub(
             )
             stream
         }
+
+    /** Frames the hub has had from servers and proxies, since it started. */
+    private var framesIn = 0L
+
+    /**
+     * The hub's metrics, in Prometheus's text format: servers connected and players by group (with each instance's
+     * tick time), frames it has had, what each package keeps in maps, requests and sends waiting, admin streams and
+     * proxies.
+     */
+    fun metrics(): String = synchronized(lock) {
+        val out = Prometheus()
+        val states = servers()
+        for ((group, instances) in states.groupBy { it.groupName }) {
+            val labels = mapOf("group" to group)
+            out.sample("netherforge_hub_servers", "Servers of a group connected to the hub", instances.count { it.linked }, labels)
+            out.sample("netherforge_hub_players", "Players on a group's servers", instances.sumOf { it.players }, labels)
+        }
+        for (state in states) {
+            state.tickMillis?.let {
+                out.sample(
+                    "netherforge_hub_server_tick_milliseconds",
+                    "A server's average tick time, as it last said",
+                    it,
+                    mapOf(
+                        "server" to state.name
+                    )
+                )
+            }
+        }
+        out.sample("netherforge_hub_frames_total", "Frames the hub has had from servers and proxies", framesIn, counter = true)
+        for ((namespace, usage) in maps.usage()) {
+            val labels = mapOf("package" to namespace)
+            out.sample("netherforge_hub_map_keys", "Keys a package keeps across its shared maps", usage.first, labels)
+            out.sample("netherforge_hub_map_bytes", "Bytes a package keeps across its shared maps", usage.second, labels)
+        }
+        out.sample("netherforge_hub_requests_waiting", "Requests waiting for their answer", routes.size)
+        out.sample("netherforge_hub_sends_waiting", "Sends waiting for room", queues.values.sumOf { it.size })
+        out.sample("netherforge_hub_admin_streams", "Admin API streams open", streams.size)
+        out.sample("netherforge_hub_proxies", "Proxies connected to the hub", if (proxy is RemoteProxy) proxies.size else 1)
+        out.toString()
+    }
 
     /** The proxies of a hub that runs on its own, with how many players are on each and whether it's draining. */
     data class ProxyView(val name: String, val players: Int, val draining: Boolean)

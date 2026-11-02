@@ -185,4 +185,26 @@ class GroupsTest {
         LocalLink(hub, "arena-2", credential.secret, wrong, "arena", group = "lobby").start()
         assertTrue(wrong.failures.single().contains("for the group arena"), wrong.failures.single())
     }
+
+    @Test
+    fun `the hub's metrics count servers and players by group, what packages keep, and what waits`() {
+        val (lobbyLink, _) = join("lobby")
+        val (arenaLink, _) = join("arena-1", "arena", 4)
+        place("a" to "arena-1", "b" to "lobby")
+        arenaLink.send(ServerFrame.Status(tickMillis = 12.34))
+        lobbyLink.send(ServerFrame.MapWrite(1, "shop:prices", "diamond", MapOp.SET, JsonPrimitive(42)))
+        val text = hub.metrics()
+        for (line in listOf(
+            "netherforge_hub_servers{group=\"arena\"} 1",
+            "netherforge_hub_players{group=\"arena\"} 1",
+            "netherforge_hub_players{group=\"lobby\"} 1",
+            "netherforge_hub_server_tick_milliseconds{server=\"arena-1\"} 12.300000",
+            "netherforge_hub_map_keys{package=\"shop\"} 1",
+            "# TYPE netherforge_hub_frames_total counter",
+            "netherforge_hub_sends_waiting 0"
+        )) {
+            assertTrue(text.contains(line), "no $line in:\n$text")
+        }
+        assertEquals(12.3, hub.states().single { it.name == "arena-1" }.tickMillis)
+    }
 }

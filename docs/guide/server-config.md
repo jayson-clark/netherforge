@@ -352,6 +352,27 @@ world first. Scripts set a world up in `world_load` and tidy up in
 pause in the tick: the log says how long each one that took 50 ms or more
 took.
 
+## Metrics
+
+```yaml
+metrics:
+  port: 9225 # off when 0
+  bind: 127.0.0.1 # 0.0.0.0 for a scraper on another machine
+```
+
+The server serves its numbers for Prometheus at `/metrics`, gathered once a
+second: `netherforge_tps` and `netherforge_tick_milliseconds` (how it keeps
+up), `netherforge_runtime_tick_milliseconds` (NetherForge's share, average and
+worst), `netherforge_players`, `netherforge_entities` and `netherforge_chunks`
+by world, `netherforge_centities`, by package `netherforge_scripts`,
+`netherforge_script_milliseconds` and `netherforge_script_bytes`, and
+`netherforge_network_sent_total` and `netherforge_network_heard_total`, its
+`netherforge_state` and `netherforge_startup_milliseconds`. Everything is
+counted, nothing listed, so collecting them costs nothing a server would
+notice. The hub has metrics of its own (`metrics.port` in `hub.properties`):
+servers and players by group, each server's tick time, frames, what each
+package keeps in maps, requests and sends waiting, admin streams and proxies.
+
 ## The control endpoint
 
 The tool that runs the server (a container's sidecar, a host's agent) can read

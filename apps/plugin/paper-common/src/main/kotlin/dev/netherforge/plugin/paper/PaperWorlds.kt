@@ -216,6 +216,10 @@ class PaperWorlds(private val plugin: Plugin) : WorldOps {
 
     override fun loadedChunks(world: String): List<Pair<Int, Int>> = world(world)?.loadedChunks?.map { it.x to it.z }.orEmpty()
 
+    override fun chunkCount(world: String): Int = world(world)?.chunkCount ?: 0
+
+    override fun entityCount(world: String): Int = world(world)?.entityCount ?: 0
+
     override fun loadChunk(world: String, chunkX: Int, chunkZ: Int): Boolean {
         val w = world(world) ?: return false
         return w.getChunkAt(chunkX, chunkZ, true).isLoaded

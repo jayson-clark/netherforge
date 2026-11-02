@@ -69,6 +69,13 @@ release is cut.
   second login through another proxy is refused or takes over
   (`duplicate-login`), and the admin API lists proxies and drains one before
   it restarts.
+- **Metrics.** `metrics.port` in `config.yml` serves a server's numbers for
+  Prometheus: TPS and tick time, players, entities, centities and chunks,
+  each package's script cost, memory and network traffic, its state and
+  start-up time. The hub serves its own (`metrics.port` in
+  `hub.properties`): servers and players by group, tick times, frames, map
+  usage, what waits. `nf.network.servers()` and `groups()` give each
+  server's `tick_milliseconds`.
 - **Groups of servers.** `network.group` and `network.capacity` make a server
   an instance of a group. `send_player` and the new `send_players` (a party,
   landing together) take `{ group = "arena" }`, and the hub picks the

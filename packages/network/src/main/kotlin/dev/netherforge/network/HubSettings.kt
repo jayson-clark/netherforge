@@ -25,6 +25,9 @@ data class HubSettings(
     /** Where the admin API listens (`admin.bind`, `admin.port`): off without a port. Its clients are in `admin.properties`. */
     val adminBind: String = "127.0.0.1",
     val adminPort: Int? = null,
+    /** Where the hub's Prometheus metrics are served (`metrics.bind`, `metrics.port`): off without a port. */
+    val metricsBind: String = "127.0.0.1",
+    val metricsPort: Int? = null,
     /** Where the hub POSTs its events (`webhook.url`), signed with `webhook.secret`; none without a URL. */
     val webhookUrl: java.net.URI? = null,
     val webhookSecret: String? = null,
@@ -137,6 +140,8 @@ data class HubSettings(
                     Remote(hub.substring(0, colon), port, text("remote.name") ?: "proxy", credential, secret)
                 },
                 adminBind = text("admin.bind") ?: "127.0.0.1",
+                metricsBind = text("metrics.bind") ?: "127.0.0.1",
+                metricsPort = positive("metrics.port")?.toInt(),
                 adminPort = positive("admin.port")?.toInt(),
                 clearResourcePacks = flag("clear-resource-packs") ?: true
             )
@@ -219,6 +224,9 @@ data class HubSettings(
                 |# its token and scopes (/nfhub admins add). Keep it on localhost or your servers' network.
                 |admin.bind=127.0.0.1
                 |admin.port=
+                |# The hub's metrics, for Prometheus, at http://<metrics.bind>:<metrics.port>/metrics. Off without a port.
+                |metrics.bind=127.0.0.1
+                |metrics.port=
                 |# How long the hub waits for a client placing a group's players to answer, before the group's balancing.
                 |placement-timeout-millis=2000
                 |

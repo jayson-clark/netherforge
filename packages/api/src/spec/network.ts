@@ -483,6 +483,11 @@ export const networkShapes: LuaClass[] = [
       type: 'boolean',
       doc: 'Whether it has been empty longer than its `network.idle-after-seconds`.',
     },
+    {
+      name: 'tick_milliseconds',
+      type: 'number?',
+      doc: 'Its average tick time lately, in milliseconds (50 is a full tick at 20 a second), as it last said (every few seconds); `nil` before it has.',
+    },
   ]),
   shape('NetworkGroup', 'A group of the network and its instances, from `nf.network.groups`.', [
     { name: 'name', type: 'string', doc: 'Its name.' },

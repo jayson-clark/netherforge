@@ -165,9 +165,19 @@ class NetworkLink(
         status()
     }
 
+    /** The server's tick time as last said to the hub. */
+    private var tickMillis: Double? = null
+
+    /** Every few seconds: the server's average tick time to the hub, for `groups()` and the hub's metrics. */
+    fun reportTick(tick: Long, millis: Double) {
+        if (tick % TICK_REPORT_TICKS != 0L || !connected) return
+        tickMillis = millis
+        status()
+    }
+
     /** Says to the hub what this server is now. */
     private fun status() {
-        link?.send(ServerFrame.Status(accepting, state, idle, startupMillis))
+        link?.send(ServerFrame.Status(accepting, state, idle, startupMillis, tickMillis))
     }
 
     /** This server's group: `network.group`, or its own name (a group of one). */
@@ -500,6 +510,8 @@ class NetworkLink(
     companion object {
         /** A script test run's network: its server is ready from the start, since a test runs before any tick. */
         const val TEST_NETWORK = "test"
+
+        private const val TICK_REPORT_TICKS = 100L
 
         private const val FAILURE_EVERY_NANOS = 5 * 60 * 1_000_000_000L
     }

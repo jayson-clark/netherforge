@@ -168,9 +168,22 @@ class Network(
         return value
     }
 
+    /** What each package sent and heard, for the metrics: counted on the main thread. */
+    private val sentByPackage = HashMap<String, Long>()
+    private val heardByPackage = HashMap<String, Long>()
+
+    fun sentCounts(): Map<String, Long> = HashMap(sentByPackage)
+
+    fun heardCounts(): Map<String, Long> = HashMap(heardByPackage)
+
+    private fun heardBy(full: String) = heardByPackage.merge(NetworkNames.namespaceOf(full), 1, Long::plus)
+
     /** Whether [namespace] may send one more this minute; says so in the log when it may not. */
     private fun allowed(namespace: String): Boolean {
-        if (rate.tryStart(namespace)) return true
+        if (rate.tryStart(namespace)) {
+            sentByPackage.merge(namespace, 1, Long::plus)
+            return true
+        }
         warnOnce(
             "rate:$namespace",
             "package \"$namespace\" sent more than ${config.messagesPerMinute} times to the network in a minute, the server's limit " +
@@ -366,6 +379,7 @@ class Network(
     private fun frame(frame: HubFrame) {
         when (frame) {
             is HubFrame.Message -> if (frame.channel in channels) {
+                heardBy(frame.channel)
                 val handle = LuaHandle.NetworkChannel(frame.channel)
                 scripts.emit(Events.NETWORKCHANNEL_MESSAGE, handle, NetworkMessageEvent(handle, frame.value, frame.from))
             }
@@ -489,6 +503,7 @@ class Network(
     }
 
     private fun answer(frame: HubFrame.Requested) {
+        heardBy(frame.channel)
         fun reply(value: JsonElement?, error: String? = null) {
             link().send(ServerFrame.Reply(frame.id, value, error))
         }

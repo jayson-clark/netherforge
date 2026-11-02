@@ -220,6 +220,14 @@ worlds:
   import-root: imports
   max-loaded: 0
 
+# Metrics for Prometheus at http://<bind>:<port>/metrics: TPS and tick time,
+# players, entities, centities and chunks, each package's script cost and
+# memory and network traffic, the server's state and start-up time. Off
+# without a port; bind 0.0.0.0 to let a scraper elsewhere reach it.
+metrics:
+  port: 0
+  bind: 127.0.0.1
+
 # A local control endpoint for the tool that runs this server (a container's
 # sidecar, a host's agent): GET /state and /events (a stream of changes), POST
 # /drain, /shutdown, /save (with "pause": true, writes stop until /resume or

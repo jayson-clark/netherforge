@@ -340,6 +340,11 @@ interface WorldOps {
     /** Every chunk loaded in the world now, as (chunk x, chunk z); empty for a world that doesn't exist. */
     fun loadedChunks(world: String): List<Pair<Int, Int>>
 
+    /** How many chunks and entities a loaded world has now, for metrics: counted by the server, nothing listed. */
+    fun chunkCount(world: String): Int
+
+    fun entityCount(world: String): Int
+
     /** Loads (generating if need be) a chunk, now. */
     fun loadChunk(world: String, chunkX: Int, chunkZ: Int): Boolean
 

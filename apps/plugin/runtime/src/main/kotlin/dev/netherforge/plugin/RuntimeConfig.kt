@@ -66,6 +66,8 @@ data class RuntimeConfig(
     val files: FilesConfig = FilesConfig(),
     /** `worlds:`: where worlds are imported from, and how many may be loaded. */
     val worlds: dev.netherforge.plugin.world.WorldsConfig = dev.netherforge.plugin.world.WorldsConfig(),
+    /** `metrics:`: the Prometheus endpoint, off unless it has a port. */
+    val metrics: dev.netherforge.plugin.metrics.MetricsConfig = dev.netherforge.plugin.metrics.MetricsConfig(),
     /** `control:`: the local control endpoint for the tool that runs the server, off unless set. */
     val control: dev.netherforge.plugin.control.ControlConfig = dev.netherforge.plugin.control.ControlConfig(),
     /**
@@ -143,6 +145,12 @@ data class RuntimeConfig(
                     maxLoaded = section.int("max-loaded")?.takeIf { it > 0 } ?: 0
                 )
             }
+            val metrics = settings.section("metrics").let { section ->
+                dev.netherforge.plugin.metrics.MetricsConfig(
+                    port = section.int("port")?.takeIf { it in 1..65535 },
+                    bind = section.text("bind")?.trim() ?: "127.0.0.1"
+                )
+            }
             val control = settings.section("control").let { section ->
                 dev.netherforge.plugin.control.ControlConfig(
                     socket = section.text("socket")?.trim()?.let { server.directory.resolve(it).toAbsolutePath().normalize() },
@@ -172,6 +180,7 @@ data class RuntimeConfig(
                     files = files,
                     control = control,
                     worlds = worlds,
+                    metrics = metrics,
                     packageCache = properties(Bridge.PACKAGE_CACHE_PROPERTY)?.takeIf {
                         it.isNotBlank()
                     }?.let { Path.of(it).toAbsolutePath().normalize() },
@@ -197,6 +206,7 @@ data class RuntimeConfig(
                 network = network,
                 control = control,
                 worlds = worlds,
+                metrics = metrics,
                 files = files,
                 resolvesPackages = false
             )

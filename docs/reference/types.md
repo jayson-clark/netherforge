@@ -3051,6 +3051,7 @@ A server of the network, from `nf.network.servers`.
 | `accepting` | `boolean` | Whether it takes players now (`set_accepting` there). |
 | `state` | `"starting"\|"ready"\|"draining"\|"stopping"\|nil` | Where it is in its life (`nf.network.state()` there); `nil` when it isn't connected. |
 | `idle` | `boolean` | Whether it has been empty longer than its `network.idle-after-seconds`. |
+| `tick_milliseconds` | `number?` | Its average tick time lately, in milliseconds (50 is a full tick at 20 a second), as it last said (every few seconds); `nil` before it has. |
 
 ### NetworkGroup {#networkgroup}
 

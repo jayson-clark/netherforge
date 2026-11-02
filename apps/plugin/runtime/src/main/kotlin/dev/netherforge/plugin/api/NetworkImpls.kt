@@ -93,6 +93,7 @@ internal class NfNetworkImpl(private val session: ProjectSession) : NfNetworkApi
         players = (counts[state.name] ?: 0).toLong(),
         state = state.state?.word,
         idle = state.idle,
+        tickMilliseconds = state.tickMillis,
         group = state.groupName,
         capacity = state.capacity?.toLong(),
         accepting = state.accepting

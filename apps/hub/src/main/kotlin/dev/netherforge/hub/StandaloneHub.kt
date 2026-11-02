@@ -31,6 +31,7 @@ class StandaloneHub(private val folder: Path, private val log: HubLog) {
     private var server: HubServer? = null
     private var admin: HubAdmin? = null
     private var watcher: ScheduledExecutorService? = null
+    private var metrics: com.sun.net.httpserver.HttpServer? = null
 
     @Volatile
     private var adminClients: List<AdminClient> = emptyList()
@@ -71,6 +72,10 @@ class StandaloneHub(private val folder: Path, private val log: HubLog) {
             admin = HubAdmin(hub, InetSocketAddress(settings.adminBind, adminPort), { adminClients }, log).also { it.start() }
             log.info("NetherForge hub's admin API listening on ${settings.adminBind}:${admin!!.port}, with ${adminClients.size} clients")
         }
+        settings.metricsPort?.let { port ->
+            metrics = dev.netherforge.network.Prometheus.serve(InetSocketAddress(settings.metricsBind, port)) { hub.metrics() }
+            log.info("NetherForge hub's metrics at http://${settings.metricsBind}:$port/metrics")
+        }
         // The files, read again when they change.
         var seen = stamps(credentialsFile.file, adminFile.file)
         watcher = Executors.newSingleThreadScheduledExecutor { Thread(it, "NetherForge hub files").apply { isDaemon = true } }.also {
@@ -96,6 +101,7 @@ class StandaloneHub(private val folder: Path, private val log: HubLog) {
 
     fun stop() {
         watcher?.shutdownNow()
+        metrics?.stop(0)
         admin?.stop()
         server?.stop()
         admin = null

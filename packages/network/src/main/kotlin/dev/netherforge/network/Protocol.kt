@@ -94,7 +94,9 @@ data class ServerState(
     /** Whether it's been empty longer than its `network.idle-after-seconds`. */
     val idle: Boolean = false,
     /** How long it took from its process starting to [Lifecycle.READY], once it got there. */
-    val startupMillis: Long? = null
+    val startupMillis: Long? = null,
+    /** Its average tick time lately, as it last said (every few seconds). */
+    val tickMillis: Double? = null
 ) {
     /** Its group's name: its [group], or its own [name] when it's a group of one. */
     val groupName get() = group ?: name
@@ -353,7 +355,9 @@ sealed interface ServerFrame {
         val accepting: Boolean = true,
         val state: Lifecycle = Lifecycle.READY,
         val idle: Boolean = false,
-        val startupMillis: Long? = null
+        val startupMillis: Long? = null,
+        /** Its average tick time lately, in milliseconds. */
+        val tickMillis: Double? = null
     ) : ServerFrame
 
     /** Asks the hub to send every player on this server to its group's fallback: it's stopping. */

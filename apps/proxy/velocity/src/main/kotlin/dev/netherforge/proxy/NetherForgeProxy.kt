@@ -60,6 +60,7 @@ class NetherForgeProxy @Inject constructor(
     private var hub: Hub? = null
     private var server: HubServer? = null
     private var admin: HubAdmin? = null
+    private var metrics: com.sun.net.httpserver.HttpServer? = null
     private var clearResourcePacks = true
     private var settings: HubSettings? = null
     private val credentialsFile by lazy { CredentialsFile(folder.resolve(CredentialsFile.FILE)) }
@@ -119,6 +120,14 @@ class NetherForgeProxy @Inject constructor(
         } catch (e: Exception) {
             logger.error("NetherForge: the network's hub couldn't listen on ${settings.bind}:${settings.port}", e)
             return
+        }
+        settings.metricsPort?.let { port ->
+            try {
+                metrics = dev.netherforge.network.Prometheus.serve(InetSocketAddress(settings.metricsBind, port)) { hub.metrics() }
+                logger.info("NetherForge: the hub's metrics are at http://${settings.metricsBind}:$port/metrics")
+            } catch (e: Exception) {
+                logger.error("NetherForge: the hub's metrics couldn't listen on ${settings.metricsBind}:$port", e)
+            }
         }
         val adminPort = settings.adminPort
         if (adminPort != null) {
@@ -213,6 +222,8 @@ class NetherForgeProxy @Inject constructor(
 
     @Subscribe
     fun onShutdown(event: ProxyShutdownEvent) {
+        metrics?.stop(0)
+        metrics = null
         remote?.stop()
         remote = null
         admin?.stop()

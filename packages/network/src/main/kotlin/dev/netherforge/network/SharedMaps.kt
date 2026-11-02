@@ -117,6 +117,9 @@ class SharedMaps(private val limits: NetworkLimits, private val now: () -> Long)
     /** Whether there's anything to save, clearing it. */
     fun takeDirty(): Boolean = dirty.also { dirty = false }
 
+    /** What each package keeps across its maps: keys and bytes. */
+    fun usage(): Map<String, Pair<Int, Long>> = (keys.keys + bytes.keys).associateWith { (keys[it] ?: 0) to (bytes[it] ?: 0L) }
+
     /** Everything, as it's saved. */
     fun snapshot(): SavedMaps = SavedMaps(
         maps.mapValues { (_, entries) -> entries.mapValues { (_, entry) -> SavedEntry(entry.value, entry.expiresAt) } }

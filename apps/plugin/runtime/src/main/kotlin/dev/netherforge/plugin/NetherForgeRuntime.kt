@@ -95,6 +95,9 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
      * not in a network, and a test run, are a network of their own, in this JVM) and what it said of the network.
      * Connected in [enable], closed in [disable].
      */
+    /** The Prometheus endpoint (`metrics:` in `config.yml`). */
+    val metrics by lazy { dev.netherforge.plugin.metrics.ServerMetrics(config.metrics, this) }
+
     /** The local control endpoint (`control:` in `config.yml`), for the tool that runs this server. */
     val control by lazy { dev.netherforge.plugin.control.Control(config.control, this) }
 
@@ -298,6 +301,7 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
         }
         network.start { log.info(it) }
         control.start()
+        metrics.start()
         config.bridge?.let { settings ->
             val connection = BridgeService(this, settings)
             debugger = Debugger(this, connection::dap)
@@ -345,6 +349,7 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
         }
         remote = null
         control.stop()
+        metrics.stop()
         network.stop()
         // Work under way (files being copied, reports written) finishes; what it reported is logged.
         pool?.close()
@@ -417,6 +422,7 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
 
     /** One server tick: the session's, what it changed committed to the store, then the editor's status now and then. */
     fun tick() {
+        val started = System.nanoTime()
         ticks++
         mainThread.run(::tickFailed)
         // What the editor set since (breakpoints, a pause), before any script of this tick runs.
@@ -428,6 +434,9 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
             if (session.running) reload(session.snapshot.everywhere(ResourcePackKind).keys.map { packFile(it) })
         }
         store.commit()
+        metrics.record(System.nanoTime() - started)
+        metrics.tick(ticks)
+        network.reportTick(ticks, platform.performance.tickMilliseconds())
         control.tick(ticks)
         if (ticks % STATUS_EVERY == 0L) {
             try {

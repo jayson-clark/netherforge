@@ -8099,6 +8099,7 @@ function Event:uncancel() end
 ---@field accepting boolean Whether it takes players now (`set_accepting` there).
 ---@field state "starting"|"ready"|"draining"|"stopping"|nil Where it is in its life (`nf.network.state()` there); `nil` when it isn't connected.
 ---@field idle boolean Whether it has been empty longer than its `network.idle-after-seconds`.
+---@field tick_milliseconds number? Its average tick time lately, in milliseconds (50 is a full tick at 20 a second), as it last said (every few seconds); `nil` before it has.
 
 --- A group of the network and its instances, from `nf.network.groups`.
 ---@class NetworkGroup
