@@ -1,19 +1,12 @@
-package dev.netherforge.proxy
+package dev.netherforge.network
 
-import dev.netherforge.network.Auth
-import dev.netherforge.network.Balance
-import dev.netherforge.network.Grants
-import dev.netherforge.network.GroupSettings
-import dev.netherforge.network.NetworkLimits
-import dev.netherforge.network.NetworkNames
-import dev.netherforge.network.Protocol
-import dev.netherforge.network.Share
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Properties
 
 /**
- * The hub's settings, `plugins/netherforge/hub.properties` on the proxy: where it listens, the shared secret a
+ * The hub's settings, `hub.properties` (in the proxy plugin's folder, or beside the hub running on its own): where it
+ * listens, the shared secret a
  * trusted server may join with, what the network shares with less trusted servers (`share.<role>`), and the
  * network's limits. Written with a new random secret the first time the proxy starts, so a hub is never open without
  * one; an owner who wants every server to have its own credential empties it. A value that isn't one (a negative
@@ -35,6 +28,16 @@ data class HubSettings(
     /** Where the hub POSTs its events (`webhook.url`), signed with `webhook.secret`; none without a URL. */
     val webhookUrl: java.net.URI? = null,
     val webhookSecret: String? = null,
+    /** Where shared maps are kept: null for `maps.json` beside this file, else a PostgreSQL JDBC URL (`store.url`). */
+    val storeUrl: String? = null,
+    val storeUser: String? = null,
+    val storePassword: String? = null,
+    /**
+     * For the proxy plugin: the hub running on its own that it joins (`remote.hub`, `host:port`), as which proxy
+     * (`remote.name`) and with what (`remote.credential.id` and `.secret`, or the hub's shared `remote.secret`).
+     * Null: the plugin runs the hub itself, as everything else in this file says.
+     */
+    val remote: Remote? = null,
     /**
      * Whether a server's resource packs come off a player as they move to another server, so one server's (a lobby's
      * hidden HUD, its replaced sprites) never follows them to the next. Default true; a file written before this
@@ -42,6 +45,9 @@ data class HubSettings(
      */
     val clearResourcePacks: Boolean = true
 ) {
+    /** The hub a proxy joins, when it runs on its own. */
+    data class Remote(val host: String, val port: Int, val name: String, val credential: String?, val secret: String)
+
     companion object {
         const val FILE = "hub.properties"
 
@@ -85,7 +91,8 @@ data class HubSettings(
                 }
             return HubSettings(
                 bind = text("bind") ?: "0.0.0.0",
-                port = positive("port")?.toInt() ?: Protocol.DEFAULT_PORT,
+                // 0: any free port (what tests use).
+                port = text("port")?.toIntOrNull()?.takeIf { it in 0..65535 } ?: Protocol.DEFAULT_PORT,
                 secret = secret,
                 roleShares = roleShares,
                 groups = groups,
@@ -108,6 +115,22 @@ data class HubSettings(
                     uri
                 },
                 webhookSecret = text("webhook.secret"),
+                storeUrl = text("store.url")?.also {
+                    require(it.startsWith("jdbc:postgresql:")) {
+                        "$file's store.url \"$it\" isn't a PostgreSQL JDBC URL (jdbc:postgresql://host/db)"
+                    }
+                },
+                storeUser = text("store.user"),
+                storePassword = text("store.password"),
+                remote = text("remote.hub")?.let { hub ->
+                    val colon = hub.lastIndexOf(':')
+                    val port = hub.substring(colon + 1).toIntOrNull()
+                    require(colon > 0 && port != null) { "$file's remote.hub \"$hub\" isn't host:port" }
+                    val credential = text("remote.credential.id")
+                    val secret = if (credential != null) text("remote.credential.secret") else text("remote.secret")
+                    require(secret != null) { "$file's remote.hub is set, and neither remote.credential.secret nor remote.secret is" }
+                    Remote(hub.substring(0, colon), port, text("remote.name") ?: "proxy", credential, secret)
+                },
                 adminBind = text("admin.bind") ?: "127.0.0.1",
                 adminPort = positive("admin.port")?.toInt(),
                 clearResourcePacks = flag("clear-resource-packs") ?: true
@@ -167,6 +190,19 @@ data class HubSettings(
                 |# How long a server that added itself to the proxy (network.register in its config.yml) may be gone
                 |# without shutting down cleanly before it comes off the proxy's servers.
                 |unregister-after-seconds=${limits.unregisterAfterMillis / 1000}
+                |
+                |# Where the network's shared maps are kept: maps.json beside this file, unless store.url names a PostgreSQL
+                |# database (jdbc:postgresql://host:5432/netherforge), which a hub running on its own can move or restart with.
+                |store.url=
+                |store.user=
+                |store.password=
+                |
+                |# For the proxy plugin only: join a hub that runs on its own (java -jar NetherForge-<version>-hub.jar)
+                |# rather than run the hub here. Then the rest of this file is that hub's, and this proxy needs only:
+                |#   remote.hub=hub.internal:25590
+                |#   remote.name=velocity-1
+                |#   remote.credential.id=velocity      (a credential with role=proxy on the hub)
+                |#   remote.credential.secret=...
                 |
                 |# The admin API: HTTP for services outside the servers (an orchestrator, a matchmaker, a moderation tool)
                 |# to see the network and act on it: add and remove servers, follow players, send and message them,

@@ -270,6 +270,36 @@ sealed interface HubFrame {
     @Serializable
     @SerialName("pong")
     data object Pong : HubFrame
+
+    // ---- to a proxy, from a hub that runs on its own ----------------------------
+
+    /** Move player [player] to [server]; answer [ServerFrame.ProxyResult] [id]. */
+    @Serializable
+    @SerialName("proxy_move")
+    data class ProxyMove(val id: Long, val player: String, val server: String) : HubFrame
+
+    /** Add [name] at [host]:[port] to the proxy's servers. */
+    @Serializable
+    @SerialName("proxy_register")
+    data class ProxyRegister(val name: String, val host: String, val port: Int) : HubFrame
+
+    @Serializable
+    @SerialName("proxy_unregister")
+    data class ProxyUnregister(val name: String) : HubFrame
+
+    /** Show [player] [text] as [kind] (`chat`, `title`, `actionbar`). */
+    @Serializable
+    @SerialName("proxy_message")
+    data class ProxyMessage(val player: String, val kind: String, val text: String, val subtitle: String? = null) : HubFrame
+
+    @Serializable
+    @SerialName("proxy_kick")
+    data class ProxyKick(val player: String, val message: String) : HubFrame
+
+    /** Where the player of [ServerFrame.ProxyLogin] [id] goes: [server] (null: the proxy's own choice), or away with [deny]. */
+    @Serializable
+    @SerialName("login_placed")
+    data class LoginPlaced(val id: Long, val server: String? = null, val deny: String? = null) : HubFrame
 }
 
 /** What a server sends the hub. */
@@ -295,7 +325,9 @@ sealed interface ServerFrame {
         /** This process's own random id: the same server dialling again keeps its name, another can't take it. */
         val instance: String? = null,
         /** Where it is in its life as it joins: a server still starting isn't sent players until it's ready. */
-        val state: Lifecycle = Lifecycle.READY
+        val state: Lifecycle = Lifecycle.READY,
+        /** `proxy` for a proxy joining a hub that runs on its own; a server says none. */
+        val role: String? = null
     ) : ServerFrame
 
     /** This server is shutting down: a server that registered itself comes off the proxy at once. */
@@ -385,6 +417,37 @@ sealed interface ServerFrame {
     @Serializable
     @SerialName("ping")
     data object Ping : ServerFrame
+
+    // ---- from a proxy, to a hub that runs on its own -----------------------------
+
+    /** The proxy's servers now: every one, and which are its config's own ([fixed]). */
+    @Serializable
+    @SerialName("proxy_servers")
+    data class ProxyServers(val servers: List<String>, val fixed: List<String>) : ServerFrame
+
+    /** [player] is on [PlayerState.server] now: they joined, or moved. */
+    @Serializable
+    @SerialName("proxy_player")
+    data class ProxyPlayer(val player: PlayerState) : ServerFrame
+
+    /** Everyone on the proxy now, when it connects: the hub's presence becomes this. */
+    @Serializable
+    @SerialName("proxy_presence")
+    data class ProxyPresence(val players: List<PlayerState>) : ServerFrame
+
+    @Serializable
+    @SerialName("proxy_player_left")
+    data class ProxyPlayerLeft(val id: String) : ServerFrame
+
+    /** How [HubFrame.ProxyMove] [id] went: null once they're there, or why not. */
+    @Serializable
+    @SerialName("proxy_result")
+    data class ProxyResult(val id: Long, val error: String? = null) : ServerFrame
+
+    /** [player] ([name]) is logging in: where should they go? Answered with [HubFrame.LoginPlaced] [id]. */
+    @Serializable
+    @SerialName("proxy_login")
+    data class ProxyLogin(val id: Long, val player: String, val name: String) : ServerFrame
 }
 
 @Serializable

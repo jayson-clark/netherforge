@@ -630,6 +630,49 @@ balancing places them, so the network keeps working without the service. One
 stream places a group at a time; another opened for it takes over when the
 first goes.
 
+## Running the hub on its own
+
+The hub runs inside the proxy plugin unless you say otherwise, and that's all
+a network with one proxy needs. To restart or move the proxy without the hub
+(and every server's network calls) going with it, run the hub on its own:
+
+```sh
+java -jar NetherForge-<version>-hub.jar
+```
+
+It reads `hub.properties`, `credentials.properties` and `admin.properties`
+from the folder it runs in, as the proxy plugin does, and reads the credential
+and admin files again within seconds whenever they change. Its command line
+manages them:
+
+```sh
+java -jar NetherForge-<version>-hub.jar credentials add velocity proxy   # the proxy's own credential
+java -jar NetherForge-<version>-hub.jar credentials add arena standard arena
+java -jar NetherForge-<version>-hub.jar admins add matchmaker presence:read,players:send
+```
+
+The proxy then joins it as a client, with a credential whose role is
+`proxy`, set in its own `plugins/netherforge/hub.properties`:
+
+```properties
+remote.hub=hub.internal:25590
+remote.name=velocity-1
+remote.credential.id=velocity
+remote.credential.secret=…
+```
+
+Servers join the hub as before (`network.hub` is the hub's address now, not
+the proxy's). The proxy tells the hub its servers and who's on them, and does
+what it asks: moving players, adding servers that register, messages and
+kicks. While no proxy is connected the hub has no servers and moves nobody,
+and servers keep running with their network calls failing; when the proxy is
+back it says who's online again, and everything picks up.
+
+**Shared maps in a database.** With `store.url` (a PostgreSQL JDBC URL, and
+`store.user`, `store.password`), the hub keeps the network's maps there
+instead of in `maps.json`, so it can restart or move to another machine
+without losing them. One hub at a time uses a database.
+
 ## Limits
 
 The server's owner limits what its packages send (`network:` in

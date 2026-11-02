@@ -135,7 +135,10 @@ data class Grants(
         const val TRUSTED_ROLE = "trusted"
         const val STANDARD_ROLE = "standard"
         const val ISOLATED_ROLE = "isolated"
-        val ROLES = listOf(TRUSTED_ROLE, STANDARD_ROLE, ISOLATED_ROLE)
+
+        /** A proxy's, joining a hub that runs on its own: it tells the hub who's online, and moves players. */
+        const val PROXY_ROLE = "proxy"
+        val ROLES = listOf(TRUSTED_ROLE, STANDARD_ROLE, ISOLATED_ROLE, PROXY_ROLE)
 
         /**
          * A preset's grants: `trusted` everything; `standard` its [owns], [shared] with standard servers, presence,
@@ -150,6 +153,7 @@ data class Grants(
             sendTo: List<String>? = null
         ): Grants = when (role) {
             TRUSTED_ROLE -> TRUSTED
+            PROXY_ROLE -> Grants(PROXY_ROLE, trusted = true)
             STANDARD_ROLE -> Grants(role, owns = owns, shares = shared, presence = presence ?: true, sendTo = sendTo)
             ISOLATED_ROLE -> Grants(role, owns = owns, shares = shared, presence = presence ?: false, sendTo = sendTo ?: listOf(BACK))
             else -> throw IllegalArgumentException("\"$role\" isn't a role: trusted, standard or isolated")

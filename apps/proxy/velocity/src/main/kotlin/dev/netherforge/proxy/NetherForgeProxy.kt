@@ -25,12 +25,17 @@ import dev.netherforge.network.FileMapStore
 import dev.netherforge.network.Grants
 import dev.netherforge.network.Hub
 import dev.netherforge.network.HubAdmin
+import dev.netherforge.network.HubClient
 import dev.netherforge.network.HubEvents
+import dev.netherforge.network.HubFrame
+import dev.netherforge.network.HubListener
 import dev.netherforge.network.HubLog
 import dev.netherforge.network.HubProxy
 import dev.netherforge.network.HubServer
+import dev.netherforge.network.HubSettings
 import dev.netherforge.network.NetworkNames
 import dev.netherforge.network.PlayerState
+import dev.netherforge.network.ServerFrame
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
@@ -63,6 +68,12 @@ class NetherForgeProxy @Inject constructor(
     @Volatile
     private var adminClients: List<AdminClient> = emptyList()
 
+    /** The hub running on its own this proxy joined (`remote.hub`), instead of running one. */
+    private var remote: HubClient? = null
+    private var remoteSettings: HubSettings.Remote? = null
+    private val logins = java.util.concurrent.ConcurrentHashMap<Long, CompletableFuture<HubFrame.LoginPlaced>>()
+    private val loginIds = java.util.concurrent.atomic.AtomicLong(1)
+
     @Subscribe
     fun onInitialize(event: ProxyInitializeEvent) {
         val settings = try {
@@ -75,6 +86,12 @@ class NetherForgeProxy @Inject constructor(
             override fun info(message: String) = logger.info(message)
 
             override fun warn(message: String) = logger.warn(message)
+        }
+        clearResourcePacks = settings.clearResourcePacks
+        settings.remote?.let { joining ->
+            joinRemote(joining)
+            proxy.commandManager.register(proxy.commandManager.metaBuilder("nfhub").plugin(this).build(), StatusCommand())
+            return
         }
         val credentials = try {
             credentialsFile.read().map { it.credential(settings.roleShares) }
@@ -99,10 +116,11 @@ class NetherForgeProxy @Inject constructor(
             logger.error("NetherForge: the network's hub couldn't listen on ${settings.bind}:${settings.port}", e)
             return
         }
-        if (settings.adminPort != null) {
+        val adminPort = settings.adminPort
+        if (adminPort != null) {
             try {
                 adminClients = adminFile.read()
-                admin = HubAdmin(hub, InetSocketAddress(settings.adminBind, settings.adminPort), { adminClients }, log).also { it.start() }
+                admin = HubAdmin(hub, InetSocketAddress(settings.adminBind, adminPort), { adminClients }, log).also { it.start() }
                 logger.info(
                     "NetherForge: the hub's admin API is listening on ${settings.adminBind}:${settings.adminPort}, " +
                         "with ${adminClients.size} clients (/nfhub admins add)"
@@ -114,7 +132,6 @@ class NetherForgeProxy @Inject constructor(
         this.hub = hub
         this.server = server
         this.settings = settings
-        clearResourcePacks = settings.clearResourcePacks
         logger.info(
             "NetherForge: the network's hub is listening on ${settings.bind}:${server.port}, with ${credentials.size} credentials" +
                 if (settings.secret == null) " and no shared secret" else ""
@@ -122,8 +139,72 @@ class NetherForgeProxy @Inject constructor(
         proxy.commandManager.register(proxy.commandManager.metaBuilder("nfhub").plugin(this).build(), StatusCommand())
     }
 
+    /** Joins the hub running on its own as its proxy: it hears this proxy's servers and players, and asks it to act. */
+    private fun joinRemote(joining: HubSettings.Remote) {
+        remoteSettings = joining
+        val velocity = VelocityProxy()
+        lateinit var client: HubClient
+        val listener = object : HubListener {
+            override fun connected(welcome: HubFrame.Welcome) {
+                logger.info("NetherForge: joined the network's hub at ${joining.host}:${joining.port} as ${joining.name}")
+                reportServers(client)
+                client.send(ServerFrame.ProxyPresence(velocity.players()))
+            }
+
+            override fun received(frame: HubFrame) {
+                when (frame) {
+                    is HubFrame.ProxyMove -> velocity.send(frame.player, frame.server).thenAccept {
+                        client.send(ServerFrame.ProxyResult(frame.id, it))
+                    }
+                    is HubFrame.ProxyRegister -> {
+                        velocity.register(frame.name, frame.host, frame.port)?.let {
+                            logger.warn("NetherForge: couldn't add ${frame.name}: $it")
+                        }
+                        reportServers(client)
+                    }
+                    is HubFrame.ProxyUnregister -> {
+                        velocity.unregister(frame.name)
+                        reportServers(client)
+                    }
+                    is HubFrame.ProxyMessage -> velocity.message(frame.player, frame.kind, frame.text, frame.subtitle)
+                    is HubFrame.ProxyKick -> velocity.kick(frame.player, frame.message)
+                    is HubFrame.LoginPlaced -> logins.remove(frame.id)?.complete(frame)
+                    else -> Unit
+                }
+            }
+
+            override fun disconnected(why: String) {
+                logger.warn("NetherForge: lost the network's hub ($why); trying again")
+                for (waiting in logins.values) waiting.complete(HubFrame.LoginPlaced(-1))
+                logins.clear()
+            }
+
+            override fun failed(why: String) = logger.warn("NetherForge: couldn't join the network's hub: $why")
+        }
+        client =
+            HubClient(
+                joining.host,
+                joining.port,
+                joining.name,
+                joining.secret,
+                listener,
+                credential = joining.credential,
+                role = Grants.PROXY_ROLE
+            )
+        remote = client
+        client.start()
+    }
+
+    private fun reportServers(client: HubClient) {
+        val all = proxy.allServers.map { it.serverInfo.name }
+        val fixed = proxy.configuration.servers.keys.toList()
+        client.send(ServerFrame.ProxyServers(all, fixed))
+    }
+
     @Subscribe
     fun onShutdown(event: ProxyShutdownEvent) {
+        remote?.stop()
+        remote = null
         admin?.stop()
         admin = null
         server?.stop()
@@ -141,6 +222,7 @@ class NetherForgeProxy @Inject constructor(
             for (pack in left) player.removeResourcePacks(pack.id)
         }
         hub?.playerMoved(player.uniqueId.toString(), player.username, event.server.serverInfo.name)
+        remote?.send(ServerFrame.ProxyPlayer(PlayerState(player.uniqueId.toString(), player.username, event.server.serverInfo.name)))
     }
 
     /**
@@ -149,6 +231,7 @@ class NetherForgeProxy @Inject constructor(
      */
     @Subscribe(order = PostOrder.LAST)
     fun onChooseInitialServer(event: PlayerChooseInitialServerEvent): EventTask? {
+        remote?.let { client -> return askRemote(client, event) }
         val hub = hub ?: return null
         val placed = hub.placeLogin(event.player.uniqueId.toString(), event.player.username)
         if (placed.isDone && placed.join().server == null && placed.join().deny == null) return null
@@ -160,9 +243,33 @@ class NetherForgeProxy @Inject constructor(
         )
     }
 
+    /** A login placed by the hub running on its own: asked, and waited for (no longer than a hold may last). */
+    private fun askRemote(client: HubClient, event: PlayerChooseInitialServerEvent): EventTask? {
+        if (!client.connected) return null
+        val id = loginIds.getAndIncrement()
+        val placed = CompletableFuture<HubFrame.LoginPlaced>()
+        logins[id] = placed
+        if (!client.send(ServerFrame.ProxyLogin(id, event.player.uniqueId.toString(), event.player.username))) {
+            logins.remove(id)
+            return null
+        }
+        return EventTask.resumeWhenComplete(
+            placed.completeOnTimeout(
+                HubFrame.LoginPlaced(id),
+                LOGIN_WAIT_SECONDS,
+                java.util.concurrent.TimeUnit.SECONDS
+            ).thenAccept { place ->
+                logins.remove(id)
+                place.server?.let { name -> proxy.getServer(name).ifPresent(event::setInitialServer) }
+                place.deny?.let { why -> event.player.disconnect(MiniMessage.miniMessage().deserialize(why)) }
+            }
+        )
+    }
+
     @Subscribe(order = PostOrder.LAST)
     fun onDisconnect(event: DisconnectEvent) {
         hub?.playerLeft(event.player.uniqueId.toString())
+        remote?.send(ServerFrame.ProxyPlayerLeft(event.player.uniqueId.toString()))
     }
 
     private inner class VelocityProxy : HubProxy {
@@ -249,15 +356,23 @@ class NetherForgeProxy @Inject constructor(
 
         override fun execute(invocation: SimpleCommand.Invocation) {
             val args = invocation.arguments()
-            val text = when (args.firstOrNull()) {
-                "credentials" -> credentials(args.drop(1))
-                "admins" -> admins(args.drop(1))
+            val text = when {
+                remote != null -> status()
+                args.firstOrNull() == "credentials" -> credentials(args.drop(1))
+                args.firstOrNull() == "admins" -> admins(args.drop(1))
                 else -> status()
             }
             invocation.source().sendMessage(Component.text(text))
         }
 
         private fun status(): String {
+            val client = remote
+            if (client != null) {
+                val joining = remoteSettings!!
+                val state = if (client.connected) "connected" else "not connected (trying again)"
+                return "This proxy is ${joining.name} of the network's hub at ${joining.host}:${joining.port}: $state. " +
+                    "Its credentials and admin clients are the hub's (java -jar NetherForge-<version>-hub.jar credentials ...)."
+            }
             val hub = hub ?: return "NetherForge's network hub isn't running (see the proxy's log)."
             val linked = hub.connections().associateBy { it.server }
             val states = hub.states().associateBy { it.name }
@@ -401,5 +516,10 @@ class NetherForgeProxy @Inject constructor(
                 "That failed: ${e.message}"
             }
         }
+    }
+
+    private companion object {
+        /** How long a login may wait for the hub running on its own to place it: a hold's longest, and a little. */
+        const val LOGIN_WAIT_SECONDS = 35L
     }
 }

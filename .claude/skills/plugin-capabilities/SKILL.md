@@ -307,6 +307,13 @@ Servers behind one Velocity proxy, talking through a **hub** the proxy runs. Thr
   had a previous server: Velocity keeps a server's packs across a switch until the next server replaces them, so a
   lobby's would follow a player into a game that sends none. Velocity holds the new backend's packets while the
   event runs, so the new server's own packs (sent as it hears the join) arrive after the removal.
+- **`apps/hub` (`:hub`)**: the hub on its own, `NetherForge-<v>-hub.jar` (`StandaloneHub`: `HubSettings`, credentials
+  and admin clients read again when their files change, `PostgresMapStore` for `store.url`, a command line for
+  credentials and admins). Its proxy is a `RemoteProxy`: the proxy plugin, with `remote.hub` in `hub.properties`, joins
+  as a client with the `proxy` role (a `proxy`-role credential or the shared secret), sends `ProxyServers`,
+  `ProxyPresence` (whole, on joining), `ProxyPlayer`/`ProxyPlayerLeft` and `ProxyLogin`, and does the hub's
+  `ProxyMove`, `ProxyRegister`, `ProxyMessage`, `ProxyKick`. One proxy at a time (a new one replaces it); with none,
+  the hub has no servers. `HubSettings` lives in `:network` for both.
 - **The editor's dev networks**: a dev server started with `-Dnetherforge.network.hub` (and `.server`, and the secret
   in `NETHERFORGE_NETWORK_SECRET`, never on the command line) is in that network whatever `config.yml` says; the
   owner's limits stay (`RuntimeConfig.devNetwork`). The editor runs the proxy and the servers (tauri-backend's "Dev

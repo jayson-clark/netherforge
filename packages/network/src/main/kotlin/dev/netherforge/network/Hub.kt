@@ -289,8 +289,14 @@ class Hub(
 
     /** The proxy says player [id] left the network. */
     fun playerLeft(id: String) {
-        synchronized(lock) {
-            val previous = players.remove(id) ?: return@synchronized
+        synchronized(lock) { left(id) }
+        runLater()
+    }
+
+    /** Under the lock: player [id] left the network. */
+    private fun left(id: String) {
+        run {
+            val previous = players.remove(id) ?: return
             cameFrom.remove(id)
             for (session in byName.values) session.presence(previous, null)
             tellAdmins(AdminScope.PRESENCE_READ, AdminEvent.PlayerLeft(id))
@@ -302,7 +308,6 @@ class Hub(
             }
             dispatch()
         }
-        runLater()
     }
 
     /** Once a second or so: expired keys, requests nobody answered, connections that never said hello, saving. */
@@ -477,6 +482,9 @@ class Hub(
         /** It said it's shutting down: a server that registered itself comes off the proxy as it goes. */
         internal var leaving = false
 
+        /** A proxy's connection (the hub running on its own), not a server's. */
+        internal var proxySession = false
+
         /** Where it is in its life, whether it's idle, and how long it took to be ready, as it last said. */
         internal var state = Lifecycle.READY
         internal var idle = false
@@ -514,9 +522,15 @@ class Hub(
             runLater()
         }
 
-        private fun close() {
+        internal fun close() {
             if (closed) return
             closed = true
+            if (proxySession) {
+                proxies -= this
+                (proxy as? RemoteProxy)?.gone()
+                log.info("NetherForge hub: the proxy $name disconnected")
+                tellServers()
+            }
             for (queue in queues.values) queue.removeAll { it.origin === this }
             sessions -= this
             val name = name
@@ -574,6 +588,7 @@ class Hub(
                 }
                 bound
             } ?: frame.group
+            if (frame.role == Grants.PROXY_ROLE) return proxyHello(frame, credential, proven)
             val byAdmin = registered.values.firstOrNull { it.byAdmin && it.name.equals(frame.server, ignoreCase = true) }
             if (byAdmin?.credential != null && byAdmin.credential != credential?.id) {
                 return refuse("${byAdmin.name} was added for the credential \"${byAdmin.credential}\", and it joins with another")
@@ -702,6 +717,54 @@ class Hub(
 
         internal fun credentialName() = "credential \"$credential\" (${grants.role})"
 
+        /** A proxy joining a hub that runs on its own: the hub's one proxy from now on (a new one replaces it). */
+        private fun proxyHello(frame: ServerFrame.Hello, credential: Credential?, proven: String) {
+            val remote = proxy as? RemoteProxy ?: return refuse("this hub runs inside a proxy: it takes no other proxy")
+            if (credential != null && credential.grants.role != Grants.PROXY_ROLE) {
+                return refuse("its credential \"${credential.id}\" isn't a proxy's (role=proxy in credentials.properties)")
+            }
+            proxies.forEach { previous ->
+                previous.peer.close("another proxy connected")
+                previous.close()
+            }
+            name = frame.server
+            this.credential = credential?.id
+            joinedWith = credential
+            grants = Grants.TRUSTED
+            proxySession = true
+            proxies += this
+            remote.link = { frame -> send(frame) }
+            log.info("NetherForge hub: the proxy ${frame.server} connected from ${peer.address}")
+            peer.secure(Channel.hub(proven, nonce, frame.nonce, frame.server, frame.credential))
+            send(HubFrame.Welcome(frame.server, servers(), players.values.toList(), limits.maxValueBytes, grants))
+        }
+
+        /** Under the lock: what a proxy says, and asks. */
+        private fun proxyFrame(frame: ServerFrame) {
+            val remote = proxy as RemoteProxy
+            when (frame) {
+                is ServerFrame.Ping -> send(HubFrame.Pong)
+                is ServerFrame.ProxyServers -> {
+                    remote.servers(frame.servers, frame.fixed)
+                    tellServers()
+                    dispatch()
+                }
+                is ServerFrame.ProxyPlayer -> frame.player.server?.let { moved(frame.player.id, frame.player.name, it) }
+                is ServerFrame.ProxyPresence -> {
+                    val online = frame.players.associateBy { it.id }
+                    for (id in players.keys.filter { it !in online }) left(id)
+                    for (player in frame.players) player.server?.let { moved(player.id, player.name, it) }
+                }
+                is ServerFrame.ProxyPlayerLeft -> left(frame.id)
+                is ServerFrame.ProxyResult -> later += { remote.result(frame.id, frame.error) }
+                is ServerFrame.ProxyLogin -> {
+                    val placed = placeLogin(frame.player, frame.name)
+                    later += { placed.thenAccept { place -> send(HubFrame.LoginPlaced(frame.id, place.server, place.deny)) } }
+                }
+                else -> send(HubFrame.Problem("a proxy's connection says only what a proxy says"))
+            }
+        }
+
         private fun refuse(why: String) {
             log.warn("NetherForge hub: refused a connection from ${peer.address}: $why")
             peer.send(HubFrame.Refused(why))
@@ -710,6 +773,7 @@ class Hub(
 
         /** Under the lock; what must wait for the lock to be let go of goes in [later]. */
         private fun handle(frame: ServerFrame) {
+            if (proxySession) return proxyFrame(frame)
             val from = name!!
             when (frame) {
                 is ServerFrame.Hello -> send(HubFrame.Problem("it already said hello"))
@@ -755,6 +819,8 @@ class Hub(
                 }
                 is ServerFrame.MapWrite -> write(frame, from)
                 is ServerFrame.Send -> sendPlayer(this, frame, from)
+                is ServerFrame.ProxyServers, is ServerFrame.ProxyPlayer, is ServerFrame.ProxyPresence, is ServerFrame.ProxyPlayerLeft,
+                is ServerFrame.ProxyResult, is ServerFrame.ProxyLogin -> send(HubFrame.Problem("only a proxy says that"))
             }
         }
 
@@ -853,6 +919,9 @@ class Hub(
     }
 
     // ---- admin clients -------------------------------------------------------------
+
+    /** The proxy connected to a hub that runs on its own (one, for now). */
+    private val proxies = ArrayList<Session>()
 
     /** The admin clients' streams, oldest first. */
     private val streams = ArrayList<AdminStream>()

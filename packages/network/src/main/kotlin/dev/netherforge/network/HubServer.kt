@@ -225,7 +225,9 @@ class HubServer(
             } finally {
                 open.set(false)
                 connections -= this
-                closeSocket()
+                // The writer closes the socket once it has sent what's queued (a refusal, saying why): closing it here
+                // could cut that off.
+                if (writer == null) closeSocket()
                 session.closed()
             }
         }

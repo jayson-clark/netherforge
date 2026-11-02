@@ -133,6 +133,12 @@ jobs:
           cp apps/plugin/paper-*/build/libs/NetherForge-*-paper-*.jar "$RUNNER_TEMP/assets/"
           # The proxy plugin: a network's hub, for server owners (and the editor's dev networks).
           cp apps/proxy/velocity/build/libs/NetherForge-*-velocity.jar "$RUNNER_TEMP/assets/"
+          # The hub on its own, for networks that run it apart from the proxy.
+          cp apps/hub/build/libs/NetherForge-*-hub.jar "$RUNNER_TEMP/assets/"
+          case "$(basename apps/hub/build/libs/NetherForge-*-hub.jar)" in
+            "NetherForge-$VERSION-hub.jar") ;;
+            *) echo "::error::the hub's jar doesn't carry version $VERSION"; exit 1 ;;
+          esac
           # The script test runner, which `netherforge test` downloads from here when the editor hasn't put one in place.
           cp apps/plugin/test-runner/build/libs/NetherForgeTest-*.jar "$RUNNER_TEMP/assets/"
           # The editor bundles the plugin jars, the proxy plugin (its dev networks) and the test runner.

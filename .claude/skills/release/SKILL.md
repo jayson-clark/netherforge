@@ -91,17 +91,17 @@ new patch version.
 
 ## What CI produces
 
-| Job       | Runner         | Attaches                                                                                                                                                                                    |
-| --------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ci        | all            | nothing: `ci.yml` called as a reusable workflow on the tagged commit; `prepare` and so every later job needs it to pass                                                                     |
-| prepare   | ubuntu         | the draft release, notes from `CHANGELOG.md`                                                                                                                                                |
-| plugin    | ubuntu         | `NetherForge-<v>-paper-<mc>.jar` for every adapter, `NetherForge-<v>-velocity.jar`, `NetherForgeTest-<v>.jar` (the script test runner `netherforge test` launches, and downloads from here) |
-| cli       | ubuntu         | nothing: builds the command, runs `tools/npm-check.mjs`, stages and packs the npm package, so one that won't publish fails the release                                                      |
-| editor    | macos-latest   | `NetherForge_<v>_universal.dmg`, the `.app.tar.gz` update bundle (+ `.sig`)                                                                                                                 |
-| editor    | windows-latest | `NetherForge_<v>_x64-setup.exe`, `NetherForge_<v>_x64_en-US.msi` (+ `.sig`)                                                                                                                 |
-| editor    | ubuntu-22.04   | `.AppImage` (+ `.sig`), `.deb`, `.rpm`                                                                                                                                                      |
-| editor    | all            | `latest.json` (merged across platforms), only when the updater key is set                                                                                                                   |
-| checksums | ubuntu         | `SHA256SUMS.txt` over everything                                                                                                                                                            |
+| Job       | Runner         | Attaches                                                                                                                                                                                                                                    |
+| --------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ci        | all            | nothing: `ci.yml` called as a reusable workflow on the tagged commit; `prepare` and so every later job needs it to pass                                                                                                                     |
+| prepare   | ubuntu         | the draft release, notes from `CHANGELOG.md`                                                                                                                                                                                                |
+| plugin    | ubuntu         | `NetherForge-<v>-paper-<mc>.jar` for every adapter, `NetherForge-<v>-velocity.jar`, `NetherForge-<v>-hub.jar` (the hub on its own), `NetherForgeTest-<v>.jar` (the script test runner `netherforge test` launches, and downloads from here) |
+| cli       | ubuntu         | nothing: builds the command, runs `tools/npm-check.mjs`, stages and packs the npm package, so one that won't publish fails the release                                                                                                      |
+| editor    | macos-latest   | `NetherForge_<v>_universal.dmg`, the `.app.tar.gz` update bundle (+ `.sig`)                                                                                                                                                                 |
+| editor    | windows-latest | `NetherForge_<v>_x64-setup.exe`, `NetherForge_<v>_x64_en-US.msi` (+ `.sig`)                                                                                                                                                                 |
+| editor    | ubuntu-22.04   | `.AppImage` (+ `.sig`), `.deb`, `.rpm`                                                                                                                                                                                                      |
+| editor    | all            | `latest.json` (merged across platforms), only when the updater key is set                                                                                                                                                                   |
+| checksums | ubuntu         | `SHA256SUMS.txt` over everything                                                                                                                                                                                                            |
 
 **Why CI runs again inside the release** rather than the workflow checking
 the commit's status: a tag can be pushed before (or without) CI finishing on
@@ -339,6 +339,8 @@ banner.
   minecraft-versions skill lists them); `unzip -p NetherForge-1.2.3-paper-26.3.jar paper-plugin.yml`
   shows `version: '1.2.3'` and `api-version: '26.3'`. Drop it on a Paper server with
   `project:` set to `examples/showcase` and `/nf spawn tower`.
+- **Hub on its own**: `NetherForge-1.2.3-hub.jar` (`apps/hub`). `unzip -p NetherForge-1.2.3-hub.jar META-INF/MANIFEST.MF`
+  shows `Implementation-Version: 1.2.3`; `java -jar NetherForge-1.2.3-hub.jar credentials list` runs.
 - **Proxy plugin**: `NetherForge-1.2.3-velocity.jar` (a network's hub, `apps/proxy/velocity`; the editor doesn't
   bundle it). `unzip -p NetherForge-1.2.3-velocity.jar velocity-plugin.json` shows `"version": "1.2.3"`. On a Velocity
   proxy it writes `plugins/netherforge/hub.properties` and logs the hub listening; `/nfhub` lists the servers.

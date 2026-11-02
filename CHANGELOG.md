@@ -59,6 +59,12 @@ release is cut.
   caps how many are loaded at once, and the log says how long a slow load
   took. The control endpoint loads and unloads worlds too
   (`POST /worlds/load`, `/worlds/unload`).
+- **The hub on its own.** `NetherForge-<version>-hub.jar` runs the network's
+  hub apart from the proxy, with the same files (read again when they change)
+  and a command line for credentials and admin clients; the proxy plugin
+  joins it with `remote.hub` and a `proxy`-role credential, telling it who's
+  where and doing what it asks. `store.url` keeps the shared maps in
+  PostgreSQL.
 - **Groups of servers.** `network.group` and `network.capacity` make a server
   an instance of a group. `send_player` and the new `send_players` (a party,
   landing together) take `{ group = "arena" }`, and the hub picks the
@@ -169,6 +175,9 @@ release is cut.
   battery) while you work in it.
 
 ### Fixed
+
+- A server the hub refused over TCP heard the connection close without the
+  reason: the hub now sends the refusal before closing.
 
 - **A hidden centity node shown again appears where it is**, rather than
   easing in from the centity's position; hiding one no longer shrinks it

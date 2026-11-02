@@ -1,9 +1,5 @@
-package dev.netherforge.proxy
+package dev.netherforge.network
 
-import dev.netherforge.network.Balance
-import dev.netherforge.network.GroupSettings
-import dev.netherforge.network.NetworkLimits
-import dev.netherforge.network.Protocol
 import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.readText
