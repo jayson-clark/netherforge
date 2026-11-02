@@ -26,6 +26,9 @@ data class CredentialEntry(
     /** Whether its servers may ban and mute players network-wide. */
     val moderation: Boolean = false
 ) {
+    /** Never the secret. */
+    override fun toString() = "CredentialEntry($id, $role)"
+
     /** What it may do: its role's preset, with what the network shares with that role ([roleShares]) and its own. */
     fun credential(roleShares: Map<String, List<Share>>): Credential = Credential(
         id,
@@ -34,6 +37,73 @@ data class CredentialEntry(
         group,
         if (register) RegisterRule(names, addresses) else null
     )
+
+    /** What's wrong with it, starting with its id (null: nothing): what the file and the admin API both refuse. */
+    fun problem(): String? {
+        if (!NetworkNames.isCredential(id)) return "\"$id\" isn't a credential id (letters, digits, _ . -)"
+        if (secret.length < CredentialsFile.MIN_SECRET) return "$id's secret is shorter than ${CredentialsFile.MIN_SECRET} characters"
+        if (secret.any { it.isWhitespace() || it.isISOControl() }) return "$id's secret has spaces or control characters in it"
+        if (role !in Grants.ROLES) return "$id's role \"$role\" isn't ${Grants.ROLES.joinToString(", ")}"
+        owns.firstOrNull { !NetworkNames.isNamespace(it) }?.let { return "$id owns \"$it\", which isn't a namespace" }
+        group?.let { if (!NetworkNames.isServer(it)) return "$id's group \"$it\" isn't a group's name" }
+        addresses.firstOrNull { Cidr.parse(it) == null }?.let {
+            return "$id's address \"$it\" isn't an IP address or range (10.0.0.0/8)"
+        }
+        return null
+    }
+
+    /** As the admin API takes it and the hub's store keeps it (the id beside it). */
+    fun stored(): StoredCredential = StoredCredential(
+        secret,
+        role,
+        owns,
+        shares.map { it.toString() },
+        presence,
+        sendTo,
+        group,
+        register,
+        names,
+        addresses,
+        moderation
+    )
+}
+
+/**
+ * A credential as the admin API's `PUT /v1/credentials/<id>` takes it and the hub's store keeps it (with its id as the
+ * key): the fields of `credentials.properties`, spelled as JSON.
+ */
+@kotlinx.serialization.Serializable
+data class StoredCredential(
+    val secret: String,
+    val role: String = Grants.STANDARD_ROLE,
+    val owns: List<String> = emptyList(),
+    val shares: List<String> = emptyList(),
+    val presence: Boolean? = null,
+    val sendTo: List<String>? = null,
+    val group: String? = null,
+    val register: Boolean = false,
+    val names: List<String> = emptyList(),
+    val addresses: List<String> = emptyList(),
+    val moderation: Boolean = false
+) {
+    /** It as [id]'s entry; throws [IllegalArgumentException] for a share that isn't one. Check [CredentialEntry.problem] after. */
+    fun entry(id: String): CredentialEntry = CredentialEntry(
+        id,
+        secret,
+        role,
+        owns,
+        shares.map { Share.parse(it) },
+        presence,
+        sendTo,
+        group,
+        register,
+        names,
+        addresses,
+        moderation
+    )
+
+    /** Never the secret. */
+    override fun toString() = "StoredCredential($role)"
 }
 
 /**
@@ -52,16 +122,6 @@ class CredentialsFile(val file: Path) {
             require(NetworkNames.isCredential(id)) { "$file: \"$id\" isn't a credential id (letters, digits, _ . -)" }
             fun text(field: String) = properties.getProperty("$id.$field")?.trim()?.takeIf { it.isNotEmpty() }
             fun list(field: String) = text(field)?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
-            val secret = text("secret") ?: throw IllegalArgumentException("$file: $id has no secret")
-            require(secret.length >= MIN_SECRET) { "$file: $id's secret is shorter than $MIN_SECRET characters" }
-            val role = text("role") ?: Grants.STANDARD_ROLE
-            require(role in Grants.ROLES) { "$file: $id's role \"$role\" isn't trusted, standard or isolated" }
-            val owns = list("owns").orEmpty()
-            for (namespace in owns) {
-                require(NetworkNames.isNamespace(namespace)) {
-                    "$file: $id owns \"$namespace\", which isn't a namespace"
-                }
-            }
             val shares = try {
                 Share.parseList(text("shares"))
             } catch (e: IllegalArgumentException) {
@@ -69,20 +129,18 @@ class CredentialsFile(val file: Path) {
             }
             CredentialEntry(
                 id = id,
-                secret = secret,
-                role = role,
-                owns = owns,
+                secret = text("secret") ?: throw IllegalArgumentException("$file: $id has no secret"),
+                role = text("role") ?: Grants.STANDARD_ROLE,
+                owns = list("owns").orEmpty(),
                 shares = shares,
                 presence = text("presence")?.lowercase()?.let { it == "true" },
                 sendTo = list("send-to"),
-                group = text("group")?.also { require(NetworkNames.isServer(it)) { "$file: $id's group \"$it\" isn't a group's name" } },
+                group = text("group"),
                 register = text("register")?.lowercase() == "true",
                 moderation = text("moderation")?.lowercase() == "true",
                 names = list("names").orEmpty(),
-                addresses = list("addresses").orEmpty().onEach {
-                    require(Cidr.parse(it) != null) { "$file: $id's address \"$it\" isn't an IP address or range (10.0.0.0/8)" }
-                }
-            )
+                addresses = list("addresses").orEmpty()
+            ).also { entry -> entry.problem()?.let { throw IllegalArgumentException("$file: $it") } }
         }
     }
 

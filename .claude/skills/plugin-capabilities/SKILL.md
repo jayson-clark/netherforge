@@ -339,7 +339,14 @@ Servers behind one Velocity proxy, talking through a **hub** the proxy runs. Thr
   its own players, `proxy` for a remote proxy; plus `presence`, `send-to`, `moderation`) are what the hub holds
   **every frame** to: anything else is `network.forbidden` to the sender and never reaches another server. A credential
   may pin a `group` and allow registering (`register`, `names`, `addresses`). Revoking drops its servers at once. The
-  shared secret is `trusted`. `nf.network.server_role()` says what the server may do.
+  shared secret is `trusted`. `nf.network.server_role()` says what the server may do. Credentials come from two
+  places: the file (`Hub.setCredentials`, at start and on reload) and the admin API (`PUT`/`DELETE /v1/credentials/<id>`,
+  `Hub.putCredential`/`removeCredential`, scope `credentials`, which `AdminScope.STAR` (`*`) leaves out). The API's
+  are `StoredCredential`s kept in `SavedMaps.credentials` (the store's, not a `netherforge:` map: every server reads
+  those) and saved at once; the hub's effective set is the file's with the API's over them (`effectiveCredentials`),
+  and both paths go through `applyCredentials`, which closes sessions whose `joinedWith` changed. `CredentialEntry.problem`
+  is the one validation for both. Saves are numbered (`Snapshot`) so the timer's and the API's never write an older
+  one over a newer. Secrets never go into logs, the audit line, answers or a parse error (`body(quote = false)`).
 - **Groups** (`network.group`, `network.capacity`; `GroupSettings` from `group.<name>.*`): instances of one game.
   Sending to a group picks an instance accepting players with room (`least` or `fill`; `send_players` keeps a party
   together); a send can wait (`wait`, `on_wait`, the hub's `max-waiting`) or fall back (`fallback`). Publishing and

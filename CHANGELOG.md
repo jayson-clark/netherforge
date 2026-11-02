@@ -11,6 +11,14 @@ release is cut.
 
 ### Added
 
+- **Credentials added and removed through the hub's admin API.**
+  `PUT /v1/credentials/<id>`, `DELETE /v1/credentials/<id>` and
+  `GET /v1/credentials`, under a new `credentials` scope that `*` doesn't
+  give: a credential put is usable at once (servers joining, and
+  `POST /v1/servers`), replacing or removing one disconnects the servers using
+  it, and it's kept in the hub's store with the maps, so it survives a restart
+  and reloads of `credentials.properties` (an id in both is the API's). Its
+  secret is never answered, logged or sent to events.
 - **A package's own database on a shared server.** `own-databases` on a
   `databases:` entry puts those packages' `nf.db()` on the MySQL or
   PostgreSQL connection, each in a schema (PostgreSQL) or database (MySQL) of

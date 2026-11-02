@@ -37,10 +37,32 @@ enum class AdminScope(val word: String) {
     PLACEMENT("placement"),
 
     /** Ban and mute players network-wide, read reports, and take servers and groups off the network. */
-    MODERATION("moderation");
+    MODERATION("moderation"),
+
+    /**
+     * Add, replace and remove the credentials servers join with (any role, `trusted` too), and list them. Not part of
+     * `*`: a client given it is named for it.
+     */
+    CREDENTIALS("credentials");
 
     companion object {
         fun of(word: String): AdminScope? = entries.firstOrNull { it.word == word }
+
+        /** What `*` gives: every scope but [CREDENTIALS], which can make credentials trusted with the whole network. */
+        val STAR: Set<AdminScope> = entries.toSet() - CREDENTIALS
+
+        /** [words] as scopes (`*` among them: [STAR]); null for a word that isn't one, named by [unknown]. */
+        fun parse(words: List<String>, unknown: (String) -> Unit = {}): Set<AdminScope>? {
+            val scopes = HashSet<AdminScope>()
+            for (word in words) {
+                if (word == "*") {
+                    scopes += STAR
+                } else {
+                    scopes += of(word) ?: return null.also { unknown(word) }
+                }
+            }
+            return scopes.sortedBy { it.ordinal }.toSet()
+        }
     }
 }
 
@@ -64,18 +86,13 @@ class AdminClientsFile(val file: Path) {
                 ?: throw IllegalArgumentException("$file: $id has no token")
             require(token.length >= MIN_TOKEN) { "$file: $id's token is shorter than $MIN_TOKEN characters" }
             val words = properties.getProperty("$id.scopes").orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }
-            val scopes = if (words == listOf("*")) {
-                AdminScope.entries.toSet()
-            } else {
-                words.map {
-                    AdminScope.of(it)
-                        ?: throw IllegalArgumentException(
-                            "$file: $id's scope \"$it\" isn't one (${AdminScope.entries.joinToString { s ->
-                                s.word
-                            }})"
-                        )
-                }.toSet()
-            }
+            val scopes = AdminScope.parse(words) {
+                throw IllegalArgumentException(
+                    "$file: $id's scope \"$it\" isn't one (${AdminScope.entries.joinToString { s ->
+                        s.word
+                    }}, or * for all but credentials)"
+                )
+            }!!
             AdminClient(id, token, scopes)
         }
     }
@@ -105,7 +122,8 @@ class AdminClientsFile(val file: Path) {
         private val HEADER = """
             |# The hub's admin API clients (a matchmaker, an orchestrator, a moderation tool): each sends its token as
             |# Authorization: Bearer <token>, and may do what its scopes say: servers:read, servers:write, presence:read,
-            |# players:send, players:message, players:kick, channels:publish, channels:read, placement (or * for all).
+            |# players:send, players:message, players:kick, channels:publish, channels:read, placement, moderation (or *
+            |# for all of those), and credentials (never part of *: it can make credentials trusted with everything).
             |# /nfhub admins add|revoke rewrite this file.
             |
         """.trimMargin()

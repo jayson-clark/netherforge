@@ -132,6 +132,7 @@ class NetherForgeProxy @Inject constructor(
             settings.limits,
             FileMapStore(folder.resolve("maps.json")),
             credentials = credentials,
+            roleShares = settings.roleShares,
             groups = settings.groups,
             fallback = settings.fallback,
             policies = settings.rolePolicies,
@@ -649,7 +650,7 @@ class NetherForgeProxy @Inject constructor(
                 "list" -> {
                     val all = adminFile.read()
                     if (all.isEmpty()) {
-                        "No admin clients. Add one with /nfhub admins add <id> <scopes> (or * for every scope)."
+                        "No admin clients. Add one with /nfhub admins add <id> <scopes> (or * for every scope but credentials)."
                     } else {
                         "Admin clients:\n" + all.joinToString("\n") { "  ${it.id}: ${it.scopes.joinToString { s -> s.word }}" }
                     }
@@ -658,14 +659,14 @@ class NetherForgeProxy @Inject constructor(
                     val id = args.getOrNull(1) ?: return "Usage: /nfhub admins add <id> <scope,scope,...|*>"
                     if (!NetworkNames.isCredential(id)) return "\"$id\" isn't a client id: letters, digits, _ . -"
                     val words = args.drop(2).joinToString(",").split(',').map { it.trim() }.filter { it.isNotEmpty() }
-                    if (words.isEmpty()) return "Say what it may do: ${AdminScope.entries.joinToString { it.word }}, or *"
-                    val scopes = if (words == listOf("*")) {
-                        AdminScope.entries.toSet()
-                    } else {
-                        words.map {
-                            AdminScope.of(it) ?: return "\"$it\" isn't a scope: ${AdminScope.entries.joinToString { s -> s.word }}"
-                        }.toSet()
+                    if (words.isEmpty()) {
+                        return "Say what it may do: ${AdminScope.entries.joinToString {
+                            it.word
+                        }}, or * (all but credentials)"
                     }
+                    var unknown = ""
+                    val scopes = AdminScope.parse(words) { unknown = it }
+                        ?: return "\"$unknown\" isn't a scope: ${AdminScope.entries.joinToString { s -> s.word }}"
                     val all = adminFile.read()
                     if (all.any { it.id == id }) return "There's an admin client \"$id\" already: revoke it first for a new token."
                     val client = AdminClient(id, Auth.newSecret(), scopes)
@@ -701,6 +702,7 @@ class NetherForgeProxy @Inject constructor(
                 when (args.firstOrNull()) {
                     "list" -> {
                         val all = hub.credentials()
+                        val api = hub.credentialSources().filter { it.source == Hub.SOURCE_API }.map { it.id }.toSet()
                         if (all.isEmpty()) {
                             "No credentials: servers join with the shared secret. Add one with /nfhub credentials add <id> [role]."
                         } else {
@@ -708,6 +710,7 @@ class NetherForgeProxy @Inject constructor(
                             "Credentials:\n" + all.joinToString("\n") { credential ->
                                 val on = connected[credential.id].orEmpty().map { it.server }
                                 "  ${credential.id}: ${credential.grants.describe()}" +
+                                    (if (credential.id in api) " (the admin API's)" else "") +
                                     if (on.isEmpty()) "" else "; connected: ${on.joinToString()}"
                             }
                         }
@@ -744,7 +747,13 @@ class NetherForgeProxy @Inject constructor(
                     "revoke" -> {
                         val id = args.getOrNull(1) ?: return "Usage: /nfhub credentials revoke <id>"
                         val entries = credentialsFile.read()
-                        if (entries.none { it.id == id }) return "There's no credential \"$id\"."
+                        if (entries.none { it.id == id }) {
+                            return if (hub.credentialSources().any { it.id == id }) {
+                                "The credential \"$id\" was put through the admin API: DELETE /v1/credentials/$id takes it off."
+                            } else {
+                                "There's no credential \"$id\"."
+                            }
+                        }
                         val left = entries.filter { it.id != id }
                         credentialsFile.write(left)
                         hub.setCredentials(left.map { it.credential(settings.roleShares) })
@@ -757,7 +766,7 @@ class NetherForgeProxy @Inject constructor(
                         this@NetherForgeProxy.settings =
                             settings.copy(roleShares = fresh.roleShares, groups = fresh.groups, fallback = fresh.fallback)
                         hub.setGroups(fresh.groups, fresh.fallback)
-                        hub.setCredentials(all)
+                        hub.setCredentials(all, fresh.roleShares)
                         "Read ${all.size} credentials (and hub.properties' shares and groups); servers whose grants changed dial again."
                     }
                     else -> "Usage: /nfhub credentials add <id> [role] [owns,...] [--to-file] | revoke <id> | list | reload"
