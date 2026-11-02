@@ -391,7 +391,9 @@ and `nf.test.network_status` to change that, for sends that wait).
 `nf.test.network_role({ role = "standard", owns = { "shop" } })` joins this
 server under a role, so what it may not do fails as on a real network;
 bans and mutes work in a test as on a network (its hub is a real one), and
-`nf.test.network_reports()` is what scripts reported. `network_publish`, `network_answer` (how another server answers requests),
+`nf.test.network_reports()` is what scripts reported. `network_publish`
+(`"admin:platform"` as the server publishes as an admin API client would, heard
+from `admin:platform`), `network_answer` (how another server answers requests),
 `network_request` (another server asks this one), `network_write` (another
 server writes a map), `network_join` and `network_quit` cover the rest; see
 [`nf.test`](../reference/nf.test.md#server-networks). To try it with real

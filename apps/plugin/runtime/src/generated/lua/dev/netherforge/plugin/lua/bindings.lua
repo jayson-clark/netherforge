@@ -9240,6 +9240,10 @@ namespaces["nf.test"] = function(scope, ns)
     prim["nf.test.oauth_token"](scope, flow, response)
   end
 
+  function ns.http(handler)
+    prim["nf.test.http"](scope, handler)
+  end
+
   function ns.disconnect(connection, options)
     prim["nf.test.disconnect"](scope, connection, options)
   end

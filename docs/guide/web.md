@@ -287,8 +287,30 @@ starts again.
 
 ## Testing
 
-In a test (`netherforge test`), nothing reaches the network. Each connection a
-script opens is held by the test, which plays the other side:
+In a test (`netherforge test`), nothing reaches the network. A request
+(`nf.http.request`) is answered by the test's
+[`nf.test.http`](../reference/nf.test.md#http) handler, after the checks a
+server makes (the declared host, the private-address rules, the rate):
+
+```lua
+local weather = require("weather")
+
+nf.test.case("the forecast is read", function()
+  nf.test.http(function(request)
+    if request.url == "https://api.weather.example/now" then
+      return { status = 200, body = nf.json.encode({ sky = "rain" }) }
+    end
+  end)
+  weather.refresh()
+  nf.test.advance(1)
+  assert(weather.sky == "rain")
+end)
+```
+
+A request the handler answers `nil` to, or one made with no handler, fails the
+test with its URL, so a request the test didn't expect never goes unnoticed.
+
+Each connection a script opens is held by the test, which plays the other side:
 
 ```lua
 local bridge = require("chat_bridge")

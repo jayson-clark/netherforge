@@ -1657,6 +1657,17 @@ interface NfTestApi {
     fun oauthToken(caller: Caller, flow: LuaHandle.OAuthFlow, response: LuaValue)
 
     /**
+     * Answers this test's `nf.http.request` calls (and `nf.images.download`'s) with `handler`, for the
+     * rest of the test (another call replaces it). In a test no request reaches the network: each is
+     * checked as on a server first (the package declares the host, the owner's private-address rules and
+     * rate apply; a name isn't looked up, and `localhost` counts as this machine), then handed to the
+     * handler at the next tick, as the test's code. Its answer is the response the script gets, as it gave
+     * it: a redirect isn't followed. A request the handler answers `nil` to, or one made with no handler
+     * set, fails the test, naming its URL, and the script gets `nil, err`.
+     */
+    fun http(caller: Caller, handler: LuaFunction)
+
+    /**
      * Ends a connection from the far end, after what it already received: with `options.error` it breaks
      * (reason `"failed"`, `detail` the error), otherwise the server finishes it (`"finished"`, a WebSocket
      * with `options.code` and `options.reason`). Its `end` event follows at the next tick. Disconnecting
@@ -1685,7 +1696,9 @@ interface NfTestApi {
 
     /**
      * Another server publishes `value` on a channel, to every server listening: this one's `message`
-     * handlers hear it at the next tick (`nf.test.advance(1)`).
+     * handlers hear it at the next tick (`nf.test.advance(1)`). With `server` `"admin:<client>"`, a
+     * service outside the network publishes it through the hub's admin API instead, as the hub delivers
+     * it: `event.server` is `"admin:<client>"`.
      */
     fun networkPublish(caller: Caller, server: String, channel: String, value: LuaValue)
 

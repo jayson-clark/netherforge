@@ -11,7 +11,7 @@ A table of functions: call them with a dot.
 | [Tests and time](#tests-and-time) | [`case`](#case) [`advance`](#advance) |
 | [Players and their input](#players-and-their-input) | [`player`](#player) [`raise`](#raise) [`click`](#click) [`release`](#release) [`input`](#input) [`shown`](#shown) |
 | [Worldgen](#worldgen) | [`terrain`](#terrain) |
-| [Web connections](#web-connections) | [`connections`](#connections) [`accept`](#accept) [`receive`](#receive) [`sent`](#sent) [`disconnect`](#disconnect) [`request`](#request) [`oauth_token`](#oauth_token) |
+| [Web connections](#web-connections) | [`http`](#http) [`connections`](#connections) [`accept`](#accept) [`receive`](#receive) [`sent`](#sent) [`disconnect`](#disconnect) [`request`](#request) [`oauth_token`](#oauth_token) |
 | [Server networks](#server-networks) | [`network_server`](#network_server) [`network_status`](#network_status) [`network_role`](#network_role) [`network_reports`](#network_reports) [`network_publish`](#network_publish) [`network_received`](#network_received) [`network_answer`](#network_answer) [`network_request`](#network_request) [`network_write`](#network_write) [`network_join`](#network_join) [`network_quit`](#network_quit) [`network_send`](#network_send) |
 | [WebAssembly](#webassembly) | [`stub_wasm`](#stub_wasm) |
 
@@ -174,6 +174,28 @@ end)
 ```
 
 ## Web connections {#web-connections}
+
+### `nf.test.http(handler)` {#http}
+
+Answers this test's `nf.http.request` calls (and `nf.images.download`'s) with `handler`, for the rest of the test (another call replaces it). In a test no request reaches the network: each is checked as on a server first (the package declares the host, the owner's private-address rules and rate apply; a name isn't looked up, and `localhost` counts as this machine), then handed to the handler at the next tick, as the test's code. Its answer is the response the script gets, as it gave it: a redirect isn't followed. A request the handler answers `nil` to, or one made with no handler set, fails the test, naming its URL, and the script gets `nil, err`.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `handler` | `fun(request: `[`TestHttpRequest`](types.md#testhttprequest)`): `[`TestHttpAnswer`](types.md#testhttpanswer)`?` | Gets each request and returns its answer, or `nil` when it has none. |
+
+```lua
+nf.test.case("the weather is read", function()
+  nf.test.http(function(request)
+    if request.url == "https://api.weather.example/now" then
+      return { status = 200, body = nf.json.encode({ sky = "rain" }) }
+    end
+  end)
+  local forecast = require("weather")
+  forecast.refresh()
+  nf.test.advance(1)
+  assert(forecast.sky == "rain")
+end)
+```
 
 ### `nf.test.connections(url?)` {#connections}
 
@@ -350,11 +372,11 @@ The reports scripts made with `nf.network.report` in this test, oldest first, as
 
 ### `nf.test.network_publish(server, channel, value)` {#network_publish}
 
-Another server publishes `value` on a channel, to every server listening: this one's `message` handlers hear it at the next tick (`nf.test.advance(1)`).
+Another server publishes `value` on a channel, to every server listening: this one's `message` handlers hear it at the next tick (`nf.test.advance(1)`). With `server` `"admin:<client>"`, a service outside the network publishes it through the hub's admin API instead, as the hub delivers it: `event.server` is `"admin:<client>"`.
 
 | Parameter | Type | |
 | --- | --- | --- |
-| `server` | `string` | The other server's name, as `nf.test.network_server` added it. |
+| `server` | `string` | The other server's name, as `nf.test.network_server` added it, or `"admin:<client>"` for an admin API client (it needn't be added). |
 | `channel` | `string` | The channel's name, as `nf.network.channel` takes it. |
 | `value` | `any` | What it publishes. |
 

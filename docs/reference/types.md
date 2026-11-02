@@ -3333,6 +3333,27 @@ What `nf.test.request` sends. Every key is optional; a key that isn't one of the
 | `body` | `string?` | The body. Default none. |
 | `ip` | `string?` | The address it comes from. Default `"127.0.0.1"`. |
 
+### TestHttpRequest {#testhttprequest}
+
+A request a script made, as `nf.test.http`'s handler gets it.
+
+| Field | Type | |
+| --- | --- | --- |
+| `method` | `string` | Its method (`"GET"`). |
+| `url` | `string` | Its URL, as the script wrote it. |
+| `headers` | `table<string, string>` | The headers the script set, as it named them. |
+| `body` | `string?` | Its body, when it has one. |
+
+### TestHttpAnswer {#testhttpanswer}
+
+What `nf.test.http`'s handler answers a request with: the response the script gets. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `status` | `integer?` | The status code. Default `200`. |
+| `headers` | `table<string, string>?` | Its headers (the script reads them by name in lowercase). Default none. |
+| `body` | `string?` | Its body. Default empty. |
+
 ### TestWebResponse {#testwebresponse}
 
 What `nf.test.request` gives back: the answer as the client got it.

@@ -461,6 +461,15 @@ class NetworkLink(
         link = LocalLink(hub, alone!!, roleSecret, listener, TEST_CREDENTIAL, state = { state }).also { it.start() }
     }
 
+    /**
+     * The admin API's client [client] publishes [value] on [channel] (a full name) to every server listening, as the hub
+     * delivers it (from `admin:<client>`): a test's `nf.test.network_publish`. Null when sent, else why not.
+     */
+    fun adminPublish(client: String, channel: String, value: kotlinx.serialization.json.JsonElement): String? {
+        val hub = hub ?: error("only a local network has the test's admin clients")
+        return hub.adminPublish(client, channel, value, null, null)
+    }
+
     /** What scripts reported in a local network. */
     fun reports(): List<dev.netherforge.network.Report> = hub?.reports()?.reversed().orEmpty()
 

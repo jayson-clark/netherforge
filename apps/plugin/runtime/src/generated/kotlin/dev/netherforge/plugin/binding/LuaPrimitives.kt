@@ -1566,6 +1566,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         0
     }
 
+    fn("nf.test.http") { call ->
+        val lua = call.lua
+        val caller = marshal.caller(lua, 1)
+        val handler = call.arg(2, "handler", LuaCodecs.FUNCTION)
+        api.nfTest.http(caller, handler)
+        0
+    }
+
     fn("nf.test.disconnect") { call ->
         val lua = call.lua
         val caller = marshal.caller(lua, 1)

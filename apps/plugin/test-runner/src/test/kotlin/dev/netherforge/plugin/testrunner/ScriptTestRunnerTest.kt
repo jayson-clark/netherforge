@@ -757,6 +757,80 @@ class ScriptTestRunnerTest {
     }
 
     @Test
+    fun `a test answers the scripts' web requests, after the checks a server makes`() {
+        val (events, _) = run(
+            mapOf(
+                "netherforge.json" to
+                    manifest.replace(
+                        "\"minecraft\": \"26.3\"",
+                        "\"minecraft\": \"26.3\",\n  \"requires\": { \"http\": [\"api.weather.example\", \"127.0.0.1\"] }"
+                    ),
+                "modules/weather/init.lua" to """
+                    local M = {}
+                    function M.refresh()
+                      nf.http.request({ url = "https://api.weather.example/now?city=oslo", headers = { ["X-Key"] = "k" } }, function(response, err)
+                        if response then
+                          M.sky = nf.json.decode(response.body).sky
+                          M.status, M.kind = response.status, response.headers["content-type"]
+                        else
+                          M.err = err
+                        end
+                      end)
+                    end
+                    return M
+                """,
+                "tests/weather_test.lua" to """
+                    local weather = require("weather")
+
+                    nf.test.case("the fake answers", function()
+                      local asked
+                      nf.test.http(function(request)
+                        asked = request
+                        return { status = 203, headers = { ["Content-Type"] = "application/json" }, body = nf.json.encode({ sky = "rain" }) }
+                      end)
+                      weather.refresh()
+                      nf.test.advance(1)
+                      assert(weather.sky == "rain", tostring(weather.err))
+                      assert(weather.status == 203 and weather.kind == "application/json")
+                      assert(asked.method == "GET" and asked.url == "https://api.weather.example/now?city=oslo" and asked.headers["X-Key"] == "k")
+                    end)
+
+                    nf.test.case("the checks come first", function()
+                      nf.test.http(function() return { body = "never" } end)
+                      local ok, err = pcall(nf.http.request, { url = "https://undeclared.example/" }, function() end)
+                      assert(not ok and tostring(err):find("hasn't declared"), tostring(err))
+                      local got, why
+                      nf.http.request({ url = "http://127.0.0.1:9000/" }, function(response, e) got, why = response, e end)
+                      nf.test.advance(1)
+                      assert(got == nil and tostring(why):find("loopback"), tostring(why))
+                    end)
+
+                    nf.test.case("an unanswered request fails the test", function()
+                      nf.test.http(function() return nil end)
+                      weather.refresh()
+                      nf.test.advance(1)
+                    end)
+
+                    nf.test.case("with no handler too, even when the script takes its error", function()
+                      weather.refresh()
+                      nf.test.advance(1)
+                      assert(weather.err)
+                    end)
+                """
+            )
+        )
+        expectStatuses(events, Status.PASSED, Status.PASSED, Status.FAILED, Status.FAILED)
+        val (unanswered, missing) = events.results().drop(2)
+        assertTrue(
+            "the request to https://api.weather.example/now?city=oslo wasn't answered: nf.test.http's handler answered nil" in
+                unanswered.message.orEmpty(),
+            unanswered.message
+        )
+        assertEquals(Place("tests/weather_test.lua", 29), unanswered.source, "at the advance it went unanswered in")
+        assertTrue("no nf.test.http handler" in missing.message.orEmpty(), missing.message)
+    }
+
+    @Test
     fun `a test plays the other servers of a network of its own`() {
         val (events, _) = run(
             mapOf(
@@ -799,6 +873,17 @@ class ScriptTestRunnerTest {
                       assert(#got == 2 and got[1].value == "hi" and got[1].server == "lobby")
                       assert(got[2].value == "hello" and got[2].server == "test" and got[2].channel == "chat")
                       assert(net.heard[2] == "test:hello", tostring(net.heard[2]))
+                    end)
+
+                    nf.test.case("an admin client publishes as the hub delivers it", function()
+                      nf.test.network_server("lobby")
+                      nf.test.advance(1)
+                      nf.test.network_publish("admin:platform", "chat", "from the service")
+                      nf.test.network_publish("lobby", "chat", "from a server")
+                      nf.test.advance(1)
+                      assert(net.heard[1] == "admin:platform:from the service", tostring(net.heard[1]))
+                      assert(net.heard[2] == "lobby:from a server", tostring(net.heard[2]))
+                      assert(not pcall(nf.test.network_publish, "admin:not an id", "chat", 1))
                     end)
 
                     nf.test.case("requests go both ways", function()
@@ -863,7 +948,7 @@ class ScriptTestRunnerTest {
                 """
             )
         )
-        expectStatuses(events, Status.PASSED, Status.PASSED, Status.PASSED, Status.PASSED, Status.PASSED)
+        expectStatuses(events, Status.PASSED, Status.PASSED, Status.PASSED, Status.PASSED, Status.PASSED, Status.PASSED)
     }
 
     @Test

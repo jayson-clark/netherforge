@@ -68,6 +68,7 @@ internal class NfHttpImpl(private val session: ProjectSession) : NfHttpApi {
         val held = session.requirements.held(what)
         val allowances = allowances()
         rateRefusal(caller, url, allowances)?.let { return CompletableFuture.failedFuture(WorkFailed(it)) }
+        if (session.config.testing != null) return answeredInTest(method, url, headers, body, allowances, read)
         val call = HttpCall(method, url, headers, body)
         val fetcher = session.http.fetcher
         return session.async.submit {
@@ -113,6 +114,47 @@ internal class NfHttpImpl(private val session: ProjectSession) : NfHttpApi {
         }
         val refusal = rateRefusal(caller, url, allowances)
         return session.connections.open(caller.scope, request, options.url, true, refusal).handle as LuaHandle.WebSocket
+    }
+
+    /**
+     * A test run's request (`nf.test.http`): nothing reaches the network. The address rules a literal URL meets on a
+     * server are held to first (a name isn't looked up; `localhost` is this machine), then the test's handler answers
+     * it on the main thread at the next tick, as the test's code.
+     */
+    private fun <T> answeredInTest(
+        method: String,
+        url: URI,
+        headers: Map<String, String>,
+        body: ByteArray?,
+        allowances: List<PrivateAllowance>,
+        read: (HttpReply) -> T
+    ): CompletionStage<T> {
+        try {
+            val host = url.host.lowercase()
+            val checked = okhttp3.HttpUrl.Builder().scheme(url.scheme).host(
+                if (host == "localhost" || host.endsWith(".localhost")) "127.0.0.1" else host.removePrefix("[").removeSuffix("]")
+            ).port(
+                if (url.port != -1) {
+                    url.port
+                } else if (url.scheme == "https") {
+                    443
+                } else {
+                    80
+                }
+            ).build()
+            session.http.fetcher.checkLiteral(checked, allowances)
+        } catch (e: WorkFailed) {
+            return CompletableFuture.failedFuture(e)
+        }
+        val done = CompletableFuture<T>()
+        session.async.mainThread.execute {
+            try {
+                done.complete(read(session.tests.answer(method, url, headers, body)))
+            } catch (e: Exception) {
+                done.completeExceptionally(e as? WorkFailed ?: WorkFailed(e.message ?: e.toString()))
+            }
+        }
+        return done
     }
 
     /**
@@ -163,7 +205,13 @@ internal class NfHttpImpl(private val session: ProjectSession) : NfHttpApi {
      */
     private fun rateRefusal(caller: Caller, url: URI, allowances: List<PrivateAllowance>): String? {
         val host = url.host.lowercase().removePrefix("[").removeSuffix("]")
-        val port = if (url.port != -1) url.port else if (url.scheme == "https" || url.scheme == "wss") 443 else 80
+        val port = if (url.port != -1) {
+            url.port
+        } else if (url.scheme == "https" || url.scheme == "wss") {
+            443
+        } else {
+            80
+        }
         val own = allowances.firstOrNull { it.requestsPerMinute != null && it.host == host && it.port == port }
         if (own != null) {
             val most = own.requestsPerMinute!!

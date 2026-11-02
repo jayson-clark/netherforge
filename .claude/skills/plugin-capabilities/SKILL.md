@@ -96,6 +96,14 @@ redirect's refusal are `nil, err` (`WorkFailed`).
   mapped address over as the `Inet4Address` it holds, so it's judged as that).
   Multicast, broadcast and `0.0.0.0`/`::` are never reachable. The owner's
   `http.allow-private-addresses` (`HttpConfig`, `config.yml`) allows the rest.
+- **A rate of its own per allowance**: an `allow-private` entry's `requests-per-minute` (`PrivateAllowance.requestsPerMinute`;
+  0 none) counts that package's requests to that host and port, as the URL writes them, in `NfHttpImpl.allowanceRates`
+  instead of the general `RequestRate`; redirects aren't counted again, as before.
+- **In a script test run** (`config.testing`) `nf.http.request` never reaches the network: `NfHttpImpl.answeredInTest`
+  holds it to the declaration, the rate and `checkLiteral` (a name isn't resolved; `localhost` is loopback), then
+  `ScriptTests.answer` calls the test's `nf.test.http` handler on `async.mainThread`. No answer (nil, no handler, a
+  handler that fails) is the script's `nil, err` and is kept: `nf.test.advance` raises it at the test's line, and `run`
+  fails a test that ended with one unraised.
 - **One package, one private host and port** (`http.allow-private`,
   `PrivateAllowance`): `NfHttpImpl.allowances()` takes the owner's entries for
   `requirements.callingPackage()` (the package the host requirement is held to;
@@ -378,6 +386,11 @@ seconds` (`NetworkLink.awaitWelcome`) and `require-hub` (`ProjectSession.waitsFo
   `Prometheus`): Prometheus's text format at `/metrics`, off without a port. The proxy plugin's `ProxyMetrics`
   (logins and refusals by reason, moves and failures, its link to a remote hub, labelled with `remote.name`) is served
   on the same port whether or not it runs the hub, the hub's appended when it does.
+- **The control endpoint's worlds** (`Control`): `/save` and `/resume` take a `world` (its own pause in `worldPauses`,
+  kept apart from the whole server's `pausedUntil`: a world saves again only when neither holds it; an unload ends it),
+  `/worlds/create` is `createWorld` (`Wrong` → 400 for a terrain or option that isn't one, `Refused` → 409, `Missing`
+  → 404), and the snapshot keeps players by UUID with their world (`player_world` when it changes) and each world's
+  players and `empty_seconds` (`worldEmptySince`).
 - **Outside the network but beside it**: `control/LocalHttp` (`Control`), a Unix socket or loopback port with a token
   file, for whoever runs the server (`/state` with `last_tick`/`tick_ms` kept every tick in volatiles and read off the
   main thread, `/healthz` without a token, a watchdog thread's `stalled` after `stall-seconds`, `/events`, `/drain`, `/shutdown`, `/save` with pause, `/resume`,

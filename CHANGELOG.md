@@ -11,6 +11,34 @@ release is cut.
 
 ### Added
 
+- **One world saved and paused on its own through the control endpoint.**
+  `POST /save` and `POST /resume` take a `world`: only its writes stop, other
+  worlds carry on, several can be paused at once, and a world's pause and the
+  whole server's stack (its writes go on once neither holds it). Its timeout
+  resumes only it, unloading it ends its pause, an unknown world is `404`, and
+  `/state`'s `paused_worlds` and `/events`' `writes` name the world.
+- **`POST /worlds/create` on the control endpoint**, taking what
+  `nf.worlds.create` takes (`name`, `terrain`, `seed`, ...): the world is made
+  by the project's terrain and is the project's from then on. A terrain or
+  option that isn't one is `400`; a name in use or `max-loaded` reached is
+  `409`.
+- **Which world each player is in, on the control endpoint.** `/state`'s
+  `players` are `{ uuid, name, world }` (`player_count` and `player_names`
+  beside them), each of its `worlds` is `{ name, players, empty_seconds }`,
+  `player_join` and `player_quit` carry `uuid` and `world`, and
+  `player_world` (`uuid`, `from`, `to`) says when a player changes worlds.
+- **A request rate per private allowance.** `requests-per-minute` on an
+  `http.allow-private` entry counts the package's requests to that host and
+  port against a rate of their own (`0` for none), leaving its general
+  `http.requests-per-minute` for everywhere else.
+- **`nf.test.http` answers `nf.http.request` in script tests.** Requests are
+  checked as on a server, then answered by the test's handler; one it doesn't
+  answer (or with no handler) fails the test with its URL. Script tests no
+  longer make real web requests.
+- **`nf.test.network_publish("admin:<client>", ...)`** publishes as an admin
+  API client, delivered as the hub delivers it (`event.server` is
+  `admin:<client>`).
+
 - **Credentials added and removed through the hub's admin API.**
   `PUT /v1/credentials/<id>`, `DELETE /v1/credentials/<id>` and
   `GET /v1/credentials`, under a new `credentials` scope that `*` doesn't
@@ -270,6 +298,13 @@ unmute`, and the admin API's `moderation` scope. `nf.network.report` sends
   (`event.from`); oversized pictures and videos in a package are refused.
 
 ### Changed
+
+- **The control endpoint's `/state` lists players and worlds as objects.**
+  `players` was a count and is now a list of `{ uuid, name, world }` (the count
+  is `player_count`), and `worlds` was a list of names and is now a list of
+  `{ name, players, empty_seconds }`. `player_names` is unchanged.
+- **`*` in `admin.properties` no longer gives every scope**: it gives every
+  scope but the new `credentials`, which a client has only when it's named.
 
 - **The network's protocol is version 3**: update NetherForge on the proxy
   and on every server together. `nf.network.send_player` now gives the server

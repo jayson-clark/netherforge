@@ -256,7 +256,13 @@ class ControlTest {
         TestServer(terrainFiles, control = ControlConfig(socket = socket)).use { server ->
             val address = UnixDomainSocketAddress.of(socket)
             repeat(10) { server.tick() }
-            val (status, body) = call(server, address, "POST", "/worlds/create", """{ "name": "island_7f2c", "terrain": "hills", "seed": 1234 }""")
+            val (status, body) = call(
+                server,
+                address,
+                "POST",
+                "/worlds/create",
+                """{ "name": "island_7f2c", "terrain": "hills", "seed": 1234 }"""
+            )
             assertEquals(200, status, body)
             val made = server.platform.worldManager.created.getValue("island_7f2c")
             assertEquals("hills", made.terrain)
@@ -301,7 +307,11 @@ class ControlTest {
             call(server, address, "POST", "/save", """{ "world": "island_b", "pause": true, "timeout": 60 }""")
             call(server, address, "POST", "/save", """{ "pause": true, "timeout": 60 }""")
             repeat(30) { server.tick() }
-            assertEquals(setOf("nether", "world", "island_a", "island_b"), manager.notSaving, "island_a's timeout passed, the server's holds it")
+            assertEquals(
+                setOf("nether", "world", "island_a", "island_b"),
+                manager.notSaving,
+                "island_a's timeout passed, the server's holds it"
+            )
             call(server, address, "POST", "/resume")
             assertEquals(setOf("island_b"), manager.notSaving, "island_a's timeout ran out on its own; island_b still holds")
             call(server, address, "POST", "/resume", """{ "world": "island_b" }""")
@@ -358,7 +368,10 @@ class ControlTest {
             assertTrue(lines.contains("event: player_world"), lines.toString())
             repeat(10) { server.tick() }
             state = call(server, address, "GET", "/state").second
-            assertTrue(state.contains("\"world\":\"world\"}") && state.contains("{\"name\":\"island_a\",\"players\":0,\"empty_seconds\":0"), state)
+            assertTrue(
+                state.contains("\"world\":\"world\"}") && state.contains("{\"name\":\"island_a\",\"players\":0,\"empty_seconds\":0"),
+                state
+            )
             repeat(45) { server.tick() }
             state = call(server, address, "GET", "/state").second
             assertTrue(Regex("\\{\"name\":\"island_a\",\"players\":0,\"empty_seconds\":[2-9]").containsMatchIn(state), state)
