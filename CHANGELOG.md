@@ -64,7 +64,11 @@ release is cut.
   and a command line for credentials and admin clients; the proxy plugin
   joins it with `remote.hub` and a `proxy`-role credential, telling it who's
   where and doing what it asks. `store.url` keeps the shared maps in
-  PostgreSQL.
+  PostgreSQL. Several proxies can join one hub: each player's moves,
+  messages and kicks go through the proxy they're on (`player.proxy`), a
+  second login through another proxy is refused or takes over
+  (`duplicate-login`), and the admin API lists proxies and drains one before
+  it restarts.
 - **Groups of servers.** `network.group` and `network.capacity` make a server
   an instance of a group. `send_player` and the new `send_players` (a party,
   landing together) take `{ group = "arena" }`, and the hub picks the

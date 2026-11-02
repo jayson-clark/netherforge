@@ -8146,6 +8146,7 @@ function Event:uncancel() end
 ---@field id string Their UUID, as a string: the same as `player:id()` on their server.
 ---@field name string Their name.
 ---@field server string? The server they're on; `nil` for a moment while the proxy is moving them.
+---@field proxy string? The proxy they came in through, when the network's hub runs on its own (with several proxies, which one); `nil` otherwise.
 
 --- What `channel:publish` takes. A key that isn't one of these is an error.
 ---@class NetworkPublishOptions

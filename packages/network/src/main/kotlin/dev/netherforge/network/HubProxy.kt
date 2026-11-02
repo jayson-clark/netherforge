@@ -61,7 +61,12 @@ data class NetworkLimits(
     /** How long a server that registered itself may be gone (not a clean shutdown) before it comes off the proxy. */
     val unregisterAfterMillis: Long = 60_000,
     /** How long the hub waits for an admin client to place players before the group's own balancing does. */
-    val placementTimeoutMillis: Long = 2_000
+    val placementTimeoutMillis: Long = 2_000,
+    /**
+     * A player logging in through one proxy while they're online through another: refused (false), or the new login
+     * takes over and the old one is kicked (true).
+     */
+    val takeOverDuplicateLogins: Boolean = false
 ) {
     companion object {
         const val DEFAULT_MAX_VALUE_BYTES = 64 * 1024

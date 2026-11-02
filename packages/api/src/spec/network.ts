@@ -603,6 +603,11 @@ export const networkShapes: LuaClass[] = [
       type: 'string?',
       doc: "The server they're on; `nil` for a moment while the proxy is moving them.",
     },
+    {
+      name: 'proxy',
+      type: 'string?',
+      doc: "The proxy they came in through, when the network's hub runs on its own (with several proxies, which one); `nil` otherwise.",
+    },
   ]),
   shape(
     'NetworkPublishOptions',

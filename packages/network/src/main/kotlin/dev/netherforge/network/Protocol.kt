@@ -150,7 +150,13 @@ enum class Balance(val word: String) {
 
 /** A player online in the network: their UUID, name and the server they're on (null while they're between servers). */
 @Serializable
-data class PlayerState(val id: String, val name: String, val server: String? = null)
+data class PlayerState(
+    val id: String,
+    val name: String,
+    val server: String? = null,
+    /** The proxy they're on, when the hub runs on its own (with several proxies, which one). */
+    val proxy: String? = null
+)
 
 /** What the hub sends a server. */
 @Serializable
@@ -295,6 +301,11 @@ sealed interface HubFrame {
     @Serializable
     @SerialName("proxy_kick")
     data class ProxyKick(val player: String, val message: String) : HubFrame
+
+    /** Take no new logins ([draining]), as a proxy about to restart; or take them again. */
+    @Serializable
+    @SerialName("proxy_drain")
+    data class ProxyDrain(val draining: Boolean) : HubFrame
 
     /** Where the player of [ServerFrame.ProxyLogin] [id] goes: [server] (null: the proxy's own choice), or away with [deny]. */
     @Serializable

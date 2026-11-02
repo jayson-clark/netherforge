@@ -7674,32 +7674,36 @@ data class NetworkShare(val name: String, val access: List<String>) : LuaShape {
 }
 
 /** A player online in the network. */
-data class NetworkPlayer(val id: String, val name: String, val server: String? = null) : LuaShape {
+data class NetworkPlayer(val id: String, val name: String, val server: String? = null, val proxy: String? = null) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)
 
     object Codec : ShapeCodec<NetworkPlayer>("NetworkPlayer") {
         val idCodec = LuaCodecs.STRING
         val nameCodec = LuaCodecs.STRING
         val serverCodec = LuaOptional(LuaCodecs.STRING)
+        val proxyCodec = LuaOptional(LuaCodecs.STRING)
 
         override val pinned = false
 
         override val fields: Map<String, LuaCodec<*>> = mapOf(
             "id" to idCodec,
             "name" to nameCodec,
-            "server" to serverCodec
+            "server" to serverCodec,
+            "proxy" to proxyCodec
         )
 
         override fun read(fields: ShapeReader) = NetworkPlayer(
             id = fields.field("id", idCodec),
             name = fields.field("name", nameCodec),
-            server = fields.field("server", serverCodec)
+            server = fields.field("server", serverCodec),
+            proxy = fields.field("proxy", proxyCodec)
         )
 
         override fun write(fields: ShapeWriter, value: NetworkPlayer) {
             fields.field("id", value.id, idCodec)
             fields.field("name", value.name, nameCodec)
             fields.field("server", value.server, serverCodec)
+            fields.field("proxy", value.proxy, proxyCodec)
         }
     }
 }

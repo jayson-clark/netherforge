@@ -3126,6 +3126,7 @@ A player online in the network.
 | `id` | `string` | Their UUID, as a string: the same as `player:id()` on their server. |
 | `name` | `string` | Their name. |
 | `server` | `string?` | The server they're on; `nil` for a moment while the proxy is moving them. |
+| `proxy` | `string?` | The proxy they came in through, when the network's hub runs on its own (with several proxies, which one); `nil` otherwise. |
 
 ### NetworkPublishOptions {#networkpublishoptions}
 

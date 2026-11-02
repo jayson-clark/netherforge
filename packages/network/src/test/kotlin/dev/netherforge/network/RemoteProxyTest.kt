@@ -70,9 +70,9 @@ class RemoteProxyTest {
     private val proxyCredential = Credential("velocity", "velocity-secret-0123456789", Grants.preset("proxy"))
     private val hub = Hub("s3cret", remote, Quiet, credentials = listOf(proxyCredential))
 
-    private fun connectProxy(): FakeProxy {
+    private fun connectProxy(name: String = "velocity-1", hub: Hub = this.hub): FakeProxy {
         val proxy = FakeProxy()
-        proxy.link = LocalLink(hub, "velocity-1", proxyCredential.secret, proxy, proxyCredential.id, role = "proxy")
+        proxy.link = LocalLink(hub, name, proxyCredential.secret, proxy, proxyCredential.id, role = "proxy")
         proxy.link.start()
         proxy.link.send(ServerFrame.ProxyServers(proxy.servers.toList(), listOf("lobby", "arena-1")))
         return proxy
@@ -150,5 +150,68 @@ class RemoteProxyTest {
         assertFalse(remote.connected)
         assertEquals(emptyList(), hub.states(), "no proxy, no servers")
         assertEquals("no proxy is connected to the hub", remote.send("u-1", "lobby").toCompletableFuture().join())
+    }
+
+    @Test
+    fun `with several proxies, each player's moves go to the proxy they're on, and servers are added on every one`() {
+        val one = connectProxy("velocity-1")
+        val two = connectProxy("velocity-2")
+        val (lobbyLink, lobby) = join("lobby")
+        join("arena-1")
+        one.link.send(ServerFrame.ProxyPresence(listOf(PlayerState("u-1", "Ann", "lobby"))))
+        two.link.send(ServerFrame.ProxyPresence(listOf(PlayerState("u-2", "Bea", "lobby"))))
+        assertEquals(mapOf("u-1" to "velocity-1", "u-2" to "velocity-2"), hub.adminPlayers().associate { it.id to it.proxy })
+        assertEquals(listOf(Hub.ProxyView("velocity-1", 1, false), Hub.ProxyView("velocity-2", 1, false)), hub.proxies())
+
+        lobbyLink.send(ServerFrame.Send(1, listOf("u-2"), "arena-1"))
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (lobby.of<HubFrame.SendResult>().isEmpty()) {
+            check(System.nanoTime() < deadline) { "no result" }
+            Thread.sleep(5)
+        }
+        assertTrue(one.frames.none { it is HubFrame.ProxyMove })
+        assertEquals(1, two.frames.count { it is HubFrame.ProxyMove })
+
+        LocalLink(hub, "arena-7", "s3cret", Recorder(), register = Registration("10.0.0.7", 25565)).start()
+        assertEquals(1, one.frames.count { it is HubFrame.ProxyRegister })
+        assertEquals(1, two.frames.count { it is HubFrame.ProxyRegister })
+
+        // A proxy's fresh list is its own: the other's players stay.
+        one.link.send(ServerFrame.ProxyPresence(emptyList()))
+        assertEquals(listOf("u-2"), hub.adminPlayers().map { it.id })
+
+        assertNull(hub.drainProxy("velocity-2", true))
+        assertEquals(listOf(HubFrame.ProxyDrain(true)), two.frames.filterIsInstance<HubFrame.ProxyDrain>())
+        assertTrue(hub.proxies().single { it.name == "velocity-2" }.draining)
+    }
+
+    private fun answer(proxy: FakeProxy): HubFrame.LoginPlaced {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (proxy.frames.none { it is HubFrame.LoginPlaced }) {
+            check(System.nanoTime() < deadline) { "no answer" }
+            Thread.sleep(5)
+        }
+        return proxy.frames.filterIsInstance<HubFrame.LoginPlaced>().last()
+    }
+
+    @Test
+    fun `a second login through another proxy is refused, or takes over when the network says so`() {
+        val one = connectProxy("velocity-1")
+        val two = connectProxy("velocity-2")
+        one.link.send(ServerFrame.ProxyPresence(listOf(PlayerState("u-1", "Ann", "lobby"))))
+        two.link.send(ServerFrame.ProxyLogin(1, "u-1", "Ann"))
+        assertTrue(answer(two).deny!!.contains("already on the network"))
+
+        val takeover =
+            Hub("s3cret", RemoteProxy(), Quiet, NetworkLimits(takeOverDuplicateLogins = true), credentials = listOf(proxyCredential))
+        val three = connectProxy("velocity-1", takeover)
+        val four = connectProxy("velocity-2", takeover)
+        three.link.send(ServerFrame.ProxyPresence(listOf(PlayerState("u-1", "Ann", "lobby"))))
+        four.link.send(ServerFrame.ProxyLogin(1, "u-1", "Ann"))
+        assertNull(answer(four).deny)
+        assertEquals(
+            listOf(HubFrame.ProxyKick("u-1", "You logged in from somewhere else")),
+            three.frames.filterIsInstance<HubFrame.ProxyKick>()
+        )
     }
 }

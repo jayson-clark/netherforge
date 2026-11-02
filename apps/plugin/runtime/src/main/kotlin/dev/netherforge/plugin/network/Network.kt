@@ -680,7 +680,7 @@ class Network(
         writes.clear()
     }
 
-    private fun player(state: PlayerState) = NetworkPlayer(state.id, state.name, state.server)
+    private fun player(state: PlayerState) = NetworkPlayer(state.id, state.name, state.server, state.proxy)
 
     private val warned = HashMap<String, Long>()
 

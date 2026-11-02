@@ -74,6 +74,10 @@ class NetherForgeProxy @Inject constructor(
     private val logins = java.util.concurrent.ConcurrentHashMap<Long, CompletableFuture<HubFrame.LoginPlaced>>()
     private val loginIds = java.util.concurrent.atomic.AtomicLong(1)
 
+    /** The hub asked this proxy to take no new logins (it's about to restart). */
+    @Volatile
+    private var draining = false
+
     @Subscribe
     fun onInitialize(event: ProxyInitializeEvent) {
         val settings = try {
@@ -169,6 +173,12 @@ class NetherForgeProxy @Inject constructor(
                     is HubFrame.ProxyMessage -> velocity.message(frame.player, frame.kind, frame.text, frame.subtitle)
                     is HubFrame.ProxyKick -> velocity.kick(frame.player, frame.message)
                     is HubFrame.LoginPlaced -> logins.remove(frame.id)?.complete(frame)
+                    is HubFrame.ProxyDrain -> {
+                        draining = frame.draining
+                        logger.info(
+                            if (frame.draining) "NetherForge: the hub drains this proxy: no new logins" else "NetherForge: logins again"
+                        )
+                    }
                     else -> Unit
                 }
             }
@@ -241,6 +251,16 @@ class NetherForgeProxy @Inject constructor(
                 place.deny?.let { why -> event.player.disconnect(MiniMessage.miniMessage().deserialize(why)) }
             }
         )
+    }
+
+    /** A proxy the hub drains takes no new logins: they join through another. */
+    @Subscribe
+    fun onLogin(event: com.velocitypowered.api.event.connection.LoginEvent) {
+        if (draining) {
+            event.result = com.velocitypowered.api.event.ResultedEvent.ComponentResult.denied(
+                Component.text("This way in is restarting: join again in a moment.")
+            )
+        }
     }
 
     /** A login placed by the hub running on its own: asked, and waited for (no longer than a hold may last). */

@@ -103,7 +103,12 @@ data class HubSettings(
                     maxQueuedFrames = positive("max-queued-frames")?.toInt() ?: defaults.maxQueuedFrames,
                     requestTimeoutMillis = positive("request-timeout-seconds")?.let { it * 1000 } ?: defaults.requestTimeoutMillis,
                     unregisterAfterMillis = positive("unregister-after-seconds")?.let { it * 1000 } ?: defaults.unregisterAfterMillis,
-                    placementTimeoutMillis = positive("placement-timeout-millis") ?: defaults.placementTimeoutMillis
+                    placementTimeoutMillis = positive("placement-timeout-millis") ?: defaults.placementTimeoutMillis,
+                    takeOverDuplicateLogins = when (val duplicate = text("duplicate-login")?.lowercase()) {
+                        null, "refuse" -> false
+                        "takeover" -> true
+                        else -> throw IllegalArgumentException("$file's duplicate-login \"$duplicate\" isn't refuse or takeover")
+                    }
                 ),
                 webhookUrl = text("webhook.url")?.let { url ->
                     val uri = try {
@@ -196,6 +201,10 @@ data class HubSettings(
                 |store.url=
                 |store.user=
                 |store.password=
+                |
+                |# With several proxies joining a hub that runs on its own: a player logging in through one while they're
+                |# online through another is refused (refuse), or takes over, the other session kicked (takeover).
+                |duplicate-login=refuse
                 |
                 |# For the proxy plugin only: join a hub that runs on its own (java -jar NetherForge-<version>-hub.jar)
                 |# rather than run the hub here. Then the rest of this file is that hub's, and this proxy needs only:

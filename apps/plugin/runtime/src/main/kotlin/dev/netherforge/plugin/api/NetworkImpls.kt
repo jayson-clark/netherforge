@@ -109,11 +109,11 @@ internal class NfNetworkImpl(private val session: ProjectSession) : NfNetworkApi
                             link.servers[it]?.groupName ?: it
                         }.equals(options.group, ignoreCase = true)
                     )
-        }.map { NetworkPlayer(it.id, it.name, it.server) }
+        }.map { NetworkPlayer(it.id, it.name, it.server, it.proxy) }
     }
 
     override fun findPlayer(caller: Caller, player: String): NetworkPlayer? =
-        network.findPlayer(player)?.let { NetworkPlayer(it.id, it.name, it.server) }
+        network.findPlayer(player)?.let { NetworkPlayer(it.id, it.name, it.server, it.proxy) }
 
     override fun channel(caller: Caller, name: String): LuaHandle.NetworkChannel =
         network.channel(network.resolve(caller.scope.namespace, name, "nf.network.channel"))

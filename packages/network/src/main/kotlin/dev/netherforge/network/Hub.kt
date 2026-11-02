@@ -271,15 +271,15 @@ class Hub(
         runLater()
     }
 
-    private fun moved(id: String, name: String, server: String) {
+    private fun moved(id: String, name: String, server: String, through: String? = null) {
         val previous = players[id]
-        val now = PlayerState(id, name, server)
+        val now = PlayerState(id, name, server, through ?: previous?.proxy)
         players[id] = now
         if (previous == null) {
             cameFrom.remove(id)
             for (session in byName.values) session.presence(null, now)
             tellAdmins(AdminScope.PRESENCE_READ, AdminEvent.PlayerJoined(now))
-        } else if (previous.server != server) {
+        } else if (previous.server != server || previous.proxy != now.proxy) {
             previous.server?.let { cameFrom[id] = it }
             for (session in byName.values) session.presence(previous, now)
             tellAdmins(AdminScope.PRESENCE_READ, AdminEvent.PlayerMoved(id, server, previous.server))
@@ -527,7 +527,7 @@ class Hub(
             closed = true
             if (proxySession) {
                 proxies -= this
-                (proxy as? RemoteProxy)?.gone()
+                (proxy as? RemoteProxy)?.detach(name!!)
                 log.info("NetherForge hub: the proxy $name disconnected")
                 tellServers()
             }
@@ -723,8 +723,8 @@ class Hub(
             if (credential != null && credential.grants.role != Grants.PROXY_ROLE) {
                 return refuse("its credential \"${credential.id}\" isn't a proxy's (role=proxy in credentials.properties)")
             }
-            proxies.forEach { previous ->
-                previous.peer.close("another proxy connected")
+            proxies.filter { it.name.equals(frame.server, ignoreCase = true) }.forEach { previous ->
+                previous.peer.close("another proxy connected as ${frame.server}")
                 previous.close()
             }
             name = frame.server
@@ -733,7 +733,8 @@ class Hub(
             grants = Grants.TRUSTED
             proxySession = true
             proxies += this
-            remote.link = { frame -> send(frame) }
+            remote.proxyOf = { id -> synchronized(lock) { players[id]?.proxy } }
+            remote.attach(frame.server) { hubFrame -> send(hubFrame) }
             log.info("NetherForge hub: the proxy ${frame.server} connected from ${peer.address}")
             peer.secure(Channel.hub(proven, nonce, frame.nonce, frame.server, frame.credential))
             send(HubFrame.Welcome(frame.server, servers(), players.values.toList(), limits.maxValueBytes, grants))
@@ -745,19 +746,29 @@ class Hub(
             when (frame) {
                 is ServerFrame.Ping -> send(HubFrame.Pong)
                 is ServerFrame.ProxyServers -> {
-                    remote.servers(frame.servers, frame.fixed)
+                    remote.servers(name!!, frame.servers, frame.fixed)
                     tellServers()
                     dispatch()
                 }
-                is ServerFrame.ProxyPlayer -> frame.player.server?.let { moved(frame.player.id, frame.player.name, it) }
+                is ServerFrame.ProxyPlayer -> frame.player.server?.let { moved(frame.player.id, frame.player.name, it, name) }
                 is ServerFrame.ProxyPresence -> {
+                    // This proxy's players are these: any other it had are gone; other proxies' stay.
                     val online = frame.players.associateBy { it.id }
-                    for (id in players.keys.filter { it !in online }) left(id)
-                    for (player in frame.players) player.server?.let { moved(player.id, player.name, it) }
+                    for (id in players.values.filter { it.proxy == name && it.id !in online }.map { it.id }) left(id)
+                    for (player in frame.players) player.server?.let { moved(player.id, player.name, it, name) }
                 }
-                is ServerFrame.ProxyPlayerLeft -> left(frame.id)
+                is ServerFrame.ProxyPlayerLeft -> if (players[frame.id]?.proxy.let { it == null || it == name }) left(frame.id)
                 is ServerFrame.ProxyResult -> later += { remote.result(frame.id, frame.error) }
                 is ServerFrame.ProxyLogin -> {
+                    val elsewhere = players[frame.player]?.proxy?.takeIf { it != name }
+                    if (elsewhere != null) {
+                        if (!limits.takeOverDuplicateLogins) {
+                            send(HubFrame.LoginPlaced(frame.id, deny = "You're already on the network through another way in"))
+                            return
+                        }
+                        log.info("NetherForge hub: ${frame.name} logged in through $name, so their session through $elsewhere ends")
+                        remote.kickFrom(elsewhere, frame.player, "You logged in from somewhere else")
+                    }
                     val placed = placeLogin(frame.player, frame.name)
                     later += { placed.thenAccept { place -> send(HubFrame.LoginPlaced(frame.id, place.server, place.deny)) } }
                 }
@@ -920,7 +931,7 @@ class Hub(
 
     // ---- admin clients -------------------------------------------------------------
 
-    /** The proxy connected to a hub that runs on its own (one, for now). */
+    /** The proxies connected to a hub that runs on its own. */
     private val proxies = ArrayList<Session>()
 
     /** The admin clients' streams, oldest first. */
@@ -1011,6 +1022,21 @@ class Hub(
             )
             stream
         }
+
+    /** The proxies of a hub that runs on its own, with how many players are on each and whether it's draining. */
+    data class ProxyView(val name: String, val players: Int, val draining: Boolean)
+
+    fun proxies(): List<ProxyView> = synchronized(lock) {
+        val remote = proxy as? RemoteProxy ?: return emptyList()
+        val counts = players.values.groupingBy { it.proxy }.eachCount()
+        remote.names().map { ProxyView(it, counts[it] ?: 0, remote.isDraining(it)) }
+    }
+
+    /** The admin API's: proxy [name] takes no new logins ([draining]), or takes them again. Null once asked, or why not. */
+    fun drainProxy(name: String, draining: Boolean): String? {
+        val remote = proxy as? RemoteProxy ?: return "this hub runs inside its proxy"
+        return if (remote.drain(name, draining)) null else "there's no proxy named $name connected"
+    }
 
     /** Closes every stream of admin client [client]: it was revoked. */
     fun detach(client: String) {

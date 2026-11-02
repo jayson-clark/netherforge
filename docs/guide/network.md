@@ -668,6 +668,17 @@ kicks. While no proxy is connected the hub has no servers and moves nobody,
 and servers keep running with their network calls failing; when the proxy is
 back it says who's online again, and everything picks up.
 
+**Several proxies.** Any number of proxies can join a hub running on its own,
+each with its own `remote.name`, and players come in through any of them:
+the hub knows who's online through which (`player.proxy` in scripts, `proxy`
+in the admin API's players), sends each player's moves, messages and kicks to
+the proxy they're on, and adds a server that registers on every proxy. A
+player logging in through a second proxy while online through another is
+refused, or with `duplicate-login=takeover` in `hub.properties` takes over,
+the old session kicked. Before restarting a proxy, drain it with the admin
+API (`POST /v1/proxies/<name>/drain`): it takes no new logins, so players
+come in through the others. `GET /v1/proxies` lists them with their players.
+
 **Shared maps in a database.** With `store.url` (a PostgreSQL JDBC URL, and
 `store.user`, `store.password`), the hub keeps the network's maps there
 instead of in `maps.json`, so it can restart or move to another machine
