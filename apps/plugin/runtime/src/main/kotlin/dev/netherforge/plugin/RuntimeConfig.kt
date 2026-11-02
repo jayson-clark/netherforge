@@ -72,6 +72,8 @@ data class RuntimeConfig(
      */
     val policy: dev.netherforge.format.project.Policy? = null,
     val policyProblem: String? = null,
+    /** `bundles:`: whether a bundle must be signed by a key the server trusts. */
+    val bundles: dev.netherforge.plugin.project.BundlesConfig = dev.netherforge.plugin.project.BundlesConfig(),
     /** `metrics:`: the Prometheus endpoint, off unless it has a port. */
     val metrics: dev.netherforge.plugin.metrics.MetricsConfig = dev.netherforge.plugin.metrics.MetricsConfig(),
     /** `control:`: the local control endpoint for the tool that runs the server, off unless set. */
@@ -204,8 +206,14 @@ data class RuntimeConfig(
                 )
             }
             val project = settings.text("project") ?: return null
+            // A bundle by URL (what `netherforge publish` prints): fetched once into the plugin's folder, run from there.
+            val projectFolder = if (dev.netherforge.plugin.project.BundleFetch.isReference(project)) {
+                dev.netherforge.plugin.project.BundleFetch.folder(project, pluginFolder.resolve("bundles")) { println(it) }
+            } else {
+                server.directory.resolve(project).toAbsolutePath().normalize()
+            }
             return RuntimeConfig(
-                project = server.directory.resolve(project).toAbsolutePath().normalize(),
+                project = projectFolder,
                 dataDirectory = pluginFolder.resolve("data"),
                 stateDirectory = pluginFolder,
                 pack = pack(settings.section("resource-pack"), server),
@@ -223,6 +231,12 @@ data class RuntimeConfig(
                 control = control,
                 worlds = worlds,
                 metrics = metrics,
+                bundles = settings.section("bundles").let { section ->
+                    dev.netherforge.plugin.project.BundlesConfig(
+                        requireSignature = section.boolean("require-signature") ?: false,
+                        trustedKeys = (section["trusted-keys"] as? List<*>).orEmpty().mapNotNull { it?.toString()?.trim() }
+                    )
+                },
                 policy = policy,
                 policyProblem = policyProblem,
                 files = files,

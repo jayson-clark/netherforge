@@ -41,7 +41,13 @@ import java.security.MessageDigest
  * runs. Which one it is, and where every package is, is decided again by
  * every [load].
  */
-class ProjectFiles(private val configured: Path, private val resolves: Boolean, private val packageCache: Path? = null) : ProjectSource {
+class ProjectFiles(
+    private val configured: Path,
+    private val resolves: Boolean,
+    private val packageCache: Path? = null,
+    /** Whether bundles must be signed, and by whom. */
+    private val bundles: BundlesConfig = BundlesConfig()
+) : ProjectSource {
     /** One load: the snapshot, what the runtime found wrong besides it (a project it won't run), and every file. */
     class Load(val snapshot: ProjectSnapshot, val problems: List<Problem>, val files: Set<String>)
 
@@ -140,6 +146,11 @@ class ProjectFiles(private val configured: Path, private val resolves: Boolean, 
                     "The bundle lists no package \"${manifest.project}\"",
                     "$.project"
                 )
+        }
+        if (manifest != null) {
+            BundleSignatures.problem(manifest, bundles)?.let { why ->
+                problems += ProblemCodes.RUNTIME_BUNDLE_SIGNATURE.at(BundleManifest.FILE_NAME, why, "$.signatures")
+            }
         }
         // A bundle runs as it was built: every package, the project's own included, as it was hashed.
         for (name in folders) {

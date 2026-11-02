@@ -90,6 +90,7 @@ class TestServer(
     private val worlds: dev.netherforge.plugin.world.WorldsConfig = dev.netherforge.plugin.world.WorldsConfig(),
     private val metrics: dev.netherforge.plugin.metrics.MetricsConfig = dev.netherforge.plugin.metrics.MetricsConfig(),
     private val policy: dev.netherforge.format.project.Policy? = null,
+    private val bundles: dev.netherforge.plugin.project.BundlesConfig = dev.netherforge.plugin.project.BundlesConfig(),
     /** `databases:` in `config.yml`: the named connections `nf.db("name")` may open. */
     private val databases: DatabasesConfig = DatabasesConfig(),
     /** How a named connection's pool is made, when not HikariCP: tests give an embedded database. */
@@ -152,6 +153,7 @@ class TestServer(
                     worlds = worlds,
                     metrics = metrics,
                     policy = policy,
+                    bundles = bundles,
                     resolvesPackages = resolvesPackages,
                     packageCache = packageCache
                 )

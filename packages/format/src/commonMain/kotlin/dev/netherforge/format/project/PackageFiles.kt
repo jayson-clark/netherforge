@@ -67,12 +67,24 @@ data class BundleManifest(
     /** The namespace of the project the bundle runs; every other package is one it depends on. */
     val project: String,
     /** Every package in the bundle, the project's own included, by namespace. */
-    val packages: Map<String, BundledPackage>
+    val packages: Map<String, BundledPackage>,
+    /**
+     * Who vouches for the bundle: each an Ed25519 signature over [signedText], by its author (`netherforge build
+     * --sign`) and maybe a network that checked it (`netherforge sign`). A server can require one by a key it trusts.
+     */
+    val signatures: List<BundleSignature>? = null
 ) {
+    /** What a signature signs: the manifest as it's written, without its signatures (so a countersignature adds one). */
+    fun signedText(): String = BundleKind.write(copy(signatures = null))
+
     companion object {
         const val FILE_NAME = "netherforge-bundle.json"
     }
 }
+
+/** One signature on a bundle: the signing [key] (`ed25519:<base64 of its 32 bytes>`) and the [signature] in base64. */
+@Serializable
+data class BundleSignature(val key: String, val signature: String)
 
 /** A package in a bundle: its [version], and the [PackageHash] its folder must have. */
 @Serializable

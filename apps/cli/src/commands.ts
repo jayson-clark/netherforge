@@ -4,12 +4,16 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  mkdtempSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import os from 'node:os'
 import path from 'node:path'
 import * as nf from '@netherforge/format'
+import { archive, put, signBundle, storage, type Storage } from './bundles.ts'
 import {
   BUNDLE_FILE,
   GAME_DATA_SCHEMA,
@@ -258,7 +262,7 @@ export function lock(
  */
 export function build(
   root: string,
-  options: { out?: string },
+  options: { out?: string; sign?: string; archive?: boolean },
   env: NodeJS.ProcessEnv = process.env,
 ): Outcome {
   const input = readProject(root)
@@ -311,10 +315,111 @@ export function build(
   // Where it is, as short as it can say it: from here when it's under here.
   const here = path.relative(process.cwd(), out)
   const shown = here && !here.startsWith('..') && !path.isAbsolute(here) ? here : out
-  return {
-    out: [`Built ${shown}: ${namespace} ${version}${what}.`],
-    err: [],
-    code: 0,
+  const lines = [`Built ${shown}: ${namespace} ${version}${what}.`]
+  if (options.sign) {
+    try {
+      lines.push(`Signed as ${signBundle(out, path.resolve(options.sign))}.`)
+    } catch (e) {
+      return { out: lines, err: [`Not signed: ${(e as Error).message}`], code: 1 }
+    }
+  }
+  if (options.archive) {
+    const file = `${out}.nfbundle`
+    lines.push(`Archived ${shown}.nfbundle, sha256 ${archive(out, file)}.`)
+  }
+  return { out: lines, err: [], code: 0 }
+}
+
+/**
+ * Builds, signs and archives the bundle, and uploads it and its listing to [options.to] (S3-compatible storage): what
+ * a server then runs by URL. The listing (`<namespace>-<version>.json`) has the version, the archive's SHA-256 and
+ * size, who signed it, and the project's listing fields.
+ */
+export async function publish(
+  root: string,
+  options: { to: string; endpoint?: string; sign?: string; publicUrl?: string },
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<Outcome> {
+  let store: Storage
+  try {
+    store = storage(options.to, options.endpoint, env)
+  } catch (e) {
+    return { out: [], err: [(e as Error).message], code: 2 }
+  }
+  const work = mkdtempSync(path.join(os.tmpdir(), 'netherforge-publish-'))
+  try {
+    const manifest = JSON.parse(readFileSync(path.join(root, MANIFEST_FILE), 'utf8')) as {
+      namespace: string
+      version: string
+      name?: string
+      listing?: { icon?: string; screenshots?: string[]; [key: string]: unknown }
+    }
+    const name = `${manifest.namespace}-${manifest.version}`
+    const out = path.join(work, name)
+    const built = build(root, { out, sign: options.sign, archive: true }, env)
+    if (built.code !== 0) return built
+    const file = `${out}.nfbundle`
+    const bytes = readFileSync(file)
+    const hash = createHash('sha256').update(bytes).digest('hex')
+    const key = (it: string) => (store.prefix ? `${store.prefix}/${it}` : it)
+    const base = (
+      options.publicUrl ??
+      `${store.endpoint}/${store.bucket}/${store.prefix ? store.prefix + '/' : ''}`
+    ).replace(/\/?$/, '/')
+    const url = `${base}${name}.nfbundle`
+    const bundle = JSON.parse(readFileSync(path.join(out, BUNDLE_FILE), 'utf8')) as {
+      signatures?: { key: string }[]
+    }
+    const listing = {
+      namespace: manifest.namespace,
+      name: manifest.name,
+      version: manifest.version,
+      url,
+      sha256: hash,
+      size: bytes.length,
+      signedBy: (bundle.signatures ?? []).map((it) => it.key),
+      listing: manifest.listing ?? null,
+    }
+    // The listing's pictures aren't the bundle's (no server needs them): beside it, the listing naming them by URL.
+    const pictures: [string, string][] = []
+    if (manifest.listing) {
+      const picture = (file: string) => {
+        const target = `${name}/${pictures.length}-${path.basename(file)}`
+        pictures.push([file, target])
+        return `${base}${target}`
+      }
+      listing.listing = {
+        ...manifest.listing,
+        ...(manifest.listing.icon ? { icon: picture(manifest.listing.icon) } : {}),
+        ...(manifest.listing.screenshots
+          ? { screenshots: manifest.listing.screenshots.map(picture) }
+          : {}),
+      }
+    }
+    try {
+      for (const [file, target] of pictures)
+        await put(store, key(target), readFileSync(path.join(root, file)), 'image/png')
+      await put(store, key(`${name}.nfbundle`), bytes, 'application/zip')
+      await put(
+        store,
+        key(`${name}.json`),
+        Buffer.from(JSON.stringify(listing, null, 2) + '\n'),
+        'application/json',
+      )
+    } catch (e) {
+      return { out: built.out, err: [`Not published: ${(e as Error).message}`], code: 1 }
+    }
+    return {
+      out: [
+        ...built.out,
+        `Published ${name}. A server runs it with:`,
+        `project: ${url}#sha256=${hash}`,
+      ],
+      err: [],
+      code: 0,
+    }
+  } finally {
+    rmSync(work, { recursive: true, force: true })
   }
 }
 

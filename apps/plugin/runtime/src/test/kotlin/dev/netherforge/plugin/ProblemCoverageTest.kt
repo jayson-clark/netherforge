@@ -27,6 +27,7 @@ class ProblemCoverageTest {
         "runtime.unbundled" to "project/PackagesTest",
         "runtime.bundle-hash" to "project/PackagesTest",
         "runtime.policy" to "session/PolicyTest",
+        "runtime.bundle-signature" to "project/BundleSignaturesTest",
         "runtime.plugin-missing" to "interop/InteropTest",
         "runtime.web-disabled" to "web/WebRoutesTest",
         "runtime.network-disabled" to "network/NetworkTest",

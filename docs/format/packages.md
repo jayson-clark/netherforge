@@ -189,6 +189,15 @@ starts: a package whose files don't hash to its entry isn't run
 (`runtime.bundle-hash`). Point the plugin's `project` setting (or
 `-Dnetherforge.project`) at the bundle's folder.
 
+`signatures`, when the bundle is signed (`netherforge build --sign`, and
+`netherforge sign` to countersign), lists who vouches for it: each a `key`
+(`ed25519:` and its 32 bytes in base64) and a `signature` (base64), an
+Ed25519 signature over the manifest as it's written without `signatures`. A
+server can require one by a key it trusts (`bundles` in its `config.yml`);
+one that doesn't match the bundle is refused on any server
+(`runtime.bundle-signature`). See
+[publishing and signing](../guide/deploying.md#publishing-and-signing).
+
 ## Copying instead
 
 **Copy into project**, on a dependency's resource in the editor's explorer,

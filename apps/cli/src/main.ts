@@ -2,7 +2,8 @@ import { parseArgs } from 'node:util'
 import { readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { build, check, format, generate, lock, type Outcome } from './commands.ts'
+import { keygen, signBundle } from './bundles.ts'
+import { build, check, format, generate, lock, publish, type Outcome } from './commands.ts'
 import { findProjectRoot } from './project.ts'
 import { preview } from './preview.ts'
 import { gallery, render } from './render.ts'
@@ -44,11 +45,25 @@ Usage:
       at the commit the lock pins until its git or rev changes; --update
       resolves every one afresh (a branch's newest commit). Git packages
       are fetched with your git into the editor's package cache.
-  netherforge build  [dir] [--out <folder>]
+  netherforge build  [dir] [--out <folder>] [--sign <key>] [--archive]
       Write a bundle: the project and the packages it depends on, for a
       production server to run (point the plugin's project setting at it).
       Default folder: build/<namespace>-<version> in the project. Refuses
-      a project with errors or an out-of-date netherforge.lock.
+      a project with errors or an out-of-date netherforge.lock. --sign
+      signs it with a private key (netherforge keygen); --archive also
+      writes it as one file, <folder>.nfbundle, and prints its SHA-256.
+  netherforge keygen <file>
+      Make an Ed25519 key pair for signing bundles: the private key in
+      <file>, the public key (what servers trust) in <file>.pub.
+  netherforge sign <bundle folder> --key <file>
+      Add a signature to a built bundle: a network countersigning what it
+      checked, so its servers trust only its key.
+  netherforge publish [dir] --to s3://bucket/prefix [--endpoint <url>]
+                      [--sign <key>] [--public-url <url>]
+      Build, sign and archive the bundle, and upload it and its listing
+      (<namespace>-<version>.nfbundle and .json) to S3-compatible storage
+      (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION). Prints what a
+      server's project setting takes to run it from there.
   netherforge preview terrain/<id>.json --out <file>.png [--seed <n>]
                      [--x <n>] [--z <n>] [--size <cells>] [--step <blocks>]
                      [--scale <pixels>] [--slice x|z --at <n> [--width <n>] [--top <y>]]
@@ -125,6 +140,12 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
         check: { type: 'boolean' },
         'game-data': { type: 'string' },
         policy: { type: 'string' },
+        sign: { type: 'string' },
+        archive: { type: 'boolean' },
+        key: { type: 'string' },
+        to: { type: 'string' },
+        endpoint: { type: 'string' },
+        'public-url': { type: 'string' },
         out: { type: 'string' },
         update: { type: 'boolean' },
         junit: { type: 'string' },
@@ -242,6 +263,29 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
     }
     return eachProject(workspace, run, command === 'test' ? (line) => console.log(line) : undefined)
   }
+  // Keys and signatures need no project: a file, and a bundle's folder.
+  if (command === 'keygen') {
+    if (dir === '.') return { out: [], err: ['Usage: netherforge keygen <file>'], code: 2 }
+    const key = keygen(path.resolve(dir))
+    return {
+      out: [
+        `Wrote the private key to ${dir} (keep it secret) and its public key to ${dir}.pub:`,
+        key,
+      ],
+      err: [],
+      code: 0,
+    }
+  }
+  if (command === 'sign') {
+    if (!values.key)
+      return { out: [], err: ['Usage: netherforge sign <bundle folder> --key <file>'], code: 2 }
+    try {
+      const key = signBundle(path.resolve(dir), path.resolve(values.key))
+      return { out: [`Signed ${dir} as ${key}.`], err: [], code: 0 }
+    } catch (e) {
+      return { out: [], err: [`Not signed: ${(e as Error).message}`], code: 1 }
+    }
+  }
   // `netherforge import city.litematic` imports into the project this folder is in.
   const root = findProjectRoot(
     testFile
@@ -289,7 +333,24 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
     case 'lock':
       return lock(root, { update: values.update }, env)
     case 'build':
-      return build(root, { out: values.out }, env)
+      return build(root, { out: values.out, sign: values.sign, archive: values.archive }, env)
+    case 'publish':
+      if (!values.to)
+        return {
+          out: [],
+          err: ['Usage: netherforge publish [dir] --to s3://bucket/prefix'],
+          code: 2,
+        }
+      return publish(
+        root,
+        {
+          to: values.to,
+          endpoint: values.endpoint,
+          sign: values.sign,
+          publicUrl: values['public-url'],
+        },
+        env,
+      )
     case 'preview': {
       const numbers: Record<string, number | undefined> = {}
       for (const key of [

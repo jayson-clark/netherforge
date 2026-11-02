@@ -1,0 +1,20 @@
+{
+  "formatVersion": 1,
+  "name": "Requires",
+  "namespace": "case",
+  "version": "1.0.0",
+  "minecraft": "26.3",
+  "listing": {
+    "icon": "listing/icon.png",
+    "screenshots": [
+      "../outside.png"
+    ],
+    "tags": [
+      "PvP"
+    ],
+    "players": {
+      "min": 4,
+      "max": 2
+    }
+  }
+}

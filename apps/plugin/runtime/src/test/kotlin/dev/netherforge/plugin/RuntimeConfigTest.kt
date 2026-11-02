@@ -240,4 +240,12 @@ class RuntimeConfigTest {
         // A production server never reads them.
         assertEquals(false, read(mapOf("project" to "p"), properties - Bridge.PROJECT_PROPERTY)!!.network.enabled)
     }
+
+    @Test
+    fun `bundles' signature rules are read`() {
+        val config = read(
+            mapOf("project" to "p", "bundles" to mapOf("require-signature" to true, "trusted-keys" to listOf(" ed25519:abc ")))
+        )!!
+        assertEquals(dev.netherforge.plugin.project.BundlesConfig(true, listOf("ed25519:abc")), config.bundles)
+    }
 }

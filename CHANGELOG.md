@@ -69,6 +69,17 @@ release is cut.
   second login through another proxy is refused or takes over
   (`duplicate-login`), and the admin API lists proxies and drains one before
   it restarts.
+- **Signed and published bundles.** `netherforge keygen`, `build --sign`
+  and `sign` (a network countersigning what it checked) put Ed25519
+  signatures in a bundle's manifest; a server with
+  `bundles.require-signature` runs only one signed by its `trusted-keys`, and
+  refuses a signature that doesn't match on any server
+  (`runtime.bundle-signature`). `build --archive` makes one `.nfbundle` file,
+  and `netherforge publish --to s3://…` builds, signs and uploads it with its
+  listing to S3-compatible storage; `project:` takes the URL it prints
+  (`…#sha256=…`), fetched once and checked. `netherforge.json` gets an
+  optional `listing` (description, authors, icon, screenshots, tags,
+  players), checked by `netherforge check`.
 - **A policy over what projects require.** `policy.json` beside `config.yml`
   allows and denies requirement kinds and HTTP hosts whatever a project
   asks for, and lowers limits (script memory and budget, call time, network

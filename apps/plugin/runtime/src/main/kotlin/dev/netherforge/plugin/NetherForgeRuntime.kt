@@ -85,7 +85,7 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
     val files = ScriptFiles(config.dataDirectory, config.files)
 
     /** The project's files and its packages', wherever they are (a dev server's folders, a bundle). */
-    val source = ProjectFiles(config.project, config.resolvesPackages, config.packageCache)
+    val source = ProjectFiles(config.project, config.resolvesPackages, config.packageCache, config.bundles)
 
     /** The resource pack: the last good build, the server that serves it, and what each player was sent. */
     val packs = Packs(config.pack, config.stateDirectory, log, platform, source::readBytes)
