@@ -77,7 +77,13 @@ data class BundleManifest(
      * The project's resource pack, built with the bundle (`netherforge build` with the game's data): a server whose pack
      * format is [BundledResourcePack.format] sends it as it is rather than building its own.
      */
-    val resourcePack: BundledResourcePack? = null
+    val resourcePack: BundledResourcePack? = null,
+    /**
+     * The namespaces of packages the project depends on that the bundle leaves out, for the server to provide
+     * (`packages.provided` in its `config.yml`): a dependency marked `provided`, or one `netherforge build --exclude`
+     * named. A server refuses a bundle that carries a package it provides.
+     */
+    val provided: List<String>? = null
 ) {
     /** What a signature signs: the manifest as it's written, without its signatures (so a countersignature adds one). */
     fun signedText(): String = BundleKind.write(copy(signatures = null))

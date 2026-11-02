@@ -96,6 +96,21 @@ redirect's refusal are `nil, err` (`WorkFailed`).
   mapped address over as the `Inet4Address` it holds, so it's judged as that).
   Multicast, broadcast and `0.0.0.0`/`::` are never reachable. The owner's
   `http.allow-private-addresses` (`HttpConfig`, `config.yml`) allows the rest.
+- **One package, one private host and port** (`http.allow-private`,
+  `PrivateAllowance`): `NfHttpImpl.allowances()` takes the owner's entries for
+  `requirements.callingPackage()` (the package the host requirement is held to;
+  none for a tail call) on the main thread, and they ride with the call
+  (`fetch(call, allowances, declared)`, `ConnectionRequest.allowances`). Each
+  hop's client gets the `CheckedDns` for the allowances on that hop's port
+  (`dnsFor`, cached by the sorted host list; `reaching` for the connection
+  clients), and `checkLiteral` takes them too: an address the allowed hosts
+  stand for (a literal as written, a name through `resolve` at that moment) is
+  let through though private or this machine's own, never a `NEVER` one. The
+  `CheckedDns` instances compare by their hosts on purpose: OkHttp's pool
+  matches connections by `Address`, which includes the `Dns`, so a connection
+  made under an allowance is never handed to a call without it.
+  `HttpFetcherTest` (ports, names, redirects, the pool) and `HttpRequestTest`
+  (from Lua: the package, another package and the project) cover it.
 - Tests: `AddressGuardTest` (the ranges), `HttpFetcherTest` (OkHttp's
   `mockwebserver3` on loopback; the injectable `resolve` and a `SocketFactory`
   that records the address each connection was asked for and connects to the
@@ -483,7 +498,11 @@ sends).
   other plugins go behind a requirement, checked here.
 - **Files**: `nf.files` is one sandboxed folder per server
   (`ScriptFiles`); a production server runs a bundle whose packages are
-  hashed (`runtime.bundle-hash`) and never resolves dependencies itself.
+  hashed (`runtime.bundle-hash`) and never resolves dependencies itself. The
+  owner's own packages (`packages.provided`, `ProjectFiles`) replace any copy
+  a project brings, and a bundle carrying one is refused
+  (`runtime.provided-package`), so the code given an owner's allowance is the
+  owner's.
 - **Inbound web requests** (`nf.web`, see "Web routes" above): off unless the owner turns them
   on; each package only under `/<namespace>/`; refused on the listener's threads before any script
   (size, per-address rate, how many wait), at most 32 routed a tick, handlers under the budget;
@@ -493,7 +512,8 @@ sends).
   WebSockets" above): hosts a package declared; every address checked once and connected to as checked, so a
   name a script's author controls can't lead into the owner's network (public
   addresses only, redirects included, unless the owner sets
-  `http.allow-private-addresses`); size, time and rate limits from the owner's
+  `http.allow-private-addresses`, or gives one package one host and port with
+  `http.allow-private`); size, time and rate limits from the owner's
   `http:` section, and for open connections how many, how many bytes a minute on the wire, how
   large a message and how long idle (`http.connections`); the owner's proxy settings never used.
 - **WebAssembly** (`nf.wasm`, see "WebAssembly" above): behind `requires.wasm`; a module imports WASI preview 1

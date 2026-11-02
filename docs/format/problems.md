@@ -266,6 +266,14 @@ Error. Two packages in the dependency tree have one namespace: there can be only
 
 Error. Packages depend on each other in a loop. See [packages](packages.md).
 
+### `package.version-range` {#package-version-range}
+
+Error. A dependency's `version` isn't a version range (`^1.2.0`, `>=1.0.0 <2.0.0`). See [packages](packages.md).
+
+### `package.version` {#package-version}
+
+Error. The package a dependency resolved to has a version outside the range the dependency takes, so it isn't loaded. See [packages](packages.md).
+
 ### `package.export-kind` {#package-export-kind}
 
 Error. A key in `exports` isn't the folder of a kind of resource. See [packages](packages.md).
@@ -1677,6 +1685,10 @@ Error. A server without the editor runs a project that has dependencies: it runs
 ### `runtime.bundle-hash` {#runtime-bundle-hash}
 
 Error. A package in a bundle isn't what the bundle says it is: a file was changed, added or removed. See [packages](packages.md).
+
+### `runtime.provided-package` {#runtime-provided-package}
+
+Error. A bundle carries its own copy of a package the server provides (`packages.provided`), or a provided package can't be read. See [packages](packages.md).
 
 ### `runtime.bundle-signature` {#runtime-bundle-signature}
 

@@ -5,6 +5,7 @@ import dev.netherforge.plugin.bots.BotsConfig
 import dev.netherforge.plugin.bridge.BridgeConfig
 import dev.netherforge.plugin.http.ConnectionLimits
 import dev.netherforge.plugin.http.HttpConfig
+import dev.netherforge.plugin.http.PrivateAllowance
 import dev.netherforge.plugin.lua.SandboxLimits
 import dev.netherforge.plugin.network.NetworkConfig
 import dev.netherforge.plugin.pack.PackConfig
@@ -92,6 +93,11 @@ data class RuntimeConfig(
      * pins; null elsewhere.
      */
     val packageCache: Path? = null,
+    /**
+     * `packages.provided`: folders of packages this server provides, loaded in place of any copy a project or bundle
+     * would bring. Read on a production server only: the dev server resolves dependencies as the editor does.
+     */
+    val providedPackages: List<Path> = emptyList(),
     /** Set only when the script test runner runs the project: what `nf.test` moves (the fake server's clock, its players). Never on a server. */
     val testing: TestHarness? = null,
     /**
@@ -243,6 +249,9 @@ data class RuntimeConfig(
                 policy = policy,
                 policyProblem = policyProblem,
                 files = files,
+                providedPackages = (settings.section("packages")["provided"] as? List<*>).orEmpty()
+                    .mapNotNull { it?.toString()?.trim()?.takeIf(String::isNotEmpty) }
+                    .map { server.directory.resolve(it).toAbsolutePath().normalize() },
                 resolvesPackages = false
             )
         }
@@ -285,12 +294,35 @@ data class RuntimeConfig(
             val defaults = HttpConfig()
             return HttpConfig(
                 allowPrivateAddresses = section.boolean("allow-private-addresses") ?: defaults.allowPrivateAddresses,
+                allowPrivate = allowPrivate(section["allow-private"]),
                 maxRequestBytes = section.int("max-request-bytes")?.takeIf { it > 0 } ?: defaults.maxRequestBytes,
                 maxResponseBytes = section.int("max-response-bytes")?.takeIf { it > 0 } ?: defaults.maxResponseBytes,
                 timeoutSeconds = section.int("timeout-seconds")?.takeIf { it > 0 } ?: defaults.timeoutSeconds,
                 requestsPerMinute = section.int("requests-per-minute")?.takeIf { it > 0 } ?: defaults.requestsPerMinute,
                 connections = connections(section.section("connections"))
             )
+        }
+
+        /**
+         * `http.allow-private:`, a list of `{ package, host, port }`: each lets one package reach one private host and
+         * port. An entry that isn't one is an error: an allowance the owner meant but that silently didn't apply would
+         * look like a bug in the package.
+         */
+        private fun allowPrivate(value: Any?): List<PrivateAllowance> {
+            if (value == null) return emptyList()
+            val entries = value as? List<*> ?: error("http.allow-private must be a list of { package, host, port }")
+            return entries.mapIndexed { i, entry ->
+                val at = "http.allow-private[$i]"
+
+                @Suppress("UNCHECKED_CAST")
+                val fields = entry as? Map<String, Any?> ?: error("$at must be { package, host, port }")
+                val namespace = fields.text("package")?.trim() ?: error("$at has no package (a package's namespace)")
+                if (!dev.netherforge.format.project.Names.isNamespace(namespace)) error("$at: \"$namespace\" isn't a package's namespace")
+                val host = fields.text("host")?.trim()?.lowercase() ?: error("$at has no host (an address, or a name)")
+                if (host.any { it.isWhitespace() || it == '/' }) error("$at: \"$host\" isn't an address or a host name")
+                val port = fields.int("port")?.takeIf { it in 1..65535 } ?: error("$at needs a port from 1 to 65535")
+                PrivateAllowance(namespace, host.removePrefix("[").removeSuffix("]"), port)
+            }
         }
 
         /** `http.connections:`: what `nf.http.stream` and `nf.http.websocket` may hold open and move. A number that isn't a positive one is the default. */

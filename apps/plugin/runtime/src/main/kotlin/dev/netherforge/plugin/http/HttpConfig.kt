@@ -7,7 +7,8 @@ package dev.netherforge.plugin.http
  * shared and unique-local addresses); a request or response body larger than
  * its limit fails; a request that takes longer than [timeoutSeconds]
  * (redirects included) fails; and each package may start [requestsPerMinute]
- * requests a minute.
+ * requests a minute. [allowPrivate] lifts the private-address refusal for one
+ * package, one host and one port each, without opening the network to the rest.
  */
 data class HttpConfig(
     val allowPrivateAddresses: Boolean = false,
@@ -16,7 +17,9 @@ data class HttpConfig(
     val timeoutSeconds: Int = 15,
     val requestsPerMinute: Int = 60,
     /** What `nf.http.stream` and `nf.http.websocket` may hold open and move. */
-    val connections: ConnectionLimits = ConnectionLimits()
+    val connections: ConnectionLimits = ConnectionLimits(),
+    /** `http.allow-private`: the owner's allowances, each a package that may reach one private host and port. */
+    val allowPrivate: List<PrivateAllowance> = emptyList()
 ) {
     companion object {
         /** Redirects one request follows before it fails. */
@@ -44,3 +47,15 @@ data class ConnectionLimits(
     val maxQueuedMessages: Int = 1000,
     val messagesPerTick: Int = 100
 )
+
+/**
+ * One entry of `http.allow-private` in `config.yml`: the package [namespace]
+ * may connect to [host] (an address, or a name looked up when it's needed) at
+ * [port] even though the address is private. The check stays on the address
+ * connected to, so this lets that package reach exactly the addresses [host]
+ * stands for, on that port, and nothing else that isn't public. It lifts only
+ * the address refusal: the package still declares the host in `requires.http`.
+ */
+data class PrivateAllowance(val namespace: String, val host: String, val port: Int) {
+    override fun toString() = "$namespace → $host:$port"
+}

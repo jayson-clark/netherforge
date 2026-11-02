@@ -1,0 +1,1 @@
+{ "formatVersion": 1, "name": "App", "namespace": "app", "version": "1.0.0", "minecraft": "26.3", "dependencies": { "a": { "path": "../a", "version": "^1.2.0" }, "b": { "path": "../b", "version": "~2.0.0" }, "e": { "path": "../e", "version": "one or two" }, "d": { "path": "../d", "version": ">=1.0.0 <2.0.0", "provided": true } } }

@@ -247,4 +247,51 @@ class HttpRequestTest {
         now = 90_000_000_000L
         assertTrue(rate.tryStart("a"))
     }
+
+    @Test
+    fun `an owner's allowance lets one package reach its private host and port, and no one else`() {
+        fun manifest(namespace: String, more: String = "") =
+            """{ "formatVersion": ${dev.netherforge.format.project.FormatVersion.CURRENT}, "name": "$namespace", """ +
+                """"namespace": "$namespace", "version": "1.0.0", "minecraft": "26.3", "requires": { "http": ["127.0.0.1"] }$more }"""
+
+        // Each package's api.get(port) is its own code calling nf.http.request, so it's held to that package.
+        fun library(namespace: String) = mapOf(
+            "../$namespace/netherforge.json" to manifest(namespace, """, "exports": { "modules": ["api"] }"""),
+            "../$namespace/modules/api/init.lua" to """
+                return { get = function(port, done)
+                  nf.http.request({ url = "http://127.0.0.1:" .. port .. "/hi" }, function(response, err)
+                    done(response and tostring(response.status) or err)
+                  end)
+                end }
+            """
+        )
+        val script = """
+            local function say(who) return function(answer) log(who .. ": " .. answer) end end
+            require("bridge:api").get(PORT, say("bridge"))
+            require("bridge:api").get(PORT + 1, say("bridge, another port"))
+            require("other:api").get(PORT, say("other"))
+            nf.http.request({ url = "http://127.0.0.1:PORT/hi" }, function(response, err)
+              say("project")(response and tostring(response.status) or err)
+            end)
+        """.replace("PORT", port.toString())
+        val files = mapOf(
+            TestServer.MANIFEST to manifest(
+                "test",
+                """, "dependencies": { "bridge": { "path": "../bridge" }, "other": { "path": "../other" } }"""
+            ),
+            "modules/t/init.lua" to script
+        ) + library("bridge") + library("other")
+        TestServer(files, http = HttpConfig(allowPrivate = listOf(PrivateAllowance("bridge", "127.0.0.1", port)))).use { server ->
+            server.tick(20)
+            assertTrue(server.errors.isEmpty(), server.errors.toString())
+            val said = server.logs.associate { it.substringBefore(": ") to it.substringAfter(": ") }
+            assertEquals("201", said["bridge"])
+            for (who in listOf("bridge, another port", "other", "project")) {
+                assertTrue("a loopback address" in said[who].orEmpty(), "$who: ${said[who]}")
+            }
+            assertTrue(
+                server.runtime.session.requirements.grants().contains("http.allow-private: bridge may reach 127.0.0.1:$port")
+            )
+        }
+    }
 }

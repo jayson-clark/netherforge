@@ -19,7 +19,11 @@ says where it is:
   "namespace": "shop",
   "dependencies": {
     "acme_economy": { "path": "../economy" },
-    "acme_quests": { "git": "https://github.com/acme/quests.git", "rev": "v1.2.0" }
+    "acme_quests": {
+      "git": "https://github.com/acme/quests.git",
+      "rev": "v1.2.0",
+      "version": "^1.2.0"
+    }
   }
 }
 ```
@@ -30,6 +34,18 @@ says where it is:
 | `…path`        | The package's folder, relative to this project's folder, `/` between its parts: `../economy`, `vendor/economy`. `..` is fine (a package is usually a sibling folder); an absolute path, a drive letter or a backslash isn't (`package.path`). The folder must hold a project (`package.missing`) whose `namespace` is the dependency's name (`package.namespace`). |
 | `…git`         | A git repository holding the package at its top: `https://…`, `ssh://…`, `user@host:path` (`git@github.com:acme/quests.git`) or `file://…`. Plain `http://` and `git://` aren't fetched from, since anyone on the way could swap the code (`package.git-url`).                                                                                                     |
 | `…rev`         | Optional, with `git`: the branch, tag or full commit to use (`main`, `v1.2.0`); the repository's default branch when absent (`package.git-rev`). The lock pins the commit it resolved to.                                                                                                                                                                          |
+| `…version`     | Optional: the versions of the package this one takes, as a range (see below). The package found must have a `version` in it, or it isn't loaded (`package.version`, naming both); any version when absent. A range that isn't one is `package.version-range`.                                                                                                      |
+| `…provided`    | Optional: `true` when the server that runs the project provides this package itself (see [Packages the server provides](#packages-the-server-provides)). The dependency still names a `path` or `git`, which the editor and the dev server use.                                                                                                                    |
+
+A `version` range is written as npm writes them, a subset of it: `*` (any),
+`1.2.3` or `=1.2.3` (exactly that one), `^1.2.3` (the same major version:
+`>=1.2.3 <2.0.0`; for `0.x` the same minor, and for `0.0.x` the same patch),
+`~1.2.3` (the same minor: `>=1.2.3 <1.3.0`), and the comparisons `>`, `>=`,
+`<` and `<=`, each with a full version. Comparisons with spaces between them
+must all hold (`>=1.0.0 <2.0.0`); `||` between them takes either
+(`^1.0.0 || ^3.0.0`). A prerelease (`2.0.0-beta.1`) is taken only by a range
+that names a prerelease of the same `major.minor.patch` (`>=2.0.0-beta.1`),
+so `^1.0.0` never takes `2.0.0-beta.1`.
 
 A package's own `dependencies` are followed too, each path relative to the
 package's folder, so a project uses the whole tree. A package from git can
@@ -213,6 +229,55 @@ one its author built.
   "project": "shop",
   "packages": { "shop": { "version": "1.0.0", "hash": "sha256:51e0…" } },
   "resourcePack": { "sha1": "3b0f…", "format": [75, 0] }
+}
+```
+
+## Packages the server provides
+
+A server's owner can provide a package themselves, such as their own
+integration with the systems around the server, which projects on their
+servers depend on. The owner keeps control of that code: whatever copy a
+project brings, the server runs its own. The owner lists the package folders
+in `packages.provided` in the plugin's `config.yml` (see
+[server configuration](../guide/server-config.md#packages-the-server-provides)).
+
+A project marks such a dependency `provided`, and usually gives it a
+`version` range:
+
+```json partial
+{
+  "dependencies": {
+    "acme_bridge": { "path": "../acme_bridge", "version": "^1.0.0", "provided": true }
+  }
+}
+```
+
+- The editor and the dev server resolve it as any other dependency, from the
+  `path` or `git` and the lock, so the project is written and tested without
+  the owner's copy. The package can ship a stand-in for that: a version that
+  answers the way the real one does, without the systems behind it.
+- `netherforge build` leaves it out of the bundle and lists it in the
+  manifest's `provided`, so the bundle's hashes are of what it carries.
+  `netherforge build --exclude <namespace>` leaves out a dependency that isn't
+  marked. A bundle that leaves a package out has no built `resourcePack`: the
+  server builds the pack with its own copy's resources.
+- The server loads its copy in place of any copy the project or bundle points
+  at, when its version is in every range that depends on it (otherwise
+  `package.version`, naming both versions, and the project is refused as for a
+  missing dependency). A bundle that carries its own copy of a package the
+  server provides is refused (`runtime.provided-package`), so the owner learns
+  it was built against something else. A bundle that leaves a package out for
+  a server that doesn't provide it is `package.missing`, saying so.
+- The provided package's own `requires` are checked like any package's, and
+  `/nf requires` and the startup log say which packages came from the server
+  and from where.
+
+```json kind=bundle
+{
+  "formatVersion": 1,
+  "project": "shop",
+  "packages": { "shop": { "version": "1.0.0", "hash": "sha256:51e0…" } },
+  "provided": ["acme_bridge"]
 }
 ```
 

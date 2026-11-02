@@ -1091,12 +1091,13 @@ interface NfCryptoApi {
  * to exactly the address it checked: a loopback, private, link-local, shared (`100.64.0.0/10`),
  * unique-local or IPv4-mapped address is refused even when its name is declared, unless the server
  * owner turned on `http.allow-private-addresses` in `config.yml` (for a service on the same machine or
- * network). Redirects (at most 5) are followed, and each one is held to the same rules, host
- * declaration included. The server's proxy settings are never used. Only `http` and `https` URLs work.
- * The server owner also limits requests in `config.yml`'s `http:` section: how large a request and a
- * response may be, how long a request may take, and how many a package may make a minute. Connections
- * that stay open (`stream`, `websocket`) are held to the same hosts and addresses, count as a request
- * when they open, and have limits of their own in `http.connections`.
+ * network), or allowed the calling package that one host and port in `http.allow-private`. Redirects
+ * (at most 5) are followed, and each one is held to the same rules, host declaration included. The
+ * server's proxy settings are never used. Only `http` and `https` URLs work. The server owner also
+ * limits requests in `config.yml`'s `http:` section: how large a request and a response may be, how
+ * long a request may take, and how many a package may make a minute. Connections that stay open
+ * (`stream`, `websocket`) are held to the same hosts and addresses, count as a request when they open,
+ * and have limits of their own in `http.connections`.
  */
 interface NfHttpApi {
     /**

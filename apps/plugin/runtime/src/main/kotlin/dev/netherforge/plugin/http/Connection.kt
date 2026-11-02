@@ -27,6 +27,8 @@ class ConnectionRequest(
     val format: StreamFormat?,
     /** A WebSocket's subprotocols to offer. */
     val protocols: List<String>,
+    /** The owner's `http.allow-private` entries for the package that opened it, held to every hop. */
+    val allowances: List<PrivateAllowance>,
     /** The host requirement for a redirect's host, bound to the calling package (`Requirements.held`); it throws what a refused check does. */
     val declared: (host: String) -> Unit
 )

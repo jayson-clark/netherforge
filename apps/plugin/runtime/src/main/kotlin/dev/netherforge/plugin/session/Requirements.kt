@@ -40,7 +40,13 @@ class Requirements(
     private val calling: () -> String,
     private val callingHidden: () -> Boolean,
     /** The server's policy over what projects may require, if it has one. */
-    private val policy: () -> dev.netherforge.format.project.Policy? = { null }
+    private val policy: () -> dev.netherforge.format.project.Policy? = { null },
+    /**
+     * What the server's owner gives particular packages, one line each: the packages it provides
+     * (`packages.provided`) and the private addresses it lets one package reach (`http.allow-private`). Logged beside
+     * the requirements and listed by `/nf requires`.
+     */
+    val grants: () -> List<String> = { emptyList() }
 ) : RuntimeService {
     override val name = "requirements"
 
@@ -64,6 +70,7 @@ class Requirements(
                 "Requires (by its packages' netherforge.json): " + combined.joinToString("; ") { use -> describe(use) }
             }
         )
+        grants().takeIf { it.isNotEmpty() }?.let { log.info("Given by the server's config.yml: " + it.joinToString("; ")) }
     }
 
     /**
@@ -72,6 +79,12 @@ class Requirements(
      * capability goes through.
      */
     fun check(requirement: Requirement, what: String) = check(requirement, what, calling(), callingHidden(), snapshot())
+
+    /**
+     * The package whose code is running, as [check] holds it; null when a tail call hid it. What a power the owner
+     * grants one package (`http.allow-private`) is given to: an unknown caller is given none.
+     */
+    fun callingPackage(): String? = if (callingHidden()) null else calling()
 
     /**
      * [check] as the code running now would make it, for a thread that isn't

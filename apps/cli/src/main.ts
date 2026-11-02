@@ -47,6 +47,7 @@ Usage:
       resolves every one afresh (a branch's newest commit). Git packages
       are fetched with your git into the editor's package cache.
   netherforge build  [dir] [--out <folder>] [--sign <key>] [--archive]
+                     [--exclude <namespace>]...
       Write a bundle: the project and the packages it depends on, for a
       production server to run (point the plugin's project setting at it).
       Default folder: build/<namespace>-<version> in the project. Refuses
@@ -56,6 +57,9 @@ Usage:
       With the game's data (the editor's cache, or --game-data <file>),
       the project's resource pack is built into the bundle too, so a
       server with that pack format sends it rather than building it.
+      A package the server provides (packages.provided in its config.yml)
+      is left out: a dependency marked "provided": true, or one named by
+      --exclude. The bundle lists it, and the server loads its own copy.
   netherforge keygen <file>
       Make an Ed25519 key pair for signing bundles: the private key in
       <file>, the public key (what servers trust) in <file>.pub.
@@ -184,6 +188,7 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
         structure: { type: 'string' },
         as: { type: 'string' },
         build: { type: 'boolean' },
+        exclude: { type: 'string', multiple: true },
         replace: { type: 'boolean' },
         'accept-eula': { type: 'boolean' },
         timeout: { type: 'string' },
@@ -378,6 +383,7 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
           sign: values.sign,
           archive: values.archive,
           gameData: values['game-data'],
+          exclude: values.exclude,
         },
         env,
       )

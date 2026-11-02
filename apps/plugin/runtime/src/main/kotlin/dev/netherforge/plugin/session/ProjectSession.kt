@@ -248,7 +248,21 @@ class ProjectSession internal constructor(
     )
 
     /** What each package declared it needs (`requires`), the check every capability goes through, and the sum whoever runs the server sees. */
-    val requirements = service(Requirements(log, { snapshot }, { names.calling() }, { names.callingHidden() }, { policy }))
+    val requirements = service(
+        Requirements(log, { snapshot }, { names.calling() }, { names.callingHidden() }, { policy }, ::ownerGrants)
+    )
+
+    /** What the owner's `config.yml` gives particular packages: the packages the server provides, and private addresses one may reach. */
+    private fun ownerGrants(): List<String> = buildList {
+        for (provided in source.providedInUse) add("package $provided, provided by the server (packages.provided)")
+        val tree = setOf(snapshot.namespace) + snapshot.packages.keys
+        for (allowance in config.http.allowPrivate) {
+            add(
+                "http.allow-private: ${allowance.namespace} may reach ${allowance.host}:${allowance.port}" +
+                    if (allowance.namespace in tree) "" else " (no package \"${allowance.namespace}\" in this project)"
+            )
+        }
+    }
 
     /** `nf.http`'s client and its connections' transport: closed with the session, so reloads leave no threads or sockets behind. */
     val http = service(HttpClient(config.testing != null) { config.http })

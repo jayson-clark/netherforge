@@ -174,7 +174,23 @@ enum class SpawnCategory {
  * another field, as `netherforge.lock`'s `source` already has its place.
  */
 @Serializable
-data class Dependency(val path: String? = null, val git: String? = null, val rev: String? = null)
+data class Dependency(
+    val path: String? = null,
+    val git: String? = null,
+    val rev: String? = null,
+    /**
+     * The versions of the package this one takes, a [VersionRange] (`^1.2.0`): the package found must be one of
+     * them, or it isn't loaded. Any version, when it's absent.
+     */
+    val version: String? = null,
+    /**
+     * Whether the server running the project provides this package (its owner's copy, `packages.provided` in
+     * `config.yml`): `netherforge build` leaves it out of the bundle, and the server loads its own. The editor and the
+     * dev server still resolve it from [path] or [git], so the project is written and tested against that copy (a
+     * stand-in, often).
+     */
+    val provided: Boolean? = null
+)
 
 /**
  * A package's declared capabilities (`"requires"` in `netherforge.json`):

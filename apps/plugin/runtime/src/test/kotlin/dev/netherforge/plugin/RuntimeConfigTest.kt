@@ -3,6 +3,7 @@ package dev.netherforge.plugin
 import dev.netherforge.format.bridge.Bridge
 import dev.netherforge.network.Registration
 import dev.netherforge.plugin.http.HttpConfig
+import dev.netherforge.plugin.http.PrivateAllowance
 import dev.netherforge.plugin.network.NetworkConfig
 import dev.netherforge.plugin.pack.PackConfig
 import dev.netherforge.plugin.schedule.ScheduleConfig
@@ -11,6 +12,7 @@ import dev.netherforge.plugin.wasm.WasmConfig
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -143,6 +145,39 @@ class RuntimeConfigTest {
         assertEquals(expected, read(mapOf("http" to section), properties)!!.http)
         assertEquals(HttpConfig(), read(mapOf("project" to "p"))!!.http)
         assertFalse(HttpConfig().allowPrivateAddresses)
+    }
+
+    @Test
+    fun `http allow-private lists one package's host and port each, and a wrong entry is an error`() {
+        val allowances = listOf(
+            mapOf("package" to "acme_bridge", "host" to "127.0.0.1", "port" to 9361),
+            mapOf("package" to "acme_bridge", "host" to "[::1]", "port" to "9361"),
+            mapOf("package" to "relay", "host" to "Bridge.Internal", "port" to 80)
+        )
+        assertEquals(
+            listOf(
+                PrivateAllowance("acme_bridge", "127.0.0.1", 9361),
+                PrivateAllowance("acme_bridge", "::1", 9361),
+                PrivateAllowance("relay", "bridge.internal", 80)
+            ),
+            read(mapOf("project" to "p", "http" to mapOf("allow-private" to allowances)))!!.http.allowPrivate
+        )
+        fun refused(entry: Map<String, Any?>) = assertFailsWith<IllegalStateException> {
+            read(mapOf("project" to "p", "http" to mapOf("allow-private" to listOf(entry))))
+        }.message.orEmpty()
+        assertTrue("namespace" in refused(mapOf("package" to "Not A Namespace", "host" to "h", "port" to 1)))
+        assertTrue("no host" in refused(mapOf("package" to "a", "port" to 1)))
+        assertTrue("port" in refused(mapOf("package" to "a", "host" to "h", "port" to 70000)))
+    }
+
+    @Test
+    fun `packages provided are folders relative to the server, read on a production server only`() {
+        val settings = mapOf("project" to "p", "packages" to mapOf("provided" to listOf("/opt/packages/bridge", "packages/relay")))
+        assertEquals(
+            listOf(Path.of("/opt/packages/bridge"), server.directory.resolve("packages/relay").toAbsolutePath().normalize()),
+            read(settings)!!.providedPackages
+        )
+        assertEquals(emptyList(), read(settings, mapOf(Bridge.PROJECT_PROPERTY to project.toString()))!!.providedPackages)
     }
 
     @Test

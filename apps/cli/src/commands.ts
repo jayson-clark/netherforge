@@ -259,10 +259,20 @@ export function lock(
  * and `netherforge-bundle.json` listing them with their hashes, for a
  * production server to run as it is. Refuses a project with errors, or whose
  * `netherforge.lock` isn't what its dependencies resolve to.
+ *
+ * A package the server provides is left out (a dependency marked `provided` anywhere in the tree, or one
+ * [options.exclude] names) and listed in the manifest's `provided`, so the bundle's hashes are of what it carries and
+ * the server loads its own copy. The resource pack isn't built then: the server's copy may bring other resources.
  */
 export function build(
   root: string,
-  options: { out?: string; sign?: string; archive?: boolean; gameData?: string },
+  options: {
+    out?: string
+    sign?: string
+    archive?: boolean
+    gameData?: string
+    exclude?: string[]
+  },
   env: NodeJS.ProcessEnv = process.env,
 ): Outcome {
   const input = readProject(root)
@@ -293,6 +303,26 @@ export function build(
   const folders: Record<string, string> = { [namespace]: root }
   for (const [name, pkg] of Object.entries(outline.packages ?? {}))
     folders[name] = packageDir(root, packageCache(env), pkg.location)
+  const provided = new Set<string>()
+  for (const name of options.exclude ?? []) {
+    if (name === namespace)
+      return { out: [], err: [`--exclude ${name}: that's the project itself.`], code: 2 }
+    if (!(name in folders))
+      return {
+        out: [],
+        err: [`--exclude ${name}: the project doesn't depend on a package "${name}".`],
+        code: 2,
+      }
+    provided.add(name)
+  }
+  for (const dir of Object.values(folders)) {
+    const { dependencies } = JSON.parse(readFileSync(path.join(dir, MANIFEST_FILE), 'utf8')) as {
+      dependencies?: Record<string, { provided?: boolean }>
+    }
+    for (const [name, dependency] of Object.entries(dependencies ?? {}))
+      if (dependency.provided === true && name in folders) provided.add(name)
+  }
+  for (const name of provided) delete folders[name]
   const packages: Record<string, { version: string; hash: string }> = {}
   for (const [name, dir] of Object.entries(folders).sort(([a], [b]) => a.localeCompare(b))) {
     for (const file of listFiles(dir).filter(nf.isPackageBundled)) {
@@ -313,7 +343,10 @@ export function build(
     game.json,
     JSON.stringify(pngSizes(root, Object.keys(input))),
   )
-  const pack = buildPack(out, namespace, layout)
+  const pack: ReturnType<typeof buildPack> =
+    provided.size > 0
+      ? { reason: 'the server provides some of its packages, and builds the pack with its copies' }
+      : buildPack(out, namespace, layout)
   let resourcePack: { sha1: string; format: number[] } | undefined
   let packLine: string
   if ('zip' in pack) {
@@ -328,6 +361,7 @@ export function build(
     project: namespace,
     packages,
     ...(resourcePack ? { resourcePack } : {}),
+    ...(provided.size > 0 ? { provided: [...provided].sort() } : {}),
   }
   const written = JSON.parse(
     nf.canonicalize('bundle', BUNDLE_FILE, JSON.stringify(bundle)),
@@ -339,6 +373,8 @@ export function build(
   const here = path.relative(process.cwd(), out)
   const shown = here && !here.startsWith('..') && !path.isAbsolute(here) ? here : out
   const lines = [`Built ${shown}: ${namespace} ${version}${what}.`, packLine]
+  if (provided.size > 0)
+    lines.push(`Left out for the server to provide: ${[...provided].sort().join(', ')}.`)
   if (options.sign) {
     try {
       lines.push(`Signed as ${signBundle(out, path.resolve(options.sign))}.`)

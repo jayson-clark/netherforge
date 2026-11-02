@@ -11,6 +11,22 @@ release is cut.
 
 ### Added
 
+- **One package may reach one private address.** `http.allow-private` in
+  `config.yml` lists `{ package, host, port }` allowances: that package (the
+  one whose code makes the request) may connect to the addresses `host` stands
+  for on that port though they aren't public, redirects, streams and
+  WebSockets included, while every other package and the project's own
+  scripts are still refused. The package still declares the host under
+  `requires.http`; `/nf requires` and the startup log list the allowances.
+- **Packages the server provides.** `packages.provided` in `config.yml` lists
+  package folders the server loads in place of any copy a project or bundle
+  brings. A dependency can take a `version` range (`^1.2.0`,
+  `>=1.0.0 <2.0.0`; `package.version` when the package found is outside it,
+  for any dependency) and be marked `"provided": true`, which `netherforge
+build` leaves out of the bundle (as does `--exclude <namespace>`), listing
+  it in the manifest's `provided`. A bundle that carries its own copy of a
+  package the server provides is refused (`runtime.provided-package`).
+
 - **A network-wide fallback group.** `fallback=<group>` in `hub.properties`
   is where the players of every group without its own
   `group.<name>.fallback` go when their server stops or drains, so groups made

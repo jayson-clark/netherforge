@@ -41,6 +41,31 @@ performance:
 [bundle](deploying.md#projects-with-dependencies)), absolute or relative to
 the server's folder. See [Deploying](deploying.md).
 
+### Packages the server provides
+
+A package of your own (an integration with your own systems, say) can be one
+that projects on your servers depend on, while you keep control of the code
+that runs. List each package's folder (the one holding its `netherforge.json`),
+absolute or relative to the server's folder:
+
+```yaml
+packages:
+  provided:
+    - /opt/server-packages/acme_bridge
+```
+
+The server loads your copy wherever a project or bundle depends on a package of
+that namespace, as long as its version is in the range the dependency takes
+(else the project is refused, naming both versions). A bundle that carries its
+own copy of one is refused (`runtime.provided-package`), so you learn it was
+built against something else: projects build bundles for your servers without
+it, by marking the dependency `"provided": true` or with
+`netherforge build --exclude <namespace>`. `/nf requires` and the startup log
+say which packages came from the server and from where, and a provided
+package's own `requires` show there like any other's. The editor's dev server
+doesn't read this: it resolves the dependency as the editor does. See
+[packages the server provides](../format/packages.md#packages-the-server-provides).
+
 ## Resource packs
 
 If the project has resource packs, NetherForge builds them into one Minecraft
@@ -117,6 +142,7 @@ those requests may do is up to you:
 ```yaml
 http:
   allow-private-addresses: false
+  allow-private: []
   max-request-bytes: 1048576
   max-response-bytes: 4194304
   timeout-seconds: 15
@@ -134,6 +160,7 @@ http:
 | Key                       | Meaning                                                                                          | Default |
 | ------------------------- | ------------------------------------------------------------------------------------------------ | ------- |
 | `allow-private-addresses` | Let requests reach this machine and your local network, not only the public internet. See below. | `false` |
+| `allow-private`           | Let one package reach one host and port of yours that isn't public. See below.                   | none    |
 | `max-request-bytes`       | The largest body a script may send. A larger one is an error in the script.                      | 1 MiB   |
 | `max-response-bytes`      | The largest response. A larger one fails the request.                                            | 4 MiB   |
 | `timeout-seconds`         | How long one request may take, redirects included.                                               | `15`    |
@@ -145,6 +172,28 @@ network or a cloud provider's internal addresses is refused, redirects
 included. Turn `allow-private-addresses` on only when a package must call a
 service of your own on your network (a webhook receiver on the same machine,
 say). Proxy settings from the environment are never used.
+
+To give **one package** a service of yours without opening your network to
+every other package the project pulls in, leave `allow-private-addresses` off
+and list an allowance instead:
+
+```yaml
+http:
+  allow-private-addresses: false
+  allow-private:
+    - package: acme_bridge # a package's namespace
+      host: 127.0.0.1 # an address, or a name looked up when it's used
+      port: 9361
+```
+
+The check is still on the address connected to: this lets `acme_bridge` reach
+loopback port 9361 and nothing else that isn't public, redirects and streams
+and WebSockets included, each hop checked again. It's given to the package
+whose code makes the request, so another package, or the project's own
+scripts, are refused the same address. The package must still declare the
+host under `requires.http`. Multicast, broadcast and `0.0.0.0` stay refused
+whatever you allow. `/nf requires` and the startup log list the allowances in
+effect.
 
 ### Streams and WebSockets
 

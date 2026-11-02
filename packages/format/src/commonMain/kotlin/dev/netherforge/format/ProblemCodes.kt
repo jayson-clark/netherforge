@@ -258,6 +258,14 @@ object ProblemCodes {
     val PACKAGE_CONFLICT =
         error("package.conflict", PACKAGES, "Two packages in the dependency tree have one namespace: there can be only one of each.")
     val PACKAGE_CYCLE = error("package.cycle", PACKAGES, "Packages depend on each other in a loop.")
+    val PACKAGE_VERSION_RANGE =
+        error("package.version-range", PACKAGES, "A dependency's `version` isn't a version range (`^1.2.0`, `>=1.0.0 <2.0.0`).")
+    val PACKAGE_VERSION =
+        error(
+            "package.version",
+            PACKAGES,
+            "The package a dependency resolved to has a version outside the range the dependency takes, so it isn't loaded."
+        )
     val PACKAGE_EXPORT_KIND = error("package.export-kind", PACKAGES, "A key in `exports` isn't the folder of a kind of resource.")
     val PACKAGE_EXPORT_MISSING = error("package.export-missing", PACKAGES, "`exports` names a resource the project doesn't have.")
     val LOCK_MISSING =
@@ -1048,6 +1056,12 @@ object ProblemCodes {
             PACKAGES,
             "A package in a bundle isn't what the bundle says it is: a file was changed, added or removed."
         )
+    val RUNTIME_PROVIDED_PACKAGE =
+        error(
+            "runtime.provided-package",
+            PACKAGES,
+            "A bundle carries its own copy of a package the server provides (`packages.provided`), or a provided package can't be read."
+        )
     val RUNTIME_BUNDLE_SIGNATURE =
         error(
             "runtime.bundle-signature",
@@ -1152,7 +1166,7 @@ object ProblemCodes {
      */
     val reportedAtRuntime: Set<ProblemCode> = setOf(
         RUNTIME_WASM, TERRAIN_SCRIPT_FAILED, MIGRATION_FAILED, VIDEO_STALE, RUNTIME_MINECRAFT_UNSUPPORTED,
-        RUNTIME_UNBUNDLED, RUNTIME_BUNDLE_HASH, RUNTIME_BUNDLE_SIGNATURE, RUNTIME_POLICY, RUNTIME_PLUGIN_MISSING,
+        RUNTIME_UNBUNDLED, RUNTIME_BUNDLE_HASH, RUNTIME_PROVIDED_PACKAGE, RUNTIME_BUNDLE_SIGNATURE, RUNTIME_POLICY, RUNTIME_PLUGIN_MISSING,
         RUNTIME_WEB_DISABLED, RUNTIME_NETWORK_DISABLED,
         RUNTIME_BOTS_DISABLED, RUNTIME_BLOCKS, RUNTIME_TERRAIN, RUNTIME_DIMENSION_TYPE, RUNTIME_RESTART, RUNTIME_DATAPACK,
         SETTINGS_FILE, SETTINGS_VALUE, SETTINGS_UNKNOWN, SCRIPT_ERROR, SCRIPT_SLOW, PARTICLES_BUDGET, RUNTIME_PACK_FORMAT

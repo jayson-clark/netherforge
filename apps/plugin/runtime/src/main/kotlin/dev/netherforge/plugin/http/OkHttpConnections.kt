@@ -85,8 +85,8 @@ class OkHttpConnections(private val fetcher: () -> HttpFetcher, private val limi
             try {
                 while (true) {
                     url = call.url.toString().toHttpUrlOrNull() ?: throw WorkFailed("\"${call.url}\" isn't a URL")
-                    fetcher.checkLiteral(url)
-                    val next = client.newCall(fetcher.request(call, url))
+                    fetcher.checkLiteral(url, request.allowances)
+                    val next = fetcher.reaching(client, request.allowances, url).newCall(fetcher.request(call, url))
                     current = next
                     if (closed) return
                     val response = next.execute()
@@ -145,7 +145,7 @@ class OkHttpConnections(private val fetcher: () -> HttpFetcher, private val limi
         val url = request.url.toString().replaceFirst(WS, "http").toHttpUrlOrNull()
         try {
             url ?: throw WorkFailed("\"${request.url}\" isn't a URL")
-            fetcher.checkLiteral(url)
+            fetcher.checkLiteral(url, request.allowances)
         } catch (e: WorkFailed) {
             sink.ended(ConnectionEnd.FAILED, detail = e.message)
             return Unconnected
@@ -153,7 +153,11 @@ class OkHttpConnections(private val fetcher: () -> HttpFetcher, private val limi
         val headers = request.headers.toMutableMap()
         if (request.protocols.isNotEmpty()) headers["Sec-WebSocket-Protocol"] = request.protocols.joinToString(", ")
         val opening = fetcher.request(HttpCall("GET", URI(url.toString()), headers, null), url)
-        val client = fetcher.connectionClient(dispatcher) { base -> CountingSocketFactory(base, sink) }
+        val client = fetcher.reaching(
+            fetcher.connectionClient(dispatcher) { base -> CountingSocketFactory(base, sink) },
+            request.allowances,
+            url
+        )
         val socket = client.newWebSocket(opening, SocketListener(fetcher, url, sink))
         sockets += socket
         return object : Link {

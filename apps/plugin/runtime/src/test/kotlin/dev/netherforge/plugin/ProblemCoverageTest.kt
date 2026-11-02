@@ -26,6 +26,7 @@ class ProblemCoverageTest {
         "runtime.minecraft-unsupported" to "session/ReloadTest",
         "runtime.unbundled" to "project/PackagesTest",
         "runtime.bundle-hash" to "project/PackagesTest",
+        "runtime.provided-package" to "project/ProvidedPackagesTest",
         "runtime.policy" to "session/PolicyTest",
         "runtime.bundle-signature" to "project/BundleSignaturesTest",
         "runtime.plugin-missing" to "interop/InteropTest",
