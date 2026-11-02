@@ -242,6 +242,43 @@ describe('build', () => {
     expect(readFileSync(path.join(out, 'resource-pack.zip')).equals(zip)).toBe(true)
   })
 
+  it('leaves out a package the server provides, by --exclude or a provided mark, and lists it', async () => {
+    const out = path.join(project, '..', 'bundle')
+    const game = path.join(tmp, 'game-data.json')
+    writeFileSync(
+      game,
+      JSON.stringify({ minecraft: '26.3', packFormat: [75, 0], schema: GAME_DATA_SCHEMA }),
+    )
+    const excluded = await run(
+      ['build', project, '--out', out, '--exclude', 'library', '--game-data', game],
+      env,
+    )
+    expect(excluded).toMatchObject({ code: 0 })
+    expect(excluded.out).toContain('Left out for the server to provide: library.')
+    const bundle = JSON.parse(readFileSync(path.join(out, 'netherforge-bundle.json'), 'utf8'))
+    expect(Object.keys(bundle.packages)).toEqual(['showcase'])
+    expect(bundle.provided).toEqual(['library'])
+    expect(existsSync(path.join(out, 'library'))).toBe(false)
+    // The server's copy may bring other resources: the pack is the server's to build.
+    expect(existsSync(path.join(out, 'resource-pack.zip'))).toBe(false)
+    expect(bundle.resourcePack).toBeUndefined()
+
+    // The same from the dependency's own mark.
+    const manifest = path.join(project, 'netherforge.json')
+    const json = JSON.parse(readFileSync(manifest, 'utf8'))
+    json.dependencies.library.provided = true
+    writeFileSync(manifest, JSON.stringify(json))
+    expect(await run(['build', project, '--out', out], env)).toMatchObject({ code: 0 })
+    const marked = JSON.parse(readFileSync(path.join(out, 'netherforge-bundle.json'), 'utf8'))
+    expect(marked.provided).toEqual(['library'])
+    expect(marked.packages.showcase.hash).toBe(hashPackage(path.join(out, 'showcase')))
+
+    expect(await run(['build', project, '--out', out, '--exclude', 'nothing'], env)).toMatchObject({
+      code: 2,
+      err: ['--exclude nothing: the project doesn\'t depend on a package "nothing".'],
+    })
+  })
+
   it('builds into build/<namespace>-<version> by default', async () => {
     expect((await run(['build', project], env)).code).toBe(0)
     expect(existsSync(path.join(project, 'build/showcase-0.1.0/netherforge-bundle.json'))).toBe(

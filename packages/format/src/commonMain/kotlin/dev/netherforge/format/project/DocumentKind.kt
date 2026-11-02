@@ -83,7 +83,7 @@ object BundleKind : DocumentKind<BundleManifest> {
     // A bundle has no .netherforge/ to point a schema at: it's for a server, not an editor.
     override val schemaRef: String? = null
 
-    override fun canonical(value: BundleManifest) = value
+    override fun canonical(value: BundleManifest) = value.copy(provided = value.provided?.distinct()?.sorted())
 }
 
 /** `fonts/default.json`: the default font's advances, which the editor writes from the imported client. */

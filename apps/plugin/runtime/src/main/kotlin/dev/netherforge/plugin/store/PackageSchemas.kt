@@ -35,7 +35,9 @@ class PackageSchemas(
     private val home: () -> String,
     /** A project file's text, by its project path (a package's at its package path). */
     private val read: (String) -> String?,
-    private val problemsChanged: () -> Unit
+    private val problemsChanged: () -> Unit,
+    /** A package's own database on a connection the owner named for it (`own-databases`), or null for its SQLite file. */
+    private val own: (String) -> OwnDatabase? = { null }
 ) : RuntimeService {
     override val name get() = "package databases"
 
@@ -93,24 +95,56 @@ class PackageSchemas(
             )
             return
         }
+        val shared = own(namespace)
+        if (shared != null) {
+            // On a server of another dialect, every step is that server's version of it: SQLite's SQL isn't theirs.
+            val dialect = shared.dialect
+            val without = migrations.entries.sortedBy { it.key }.firstOrNull { dialect !in it.value.value.dialects }
+            if (without != null) {
+                return fail(
+                    namespace,
+                    pathOf(without.key),
+                    "it's on the ${shared.describe()}, and its migrations have no $dialect versions " +
+                        "(${dialectPathOf(without.key, without.value.group, dialect)})",
+                    code = ProblemCodes.MIGRATION_DIALECT
+                )
+            }
+        }
         val steps = ArrayList<Migration>()
-        for ((id, _) in migrations.entries.sortedBy { it.key }) {
-            val path = pathOf(id)
+        for ((id, loaded) in migrations.entries.sortedBy { it.key }) {
+            val path = if (shared == null) pathOf(id) else dialectPathOf(id, loaded.group, shared.dialect)
             val sql = read(path) ?: return fail(namespace, path, "$path couldn't be read")
             steps += Migration.of(PackagePaths.split(id).second + ".sql", sql)
         }
         try {
-            databases.database(namespace).migrate(namespace, steps)
+            if (shared == null) databases.database(namespace).migrate(namespace, steps) else shared.migrate(steps)
         } catch (e: MigrationFailed) {
             val failed = migrations.keys.first { PackagePaths.split(it).second + ".sql" == e.migration.fileName }
-            fail(namespace, pathOf(failed), "couldn't apply ${e.migration.fileName}: ${e.cause.message}", e)
+            val path = if (shared == null) pathOf(failed) else dialectPathOf(failed, migrations[failed]?.group, shared.dialect)
+            fail(namespace, path, "couldn't apply ${e.migration.fileName}: ${e.cause.message}", e)
+        } catch (e: MigrationAhead) {
+            fail(
+                namespace,
+                pathOf(migrations.keys.maxOf { it }),
+                "the ${shared?.describe()} has ${e.message} applied, which this server's copy of $namespace doesn't have: " +
+                    "a newer copy ran there, so run that one here too",
+                code = ProblemCodes.MIGRATION_AHEAD
+            )
         } catch (e: Exception) {
             fail(namespace, pathOf(first), "couldn't open the database: ${e.message}", e)
         }
     }
 
-    private fun fail(namespace: String, file: String, message: String, cause: Throwable? = null) {
-        failures[namespace] = ProblemCodes.MIGRATION_FAILED.at(file, "The database of $namespace is unavailable: $message")
+    private fun dialectPathOf(id: String, group: String?, dialect: String) = MigrationKind.dialectPathOf(id, group, dialect)
+
+    private fun fail(
+        namespace: String,
+        file: String,
+        message: String,
+        cause: Throwable? = null,
+        code: dev.netherforge.format.ProblemCode = ProblemCodes.MIGRATION_FAILED
+    ) {
+        failures[namespace] = code.at(file, "The database of $namespace is unavailable: $message")
         log.error("The database of $namespace is unavailable: $message", cause)
     }
 }

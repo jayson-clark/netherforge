@@ -605,7 +605,15 @@ resolves them in the project's namespace and still lands in the package's
   hashed with `ProjectFiles.hash` and refused on a mismatch,
   `runtime.bundle-hash`), and a project with dependencies that isn't one is
   refused (`runtime.unbundled`). Both are `loadProblems`, which `refusal`
-  checks first.
+  checks first. **Provided packages** (`RuntimeConfig.providedPackages`,
+  `packages.provided`, production only) are read afresh each `load`
+  (`readProvided`, by their manifest's namespace) and answer a dependency of
+  their namespace before anything else, on either path (a project whose only
+  dependencies are provided needs no bundle); `providedInUse` is what
+  `Requirements.grants` logs and `/nf requires` lists, beside the
+  `http.allow-private` allowances. A bundle carrying a provided namespace, or
+  a provided folder that isn't a package, is `runtime.provided-package`;
+  `ProvidedPackagesTest` covers it.
 - **`require`.** A bare name is in the caller's package (the owner's
   resource id says which: `library:greetings`'s bare `require("phrases")` is
   `library:phrases`); `require("acme:api")` needs the caller's package to

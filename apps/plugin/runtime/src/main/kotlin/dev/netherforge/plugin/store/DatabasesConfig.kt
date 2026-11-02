@@ -35,7 +35,17 @@ data class DatabasesConfig(
                     continue
                 }
                 when (val read = connection(fields)) {
-                    is Read.Ok -> connections[name] = read.connection
+                    is Read.Ok -> {
+                        // A package's own database is in one place: a second connection claiming it can't be used.
+                        val taken = read.connection.ownDatabases.firstNotNullOfOrNull { namespace ->
+                            connections.entries.firstOrNull { namespace in it.value.ownDatabases }?.let { namespace to it.key }
+                        }
+                        if (taken != null) {
+                            invalid[name] = "`own-databases` has \"${taken.first}\", whose own database is already on \"${taken.second}\""
+                        } else {
+                            connections[name] = read.connection
+                        }
+                    }
                     is Read.Bad -> invalid[name] = read.why
                 }
             }
@@ -82,6 +92,14 @@ data class DatabasesConfig(
             packages.firstOrNull {
                 !Names.isNamespace(it)
             }?.let { return Read.Bad("`packages` has \"$it\", which isn't a package's namespace") }
+            val ownDatabases = when (val raw = fields["own-databases"]) {
+                null -> emptySet()
+                is List<*> -> raw.map { it?.toString().orEmpty() }.toSet()
+                else -> return Read.Bad("`own-databases` isn't a list of package namespaces")
+            }
+            ownDatabases.firstOrNull {
+                !Names.isNamespace(it)
+            }?.let { return Read.Bad("`own-databases` has \"$it\", which isn't a package's namespace") }
             val properties = when (val raw = fields["properties"]) {
                 null -> emptyMap()
                 is Map<*, *> -> raw.entries.associate { (key, value) -> key.toString() to value.toString() }
@@ -97,7 +115,8 @@ data class DatabasesConfig(
                     password = fields["password"]?.toString().orEmpty(),
                     poolSize,
                     packages,
-                    properties
+                    properties,
+                    ownDatabases
                 )
             )
         }
@@ -124,6 +143,9 @@ enum class DatabaseType(val id: String, val defaultPort: Int, val driver: String
  * whose scripts may open it: the owner's own list, apart from the packages'
  * `requires.db`, so a package can't give itself a database it wasn't granted.
  * [properties] are extra driver properties (`sslMode: REQUIRED`).
+ * [ownDatabases] are the namespaces of the packages whose own database
+ * (`nf.db()`) is here rather than in a SQLite file: each in a space of its own
+ * ([OwnDatabase]), its migrations run here once for every server sharing it.
  */
 data class ConnectionConfig(
     val type: DatabaseType,
@@ -134,7 +156,8 @@ data class ConnectionConfig(
     val password: String,
     val poolSize: Int = DatabasesConfig.DEFAULT_POOL_SIZE,
     val packages: Set<String> = emptySet(),
-    val properties: Map<String, String> = emptyMap()
+    val properties: Map<String, String> = emptyMap(),
+    val ownDatabases: Set<String> = emptySet()
 ) {
     /** The JDBC URL. [read] only lets through a host and database name that can't add settings to it. */
     val jdbcUrl: String get() = "jdbc:${type.scheme}://$host:$port/$database"

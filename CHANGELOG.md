@@ -11,6 +11,38 @@ release is cut.
 
 ### Added
 
+- **A package's own database on a shared server.** `own-databases` on a
+  `databases:` entry puts those packages' `nf.db()` on the MySQL or
+  PostgreSQL connection, each in a schema (PostgreSQL) or database (MySQL) of
+  its own, so several servers of a project share their data without the
+  project changing. Their migrations run there once across every server,
+  under a database lock, from `migrations/postgres/` or `migrations/mysql/`
+  beside the SQLite ones (`migration.dialects` when a dialect isn't numbered
+  like them, `migration.dialect` when it's missing, `migration.ahead` when a
+  newer copy already migrated the database).
+- **Click and hover in the admin API's messages, held to what's safe.** The
+  `text` of `POST /v1/players/<player>/message` was already MiniMessage; the
+  hub now refuses (400) a click action other than `run_command`,
+  `suggest_command`, `copy_to_clipboard` and `open_url`, a hover other than
+  `show_text`, and text over the network's value limit, and the proxy shows
+  nothing else.
+
+- **One package may reach one private address.** `http.allow-private` in
+  `config.yml` lists `{ package, host, port }` allowances: that package (the
+  one whose code makes the request) may connect to the addresses `host` stands
+  for on that port though they aren't public, redirects, streams and
+  WebSockets included, while every other package and the project's own
+  scripts are still refused. The package still declares the host under
+  `requires.http`; `/nf requires` and the startup log list the allowances.
+- **Packages the server provides.** `packages.provided` in `config.yml` lists
+  package folders the server loads in place of any copy a project or bundle
+  brings. A dependency can take a `version` range (`^1.2.0`,
+  `>=1.0.0 <2.0.0`; `package.version` when the package found is outside it,
+  for any dependency) and be marked `"provided": true`, which `netherforge
+build` leaves out of the bundle (as does `--exclude <namespace>`), listing
+  it in the manifest's `provided`. A bundle that carries its own copy of a
+  package the server provides is refused (`runtime.provided-package`).
+
 - **A network-wide fallback group.** `fallback=<group>` in `hub.properties`
   is where the players of every group without its own
   `group.<name>.fallback` go when their server stops or drains, so groups made

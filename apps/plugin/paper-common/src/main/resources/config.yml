@@ -125,10 +125,17 @@ screens:
 # only: a name that leads to loopback, a private, link-local, shared (CGNAT) or
 # unique-local address, and a redirect that leads there, is refused. Turn
 # allow-private-addresses on only for a service of your own on this machine or
-# network. Sizes are in bytes; the timeout covers a request with its redirects;
+# network. allow-private lets one package reach one host and port of yours that
+# isn't public, without opening the network to every package:
+#   allow-private:
+#     - package: acme_bridge   # a package's namespace
+#       host: 127.0.0.1        # an address, or a name looked up when it's used
+#       port: 9361
+# Sizes are in bytes; the timeout covers a request with its redirects;
 # the rate is per package. Read when the server starts; dev servers read it too.
 http:
   allow-private-addresses: false
+  allow-private: []
   max-request-bytes: 1048576
   max-response-bytes: 4194304
   timeout-seconds: 15
@@ -248,6 +255,15 @@ bundles:
   require-signature: false
   trusted-keys: []
 
+# Packages this server provides: folders (each holding a package's
+# netherforge.json), absolute or relative to the server's folder. A project's
+# dependency on one of their namespaces gets this copy, within the version range
+# it asks for; a bundle that carries its own copy is refused. Read when the
+# server starts (the packages' files each time the project loads); dev servers
+# don't read it (they resolve dependencies as the editor does).
+packages:
+  provided: []
+
 # Worlds at run time: nf.worlds.import makes a world from a folder a tool put
 # under import-root (relative to the server's folder; off to turn it off),
 # and at most max-loaded worlds are loaded at once, the server's own
@@ -297,3 +313,7 @@ control:
 #     pool-size: 4         # most statements running at once (1 to 32)
 #     packages: [shop]     # who may open it; empty lets no package in
 #     properties: {}       # extra driver properties, like sslMode: REQUIRED
+#     own-databases: []    # packages whose own nf.db() lives here, not in a
+#                          # SQLite file: each in a schema (postgres) or
+#                          # database (mysql) of its own, its migrations run
+#                          # once for every server sharing the connection

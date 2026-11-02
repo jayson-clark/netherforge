@@ -13,6 +13,35 @@ class DatabasesConfigTest {
     private fun read(section: Map<String, Any?>) = DatabasesConfig.read(section)
 
     @Test
+    fun `own-databases names the packages whose nf_db is on the connection, each on one only`() {
+        val config = read(
+            mapOf(
+                "game" to mapOf("type" to "postgres", "database" to "game_chess", "own-databases" to listOf("chess", "chess_club")),
+                "other" to mapOf("type" to "mysql", "database" to "other", "own-databases" to listOf("chess")),
+                "bad" to mapOf("type" to "mysql", "database" to "x", "own-databases" to listOf("Not One"))
+            )
+        )
+        assertEquals(setOf("chess", "chess_club"), config.connections.getValue("game").ownDatabases)
+        assertTrue("already on \"game\"" in config.invalid.getValue("other"), config.invalid.toString())
+        assertTrue("isn't a package's namespace" in config.invalid.getValue("bad"))
+        assertEquals(
+            emptySet(),
+            read(mapOf("plain" to mapOf("type" to "mysql", "database" to "x"))).connections.getValue("plain").ownDatabases
+        )
+    }
+
+    @Test
+    fun `a migration is cut into its statements for a server that takes one at a time`() {
+        assertEquals(
+            listOf("CREATE TABLE a (x TEXT DEFAULT ';')", "-- one; two\nINSERT INTO a VALUES ('b;c')", "/* ; */ SELECT `x;y` FROM a"),
+            SqlText.statements(
+                "CREATE TABLE a (x TEXT DEFAULT ';');\n-- one; two\nINSERT INTO a VALUES ('b;c');\n/* ; */ SELECT `x;y` FROM a;\n-- done\n"
+            )
+        )
+        assertEquals(emptyList(), SqlText.statements("  -- nothing\n;;"))
+    }
+
+    @Test
     fun `a connection is read with its defaults`() {
         val config = read(
             mapOf(

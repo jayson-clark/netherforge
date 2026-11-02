@@ -33,27 +33,59 @@ class ControlTest {
         token: String? = null,
         ticking: Boolean = true
     ): Pair<Int, String> {
-        val answer = CompletableFuture.supplyAsync {
-            val family = if (address is UnixDomainSocketAddress) StandardProtocolFamily.UNIX else StandardProtocolFamily.INET
-            SocketChannel.open(family).use { channel ->
-                channel.connect(address)
-                val out = Channels.newOutputStream(channel)
-                val auth = token?.let { "Authorization: Bearer $it\r\n" }.orEmpty()
-                out.write(
-                    "$method $path HTTP/1.1\r\nHost: x\r\n${auth}Content-Length: ${body.toByteArray().size}\r\n\r\n$body".toByteArray()
-                )
-                out.flush()
-                val text = Channels.newInputStream(channel).readAllBytes().toString(Charsets.UTF_8)
-                text.substringAfter(' ').substringBefore(' ').toInt() to text.substringAfter("\r\n\r\n")
+        val family = if (address is UnixDomainSocketAddress) StandardProtocolFamily.UNIX else StandardProtocolFamily.INET
+        val channel = SocketChannel.open(family)
+        val answer = CompletableFuture<Pair<Int, String>>()
+        // A thread of its own, named so a timed-out request's dump shows where it waited.
+        Thread({
+            try {
+                channel.use {
+                    channel.connect(address)
+                    val out = Channels.newOutputStream(channel)
+                    val auth = token?.let { "Authorization: Bearer $it\r\n" }.orEmpty()
+                    out.write(
+                        "$method $path HTTP/1.1\r\nHost: x\r\n${auth}Content-Length: ${body.toByteArray().size}\r\n\r\n$body".toByteArray()
+                    )
+                    out.flush()
+                    answer.complete(response(Channels.newInputStream(channel)))
+                }
+            } catch (e: Throwable) {
+                answer.completeExceptionally(e)
             }
+        }, "NetherForge test client $method $path").apply {
+            isDaemon = true
+            start()
         }
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
         while (!answer.isDone) {
-            check(System.nanoTime() < deadline) { "$method $path timed out\n${whatWasGoingOn(server)}" }
+            if (System.nanoTime() >= deadline) {
+                val what = whatWasGoingOn(server)
+                channel.close()
+                error("$method $path timed out\n$what")
+            }
             if (ticking) server.tick()
             Thread.sleep(5)
         }
         return answer.join()
+    }
+
+    /**
+     * The status and body of one response, read by its Content-Length rather than to the connection's end: on
+     * Windows, a Unix socket's close doesn't always reach a blocked read.
+     */
+    private fun response(input: java.io.InputStream): Pair<Int, String> {
+        val head = java.io.ByteArrayOutputStream()
+        while (!head.toString(Charsets.UTF_8).endsWith("\r\n\r\n")) {
+            val b = input.read()
+            check(b >= 0) { "the connection ended before the response's head did: $head" }
+            head.write(b)
+        }
+        val lines = head.toString(Charsets.UTF_8).split("\r\n")
+        val status = lines.first().substringAfter(' ').substringBefore(' ').toInt()
+        val length = lines.firstOrNull { it.startsWith("content-length:", ignoreCase = true) }
+            ?.substringAfter(':')?.trim()?.toInt()
+        val body = if (length != null) input.readNBytes(length) else input.readAllBytes()
+        return status to body.toString(Charsets.UTF_8)
     }
 
     /** The server's log and where its threads were: what a timed-out request was waiting for. */

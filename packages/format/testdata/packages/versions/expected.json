@@ -1,0 +1,30 @@
+[
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"app\" takes \"b\" ~2.0.0, and the package it resolved to is 2.1.0, so it isn't loaded",
+    "path": "$.dependencies.b.version",
+    "code": "package.version"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"app\" takes \"d\" >=1.0.0 <2.0.0, and the package it resolved to is 1.1.0-beta.1, so it isn't loaded",
+    "path": "$.dependencies.d.version",
+    "code": "package.version"
+  },
+  {
+    "severity": "error",
+    "file": "netherforge.json",
+    "message": "\"one or two\" isn't a version range like ^1.2.0, ~1.2.0, >=1.0.0 <2.0.0, 1.2.3 or *",
+    "path": "$.dependencies.e.version",
+    "code": "package.version-range"
+  },
+  {
+    "severity": "warning",
+    "file": "netherforge.json",
+    "message": "There's no netherforge.lock pinning the packages this project depends on; the editor writes it, or run netherforge lock",
+    "path": "$.dependencies",
+    "code": "lock.missing"
+  }
+]

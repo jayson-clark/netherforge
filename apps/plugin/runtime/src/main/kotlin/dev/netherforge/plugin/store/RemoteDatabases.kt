@@ -47,7 +47,8 @@ class RemoteDatabases(
     /** One line per connection for the log when the plugin starts: what it is and who may use it, never the password. */
     fun describe(): List<String> = config.connections.map { (name, connection) ->
         "$name: ${connection.type.id} at ${connection.host}:${connection.port}, for " +
-            (connection.packages.sorted().joinToString().ifEmpty { "no package yet" })
+            (connection.packages.sorted().joinToString().ifEmpty { "no package yet" }) +
+            (connection.ownDatabases.takeIf { it.isNotEmpty() }?.sorted()?.joinToString(prefix = "; the own databases of ").orEmpty())
     }
 
     /** What's wrong with the configuration itself, by connection name, for the log. */
@@ -76,8 +77,22 @@ class RemoteDatabases(
 
     /** The connection [name], for work given to [lane]. Only for a name [problem] let through. */
     fun database(name: String): SqlDatabase = open[name] ?: synchronized(open) {
+        // Reentrant: [own] asks for the connection while holding the same lock.
         open.getOrPut(name) { RemoteDatabase(name, config.connections.getValue(name), sources, report) }
     }
+
+    /**
+     * [namespace]'s own database, when the owner put it on a connection (`own-databases`), else null: its SQLite file
+     * stays where it is.
+     */
+    fun own(namespace: String): OwnDatabase? {
+        val (name, connection) = config.connections.entries.firstOrNull { namespace in it.value.ownDatabases } ?: return null
+        return owned[namespace] ?: synchronized(open) {
+            owned.getOrPut(namespace) { OwnDatabase(namespace, name, connection, database(name) as RemoteDatabase) }
+        }
+    }
+
+    private val owned = ConcurrentHashMap<String, OwnDatabase>()
 
     /** The lane [namespace]'s work for connection [name] runs on. */
     fun lane(namespace: String, name: String): Executor = workers().lane("database:$namespace:$name")
@@ -86,6 +101,7 @@ class RemoteDatabases(
         synchronized(open) {
             for (database in open.values) database.close()
             open.clear()
+            owned.clear()
         }
     }
 }

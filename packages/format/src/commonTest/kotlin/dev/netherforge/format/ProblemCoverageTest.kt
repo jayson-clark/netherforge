@@ -65,6 +65,7 @@ class ProblemCoverageTest {
             unit("migration/MigrationTest", "MigrationTest loads a project per rule and variant (the first number, gaps, names)"),
         "migration.duplicate" to unit("migration/MigrationTest", "MigrationTest loads a project per rule and variant"),
         "migration.gap" to unit("migration/MigrationTest", "MigrationTest loads a project per rule and variant"),
+        "migration.dialects" to unit("migration/MigrationTest", "MigrationTest loads a project per rule and variant"),
         "advancement.unknown-icon" to unit("advancement/AdvancementTest", gameData),
         "advancement.unknown-trigger" to unit("advancement/AdvancementTest", gameData),
         "structure.unknown-biome" to unit("world/StructureGenerationTest", gameData),

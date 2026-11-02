@@ -70,6 +70,8 @@ class TestServer(
     private val resolvesPackages: Boolean = true,
     /** The editor's package cache, where git packages' checkouts are (`-Dnetherforge.packages`). */
     private val packageCache: Path? = null,
+    /** `packages.provided` in `config.yml`: folders of packages the server provides, relative to the project's. */
+    private val provided: List<String> = emptyList(),
     /** Whether a manifest is written when [files] has none (a bundle has its own layout). */
     writeManifest: Boolean = true,
     /** `http:` in `config.yml`, when not the defaults. */
@@ -157,7 +159,8 @@ class TestServer(
                     bundles = bundles,
                     pack = pack,
                     resolvesPackages = resolvesPackages,
-                    packageCache = packageCache
+                    packageCache = packageCache,
+                    providedPackages = provided.map { project.resolve(it).normalize() }
                 )
             )
         clock?.let { runtime.clock = it }

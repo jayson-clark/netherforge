@@ -33,9 +33,12 @@ sealed interface PackageLookup
 /**
  * A package a host found: its files, their [PackageHash] when the host
  * computes one, and for a git package the [commit] it is (a bundle, which
- * answers by namespace, may not know).
+ * answers by namespace, may not know). [from] says where it came from when
+ * that isn't where the dependency points (a server's own copy: "the server's,
+ * from /opt/packages/bridge"), for the problems that name it.
  */
-class OpenedPackage(val source: ProjectSource, val hash: String? = null, val commit: String? = null) : PackageLookup
+class OpenedPackage(val source: ProjectSource, val hash: String? = null, val commit: String? = null, val from: String? = null) :
+    PackageLookup
 
 /** Nothing there: no project at a folder ([reason] null), or a repository that couldn't be fetched ([reason] says why). */
 class PackageMissing(val reason: String? = null) : PackageLookup
@@ -78,7 +81,9 @@ class ResolvedPackage internal constructor(
     /** Its [PackageHash], when the host computed one. */
     val hash: String?,
     /** The namespaces of what depends on it (the project's among them), in the order they were found. */
-    val requiredBy: List<String>
+    val requiredBy: List<String>,
+    /** Where it came from when that isn't where the dependency points ([OpenedPackage.from]): the server's own copy. */
+    val from: String? = null
 )
 
 /** What a project's dependencies resolved to: every package in the tree by namespace, and what's wrong with it. */
@@ -185,6 +190,9 @@ object Packages {
         val problems = mutableListOf<Problem>()
         val resolved = LinkedHashMap<String, ResolvedPackage>()
         val requirers = HashMap<String, MutableList<String>>()
+        // Packages a requirer's range refused, with their version and where they came from: refused for everyone, so
+        // what loads doesn't hang on which requirer was read first.
+        val outOfRange = HashMap<String, Pair<String, String?>>()
         val home = root.namespace
         // The packages whose dependencies are still to follow: (namespace, location, manifest), the project first.
         val queue = ArrayDeque(listOf(Triple(home, "", root)))
@@ -213,10 +221,19 @@ object Packages {
                     )
                     continue
                 }
+                outOfRange[name]?.let { (version, from) ->
+                    versionProblem(requirer, name, dependency, version, from)?.let {
+                        problems += ProblemCodes.PACKAGE_VERSION.at(file, it, "$at.version")
+                    }
+                    continue
+                }
                 val existing = resolved[name]
                 if (existing != null) {
                     if (sameRequest(existing.origin, request)) {
                         requirers.getValue(name) += requirer
+                        versionProblem(requirer, name, dependency, existing.manifest?.version, existing.from)?.let {
+                            problems += ProblemCodes.PACKAGE_VERSION.at(file, it, "$at.version")
+                        }
                     } else {
                         val them = existing.requiredBy.joinToString(" and ") { "\"$it\"" }
                         problems += ProblemCodes.PACKAGE_CONFLICT.at(
@@ -286,14 +303,33 @@ object Packages {
                     )
                     continue
                 }
+                if (found != null) {
+                    versionProblem(requirer, name, dependency, found.version, opened.from)?.let {
+                        problems += ProblemCodes.PACKAGE_VERSION.at(file, it, "$at.version")
+                        outOfRange[name] = found.version to opened.from
+                        continue
+                    }
+                }
                 val by = mutableListOf(requirer)
                 requirers[name] = by
-                resolved[name] = ResolvedPackage(name, location, origin, found, opened.source, opened.hash, by)
+                resolved[name] = ResolvedPackage(name, location, origin, found, opened.source, opened.hash, by, opened.from)
                 if (found != null) queue += Triple(name, location, found)
             }
         }
         problems += cycles(home, resolved)
         return Resolution(resolved, problems)
+    }
+
+    /**
+     * Why the package [name] at [version] (null: its manifest doesn't read, which its own problems say) doesn't do for
+     * [requirer]'s [dependency] on it, or null when it does: in the range the dependency takes, or the dependency takes
+     * any. [from] is where it came from when that's worth saying.
+     */
+    private fun versionProblem(requirer: String, name: String, dependency: Dependency, version: String?, from: String?): String? {
+        val range = dependency.version?.let(VersionRange::parse) ?: return null
+        if (version == null || range.admits(version)) return null
+        return "\"$requirer\" takes \"$name\" $range, and the package it resolved to" +
+            (from?.let { " ($it)" } ?: "") + " is $version, so it isn't loaded"
     }
 
     /**
@@ -320,6 +356,11 @@ object Packages {
                 else -> "\"rev\" goes with a \"git\" repository, not a \"path\""
             }
             problems += ProblemCodes.PACKAGE_SOURCE.at(file, why, at)
+            return null
+        }
+        val version = dependency.version
+        if (version != null && VersionRange.parse(version) == null) {
+            problems += ProblemCodes.PACKAGE_VERSION_RANGE.at(file, "\"$version\" isn't ${VersionRange.RULE}", "$at.version")
             return null
         }
         if (path != null) {

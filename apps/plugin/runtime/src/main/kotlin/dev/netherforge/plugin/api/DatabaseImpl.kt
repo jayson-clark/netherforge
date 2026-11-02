@@ -127,7 +127,9 @@ internal class DatabaseImpl(private val session: ProjectSession) : DatabaseApi {
         // No check of who calls: a handle can only come from its package's own `nf.db()` (or a package that was handed one),
         // and a package's module is called from other packages' scripts all the time.
         SqlText.problem(sql)?.let { throw LuaApiException("$what: $it") }
-        if (self.connection.isEmpty()) SqlText.sqliteProblem(sql)?.let { throw LuaApiException("$what: $it") }
+        if (self.connection.isEmpty() && remoteDatabases.own(self.namespace) == null) {
+            SqlText.sqliteProblem(sql)?.let { throw LuaApiException("$what: $it") }
+        }
         return Statement(sql, values(params, what))
     }
 
@@ -180,7 +182,8 @@ internal class DatabaseImpl(private val session: ProjectSession) : DatabaseApi {
             lane = remoteDatabases.lane(self.namespace, self.connection)
         } else {
             session.schemas.unavailable(self.namespace)?.let { return CompletableFuture.failedFuture(WorkFailed(it)) }
-            database = try {
+            // The owner may have put the package's own database on a shared connection: the same lane, another server.
+            database = remoteDatabases.own(self.namespace) ?: try {
                 databases.database(self.namespace)
             } catch (e: Exception) {
                 return CompletableFuture.failedFuture(WorkFailed("the database of ${self.namespace} couldn't be opened: ${e.message}"))

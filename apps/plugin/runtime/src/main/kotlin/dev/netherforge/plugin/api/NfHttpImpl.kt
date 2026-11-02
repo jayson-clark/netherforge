@@ -13,6 +13,7 @@ import dev.netherforge.plugin.http.ConnectionRequest
 import dev.netherforge.plugin.http.HttpCall
 import dev.netherforge.plugin.http.HttpFetcher
 import dev.netherforge.plugin.http.HttpReply
+import dev.netherforge.plugin.http.PrivateAllowance
 import dev.netherforge.plugin.http.RequestRate
 import dev.netherforge.plugin.http.StreamFormat
 import dev.netherforge.plugin.lua.LuaApiException
@@ -65,8 +66,9 @@ internal class NfHttpImpl(private val session: ProjectSession) : NfHttpApi {
         rateRefusal(caller)?.let { return CompletableFuture.failedFuture(WorkFailed(it)) }
         val call = HttpCall(method, url, headers, body)
         val fetcher = session.http.fetcher
+        val allowances = allowances()
         return session.async.submit {
-            read(fetcher.fetch(call) { redirectedTo -> held(Requirement.Http(redirectedTo)) })
+            read(fetcher.fetch(call, allowances) { redirectedTo -> held(Requirement.Http(redirectedTo)) })
         }
     }
 
@@ -83,7 +85,9 @@ internal class NfHttpImpl(private val session: ProjectSession) : NfHttpApi {
         }
         session.requirements.check(Requirement.Http(HttpFetcher.hostOf(url)!!), "nf.http.stream")
         val held = session.requirements.held("nf.http.stream")
-        val request = ConnectionRequest(url, method, headers, body, format, emptyList()) { host -> held(Requirement.Http(host)) }
+        val request = ConnectionRequest(url, method, headers, body, format, emptyList(), allowances()) { host ->
+            held(Requirement.Http(host))
+        }
         return session.connections.open(caller.scope, request, options.url, false, rateRefusal(caller)).handle as LuaHandle.HttpStream
     }
 
@@ -98,10 +102,19 @@ internal class NfHttpImpl(private val session: ProjectSession) : NfHttpApi {
             !TOKEN.matches(it)
         }?.let { throw LuaApiException("options.protocols has \"$it\", which isn't a protocol name") }
         session.requirements.check(Requirement.Http(url.host.lowercase()), "nf.http.websocket")
-        val request = ConnectionRequest(url, "GET", headers, null, null, protocols) { host ->
+        val request = ConnectionRequest(url, "GET", headers, null, null, protocols, allowances()) { host ->
             throw LuaApiException("WebSockets don't follow redirects (to $host)")
         }
         return session.connections.open(caller.scope, request, options.url, true, rateRefusal(caller)).handle as LuaHandle.WebSocket
+    }
+
+    /**
+     * The owner's `http.allow-private` entries for the package whose code is making the call (the one its host
+     * requirement is held to): none for the project's own scripts unless they name it, and none for a tail call.
+     */
+    private fun allowances(): List<PrivateAllowance> {
+        val namespace = session.requirements.callingPackage() ?: return emptyList()
+        return limits.allowPrivate.filter { it.namespace == namespace }
     }
 
     /** [text] as a URL of one of [schemes] with a host, no credentials and a port that is one; else an error at the script's line. */

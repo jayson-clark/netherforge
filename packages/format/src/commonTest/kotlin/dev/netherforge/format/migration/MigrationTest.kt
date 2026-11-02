@@ -49,6 +49,36 @@ class MigrationTest {
     }
 
     @Test
+    fun aServersVersionsGoBesideEveryMigrationOrNone() {
+        assertEquals(
+            emptyList(),
+            problems(
+                "001_init.sql",
+                "002_rank.sql",
+                "postgres/001_init.sql",
+                "postgres/002_rank.sql",
+                "mysql/001_init.sql",
+                "mysql/002_rank.sql"
+            )
+        )
+        // A dialect with a version of one migration and not the next: reported on the one without.
+        assertEquals(
+            listOf("migration.dialects" to "migrations/002_rank.sql"),
+            problems("001_init.sql", "002_rank.sql", "postgres/001_init.sql")
+        )
+        // A server's version with no SQLite one: reported on it (and the dialect's gap on the migration without one).
+        assertEquals(
+            setOf("migration.dialects" to "migrations/postgres/002_rank.sql", "migration.dialects" to "migrations/001_init.sql"),
+            problems("001_init.sql", "postgres/002_rank.sql").toSet()
+        )
+        // A folder that isn't a dialect is still a stray.
+        assertEquals(listOf("project.stray-file" to "migrations/oracle/001_init.sql"), problems("001_init.sql", "oracle/001_init.sql"))
+        val file = MigrationKind.of("001_init", listOf("001_init.sql", "postgres/001_init.sql"))
+        assertEquals(setOf("postgres"), file.dialects)
+        assertEquals("migrations/(admin)/mysql/001_init.sql", MigrationKind.dialectPathOf("001_init", "(admin)", "mysql"))
+    }
+
+    @Test
     fun theNumberIsTheNameBeforeTheUnderscore() {
         assertEquals(1, MigrationKind.of("001_init", emptyList()).number)
         assertEquals(null, MigrationKind.of("init", emptyList()).number)

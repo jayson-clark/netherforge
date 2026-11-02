@@ -141,6 +141,33 @@ class HttpFetcherTest {
     }
 
     @Test
+    fun `an allowance lets its package reach one private host and port and nothing else that isn't public`() {
+        route("/hi") { reply(200, "bridge") }
+        route("/away") { redirect(302, "http://127.0.0.1:${server.port + 1}/hi") }
+        val strict = fetcher(HttpConfig())
+        val port = server.port
+        val mine = listOf(PrivateAllowance("bridge", "127.0.0.1", port))
+        // As the address, and through a name that leads to it.
+        assertEquals("bridge", strict.fetch(call("http://127.0.0.1:$port/hi"), mine, anyone).body)
+        assertEquals("bridge", strict.fetch(call("http://service.test:$port/hi"), mine, anyone).body)
+        // Another port on the allowed address, and another private address on the allowed port, are refused.
+        assertTrue("a loopback address" in failure { strict.fetch(call("http://127.0.0.1:${port + 1}/hi"), mine, anyone) })
+        assertTrue("a private address" in failure { strict.fetch(call("http://internal.test:$port/hi"), mine, anyone) })
+        // A redirect is checked at its hop: to another port is refused.
+        assertTrue("a loopback address" in failure { strict.fetch(call("http://127.0.0.1:$port/away"), mine, anyone) })
+        // Without the allowance (another package, the project) the same URLs are refused, the pooled connection notwithstanding.
+        assertTrue("a loopback address" in failure { strict.fetch(call("http://service.test:$port/hi"), anyone) })
+        assertTrue("http.allow-private" in failure { strict.fetch(call("http://127.0.0.1:$port/hi"), anyone) })
+        // An allowance by name stands for what the name resolves to.
+        val named = listOf(PrivateAllowance("bridge", "internal.test", port))
+        assertEquals("bridge", strict.fetch(call("http://internal.test:$port/hi"), named, anyone).body)
+        // What names no one host stays refused whatever is allowed.
+        val never = listOf(PrivateAllowance("bridge", "0.0.0.0", port))
+        assertTrue("not an address of one host" in failure { strict.fetch(call("http://0.0.0.0:$port/hi"), never, anyone) })
+        assertEquals(3, seen.count { it.url.encodedPath == "/hi" })
+    }
+
+    @Test
     fun `without the owner's option a name that leads to a private address is refused before any connection`() {
         route("/hello") { reply(200, "world") }
         val strict = fetcher(HttpConfig())

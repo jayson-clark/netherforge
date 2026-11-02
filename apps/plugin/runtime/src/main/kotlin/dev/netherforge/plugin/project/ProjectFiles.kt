@@ -9,6 +9,7 @@ import dev.netherforge.format.project.BundleManifest
 import dev.netherforge.format.project.BundledResourcePack
 import dev.netherforge.format.project.ImageInfo
 import dev.netherforge.format.project.LockFile
+import dev.netherforge.format.project.ManifestKind
 import dev.netherforge.format.project.Names
 import dev.netherforge.format.project.OpenedPackage
 import dev.netherforge.format.project.PackageHash
@@ -41,16 +42,77 @@ import java.security.MessageDigest
  * project's, each checked against the hash the bundle lists before anything
  * runs. Which one it is, and where every package is, is decided again by
  * every [load].
+ *
+ * **Packages the server provides** ([provided], the owner's
+ * `packages.provided`): each folder is a package, found by the namespace its
+ * `netherforge.json` says, and it's what a dependency of that namespace opens,
+ * in place of any copy the project points at, whether or not the server
+ * resolves (a production server running a project whose only dependencies
+ * are provided needs no bundle). It satisfies a dependency only within the
+ * dependency's `version` range (format's `package.version`). A bundle that
+ * carries its own copy of one is refused (`runtime.provided-package`): it was
+ * built against something else, and the owner's code is the one that runs.
  */
 class ProjectFiles(
     private val configured: Path,
     private val resolves: Boolean,
     private val packageCache: Path? = null,
     /** Whether bundles must be signed, and by whom. */
-    private val bundles: BundlesConfig = BundlesConfig()
+    private val bundles: BundlesConfig = BundlesConfig(),
+    /** The folders of the packages the server provides (`packages.provided` in `config.yml`). */
+    private val provided: List<Path> = emptyList()
 ) : ProjectSource {
     /** One load: the snapshot, what the runtime found wrong besides it (a project it won't run), and every file. */
     class Load(val snapshot: ProjectSnapshot, val problems: List<Problem>, val files: Set<String>)
+
+    /** A package the server provides, as the last [load] found it: its [namespace], [version] and [folder]. */
+    data class Provided(val namespace: String, val version: String, val folder: Path) {
+        override fun toString() = "$namespace $version (from $folder)"
+    }
+
+    /** The packages the server provides that the project loaded, as the last [load] found them. */
+    @Volatile
+    var providedInUse: List<Provided> = emptyList()
+        private set
+
+    /** The provided packages by namespace, read afresh, and what's wrong with them (a folder that isn't a package, two of one namespace). */
+    private fun readProvided(problems: MutableList<Problem>): Map<String, Pair<Provided, DiskProjectSource>> {
+        val found = LinkedHashMap<String, Pair<Provided, DiskProjectSource>>()
+        for (folder in provided) {
+            val manifest = DiskProjectSource(folder).read(ProjectManifest.FILE_NAME)
+                ?.let { (ManifestKind.parse(it, ProjectManifest.FILE_NAME) as? CanonicalJson.Parsed.Ok)?.value }
+            if (manifest == null) {
+                problems += ProblemCodes.RUNTIME_PROVIDED_PACKAGE.at(
+                    ProjectManifest.FILE_NAME,
+                    "The server provides a package at $folder (packages.provided in config.yml), but there's no readable " +
+                        "${ProjectManifest.FILE_NAME} there",
+                    "$.dependencies"
+                )
+                continue
+            }
+            val namespace = manifest.namespace
+            found[namespace]?.let { (other, _) ->
+                problems += ProblemCodes.RUNTIME_PROVIDED_PACKAGE.at(
+                    ProjectManifest.FILE_NAME,
+                    "The server provides two packages called \"$namespace\" (packages.provided in config.yml): ${other.folder} " +
+                        "and $folder. It runs one of each namespace",
+                    "$.dependencies"
+                )
+                continue
+            }
+            found[namespace] = Provided(namespace, manifest.version, folder) to DiskProjectSource(folder)
+        }
+        return found
+    }
+
+    /** [entry] as format is given it: the server's copy, named as such in its problems. */
+    private fun opened(entry: Pair<Provided, DiskProjectSource>) =
+        OpenedPackage(entry.second, hash(entry.second), from = "the server's, from ${entry.first.folder}")
+
+    /** Which provided packages the load used: those the snapshot has, whose folder is the server's. */
+    private fun inUse(snapshot: ProjectSnapshot, server: Map<String, Pair<Provided, DiskProjectSource>>) =
+        server.filter { (namespace, entry) -> packages[namespace] === entry.second && namespace in snapshot.packages }
+            .map { it.value.first }
 
     // Written on the main thread by [load]; [pathOf] reads them from the bridge's.
     @Volatile
@@ -71,15 +133,23 @@ class ProjectFiles(
     fun load(game: GameData?): Load {
         val bundle = configured.resolve(BundleManifest.FILE_NAME)
         bundledPack = null
-        return if (Files.isRegularFile(bundle)) loadBundle(bundle, game) else loadProject(game)
+        val problems = mutableListOf<Problem>()
+        val server = readProvided(problems)
+        val load = if (Files.isRegularFile(bundle)) loadBundle(bundle, game, server) else loadProject(game, server)
+        providedInUse = inUse(load.snapshot, server)
+        return Load(load.snapshot, problems + load.problems, load.files)
     }
 
-    private fun loadProject(game: GameData?): Load {
+    private fun loadProject(game: GameData?, server: Map<String, Pair<Provided, DiskProjectSource>>): Load {
         root = DiskProjectSource(configured)
         rootFiles = root.files()
         val opened = LinkedHashMap<String, DiskProjectSource>()
         val sources = object : PackageSources {
             override fun open(namespace: String, request: PackageRequest): PackageLookup {
+                server[namespace]?.let { entry ->
+                    opened[namespace] = entry.second
+                    return opened(entry)
+                }
                 if (!resolves) return PackageMissing()
                 return when (request) {
                     is PackageRequest.Folder -> {
@@ -106,7 +176,7 @@ class ProjectFiles(
         val snapshot = Projects.load(this, game, sources)
         packages = opened.filterKeys { it in snapshot.packages }
         val problems = mutableListOf<Problem>()
-        if (!resolves && !snapshot.manifest?.dependencies.isNullOrEmpty()) {
+        if (!resolves && snapshot.manifest?.dependencies.orEmpty().keys.any { it !in server }) {
             problems += ProblemCodes.RUNTIME_UNBUNDLED.at(
                 ProjectManifest.FILE_NAME,
                 "This project has dependencies, and a server outside the editor never resolves them itself: build a bundle with " +
@@ -125,7 +195,7 @@ class ProjectFiles(
         return DiskProjectSource(folder) to commit
     }
 
-    private fun loadBundle(file: Path, game: GameData?): Load {
+    private fun loadBundle(file: Path, game: GameData?, server: Map<String, Pair<Provided, DiskProjectSource>>): Load {
         val problems = mutableListOf<Problem>()
         val manifest = when (val parsed = BundleKind.parse(Files.readString(file), BundleManifest.FILE_NAME)) {
             is CanonicalJson.Parsed.Failed -> null.also { problems += parsed.problem }
@@ -173,13 +243,38 @@ class ProjectFiles(
                 )
             }
         }
+        // The owner's copy is the one that runs: a bundle carrying its own was built against something else.
+        for (name in folders.filter { it in server }) {
+            problems += ProblemCodes.RUNTIME_PROVIDED_PACKAGE.at(
+                BundleManifest.FILE_NAME,
+                "This bundle carries its own \"$name\", which the server provides (${server.getValue(name).first.folder}, " +
+                    "packages.provided in config.yml): build it without it (mark the dependency \"provided\": true, or " +
+                    "netherforge build --exclude $name)",
+                CanonicalJson.childPath("$.packages", name)
+            )
+        }
+        val leftOut = manifest?.provided.orEmpty().toSet()
+        val withServer = packages + server.filterKeys { it !in folders }.mapValues { it.value.second }
+        packages = withServer
         val sources = object : PackageSources {
-            override fun open(namespace: String, request: PackageRequest): PackageLookup =
-                packages[namespace]?.let { OpenedPackage(it) } ?: PackageMissing("the bundle has no package \"$namespace\"")
+            override fun open(namespace: String, request: PackageRequest): PackageLookup {
+                server[namespace]?.takeIf { namespace !in folders }?.let { return opened(it) }
+                packages[namespace]?.takeIf { namespace in folders }?.let { return OpenedPackage(it) }
+                return PackageMissing(
+                    if (namespace in leftOut) {
+                        "the bundle leaves \"$namespace\" for the server to provide, and this server provides no such package " +
+                            "(packages.provided in config.yml)"
+                    } else {
+                        "the bundle has no package \"$namespace\""
+                    }
+                )
+            }
 
             override val checksLock: Boolean get() = false
         }
-        return Load(Projects.load(this, game, sources), problems, allFiles())
+        val snapshot = Projects.load(this, game, sources)
+        packages = withServer.filterKeys { it in folders || it in snapshot.packages }
+        return Load(snapshot, problems, allFiles())
     }
 
     /** The project's own files, as the last [load] listed them: what format loads it from. */

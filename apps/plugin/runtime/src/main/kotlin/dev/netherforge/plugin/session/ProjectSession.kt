@@ -224,7 +224,8 @@ class ProjectSession internal constructor(
     val async = service(AsyncWork(generation, runtime.completions, runtime.workers, scripts, log))
 
     /** Each package's own database (`nf.db()`): its migrations applied before any script runs. */
-    internal val schemas = service(PackageSchemas(runtime.databases, log, { namespace }, source::read, ::problemsChanged))
+    internal val schemas =
+        service(PackageSchemas(runtime.databases, log, { namespace }, source::read, ::problemsChanged, runtime.remoteDatabases::own))
 
     /** `centity:data()`, `player:data()` and each package's `nf.data(name)`. */
     val data = service(
@@ -248,7 +249,24 @@ class ProjectSession internal constructor(
     )
 
     /** What each package declared it needs (`requires`), the check every capability goes through, and the sum whoever runs the server sees. */
-    val requirements = service(Requirements(log, { snapshot }, { names.calling() }, { names.callingHidden() }, { policy }))
+    val requirements = service(
+        Requirements(log, { snapshot }, { names.calling() }, { names.callingHidden() }, { policy }, ::ownerGrants)
+    )
+
+    /** What the owner's `config.yml` gives particular packages: the packages the server provides, and private addresses one may reach. */
+    private fun ownerGrants(): List<String> = buildList {
+        for (provided in source.providedInUse) add("package $provided, provided by the server (packages.provided)")
+        val tree = setOf(snapshot.namespace) + snapshot.packages.keys
+        for (namespace in tree.sorted()) {
+            runtime.remoteDatabases.own(namespace)?.let { add("the own database of $namespace: on the ${it.describe()} (own-databases)") }
+        }
+        for (allowance in config.http.allowPrivate) {
+            add(
+                "http.allow-private: ${allowance.namespace} may reach ${allowance.host}:${allowance.port}" +
+                    if (allowance.namespace in tree) "" else " (no package \"${allowance.namespace}\" in this project)"
+            )
+        }
+    }
 
     /** `nf.http`'s client and its connections' transport: closed with the session, so reloads leave no threads or sockets behind. */
     val http = service(HttpClient(config.testing != null) { config.http })

@@ -1283,6 +1283,9 @@ class Hub(
         return outcome
     }
 
+    /** The most one value may be as JSON, which the admin API holds a message to as well. */
+    val maxValueBytes: Int get() = limits.maxValueBytes
+
     /** The admin API's: shows a player a chat message, title or action bar through the proxy. Null once shown, or why not. */
     fun adminMessage(player: String, kind: String, text: String, subtitle: String?): String? {
         val id = findPlayer(player)?.id ?: return "nobody called $player is online"

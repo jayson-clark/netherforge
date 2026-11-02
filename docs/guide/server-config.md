@@ -41,6 +41,31 @@ performance:
 [bundle](deploying.md#projects-with-dependencies)), absolute or relative to
 the server's folder. See [Deploying](deploying.md).
 
+### Packages the server provides
+
+A package of your own (an integration with your own systems, say) can be one
+that projects on your servers depend on, while you keep control of the code
+that runs. List each package's folder (the one holding its `netherforge.json`),
+absolute or relative to the server's folder:
+
+```yaml
+packages:
+  provided:
+    - /opt/server-packages/acme_bridge
+```
+
+The server loads your copy wherever a project or bundle depends on a package of
+that namespace, as long as its version is in the range the dependency takes
+(else the project is refused, naming both versions). A bundle that carries its
+own copy of one is refused (`runtime.provided-package`), so you learn it was
+built against something else: projects build bundles for your servers without
+it, by marking the dependency `"provided": true` or with
+`netherforge build --exclude <namespace>`. `/nf requires` and the startup log
+say which packages came from the server and from where, and a provided
+package's own `requires` show there like any other's. The editor's dev server
+doesn't read this: it resolves the dependency as the editor does. See
+[packages the server provides](../format/packages.md#packages-the-server-provides).
+
 ## Resource packs
 
 If the project has resource packs, NetherForge builds them into one Minecraft
@@ -117,6 +142,7 @@ those requests may do is up to you:
 ```yaml
 http:
   allow-private-addresses: false
+  allow-private: []
   max-request-bytes: 1048576
   max-response-bytes: 4194304
   timeout-seconds: 15
@@ -134,6 +160,7 @@ http:
 | Key                       | Meaning                                                                                          | Default |
 | ------------------------- | ------------------------------------------------------------------------------------------------ | ------- |
 | `allow-private-addresses` | Let requests reach this machine and your local network, not only the public internet. See below. | `false` |
+| `allow-private`           | Let one package reach one host and port of yours that isn't public. See below.                   | none    |
 | `max-request-bytes`       | The largest body a script may send. A larger one is an error in the script.                      | 1 MiB   |
 | `max-response-bytes`      | The largest response. A larger one fails the request.                                            | 4 MiB   |
 | `timeout-seconds`         | How long one request may take, redirects included.                                               | `15`    |
@@ -145,6 +172,28 @@ network or a cloud provider's internal addresses is refused, redirects
 included. Turn `allow-private-addresses` on only when a package must call a
 service of your own on your network (a webhook receiver on the same machine,
 say). Proxy settings from the environment are never used.
+
+To give **one package** a service of yours without opening your network to
+every other package the project pulls in, leave `allow-private-addresses` off
+and list an allowance instead:
+
+```yaml
+http:
+  allow-private-addresses: false
+  allow-private:
+    - package: acme_bridge # a package's namespace
+      host: 127.0.0.1 # an address, or a name looked up when it's used
+      port: 9361
+```
+
+The check is still on the address connected to: this lets `acme_bridge` reach
+loopback port 9361 and nothing else that isn't public, redirects and streams
+and WebSockets included, each hop checked again. It's given to the package
+whose code makes the request, so another package, or the project's own
+scripts, are refused the same address. The package must still declare the
+host under `requires.http`. Multicast, broadcast and `0.0.0.0` stay refused
+whatever you allow. `/nf requires` and the startup log list the allowances in
+effect.
 
 ### Streams and WebSockets
 
@@ -574,17 +623,18 @@ databases:
     packages: [shop, ranks]
 ```
 
-| Key          | Meaning                                                                                   | Default                 |
-| ------------ | ----------------------------------------------------------------------------------------- | ----------------------- |
-| `type`       | `mysql` (MariaDB too) or `postgres`.                                                      | required                |
-| `host`       | The database server's host name or address.                                               | `localhost`             |
-| `port`       | Its port.                                                                                 | `3306` / `5432` by type |
-| `database`   | The database on that server.                                                              | required                |
-| `username`   | The user to connect as.                                                                   | empty                   |
-| `password`   | Its password. Never logged, and never readable by a script.                               | empty                   |
-| `pool-size`  | The most statements running at once on this connection (1 to 32).                         | `4`                     |
-| `packages`   | The namespaces of the packages allowed to use it. A package that isn't listed is refused. | none                    |
-| `properties` | Extra driver properties, like `sslMode: REQUIRED`.                                        | none                    |
+| Key             | Meaning                                                                                                      | Default                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| `type`          | `mysql` (MariaDB too) or `postgres`.                                                                         | required                |
+| `host`          | The database server's host name or address.                                                                  | `localhost`             |
+| `port`          | Its port.                                                                                                    | `3306` / `5432` by type |
+| `database`      | The database on that server.                                                                                 | required                |
+| `username`      | The user to connect as.                                                                                      | empty                   |
+| `password`      | Its password. Never logged, and never readable by a script.                                                  | empty                   |
+| `pool-size`     | The most statements running at once on this connection (1 to 32).                                            | `4`                     |
+| `packages`      | The namespaces of the packages allowed to use it. A package that isn't listed is refused.                    | none                    |
+| `properties`    | Extra driver properties, like `sslMode: REQUIRED`.                                                           | none                    |
+| `own-databases` | The namespaces of packages whose own database (`nf.db()`) lives here instead of in a SQLite file. See below. | none                    |
 
 A package needs **two yeses** to use one of these: it asks for a database in
 its own `netherforge.json`, and you list it under the connection's `packages`.
@@ -592,8 +642,8 @@ A package can never open your database on its own say-so.
 
 Things to know:
 
-- **Tables aren't created for you.** A package's `migrations/` only set up its
-  own SQLite database. On a shared server, scripts create their own tables
+- **Tables aren't created for you** on a connection opened by name. A
+  package's `migrations/` set up its own database only. On a shared server, scripts create their own tables
   (`CREATE TABLE IF NOT EXISTS`, in that server's SQL dialect) or you manage
   them yourself. Packages share the connection, so give tables names only
   their package would pick (`shop_scores`).
@@ -602,6 +652,47 @@ Things to know:
 - **The database being down doesn't stop the server.** The first statement
   that needs it fails with a message saying it couldn't connect (the log says
   why), and the next one tries again.
+
+### A package's own database on your server
+
+To run several servers of one project against one database, move the
+packages' own databases there without changing the project: the same
+`nf.db()` calls and the same migrations.
+
+```yaml
+databases:
+  game:
+    type: postgres
+    host: pooler.example
+    database: game_chess
+    username: game_chess
+    password: change-me
+    own-databases: [chess, chess_club] # these packages' nf.db() live here
+```
+
+- Each package listed gets a space of its own, named from its namespace: a
+  schema on PostgreSQL (`chess`), a database beside the one you named on
+  MySQL (`game_chess_chess`, since MySQL's schemas are databases). The user
+  needs the rights to create it (or create it yourself). Spaces keep packages'
+  tables apart by name; packages on one connection share its user, so one
+  package's SQL could still name another's tables in full. Give a package you
+  don't trust with another's data a connection and user of its own.
+- Its migrations run there, each **once** across every server sharing the
+  connection: under a lock the database holds, with what was applied kept in
+  the space's `nf_migrations` table. Two servers starting together apply each
+  migration once. A server whose copy of the package is older than what ran
+  there refuses that package (`migration.ahead`) rather than work against
+  tables it doesn't know.
+- The migrations run are the package's versions for that server,
+  `migrations/postgres/` or `migrations/mysql/` (see
+  [Migrations](../format/migrations.md#on-a-mysql-or-postgresql-server)). A
+  package without them is refused (`migration.dialect`), naming the package
+  and the server type.
+- A package's own database needs only its `requires.db`: `own-databases` is
+  where it lives, not who may open the connection by name (`packages`).
+- `/nf requires` and the startup log say where each package's own database is.
+- A dev server reads this section too: leave `own-databases` out of its
+  `config.yml`, and the project is written and tested on SQLite as before.
 
 ## Script files
 

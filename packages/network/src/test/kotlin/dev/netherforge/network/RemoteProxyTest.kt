@@ -124,6 +124,18 @@ class RemoteProxyTest {
     }
 
     @Test
+    fun `an admin client's message reaches the player on the proxy that holds them, click and all`() {
+        val first = connectProxy("velocity-1")
+        val second = connectProxy("velocity-2")
+        second.link.send(ServerFrame.ProxyPlayer(PlayerState("u-2", "Bea", "lobby")))
+        val invite = "Alice invited you. <green><click:run_command:'/party accept Alice'>[Accept]"
+        assertEquals(null, RichText.problem(invite, null, NetworkLimits().maxValueBytes))
+        assertNull(hub.adminMessage("Bea", "chat", invite, null))
+        assertEquals(listOf(HubFrame.ProxyMessage("u-2", "chat", invite)), second.frames.filterIsInstance<HubFrame.ProxyMessage>())
+        assertEquals(emptyList(), first.frames.filterIsInstance<HubFrame.ProxyMessage>())
+    }
+
+    @Test
     fun `a server registering itself is added on the proxy, and only a proxy's credential joins as one`() {
         val proxy = connectProxy()
         val recorder = Recorder()

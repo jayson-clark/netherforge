@@ -202,6 +202,19 @@ class AdminApiTest {
         assertEquals(200, call("POST", "/v1/players/u-1/kick", """{ "message": "bye" }""").first)
         assertEquals(listOf("u-1 title <gold>Hi", "u-1 kicked bye"), proxy.shown)
         assertEquals(404, call("POST", "/v1/players/Nobody/message", """{ "text": "?" }""").first)
+        // Clicks that run or suggest a command, copy or open a link, and hovers that show text; nothing else.
+        val invite = """Alice invited you. <green><click:run_command:'/party accept Alice'><hover:show_text:'<gray>Join'>[Accept]"""
+        assertEquals(200, call("POST", "/v1/players/u-1/message", """{ "text": "$invite" }""").first)
+        val file = call("POST", "/v1/players/u-1/message", """{ "text": "<click:open_file:/etc/passwd>x" }""")
+        assertEquals(400, file.first)
+        assertTrue("<click:open_file> isn't allowed" in file.second, file.second)
+        assertEquals(400, call("POST", "/v1/players/u-1/message", """{ "text": "<HOVER:show_item:stone>x" }""").first)
+        // A click hidden in a hover's text is still a click.
+        assertEquals(400, call("POST", "/v1/players/u-1/message", """{ "text": "<hover:show_text:'<click:change_page:2>p'>x" }""").first)
+        assertEquals(
+            400,
+            call("POST", "/v1/players/u-1/message", """{ "kind": "title", "text": "t", "subtitle": "<click:custom:x>s" }""").first
+        )
     }
 
     @Test

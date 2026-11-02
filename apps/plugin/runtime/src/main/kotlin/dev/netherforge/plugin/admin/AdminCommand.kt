@@ -148,6 +148,11 @@ internal class AdminCommand(private val runtime: NetherForgeRuntime) : CommandHa
     /** What the project and its packages declare they need (`requires`), each with who declares it: what running it asks of this server. */
     private fun requires(sender: CommandSender) {
         val combined = runtime.session.requirements.combined()
+        val grants = runtime.session.requirements.grants()
+        if (grants.isNotEmpty()) {
+            sender.reply("<gold>Given by this server's config.yml:")
+            for (grant in grants) sender.reply("<yellow>${escape(grant)}")
+        }
         if (combined.isEmpty()) {
             sender.reply("<gray>The project and its packages require nothing beyond what every project may do.")
             return

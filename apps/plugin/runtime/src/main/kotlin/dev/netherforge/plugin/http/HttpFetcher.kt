@@ -57,6 +57,15 @@ class HttpReply(val status: Int, val headers: Map<String, String>, val body: Str
  * [HttpConfig.timeoutSeconds]. Every failure is a [WorkFailed], which a script
  * sees as `nil, err`.
  *
+ * **One package may reach one private host and port** (`http.allow-private`):
+ * a call carries the owner's allowances for the package whose code made it,
+ * and each hop is checked with a [CheckedDns] that also lets through the
+ * addresses the allowances on that hop's port stand for. OkHttp keeps a
+ * client's `Dns` in each pooled connection's address, so a connection made
+ * under one package's allowance is never handed to a call without it. Every
+ * other address that isn't public is refused as before, and [AddressGuard.Kind.NEVER]
+ * whatever is allowed.
+ *
  * [close] stops OkHttp's threads and pooled connections: a session that ends
  * must not leave them behind.
  */
@@ -72,13 +81,18 @@ class HttpFetcher(
      */
     private val ownAddresses: () -> Set<InetAddress> = OwnAddresses::current
 ) : Closeable {
+    /** The checked `Dns` of a call no allowance applies to: public addresses only. */
+    private val publicOnly = CheckedDns(emptyList())
+
+    private val dnsByAllowed = java.util.concurrent.ConcurrentHashMap<List<String>, CheckedDns>()
+
     private val client: OkHttpClient = OkHttpClient.Builder()
         .proxy(Proxy.NO_PROXY)
         .followRedirects(false)
         .followSslRedirects(false)
         .retryOnConnectionFailure(false)
         .cache(null)
-        .dns(CheckedDns())
+        .dns(publicOnly)
         .socketFactory(socketFactory)
         .connectionPool(ConnectionPool(MAX_IDLE, KEEP_ALIVE_SECONDS, TimeUnit.SECONDS))
         .connectTimeout(limits.timeoutSeconds.toLong(), TimeUnit.SECONDS)
@@ -89,7 +103,16 @@ class HttpFetcher(
     /** The refusal and "doesn't resolve" answers of [CheckedDns], which OkHttp passes through as the failure of the call. */
     private class Unreachable(message: String) : UnknownHostException(message)
 
-    private inner class CheckedDns : Dns {
+    /**
+     * Resolves a name once and refuses it whole if any address it leads to may not be reached. [allowed] are the hosts
+     * (addresses or names) whose addresses are let through though private: the calling package's allowances for the
+     * port being connected to. Two with the same [allowed] are equal, so their pooled connections are shared.
+     */
+    private inner class CheckedDns(val allowed: List<String>) : Dns {
+        override fun equals(other: Any?) = other is CheckedDns && other.allowed == allowed
+
+        override fun hashCode() = allowed.hashCode()
+
         override fun lookup(hostname: String): List<InetAddress> {
             val addresses = try {
                 resolve(hostname)
@@ -98,19 +121,50 @@ class HttpFetcher(
             }
             if (addresses.isEmpty()) throw Unreachable("$hostname doesn't resolve")
             // Every address it leads to is checked, not just the one used: a name that leads anywhere private is refused whole.
-            for (address in addresses) refusal(hostname, address)?.let { throw Unreachable(it) }
+            for (address in addresses) refusal(hostname, address, allowed)?.let { throw Unreachable(it) }
             return addresses
         }
     }
 
-    /** Why [address] is out of bounds for a request to [host], in the words a script is told, or null when it may be reached. */
-    private fun refusal(host: String, address: InetAddress): String? {
-        val why = AddressGuard.refusal(address, limits.allowPrivateAddresses)
-            ?: "this server's own address".takeIf { !limits.allowPrivateAddresses && address in ownAddresses() }
-            ?: return null
+    /** The hosts [allowances] (one package's) let a connection to [port] reach though private, in one order. */
+    private fun allowedAt(allowances: List<PrivateAllowance>, port: Int): List<String> =
+        allowances.filter { it.port == port }.map { it.host.lowercase() }.distinct().sorted()
+
+    /** The checked `Dns` for a hop to [port] under [allowances]: the public-only one when none is for that port. */
+    private fun dnsFor(allowances: List<PrivateAllowance>, port: Int): CheckedDns {
+        val allowed = allowedAt(allowances, port)
+        return if (allowed.isEmpty()) publicOnly else dnsByAllowed.computeIfAbsent(allowed) { CheckedDns(it) }
+    }
+
+    /** [client] as it makes a hop to [url] under [allowances]: itself when none is for the hop's port. */
+    internal fun reaching(client: OkHttpClient, allowances: List<PrivateAllowance>, url: HttpUrl): OkHttpClient {
+        val dns = dnsFor(allowances, url.port)
+        return if (dns === publicOnly) client else client.newBuilder().dns(dns).build()
+    }
+
+    /** What the hosts in [allowed] stand for now: an address as written, a name as it resolves (nothing when it doesn't). */
+    private fun addressesOf(allowed: List<String>): Set<InetAddress> = allowed.flatMapTo(HashSet()) { host ->
+        literal(host.removePrefix("[").removeSuffix("]"))?.let { listOf(it) } ?: try {
+            resolve(host)
+        } catch (e: UnknownHostException) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Why [address] is out of bounds for a request to [host], in the words a script is told, or null when it may be
+     * reached: public, or private and one of [allowed]'s (never one that names no one host).
+     */
+    private fun refusal(host: String, address: InetAddress, allowed: List<String> = emptyList()): String? {
+        val kind = AddressGuard.classify(address)
+        val own = !limits.allowPrivateAddresses && address in ownAddresses()
+        if (kind == null && !own) return null
+        if (kind != AddressGuard.Kind.NEVER && allowed.isNotEmpty() && address in addressesOf(allowed)) return null
+        val why = AddressGuard.refusal(address, limits.allowPrivateAddresses) ?: "this server's own address".takeIf { own } ?: return null
         val leads = if (host == address.hostAddress) "$host is" else "$host leads to ${address.hostAddress},"
         return "$leads $why, which nf.http.request doesn't reach " +
-            "(the server owner can allow private addresses with http.allow-private-addresses in config.yml)"
+            "(the server owner can allow private addresses with http.allow-private-addresses in config.yml, " +
+            "or one package one host and port with http.allow-private)"
     }
 
     /**
@@ -121,12 +175,12 @@ class HttpFetcher(
      * at: the JDK would read some of them as addresses and, given others, ask
      * DNS, and OkHttp would then connect to what it read.
      */
-    internal fun checkLiteral(url: HttpUrl) {
+    internal fun checkLiteral(url: HttpUrl, allowances: List<PrivateAllowance> = emptyList()) {
         val host = url.host
         if (!LITERAL.matches(host)) return
         val address =
             literal(host) ?: throw WorkFailed("$host isn't an IP address nf.http.request can send to (write IPv4 as four plain numbers)")
-        refusal(host, address)?.let { throw WorkFailed(it) }
+        refusal(host, address, allowedAt(allowances, url.port))?.let { throw WorkFailed(it) }
     }
 
     private fun literal(host: String): InetAddress? {
@@ -151,13 +205,18 @@ class HttpFetcher(
      * Sends [call] and follows its redirects. [declared] is the host
      * requirement for a redirect's host (it throws what `Requirements.check`
      * does), checked here because it happens after the script's call.
+     * [allowances] are the owner's `http.allow-private` entries for the
+     * package whose code made the call, held to every hop.
      */
-    fun fetch(call: HttpCall, declared: (host: String) -> Unit): HttpReply {
+    fun fetch(call: HttpCall, declared: (host: String) -> Unit): HttpReply = fetch(call, emptyList(), declared)
+
+    /** [fetch], under [allowances]. */
+    fun fetch(call: HttpCall, allowances: List<PrivateAllowance>, declared: (host: String) -> Unit): HttpReply {
         val deadline = System.nanoTime() + limits.timeoutSeconds * NANOS_PER_SECOND
         var current = call
         var redirects = 0
         while (true) {
-            val (reply, location) = exchange(current, deadline)
+            val (reply, location) = exchange(current, deadline, allowances)
             if (reply.status !in REDIRECTS || location == null) return reply
             if (++redirects > HttpConfig.MAX_REDIRECTS) throw WorkFailed("it was redirected more than ${HttpConfig.MAX_REDIRECTS} times")
             val next = try {
@@ -187,12 +246,12 @@ class HttpFetcher(
     }
 
     /** One hop: the reply, and the `Location` it carries. */
-    private fun exchange(call: HttpCall, deadline: Long): Pair<HttpReply, String?> {
+    private fun exchange(call: HttpCall, deadline: Long, allowances: List<PrivateAllowance>): Pair<HttpReply, String?> {
         val url = call.url.toString().toHttpUrlOrNull() ?: throw WorkFailed("\"${call.url}\" isn't a URL")
-        checkLiteral(url)
+        checkLiteral(url, allowances)
         val left = deadline - System.nanoTime()
         if (left <= 0) throw timedOut()
-        val hop = client.newBuilder().callTimeout(left, TimeUnit.NANOSECONDS).build()
+        val hop = client.newBuilder().dns(dnsFor(allowances, url.port)).callTimeout(left, TimeUnit.NANOSECONDS).build()
         try {
             hop.newCall(request(call, url)).execute().use { response ->
                 val headers = headersOf(response.headers)

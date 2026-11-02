@@ -186,6 +186,23 @@ another field) and `exports` (kind folder → ids).
   needed. Pins come from the files' `netherforge.lock`: leave it out to
   resolve every git dependency afresh (`netherforge lock --update`, the
   editor's `updatePackages`).
+- **Dialect migrations.** `Layout.SingleFile.variants` are folders whose same-named file is part of the resource
+  (`MigrationKind`'s `postgres`/`mysql`): `Kinds.classify` gives such a file the resource's id with role `FILE` and
+  `rest` `<variant>/<name>`, and with variants the main file's `rest` is its name, so `of(id, files)` sees them all
+  (`MigrationFile.dialects`, `base`). `migration.dialects` is a version without its SQLite file, or a dialect some
+  migrations have and one lacks (`MigrationTest`).
+- **Versions and provided packages.** A dependency's `version` is a
+  `VersionRange` (`VersionRange.kt`: npm's `^`, `~`, comparisons, `||`, `*`,
+  npm's prerelease rule; `SemVer` orders versions) checked as it resolves:
+  `package.version-range` for one that isn't, `package.version` (naming both
+  versions and `OpenedPackage.from`, where a host's copy came from) for a
+  package outside a requirer's range, which then isn't loaded for anyone
+  (`outOfRange`, so what loads doesn't depend on which requirer is read
+  first). `provided: true` is for hosts: `netherforge build` leaves it out
+  and lists it in `BundleManifest.provided` (sorted by `BundleKind.canonical`),
+  and the plugin's `ProjectFiles` opens its server's copy instead
+  (`runtime.provided-package` when a bundle carries one). The
+  `packages/versions` golden covers the format's half.
 - **Package paths.** A dependency's files are `ns:path`
   (`PackagePaths`): its problems join the root's that way
   (`Packages.inPackage`), `Kinds.classify` answers them with `pkg` set, and
