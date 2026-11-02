@@ -184,6 +184,7 @@ http:
     - package: acme_bridge # a package's namespace
       host: 127.0.0.1 # an address, or a name looked up when it's used
       port: 9361
+      requests-per-minute: 1200 # optional: its own rate there (0: no limit)
 ```
 
 The check is still on the address connected to: this lets `acme_bridge` reach
@@ -194,6 +195,13 @@ scripts, are refused the same address. The package must still declare the
 host under `requires.http`. Multicast, broadcast and `0.0.0.0` stay refused
 whatever you allow. `/nf requires` and the startup log list the allowances in
 effect.
+
+With `requests-per-minute`, the package's requests (and streams and
+WebSockets opened) to that host and port, as its URLs write them, count
+against that rate instead of `http.requests-per-minute`: a package of yours
+can talk to a service beside the server as often as it needs, while every
+package is still held to the general rate everywhere else. Without it they
+count against the general rate like any other.
 
 ### Streams and WebSockets
 

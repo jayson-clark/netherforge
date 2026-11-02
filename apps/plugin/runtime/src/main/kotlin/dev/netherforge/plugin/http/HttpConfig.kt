@@ -56,6 +56,15 @@ data class ConnectionLimits(
  * stands for, on that port, and nothing else that isn't public. It lifts only
  * the address refusal: the package still declares the host in `requires.http`.
  */
-data class PrivateAllowance(val namespace: String, val host: String, val port: Int) {
-    override fun toString() = "$namespace → $host:$port"
+data class PrivateAllowance(
+    val namespace: String,
+    val host: String,
+    val port: Int,
+    /**
+     * The package's requests to [host] and [port] a minute, counted apart from its `http.requests-per-minute` (null:
+     * they count against that, as any other; 0: no limit).
+     */
+    val requestsPerMinute: Int? = null
+) {
+    override fun toString() = "$namespace → $host:$port" + requestsPerMinute?.let { " ($it a minute)" }.orEmpty()
 }

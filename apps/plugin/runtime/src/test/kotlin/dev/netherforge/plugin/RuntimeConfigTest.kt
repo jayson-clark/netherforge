@@ -152,13 +152,13 @@ class RuntimeConfigTest {
         val allowances = listOf(
             mapOf("package" to "acme_bridge", "host" to "127.0.0.1", "port" to 9361),
             mapOf("package" to "acme_bridge", "host" to "[::1]", "port" to "9361"),
-            mapOf("package" to "relay", "host" to "Bridge.Internal", "port" to 80)
+            mapOf("package" to "relay", "host" to "Bridge.Internal", "port" to 80, "requests-per-minute" to 1200)
         )
         assertEquals(
             listOf(
                 PrivateAllowance("acme_bridge", "127.0.0.1", 9361),
                 PrivateAllowance("acme_bridge", "::1", 9361),
-                PrivateAllowance("relay", "bridge.internal", 80)
+                PrivateAllowance("relay", "bridge.internal", 80, 1200)
             ),
             read(mapOf("project" to "p", "http" to mapOf("allow-private" to allowances)))!!.http.allowPrivate
         )
@@ -168,6 +168,7 @@ class RuntimeConfigTest {
         assertTrue("namespace" in refused(mapOf("package" to "Not A Namespace", "host" to "h", "port" to 1)))
         assertTrue("no host" in refused(mapOf("package" to "a", "port" to 1)))
         assertTrue("port" in refused(mapOf("package" to "a", "host" to "h", "port" to 70000)))
+        assertTrue("requests-per-minute" in refused(mapOf("package" to "a", "host" to "h", "port" to 1, "requests-per-minute" to -1)))
     }
 
     @Test

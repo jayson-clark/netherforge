@@ -229,6 +229,38 @@ class HttpRequestTest {
     }
 
     @Test
+    fun `an allowance with a rate of its own counts requests there apart from the package's general rate`() {
+        server(
+            """
+            nf.task(function()
+              for i = 1, 6 do
+                local r, why = nf.http.request({ url = "http://127.0.0.1:PORT/hi" })
+                log("allowed " .. i .. " " .. (r and r.status or why))
+              end
+              for i = 1, 3 do
+                local r, why = nf.http.request({ url = "http://localhost:PORT/hi" })
+                log("elsewhere " .. i .. " " .. (r and r.status or why))
+              end
+            end)
+            """,
+            hosts = """["localhost", "127.0.0.1"]""",
+            http = HttpConfig(
+                allowPrivateAddresses = true,
+                requestsPerMinute = 2,
+                allowPrivate = listOf(PrivateAllowance("test", "127.0.0.1", port, requestsPerMinute = 5))
+            )
+        ).use { server ->
+            server.tick(30)
+            assertTrue(server.errors.isEmpty(), server.errors.toString())
+            val logs = server.logs
+            assertEquals((1..5).map { "allowed $it 201" }, logs.subList(0, 5), "more than the general rate of 2")
+            assertTrue(logs[5].startsWith("allowed 6 package \"test\" has made 5 requests to 127.0.0.1:$port"), logs[5])
+            assertEquals(listOf("elsewhere 1 201", "elsewhere 2 201"), logs.subList(6, 8), "the general rate is untouched")
+            assertTrue(logs[8].startsWith("elsewhere 3 package \"test\" has made 2 requests in the last minute"), logs[8])
+        }
+    }
+
+    @Test
     fun `the rate is a sliding minute per key`() {
         var now = 0L
         val rate = RequestRate(2) { now }
