@@ -58,10 +58,30 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
     /** What the last snapshot held, to tell listeners what changed. */
     private var last: Snapshot? = null
 
-    private data class Snapshot(val state: String, val players: Set<String>, val worlds: Set<String>, val paused: Boolean)
+    /** A player online: their name and the world they're in (null: not known yet). */
+    private data class PlayerView(val name: String, val world: String?)
 
-    /** Writes paused (`POST /save` with `pause`): until this tick at the latest. */
+    private data class Snapshot(
+        val state: String,
+        val players: Map<java.util.UUID, PlayerView>,
+        val worlds: Set<String>,
+        /** Whether every world's writes are paused (`POST /save` with `pause` and no world). */
+        val paused: Boolean,
+        /** The worlds paused on their own (`POST /save` naming one). */
+        val pausedWorlds: Set<String>
+    )
+
+    /** Every world's writes paused (`POST /save` with `pause`): until this tick at the latest. */
     private var pausedUntil: Long? = null
+
+    /**
+     * Worlds whose writes are paused on their own, each until its tick at the latest. A world's writes go on when
+     * neither this nor [pausedUntil] holds it.
+     */
+    private val worldPauses = HashMap<String, Long>()
+
+    /** When each loaded world last had no players in it, by tick (absent while it has some). */
+    private val worldEmptySince = HashMap<String, Long>()
 
     /** When the last tick ended (Unix milliseconds; 0 before the first), and how long it took. */
     @Volatile
@@ -102,7 +122,10 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
     }
 
     fun stop() {
-        if (pausedUntil != null) resume("the server is stopping")
+        if (pausedUntil != null || worldPauses.isNotEmpty()) {
+            for (world in worldPauses.keys.toList()) resumeWorld(world, null)
+            resume("the server is stopping")
+        }
         watchdog?.shutdownNow()
         watchdog = null
         http?.stop()
@@ -117,9 +140,17 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
         tickMillis = runtime.platform.performance.lastTickMilliseconds()
         lastTick = System.currentTimeMillis()
         if (tick % SNAPSHOT_TICKS != 0L) return
-        val players = runtime.platform.players.online().map { it.name }.toSet()
+        val players = runtime.platform.players.online().associate {
+            it.uuid to PlayerView(it.name, runtime.platform.players.location(it.uuid)?.world)
+        }
         emptySince = if (players.isEmpty()) emptySince ?: tick else null
         val worlds = runtime.platform.worlds.names().toSet()
+        val occupied = players.values.mapNotNull { it.world }.toSet()
+        worldEmptySince.keys.retainAll(worlds)
+        for (world in worlds) if (world in occupied) worldEmptySince.remove(world) else worldEmptySince.putIfAbsent(world, tick)
+        // A world unloaded while paused: its pause ends with it.
+        worldPauses.keys.retainAll(worlds)
+        for ((world, until) in worldPauses.entries.toList()) if (tick >= until) resumeWorld(world, "its timeout ran out")
         val until = pausedUntil
         if (until != null) {
             if (tick >= until) {
@@ -129,7 +160,7 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
                 for (world in worlds - last?.worlds.orEmpty()) runtime.platform.worldManager.setSaving(world, false)
             }
         }
-        val now = Snapshot(runtime.network.state.word, players, worlds, pausedUntil != null)
+        val now = Snapshot(runtime.network.state.word, players, worlds, pausedUntil != null, worldPauses.keys.toSet())
         state = snapshot(now, tick)
         val before = last
         last = now
@@ -143,19 +174,58 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
                 }
             )
         }
-        for (player in now.players - before.players) tell("player_join", buildJsonObject { put("player", player) })
-        for (player in before.players - now.players) tell("player_quit", buildJsonObject { put("player", player) })
+        fun player(uuid: java.util.UUID, view: PlayerView) = buildJsonObject {
+            put("player", view.name)
+            put("uuid", uuid.toString())
+            view.world?.let { put("world", it) }
+        }
+        for ((uuid, view) in now.players) {
+            val was = before.players[uuid]
+            when {
+                was == null -> tell("player_join", player(uuid, view))
+                was.world != null && view.world != null && was.world != view.world -> tell(
+                    "player_world",
+                    buildJsonObject {
+                        put("player", view.name)
+                        put("uuid", uuid.toString())
+                        put("from", was.world)
+                        put("to", view.world)
+                    }
+                )
+            }
+        }
+        for ((uuid, view) in before.players) if (uuid !in now.players) tell("player_quit", player(uuid, view))
         for (world in now.worlds - before.worlds) tell("world_load", buildJsonObject { put("world", world) })
         for (world in before.worlds - now.worlds) tell("world_unload", buildJsonObject { put("world", world) })
         if (before.paused != now.paused) tell("writes", buildJsonObject { put("paused", now.paused) })
+        for (world in (now.pausedWorlds - before.pausedWorlds) + (before.pausedWorlds - now.pausedWorlds)) {
+            tell(
+                "writes",
+                buildJsonObject {
+                    put("world", world)
+                    put("paused", world in now.pausedWorlds)
+                }
+            )
+        }
     }
 
     private fun snapshot(now: Snapshot, tick: Long): JsonObject {
         val manifest = runtime.session.snapshot.manifest
         return buildJsonObject {
             put("state", now.state)
-            put("players", now.players.size)
-            putJsonArray("player_names") { now.players.sorted().forEach { add(JsonPrimitive(it)) } }
+            put("player_count", now.players.size)
+            putJsonArray("players") {
+                for ((uuid, view) in now.players.entries.sortedBy { it.value.name.lowercase() }) {
+                    add(
+                        buildJsonObject {
+                            put("uuid", uuid.toString())
+                            put("name", view.name)
+                            view.world?.let { put("world", it) }
+                        }
+                    )
+                }
+            }
+            putJsonArray("player_names") { now.players.values.map { it.name }.sorted().forEach { add(JsonPrimitive(it)) } }
             emptySince?.let { put("empty_seconds", (tick - it) / TICKS_PER_SECOND) }
             put("idle", runtime.network.idle)
             runtime.network.startupMillis?.let { put("startup_millis", it) }
@@ -165,8 +235,23 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
                 put("project", it.name)
                 put("version", it.version)
             }
-            putJsonArray("worlds") { now.worlds.sorted().forEach { add(JsonPrimitive(it)) } }
-            put("writes_paused", now.paused)
+            val counts = now.players.values.mapNotNull { it.world }.groupingBy { it }.eachCount()
+            putJsonArray("worlds") {
+                for (world in now.worlds.sorted()) {
+                    add(
+                        buildJsonObject {
+                            put("name", world)
+                            put("players", counts[world] ?: 0)
+                            worldEmptySince[world]?.let { put("empty_seconds", (tick - it) / TICKS_PER_SECOND) }
+                            if (now.paused || world in now.pausedWorlds) put("writes_paused", true)
+                        }
+                    )
+                }
+            }
+            put("writes_paused", now.paused || now.pausedWorlds.isNotEmpty())
+            putJsonArray("paused_worlds") {
+                (if (now.paused) now.worlds else now.pausedWorlds).sorted().forEach { add(JsonPrimitive(it)) }
+            }
         }
     }
 
@@ -209,11 +294,21 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
     /** An action the server refused: answered 409 with why. */
     private class Refused(message: String) : Exception(message)
 
+    /** What the request names isn't there: answered 404. */
+    private class Missing(message: String) : Exception(message)
+
+    /** A request that's wrong in itself: answered 400. */
+    private class Wrong(message: String) : Exception(message)
+
     private fun handle(request: LocalHttp.Request, respond: LocalHttp.Responder) {
         try {
             route(request, respond)
         } catch (e: Refused) {
             respond.send(409, """{"error":${LocalHttp.quote(e.message.orEmpty())}}""")
+        } catch (e: Missing) {
+            respond.send(404, """{"error":${LocalHttp.quote(e.message.orEmpty())}}""")
+        } catch (e: Wrong) {
+            respond.send(400, """{"error":${LocalHttp.quote(e.message.orEmpty())}}""")
         } catch (e: java.util.concurrent.ExecutionException) {
             respond.send(409, """{"error":${LocalHttp.quote(e.cause?.message ?: e.toString())}}""")
         }
@@ -243,6 +338,7 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
         } ?: JsonObject(emptyMap())
         fun flag(key: String) = (body[key] as? JsonPrimitive)?.booleanOrNull
         fun number(key: String) = (body[key] as? JsonPrimitive)?.doubleOrNull
+        fun text(key: String) = (body[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
         when (request.method to request.path) {
             "GET" to "/state" -> respond.send(200, stateNow().toString())
             "GET" to "/events" -> events(respond)
@@ -261,15 +357,37 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
             }
             "POST" to "/save" -> {
                 val pause = flag("pause") ?: false
+                val world = text("world")
                 val timeout = number("timeout")?.toLong()?.takeIf { it > 0 } ?: DEFAULT_PAUSE_SECONDS
-                val saved = act("save${if (pause) ", pausing writes for up to $timeout seconds" else ""}") { save(pause, timeout) }
+                val what = "save${world?.let { " world $it" }.orEmpty()}" +
+                    if (pause) ", pausing ${if (world == null) "writes" else "its writes"} for up to $timeout seconds" else ""
+                val saved = act(what) { save(world, pause, timeout) }
                 respond.send(
                     200,
                     buildJsonObject {
+                        world?.let { put("world", it) }
                         putJsonArray("saved") { saved.forEach { add(JsonPrimitive(it)) } }
                         put("writes_paused", pause)
                     }.toString()
                 )
+            }
+            "POST" to "/worlds/create" -> {
+                val name = text("name") ?: return respond.send(400, """{"error":"a create names its world"}""")
+                val options = createOptions(body)
+                act("create world $name") {
+                    val session = runtime.session
+                    // What's wrong with the request is a 400; a world that can't be made now (its name taken, too
+                    // many loaded) is a 409, as nf.worlds.create's errors say.
+                    try {
+                        options.terrain?.let { dev.netherforge.plugin.api.projectTerrain(session, it) }
+                        options.dimensionType?.let { dev.netherforge.plugin.api.projectDimensionType(session, it) }
+                    } catch (e: dev.netherforge.plugin.lua.LuaApiException) {
+                        throw Wrong(e.message.orEmpty())
+                    }
+                    dev.netherforge.plugin.api.createWorld(session, name, options)
+                        ?: throw Refused("the server couldn't make world $name")
+                }
+                respond.send(200, """{"world":${LocalHttp.quote(name)}}""")
             }
             "POST" to "/worlds/load" -> {
                 val name = (body["name"] as? JsonPrimitive)?.content ?: return respond.send(400, """{"error":"a load names its world"}""")
@@ -293,14 +411,35 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
                     (body["name"] as? JsonPrimitive)?.content ?: return respond.send(400, """{"error":"an unload names its world"}""")
                 val moveTo = (body["move_players_to"] as? JsonPrimitive)?.content
                 val unloaded = act("unload world $name") {
+                    // Its own pause ends, so it's saved as an unload saves it.
+                    if (worldPauses.remove(name) != null && pausedUntil == null) runtime.platform.worldManager.setSaving(name, true)
                     runtime.session.managedWorlds.unload(name, flag("save") ?: true, flag("delete") ?: false, moveTo)
                 }
                 if (!unloaded) return respond.send(409, """{"error":"$name had gone, or the server kept it"}""")
                 respond.send(200, """{"world":${LocalHttp.quote(name)}}""")
             }
             "POST" to "/resume" -> {
-                act("resume writes") { resume(null) }
-                respond.send(200, """{"writes_paused":false}""")
+                val world = text("world")
+                // Whether writes are still paused where it asked: worlds paused on their own, or the whole server's.
+                val paused = if (world == null) {
+                    act("resume writes") {
+                        resume(null)
+                        worldPauses.isNotEmpty()
+                    }
+                } else {
+                    act("resume world $world's writes") {
+                        if (world !in runtime.platform.worlds.names()) throw Missing("no world \"$world\" is loaded")
+                        resumeWorld(world, null)
+                        pausedUntil != null
+                    }
+                }
+                respond.send(
+                    200,
+                    buildJsonObject {
+                        world?.let { put("world", it) }
+                        put("writes_paused", paused)
+                    }.toString()
+                )
             }
             else -> respond.send(404, """{"error":"there's no ${request.method} ${request.path}"}""")
         }
@@ -334,35 +473,83 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
         val result = try {
             done.get(ACT_SECONDS, TimeUnit.SECONDS)
         } catch (e: java.util.concurrent.ExecutionException) {
-            throw Refused(e.cause?.message ?: e.toString())
+            when (val cause = e.cause) {
+                is Missing, is Wrong, is Refused -> throw cause
+                else -> throw Refused(cause?.message ?: e.toString())
+            }
         }
         // The snapshot shows it at once.
         runtime.mainThread.execute {
             last?.let {
                 state =
-                    snapshot(it.copy(state = runtime.network.state.word, paused = pausedUntil != null), runtime.ticks)
+                    snapshot(
+                        it.copy(state = runtime.network.state.word, paused = pausedUntil != null, pausedWorlds = worldPauses.keys.toSet()),
+                        runtime.ticks
+                    )
             }
         }
         return result
     }
 
-    /** On the main thread: every world saved and flushed, and with [pause] its writes paused for up to [seconds]. */
-    private fun save(pause: Boolean, seconds: Long): List<String> {
-        val worlds = runtime.platform.worlds.names()
-        for (world in worlds) runtime.platform.worldManager.saveFiles(world)
+    /**
+     * On the main thread: every world (or only [world]) saved and flushed, and with [pause] its writes paused for up to
+     * [seconds]. A world's pause and the whole server's are kept apart, each ending on its own.
+     */
+    private fun save(world: String?, pause: Boolean, seconds: Long): List<String> {
+        val loaded = runtime.platform.worlds.names()
+        if (world != null && world !in loaded) throw Missing("no world \"$world\" is loaded")
+        val worlds = if (world == null) loaded else listOf(world)
+        for (each in worlds) runtime.platform.worldManager.saveFiles(each)
         if (pause) {
-            for (world in worlds) runtime.platform.worldManager.setSaving(world, false)
-            pausedUntil = runtime.ticks + seconds * TICKS_PER_SECOND
+            for (each in worlds) runtime.platform.worldManager.setSaving(each, false)
+            val until = runtime.ticks + seconds * TICKS_PER_SECOND
+            if (world == null) pausedUntil = until else worldPauses[world] = until
         }
         return worlds
     }
 
-    /** On the main thread: writes resume (said in the log when not asked: [why]). */
+    /** On the main thread: every world's pause ends (said in the log when not asked: [why]); worlds paused on their own stay. */
     private fun resume(why: String?) {
         if (pausedUntil == null) return
         pausedUntil = null
-        for (world in runtime.platform.worlds.names()) runtime.platform.worldManager.setSaving(world, true)
+        for (world in runtime.platform.worlds.names()) {
+            if (world !in worldPauses) runtime.platform.worldManager.setSaving(world, true)
+        }
         if (why != null) runtime.log.info("Control endpoint: writes resume: $why")
+    }
+
+    /** On the main thread: [world]'s own pause ends; its writes go on unless the whole server's are paused. */
+    private fun resumeWorld(world: String, why: String?) {
+        if (worldPauses.remove(world) == null) return
+        if (pausedUntil == null) runtime.platform.worldManager.setSaving(world, true)
+        if (why != null) runtime.log.info("Control endpoint: world $world's writes resume: $why")
+    }
+
+    /** `POST /worlds/create`'s body as `nf.worlds.create` takes it; a value that isn't one is a 400. */
+    private fun createOptions(body: JsonObject): dev.netherforge.plugin.binding.WorldCreateOptions {
+        fun text(key: String): String? {
+            val value = body[key] ?: return null
+            return (value as? JsonPrimitive)?.takeIf { it.isString }?.content ?: throw Wrong("$key is a string")
+        }
+        fun flag(key: String): Boolean? {
+            val value = body[key] ?: return null
+            return (value as? JsonPrimitive)?.booleanOrNull ?: throw Wrong("$key is true or false")
+        }
+        fun choice(key: String, choices: List<String>) = text(key)?.also {
+            if (it !in choices) throw Wrong("$key \"$it\" isn't ${choices.joinToString(", ")}")
+        }
+        val seed = body["seed"]?.let { value ->
+            (value as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toLongOrNull() ?: throw Wrong("seed is a whole number")
+        }
+        return dev.netherforge.plugin.binding.WorldCreateOptions(
+            generator = choice("generator", listOf("normal", "flat", "void", "amplified", "large_biomes")),
+            terrain = text("terrain"),
+            environment = choice("environment", listOf("normal", "nether", "end")),
+            dimensionType = text("dimension_type"),
+            seed = seed,
+            structures = flag("structures"),
+            keepSpawnLoaded = flag("keep_spawn_loaded")
+        )
     }
 
     /** The token in [file], made (readable by the server's own user only) when there's none yet. */
