@@ -80,6 +80,7 @@ import dev.netherforge.plugin.structure.StructureSpawns
 import dev.netherforge.plugin.structure.StructureStore
 import dev.netherforge.plugin.terrain.WorldGenerators
 import dev.netherforge.plugin.testing.ScriptTests
+import dev.netherforge.plugin.under
 import dev.netherforge.plugin.wasm.WasmModules
 import dev.netherforge.plugin.web.OAuthFlows
 import dev.netherforge.plugin.web.WebRoutes
@@ -120,7 +121,20 @@ class ProjectSession internal constructor(
     handover: Handover
 ) {
     val platform get() = runtime.platform
-    val config get() = runtime.config
+
+    /**
+     * The policy this session runs under: the owner's (`policy.json`) and the network's for the server's role, the
+     * stricter of each; null for none. Read as the session starts: a new one from the hub starts a new session.
+     */
+    val policy: dev.netherforge.format.project.Policy? =
+        listOfNotNull(runtime.config.policy, runtime.network.hubPolicy?.let { dev.netherforge.format.project.Policy.parse(it).getOrNull() })
+            .reduceOrNull { a, b -> a and b }
+
+    /** The network's policy this session was started with, as its hub sent it. */
+    val hubPolicy: String? = runtime.network.hubPolicy
+
+    /** The owner's config, under [policy]'s limits. */
+    val config = runtime.config.under(policy)
     val log get() = runtime.log
 
     /** The project's files and its packages' (package paths). */
@@ -199,7 +213,7 @@ class ProjectSession internal constructor(
             ticks = { ticks },
             memoryMegabytes = config.sandbox.memoryMegabytes
         )
-    )
+    ).also { it.maxBudget = config.sandbox.maxBudget }
 
     /** Work off the main thread, and how its results come back: to services, and to the scripts that wait. */
     val async = service(AsyncWork(generation, runtime.completions, runtime.workers, scripts, log))
@@ -229,7 +243,7 @@ class ProjectSession internal constructor(
     )
 
     /** What each package declared it needs (`requires`), the check every capability goes through, and the sum whoever runs the server sees. */
-    val requirements = service(Requirements(log, { snapshot }, { names.calling() }) { names.callingHidden() })
+    val requirements = service(Requirements(log, { snapshot }, { names.calling() }, { names.callingHidden() }, { policy }))
 
     /** `nf.http`'s client and its connections' transport: closed with the session, so reloads leave no threads or sockets behind. */
     val http = service(HttpClient(config.testing != null) { config.http })
@@ -863,6 +877,9 @@ class ProjectSession internal constructor(
     }
 
     private fun refusal(snapshot: ProjectSnapshot): Pair<String, Problem?>? {
+        // A policy the owner wrote that can't be read: nothing runs, rather than everything.
+        config.policyProblem?.let { return it to null }
+        policy?.takeIf { it.stops }?.check(snapshot)?.firstOrNull()?.let { return "${it.file}: ${it.message}" to it }
         // A bundle that isn't what it was built as, or dependencies a production server won't resolve.
         loadProblems.firstOrNull { it.severity == Severity.ERROR }?.let { return "${it.file}: ${it.message}" to null }
         // An older or newer format among them: its message says which version the project is in.

@@ -69,6 +69,14 @@ release is cut.
   second login through another proxy is refused or takes over
   (`duplicate-login`), and the admin API lists proxies and drains one before
   it restarts.
+- **A policy over what projects require.** `policy.json` beside `config.yml`
+  allows and denies requirement kinds and HTTP hosts whatever a project
+  asks for, and lowers limits (script memory and budget, call time, network
+  and HTTP rates). A project it refuses doesn't load, or with `degrade` loads
+  with the refused calls failing, and `runtime.policy` says which rule. A
+  network sends each role's servers a policy too (`policy.<role>` in
+  `hub.properties`), and `netherforge check --policy policy.json` tells an
+  author whether a project runs under one.
 - **Metrics.** `metrics.port` in `config.yml` serves a server's numbers for
   Prometheus: TPS and tick time, players, entities, centities and chunks,
   each package's script cost, memory and network traffic, its state and

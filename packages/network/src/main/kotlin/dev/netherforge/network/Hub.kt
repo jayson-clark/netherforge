@@ -64,8 +64,18 @@ class Hub(
     credentials: Collection<Credential> = emptyList(),
     groups: Map<String, GroupSettings> = emptyMap(),
     /** What whatever runs the servers may want to hear of (the webhook); called off the hub's lock. */
-    private val events: (HubEvent) -> Unit = {}
+    private val events: (HubEvent) -> Unit = {},
+    /** The network's policy for each role's servers, as JSON, sent in their welcome. */
+    policies: Map<String, String> = emptyMap()
 ) {
+    @Volatile
+    private var policies: Map<String, String> = policies
+
+    /** Replaces the roles' policies: servers hear the new one as they next join (a server dialling again hears it at once). */
+    fun setPolicies(all: Map<String, String>) {
+        policies = all
+    }
+
     private val lock = Any()
     private val sessions = LinkedHashSet<Session>()
     private val byName = LinkedHashMap<String, Session>()
@@ -680,7 +690,7 @@ class Hub(
             log.info("NetherForge hub: $server connected from ${peer.address} with $how")
             // Sealed from the welcome on, under the name the server said (the one its keys are bound to).
             peer.secure(Channel.hub(proven, nonce, frame.nonce, frame.server, frame.credential))
-            send(HubFrame.Welcome(server, servers(), visible(this), limits.maxValueBytes, grants))
+            send(HubFrame.Welcome(server, servers(), visible(this), limits.maxValueBytes, grants, policies[grants.role]))
             val state = state(server, players.values.count { it.server == server })
             for (other in byName.values) if (other !== this) other.send(HubFrame.Server(state))
             told = told + (server to state)

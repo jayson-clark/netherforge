@@ -180,7 +180,9 @@ sealed interface HubFrame {
         val servers: List<ServerState>,
         val players: List<PlayerState>,
         val maxValueBytes: Int = NetworkLimits.DEFAULT_MAX_VALUE_BYTES,
-        val grants: Grants = Grants.TRUSTED
+        val grants: Grants = Grants.TRUSTED,
+        /** The network's policy for this server's role (`policy.<role>` in `hub.properties`), as JSON; null for none. */
+        val policy: String? = null
     ) : HubFrame
 
     /** The hello wasn't accepted, and why; the hub closes the connection after it. */

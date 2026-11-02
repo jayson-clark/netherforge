@@ -352,6 +352,51 @@ world first. Scripts set a world up in `world_load` and tidy up in
 pause in the tick: the log says how long each one that took 50 ms or more
 took.
 
+## A policy over what projects require
+
+A project says what it needs (`requires` in its `netherforge.json`), and you
+accept that by running it. A server that runs projects other people wrote
+needs rules that apply whatever a project asks for: `policy.json` beside
+`config.yml` in `plugins/NetherForge/`:
+
+```json
+{
+  "requires": {
+    "allow": ["network", "db", "http"],
+    "deny": ["moderation", "plugins"],
+    "http": ["api.example.com", "*.cdn.example.com"],
+    "refused": "refuse"
+  },
+  "limits": {
+    "script-memory-mb": 256,
+    "instruction-budget": 200000,
+    "call-milliseconds": 500,
+    "network-messages-per-minute": 600,
+    "http-requests-per-minute": 30
+  }
+}
+```
+
+| Key                | Means                                                                                                                                                                                                                                  |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `requires.allow`   | The only kinds a project (or any package it uses) may require: `console`, `moderation`, `db`, `web`, `bots`, `wasm`, `network`, `http`, `plugins`.                                                                                     |
+| `requires.deny`    | Kinds none may.                                                                                                                                                                                                                        |
+| `requires.http`    | The only hosts one may declare for `http` (`*.example.com` for any under it), whatever it lists.                                                                                                                                       |
+| `requires.refused` | `refuse` (a project the policy refuses doesn't load) or `degrade` (it loads, and the refused calls fail, as an undeclared requirement's do).                                                                                           |
+| `limits`           | Limits that replace the server's own where they're lower: scripts' memory together, a script's instruction budget (whatever its file says), how long one call may run, and each package's network messages and HTTP requests a minute. |
+
+The server's log, `/nf requires` and the problem `runtime.policy` say which
+package requires what, and which rule of the policy refused it. A policy that
+can't be read stops every project, rather than letting them all through. A
+network can send each role's servers a policy too (`policy.<role>` in the
+hub's `hub.properties`): the server holds its projects to both, the stricter
+of each, and starts the project again when the network's changes. A project's
+author can check before publishing that it runs under a network's policy:
+
+```sh
+netherforge check --policy policy.json
+```
+
 ## Metrics
 
 ```yaml

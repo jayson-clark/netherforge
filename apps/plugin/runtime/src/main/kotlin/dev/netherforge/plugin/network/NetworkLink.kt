@@ -201,6 +201,11 @@ class NetworkLink(
     var maxValueBytes = NetworkLimits.DEFAULT_MAX_VALUE_BYTES
         private set
 
+    /** The policy the network's hub sends for this server's role (its welcome's), as JSON; null for none. */
+    @Volatile
+    var hubPolicy: String? = null
+        private set
+
     /** What the hub lets this server do, as its welcome said; trusted until it has said. */
     var grants: Grants = Grants.TRUSTED
         private set
@@ -356,6 +361,7 @@ class NetworkLink(
         lastFailure = null
         maxValueBytes = welcome.maxValueBytes
         grants = welcome.grants
+        hubPolicy = welcome.policy
         players.clear()
         for (player in welcome.players) players[player.id] = player
         servers.clear()

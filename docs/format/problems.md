@@ -1670,6 +1670,10 @@ Error. A server without the editor runs a project that has dependencies: it runs
 
 Error. A package in a bundle isn't what the bundle says it is: a file was changed, added or removed. See [packages](packages.md).
 
+### `runtime.policy` {#runtime-policy}
+
+Error. A package requires something the server's policy (`policy.json`, or the network's for the server's role) refuses. See [packages](packages.md).
+
 ### `runtime.web-disabled` {#runtime-web-disabled}
 
 Warning. A package declares `requires.web`, but the server owner hasn't turned web routes on (`web.enabled`), so its routes aren't served. See [the project format](project.md).

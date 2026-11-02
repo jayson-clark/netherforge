@@ -66,6 +66,12 @@ data class RuntimeConfig(
     val files: FilesConfig = FilesConfig(),
     /** `worlds:`: where worlds are imported from, and how many may be loaded. */
     val worlds: dev.netherforge.plugin.world.WorldsConfig = dev.netherforge.plugin.world.WorldsConfig(),
+    /**
+     * The owner's policy over what projects may require (`policy.json` beside `config.yml`), or null for none; or why it
+     * couldn't be read ([policyProblem]), in which case no project runs.
+     */
+    val policy: dev.netherforge.format.project.Policy? = null,
+    val policyProblem: String? = null,
     /** `metrics:`: the Prometheus endpoint, off unless it has a port. */
     val metrics: dev.netherforge.plugin.metrics.MetricsConfig = dev.netherforge.plugin.metrics.MetricsConfig(),
     /** `control:`: the local control endpoint for the tool that runs the server, off unless set. */
@@ -138,6 +144,14 @@ data class RuntimeConfig(
             val wasm = wasm(settings.section("wasm"))
             val network = network(settings.section("network"))
             val files = files(settings.section("files"))
+            val policyFile = pluginFolder.resolve(dev.netherforge.format.project.Policy.FILE_NAME)
+            val readPolicy = if (java.nio.file.Files.isRegularFile(policyFile)) {
+                dev.netherforge.format.project.Policy.parse(java.nio.file.Files.readString(policyFile))
+            } else {
+                null
+            }
+            val policy = readPolicy?.getOrNull()
+            val policyProblem = readPolicy?.exceptionOrNull()?.let { "$policyFile can't be read: ${it.message}" }
             val worlds = settings.section("worlds").let { section ->
                 dev.netherforge.plugin.world.WorldsConfig(
                     importRoot = (section.text("import-root")?.trim() ?: "imports").takeIf { it.isNotEmpty() && it != "off" }
@@ -181,6 +195,8 @@ data class RuntimeConfig(
                     control = control,
                     worlds = worlds,
                     metrics = metrics,
+                    policy = policy,
+                    policyProblem = policyProblem,
                     packageCache = properties(Bridge.PACKAGE_CACHE_PROPERTY)?.takeIf {
                         it.isNotBlank()
                     }?.let { Path.of(it).toAbsolutePath().normalize() },
@@ -207,6 +223,8 @@ data class RuntimeConfig(
                 control = control,
                 worlds = worlds,
                 metrics = metrics,
+                policy = policy,
+                policyProblem = policyProblem,
                 files = files,
                 resolvesPackages = false
             )
@@ -422,3 +440,21 @@ data class RuntimeConfig(
  * address it's bound to (`server-ip`, empty for every interface).
  */
 data class ServerAddress(val directory: Path, val ip: String)
+
+/**
+ * This config with [policy]'s limits where they're lower: script memory, call time and instruction budget, the
+ * network's and HTTP's rates. What a session runs under.
+ */
+fun RuntimeConfig.under(policy: dev.netherforge.format.project.Policy?): RuntimeConfig {
+    val limits = policy?.limits ?: return this
+    fun lower(own: Int, theirs: Int?) = theirs?.let { minOf(own, it) } ?: own
+    return copy(
+        sandbox = sandbox.copy(
+            memoryMegabytes = lower(sandbox.memoryMegabytes, limits.scriptMemoryMb),
+            deadlineMillis = lower(sandbox.deadlineMillis, limits.callMillis),
+            maxBudget = limits.instructionBudget ?: sandbox.maxBudget
+        ),
+        network = network.copy(messagesPerMinute = lower(network.messagesPerMinute, limits.networkMessagesPerMinute)),
+        http = http.copy(requestsPerMinute = lower(http.requestsPerMinute, limits.httpRequestsPerMinute))
+    )
+}

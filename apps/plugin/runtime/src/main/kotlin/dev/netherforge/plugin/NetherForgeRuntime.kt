@@ -434,6 +434,14 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
             if (session.running) reload(session.snapshot.everywhere(ResourcePackKind).keys.map { packFile(it) })
         }
         store.commit()
+        // The network's policy for this server came, or changed: the project runs under it from a new session.
+        if (network.connected && network.hubPolicy != session.hubPolicy && ticks % POLICY_CHECK_TICKS == 0L) {
+            log.info(
+                "The network's policy for this server " +
+                    if (session.hubPolicy == null) "arrived" else "changed" + "; starting the project again under it"
+            )
+            reloadAll()
+        }
         metrics.record(System.nanoTime() - started)
         metrics.tick(ticks)
         network.reportTick(ticks, platform.performance.tickMilliseconds())
@@ -574,6 +582,9 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
     }
 
     companion object {
+        /** How often the runtime looks whether the network's policy changed. */
+        private const val POLICY_CHECK_TICKS = 20L
+
         /** The project documents that aren't resources whose saving some service follows. */
         private val FOLLOWED_DOCUMENTS = setOf(DefaultFontKind.id, VanillaKind.id)
 

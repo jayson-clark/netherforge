@@ -20,6 +20,11 @@ data class HubSettings(
     val limits: NetworkLimits,
     /** What's shared with every credential of a role (`share.standard`, `share.isolated`). */
     val roleShares: Map<String, List<Share>> = emptyMap(),
+    /**
+     * What the network requires of each role's servers' projects (`policy.<role>`, a `policy.json` beside this file):
+     * the file's JSON, by role. Sent to each server in its welcome.
+     */
+    val rolePolicies: Map<String, String> = emptyMap(),
     /** Each group's settings (`group.<name>.balance`), by the group's name. */
     val groups: Map<String, GroupSettings> = emptyMap(),
     /** Where the admin API listens (`admin.bind`, `admin.port`): off without a port. Its clients are in `admin.properties`. */
@@ -98,6 +103,12 @@ data class HubSettings(
                 port = text("port")?.toIntOrNull()?.takeIf { it in 0..65535 } ?: Protocol.DEFAULT_PORT,
                 secret = secret,
                 roleShares = roleShares,
+                rolePolicies = Grants.ROLES.mapNotNull { role ->
+                    val name = text("policy.$role") ?: return@mapNotNull null
+                    val policyFile = file.resolveSibling(name)
+                    require(Files.isRegularFile(policyFile)) { "$file's policy.$role names $policyFile, which isn't there" }
+                    role to Files.readString(policyFile)
+                }.toMap(),
                 groups = groups,
                 limits = NetworkLimits(
                     maxValueBytes = positive("max-value-bytes")?.toInt() ?: defaults.maxValueBytes,
@@ -172,6 +183,10 @@ data class HubSettings(
                 |#   share.standard=lobby:return(request), events:announcements(read)
                 |share.standard=
                 |share.isolated=
+                |
+                |# What each role's servers' projects may require, whatever they ask for: a policy file beside this one
+                |# (see the docs' "Network policy"), sent to each server as it joins. For example:
+                |#   policy.standard=policy-standard.json
                 |
                 |# Groups: servers that are copies of one game (network.group in their config.yml), which scripts send
                 |# players to as one ({ group = "arena" }). How the hub picks the instance: least (the one with the fewest

@@ -58,6 +58,30 @@ describe('check', () => {
     expect(outcome.err.join('\n')).toContain("ids weren't checked")
   })
 
+  it("with --policy, says what a network's policy refuses of what the project and its packages require", async () => {
+    const policy = path.join(tmp, 'policy.json')
+    writeFileSync(
+      policy,
+      JSON.stringify({ requires: { deny: ['bots'], http: ['cdn.example.com'] } }),
+    )
+    const refused = await run(['check', project, '--policy', policy], env)
+    expect(refused.code).toBe(1)
+    const lines = refused.out.join('\n')
+    expect(lines).toContain(
+      'requires bots, which the server\'s policy refuses (requires.deny lists "bots")',
+    )
+    expect(lines).toContain('http:api.example.com')
+    writeFileSync(
+      policy,
+      JSON.stringify({ requires: { allow: ['db', 'web', 'bots', 'wasm', 'http'] } }),
+    )
+    expect((await run(['check', project, '--policy', policy], env)).out.at(-1)).toBe('No problems.')
+    writeFileSync(policy, '{ "requires": { "deny": ["teleport"] } }')
+    expect((await run(['check', project, '--policy', policy], env)).out.join('\n')).toContain(
+      "The policy can't be read",
+    )
+  })
+
   it('reports problems as file:line:column: severity: message (at path) and fails', async () => {
     editJson(centity(), (json) => {
       json.nodes.box!.bogus = 1

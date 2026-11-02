@@ -27,7 +27,9 @@ data class SandboxLimits(
      * once, and a custom event is a call its emitter waits on), and so do its commands and body. 0 turns it off
      * (`performance.max-ms-per-tick` in `config.yml`).
      */
-    val maxTickMillis: Double = 25.0
+    val maxTickMillis: Double = 25.0,
+    /** The most a script's instruction budget may be, whatever its file says (a policy's `instruction-budget`); null: any. */
+    val maxBudget: Int? = null
 ) {
     init {
         require(hookEvery > 0 && deadlineEvery > 0 && memoryEvery > 0) { "hook intervals must be positive" }

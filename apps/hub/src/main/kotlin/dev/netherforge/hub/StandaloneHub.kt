@@ -56,6 +56,7 @@ class StandaloneHub(private val folder: Path, private val log: HubLog) {
             store,
             credentials = credentials,
             groups = settings.groups,
+            policies = settings.rolePolicies,
             events = settings.webhookUrl?.let { url -> HubEvents(url, settings.webhookSecret, log)::send } ?: {}
         )
         val server = HubServer(hub, InetSocketAddress(settings.bind, settings.port), log, settings.limits)

@@ -115,13 +115,18 @@ export function isCurrent(json: string): boolean {
 
 export function check(
   root: string,
-  options: { json?: boolean; gameData?: string; servers?: string[] },
+  options: { json?: boolean; gameData?: string; servers?: string[]; policy?: string },
   env: NodeJS.ProcessEnv = process.env,
 ): Outcome {
   const input = readProject(root)
   const game = loadGameData(input, options.gameData, env)
-  const outline = load(root, input, env, game.json)
-  const problems = [...outline.problems, ...networkProblems(input, options.servers)]
+  const packages = readPackages(root, packageCache(env), input)
+  const outline = load(root, input, env, game.json, packages)
+  const problems = [
+    ...outline.problems,
+    ...networkProblems(input, options.servers),
+    ...policyProblems(input, packages, options.policy),
+  ]
   const errors = problems.filter((it) => it.severity === 'error').length
   const warnings = problems.length - errors
   const code = errors > 0 ? 1 : 0
@@ -137,6 +142,34 @@ export function check(
       : `${errors} error${errors === 1 ? '' : 's'}, ${warnings} warning${warnings === 1 ? '' : 's'}.`,
   )
   return { out, err, code }
+}
+
+/**
+ * What the policy in [file] (a network's `policy.json`, as `--policy` names it) refuses of what the project and its
+ * packages require: whether the project would run under it.
+ */
+function policyProblems(
+  input: Record<string, string | null>,
+  packages: PackageInputs,
+  file?: string,
+): Problem[] {
+  if (!file) return []
+  let text: string
+  try {
+    text = readFileSync(file, 'utf8')
+  } catch (e) {
+    return [
+      {
+        severity: 'error',
+        file,
+        message: `The policy can't be read: ${(e as Error).message}`,
+        code: 'runtime.policy',
+      },
+    ]
+  }
+  return JSON.parse(
+    nf.checkPolicy(text, JSON.stringify(input), JSON.stringify(packages)),
+  ) as Problem[]
 }
 
 /**

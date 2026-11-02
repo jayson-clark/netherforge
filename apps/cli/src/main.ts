@@ -24,11 +24,12 @@ Usage:
       agents, and this command (.netherforge/bin/netherforge.mjs). Adds a
       .luarc.json when the project has none. Run it on a fresh clone, and
       again after changing netherforge.json, its dependencies or its names.
-  netherforge check  [dir] [--json] [--game-data <file>]
+  netherforge check  [dir] [--json] [--game-data <file>] [--policy <file>]
       Validate the whole project, as the editor's Problems panel does.
       Prints file:line: severity: message (at $.json.path), one per line.
       Exits 1 if there are errors. Ids are checked against the game data
-      the editor's dev server exported, when it has.
+      the editor's dev server exported, when it has. With --policy, also
+      what a network's policy.json refuses of what the project requires.
   netherforge format [dir] [--check]
       Rewrite project JSON in canonical form, as the editor saves it.
       With --check, change nothing and exit 1 if a file isn't canonical.
@@ -123,6 +124,7 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
         json: { type: 'boolean' },
         check: { type: 'boolean' },
         'game-data': { type: 'string' },
+        policy: { type: 'string' },
         out: { type: 'string' },
         update: { type: 'boolean' },
         junit: { type: 'string' },
@@ -205,6 +207,7 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
               json: values.json,
               gameData: values['game-data'],
               servers: workspace.servers ?? undefined,
+              policy: values.policy,
             },
             env,
           )
@@ -263,7 +266,11 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
       )
     }
     case 'check':
-      return check(root, { json: values.json, gameData: values['game-data'] }, env)
+      return check(
+        root,
+        { json: values.json, gameData: values['game-data'], policy: values.policy },
+        env,
+      )
     case 'format':
       return format(root, { check: values.check })
     case 'generate':

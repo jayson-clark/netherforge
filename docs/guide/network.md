@@ -446,6 +446,11 @@ can also set `presence` (whether it sees players on other servers) and
 After editing either file by hand, `/nfhub credentials reload`; servers whose
 grants changed dial again under the new ones.
 
+**What its projects may require.** `policy.standard=policy-standard.json` in
+`hub.properties` sends that [policy](./server-config.md#a-policy-over-what-projects-require)
+to every server joining with a `standard` credential (and likewise for the
+other roles): the server holds its projects to it, as well as to its own.
+
 **What scripts see.** `nf.network.server_role()` says what this server may
 do. A call it may not make never reaches another server: publishing, asking
 or writing where it may not is an error at the script's line naming

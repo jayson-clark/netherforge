@@ -1036,6 +1036,12 @@ object ProblemCodes {
             PACKAGES,
             "A package in a bundle isn't what the bundle says it is: a file was changed, added or removed."
         )
+    val RUNTIME_POLICY =
+        error(
+            "runtime.policy",
+            PACKAGES,
+            "A package requires something the server's policy (`policy.json`, or the network's for the server's role) refuses."
+        )
     val SETTINGS_FILE =
         warning("settings.file", SETTINGS, "A server's settings file isn't a JSON object, so the package's settings have their defaults.")
     val SETTINGS_VALUE =
@@ -1128,7 +1134,7 @@ object ProblemCodes {
      */
     val reportedAtRuntime: Set<ProblemCode> = setOf(
         RUNTIME_WASM, TERRAIN_SCRIPT_FAILED, MIGRATION_FAILED, VIDEO_STALE, RUNTIME_MINECRAFT_UNSUPPORTED,
-        RUNTIME_UNBUNDLED, RUNTIME_BUNDLE_HASH, RUNTIME_PLUGIN_MISSING, RUNTIME_WEB_DISABLED, RUNTIME_NETWORK_DISABLED,
+        RUNTIME_UNBUNDLED, RUNTIME_BUNDLE_HASH, RUNTIME_POLICY, RUNTIME_PLUGIN_MISSING, RUNTIME_WEB_DISABLED, RUNTIME_NETWORK_DISABLED,
         RUNTIME_BOTS_DISABLED, RUNTIME_BLOCKS, RUNTIME_TERRAIN, RUNTIME_DIMENSION_TYPE, RUNTIME_RESTART, RUNTIME_DATAPACK,
         SETTINGS_FILE, SETTINGS_VALUE, SETTINGS_UNKNOWN, SCRIPT_ERROR, SCRIPT_SLOW, PARTICLES_BUDGET, RUNTIME_PACK_FORMAT
     )

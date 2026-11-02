@@ -151,6 +151,23 @@ fun loadProject(filesJson: String, packagesJson: String?, gameDataJson: String?,
     return encode(ProjectOutline.serializer(), outlineOf(snapshot))
 }
 
+/**
+ * What [policyText] (a `policy.json`) refuses of the project in [filesJson] and the packages in [packagesJson], as
+ * [loadProject] takes them: problems, as JSON; one saying why when the policy isn't one. `netherforge check --policy`.
+ */
+fun checkPolicy(policyText: String, filesJson: String, packagesJson: String?): String {
+    val problems = kotlinx.serialization.builtins.ListSerializer(Problem.serializer())
+    val policy = dev.netherforge.format.project.Policy.parse(policyText).getOrElse {
+        return encode(
+            problems,
+            listOf(Problem(Severity.ERROR, "policy.json", "The policy can't be read: ${it.message}", code = "runtime.policy"))
+        )
+    }
+    val files = CanonicalJson.json.decodeFromString<Map<String, String?>>(filesJson)
+    val snapshot = Projects.load(MapProjectSource(files), null, MapPackages(packagesJson))
+    return encode(problems, policy.check(snapshot))
+}
+
 /** What a WebAssembly module's [bytes] say about it, as a `WasmInfo`: what a host passes [loadProject] for it. */
 fun readWasm(bytes: ByteArray): String = encode(WasmInfo.serializer(), WasmReader.read(bytes))
 
