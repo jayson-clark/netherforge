@@ -153,6 +153,11 @@ object Kinds {
                 ClassifiedPath(kind.id, name, role, document.takeIf { role == PathRole.MAIN }, rest, group = group)
             }
             is Layout.SingleFile -> {
+                if (parts.size == at + 2 && name in layout.variants) {
+                    val file = parts[at + 1]
+                    if (file.startsWith(".") || !file.endsWith(layout.extension) || file.length == layout.extension.length) return null
+                    return ClassifiedPath(kind.id, file.removeSuffix(layout.extension), PathRole.FILE, null, "$name/$file", group = group)
+                }
                 if (parts.size != at + 1) return null
                 val companion = layout.companion
                 if (companion != null && name.endsWith(companion) && name.length > companion.length) {
@@ -173,7 +178,7 @@ object Kinds {
                     PathRole.MAIN,
                     document,
                     name.takeIf {
-                        companion != null
+                        companion != null || layout.variants.isNotEmpty()
                     },
                     group = group
                 )

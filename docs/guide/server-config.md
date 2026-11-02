@@ -623,17 +623,18 @@ databases:
     packages: [shop, ranks]
 ```
 
-| Key          | Meaning                                                                                   | Default                 |
-| ------------ | ----------------------------------------------------------------------------------------- | ----------------------- |
-| `type`       | `mysql` (MariaDB too) or `postgres`.                                                      | required                |
-| `host`       | The database server's host name or address.                                               | `localhost`             |
-| `port`       | Its port.                                                                                 | `3306` / `5432` by type |
-| `database`   | The database on that server.                                                              | required                |
-| `username`   | The user to connect as.                                                                   | empty                   |
-| `password`   | Its password. Never logged, and never readable by a script.                               | empty                   |
-| `pool-size`  | The most statements running at once on this connection (1 to 32).                         | `4`                     |
-| `packages`   | The namespaces of the packages allowed to use it. A package that isn't listed is refused. | none                    |
-| `properties` | Extra driver properties, like `sslMode: REQUIRED`.                                        | none                    |
+| Key             | Meaning                                                                                                      | Default                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| `type`          | `mysql` (MariaDB too) or `postgres`.                                                                         | required                |
+| `host`          | The database server's host name or address.                                                                  | `localhost`             |
+| `port`          | Its port.                                                                                                    | `3306` / `5432` by type |
+| `database`      | The database on that server.                                                                                 | required                |
+| `username`      | The user to connect as.                                                                                      | empty                   |
+| `password`      | Its password. Never logged, and never readable by a script.                                                  | empty                   |
+| `pool-size`     | The most statements running at once on this connection (1 to 32).                                            | `4`                     |
+| `packages`      | The namespaces of the packages allowed to use it. A package that isn't listed is refused.                    | none                    |
+| `properties`    | Extra driver properties, like `sslMode: REQUIRED`.                                                           | none                    |
+| `own-databases` | The namespaces of packages whose own database (`nf.db()`) lives here instead of in a SQLite file. See below. | none                    |
 
 A package needs **two yeses** to use one of these: it asks for a database in
 its own `netherforge.json`, and you list it under the connection's `packages`.
@@ -641,8 +642,8 @@ A package can never open your database on its own say-so.
 
 Things to know:
 
-- **Tables aren't created for you.** A package's `migrations/` only set up its
-  own SQLite database. On a shared server, scripts create their own tables
+- **Tables aren't created for you** on a connection opened by name. A
+  package's `migrations/` set up its own database only. On a shared server, scripts create their own tables
   (`CREATE TABLE IF NOT EXISTS`, in that server's SQL dialect) or you manage
   them yourself. Packages share the connection, so give tables names only
   their package would pick (`shop_scores`).
@@ -651,6 +652,47 @@ Things to know:
 - **The database being down doesn't stop the server.** The first statement
   that needs it fails with a message saying it couldn't connect (the log says
   why), and the next one tries again.
+
+### A package's own database on your server
+
+To run several servers of one project against one database, move the
+packages' own databases there without changing the project: the same
+`nf.db()` calls and the same migrations.
+
+```yaml
+databases:
+  game:
+    type: postgres
+    host: pooler.example
+    database: game_chess
+    username: game_chess
+    password: change-me
+    own-databases: [chess, chess_club] # these packages' nf.db() live here
+```
+
+- Each package listed gets a space of its own, named from its namespace: a
+  schema on PostgreSQL (`chess`), a database beside the one you named on
+  MySQL (`game_chess_chess`, since MySQL's schemas are databases). The user
+  needs the rights to create it (or create it yourself). Spaces keep packages'
+  tables apart by name; packages on one connection share its user, so one
+  package's SQL could still name another's tables in full. Give a package you
+  don't trust with another's data a connection and user of its own.
+- Its migrations run there, each **once** across every server sharing the
+  connection: under a lock the database holds, with what was applied kept in
+  the space's `nf_migrations` table. Two servers starting together apply each
+  migration once. A server whose copy of the package is older than what ran
+  there refuses that package (`migration.ahead`) rather than work against
+  tables it doesn't know.
+- The migrations run are the package's versions for that server,
+  `migrations/postgres/` or `migrations/mysql/` (see
+  [Migrations](../format/migrations.md#on-a-mysql-or-postgresql-server)). A
+  package without them is refused (`migration.dialect`), naming the package
+  and the server type.
+- A package's own database needs only its `requires.db`: `own-databases` is
+  where it lives, not who may open the connection by name (`packages`).
+- `/nf requires` and the startup log say where each package's own database is.
+- A dev server reads this section too: leave `own-databases` out of its
+  `config.yml`, and the project is written and tested on SQLite as before.
 
 ## Script files
 

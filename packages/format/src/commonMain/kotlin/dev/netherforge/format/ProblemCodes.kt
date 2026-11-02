@@ -530,6 +530,24 @@ object ProblemCodes {
         )
     val MIGRATION_DUPLICATE = error("migration.duplicate", MIGRATION, "Two migration files have the same number.")
     val MIGRATION_GAP = error("migration.gap", MIGRATION, "Migration numbers don't run 001, 002, 003 with nothing skipped.")
+    val MIGRATION_DIALECTS =
+        error(
+            "migration.dialects",
+            MIGRATION,
+            "A server's version of a migration (`migrations/postgres/`, `migrations/mysql/`) has no SQLite one beside it, or a dialect has versions of some migrations and not others."
+        )
+    val MIGRATION_DIALECT =
+        error(
+            "migration.dialect",
+            MIGRATION,
+            "A package's own database is on a MySQL or PostgreSQL connection, and its migrations have no versions for that server."
+        )
+    val MIGRATION_AHEAD =
+        error(
+            "migration.ahead",
+            MIGRATION,
+            "A package's shared database has a migration applied that this server's copy of the package doesn't have: a newer one ran there."
+        )
     val MIGRATION_FAILED =
         error("migration.failed", MIGRATION, "A migration couldn't be applied to the package's database, so scripts can't use it.")
 
@@ -1165,7 +1183,8 @@ object ProblemCodes {
      * golden can hold one. The runtime's `ProblemCoverageTest` names the test that produces each.
      */
     val reportedAtRuntime: Set<ProblemCode> = setOf(
-        RUNTIME_WASM, TERRAIN_SCRIPT_FAILED, MIGRATION_FAILED, VIDEO_STALE, RUNTIME_MINECRAFT_UNSUPPORTED,
+        RUNTIME_WASM, TERRAIN_SCRIPT_FAILED, MIGRATION_FAILED, MIGRATION_DIALECT, MIGRATION_AHEAD, VIDEO_STALE,
+        RUNTIME_MINECRAFT_UNSUPPORTED,
         RUNTIME_UNBUNDLED, RUNTIME_BUNDLE_HASH, RUNTIME_PROVIDED_PACKAGE, RUNTIME_BUNDLE_SIGNATURE, RUNTIME_POLICY, RUNTIME_PLUGIN_MISSING,
         RUNTIME_WEB_DISABLED, RUNTIME_NETWORK_DISABLED,
         RUNTIME_BOTS_DISABLED, RUNTIME_BLOCKS, RUNTIME_TERRAIN, RUNTIME_DIMENSION_TYPE, RUNTIME_RESTART, RUNTIME_DATAPACK,

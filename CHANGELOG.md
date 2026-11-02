@@ -11,6 +11,22 @@ release is cut.
 
 ### Added
 
+- **A package's own database on a shared server.** `own-databases` on a
+  `databases:` entry puts those packages' `nf.db()` on the MySQL or
+  PostgreSQL connection, each in a schema (PostgreSQL) or database (MySQL) of
+  its own, so several servers of a project share their data without the
+  project changing. Their migrations run there once across every server,
+  under a database lock, from `migrations/postgres/` or `migrations/mysql/`
+  beside the SQLite ones (`migration.dialects` when a dialect isn't numbered
+  like them, `migration.dialect` when it's missing, `migration.ahead` when a
+  newer copy already migrated the database).
+- **Click and hover in the admin API's messages, held to what's safe.** The
+  `text` of `POST /v1/players/<player>/message` was already MiniMessage; the
+  hub now refuses (400) a click action other than `run_command`,
+  `suggest_command`, `copy_to_clipboard` and `open_url`, a hover other than
+  `show_text`, and text over the network's value limit, and the proxy shows
+  nothing else.
+
 - **One package may reach one private address.** `http.allow-private` in
   `config.yml` lists `{ package, host, port }` allowances: that package (the
   one whose code makes the request) may connect to the addresses `host` stands

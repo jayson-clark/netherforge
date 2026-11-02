@@ -920,6 +920,18 @@ Error. Two migration files have the same number. See [format/migrations.md](migr
 
 Error. Migration numbers don't run 001, 002, 003 with nothing skipped. See [format/migrations.md](migrations.md).
 
+### `migration.dialects` {#migration-dialects}
+
+Error. A server's version of a migration (`migrations/postgres/`, `migrations/mysql/`) has no SQLite one beside it, or a dialect has versions of some migrations and not others. See [format/migrations.md](migrations.md).
+
+### `migration.dialect` {#migration-dialect}
+
+Error. A package's own database is on a MySQL or PostgreSQL connection, and its migrations have no versions for that server. See [format/migrations.md](migrations.md).
+
+### `migration.ahead` {#migration-ahead}
+
+Error. A package's shared database has a migration applied that this server's copy of the package doesn't have: a newer one ran there. See [format/migrations.md](migrations.md).
+
 ### `migration.failed` {#migration-failed}
 
 Error. A migration couldn't be applied to the package's database, so scripts can't use it. See [format/migrations.md](migrations.md).

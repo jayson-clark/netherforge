@@ -313,3 +313,7 @@ control:
 #     pool-size: 4         # most statements running at once (1 to 32)
 #     packages: [shop]     # who may open it; empty lets no package in
 #     properties: {}       # extra driver properties, like sslMode: REQUIRED
+#     own-databases: []    # packages whose own nf.db() lives here, not in a
+#                          # SQLite file: each in a schema (postgres) or
+#                          # database (mysql) of its own, its migrations run
+#                          # once for every server sharing the connection

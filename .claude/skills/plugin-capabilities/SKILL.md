@@ -352,6 +352,10 @@ Servers behind one Velocity proxy, talking through a **hub** the proxy runs. Thr
   drains, moves players and stops. `HubEvents` POSTs each change to the owner's webhook, signed. `network.wait-for-hub-
 seconds` (`NetworkLink.awaitWelcome`) and `require-hub` (`ProjectSession.waitsForHub`) hold the project until the hub
   answers.
+- **Admin messages** (`POST /v1/players/<p>/message`): the text is MiniMessage, held by the hub to `RichText`
+  (clicks `run_command`, `suggest_command`, `copy_to_clipboard`, `open_url`; hovers `show_text`; the value limit:
+  400 otherwise), found by a tag scan that also looks inside a hover's text; the Velocity proxy holds the component
+  Adventure built to the same lists before showing it (`allowed`), so a reading that differs can only refuse more.
 - **The admin API** (`HubAdmin`, `admin.properties` as `AdminClientsFile`, `AdminScope`s per client, never a server's
   credential; constant-time token compare): HTTP and JSON plus SSE `/v1/events` (first `hello` with `Hub.started`/`instance`, then `server_connected` and
   `server_disconnected` for every server as its session is welcomed and closed, beside `server` for changes); servers, players, sends, messages,

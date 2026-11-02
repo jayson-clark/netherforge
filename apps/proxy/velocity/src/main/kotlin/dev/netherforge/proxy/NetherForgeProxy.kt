@@ -36,8 +36,11 @@ import dev.netherforge.network.HubServer
 import dev.netherforge.network.HubSettings
 import dev.netherforge.network.NetworkNames
 import dev.netherforge.network.PlayerState
+import dev.netherforge.network.RichText
 import dev.netherforge.network.ServerFrame
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.event.ClickEvent
+import net.kyori.adventure.text.event.HoverEvent
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import net.kyori.adventure.title.Title
@@ -459,18 +462,35 @@ class NetherForgeProxy @Inject constructor(
         override fun message(id: String, kind: String, text: String, subtitle: String?): String? {
             val player = proxy.getPlayer(UUID.fromString(id)).orElse(null) ?: return "they aren't on the proxy"
             val shown = MiniMessage.miniMessage().deserialize(text)
+            val below = subtitle?.let { MiniMessage.miniMessage().deserialize(it) }
+            // The hub held the text to RichText already; what Adventure built is held to it again, so nothing else is shown.
+            if (!allowed(shown) || (below != null && !allowed(below))) {
+                return "the message has a click or hover action a message may not carry"
+            }
             when (kind) {
                 "chat" -> player.sendMessage(shown)
                 "actionbar" -> player.sendActionBar(shown)
                 "title" -> player.showTitle(
                     Title.title(
                         shown,
-                        subtitle?.let { MiniMessage.miniMessage().deserialize(it) } ?: Component.empty()
+                        below ?: Component.empty()
                     )
                 )
                 else -> return "\"$kind\" isn't chat, title or actionbar"
             }
             return null
+        }
+
+        /** Whether [component] and everything in it clicks and hovers only as [RichText] allows. */
+        private fun allowed(component: Component): Boolean {
+            component.clickEvent()?.let { click ->
+                if (ClickEvent.Action.NAMES.key(click.action()) !in RichText.ALLOWED_CLICKS) return false
+            }
+            component.hoverEvent()?.let { hover ->
+                if (hover.action() != HoverEvent.Action.SHOW_TEXT) return false
+                if (!allowed(hover.value() as Component)) return false
+            }
+            return component.children().all(::allowed)
         }
 
         override fun kick(id: String, message: String): String? {

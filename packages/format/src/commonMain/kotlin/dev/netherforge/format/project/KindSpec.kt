@@ -32,8 +32,13 @@ sealed interface Layout {
      * but its [companion], when it has one: an optional document of the same
      * name (`<folder>/<id><companion>`) that says more about the resource and
      * means nothing without the file (a structure's `.json` beside its `.nbt`).
+     * [variants] are folders beside the files whose file of the same name is
+     * part of the same resource (`migrations/postgres/001_init.sql` is
+     * `001_init`'s PostgreSQL version): with any, every file of the resource
+     * is in its files, the main one by its name and a variant's as
+     * `<variant>/<name>`.
      */
-    data class SingleFile(val extension: String, val companion: String? = null) : Layout
+    data class SingleFile(val extension: String, val companion: String? = null, val variants: Set<String> = emptySet()) : Layout
 }
 
 /** What format makes of a kind's files. */

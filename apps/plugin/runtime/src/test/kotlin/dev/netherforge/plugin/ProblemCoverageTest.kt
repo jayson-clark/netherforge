@@ -22,6 +22,8 @@ class ProblemCoverageTest {
         "runtime.wasm" to "wasm/WasmModulesTest",
         "terrain.script-failed" to "terrain/TerrainTest",
         "migration.failed" to "store/PackageDatabaseTest",
+        "migration.dialect" to "store/SharedOwnDatabaseTest",
+        "migration.ahead" to "store/SharedOwnDatabaseTest",
         "video.stale" to "screen/ScreenTest",
         "runtime.minecraft-unsupported" to "session/ReloadTest",
         "runtime.unbundled" to "project/PackagesTest",

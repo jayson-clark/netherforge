@@ -46,6 +46,46 @@ internal object SqlText {
     }
 
     /**
+     * [sql] cut into its statements, each without its `;`, by the same reading as [problem]: a `;` in a string, a
+     * quoted name or a comment doesn't end one, and what's only whitespace and comments isn't one. For a server that
+     * takes one statement at a time (MySQL), to run a migration file of several.
+     */
+    fun statements(sql: String): List<String> {
+        val found = ArrayList<String>()
+        var start = 0
+        var content = false
+        var i = 0
+        fun end(at: Int) {
+            if (content) found += sql.substring(start, at).trim()
+            start = at + 1
+            content = false
+        }
+        while (i < sql.length) {
+            val c = sql[i]
+            when {
+                c == ';' -> {
+                    end(i)
+                    i++
+                }
+                c.isWhitespace() -> i++
+                c == '-' && sql.startsWith("--", i) -> i = sql.indexOf('\n', i).let { if (it < 0) sql.length else it + 1 }
+                c == '/' && sql.startsWith("/*", i) -> i = sql.indexOf("*/", i + 2).let { if (it < 0) sql.length else it + 2 }
+                c == '\'' || c == '"' || c == '`' || c == '[' -> {
+                    content = true
+                    val close = if (c == '[') ']' else c
+                    i = sql.indexOf(close, i + 1).let { if (it < 0) sql.length else it + 1 }
+                }
+                else -> {
+                    content = true
+                    i++
+                }
+            }
+        }
+        end(sql.length)
+        return found
+    }
+
+    /**
      * Why [sql] can't run on a package's own SQLite database, or null: a
      * statement that reaches another file. `ATTACH` (another package's
      * database, the runtime's store, a new file anywhere), `VACUUM` (`VACUUM

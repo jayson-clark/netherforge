@@ -31,7 +31,8 @@ import java.util.concurrent.atomic.AtomicInteger
  *   restarts.
  * - `POST /v1/players/<id or name>/send` `{ "server" | "group", "balance"?, "data"?, "wait"? }` (players:send): answers
  *   once they're on their way, or why not.
- * - `POST /v1/players/<id or name>/message` `{ "kind": "chat" | "title" | "actionbar", "text", "subtitle"? }`
+ * - `POST /v1/players/<id or name>/message` `{ "kind": "chat" | "title" | "actionbar", "text", "subtitle"? }`, the text
+ *   MiniMessage held to [RichText] (clicks that run or suggest a command, copy or open a link; hovers that show text)
  *   (players:message), `POST /v1/players/<id or name>/kick` `{ "message" }` (players:kick).
  * - `POST /v1/channels/publish` `{ "channel", "value", "server"?, "group"? }` (channels:publish).
  * - `GET /v1/events?listen=<channels>&place=<groups>` (Server-Sent Events): presence (presence:read), servers
@@ -318,6 +319,7 @@ class HubAdmin(
                 ) {
                     throw Fail(400, "\"${message.kind}\" isn't chat, title or actionbar")
                 }
+                RichText.problem(message.text, message.subtitle, hub.maxValueBytes)?.let { throw Fail(400, it) }
                 hub.adminMessage(player, message.kind, message.text, message.subtitle)?.let { throw Fail(404, it) }
                 answer(exchange, 200, Answer())
             }

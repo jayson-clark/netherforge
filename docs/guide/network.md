@@ -609,17 +609,34 @@ That prints the client's token once, and keeps it in
 `Authorization: Bearer <token>`, and may do only what the client's scopes
 allow; `/nfhub admins revoke <id>` ends it and its streams.
 
-| Scope              | Allows                                                                                                                                |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `servers:read`     | `GET /v1/servers` (each with its group, state, players and room), and server changes streamed.                                        |
-| `servers:write`    | `POST /v1/servers`, `DELETE /v1/servers/<name>`, `POST /v1/servers/<name>/drain`.                                                     |
-| `presence:read`    | `GET /v1/players`, and joins, moves and leaves streamed.                                                                              |
-| `players:send`     | `POST /v1/players/<id or name>/send` `{ "server" \| "group", "balance", "data", "wait" }`.                                            |
-| `players:message`  | `POST /v1/players/<id or name>/message` `{ "kind": "chat" \| "title" \| "actionbar", "text" }`, shown by the proxy wherever they are. |
-| `players:kick`     | `POST /v1/players/<id or name>/kick` `{ "message" }`.                                                                                 |
-| `channels:publish` | `POST /v1/channels/publish` `{ "channel": "lobby:news", "value", "server", "group" }`.                                                |
-| `channels:read`    | Messages on the channels its stream listens to, and requests addressed to it.                                                         |
-| `placement`        | Deciding where players sent to a group, or logging in, go.                                                                            |
+| Scope              | Allows                                                                                                                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `servers:read`     | `GET /v1/servers` (each with its group, state, players and room), and server changes streamed.                                                                |
+| `servers:write`    | `POST /v1/servers`, `DELETE /v1/servers/<name>`, `POST /v1/servers/<name>/drain`.                                                                             |
+| `presence:read`    | `GET /v1/players`, and joins, moves and leaves streamed.                                                                                                      |
+| `players:send`     | `POST /v1/players/<id or name>/send` `{ "server" \| "group", "balance", "data", "wait" }`.                                                                    |
+| `players:message`  | `POST /v1/players/<id or name>/message` `{ "kind": "chat" \| "title" \| "actionbar", "text", "subtitle" }`, shown by the proxy wherever they are (see below). |
+| `players:kick`     | `POST /v1/players/<id or name>/kick` `{ "message" }`.                                                                                                         |
+| `channels:publish` | `POST /v1/channels/publish` `{ "channel": "lobby:news", "value", "server", "group" }`.                                                                        |
+| `channels:read`    | Messages on the channels its stream listens to, and requests addressed to it.                                                                                 |
+| `placement`        | Deciding where players sent to a group, or logging in, go.                                                                                                    |
+
+**Messages.** A message's `text` (and a title's `subtitle`) is MiniMessage,
+as scripts write it, so a service can put the answer to a question one click
+away:
+
+```json
+{
+  "kind": "chat",
+  "text": "Alice invited you. <green><click:run_command:'/party accept Alice'><hover:show_text:'<gray>Join her party'>[Accept]"
+}
+```
+
+A click may only `run_command`, `suggest_command`, `copy_to_clipboard` or
+`open_url`, and a hover only `show_text`; anything else, or a message over the
+network's value limit, is refused with `400` before it goes anywhere. A
+command clicked runs as if the player typed it, through the same proxy and
+server with their own permissions.
 
 **The stream.** `GET /v1/events` stays open and sends what the client's scopes
 allow: `player_joined`, `player_moved`, `player_left`, `server_connected` and
