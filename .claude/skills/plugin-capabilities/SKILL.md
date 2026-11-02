@@ -315,7 +315,9 @@ Servers behind one Velocity proxy, talking through a **hub** the proxy runs. Thr
   `ProxyMove`, `ProxyRegister`, `ProxyMessage`, `ProxyKick`. Several proxies may join at once (each player's
   `PlayerState.proxy` says which holds them; a player logging in on a second is refused or takes over, as
   `duplicate-login` says; `/v1/proxies` lists
-  them and drains one); with none, the hub has no servers. `HubSettings` lives in `:network` for both.
+  them, `synced` from `RemoteProxy.has`, and drains one). A proxy joining gets `ProxySync`, every server added at run
+  time, after its welcome, and holds logins until it has applied it (`SYNC_WAIT_SECONDS`); `HubProxy.fill` sends a
+  server added again at the same address to the proxies that lack it); with none, the hub has no servers. `HubSettings` lives in `:network` for both.
 - **Credentials and roles** (`CredentialsFile`, `credentials.properties` beside `hub.properties`; `/nfhub credentials`):
   a server proves its credential's secret instead of the shared one, and the credential's `Grants` (a role's preset:
   `trusted` everything, `standard` its `owns` namespaces and what `share.<role>` grants, `isolated` only what's shared and

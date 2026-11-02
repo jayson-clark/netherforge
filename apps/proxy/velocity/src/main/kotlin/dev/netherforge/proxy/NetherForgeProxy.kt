@@ -75,6 +75,18 @@ class NetherForgeProxy @Inject constructor(
     private val logins = java.util.concurrent.ConcurrentHashMap<Long, CompletableFuture<HubFrame.LoginPlaced>>()
     private val loginIds = java.util.concurrent.atomic.AtomicLong(1)
 
+    /**
+     * Completes once the hub has sent this proxy every server added at run time ([HubFrame.ProxySync]) and it has
+     * them: logins wait for it (at most [SYNC_WAIT_SECONDS]), so none lands on a proxy missing half the network. A new
+     * one each time the link drops, since the hub may have added servers while it was away.
+     */
+    @Volatile
+    private var synced = CompletableFuture<Unit>()
+
+    /** Whether it ever had the hub's servers: until then logins wait even while the hub can't be reached. */
+    @Volatile
+    private var everSynced = false
+
     /** The hub asked this proxy to take no new logins (it's about to restart). */
     @Volatile
     private var draining = false
@@ -173,10 +185,22 @@ class NetherForgeProxy @Inject constructor(
                         client.send(ServerFrame.ProxyResult(frame.id, it))
                     }
                     is HubFrame.ProxyRegister -> {
-                        velocity.register(frame.name, frame.host, frame.port)?.let {
-                            logger.warn("NetherForge: couldn't add ${frame.name}: $it")
-                        }
+                        place(frame.name, frame.host, frame.port)
                         reportServers(client)
+                    }
+                    is HubFrame.ProxySync -> {
+                        val wanted = frame.servers.map { it.name.lowercase() }.toSet()
+                        val fixed = proxy.configuration.servers.keys.map { it.lowercase() }.toSet()
+                        // Run-time servers the hub no longer holds (taken off while this proxy was away) come off.
+                        for (server in proxy.allServers) {
+                            val name = server.serverInfo.name.lowercase()
+                            if (name !in fixed && name !in wanted) proxy.unregisterServer(server.serverInfo)
+                        }
+                        for (server in frame.servers) place(server.name, server.host, server.port)
+                        reportServers(client)
+                        logger.info("NetherForge: has the hub's ${frame.servers.size} servers added at run time; taking logins")
+                        everSynced = true
+                        synced.complete(Unit)
                     }
                     is HubFrame.ProxyUnregister -> {
                         velocity.unregister(frame.name)
@@ -197,6 +221,7 @@ class NetherForgeProxy @Inject constructor(
 
             override fun disconnected(why: String) {
                 logger.warn("NetherForge: lost the network's hub ($why); trying again")
+                if (synced.isDone) synced = CompletableFuture()
                 for (waiting in logins.values) waiting.complete(HubFrame.LoginPlaced(-1))
                 logins.clear()
             }
@@ -215,6 +240,21 @@ class NetherForgeProxy @Inject constructor(
             )
         remote = client
         client.start()
+    }
+
+    /** Adds [name] at [host]:[port], or moves it there; a server already there is left as it is. */
+    private fun place(name: String, host: String, port: Int) {
+        val existing = proxy.getServer(name).orElse(null)?.serverInfo
+        if (existing != null) {
+            val address = existing.address
+            if (address.hostString == host && address.port == port) return
+            if (proxy.configuration.servers.keys.any { it.equals(name, ignoreCase = true) }) {
+                logger.warn("NetherForge: the hub asked to add $name, one of this proxy's own servers; it stays as configured")
+                return
+            }
+            proxy.unregisterServer(existing)
+        }
+        proxy.registerServer(ServerInfo(name, InetSocketAddress.createUnresolved(host, port)))
     }
 
     private fun reportServers(client: HubClient) {
@@ -255,7 +295,7 @@ class NetherForgeProxy @Inject constructor(
      */
     @Subscribe(order = PostOrder.LAST)
     fun onChooseInitialServer(event: PlayerChooseInitialServerEvent): EventTask? {
-        remote?.let { client -> return askRemote(client, event) }
+        remote?.let { client -> return awaitSync(client, event) }
         val hub = hub ?: return null
         val placed = hub.placeLogin(event.player.uniqueId.toString(), event.player.username)
         if (placed.isDone && placed.join().server == null && placed.join().deny == null) return null
@@ -282,6 +322,20 @@ class NetherForgeProxy @Inject constructor(
     }
 
     /** A login placed by the hub running on its own: asked, and waited for (no longer than a hold may last). */
+    private fun awaitSync(client: HubClient, event: PlayerChooseInitialServerEvent): EventTask? {
+        val sync = synced
+        if (!sync.isDone && (client.connected || !everSynced)) {
+            // Joined (or joining) the hub but without its servers yet: wait for them, then place the login.
+            return EventTask.withContinuation { continuation ->
+                sync.completeOnTimeout(Unit, SYNC_WAIT_SECONDS, java.util.concurrent.TimeUnit.SECONDS).whenComplete { _, _ ->
+                    val placing = askRemote(client, event)
+                    if (placing == null) continuation.resume() else placing.execute(continuation)
+                }
+            }
+        }
+        return askRemote(client, event)
+    }
+
     private fun askRemote(client: HubClient, event: PlayerChooseInitialServerEvent): EventTask? {
         if (!client.connected) return null
         val id = loginIds.getAndIncrement()
@@ -614,5 +668,8 @@ class NetherForgeProxy @Inject constructor(
     private companion object {
         /** How long a login may wait for the hub running on its own to place it: a hold's longest, and a little. */
         const val LOGIN_WAIT_SECONDS = 35L
+
+        /** How long a login waits for the proxy to have the hub's servers before it goes ahead with what it has. */
+        const val SYNC_WAIT_SECONDS = 5L
     }
 }

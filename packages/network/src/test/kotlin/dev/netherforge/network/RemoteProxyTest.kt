@@ -38,6 +38,10 @@ class RemoteProxyTest {
                     servers += frame.name
                     link.send(ServerFrame.ProxyServers(servers.toList(), listOf("lobby", "arena-1")))
                 }
+                is HubFrame.ProxySync -> {
+                    for (server in frame.servers) if (server.name !in servers) servers += server.name
+                    if (::link.isInitialized) link.send(ServerFrame.ProxyServers(servers.toList(), listOf("lobby", "arena-1")))
+                }
                 else -> Unit
             }
         }
@@ -161,7 +165,7 @@ class RemoteProxyTest {
         one.link.send(ServerFrame.ProxyPresence(listOf(PlayerState("u-1", "Ann", "lobby"))))
         two.link.send(ServerFrame.ProxyPresence(listOf(PlayerState("u-2", "Bea", "lobby"))))
         assertEquals(mapOf("u-1" to "velocity-1", "u-2" to "velocity-2"), hub.adminPlayers().associate { it.id to it.proxy })
-        assertEquals(listOf(Hub.ProxyView("velocity-1", 1, false), Hub.ProxyView("velocity-2", 1, false)), hub.proxies())
+        assertEquals(listOf(Hub.ProxyView("velocity-1", 1, false, true), Hub.ProxyView("velocity-2", 1, false, true)), hub.proxies())
 
         lobbyLink.send(ServerFrame.Send(1, listOf("u-2"), "arena-1"))
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
@@ -183,6 +187,33 @@ class RemoteProxyTest {
         assertNull(hub.drainProxy("velocity-2", true))
         assertEquals(listOf(HubFrame.ProxyDrain(true)), two.frames.filterIsInstance<HubFrame.ProxyDrain>())
         assertTrue(hub.proxies().single { it.name == "velocity-2" }.draining)
+    }
+
+    @Test
+    fun `a proxy joining later gets every server added at run time, and adding one again fills in whoever lacks it`() {
+        val one = connectProxy("velocity-1")
+        assertNull(hub.adminRegister("arena-9", "10.0.0.9", 25565, "arena", null))
+        LocalLink(hub, "arena-7", "s3cret", Recorder(), register = Registration("10.0.0.7", 25565)).start()
+        assertEquals(listOf("arena-9", "arena-7"), one.frames.filterIsInstance<HubFrame.ProxyRegister>().map { it.name })
+
+        val two = connectProxy("velocity-2")
+        assertEquals(
+            HubFrame.ProxySync(
+                listOf(HubFrame.ProxyServer("arena-9", "10.0.0.9", 25565, "arena"), HubFrame.ProxyServer("arena-7", "10.0.0.7", 25565))
+            ),
+            two.frames.filterIsInstance<HubFrame.ProxySync>().single()
+        )
+        assertTrue("arena-9" in two.servers && "arena-7" in two.servers)
+        assertEquals(listOf(true, true), hub.proxies().map { it.synced })
+
+        // Proxy two loses arena-9 (it was taken off by hand): it isn't synced, and adding it again fills it in alone.
+        two.servers -= "arena-9"
+        two.link.send(ServerFrame.ProxyServers(two.servers.toList(), listOf("lobby", "arena-1")))
+        assertEquals(listOf(true, false), hub.proxies().map { it.synced })
+        assertNull(hub.adminRegister("arena-9", "10.0.0.9", 25565, "arena", null))
+        assertEquals(1, one.frames.count { it is HubFrame.ProxyRegister && it.name == "arena-9" }, "the one that has it hears nothing")
+        assertEquals(1, two.frames.count { it is HubFrame.ProxyRegister && it.name == "arena-9" })
+        assertEquals(listOf(true, true), hub.proxies().map { it.synced })
     }
 
     private fun answer(proxy: FakeProxy): HubFrame.LoginPlaced {

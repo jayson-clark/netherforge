@@ -27,7 +27,8 @@ import java.util.concurrent.atomic.AtomicInteger
  *   (servers:write).
  * - `GET /v1/players` (presence:read).
  * - `GET /v1/proxies` (servers:read), `POST /v1/proxies/<name>/drain` (servers:write): a hub running on its own's
- *   proxies, and one taking no new logins before it restarts.
+ *   proxies (each `synced` once it has every server added at run time), and one taking no new logins before it
+ *   restarts.
  * - `POST /v1/players/<id or name>/send` `{ "server" | "group", "balance"?, "data"?, "wait"? }` (players:send): answers
  *   once they're on their way, or why not.
  * - `POST /v1/players/<id or name>/message` `{ "kind": "chat" | "title" | "actionbar", "text", "subtitle"? }`
@@ -88,7 +89,7 @@ class HubAdmin(
     data class Drain(val draining: Boolean = true)
 
     @Serializable
-    data class ProxyView(val name: String, val players: Int, val draining: Boolean)
+    data class ProxyView(val name: String, val players: Int, val draining: Boolean, val synced: Boolean)
 
     @Serializable
     data class Proxies(val proxies: List<ProxyView>)
@@ -196,7 +197,7 @@ class HubAdmin(
             }
             parts == listOf("proxies") && method == "GET" -> {
                 client.need(AdminScope.SERVERS_READ)
-                answer(exchange, 200, Proxies(hub.proxies().map { ProxyView(it.name, it.players, it.draining) }))
+                answer(exchange, 200, Proxies(hub.proxies().map { ProxyView(it.name, it.players, it.draining, it.synced) }))
             }
             parts.size == 3 && parts[0] == "proxies" && parts[2] == "drain" && method == "POST" -> {
                 client.need(AdminScope.SERVERS_WRITE)

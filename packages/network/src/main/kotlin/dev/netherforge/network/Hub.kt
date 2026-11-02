@@ -142,6 +142,8 @@ class Hub(
         if (existing == null || existing.host != host || existing.port != port) {
             if (existing != null) proxy.unregister(existing.name)
             proxy.register(kept, host, port)?.let { return "the proxy couldn't add it: $it" }
+        } else {
+            proxy.fill(kept, host, port)
         }
         registered[kept] = Registered(kept, host, port, null, credential, null, byAdmin = true, group = group)
         log.info("NetherForge hub: the admin API added $kept at $host:$port" + group?.let { " in $it" }.orEmpty())
@@ -676,6 +678,8 @@ class Hub(
                         return refuse("the proxy couldn't add it: $why")
                     }
                     log.info("NetherForge hub: $name added itself to the proxy's servers at $host:${registering.port}")
+                } else {
+                    proxy.fill(existing.name, host, registering.port)
                 }
                 said = existing?.name ?: name
                 registered[said] = Registered(said, host, registering.port, frame.instance, credential?.id, null)
@@ -763,6 +767,12 @@ class Hub(
             log.info("NetherForge hub: the proxy ${frame.server} connected from ${peer.address}")
             peer.secure(Channel.hub(proven, nonce, frame.nonce, frame.server, frame.credential))
             send(HubFrame.Welcome(frame.server, servers(), players.values.toList(), limits.maxValueBytes, grants))
+            // Before it takes logins, the proxy gets every server added at run time: those it missed while away.
+            send(
+                HubFrame.ProxySync(
+                    registered.values.map { HubFrame.ProxyServer(it.name, it.host, it.port, it.group ?: byName[it.name]?.group) }
+                )
+            )
         }
 
         /** Under the lock: what a proxy says, and asks. */
@@ -1113,12 +1123,12 @@ class Hub(
     }
 
     /** The proxies of a hub that runs on its own, with how many players are on each and whether it's draining. */
-    data class ProxyView(val name: String, val players: Int, val draining: Boolean)
+    data class ProxyView(val name: String, val players: Int, val draining: Boolean, val synced: Boolean)
 
     fun proxies(): List<ProxyView> = synchronized(lock) {
         val remote = proxy as? RemoteProxy ?: return emptyList()
         val counts = players.values.groupingBy { it.proxy }.eachCount()
-        remote.names().map { ProxyView(it, counts[it] ?: 0, remote.isDraining(it)) }
+        remote.names().map { ProxyView(it, counts[it] ?: 0, remote.isDraining(it), remote.has(it, registered.keys)) }
     }
 
     /** The admin API's: proxy [name] takes no new logins ([draining]), or takes them again. Null once asked, or why not. */

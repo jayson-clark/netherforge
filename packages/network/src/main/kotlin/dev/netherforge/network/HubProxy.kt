@@ -23,6 +23,12 @@ interface HubProxy {
     /** Adds [name] at [host]:[port] to the proxy's servers, as a server registers itself. Null once it has, or why not. */
     fun register(name: String, host: String, port: Int): String? = "this proxy can't add servers while it runs"
 
+    /**
+     * [name] is added again at the same [host]:[port]: any part of the proxy that lacks it (a proxy of several that
+     * joined later) gets it; the rest change nothing.
+     */
+    fun fill(name: String, host: String, port: Int) {}
+
     /** Takes [name] (one [register] added) off the proxy's servers. */
     fun unregister(name: String) {}
 

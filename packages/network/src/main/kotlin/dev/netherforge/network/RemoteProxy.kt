@@ -19,6 +19,9 @@ class RemoteProxy : HubProxy {
 
         @Volatile var fixed: Set<String> = emptySet()
 
+        /** The servers the proxy itself last said it has (lowercase), not what the hub expects it to have. */
+        @Volatile var reported: Set<String> = emptySet()
+
         @Volatile var draining = false
     }
 
@@ -39,6 +42,12 @@ class RemoteProxy : HubProxy {
 
     fun isDraining(name: String) = proxies[name]?.draining == true
 
+    /** Whether proxy [name] said it has every one of [servers]: the hub's full list of servers added at run time. */
+    fun has(name: String, servers: Collection<String>): Boolean {
+        val reported = proxies[name]?.reported ?: return false
+        return servers.all { it.lowercase() in reported }
+    }
+
     internal fun attach(name: String, link: (HubFrame) -> Unit) {
         proxies.put(name, Joined(link))?.let { gone(name, it) }
     }
@@ -50,6 +59,7 @@ class RemoteProxy : HubProxy {
     internal fun servers(name: String, all: List<String>, fixed: List<String>) {
         val proxy = proxies[name] ?: return
         proxy.servers = all
+        proxy.reported = all.map { it.lowercase() }.toSet()
         proxy.fixed = fixed.map { it.lowercase() }.toSet()
     }
 
@@ -94,18 +104,25 @@ class RemoteProxy : HubProxy {
 
     override fun register(name: String, host: String, port: Int): String? {
         if (proxies.isEmpty()) return "no proxy is connected to the hub"
+        fill(name, host, port)
+        return null
+    }
+
+    /** Sends [name] to every proxy that lacks it; one that has it is left alone, so adding it again changes nothing. */
+    override fun fill(name: String, host: String, port: Int) {
         for (proxy in proxies.values) {
+            if (proxy.servers.any { it.equals(name, ignoreCase = true) }) continue
             proxy.link(HubFrame.ProxyRegister(name, host, port))
             // Until the proxy says its servers again, the hub knows it has it.
             proxy.servers = proxy.servers + name
         }
-        return null
     }
 
     override fun unregister(name: String) {
         for (proxy in proxies.values) {
             proxy.link(HubFrame.ProxyUnregister(name))
             proxy.servers = proxy.servers.filterNot { it.equals(name, ignoreCase = true) }
+            proxy.reported = proxy.reported - name.lowercase()
         }
     }
 

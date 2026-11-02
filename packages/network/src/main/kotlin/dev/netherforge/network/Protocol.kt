@@ -307,6 +307,19 @@ sealed interface HubFrame {
     @SerialName("proxy_register")
     data class ProxyRegister(val name: String, val host: String, val port: Int) : HubFrame
 
+    /**
+     * Every server added at run time the hub holds, sent to a proxy as it joins (or rejoins): it adds the ones it lacks,
+     * moves any at another address, takes off run-time servers that aren't among them, says its servers again
+     * ([ServerFrame.ProxyServers]), and takes logins from then on.
+     */
+    @Serializable
+    @SerialName("proxy_sync")
+    data class ProxySync(val servers: List<ProxyServer>) : HubFrame
+
+    /** A server added at run time, as [ProxySync] lists it. */
+    @Serializable
+    data class ProxyServer(val name: String, val host: String, val port: Int, val group: String? = null)
+
     @Serializable
     @SerialName("proxy_unregister")
     data class ProxyUnregister(val name: String) : HubFrame

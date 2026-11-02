@@ -696,7 +696,11 @@ player logging in through a second proxy while online through another is
 refused, or with `duplicate-login=takeover` in `hub.properties` takes over,
 the old session kicked. Before restarting a proxy, drain it with the admin
 API (`POST /v1/proxies/<name>/drain`): it takes no new logins, so players
-come in through the others. `GET /v1/proxies` lists them with their players.
+come in through the others. `GET /v1/proxies` lists them with their players,
+and `synced` for each: whether it has every server added at run time. A proxy
+joining (a restart, a new replica) gets the hub's whole list of those servers
+first, and holds logins until it has them (five seconds at most); adding a
+server again at the same address fills in any proxy that lacks it.
 
 **Shared maps in a database.** With `store.url` (a PostgreSQL JDBC URL, and
 `store.user`, `store.password`), the hub keeps the network's maps there
