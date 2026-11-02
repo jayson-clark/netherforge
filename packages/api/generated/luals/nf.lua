@@ -347,7 +347,7 @@ function nf.after(ticks, callback) end
 ---@return Task
 function nf.every(ticks, callback) end
 
---- Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.worlds.import`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.send_player`, `nf.network.send_players`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.
+--- Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.worlds.import`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.ban`, `nf.network.unban`, `nf.network.mute`, `nf.network.unmute`, `nf.network.send_player`, `nf.network.send_players`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.
 ---@param callback async fun(...: any) The task: plain Lua that may wait.
 ---@param ... any Passed to `callback`.
 ---@return Task # Call `:cancel()` on it to end it early.
@@ -1516,6 +1516,69 @@ function nf.network.channel(name) end
 ---@param name NetworkMapName Its name: lowercase letters, digits and `_ . - /`, at most 64 characters. It's the calling package's own (`shop` names `"sales"` `shop:sales`), so packages can't collide; `namespace:name` names one of a package it depends on.
 ---@return NetworkMap
 function nf.network.map(name) end
+
+--- Bans a player from the whole network: the proxy turns them away before they reach any server, until it runs out or `unban`, and kicks them now when they're online. Kept by the network's hub, with the reason, who did it and when. Needs `moderation` declared, and a server whose credential may moderate (`moderation=true` on the hub; a trusted server may). It fails (`nil, err`) when this server isn't connected or may not moderate, or `expires` is past. It works off the main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+--- Needs `"requires": { "moderation": true }` in `netherforge.json`: without it, calling it is an error.
+---@param player Player|string Who: a player on this server, or anyone by name (online in the network) or UUID.
+---@param options? NetworkSanctionOptions Why, and until when.
+---@param callback? fun(done: boolean?, err: string?) Called on the main thread once it's done, as this script's code, with `true` once the hub has it (or `nil` and why not). Not called if the script has stopped by then.
+---@return boolean? # Only without a callback, in a task: `true` once the hub has it, or `nil`.
+---@return string? # Why it failed, when it did; `nil` when it worked.
+---@overload async fun(player: Player|string, options?: NetworkSanctionOptions): boolean?, string?
+---@overload fun(player: Player|string, options?: NetworkSanctionOptions, callback: fun(done: boolean?, err: string?))
+function nf.network.ban(player, options, callback) end
+
+--- Lifts a player's network ban. It fails when they weren't banned, or as `ban` does. It works off the main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+--- Needs `"requires": { "moderation": true }` in `netherforge.json`: without it, calling it is an error.
+---@param player Player|string Who, by name or UUID.
+---@param callback? fun(done: boolean?, err: string?) Called on the main thread once it's done, as this script's code, with `true` once the hub has lifted it (or `nil` and why not). Not called if the script has stopped by then.
+---@return boolean? # Only without a callback, in a task: `true` once the hub has lifted it, or `nil`.
+---@return string? # Why it failed, when it did; `nil` when it worked.
+---@overload async fun(player: Player|string): boolean?, string?
+---@overload fun(player: Player|string, callback: fun(done: boolean?, err: string?))
+function nf.network.unban(player, callback) end
+
+--- Mutes a player across the network: every server's NetherForge holds back their chat (they're told why), until it runs out or `unmute`. As `ban` for what it needs and when it fails. It works off the main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+--- Needs `"requires": { "moderation": true }` in `netherforge.json`: without it, calling it is an error.
+---@param player Player|string Who: a player on this server, or anyone by name or UUID.
+---@param options? NetworkSanctionOptions Why, and until when.
+---@param callback? fun(done: boolean?, err: string?) Called on the main thread once it's done, as this script's code, with `true` once the hub has it (or `nil` and why not). Not called if the script has stopped by then.
+---@return boolean? # Only without a callback, in a task: `true` once the hub has it, or `nil`.
+---@return string? # Why it failed, when it did; `nil` when it worked.
+---@overload async fun(player: Player|string, options?: NetworkSanctionOptions): boolean?, string?
+---@overload fun(player: Player|string, options?: NetworkSanctionOptions, callback: fun(done: boolean?, err: string?))
+function nf.network.mute(player, options, callback) end
+
+--- Lifts a player's network mute. It fails when they weren't muted, or as `ban` does. It works off the main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+--- Needs `"requires": { "moderation": true }` in `netherforge.json`: without it, calling it is an error.
+---@param player Player|string Who, by name or UUID.
+---@param callback? fun(done: boolean?, err: string?) Called on the main thread once it's done, as this script's code, with `true` once the hub has lifted it (or `nil` and why not). Not called if the script has stopped by then.
+---@return boolean? # Only without a callback, in a task: `true` once the hub has lifted it, or `nil`.
+---@return string? # Why it failed, when it did; `nil` when it worked.
+---@overload async fun(player: Player|string): boolean?, string?
+---@overload fun(player: Player|string, callback: fun(done: boolean?, err: string?))
+function nf.network.unmute(player, callback) end
+
+--- Whether a player is banned from the network now, as this server's copy of the hub's bans says.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@param player Player|string Who, by name (online in the network) or UUID.
+---@return boolean
+function nf.network.is_banned(player) end
+
+--- Whether a player is muted across the network now.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@param player Player|string Who, by name (online in the network) or UUID.
+---@return boolean
+function nf.network.is_muted(player) end
+
+--- Reports a player to whoever moderates the network: the hub keeps it (`/nfhub reports`, the admin API) and tells its webhook. Goes at once, without waiting.
+--- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
+---@param player Player|string Who is reported: a player on this server, or anyone by name or UUID.
+---@param reason string Why, in a few words (at most 500 characters).
+---@param details? any What else to say: where, what was said. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line.
+---@param by? Player? Who reports them, when a player does.
+---@return boolean # `false` when it didn't go: this server isn't connected.
+function nf.network.report(player, reason, details, by) end
 
 --- Sends a player to another server of the network, through the proxy, with `data` for that server's scripts: its `player_arrive` handlers hear it once they've joined there. The player may be on any server, this one or another (a server whose credential isn't trusted sends only its own). Sent to a group, the hub picks the instance as the group's balancing says (`least`: the one with the fewest players that has room; `fill`: the fullest that still has room) or `target.balance`, passing over instances that don't take players now (`set_accepting`) or are full (`network.capacity`). It fails (`nil, err`) when this server isn't connected, the player isn't online, there's no such server or group, no instance has room, they're already there, or the proxy couldn't move them (the server is down, a proxy plugin cancelled it). It works off the main thread, so its server arrives later: give `callback`, which is called with `server, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `server, err`. Without a callback outside a task, it's an error. When it fails, `server` is `nil` and `err` says why.
 --- Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.
@@ -8127,6 +8190,11 @@ function Event:uncancel() end
 ---@field data any What arrives with them, when `data` isn't given.
 ---@field wait number? Seconds it may wait, when there's no instance with room yet (none is ready, all are full, the server is starting): the hub holds it, first come first served, tells whatever runs the servers that the group is wanted (its webhook), and sends them as soon as one has room. They stay where they are meanwhile. At most 600; it fails after that, saying why it waited.
 ---@field on_wait fun(position: integer, status: string?)? Called while it waits, each time its place in the queue changes (1 is next), or with `status` when a service placing the group's players holds them (`position` 0). Without it, each player waiting who's on this server sees their place, or the status, on their action bar.
+
+--- How `nf.network.ban` and `mute` sanction. A key that isn't one of these is an error.
+---@class NetworkSanctionOptions
+---@field reason string? Why: shown to them, and kept with it.
+---@field expires integer? When it runs out, as Unix time in milliseconds (like `nf.server.unix_time()`); never when left out.
 
 --- What this server may do in the network, from `nf.network.server_role`.
 ---@class NetworkRole

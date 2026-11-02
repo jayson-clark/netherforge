@@ -34,7 +34,10 @@ enum class AdminScope(val word: String) {
     CHANNELS_READ("channels:read"),
 
     /** Decide which server players sent to a group (or logging in) go to. */
-    PLACEMENT("placement");
+    PLACEMENT("placement"),
+
+    /** Ban and mute players network-wide, read reports, and take servers and groups off the network. */
+    MODERATION("moderation");
 
     companion object {
         fun of(word: String): AdminScope? = entries.firstOrNull { it.word == word }

@@ -9020,6 +9020,54 @@ namespaces["nf.network"] = function(scope, ns)
     return prim["nf.network.map"](scope, name)
   end
 
+  function ns.ban(player, options, callback)
+    local waker, task, token = async.begin("nf.network.ban", callback)
+    local wait_id = prim["nf.network.ban"](scope, player, options, waker)
+    if task ~= nil then
+      local value, err = async.wait(task, token, wait_id)
+      return value, err
+    end
+  end
+
+  function ns.unban(player, callback)
+    local waker, task, token = async.begin("nf.network.unban", callback)
+    local wait_id = prim["nf.network.unban"](scope, player, waker)
+    if task ~= nil then
+      local value, err = async.wait(task, token, wait_id)
+      return value, err
+    end
+  end
+
+  function ns.mute(player, options, callback)
+    local waker, task, token = async.begin("nf.network.mute", callback)
+    local wait_id = prim["nf.network.mute"](scope, player, options, waker)
+    if task ~= nil then
+      local value, err = async.wait(task, token, wait_id)
+      return value, err
+    end
+  end
+
+  function ns.unmute(player, callback)
+    local waker, task, token = async.begin("nf.network.unmute", callback)
+    local wait_id = prim["nf.network.unmute"](scope, player, waker)
+    if task ~= nil then
+      local value, err = async.wait(task, token, wait_id)
+      return value, err
+    end
+  end
+
+  function ns.is_banned(player)
+    return prim["nf.network.is_banned"](scope, player)
+  end
+
+  function ns.is_muted(player)
+    return prim["nf.network.is_muted"](scope, player)
+  end
+
+  function ns.report(player, reason, details, by)
+    return prim["nf.network.report"](scope, player, reason, details, by)
+  end
+
   function ns.send_player(player, target, data, callback)
     local waker, task, token = async.begin("nf.network.send_player", callback)
     local wait_id = prim["nf.network.send_player"](scope, player, target, data, waker)

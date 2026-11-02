@@ -12,6 +12,7 @@ A table of functions: call them with a dot.
 | [The network](#the-network) | [`servers`](#servers) [`groups`](#groups) [`players`](#players) [`find_player`](#find_player) |
 | [Channels and maps](#channels-and-maps) | [`channel`](#channel) [`map`](#map) |
 | [Sending players](#sending-players) | [`send_player`](#send_player) [`send_players`](#send_players) |
+| [Moderation](#moderation) | [`ban`](#ban) [`unban`](#unban) [`mute`](#mute) [`unmute`](#unmute) [`is_banned`](#is_banned) [`is_muted`](#is_muted) [`report`](#report) |
 
 ## This server {#this-server}
 
@@ -274,4 +275,120 @@ local function start_match(players)
 end
 
 return start_match
+```
+
+## Moderation {#moderation}
+
+### `nf.network.ban(player, options?, callback?)` {#ban}
+
+Bans a player from the whole network: the proxy turns them away before they reach any server, until it runs out or `unban`, and kicks them now when they're online. Kept by the network's hub, with the reason, who did it and when. Needs `moderation` declared, and a server whose credential may moderate (`moderation=true` on the hub; a trusted server may). It fails (`nil, err`) when this server isn't connected or may not moderate, or `expires` is past. It works off the main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+
+*Needs `"requires": { "moderation": true }` in `netherforge.json`: without it, calling it is an error.*
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `player` | [`Player`](player.md)`\|string` | Who: a player on this server, or anyone by name (online in the network) or UUID. |
+| `options` (optional) | [`NetworkSanctionOptions`](types.md#networksanctionoptions) | Why, and until when. |
+| `callback` (optional) | `fun(done: boolean?, err: string?)` | Called on the main thread once it's done, as this script's code, with `true` once the hub has it (or `nil` and why not). Not called if the script has stopped by then. |
+
+**Returns** `boolean?`: Only without a callback, in a task: `true` once the hub has it, or `nil`., `string?`: Why it failed, when it did; `nil` when it worked.
+
+```lua
+local function ban_cheater(name)
+  nf.task(function()
+    local done, err = nf.network.ban(name, { reason = "Fly hacks", expires = nf.server.unix_time() + 7 * 86400000 })
+    if not done then
+      log("couldn't ban: " .. err)
+    end
+  end)
+end
+
+return ban_cheater
+```
+
+### `nf.network.unban(player, callback?)` {#unban}
+
+Lifts a player's network ban. It fails when they weren't banned, or as `ban` does. It works off the main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+
+*Needs `"requires": { "moderation": true }` in `netherforge.json`: without it, calling it is an error.*
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `player` | [`Player`](player.md)`\|string` | Who, by name or UUID. |
+| `callback` (optional) | `fun(done: boolean?, err: string?)` | Called on the main thread once it's done, as this script's code, with `true` once the hub has lifted it (or `nil` and why not). Not called if the script has stopped by then. |
+
+**Returns** `boolean?`: Only without a callback, in a task: `true` once the hub has lifted it, or `nil`., `string?`: Why it failed, when it did; `nil` when it worked.
+
+### `nf.network.mute(player, options?, callback?)` {#mute}
+
+Mutes a player across the network: every server's NetherForge holds back their chat (they're told why), until it runs out or `unmute`. As `ban` for what it needs and when it fails. It works off the main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+
+*Needs `"requires": { "moderation": true }` in `netherforge.json`: without it, calling it is an error.*
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `player` | [`Player`](player.md)`\|string` | Who: a player on this server, or anyone by name or UUID. |
+| `options` (optional) | [`NetworkSanctionOptions`](types.md#networksanctionoptions) | Why, and until when. |
+| `callback` (optional) | `fun(done: boolean?, err: string?)` | Called on the main thread once it's done, as this script's code, with `true` once the hub has it (or `nil` and why not). Not called if the script has stopped by then. |
+
+**Returns** `boolean?`: Only without a callback, in a task: `true` once the hub has it, or `nil`., `string?`: Why it failed, when it did; `nil` when it worked.
+
+### `nf.network.unmute(player, callback?)` {#unmute}
+
+Lifts a player's network mute. It fails when they weren't muted, or as `ban` does. It works off the main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+
+*Needs `"requires": { "moderation": true }` in `netherforge.json`: without it, calling it is an error.*
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `player` | [`Player`](player.md)`\|string` | Who, by name or UUID. |
+| `callback` (optional) | `fun(done: boolean?, err: string?)` | Called on the main thread once it's done, as this script's code, with `true` once the hub has lifted it (or `nil` and why not). Not called if the script has stopped by then. |
+
+**Returns** `boolean?`: Only without a callback, in a task: `true` once the hub has lifted it, or `nil`., `string?`: Why it failed, when it did; `nil` when it worked.
+
+### `nf.network.is_banned(player)` {#is_banned}
+
+Whether a player is banned from the network now, as this server's copy of the hub's bans says.
+
+*Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `player` | [`Player`](player.md)`\|string` | Who, by name (online in the network) or UUID. |
+
+**Returns** `boolean`
+
+### `nf.network.is_muted(player)` {#is_muted}
+
+Whether a player is muted across the network now.
+
+*Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `player` | [`Player`](player.md)`\|string` | Who, by name (online in the network) or UUID. |
+
+**Returns** `boolean`
+
+### `nf.network.report(player, reason, details?, by?)` {#report}
+
+Reports a player to whoever moderates the network: the hub keeps it (`/nfhub reports`, the admin API) and tells its webhook. Goes at once, without waiting.
+
+*Needs `"requires": { "network": true }` in `netherforge.json`: without it, calling it is an error.*
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `player` | [`Player`](player.md)`\|string` | Who is reported: a player on this server, or anyone by name or UUID. |
+| `reason` | `string` | Why, in a few words (at most 500 characters). |
+| `details` (optional) | `any` | What else to say: where, what was said. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line. |
+| `by` (optional) | [`Player`](player.md)`?` | Who reports them, when a player does. |
+
+**Returns** `boolean`: `false` when it didn't go: this server isn't connected.
+
+```lua
+local function report(player, reason)
+  nf.network.report(player, reason, { server = nf.network.server_name() })
+end
+
+return report
 ```

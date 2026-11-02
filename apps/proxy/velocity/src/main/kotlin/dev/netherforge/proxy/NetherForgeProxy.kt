@@ -114,6 +114,7 @@ class NetherForgeProxy @Inject constructor(
             groups = settings.groups,
             policies = settings.rolePolicies,
             keepsPacks = !settings.clearResourcePacks,
+            audit = AuditLog(folder.resolve("audit.log"))::append,
             events = settings.webhookUrl?.let { url -> HubEvents(url, settings.webhookSecret, log)::send } ?: {}
         )
         val server = HubServer(hub, InetSocketAddress(settings.bind, settings.port), log, settings.limits)
@@ -269,6 +270,10 @@ class NetherForgeProxy @Inject constructor(
     /** A proxy the hub drains takes no new logins: they join through another. */
     @Subscribe
     fun onLogin(event: com.velocitypowered.api.event.connection.LoginEvent) {
+        hub?.banOf(event.player.uniqueId.toString())?.let { why ->
+            event.result = com.velocitypowered.api.event.ResultedEvent.ComponentResult.denied(Component.text(why))
+            return
+        }
         if (draining) {
             event.result = com.velocitypowered.api.event.ResultedEvent.ComponentResult.denied(
                 Component.text("This way in is restarting: join again in a moment.")
@@ -379,7 +384,8 @@ class NetherForgeProxy @Inject constructor(
         override fun suggest(invocation: SimpleCommand.Invocation): List<String> {
             val args = invocation.arguments()
             return when (args.size) {
-                0, 1 -> listOf("credentials", "admins").filter { it.startsWith(args.firstOrNull().orEmpty()) }
+                0, 1 -> listOf("credentials", "admins", "ban", "unban", "mute", "unmute", "reports", "disable", "enable")
+                    .filter { it.startsWith(args.firstOrNull().orEmpty()) }
                 2 -> listOf("add", "revoke", "list", "reload").filter { it.startsWith(args[1]) }
                 3 -> if (args[1] == "revoke") hub?.credentials()?.map { it.id }.orEmpty().filter { it.startsWith(args[2]) } else emptyList()
                 4 -> if (args[1] == "add") Grants.ROLES.filter { it.startsWith(args[3]) } else emptyList()
@@ -389,10 +395,20 @@ class NetherForgeProxy @Inject constructor(
 
         override fun execute(invocation: SimpleCommand.Invocation) {
             val args = invocation.arguments()
+            val by = (invocation.source() as? com.velocitypowered.api.proxy.Player)?.username ?: "the proxy's console"
             val text = when {
                 remote != null -> status()
                 args.firstOrNull() == "credentials" -> credentials(args.drop(1))
                 args.firstOrNull() == "admins" -> admins(args.drop(1))
+                args.firstOrNull() in setOf(
+                    "ban",
+                    "unban",
+                    "mute",
+                    "unmute",
+                    "reports",
+                    "disable",
+                    "enable"
+                ) -> moderation(args.toList(), by)
                 else -> status()
             }
             invocation.source().sendMessage(Component.text(text))
@@ -428,6 +444,48 @@ class NetherForgeProxy @Inject constructor(
             return "NetherForge network hub on port ${server?.port}:\n" + lines.joinToString("\n")
         }
 
+        /**
+         * `/nfhub ban|mute <player> [reason]`, `unban|unmute <player>` (network-wide), `reports`, and `disable <server|group>
+         * [reason]` / `enable <server|group>`: the network's moderation, kept by the hub.
+         */
+        private fun moderation(args: List<String>, by: String): String {
+            val hub = hub ?: return "NetherForge's network hub isn't running (see the proxy's log)."
+            val what = args[0]
+            if (what == "reports") {
+                val all = hub.reports().take(20)
+                return if (all.isEmpty()) {
+                    "No reports."
+                } else {
+                    "Reports, newest first:\n" + all.joinToString("\n") {
+                        "  #${it.id} ${it.name} on ${it.server}: ${it.reason}" + it.by?.let { by -> " (by $by)" }.orEmpty()
+                    }
+                }
+            }
+            val target =
+                args.getOrNull(1)
+                    ?: return "Usage: /nfhub $what <${if (what == "disable" || what == "enable") "server|group" else "player"}>" +
+                        if (what == "ban" || what == "mute" || what == "disable") " [reason]" else ""
+            val reason = args.drop(2).joinToString(" ").ifBlank { null }
+            if (what ==
+                "disable"
+            ) {
+                return hub.disable(target, reason, by)
+                    ?: "Took $target off the network: its players are sent to its fallback, and it's refused until /nfhub enable $target."
+            }
+            if (what == "enable") return hub.enable(target, by) ?: "$target may join the network again."
+            val player = proxy.getPlayer(target).orElse(null)
+            val id = player?.uniqueId?.toString() ?: runCatching { UUID.fromString(target) }.getOrNull()?.toString()
+                ?: return "Nobody called $target is on the proxy: name them by UUID."
+            val name = player?.username ?: target
+            val action = dev.netherforge.network.ModerationAction.entries.first { it.word == what }
+            return hub.moderate(action, id, name, reason, by, null) ?: when (action) {
+                dev.netherforge.network.ModerationAction.BAN -> "Banned $name from the network."
+                dev.netherforge.network.ModerationAction.UNBAN -> "Lifted $name's ban."
+                dev.netherforge.network.ModerationAction.MUTE -> "Muted $name across the network."
+                dev.netherforge.network.ModerationAction.UNMUTE -> "Lifted $name's mute."
+            }
+        }
+
         /** `/nfhub admins add <id> <scopes|*>`, `revoke <id>`, `list`: the admin API's clients, in `admin.properties`. */
         private fun admins(args: List<String>): String = try {
             when (args.firstOrNull()) {
@@ -457,6 +515,7 @@ class NetherForgeProxy @Inject constructor(
                     adminFile.write(all + client)
                     adminClients = all + client
                     logger.info("NetherForge: added the admin client $id (${scopes.joinToString { it.word }})")
+                    hub?.note("the proxy's console", "admin client added", id, scopes.joinToString { it.word })
                     val off = if (admin == null) " The admin API is off: set admin.port in hub.properties and restart." else ""
                     "Added the admin client $id. Its token, shown only now: ${client.token}$off"
                 }
@@ -467,6 +526,7 @@ class NetherForgeProxy @Inject constructor(
                     adminFile.write(all.filter { it.id != id })
                     adminClients = all.filter { it.id != id }
                     hub?.detach(id)
+                    hub?.note("the proxy's console", "admin client revoked", id)
                     logger.info("NetherForge: revoked the admin client $id")
                     "Revoked $id: its token no longer works, and its open streams are closed."
                 }

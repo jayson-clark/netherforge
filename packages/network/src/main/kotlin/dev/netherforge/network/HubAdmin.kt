@@ -38,6 +38,8 @@ import java.util.concurrent.atomic.AtomicInteger
  *   place for the groups named (`*login` for logins; placement), for as long as it's connected.
  * - `POST /v1/requests/<id>/reply` `{ "value"?, "error"? }` (channels:read), `POST /v1/placements/<id>`
  *   `{ "server" | "hold" | "fail" }` (placement).
+ * - `GET`, `POST` `{ "player", "reason"?, "until"? }` and `DELETE /v1/bans[/<player>]`, the same for `/v1/mutes`,
+ *   `GET /v1/reports`, `POST /v1/servers/<name>/disable` `{ "reason"? }` and `/enable` (moderation).
  *
  * Plain HTTP, like the hub's own port: keep it on localhost or the servers' network, or put TLS in front.
  */
@@ -228,9 +230,64 @@ class HubAdmin(
                 answer(exchange, 200, Answer())
             }
             parts == listOf("events") && method == "GET" -> events(exchange, client)
+            parts.firstOrNull() in setOf("bans", "mutes", "reports") ||
+                (parts.size == 3 && parts[0] == "servers" && parts[2] in setOf("disable", "enable")) -> {
+                client.need(AdminScope.MODERATION)
+                moderation(exchange, client, parts, method)
+            }
             else -> throw Fail(404, "there's no $method ${exchange.requestURI.path}")
         }
     }
+
+    @Serializable
+    data class Sanctioning(val player: String, val name: String? = null, val reason: String? = null, val until: Long? = null)
+
+    @Serializable
+    data class Sanctions(val players: Map<String, Sanction>)
+
+    @Serializable
+    data class Reports(val reports: List<Report>)
+
+    @Serializable
+    data class Disabling(val reason: String? = null)
+
+    /** Bans, mutes, reports, and servers and groups taken off the network: the `moderation` scope's. */
+    private fun moderation(exchange: HttpExchange, client: AdminClient, parts: List<String>, method: String) {
+        val by = "the admin client ${client.id}"
+        when {
+            parts == listOf("reports") && method == "GET" -> answer(exchange, 200, Reports(hub.reports()))
+            parts.size == 1 && method == "GET" -> answer(exchange, 200, Sanctions(if (parts[0] == "bans") hub.bans() else hub.mutes()))
+            parts.size == 1 && method == "POST" -> {
+                val asked = body(text(exchange), Sanctioning.serializer())
+                val online = hub.findPlayer(asked.player)
+                val id =
+                    online?.id ?: asked.player.takeIf(::isUuid)
+                        ?: throw Fail(404, "nobody called ${asked.player} is online: name them by UUID")
+                val action = if (parts[0] == "bans") ModerationAction.BAN else ModerationAction.MUTE
+                hub.moderate(action, id, asked.name ?: online?.name ?: id, asked.reason, by, asked.until)?.let { throw Fail(409, it) }
+                answer(exchange, 200, Answer(name = id))
+            }
+            parts.size == 2 && method == "DELETE" -> {
+                val id = hub.findPlayer(parts[1])?.id ?: parts[1]
+                val action = if (parts[0] == "bans") ModerationAction.UNBAN else ModerationAction.UNMUTE
+                hub.moderate(action, id, parts[1], null, by, null)?.let { throw Fail(404, it) }
+                answer(exchange, 200, Answer(name = id))
+            }
+            parts.size == 3 && parts[2] == "disable" && method == "POST" -> {
+                val body = text(exchange)
+                val reason = if (body.isBlank()) null else body(body, Disabling.serializer()).reason
+                hub.disable(parts[1], reason, by)?.let { throw Fail(409, it) }
+                answer(exchange, 200, Answer(name = parts[1]))
+            }
+            parts.size == 3 && parts[2] == "enable" && method == "POST" -> {
+                hub.enable(parts[1], by)?.let { throw Fail(404, it) }
+                answer(exchange, 200, Answer(name = parts[1]))
+            }
+            else -> throw Fail(404, "there's no $method ${exchange.requestURI.path}")
+        }
+    }
+
+    private fun isUuid(text: String) = runCatching { java.util.UUID.fromString(text) }.isSuccess && text.length == 36
 
     private fun player(exchange: HttpExchange, client: AdminClient, player: String, action: String) {
         when (action) {

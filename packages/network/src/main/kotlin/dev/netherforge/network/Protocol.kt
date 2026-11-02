@@ -189,6 +189,11 @@ sealed interface HubFrame {
         val keepsPacks: Boolean = false
     ) : HubFrame
 
+    /** How this server's [ServerFrame.Moderate] [id] went: done, or [error] saying why not. */
+    @Serializable
+    @SerialName("moderate_result")
+    data class ModerateResult(val id: Long, val error: String? = null) : HubFrame
+
     /** Player [id]'s game loaded the resource pack [pack] (its SHA-1). */
     @Serializable
     @SerialName("player_pack")
@@ -353,6 +358,28 @@ sealed interface ServerFrame {
         /** `proxy` for a proxy joining a hub that runs on its own; a server says none. */
         val role: String? = null
     ) : ServerFrame
+
+    /**
+     * Bans, unbans, mutes or unmutes [player] (a UUID; [name] theirs) network-wide, [by] whom (a player's name, a
+     * package's), until [until] (Unix milliseconds; null for good); answered with [HubFrame.ModerateResult] [id].
+     */
+    @Serializable
+    @SerialName("moderate")
+    data class Moderate(
+        val id: Long,
+        val action: ModerationAction,
+        val player: String,
+        val name: String,
+        val reason: String? = null,
+        val by: String,
+        val until: Long? = null
+    ) : ServerFrame
+
+    /** A report of [player] ([name]), [by] another player, for whoever moderates the network to see. */
+    @Serializable
+    @SerialName("report")
+    data class Report(val player: String, val name: String, val reason: String, val details: JsonElement? = null, val by: String? = null) :
+        ServerFrame
 
     /** [player]'s game loaded this server's resource pack, whose SHA-1 is [sha1]. */
     @Serializable

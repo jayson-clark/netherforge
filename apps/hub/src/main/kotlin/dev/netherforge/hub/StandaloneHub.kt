@@ -58,6 +58,16 @@ class StandaloneHub(private val folder: Path, private val log: HubLog) {
             groups = settings.groups,
             policies = settings.rolePolicies,
             keepsPacks = !settings.clearResourcePacks,
+            audit = { line ->
+                synchronized(this) {
+                    java.nio.file.Files.writeString(
+                        folder.resolve("audit.log"),
+                        line + "\n",
+                        java.nio.file.StandardOpenOption.CREATE,
+                        java.nio.file.StandardOpenOption.APPEND
+                    )
+                }
+            },
             events = settings.webhookUrl?.let { url -> HubEvents(url, settings.webhookSecret, log)::send } ?: {}
         )
         val server = HubServer(hub, InetSocketAddress(settings.bind, settings.port), log, settings.limits)

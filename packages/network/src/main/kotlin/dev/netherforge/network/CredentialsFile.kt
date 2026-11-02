@@ -22,13 +22,15 @@ data class CredentialEntry(
     /** Whether its servers may add themselves to the proxy, as which names and from which addresses. */
     val register: Boolean = false,
     val names: List<String> = emptyList(),
-    val addresses: List<String> = emptyList()
+    val addresses: List<String> = emptyList(),
+    /** Whether its servers may ban and mute players network-wide. */
+    val moderation: Boolean = false
 ) {
     /** What it may do: its role's preset, with what the network shares with that role ([roleShares]) and its own. */
     fun credential(roleShares: Map<String, List<Share>>): Credential = Credential(
         id,
         secret,
-        Grants.preset(role, owns, roleShares[role].orEmpty() + shares, presence, sendTo),
+        Grants.preset(role, owns, roleShares[role].orEmpty() + shares, presence, sendTo, moderation),
         group,
         if (register) RegisterRule(names, addresses) else null
     )
@@ -75,6 +77,7 @@ class CredentialsFile(val file: Path) {
                 sendTo = list("send-to"),
                 group = text("group")?.also { require(NetworkNames.isServer(it)) { "$file: $id's group \"$it\" isn't a group's name" } },
                 register = text("register")?.lowercase() == "true",
+                moderation = text("moderation")?.lowercase() == "true",
                 names = list("names").orEmpty(),
                 addresses = list("addresses").orEmpty().onEach {
                     require(Cidr.parse(it) != null) { "$file: $id's address \"$it\" isn't an IP address or range (10.0.0.0/8)" }
@@ -98,6 +101,7 @@ class CredentialsFile(val file: Path) {
                 entry.sendTo?.let { append("${entry.id}.send-to=${it.joinToString(", ")}\n") }
                 entry.group?.let { append("${entry.id}.group=$it\n") }
                 if (entry.register) append("${entry.id}.register=true\n")
+                if (entry.moderation) append("${entry.id}.moderation=true\n")
                 if (entry.names.isNotEmpty()) append("${entry.id}.names=${entry.names.joinToString(", ")}\n")
                 if (entry.addresses.isNotEmpty()) append("${entry.id}.addresses=${entry.addresses.joinToString(", ")}\n")
             }
@@ -130,6 +134,7 @@ class CredentialsFile(val file: Path) {
             |#   <id>.send-to   where it may send its players: servers, groups, back (where they came from), * (anywhere)
             |#   <id>.group     the group its servers are instances of (arena), whatever their config says
             |#   <id>.register  true: its servers may add themselves to the proxy as they start (not in velocity.toml)
+            |#   <id>.moderation true: its servers' scripts may ban and mute players network-wide
             |#   <id>.names     the names they may take then: arena-* (any when empty)
             |#   <id>.addresses where the proxy may reach them: 10.0.0.0/8, 192.168.1.20 (any when empty)
             |

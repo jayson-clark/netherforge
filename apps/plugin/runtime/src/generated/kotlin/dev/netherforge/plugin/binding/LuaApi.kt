@@ -1395,6 +1395,55 @@ interface NfNetworkApi {
     fun map(caller: Caller, name: String): LuaHandle.NetworkMap
 
     /**
+     * Bans a player from the whole network: the proxy turns them away before they reach any server, until
+     * it runs out or `unban`, and kicks them now when they're online. Kept by the network's hub, with the
+     * reason, who did it and when. Needs `moderation` declared, and a server whose credential may moderate
+     * (`moderation=true` on the hub; a trusted server may). It fails (`nil, err`) when this server isn't
+     * connected or may not moderate, or `expires` is past. It works off the main thread, so its done
+     * arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a
+     * task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a
+     * task, it's an error. When it fails, `done` is `nil` and `err` says why.
+     */
+    fun ban(caller: Caller, player: PlayerOrString, options: NetworkSanctionOptions?): CompletionStage<Boolean>
+
+    /**
+     * Lifts a player's network ban. It fails when they weren't banned, or as `ban` does. It works off the
+     * main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's
+     * done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`.
+     * Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+     */
+    fun unban(caller: Caller, player: PlayerOrString): CompletionStage<Boolean>
+
+    /**
+     * Mutes a player across the network: every server's NetherForge holds back their chat (they're told
+     * why), until it runs out or `unmute`. As `ban` for what it needs and when it fails. It works off the
+     * main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's
+     * done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`.
+     * Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+     */
+    fun mute(caller: Caller, player: PlayerOrString, options: NetworkSanctionOptions?): CompletionStage<Boolean>
+
+    /**
+     * Lifts a player's network mute. It fails when they weren't muted, or as `ban` does. It works off the
+     * main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's
+     * done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`.
+     * Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.
+     */
+    fun unmute(caller: Caller, player: PlayerOrString): CompletionStage<Boolean>
+
+    /** Whether a player is banned from the network now, as this server's copy of the hub's bans says. */
+    fun isBanned(caller: Caller, player: PlayerOrString): Boolean
+
+    /** Whether a player is muted across the network now. */
+    fun isMuted(caller: Caller, player: PlayerOrString): Boolean
+
+    /**
+     * Reports a player to whoever moderates the network: the hub keeps it (`/nfhub reports`, the admin
+     * API) and tells its webhook. Goes at once, without waiting.
+     */
+    fun report(caller: Caller, player: PlayerOrString, reason: String, details: LuaValue, by: LuaHandle.Player?): Boolean
+
+    /**
      * Sends a player to another server of the network, through the proxy, with `data` for that server's
      * scripts: its `player_arrive` handlers hear it once they've joined there. The player may be on any
      * server, this one or another (a server whose credential isn't trusted sends only its own). Sent to a

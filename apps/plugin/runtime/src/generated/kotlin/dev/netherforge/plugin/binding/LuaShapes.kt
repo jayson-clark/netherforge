@@ -7607,6 +7607,33 @@ data class NetworkSendOptions(val server: String? = null, val group: String? = n
     }
 }
 
+/** How `nf.network.ban` and `mute` sanction. A key that isn't one of these is an error. */
+data class NetworkSanctionOptions(val reason: String? = null, val expires: Long? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<NetworkSanctionOptions>("NetworkSanctionOptions") {
+        val reasonCodec = LuaOptional(LuaCodecs.STRING)
+        val expiresCodec = LuaOptional(LuaCodecs.INTEGER)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "reason" to reasonCodec,
+            "expires" to expiresCodec
+        )
+
+        override fun read(fields: ShapeReader) = NetworkSanctionOptions(
+            reason = fields.field("reason", reasonCodec),
+            expires = fields.field("expires", expiresCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: NetworkSanctionOptions) {
+            fields.field("reason", value.reason, reasonCodec)
+            fields.field("expires", value.expires, expiresCodec)
+        }
+    }
+}
+
 /** What this server may do in the network, from `nf.network.server_role`. */
 data class NetworkRole(val role: String, val trusted: Boolean, val owns: List<String>, val shares: List<NetworkShare>, val presence: Boolean, val sendTo: List<String>? = null) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)

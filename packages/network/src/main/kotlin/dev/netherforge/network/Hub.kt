@@ -68,7 +68,9 @@ class Hub(
     /** The network's policy for each role's servers, as JSON, sent in their welcome. */
     policies: Map<String, String> = emptyMap(),
     /** Whether the proxy keeps players' resource packs as they switch (`clear-resource-packs=false`). */
-    private val keepsPacks: Boolean = false
+    private val keepsPacks: Boolean = false,
+    /** The audit log: one JSON line for each moderation action, credential change and server taken off. */
+    private val audit: (String) -> Unit = {}
 ) {
     @Volatile
     private var policies: Map<String, String> = policies
@@ -257,9 +259,16 @@ class Hub(
     fun setCredentials(all: Collection<Credential>) {
         val dropped = synchronized(lock) {
             val next = all.associateBy { it.id }
+            val added = next.keys - credentials.keys
+            val removed = credentials.keys - next.keys
+            val changed = next.keys.filter { it in credentials && credentials[it] != next[it] }
+            if (added.isNotEmpty() || removed.isNotEmpty() || changed.isNotEmpty()) {
+                record("hub", "credentials", null, "added ${added.sorted()}, revoked ${removed.sorted()}, changed ${changed.sorted()}")
+            }
             credentials = next
             byName.values.filter { session -> session.credential != null && next[session.credential] != session.joinedWith }
         }
+        runLater()
         for (session in dropped) {
             val why = if (session.credential !in credentials) "its credential was revoked" else "its credential changed"
             log.info("NetherForge hub: disconnected ${session.name}: $why")
@@ -604,6 +613,7 @@ class Hub(
                 bound
             } ?: frame.group
             if (frame.role == Grants.PROXY_ROLE) return proxyHello(frame, credential, proven)
+            disabledWhy(frame.server, frame.group ?: credential?.group)?.let { return refuse(it) }
             val byAdmin = registered.values.firstOrNull { it.byAdmin && it.name.equals(frame.server, ignoreCase = true) }
             if (byAdmin?.credential != null && byAdmin.credential != credential?.id) {
                 return refuse("${byAdmin.name} was added for the credential \"${byAdmin.credential}\", and it joins with another")
@@ -810,6 +820,16 @@ class Hub(
                     evacuate(this)
                 }
                 is ServerFrame.Leaving -> leaving = true
+                is ServerFrame.Moderate -> {
+                    if (!grants.moderates) {
+                        return send(
+                            HubFrame.ModerateResult(frame.id, "network.forbidden: ${credentialName()} may not moderate (moderation=true)")
+                        )
+                    }
+                    val why = moderateLocked(frame.action, frame.player, frame.name, frame.reason, "${frame.by} on $from", frame.until)
+                    send(HubFrame.ModerateResult(frame.id, why))
+                }
+                is ServerFrame.Report -> reportLocked(frame.player, frame.name, frame.reason, frame.details, frame.by, from)
                 is ServerFrame.PackLoaded -> players[frame.player]?.let { player ->
                     if (player.pack != frame.sha1 && frame.sha1.length == 40) {
                         players[player.id] = player.copy(pack = frame.sha1)
@@ -1277,12 +1297,165 @@ class Hub(
      * choice), within the placement timeout, or longer if it holds them.
      */
     fun placeLogin(id: String, name: String): java.util.concurrent.CompletableFuture<LoginPlace> = synchronized(lock) {
+        banned(id)?.let { return java.util.concurrent.CompletableFuture.completedFuture(LoginPlace(deny = it)) }
         val hook = hookFor(LOGINS) ?: return java.util.concurrent.CompletableFuture.completedFuture(LoginPlace())
         val future = java.util.concurrent.CompletableFuture<LoginPlace>()
         val place = nextPlace++
         pending[place] = Pending(place, hook, null, ServerFrame.Send(-1, listOf(id)), null, future, clock() + limits.placementTimeoutMillis)
         hook.push(AdminEvent.Place(place, listOf(PlayerState(id, name)), login = true))
         future
+    }
+
+    // ---- moderation ----------------------------------------------------------------
+
+    /** The last reports, newest last. */
+    private val reports = ArrayDeque<Report>()
+    private var nextReport = 1L
+
+    /** Under the lock: a line in the audit log, once the lock is let go of. */
+    private fun record(by: String, action: String, target: String?, detail: String? = null) {
+        val line = kotlinx.serialization.json.buildJsonObject {
+            put("at", kotlinx.serialization.json.JsonPrimitive(clock()))
+            put("by", kotlinx.serialization.json.JsonPrimitive(by))
+            put("action", kotlinx.serialization.json.JsonPrimitive(action))
+            target?.let { put("target", kotlinx.serialization.json.JsonPrimitive(it)) }
+            detail?.let { put("detail", kotlinx.serialization.json.JsonPrimitive(it)) }
+        }.toString()
+        later += { audit(line) }
+    }
+
+    private fun sanction(map: String, id: String): Sanction? = maps.entries(map)[id]?.let {
+        runCatching { Protocol.json.decodeFromJsonElement(Sanction.serializer(), it) }.getOrNull()
+    }?.takeIf { it.until == null || it.until > clock() }
+
+    /** Under the lock: why player [id] may not join the network, or null when they may. */
+    private fun banned(id: String): String? = sanction(Moderation.BANS, id)?.let { ban ->
+        "You're banned from the network" + ban.reason?.let { ": $it" }.orEmpty() +
+            ban.until?.let { "\nUntil ${java.time.Instant.ofEpochMilli(it)}" }.orEmpty()
+    }
+
+    /** A line in the audit log for what changed outside the hub (an admin client added, a file edited). */
+    fun note(by: String, action: String, target: String?, detail: String? = null) {
+        synchronized(lock) { record(by, action, target, detail) }
+        runLater()
+    }
+
+    /** Why player [id] may not join, as a ban says: what the proxy turns them away with. */
+    fun banOf(id: String): String? = synchronized(lock) { banned(id) }
+
+    fun bans(): Map<String, Sanction> = synchronized(lock) { live(Moderation.BANS) }
+
+    fun mutes(): Map<String, Sanction> = synchronized(lock) { live(Moderation.MUTES) }
+
+    private fun live(map: String) = maps.entries(map).keys.mapNotNull { id -> sanction(map, id)?.let { id to it } }.toMap()
+
+    /** Bans, unbans, mutes or unmutes [player] ([name]), [by] whom, until [until]: the admin API's and the proxy's own. Null once done. */
+    fun moderate(action: ModerationAction, player: String, name: String, reason: String?, by: String, until: Long?): String? {
+        val why = synchronized(lock) { moderateLocked(action, player, name, reason, by, until) }
+        runLater()
+        return why
+    }
+
+    private fun moderateLocked(action: ModerationAction, player: String, name: String, reason: String?, by: String, until: Long?): String? {
+        if (until != null && until <= clock()) return "until is in the past"
+        val map = if (action == ModerationAction.BAN || action == ModerationAction.UNBAN) Moderation.BANS else Moderation.MUTES
+        val setting = action == ModerationAction.BAN || action == ModerationAction.MUTE
+        val value = if (setting) {
+            Protocol.json.encodeToJsonElement(
+                Sanction.serializer(),
+                Sanction(name, reason, by, clock(), until)
+            )
+        } else {
+            null
+        }
+        val write = ServerFrame.MapWrite(
+            0,
+            map,
+            player,
+            if (setting) MapOp.SET else MapOp.DELETE,
+            value,
+            expiresMillis = until?.let {
+                it -
+                    clock()
+            }
+        )
+        when (val outcome = maps.write(write)) {
+            is SharedMaps.Outcome.Refused -> return outcome.why
+            is SharedMaps.Outcome.Unchanged -> if (!setting) return "$name wasn't ${if (map == Moderation.BANS) "banned" else "muted"}"
+            is SharedMaps.Outcome.Changed -> changed(
+                HubFrame.MapChanged(map, player, outcome.value, by, if (outcome.value == null) MapCause.DELETE else MapCause.SET)
+            )
+        }
+        record(by, action.word, "$name ($player)", listOfNotNull(reason, until?.let { "until $it" }).joinToString(", ").ifEmpty { null })
+        if (action == ModerationAction.BAN && player in players) {
+            val message = banned(player) ?: "You're banned from the network"
+            later += { proxy.kick(player, message) }
+        }
+        return null
+    }
+
+    private fun reportLocked(player: String, name: String, reason: String, details: JsonElement?, by: String?, server: String) {
+        val report = Report(nextReport++, player, name, reason.take(MAX_REASON), details, by, server, clock())
+        reports.addLast(report)
+        while (reports.size > MAX_REPORTS) reports.removeFirst()
+        emit(HubEvent.Reported(report))
+    }
+
+    /** The last reports, newest first. */
+    fun reports(): List<Report> = synchronized(lock) { reports.reversed() }
+
+    /** Under the lock: why [server] (an instance of [group]) is off the network, or null. */
+    private fun disabledWhy(server: String, group: String?): String? {
+        val off = maps.entries(Moderation.DISABLED)
+        val reason = off[server.lowercase()] ?: group?.let { off[it.lowercase()] } ?: return null
+        val why = (reason as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+        return "it's taken off the network" + if (why.isEmpty()) "" else ": $why"
+    }
+
+    /**
+     * Takes [name] (a server, or a group: every instance) off the network: it drains, its players go to its group's
+     * fallback, its connection closes, and it's refused until [enable]. Kept with the network's maps.
+     */
+    fun disable(name: String, reason: String?, by: String): String? {
+        val gone = synchronized(lock) {
+            val write = ServerFrame.MapWrite(
+                0,
+                Moderation.DISABLED,
+                name.lowercase(),
+                MapOp.SET,
+                kotlinx.serialization.json.JsonPrimitive(reason.orEmpty())
+            )
+            (maps.write(write) as? SharedMaps.Outcome.Refused)?.let { return it.why }
+            record(by, "disable", name, reason)
+            val matching = byName.values.filter { it.name.equals(name, ignoreCase = true) || it.group.equals(name, ignoreCase = true) }
+            for (session in matching) {
+                session.state = Lifecycle.STOPPING
+                session.send(HubFrame.Drain(true))
+                evacuate(session)
+            }
+            matching
+        }
+        runLater()
+        for (session in gone) {
+            session.peer.close("it was taken off the network")
+            session.closed()
+        }
+        return null
+    }
+
+    fun enable(name: String, by: String): String? {
+        synchronized(lock) {
+            val write = ServerFrame.MapWrite(0, Moderation.DISABLED, name.lowercase(), MapOp.DELETE)
+            if (maps.write(write) is SharedMaps.Outcome.Unchanged) return "$name isn't off the network"
+            record(by, "enable", name)
+        }
+        runLater()
+        return null
+    }
+
+    /** The servers and groups off the network, with why. */
+    fun disabled(): Map<String, String> = synchronized(lock) {
+        maps.entries(Moderation.DISABLED).mapValues { (it.value as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty() }
     }
 
     // ---- sending players ----------------------------------------------------------
@@ -1493,6 +1666,9 @@ class Hub(
 
         /** How long a send may wait for room, at most. */
         const val MAX_WAIT_MILLIS = 10 * 60_000L
+
+        private const val MAX_REPORTS = 1000
+        private const val MAX_REASON = 500
 
         /** The placement hook for players logging in, as [attach] takes it. */
         const val LOGINS = "*login"

@@ -47,6 +47,17 @@ internal class RuntimeGameEvents(private val runtime: NetherForgeRuntime) : Game
         session.playerQuit(event.player)
     }
 
+    /** A player muted across the network says nothing, whatever scripts would do: they're told why. */
+    override fun playerChat(event: GameEvent.PlayerChat): Boolean {
+        if (session.running) {
+            session.network.muted(event.player.uuid)?.let { why ->
+                runtime.platform.players.message(event.player.uuid, why)
+                return true
+            }
+        }
+        return super.playerChat(event)
+    }
+
     /** Scripts first, so what they change in its blocks' data is saved with it. */
     override fun chunkUnload(event: GameEvent.Chunk) {
         val session = session

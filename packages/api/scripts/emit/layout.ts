@@ -180,6 +180,7 @@ export const FUNCTION_GROUPS: Record<string, Group[]> = {
     group('The network', 'servers groups players find_player'),
     group('Channels and maps', 'channel map'),
     group('Sending players', 'send_player send_players'),
+    group('Moderation', 'ban unban mute unmute is_banned is_muted report'),
   ],
   'nf.test': [
     group('Tests and time', 'case advance'),

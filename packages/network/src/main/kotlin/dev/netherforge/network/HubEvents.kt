@@ -62,6 +62,9 @@ class HubEvents(
                 put("server", event.server)
                 event.group?.let { put("group", it) }
             }
+            is HubEvent.Reported -> {
+                put("report", Protocol.json.encodeToJsonElement(Report.serializer(), event.report))
+            }
             is HubEvent.GroupWanted -> {
                 put("group", event.group)
                 put("waiting", JsonPrimitive(event.waiting))

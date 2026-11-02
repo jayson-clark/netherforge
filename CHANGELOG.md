@@ -69,6 +69,15 @@ release is cut.
   second login through another proxy is refused or takes over
   (`duplicate-login`), and the admin API lists proxies and drains one before
   it restarts.
+- **Network-wide moderation.** The hub keeps bans (applied by the proxy
+  before a player reaches any server) and mutes (every server holds back a
+  muted player's chat), with the reason, who and until when:
+  `nf.network.ban/unban/mute/unmute/is_banned/is_muted` (with `moderation`
+  declared and a credential allowed to moderate), `/nfhub ban|mute|unban|
+unmute`, and the admin API's `moderation` scope. `nf.network.report` sends
+  reports to the hub (`/nfhub reports`, the webhook's `report`).
+  `/nfhub disable <server|group>` takes one off the network until `enable`.
+  The hub writes moderation, credential and admin changes to `audit.log`.
 - **Resource packs from shared storage.** `resource-pack.storage` uploads
   packs to S3-compatible storage under their hash (once, whichever server
   builds one first) and sends players the store's URL. With

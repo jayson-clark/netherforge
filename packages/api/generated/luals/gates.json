@@ -156,6 +156,34 @@
     "requires": "network"
   },
   {
+    "function": "nf.network.ban",
+    "requires": "moderation"
+  },
+  {
+    "function": "nf.network.unban",
+    "requires": "moderation"
+  },
+  {
+    "function": "nf.network.mute",
+    "requires": "moderation"
+  },
+  {
+    "function": "nf.network.unmute",
+    "requires": "moderation"
+  },
+  {
+    "function": "nf.network.is_banned",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.is_muted",
+    "requires": "network"
+  },
+  {
+    "function": "nf.network.report",
+    "requires": "network"
+  },
+  {
     "function": "nf.network.send_player",
     "requires": "network"
   },

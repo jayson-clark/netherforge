@@ -3,6 +3,8 @@ package dev.netherforge.plugin.api
 import dev.netherforge.network.Balance
 import dev.netherforge.network.Lifecycle
 import dev.netherforge.network.MapOp
+import dev.netherforge.network.Moderation
+import dev.netherforge.network.ModerationAction
 import dev.netherforge.network.NetworkNames
 import dev.netherforge.network.ServerState
 import dev.netherforge.plugin.async.WorkFailed
@@ -16,6 +18,7 @@ import dev.netherforge.plugin.binding.NetworkPlayer
 import dev.netherforge.plugin.binding.NetworkPlayersOptions
 import dev.netherforge.plugin.binding.NetworkPublishOptions
 import dev.netherforge.plugin.binding.NetworkRole
+import dev.netherforge.plugin.binding.NetworkSanctionOptions
 import dev.netherforge.plugin.binding.NetworkServer
 import dev.netherforge.plugin.binding.NetworkShare
 import dev.netherforge.plugin.binding.NfNetworkApi
@@ -26,6 +29,7 @@ import dev.netherforge.plugin.lua.LuaApiException
 import dev.netherforge.plugin.lua.LuaValue
 import dev.netherforge.plugin.session.ProjectSession
 import kotlinx.serialization.json.JsonElement
+import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
 
@@ -182,6 +186,50 @@ internal class NfNetworkImpl(private val session: ProjectSession) : NfNetworkApi
         }
         val onWait = options?.onWait?.let { caller.scope to it.ref }
         return network.send(caller.scope.namespace, ids, server, json, group, balance, wait, onWait)
+    }
+    // ---- moderation ----------------------------------------------------------------
+
+    /** [player] as the network knows them: their UUID and name; an error when nobody by that name is online. */
+    private fun who(player: PlayerOrString): Pair<String, String> = when (player) {
+        is PlayerOrString.Player ->
+            player.value.id to
+                (session.platform.players.get(UUID.fromString(player.value.id))?.name ?: player.value.id)
+        is PlayerOrString.String -> network.findPlayer(player.value)?.let { it.id to it.name }
+            ?: player.value.takeIf { runCatching { UUID.fromString(it) }.isSuccess }?.let { it to it }
+            ?: throw LuaApiException("nobody called \"${player.value}\" is online in the network: name them by UUID")
+    }
+
+    private fun sanction(
+        caller: Caller,
+        action: ModerationAction,
+        player: PlayerOrString,
+        options: NetworkSanctionOptions?
+    ): CompletionStage<Boolean> {
+        session.requirements.check(dev.netherforge.format.project.Requirement.Network, "nf.network.${action.word}")
+        val (id, name) = who(player)
+        return network.moderate(caller.scope.namespace, action, id, name, options?.reason, options?.expires)
+    }
+
+    override fun ban(caller: Caller, player: PlayerOrString, options: NetworkSanctionOptions?) =
+        sanction(caller, ModerationAction.BAN, player, options)
+
+    override fun unban(caller: Caller, player: PlayerOrString) = sanction(caller, ModerationAction.UNBAN, player, null)
+
+    override fun mute(caller: Caller, player: PlayerOrString, options: NetworkSanctionOptions?) =
+        sanction(caller, ModerationAction.MUTE, player, options)
+
+    override fun unmute(caller: Caller, player: PlayerOrString) = sanction(caller, ModerationAction.UNMUTE, player, null)
+
+    override fun isBanned(caller: Caller, player: PlayerOrString): Boolean = network.sanction(Moderation.BANS, who(player).first) != null
+
+    override fun isMuted(caller: Caller, player: PlayerOrString): Boolean = network.sanction(Moderation.MUTES, who(player).first) != null
+
+    override fun report(caller: Caller, player: PlayerOrString, reason: String, details: LuaValue, by: LuaHandle.Player?): Boolean {
+        if (reason.isBlank()) throw LuaApiException("bad argument 'reason' (a reason expected)")
+        val (id, name) = who(player)
+        val json = if (details.isNil) null else network.checked(details.json("details"), "details")
+        val reporter = by?.let { session.platform.players.get(UUID.fromString(it.id))?.name ?: it.id }
+        return network.report(caller.scope.namespace, id, name, reason.take(500), json, reporter)
     }
 }
 

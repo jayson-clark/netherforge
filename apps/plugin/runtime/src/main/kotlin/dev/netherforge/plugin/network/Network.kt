@@ -113,6 +113,62 @@ class Network(
 
     override fun start() {
         scripts.counting(Events.NETWORKCHANNEL_MESSAGE, Events.NETWORKCHANNEL_REQUEST) { listenChanged = true }
+        // The network's bans and mutes: this server's copies, to enforce (a muted player's chat) and to answer from.
+        if (link().mode != NetworkLink.Mode.OFF) {
+            mirror(dev.netherforge.network.Moderation.BANS)
+            mirror(dev.netherforge.network.Moderation.MUTES)
+        }
+    }
+
+    /** A server in a network watches chat: a player muted across it may say something. */
+    override val needsWatched: Set<dev.netherforge.plugin.platform.WatchedEvent>
+        get() = if (link().mode == NetworkLink.Mode.OFF) emptySet() else setOf(dev.netherforge.plugin.platform.WatchedEvent.PLAYER_CHAT)
+
+    /** [player]'s network ban or mute now ([map] says which), as this server's copy has it; null for none. */
+    fun sanction(map: String, player: String): dev.netherforge.network.Sanction? {
+        val value = mirrors[map]?.entries?.get(player) ?: return null
+        val sanction = runCatching { Protocol.json.decodeFromJsonElement(dev.netherforge.network.Sanction.serializer(), value) }.getOrNull()
+        return sanction?.takeIf { s -> s.until.let { it == null || it > System.currentTimeMillis() } }
+    }
+
+    /** What a muted player is told when their chat is held back; null when they aren't muted. */
+    fun muted(player: UUID): String? = sanction(dev.netherforge.network.Moderation.MUTES, player.toString())?.let { mute ->
+        "<red>You're muted on this network" + mute.reason?.let { ": $it" }.orEmpty()
+    }
+
+    private val moderations = HashMap<Long, Waiting<Boolean>>()
+
+    /** Bans, unbans, mutes or unmutes [player] ([name]) network-wide, as package [namespace] asks. */
+    fun moderate(
+        namespace: String,
+        action: dev.netherforge.network.ModerationAction,
+        player: String,
+        name: String,
+        reason: String?,
+        until: Long?
+    ): CompletionStage<Boolean> {
+        refusal(namespace)?.let { return CompletableFuture.failedFuture(WorkFailed(it)) }
+        val grants = link().grants
+        if (!grants.moderates) {
+            return CompletableFuture.failedFuture(
+                WorkFailed(
+                    "network.forbidden: this server's credential (${grants.role}) may not moderate the network (moderation=true on the hub)"
+                )
+            )
+        }
+        val id = link().nextId()
+        val future = CompletableFuture<Boolean>()
+        moderations[id] = Waiting(future, ticks() + config.requestTimeoutSeconds * TICKS_PER_SECOND, "the network's hub didn't answer")
+        if (!link().send(ServerFrame.Moderate(id, action, player, name, reason, "package $namespace", until))) {
+            moderations.remove(id)
+            return CompletableFuture.failedFuture(WorkFailed(notConnected()))
+        }
+        return future
+    }
+
+    fun report(namespace: String, player: String, name: String, reason: String, details: JsonElement?, by: String?): Boolean {
+        if (!link().connected || !allowed(namespace)) return false
+        return link().send(ServerFrame.Report(player, name, reason, details, by))
     }
 
     // ---- names -----------------------------------------------------------------
@@ -395,6 +451,9 @@ class Network(
             is HubFrame.MapChanged -> changed(frame)
             is HubFrame.MapResult -> writes.remove(frame.id)?.let { (op, waiting) -> written(frame, op, waiting) }
             is HubFrame.SendWaiting -> waited(frame)
+            is HubFrame.ModerateResult -> moderations.remove(frame.id)?.let { waiting ->
+                if (frame.error != null) waiting.future.completeExceptionally(WorkFailed(frame.error!!)) else waiting.future.complete(true)
+            }
             is HubFrame.Drain -> {
                 log.info(
                     if (frame.draining) "The network's admin API drains this server" else "The network's admin API ends its draining"
@@ -572,7 +631,10 @@ class Network(
     }
 
     /** The channels and maps this session told the hub it listens to, for `/nf network`. */
-    fun listening(): Pair<List<String>, List<String>> = listened ?: (emptyList<String>() to emptyList())
+    fun listening(): Pair<List<String>, List<String>> = (listened ?: (emptyList<String>() to emptyList())).let { (channels, maps) ->
+        // The hub's own maps (bans, mutes) are this server's, not its scripts'.
+        channels to maps.filterNot(dev.netherforge.network.Moderation::isReserved)
+    }
 
     /** Tells the hub what this session listens to, when it changed. */
     private fun listen() {
@@ -618,6 +680,7 @@ class Network(
         }
         expire(requests)
         expire(sends)
+        expire(moderations)
         for ((id, entry) in writes.filterValues { it.second.deadline <= now }) {
             writes.remove(id)
             entry.second.future.completeExceptionally(WorkFailed("${entry.second.what} within the time allowed"))
@@ -689,6 +752,8 @@ class Network(
     private fun failAll(failure: WorkFailed) {
         for (waiting in requests.values) waiting.future.completeExceptionally(failure)
         for (waiting in sends.values) waiting.future.completeExceptionally(failure)
+        for (waiting in moderations.values) waiting.future.completeExceptionally(failure)
+        moderations.clear()
         for ((_, waiting) in writes.values) waiting.future.completeExceptionally(failure)
         requests.clear()
         sends.clear()

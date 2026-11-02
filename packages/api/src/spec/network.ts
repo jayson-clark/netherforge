@@ -179,6 +179,116 @@ export const nfNetwork: LuaClass = {
       returns: [{ type: 'NetworkMap' }],
     },
     asyncFunction({
+      name: 'ban',
+      doc: "Bans a player from the whole network: the proxy turns them away before they reach any server, until it runs out or `unban`, and kicks them now when they're online. Kept by the network's hub, with the reason, who did it and when. Needs `moderation` declared, and a server whose credential may moderate (`moderation=true` on the hub; a trusted server may). It fails (`nil, err`) when this server isn't connected or may not moderate, or `expires` is past.",
+      requires: 'moderation',
+      params: [
+        {
+          name: 'player',
+          type: 'Player|string',
+          doc: 'Who: a player on this server, or anyone by name (online in the network) or UUID.',
+        },
+        {
+          name: 'options',
+          type: 'NetworkSanctionOptions',
+          doc: 'Why, and until when.',
+          optional: true,
+        },
+      ],
+      value: { name: 'done', type: 'boolean', doc: '`true` once the hub has it' },
+      example:
+        'local function ban_cheater(name)\n  nf.task(function()\n    local done, err = nf.network.ban(name, { reason = "Fly hacks", expires = nf.server.unix_time() + 7 * 86400000 })\n    if not done then\n      log("couldn\'t ban: " .. err)\n    end\n  end)\nend\n\nreturn ban_cheater',
+    }),
+    asyncFunction({
+      name: 'unban',
+      doc: "Lifts a player's network ban. It fails when they weren't banned, or as `ban` does.",
+      requires: 'moderation',
+      params: [{ name: 'player', type: 'Player|string', doc: 'Who, by name or UUID.' }],
+      value: { name: 'done', type: 'boolean', doc: '`true` once the hub has lifted it' },
+    }),
+    asyncFunction({
+      name: 'mute',
+      doc: "Mutes a player across the network: every server's NetherForge holds back their chat (they're told why), until it runs out or `unmute`. As `ban` for what it needs and when it fails.",
+      requires: 'moderation',
+      params: [
+        {
+          name: 'player',
+          type: 'Player|string',
+          doc: 'Who: a player on this server, or anyone by name or UUID.',
+        },
+        {
+          name: 'options',
+          type: 'NetworkSanctionOptions',
+          doc: 'Why, and until when.',
+          optional: true,
+        },
+      ],
+      value: { name: 'done', type: 'boolean', doc: '`true` once the hub has it' },
+    }),
+    asyncFunction({
+      name: 'unmute',
+      doc: "Lifts a player's network mute. It fails when they weren't muted, or as `ban` does.",
+      requires: 'moderation',
+      params: [{ name: 'player', type: 'Player|string', doc: 'Who, by name or UUID.' }],
+      value: { name: 'done', type: 'boolean', doc: '`true` once the hub has lifted it' },
+    }),
+    {
+      name: 'is_banned',
+      doc: "Whether a player is banned from the network now, as this server's copy of the hub's bans says.",
+      requires: 'network',
+      params: [
+        {
+          name: 'player',
+          type: 'Player|string',
+          doc: 'Who, by name (online in the network) or UUID.',
+        },
+      ],
+      returns: [{ type: 'boolean' }],
+    },
+    {
+      name: 'is_muted',
+      doc: 'Whether a player is muted across the network now.',
+      requires: 'network',
+      params: [
+        {
+          name: 'player',
+          type: 'Player|string',
+          doc: 'Who, by name (online in the network) or UUID.',
+        },
+      ],
+      returns: [{ type: 'boolean' }],
+    },
+    {
+      name: 'report',
+      doc: 'Reports a player to whoever moderates the network: the hub keeps it (`/nfhub reports`, the admin API) and tells its webhook. Goes at once, without waiting.',
+      requires: 'network',
+      params: [
+        {
+          name: 'player',
+          type: 'Player|string',
+          doc: 'Who is reported: a player on this server, or anyone by name or UUID.',
+        },
+        { name: 'reason', type: 'string', doc: 'Why, in a few words (at most 500 characters).' },
+        {
+          name: 'details',
+          type: 'any',
+          doc: `What else to say: where, what was said. ${VALUES}`,
+          optional: true,
+        },
+        {
+          name: 'by',
+          type: 'Player?',
+          doc: 'Who reports them, when a player does.',
+          optional: true,
+        },
+      ],
+      returns: [
+        { type: 'boolean', doc: "`false` when it didn't go: this server isn't connected." },
+      ],
+      example:
+        'local function report(player, reason)\n  nf.network.report(player, reason, { server = nf.network.server_name() })\nend\n\nreturn report',
+    },
+    asyncFunction({
       name: 'send_player',
       doc: "Sends a player to another server of the network, through the proxy, with `data` for that server's scripts: its `player_arrive` handlers hear it once they've joined there. The player may be on any server, this one or another (a server whose credential isn't trusted sends only its own). Sent to a group, the hub picks the instance as the group's balancing says (`least`: the one with the fewest players that has room; `fill`: the fullest that still has room) or `target.balance`, passing over instances that don't take players now (`set_accepting`) or are full (`network.capacity`). It fails (`nil, err`) when this server isn't connected, the player isn't online, there's no such server or group, no instance has room, they're already there, or the proxy couldn't move them (the server is down, a proxy plugin cancelled it).",
       requires: 'network',
@@ -545,6 +655,18 @@ export const networkShapes: LuaClass[] = [
         name: 'on_wait',
         type: 'fun(position: integer, status: string?)?',
         doc: "Called while it waits, each time its place in the queue changes (1 is next), or with `status` when a service placing the group's players holds them (`position` 0). Without it, each player waiting who's on this server sees their place, or the status, on their action bar.",
+      },
+    ],
+  ),
+  shape(
+    'NetworkSanctionOptions',
+    "How `nf.network.ban` and `mute` sanction. A key that isn't one of these is an error.",
+    [
+      { name: 'reason', type: 'string?', doc: 'Why: shown to them, and kept with it.' },
+      {
+        name: 'expires',
+        type: 'integer?',
+        doc: 'When it runs out, as Unix time in milliseconds (like `nf.server.unix_time()`); never when left out.',
       },
     ],
   ),

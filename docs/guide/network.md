@@ -689,6 +689,49 @@ come in through the others. `GET /v1/proxies` lists them with their players.
 instead of in `maps.json`, so it can restart or move to another machine
 without losing them. One hub at a time uses a database.
 
+## Moderating the network
+
+**Bans and mutes for the whole network** are kept by the hub, with the
+reason, who did it and when they run out, saved with the network's maps. A
+banned player is turned away by the proxy before they reach any server; a
+muted player's chat is held back by every server's NetherForge (they're told
+why). From the proxy:
+
+```
+/nfhub ban Ann griefing
+/nfhub mute Bea spam
+/nfhub unban Ann
+```
+
+From scripts, with `"requires": { "moderation": true }` and a server allowed
+to moderate (a trusted server, or a credential with `moderation=true`):
+
+```lua
+nf.task(function()
+  local done, err = nf.network.ban(player, { reason = "Fly hacks", expires = nf.server.unix_time() + 7 * 86400000 })
+end)
+nf.network.mute("Bea", { reason = "Spam" })
+if nf.network.is_banned(name) then ... end
+```
+
+The admin API has them too, with the `moderation` scope (`/v1/bans`,
+`/v1/mutes`).
+
+**Reports.** `nf.network.report(player, reason, details, by)` reports a player
+to whoever moderates the network: the hub keeps the last thousand
+(`/nfhub reports`, `GET /v1/reports`) and tells its webhook (`report`).
+
+**Taking a server or group off the network.** `/nfhub disable arena cheat
+found` (or the admin API's `POST /v1/servers/<name>/disable`) drains every
+instance of `arena`, sends their players to the group's fallback, disconnects
+them from the hub and refuses them until `/nfhub enable arena`. It's kept with
+the maps, so a restart doesn't let them back.
+
+**The audit log.** The hub writes every moderation action, every server
+taken off or let back, and every change of credentials and admin clients to
+`audit.log` beside `hub.properties`: one JSON line each, with when, who and
+what.
+
 ## Limits
 
 The server's owner limits what its packages send (`network:` in

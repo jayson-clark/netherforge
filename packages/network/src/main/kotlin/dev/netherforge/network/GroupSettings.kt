@@ -34,6 +34,11 @@ sealed interface HubEvent {
         override val name get() = "server_gone"
     }
 
+    /** A player reported another: for whoever moderates the network. */
+    data class Reported(val report: Report) : HubEvent {
+        override val name get() = "report"
+    }
+
     /** Players wait to be sent to [group] (or a server of that name), which has no instance with room: start one. */
     data class GroupWanted(val group: String, val waiting: Int) : HubEvent {
         override val name get() = "group_wanted"

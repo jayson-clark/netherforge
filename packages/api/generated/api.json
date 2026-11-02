@@ -1647,7 +1647,7 @@
         {
           "name": "task",
           "impl": "lua",
-          "doc": "Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.worlds.import`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.send_player`, `nf.network.send_players`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.",
+          "doc": "Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.worlds.import`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.ban`, `nf.network.unban`, `nf.network.mute`, `nf.network.unmute`, `nf.network.send_player`, `nf.network.send_players`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.",
           "params": [
             {
               "name": "callback",
@@ -4433,6 +4433,205 @@
               "type": "NetworkMap"
             }
           ]
+        },
+        {
+          "name": "ban",
+          "doc": "Bans a player from the whole network: the proxy turns them away before they reach any server, until it runs out or `unban`, and kicks them now when they're online. Kept by the network's hub, with the reason, who did it and when. Needs `moderation` declared, and a server whose credential may moderate (`moderation=true` on the hub; a trusted server may). It fails (`nil, err`) when this server isn't connected or may not moderate, or `expires` is past. It works off the main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.",
+          "requires": "moderation",
+          "params": [
+            {
+              "name": "player",
+              "type": "Player|string",
+              "doc": "Who: a player on this server, or anyone by name (online in the network) or UUID."
+            },
+            {
+              "name": "options",
+              "type": "NetworkSanctionOptions",
+              "doc": "Why, and until when.",
+              "optional": true
+            },
+            {
+              "name": "callback",
+              "type": "fun(done: boolean?, err: string?)",
+              "doc": "Called on the main thread once it's done, as this script's code, with `true` once the hub has it (or `nil` and why not). Not called if the script has stopped by then.",
+              "optional": true
+            }
+          ],
+          "example": "local function ban_cheater(name)\n  nf.task(function()\n    local done, err = nf.network.ban(name, { reason = \"Fly hacks\", expires = nf.server.unix_time() + 7 * 86400000 })\n    if not done then\n      log(\"couldn't ban: \" .. err)\n    end\n  end)\nend\n\nreturn ban_cheater",
+          "returns": [
+            {
+              "type": "boolean?",
+              "doc": "Only without a callback, in a task: `true` once the hub has it, or `nil`."
+            },
+            {
+              "type": "string?",
+              "doc": "Why it failed, when it did; `nil` when it worked."
+            }
+          ],
+          "async": true
+        },
+        {
+          "name": "unban",
+          "doc": "Lifts a player's network ban. It fails when they weren't banned, or as `ban` does. It works off the main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.",
+          "requires": "moderation",
+          "params": [
+            {
+              "name": "player",
+              "type": "Player|string",
+              "doc": "Who, by name or UUID."
+            },
+            {
+              "name": "callback",
+              "type": "fun(done: boolean?, err: string?)",
+              "doc": "Called on the main thread once it's done, as this script's code, with `true` once the hub has lifted it (or `nil` and why not). Not called if the script has stopped by then.",
+              "optional": true
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean?",
+              "doc": "Only without a callback, in a task: `true` once the hub has lifted it, or `nil`."
+            },
+            {
+              "type": "string?",
+              "doc": "Why it failed, when it did; `nil` when it worked."
+            }
+          ],
+          "async": true
+        },
+        {
+          "name": "mute",
+          "doc": "Mutes a player across the network: every server's NetherForge holds back their chat (they're told why), until it runs out or `unmute`. As `ban` for what it needs and when it fails. It works off the main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.",
+          "requires": "moderation",
+          "params": [
+            {
+              "name": "player",
+              "type": "Player|string",
+              "doc": "Who: a player on this server, or anyone by name or UUID."
+            },
+            {
+              "name": "options",
+              "type": "NetworkSanctionOptions",
+              "doc": "Why, and until when.",
+              "optional": true
+            },
+            {
+              "name": "callback",
+              "type": "fun(done: boolean?, err: string?)",
+              "doc": "Called on the main thread once it's done, as this script's code, with `true` once the hub has it (or `nil` and why not). Not called if the script has stopped by then.",
+              "optional": true
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean?",
+              "doc": "Only without a callback, in a task: `true` once the hub has it, or `nil`."
+            },
+            {
+              "type": "string?",
+              "doc": "Why it failed, when it did; `nil` when it worked."
+            }
+          ],
+          "async": true
+        },
+        {
+          "name": "unmute",
+          "doc": "Lifts a player's network mute. It fails when they weren't muted, or as `ban` does. It works off the main thread, so its done arrives later: give `callback`, which is called with `done, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `done, err`. Without a callback outside a task, it's an error. When it fails, `done` is `nil` and `err` says why.",
+          "requires": "moderation",
+          "params": [
+            {
+              "name": "player",
+              "type": "Player|string",
+              "doc": "Who, by name or UUID."
+            },
+            {
+              "name": "callback",
+              "type": "fun(done: boolean?, err: string?)",
+              "doc": "Called on the main thread once it's done, as this script's code, with `true` once the hub has lifted it (or `nil` and why not). Not called if the script has stopped by then.",
+              "optional": true
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean?",
+              "doc": "Only without a callback, in a task: `true` once the hub has lifted it, or `nil`."
+            },
+            {
+              "type": "string?",
+              "doc": "Why it failed, when it did; `nil` when it worked."
+            }
+          ],
+          "async": true
+        },
+        {
+          "name": "is_banned",
+          "doc": "Whether a player is banned from the network now, as this server's copy of the hub's bans says.",
+          "requires": "network",
+          "params": [
+            {
+              "name": "player",
+              "type": "Player|string",
+              "doc": "Who, by name (online in the network) or UUID."
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        {
+          "name": "is_muted",
+          "doc": "Whether a player is muted across the network now.",
+          "requires": "network",
+          "params": [
+            {
+              "name": "player",
+              "type": "Player|string",
+              "doc": "Who, by name (online in the network) or UUID."
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        {
+          "name": "report",
+          "doc": "Reports a player to whoever moderates the network: the hub keeps it (`/nfhub reports`, the admin API) and tells its webhook. Goes at once, without waiting.",
+          "requires": "network",
+          "params": [
+            {
+              "name": "player",
+              "type": "Player|string",
+              "doc": "Who is reported: a player on this server, or anyone by name or UUID."
+            },
+            {
+              "name": "reason",
+              "type": "string",
+              "doc": "Why, in a few words (at most 500 characters)."
+            },
+            {
+              "name": "details",
+              "type": "any",
+              "doc": "What else to say: where, what was said. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line.",
+              "optional": true
+            },
+            {
+              "name": "by",
+              "type": "Player?",
+              "doc": "Who reports them, when a player does.",
+              "optional": true
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean",
+              "doc": "`false` when it didn't go: this server isn't connected."
+            }
+          ],
+          "example": "local function report(player, reason)\n  nf.network.report(player, reason, { server = nf.network.server_name() })\nend\n\nreturn report"
         },
         {
           "name": "send_player",
@@ -27523,6 +27722,24 @@
           "name": "on_wait",
           "type": "fun(position: integer, status: string?)?",
           "doc": "Called while it waits, each time its place in the queue changes (1 is next), or with `status` when a service placing the group's players holds them (`position` 0). Without it, each player waiting who's on this server sees their place, or the status, on their action bar."
+        }
+      ]
+    },
+    {
+      "name": "NetworkSanctionOptions",
+      "doc": "How `nf.network.ban` and `mute` sanction. A key that isn't one of these is an error.",
+      "methods": false,
+      "functions": [],
+      "fields": [
+        {
+          "name": "reason",
+          "type": "string?",
+          "doc": "Why: shown to them, and kept with it."
+        },
+        {
+          "name": "expires",
+          "type": "integer?",
+          "doc": "When it runs out, as Unix time in milliseconds (like `nf.server.unix_time()`); never when left out."
         }
       ]
     },

@@ -93,10 +93,16 @@ data class Grants(
      * Where it may send players: server names (and groups'), [BACK] for where the player came from, or null for
      * anywhere. Only a [trusted] server sends players who aren't on it.
      */
-    val sendTo: List<String>? = null
+    val sendTo: List<String>? = null,
+    /** Whether it may ban and mute players network-wide (a trusted server may). */
+    val moderation: Boolean = false
 ) {
+    val moderates get() = trusted || moderation
+
     /** Whether it may do [access] on [full] (a channel's or map's `namespace:name`). */
     fun allows(full: String, access: Access): Boolean {
+        // The hub's own maps: every server reads its bans and mutes (it enforces them); nobody writes them as a map.
+        if (Moderation.isReserved(full)) return access == Access.READ && full in Moderation.READABLE
         if (trusted || NetworkNames.namespaceOf(full) in owns) return true
         return shares.any { share ->
             share.matches(full) && (access in share.access || (access == Access.READ && Access.WRITE in share.access))
@@ -124,6 +130,7 @@ data class Grants(
         if (shares.isNotEmpty()) append(", shared ").append(shares.joinToString())
         if (!presence) append(", no presence")
         sendTo?.let { append(", sends to ").append(if (it.isEmpty()) "nowhere" else it.joinToString()) }
+        if (moderation) append(", moderates")
     }
 
     companion object {
@@ -150,12 +157,28 @@ data class Grants(
             owns: List<String> = emptyList(),
             shared: List<Share> = emptyList(),
             presence: Boolean? = null,
-            sendTo: List<String>? = null
+            sendTo: List<String>? = null,
+            moderation: Boolean = false
         ): Grants = when (role) {
             TRUSTED_ROLE -> TRUSTED
             PROXY_ROLE -> Grants(PROXY_ROLE, trusted = true)
-            STANDARD_ROLE -> Grants(role, owns = owns, shares = shared, presence = presence ?: true, sendTo = sendTo)
-            ISOLATED_ROLE -> Grants(role, owns = owns, shares = shared, presence = presence ?: false, sendTo = sendTo ?: listOf(BACK))
+            STANDARD_ROLE -> Grants(
+                role,
+                owns = owns,
+                shares = shared,
+                presence = presence ?: true,
+                sendTo = sendTo,
+                moderation = moderation
+            )
+            ISOLATED_ROLE ->
+                Grants(
+                    role,
+                    owns = owns,
+                    shares = shared,
+                    presence = presence ?: false,
+                    sendTo = sendTo ?: listOf(BACK),
+                    moderation = moderation
+                )
             else -> throw IllegalArgumentException("\"$role\" isn't a role: trusted, standard or isolated")
         }
     }

@@ -3096,6 +3096,15 @@ Where `send_player` and `send_players` send players. A key that isn't one of the
 | `wait` | `number?` | Seconds it may wait, when there's no instance with room yet (none is ready, all are full, the server is starting): the hub holds it, first come first served, tells whatever runs the servers that the group is wanted (its webhook), and sends them as soon as one has room. They stay where they are meanwhile. At most 600; it fails after that, saying why it waited. |
 | `on_wait` | `fun(position: integer, status: string?)?` | Called while it waits, each time its place in the queue changes (1 is next), or with `status` when a service placing the group's players holds them (`position` 0). Without it, each player waiting who's on this server sees their place, or the status, on their action bar. |
 
+### NetworkSanctionOptions {#networksanctionoptions}
+
+How `nf.network.ban` and `mute` sanction. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `reason` | `string?` | Why: shown to them, and kept with it. |
+| `expires` | `integer?` | When it runs out, as Unix time in milliseconds (like `nf.server.unix_time()`); never when left out. |
+
 ### NetworkRole {#networkrole}
 
 What this server may do in the network, from `nf.network.server_role`.
