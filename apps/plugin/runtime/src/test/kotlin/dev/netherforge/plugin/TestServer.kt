@@ -87,6 +87,7 @@ class TestServer(
     /** `network:` in `config.yml`, when not the defaults (in no network). */
     private val network: NetworkConfig = NetworkConfig(),
     private val control: dev.netherforge.plugin.control.ControlConfig = dev.netherforge.plugin.control.ControlConfig(),
+    private val worlds: dev.netherforge.plugin.world.WorldsConfig = dev.netherforge.plugin.world.WorldsConfig(),
     /** `databases:` in `config.yml`: the named connections `nf.db("name")` may open. */
     private val databases: DatabasesConfig = DatabasesConfig(),
     /** How a named connection's pool is made, when not HikariCP: tests give an embedded database. */
@@ -146,6 +147,7 @@ class TestServer(
                     screens = screens,
                     network = network,
                     control = control,
+                    worlds = worlds,
                     resolvesPackages = resolvesPackages,
                     packageCache = packageCache
                 )

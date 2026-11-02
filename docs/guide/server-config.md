@@ -334,6 +334,24 @@ are connected and with which credential. Servers' own credentials are in
 [credentials](./network.md#servers-with-credentials)); keep that file as
 private as `hub.properties`.
 
+## Worlds at run time
+
+```yaml
+worlds:
+  import-root: imports # relative to the server's folder; off turns importing off
+  max-loaded: 0 # the most worlds loaded at once, the server's own included; 0 for any number
+```
+
+A server that hosts different worlds over its life (one player's island, then
+another's) loads and unloads them as it runs instead of restarting:
+`nf.worlds.import("islands/7f2c", "island_7f2c")` makes a world from a folder
+a tool put under `import-root` (laid out as a [map](../format/worlds.md#maps) is),
+and `world:unload` saves it and lets it go, its players moved to another
+world first. Scripts set a world up in `world_load` and tidy up in
+`world_unload`. Paper loads a world on the main thread, so a load is a short
+pause in the tick: the log says how long each one that took 50 ms or more
+took.
+
 ## The control endpoint
 
 The tool that runs the server (a container's sidecar, a host's agent) can read
@@ -347,14 +365,16 @@ control:
   token-file: control.token # in the plugin's folder; made for you
 ```
 
-| Request                                                   | Does                                                                                                                                                   |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /state`                                              | Its [state](./network.md#a-servers-life-starting-ready-draining-stopping), its players, how long it's been empty, its project and version, its worlds. |
-| `GET /events`                                             | A stream (Server-Sent Events) of `state`, `player_join`, `player_quit`, `world_load`, `world_unload` and `writes`.                                     |
-| `POST /drain` `{ "draining": false }` to undo             | As `/nf drain`.                                                                                                                                        |
-| `POST /shutdown` `{ "after_empty": true, "timeout": 60 }` | As `/nf shutdown`.                                                                                                                                     |
-| `POST /save` `{ "pause": true, "timeout": 300 }`          | Saves every world and flushes it to disk; with `pause`, writes stop (the server's `save-off`, world by world) until `POST /resume` or the timeout.     |
-| `POST /resume`                                            | Writes go on.                                                                                                                                          |
+| Request                                                                    | Does                                                                                                                                                   |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /state`                                                               | Its [state](./network.md#a-servers-life-starting-ready-draining-stopping), its players, how long it's been empty, its project and version, its worlds. |
+| `GET /events`                                                              | A stream (Server-Sent Events) of `state`, `player_join`, `player_quit`, `world_load`, `world_unload` and `writes`.                                     |
+| `POST /drain` `{ "draining": false }` to undo                              | As `/nf drain`.                                                                                                                                        |
+| `POST /shutdown` `{ "after_empty": true, "timeout": 60 }`                  | As `/nf shutdown`.                                                                                                                                     |
+| `POST /save` `{ "pause": true, "timeout": 300 }`                           | Saves every world and flushes it to disk; with `pause`, writes stop (the server's `save-off`, world by world) until `POST /resume` or the timeout.     |
+| `POST /resume`                                                             | Writes go on.                                                                                                                                          |
+| `POST /worlds/load` `{ "name", "folder"?, "terrain"? }`                    | Loads a saved world, or with `folder` imports one from the import root (as `nf.worlds.import`).                                                        |
+| `POST /worlds/unload` `{ "name", "save"?, "delete"?, "move_players_to"? }` | Unloads one of the project's worlds, its players moved out first (as `world:unload`).                                                                  |
 
 So a tool copies a consistent world with `POST /save {"pause": true}`, the
 copy, then `POST /resume`; if it never resumes, the timeout does. Every action

@@ -347,7 +347,7 @@ function nf.after(ticks, callback) end
 ---@return Task
 function nf.every(ticks, callback) end
 
---- Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.send_player`, `nf.network.send_players`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.
+--- Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.worlds.import`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.send_player`, `nf.network.send_players`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.
 ---@param callback async fun(...: any) The task: plain Lua that may wait.
 ---@param ... any Passed to `callback`.
 ---@return Task # Call `:cancel()` on it to end it early.
@@ -812,6 +812,17 @@ function nf.worlds.load(name) end
 ---@overload async fun(map: MapId, name: string): World?, string?
 ---@overload fun(map: MapId, name: string, callback: fun(world: World?, err: string?))
 function nf.worlds.copy(map, name, callback) end
+
+--- Makes a new world from a world's files a tool put on the server (one player's island, fetched from storage): the folder is inside the server owner's import root (`worlds.import-root` in `config.yml`), laid out as a map is. Its files are copied, then the server loads the copy as a world named `name`, the project's from then on (as for `nf.worlds.copy`), and `world_load` is heard: set its game rules and spawn limits there, or on the world this gives. With `options.terrain`, chunks it doesn't have yet are made by that project terrain (a void around an island). Importing off on the server, a folder outside the root or not there, a name that isn't an id or that a world already has, or the server holding `worlds.max-loaded` worlds already, is an error at once; a copy that can't be made fails. It works off the main thread, so its world arrives later: give `callback`, which is called with `world, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `world, err`. Without a callback outside a task, it's an error. When it fails, `world` is `nil` and `err` says why.
+---@param folder string The folder, relative to the import root: `"islands/7f2c"`.
+---@param name string The new world's name: `"island_7f2c"`.
+---@param options? WorldImportOptions How its new chunks are made.
+---@param callback? fun(world: World?, err: string?) Called on the main thread once it's done, as this script's code, with the new world (or `nil` and why not). Not called if the script has stopped by then.
+---@return World? # Only without a callback, in a task: the new world, or `nil`.
+---@return string? # Why it failed, when it did; `nil` when it worked.
+---@overload async fun(folder: string, name: string, options?: WorldImportOptions): World?, string?
+---@overload fun(folder: string, name: string, options?: WorldImportOptions, callback: fun(world: World?, err: string?))
+function nf.worlds.import(folder, name, options, callback) end
 
 --- The server's main world: where things go when nothing says which.
 ---@return World
@@ -7666,6 +7677,10 @@ function Event:uncancel() end
 ---@field seed integer? Its seed: a project generator makes the same world for the same seed. Default: a random one.
 ---@field structures boolean? Whether villages, temples and the like generate. Default `true`.
 ---@field keep_spawn_loaded boolean? Whether the chunks around its spawn stay loaded with nobody near. Default `false`.
+
+--- How `nf.worlds.import` makes the world it imports. A key that isn't one of these is an error.
+---@class WorldImportOptions
+---@field terrain string? One of the project's terrains (as the calling package names it), which makes the chunks the world doesn't have yet; the game's own when left out.
 
 --- How `world:unload` lets a world go. A key that isn't one of these is an error.
 ---@class WorldUnloadOptions

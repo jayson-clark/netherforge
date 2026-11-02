@@ -8521,6 +8521,15 @@ namespaces["nf.worlds"] = function(scope, ns)
     end
   end
 
+  function ns.import(folder, name, options, callback)
+    local waker, task, token = async.begin("nf.worlds.import", callback)
+    local wait_id = prim["nf.worlds.import"](scope, folder, name, options, waker)
+    if task ~= nil then
+      local value, err = async.wait(task, token, wait_id)
+      return value, err
+    end
+  end
+
   function ns.default()
     return prim["nf.worlds.default"](scope)
   end

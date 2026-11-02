@@ -136,6 +136,13 @@ internal class NfWorldsImpl(private val session: ProjectSession) : NfWorldsApi {
     override fun load(caller: Caller, name: String): LuaHandle.World? = loadWorld(session, name)
 
     override fun copy(caller: Caller, map: String, name: String): CompletionStage<LuaHandle.World> = session.managedWorlds.copy(map, name)
+
+    override fun import(
+        caller: Caller,
+        folder: String,
+        name: String,
+        options: dev.netherforge.plugin.binding.WorldImportOptions?
+    ): CompletionStage<LuaHandle.World> = session.managedWorlds.import(folder, name, options?.terrain?.let { projectTerrain(session, it) })
 }
 
 /**

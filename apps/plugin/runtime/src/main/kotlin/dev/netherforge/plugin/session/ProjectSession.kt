@@ -343,7 +343,7 @@ class ProjectSession internal constructor(
 
     /** The worlds the project made and may unload. */
     internal val managedWorlds =
-        service(ManagedWorlds(platform, async, log, runtime.store.worlds, namespace, { source.rootFolder }) { snapshot })
+        service(ManagedWorlds(platform, async, log, runtime.store.worlds, namespace, { source.rootFolder }, config.worlds) { snapshot })
 
     /** Worlds' `dusk` and `dawn`: their clocks, looked at while a script listens. */
     internal val daylight = service(Daylight(platform, scripts))

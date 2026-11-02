@@ -149,7 +149,20 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
 
     // ---- requests ----------------------------------------------------------------
 
+    /** An action the server refused: answered 409 with why. */
+    private class Refused(message: String) : Exception(message)
+
     private fun handle(request: LocalHttp.Request, respond: LocalHttp.Responder) {
+        try {
+            route(request, respond)
+        } catch (e: Refused) {
+            respond.send(409, """{"error":${LocalHttp.quote(e.message.orEmpty())}}""")
+        } catch (e: java.util.concurrent.ExecutionException) {
+            respond.send(409, """{"error":${LocalHttp.quote(e.cause?.message ?: e.toString())}}""")
+        }
+    }
+
+    private fun route(request: LocalHttp.Request, respond: LocalHttp.Responder) {
         token?.let { expected ->
             val given = request.header("authorization")?.removePrefix("Bearer ")?.trim().orEmpty()
             if (!MessageDigest.isEqual(given.toByteArray(), expected.toByteArray())) {
@@ -193,6 +206,33 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
                     }.toString()
                 )
             }
+            "POST" to "/worlds/load" -> {
+                val name = (body["name"] as? JsonPrimitive)?.content ?: return respond.send(400, """{"error":"a load names its world"}""")
+                val folder = (body["folder"] as? JsonPrimitive)?.content
+                val terrain = (body["terrain"] as? JsonPrimitive)?.content
+                val loading = act("load world $name" + folder?.let { " from $it" }.orEmpty()) {
+                    val session = runtime.session
+                    if (folder != null) {
+                        session.managedWorlds.import(folder, name, terrain?.let { dev.netherforge.plugin.api.projectTerrain(session, it) })
+                            .toCompletableFuture()
+                    } else {
+                        CompletableFuture.completedFuture(session.managedWorlds.load(name))
+                    }
+                }
+                val loaded = loading.get(LOAD_SECONDS, TimeUnit.SECONDS)
+                if (loaded == false) return respond.send(404, """{"error":"the server has no world saved as $name"}""")
+                respond.send(200, """{"world":${LocalHttp.quote(name)}}""")
+            }
+            "POST" to "/worlds/unload" -> {
+                val name =
+                    (body["name"] as? JsonPrimitive)?.content ?: return respond.send(400, """{"error":"an unload names its world"}""")
+                val moveTo = (body["move_players_to"] as? JsonPrimitive)?.content
+                val unloaded = act("unload world $name") {
+                    runtime.session.managedWorlds.unload(name, flag("save") ?: true, flag("delete") ?: false, moveTo)
+                }
+                if (!unloaded) return respond.send(409, """{"error":"$name had gone, or the server kept it"}""")
+                respond.send(200, """{"world":${LocalHttp.quote(name)}}""")
+            }
             "POST" to "/resume" -> {
                 act("resume writes") { resume(null) }
                 respond.send(200, """{"writes_paused":false}""")
@@ -220,13 +260,17 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
         }
     }
 
-    /** [what], logged with where it came from, done on the main thread. */
+    /** [what], logged with where it came from, done on the main thread; what refuses it is the request's failure. */
     private fun <T> act(what: String, block: () -> T): T {
         val done = CompletableFuture.supplyAsync({
             runtime.log.info("Control endpoint ($where): $what")
             block()
         }, runtime.mainThread)
-        val result = done.get(ACT_SECONDS, TimeUnit.SECONDS)
+        val result = try {
+            done.get(ACT_SECONDS, TimeUnit.SECONDS)
+        } catch (e: java.util.concurrent.ExecutionException) {
+            throw Refused(e.cause?.message ?: e.toString())
+        }
         // The snapshot shows it at once.
         runtime.mainThread.execute {
             last?.let {
@@ -280,6 +324,9 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
         const val MAX_QUEUED = 1000
         const val PING_SECONDS = 15L
         const val ACT_SECONDS = 30L
+
+        /** How long a world's import may take, its files' copy included. */
+        const val LOAD_SECONDS = 120L
         const val DEFAULT_SHUTDOWN_SECONDS = 60L
         const val DEFAULT_PAUSE_SECONDS = 300L
 

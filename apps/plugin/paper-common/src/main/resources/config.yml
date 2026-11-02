@@ -212,10 +212,19 @@ network:
   messages-per-tick: 1000
   max-queued-messages: 10000
 
+# Worlds at run time: nf.worlds.import makes a world from a folder a tool put
+# under import-root (relative to the server's folder; off to turn it off),
+# and at most max-loaded worlds are loaded at once, the server's own
+# included (0 for any number).
+worlds:
+  import-root: imports
+  max-loaded: 0
+
 # A local control endpoint for the tool that runs this server (a container's
 # sidecar, a host's agent): GET /state and /events (a stream of changes), POST
 # /drain, /shutdown, /save (with "pause": true, writes stop until /resume or
-# its timeout, so the worlds can be copied whole) and /resume. Only on a Unix
+# its timeout, so the worlds can be copied whole), /resume, and /worlds/load
+# and /worlds/unload. Only on a Unix
 # socket (whoever may open the file may use it) or on 127.0.0.1 with the
 # token in token-file (made for you). Off unless socket or port is set.
 control:

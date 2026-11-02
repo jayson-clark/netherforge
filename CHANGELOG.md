@@ -53,6 +53,12 @@ release is cut.
   (`GET /state`, a stream of changes at `GET /events`) and drain it, shut it
   down, save it, and pause writes for a consistent copy until `POST /resume`
   or a timeout.
+- **Worlds imported at run time.** `nf.worlds.import(folder, name)` makes a
+  world from a folder a tool put under `worlds.import-root` (a player's
+  island), with a project terrain for its new chunks; `worlds.max-loaded`
+  caps how many are loaded at once, and the log says how long a slow load
+  took. The control endpoint loads and unloads worlds too
+  (`POST /worlds/load`, `/worlds/unload`).
 - **Groups of servers.** `network.group` and `network.capacity` make a server
   an instance of a group. `send_player` and the new `send_players` (a party,
   landing together) take `{ group = "arena" }`, and the hub picks the

@@ -2204,6 +2204,14 @@ How `nf.worlds.create` makes a world. A key that isn't one of these is an error.
 | `structures` | `boolean?` | Whether villages, temples and the like generate. Default `true`. |
 | `keep_spawn_loaded` | `boolean?` | Whether the chunks around its spawn stay loaded with nobody near. Default `false`. |
 
+### WorldImportOptions {#worldimportoptions}
+
+How `nf.worlds.import` makes the world it imports. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `terrain` | `string?` | One of the project's terrains (as the calling package names it), which makes the chunks the world doesn't have yet; the game's own when left out. |
+
 ### WorldUnloadOptions {#worldunloadoptions}
 
 How `world:unload` lets a world go. A key that isn't one of these is an error.

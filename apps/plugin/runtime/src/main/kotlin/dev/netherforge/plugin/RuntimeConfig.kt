@@ -64,6 +64,8 @@ data class RuntimeConfig(
     val network: NetworkConfig = NetworkConfig(),
     /** `files:`: what each package may keep in `nf.files`. */
     val files: FilesConfig = FilesConfig(),
+    /** `worlds:`: where worlds are imported from, and how many may be loaded. */
+    val worlds: dev.netherforge.plugin.world.WorldsConfig = dev.netherforge.plugin.world.WorldsConfig(),
     /** `control:`: the local control endpoint for the tool that runs the server, off unless set. */
     val control: dev.netherforge.plugin.control.ControlConfig = dev.netherforge.plugin.control.ControlConfig(),
     /**
@@ -134,6 +136,13 @@ data class RuntimeConfig(
             val wasm = wasm(settings.section("wasm"))
             val network = network(settings.section("network"))
             val files = files(settings.section("files"))
+            val worlds = settings.section("worlds").let { section ->
+                dev.netherforge.plugin.world.WorldsConfig(
+                    importRoot = (section.text("import-root")?.trim() ?: "imports").takeIf { it.isNotEmpty() && it != "off" }
+                        ?.let { server.directory.resolve(it).toAbsolutePath().normalize() },
+                    maxLoaded = section.int("max-loaded")?.takeIf { it > 0 } ?: 0
+                )
+            }
             val control = settings.section("control").let { section ->
                 dev.netherforge.plugin.control.ControlConfig(
                     socket = section.text("socket")?.trim()?.let { server.directory.resolve(it).toAbsolutePath().normalize() },
@@ -162,6 +171,7 @@ data class RuntimeConfig(
                     network = devNetwork(network, properties, env),
                     files = files,
                     control = control,
+                    worlds = worlds,
                     packageCache = properties(Bridge.PACKAGE_CACHE_PROPERTY)?.takeIf {
                         it.isNotBlank()
                     }?.let { Path.of(it).toAbsolutePath().normalize() },
@@ -186,6 +196,7 @@ data class RuntimeConfig(
                 wasm = wasm,
                 network = network,
                 control = control,
+                worlds = worlds,
                 files = files,
                 resolvesPackages = false
             )

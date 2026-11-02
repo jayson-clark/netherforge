@@ -1088,6 +1088,17 @@ export const worldShapes: LuaClass[] = [
     ],
   ),
   shape(
+    'WorldImportOptions',
+    "How `nf.worlds.import` makes the world it imports. A key that isn't one of these is an error.",
+    [
+      {
+        name: 'terrain',
+        type: 'string?',
+        doc: "One of the project's terrains (as the calling package names it), which makes the chunks the world doesn't have yet; the game's own when left out.",
+      },
+    ],
+  ),
+  shape(
     'WorldUnloadOptions',
     "How `world:unload` lets a world go. A key that isn't one of these is an error.",
     [
@@ -1614,6 +1625,27 @@ export const nfWorlds: LuaClass = {
       value: { name: 'world', type: 'World', doc: 'the new world' },
       example:
         'nf.task(function()\n  local arena, err = nf.worlds.copy("arena", "arena_2")\n  if not arena then\n    log("no arena: " .. err)\n    return\n  end\n  local spawn = arena:spawn_location()\n  if spawn then\n    player:teleport(spawn)\n  end\nend)',
+    }),
+    asyncFunction({
+      name: 'import',
+      doc: "Makes a new world from a world's files a tool put on the server (one player's island, fetched from storage): the folder is inside the server owner's import root (`worlds.import-root` in `config.yml`), laid out as a map is. Its files are copied, then the server loads the copy as a world named `name`, the project's from then on (as for `nf.worlds.copy`), and `world_load` is heard: set its game rules and spawn limits there, or on the world this gives. With `options.terrain`, chunks it doesn't have yet are made by that project terrain (a void around an island). Importing off on the server, a folder outside the root or not there, a name that isn't an id or that a world already has, or the server holding `worlds.max-loaded` worlds already, is an error at once; a copy that can't be made fails.",
+      params: [
+        {
+          name: 'folder',
+          type: 'string',
+          doc: 'The folder, relative to the import root: `"islands/7f2c"`.',
+        },
+        { name: 'name', type: 'string', doc: 'The new world\'s name: `"island_7f2c"`.' },
+        {
+          name: 'options',
+          type: 'WorldImportOptions',
+          doc: 'How its new chunks are made.',
+          optional: true,
+        },
+      ],
+      value: { name: 'world', type: 'World', doc: 'the new world' },
+      example:
+        'local owner = "7f2c"\nnf.task(function()\n  local island, err = nf.worlds.import("islands/" .. owner, "island_" .. owner, { terrain = "void" })\n  if not island then\n    log("no island: " .. err)\n    return\n  end\n  island:set_game_rule("pvp", false)\nend)',
     }),
     {
       name: 'default',

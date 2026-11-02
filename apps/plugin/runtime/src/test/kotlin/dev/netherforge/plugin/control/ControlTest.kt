@@ -134,4 +134,27 @@ class ControlTest {
     }
 
     private fun freePort() = java.net.ServerSocket(0).use { it.localPort }
+
+    @Test
+    fun `worlds are imported and unloaded from the endpoint`() {
+        val socket = folder.resolve("w.sock")
+        val root = folder.resolve("imports")
+        Files.createDirectories(root.resolve("islands/a1"))
+        Files.writeString(root.resolve("islands/a1/level.dat"), "a level")
+        TestServer(
+            mapOf(TestServer.MANIFEST to TestServer.manifest()),
+            control = ControlConfig(socket = socket),
+            worlds = dev.netherforge.plugin.world.WorldsConfig(importRoot = root)
+        ).use { server ->
+            val address = UnixDomainSocketAddress.of(socket)
+            repeat(10) { server.tick() }
+            val (status, body) = call(server, address, "POST", "/worlds/load", """{ "name": "island_a1", "folder": "islands/a1" }""")
+            assertEquals(200, status, body)
+            assertTrue("island_a1" in server.platform.worlds.names())
+            assertEquals(409, call(server, address, "POST", "/worlds/load", """{ "name": "x", "folder": "../out" }""").first)
+            assertEquals(200, call(server, address, "POST", "/worlds/unload", """{ "name": "island_a1" }""").first)
+            assertTrue("island_a1" !in server.platform.worlds.names())
+            assertEquals(409, call(server, address, "POST", "/worlds/unload", """{ "name": "world" }""").first)
+        }
+    }
 }

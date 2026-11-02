@@ -5383,6 +5383,29 @@ data class WorldCreateOptions(val generator: String? = null, val terrain: String
     }
 }
 
+/** How `nf.worlds.import` makes the world it imports. A key that isn't one of these is an error. */
+data class WorldImportOptions(val terrain: String? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<WorldImportOptions>("WorldImportOptions") {
+        val terrainCodec = LuaOptional(LuaCodecs.STRING)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "terrain" to terrainCodec
+        )
+
+        override fun read(fields: ShapeReader) = WorldImportOptions(
+            terrain = fields.field("terrain", terrainCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: WorldImportOptions) {
+            fields.field("terrain", value.terrain, terrainCodec)
+        }
+    }
+}
+
 /** How `world:unload` lets a world go. A key that isn't one of these is an error. */
 data class WorldUnloadOptions(val save: Boolean? = null, val delete: Boolean? = null, val movePlayersTo: LuaHandle.World? = null) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)
