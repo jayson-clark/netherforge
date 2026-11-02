@@ -1181,7 +1181,12 @@ mod tests {
             servers: vec![layout::NetworkServer {
                 name: "lobby".into(),
                 project: "../lobby".into(),
-                options: Default::default(),
+                // A server of a group, with a credential of its own: the real hub has to take it.
+                options: layout::ServerOptions {
+                    group: Some("lobbies".into()),
+                    capacity: Some(20),
+                    role: Some("standard".into()),
+                },
             }],
         };
         let settings = Settings {
@@ -1249,7 +1254,10 @@ mod tests {
             network.command("proxy", "nfhub").await.unwrap();
             tokio::time::sleep(Duration::from_secs(1)).await;
             let said = output_of(&sink, "proxy").join("\n");
-            if said.contains("main: connected") && said.contains("lobby: connected") {
+            if said.contains("main: connected (shared secret)")
+                && said
+                    .contains("lobby: connected (dev-lobby: standard) in lobbies, 0 of 20 online")
+            {
                 break;
             }
             if std::time::Instant::now() > deadline {

@@ -475,7 +475,7 @@ layout is `enabled`.
 - **Tests**: unit tests per module, `runs_a_network_and_reloads_its_other_servers`
   (the fake server as proxy and peer), two contract cases, and the ignored
   `runs_a_real_network` (real Java, Paper, Velocity and the repo's jars: both
-  servers connected per `/nfhub`).
+  servers connected per `/nfhub`, the lobby with a `standard` credential in a group).
 
 ## lua-language-server
 
