@@ -64,6 +64,8 @@ data class RuntimeConfig(
     val network: NetworkConfig = NetworkConfig(),
     /** `files:`: what each package may keep in `nf.files`. */
     val files: FilesConfig = FilesConfig(),
+    /** `control:`: the local control endpoint for the tool that runs the server, off unless set. */
+    val control: dev.netherforge.plugin.control.ControlConfig = dev.netherforge.plugin.control.ControlConfig(),
     /**
      * Whether the project's dependencies are found where `netherforge.json`'s
      * paths point: on the editor's dev server (and in tests). A production
@@ -132,6 +134,13 @@ data class RuntimeConfig(
             val wasm = wasm(settings.section("wasm"))
             val network = network(settings.section("network"))
             val files = files(settings.section("files"))
+            val control = settings.section("control").let { section ->
+                dev.netherforge.plugin.control.ControlConfig(
+                    socket = section.text("socket")?.trim()?.let { server.directory.resolve(it).toAbsolutePath().normalize() },
+                    port = section.int("port")?.takeIf { it in 1..65535 },
+                    tokenFile = pluginFolder.resolve(section.text("token-file")?.trim() ?: "control.token").toAbsolutePath().normalize()
+                )
+            }
             properties(Bridge.PROJECT_PROPERTY)?.takeIf { it.isNotBlank() }?.let { project ->
                 val port = properties(Bridge.PORT_PROPERTY)?.toIntOrNull()
                 return RuntimeConfig(
@@ -152,6 +161,7 @@ data class RuntimeConfig(
                     wasm = wasm,
                     network = devNetwork(network, properties, env),
                     files = files,
+                    control = control,
                     packageCache = properties(Bridge.PACKAGE_CACHE_PROPERTY)?.takeIf {
                         it.isNotBlank()
                     }?.let { Path.of(it).toAbsolutePath().normalize() },
@@ -175,6 +185,7 @@ data class RuntimeConfig(
                 screens = screens,
                 wasm = wasm,
                 network = network,
+                control = control,
                 files = files,
                 resolvesPackages = false
             )

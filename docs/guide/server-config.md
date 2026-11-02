@@ -334,6 +334,32 @@ are connected and with which credential. Servers' own credentials are in
 [credentials](./network.md#servers-with-credentials)); keep that file as
 private as `hub.properties`.
 
+## The control endpoint
+
+The tool that runs the server (a container's sidecar, a host's agent) can read
+its state and tell it what to do without a player or the console, through a
+small HTTP endpoint that's never reachable from elsewhere:
+
+```yaml
+control:
+  socket: /run/netherforge/control.sock # a Unix socket: whoever may open the file may use it
+  port: 0 # or a TCP port on 127.0.0.1, with the token in token-file
+  token-file: control.token # in the plugin's folder; made for you
+```
+
+| Request                                                   | Does                                                                                                                                                   |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /state`                                              | Its [state](./network.md#a-servers-life-starting-ready-draining-stopping), its players, how long it's been empty, its project and version, its worlds. |
+| `GET /events`                                             | A stream (Server-Sent Events) of `state`, `player_join`, `player_quit`, `world_load`, `world_unload` and `writes`.                                     |
+| `POST /drain` `{ "draining": false }` to undo             | As `/nf drain`.                                                                                                                                        |
+| `POST /shutdown` `{ "after_empty": true, "timeout": 60 }` | As `/nf shutdown`.                                                                                                                                     |
+| `POST /save` `{ "pause": true, "timeout": 300 }`          | Saves every world and flushes it to disk; with `pause`, writes stop (the server's `save-off`, world by world) until `POST /resume` or the timeout.     |
+| `POST /resume`                                            | Writes go on.                                                                                                                                          |
+
+So a tool copies a consistent world with `POST /save {"pause": true}`, the
+copy, then `POST /resume`; if it never resumes, the timeout does. Every action
+is in the server's log, with where it came from.
+
 ## Web routes
 
 A package that declares `"requires": { "web": true }` can answer web requests

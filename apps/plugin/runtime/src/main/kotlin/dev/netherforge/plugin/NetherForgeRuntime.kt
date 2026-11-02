@@ -95,6 +95,9 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
      * not in a network, and a test run, are a network of their own, in this JVM) and what it said of the network.
      * Connected in [enable], closed in [disable].
      */
+    /** The local control endpoint (`control:` in `config.yml`), for the tool that runs this server. */
+    val control by lazy { dev.netherforge.plugin.control.Control(config.control, this) }
+
     val network = NetworkLink(
         config.network,
         alone = when {
@@ -294,6 +297,7 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
             }
         }
         network.start { log.info(it) }
+        control.start()
         config.bridge?.let { settings ->
             val connection = BridgeService(this, settings)
             debugger = Debugger(this, connection::dap)
@@ -340,6 +344,7 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
             log.error("NetherForge couldn't close its database connections", e)
         }
         remote = null
+        control.stop()
         network.stop()
         // Work under way (files being copied, reports written) finishes; what it reported is logged.
         pool?.close()
@@ -423,6 +428,7 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
             if (session.running) reload(session.snapshot.everywhere(ResourcePackKind).keys.map { packFile(it) })
         }
         store.commit()
+        control.tick(ticks)
         if (ticks % STATUS_EVERY == 0L) {
             try {
                 sendStatus()

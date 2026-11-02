@@ -140,6 +140,13 @@ class PaperWorldManager(private val plugin: JavaPlugin, private val version: Pap
         return FileWork { storage.delete(name, dimension) }
     }
 
+    override fun setSaving(name: String, saving: Boolean): Boolean {
+        val world = Bukkit.getWorld(name) ?: return false
+        // The world's own save-off: Paper skips its autosave and the chunks it unloads while this is off.
+        world.isAutoSave = saving
+        return true
+    }
+
     override fun saveFiles(name: String): WorldFiles? {
         val world = Bukkit.getWorld(name) ?: return null
         // Writes every chunk and the world's saved data, and waits for the region files to be on disk.

@@ -212,6 +212,17 @@ network:
   messages-per-tick: 1000
   max-queued-messages: 10000
 
+# A local control endpoint for the tool that runs this server (a container's
+# sidecar, a host's agent): GET /state and /events (a stream of changes), POST
+# /drain, /shutdown, /save (with "pause": true, writes stop until /resume or
+# its timeout, so the worlds can be copied whole) and /resume. Only on a Unix
+# socket (whoever may open the file may use it) or on 127.0.0.1 with the
+# token in token-file (made for you). Off unless socket or port is set.
+control:
+  socket: ''
+  port: 0
+  token-file: control.token
+
 # MySQL and PostgreSQL servers that scripts may use, each under a name:
 # nf.db("network"). A script names a connection and never sees its host or
 # password. A connection opens only to the packages (by namespace) listed under

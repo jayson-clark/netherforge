@@ -48,6 +48,11 @@ release is cut.
   the hub's new webhook hears `server_ready`, `server_idle`
   (`network.idle-after-seconds`), `server_gone` and `group_wanted`. The time
   from start to ready is logged.
+- **A local control endpoint.** `control:` in `config.yml` (a Unix socket, or
+  `127.0.0.1` with a token) lets the tool running a server read its state
+  (`GET /state`, a stream of changes at `GET /events`) and drain it, shut it
+  down, save it, and pause writes for a consistent copy until `POST /resume`
+  or a timeout.
 - **Groups of servers.** `network.group` and `network.capacity` make a server
   an instance of a group. `send_player` and the new `send_players` (a party,
   landing together) take `{ group = "arena" }`, and the hub picks the
