@@ -8,6 +8,13 @@
 # -Dnetherforge.project=<folder> instead.
 project: ''
 
+# Write the game's data (registries, tags, block states, collision shapes:
+# what the editor's dev server exports) to this file at every start, for
+# `netherforge check` and `netherforge test` on a machine with no editor (put it
+# at --game-data, or in the editor's cache). Empty: not written. Needs no
+# project. `netherforge game-data <minecraft version>` does this for you.
+export-game-data: ''
+
 # How players get the project's resource pack (everything under resource_packs/). The
 # plugin builds it, and by default serves it itself over HTTP and sends it to
 # players as they join. The editor's dev server ignores this section and

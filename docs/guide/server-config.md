@@ -663,3 +663,17 @@ performance:
 | `warn-ms`         | Milliseconds a tick, on average, above which a script is slow. 0 turns it off.                               | `10`    |
 | `warn-ticks`      | How many ticks that average is over (1 to 100).                                                              | `20`    |
 | `max-ms-per-tick` | Milliseconds a script's code may run in a tick before its timers and tick handlers wait for the next. 0 off. | `25`    |
+
+## Exporting the game data
+
+`export-game-data:` names a file (absolute, or relative to the server's
+folder) the plugin writes the game's data to once the server has started:
+the registries, tags, block states and collision shapes `netherforge check`
+and `netherforge test` read, as the editor's dev server exports them. It needs
+no project. `netherforge game-data <version>` starts a server just for this (see
+[Testing](testing.md#what-it-needs)), so this is for tools that already
+run one.
+
+```yaml
+export-game-data: game-data.json
+```

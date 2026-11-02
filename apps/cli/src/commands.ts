@@ -94,7 +94,7 @@ export function loadGameData(
     json: null,
     note:
       `No game data for Minecraft ${minecraft} (${file}), so block, item and entity ids weren't checked. ` +
-      'Start the dev server from the NetherForge editor once to export it, or pass --game-data <file>.',
+      `Start the dev server from the NetherForge editor once to export it, run netherforge game-data ${minecraft} --accept-eula, or pass --game-data <file>.`,
   }
 }
 

@@ -33,5 +33,7 @@ internal object GameDataFile {
         return bundle
     }
 
-    private const val HOW = "Start the dev server from the NetherForge editor once for the project's Minecraft version to export it."
+    private const val HOW =
+        "Start the dev server from the NetherForge editor once for the project's Minecraft version to export it, or run " +
+            "`netherforge game-data <minecraft version> --accept-eula`."
 }

@@ -11,6 +11,12 @@ release is cut.
 
 ### Added
 
+- **Game data without the editor.** `netherforge game-data <version>`
+  (with `--accept-eula`) downloads the version's plugin and its Paper build,
+  starts Paper headless, exports the game data `check` and `test` read into
+  the same per-user cache the editor uses (or `--out`), and stops: what CI
+  needs to run a project's tests. A server can also write it at every start
+  with `export-game-data: <file>` in `config.yml`.
 - **Server credentials and roles.** A network's servers can join with
   credentials of their own (`/nfhub credentials add <id> [role]
 [namespaces]`, kept in the proxy's `credentials.properties`), each with a

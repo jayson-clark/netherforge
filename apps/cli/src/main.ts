@@ -10,6 +10,7 @@ import { gallery, render } from './render.ts'
 import { setup, setupWorkspace } from './setup.ts'
 import { findPlaceable, importSchematic, placeableAt, previewStructure } from './structures.ts'
 import { fetchJar, findJar, test } from './test.ts'
+import { exportGameData } from './gameData.ts'
 import { eachProject, isWorkspace, readWorkspace, workspaceAround } from './workspace.ts'
 
 declare const __NETHERFORGE_VERSION__: string
@@ -113,6 +114,16 @@ Usage:
   netherforge gallery [dir] [--out <folder>] [--size <pixels>]
       Draw every item, block and centity of the project into --out
       (default build/gallery), with an index.html showing them all.
+  netherforge game-data <minecraft version> [--out <file>] --accept-eula
+                     [--timeout <seconds>]
+      Export the game's data for a Minecraft version without the editor (on
+      CI, say), into the cache check and test read, or --out. Downloads the
+      version's plugin jar from this NetherForge's release (or
+      NETHERFORGE_PLUGIN_JAR) and the Paper build it names, starts Paper
+      headless with Java 25 or newer, exports and stops. Running Minecraft's
+      server needs you to accept its EULA: --accept-eula says you do.
+      --timeout bounds the run (default 600; the first start downloads and
+      patches Minecraft's server).
   netherforge test   [dir|file] [--json] [--junit <file>] [--filter <text>]
                      [--game-data <file>]
       Run the project's *_test.lua files on a fake server, each test on a
@@ -121,8 +132,8 @@ Usage:
       jar: the editor puts it in its data folder, and this command downloads
       it from the release the first time (see NETHERFORGE_TEST_JAR).
       The project runs on the real game data of its Minecraft version, the
-      dev server's export the editor caches (or --game-data <file>); without
-      it the tests don't run.
+      dev server's export the editor caches (or netherforge game-data puts
+      there, or --game-data <file>); without it the tests don't run.
       --json prints one JSON event per line, --junit also writes JUnit XML,
       --filter keeps the tests whose "file: name" contains the text. Giving a
       *_test.lua file runs only that file. Exits 1 if a test fails or errors,
@@ -174,6 +185,8 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
         as: { type: 'string' },
         build: { type: 'boolean' },
         replace: { type: 'boolean' },
+        'accept-eula': { type: 'boolean' },
+        timeout: { type: 'string' },
         help: { type: 'boolean', short: 'h' },
         version: { type: 'boolean', short: 'v' },
       },
@@ -268,6 +281,25 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
       return { out: [JSON.stringify(report, null, 2)], err: [], code }
     }
     return eachProject(workspace, run, command === 'test' ? (line) => console.log(line) : undefined)
+  }
+  // The game's data needs no project either: a Minecraft version.
+  if (command === 'game-data') {
+    if (dir === '.')
+      return {
+        out: [],
+        err: ['Usage: netherforge game-data <minecraft version> [--out <file>] --accept-eula'],
+        code: 2,
+      }
+    const timeout = values.timeout === undefined ? undefined : Number(values.timeout)
+    if (timeout !== undefined && !(timeout > 0))
+      return { out: [], err: [`--timeout is seconds, not "${values.timeout}"`], code: 2 }
+    return exportGameData(
+      dir,
+      { out: values.out, acceptEula: values['accept-eula'], timeoutSeconds: timeout },
+      __NETHERFORGE_VERSION__,
+      env,
+      { say: (line) => process.stderr.write(`${line}\n`) },
+    )
   }
   // Keys and signatures need no project: a file, and a bundle's folder.
   if (command === 'keygen') {

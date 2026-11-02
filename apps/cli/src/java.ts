@@ -11,6 +11,9 @@ import { editorDataDir } from './project.ts'
  */
 export const MIN_JAVA = 21
 
+/** The oldest Java a server runs on: what the editor's dev server needs (`server/java.rs`), for every supported Minecraft. */
+export const SERVER_JAVA = 25
+
 /** Where the Java search looks: a pure function of this, so a test can fake the machine. */
 export interface JavaEnv {
   platform: NodeJS.Platform
@@ -160,11 +163,14 @@ export function javaVersion(java: string): number | null {
   return parseVersionOutput(`${ran.stderr ?? ''}\n${ran.stdout ?? ''}`)
 }
 
-/** The first Java of at least [MIN_JAVA] that the search finds, or null. */
-export function findJava(machine: JavaEnv = currentJavaEnv()): string | null {
+/** The first Java of at least [min] that the search finds, or null. */
+export function findJava(
+  machine: JavaEnv = currentJavaEnv(),
+  min: number = MIN_JAVA,
+): string | null {
   for (const java of javaCandidates(machine)) {
     const major = javaVersion(java)
-    if (major != null && major >= MIN_JAVA) return java
+    if (major != null && major >= min) return java
   }
   return null
 }

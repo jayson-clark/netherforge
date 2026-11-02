@@ -57,17 +57,41 @@ export function releasesUrl(env: NodeJS.ProcessEnv = process.env): string {
  * [findJar] finds it next time, and where the editor puts the one it carries), checked against the
  * release's `SHA256SUMS.txt`. [say] hears what it's doing.
  */
-export async function fetchJar(
+export function fetchJar(
   version: string,
   env: NodeJS.ProcessEnv = process.env,
   say: (line: string) => void = () => {},
   get: typeof fetch = fetch,
 ): Promise<{ file: string } | { err: string }> {
   const name = jarName(version)
-  const base = `${releasesUrl(env)}/v${version}`
-  const how =
+  return fetchReleaseFile(
+    version,
+    name,
+    path.join(editorDataDir(env), 'test-runner'),
+    'Running tests',
     `Download ${name} from the NetherForge ${version} release yourself and set NETHERFORGE_TEST_JAR to it, ` +
-    'or start the NetherForge editor once, which puts it where this command looks.'
+      'or start the NetherForge editor once, which puts it where this command looks.',
+    env,
+    say,
+    get,
+  )
+}
+
+/**
+ * Downloads [name] from NetherForge [version]'s release into [folder], checked against the release's
+ * `SHA256SUMS.txt`. [purpose] (`Running tests`) and [how] (what to do instead) word the error.
+ */
+export async function fetchReleaseFile(
+  version: string,
+  name: string,
+  folder: string,
+  purpose: string,
+  how: string,
+  env: NodeJS.ProcessEnv = process.env,
+  say: (line: string) => void = () => {},
+  get: typeof fetch = fetch,
+): Promise<{ file: string } | { err: string }> {
+  const base = `${releasesUrl(env)}/v${version}`
   const download = async (file: string): Promise<Buffer> => {
     const response = await get(`${base}/${file}`)
     if (!response.ok) throw new Error(`${base}/${file} answered ${response.status}`)
@@ -81,7 +105,7 @@ export async function fetchJar(
     jar = await download(name)
   } catch (error) {
     return {
-      err: `Running tests needs ${name}, and it couldn't be downloaded: ${(error as Error).message}. ${how}`,
+      err: `${purpose} needs ${name}, and it couldn't be downloaded: ${(error as Error).message}. ${how}`,
     }
   }
   const expected = sums
@@ -93,7 +117,6 @@ export async function fetchJar(
     return {
       err: `The downloaded ${name} doesn't match the release's SHA256SUMS.txt (${expected ? `expected ${expected}` : 'not listed'}, got ${actual}). ${how}`,
     }
-  const folder = path.join(editorDataDir(env), 'test-runner')
   const file = path.join(folder, name)
   mkdirSync(folder, { recursive: true })
   // Whole or not at all: a jar cut short by an interrupted run would be found next time.
@@ -127,8 +150,7 @@ export function findGameData(
     return {
       err: "netherforge.json doesn't name a Minecraft release (`minecraft`), so there is no game data to test on.",
     }
-  const how =
-    'Start the dev server from the NetherForge editor once to export it, or pass --game-data <file>.'
+  const how = `Start the dev server from the NetherForge editor once to export it, run netherforge game-data ${minecraft ?? '<minecraft version>'} --accept-eula, or pass --game-data <file>.`
   let json: string
   try {
     json = readFileSync(file, 'utf8')
