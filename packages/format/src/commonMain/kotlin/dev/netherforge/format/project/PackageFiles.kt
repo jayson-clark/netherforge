@@ -72,13 +72,26 @@ data class BundleManifest(
      * Who vouches for the bundle: each an Ed25519 signature over [signedText], by its author (`netherforge build
      * --sign`) and maybe a network that checked it (`netherforge sign`). A server can require one by a key it trusts.
      */
-    val signatures: List<BundleSignature>? = null
+    val signatures: List<BundleSignature>? = null,
+    /**
+     * The project's resource pack, built with the bundle (`netherforge build` with the game's data): a server whose pack
+     * format is [BundledResourcePack.format] sends it as it is rather than building its own.
+     */
+    val resourcePack: BundledResourcePack? = null
 ) {
     /** What a signature signs: the manifest as it's written, without its signatures (so a countersignature adds one). */
     fun signedText(): String = BundleKind.write(copy(signatures = null))
 
     companion object {
         const val FILE_NAME = "netherforge-bundle.json"
+    }
+}
+
+/** A resource pack built into a bundle, as [FILE] beside the manifest: its [sha1], and the pack [format] it's for. */
+@Serializable
+data class BundledResourcePack(val sha1: String, val format: List<Int>) {
+    companion object {
+        const val FILE = "resource-pack.zip"
     }
 }
 

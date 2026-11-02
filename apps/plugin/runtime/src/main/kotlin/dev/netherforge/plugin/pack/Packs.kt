@@ -4,6 +4,7 @@ import dev.netherforge.format.Problem
 import dev.netherforge.format.ProblemCodes
 import dev.netherforge.format.block.BlockKind
 import dev.netherforge.format.block.plan
+import dev.netherforge.format.project.BundledResourcePack
 import dev.netherforge.format.project.ProjectSnapshot
 import dev.netherforge.format.ref.RefKind
 import dev.netherforge.format.ref.ResourceKey
@@ -58,7 +59,9 @@ class Packs(
      * The hash of the project's pack [player]'s game has loaded already, as the network knows (from the server they
      * came from, when the proxy keeps packs on a switch); null when it doesn't know. One that matches isn't sent again.
      */
-    private val loadedElsewhere: (UUID) -> String? = { null }
+    private val loadedElsewhere: (UUID) -> String? = { null },
+    /** The pack a bundle was built with, and its file (`netherforge build`): sent as it is when it's for this server's format. */
+    private val prebuilt: () -> Pair<BundledResourcePack, Path>? = { null }
 ) {
     /** A pack's game said it loaded: the network hears it, for the next server they go to. */
     var onLoaded: ((player: UUID, sha1: String) -> Unit)? = null
@@ -137,7 +140,7 @@ class Packs(
         // `onDemand` packs each go into a zip of their own, for scripts to push; every other one into the one players get as they join.
         val (separate, joined) = compiled.values.partition { it.onDemand }
         val textureSize = { path: String -> readBytes(path)?.let(::pngSize) }
-        val bytes = zip(PackLayout.build(joined, format, description, blocks, snapshot.vanilla, videos, textureSize))
+        val bytes = bundled(format) ?: zip(PackLayout.build(joined, format, description, blocks, snapshot.vanilla, videos, textureSize))
         onDemand = separate.associate { pack ->
             val own = zip(PackLayout.build(listOf(pack), format, pack.description ?: pack.name ?: pack.key, textureSize = textureSize))
             val ownSha1 = sha1(own)
@@ -149,6 +152,24 @@ class Packs(
         built = Built(bytes, sha1, publish(bytes, sha1))
         log.info("Built the resource pack from ${joined.size} resource pack(s), ${bytes.size} bytes, SHA-1 $sha1")
         return emptyList()
+    }
+
+    /**
+     * The bundle's own pack, when it was built for [format] and its file is the one its manifest names; null to build
+     * one here. A bundle's files are checked against its manifest, and this one against its SHA-1, so it's what was built.
+     */
+    private fun bundled(format: List<Int>): ByteArray? {
+        val (pack, file) = prebuilt() ?: return null
+        if (pack.format != format) {
+            log.info("The bundle's resource pack is for pack format ${pack.format.joinToString(".")}, not this server's: building one")
+            return null
+        }
+        val bytes = runCatching { Files.readAllBytes(file) }.getOrNull()
+        if (bytes == null || sha1(bytes) != pack.sha1) {
+            log.warn("The bundle's ${BundledResourcePack.FILE} isn't the one it was built with: building the resource pack here")
+            return null
+        }
+        return bytes
     }
 
     private fun zip(layout: Map<String, PackLayout.Entry>): ByteArray {

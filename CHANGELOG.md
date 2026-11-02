@@ -83,6 +83,12 @@ unmute`, and the admin API's `moderation` scope. `nf.network.report` sends
   builds one first) and sends players the store's URL. With
   `clear-resource-packs=false`, the hub remembers which pack each player has
   loaded, and a server whose pack they have doesn't send it again.
+- **Resource packs built into bundles.** With the game's data,
+  `netherforge build` makes the project's resource pack into the bundle
+  (`resource-pack.zip`, its SHA-1 and pack format in the manifest's
+  `resourcePack`), and a server of that pack format sends it rather than
+  building its own. `netherforge publish --packs-to s3://…` uploads it where
+  `resource-pack.storage` keeps packs.
 - **Signed and published bundles.** `netherforge keygen`, `build --sign`
   and `sign` (a network countersigning what it checked) put Ed25519
   signatures in a bundle's manifest; a server with

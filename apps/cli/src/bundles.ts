@@ -83,12 +83,21 @@ export function signBundle(dir: string, keyFile: string): string {
  * bundle always makes the same bytes (and the same SHA-256). Gives its SHA-256, in hex.
  */
 export function archive(dir: string, out: string): string {
-  const files = listFiles(dir).sort()
+  const bytes = zipFiles(
+    listFiles(dir)
+      .sort()
+      .map((name) => [name, readFileSync(path.join(dir, name))] as [string, Buffer]),
+  )
+  writeFileSync(out, bytes)
+  return createHash('sha256').update(bytes).digest('hex')
+}
+
+/** [files] (path and bytes, in the order given) as one zip, deflated, with no times or owners: the same files, the same bytes. */
+export function zipFiles(files: [string, Buffer][]): Buffer {
   const local: Buffer[] = []
   const central: Buffer[] = []
   let offset = 0
-  for (const name of files) {
-    const data = readFileSync(path.join(dir, name))
+  for (const [name, data] of files) {
     const packed = deflateRawSync(data, { level: 9 })
     const nameBytes = Buffer.from(name, 'utf8')
     const crc = crc32(data)
@@ -126,9 +135,40 @@ export function archive(dir: string, out: string): string {
   end.writeUInt16LE(files.length, 10)
   end.writeUInt32LE(directory.length, 12)
   end.writeUInt32LE(offset, 16)
-  const bytes = Buffer.concat([...local, directory, end])
-  writeFileSync(out, bytes)
-  return createHash('sha256').update(bytes).digest('hex')
+  return Buffer.concat([...local, directory, end])
+}
+
+/**
+ * The project's resource pack, built as a server would for players joining: from format's layout of it ([layoutJson],
+ * `resourcePackLayout`), the files it copies read from the bundle folder [out] (a package's `ns:path` from `out/ns/`,
+ * the project's from `out/<project>/`). The zip, its SHA-1 and the pack format; or why there's none.
+ */
+export function buildPack(
+  out: string,
+  project: string,
+  layoutJson: string,
+): { zip: Buffer; sha1: string; format: number[] } | { reason: string } {
+  const layout = JSON.parse(layoutJson) as {
+    format?: number[]
+    files?: Record<string, { text?: string; copy?: string; base64?: string }>
+    reason?: string
+  }
+  if (!layout.format || !layout.files)
+    return { reason: layout.reason ?? 'there is no pack to build' }
+  const files: [string, Buffer][] = []
+  for (const [name, file] of Object.entries(layout.files)) {
+    if (file.text != null) files.push([name, Buffer.from(file.text, 'utf8')])
+    else if (file.base64 != null) files.push([name, Buffer.from(file.base64, 'base64')])
+    else if (file.copy != null) {
+      const colon = file.copy.indexOf(':')
+      const [pkg, local] =
+        colon < 0 ? [project, file.copy] : [file.copy.slice(0, colon), file.copy.slice(colon + 1)]
+      files.push([name, readFileSync(path.join(out, pkg, local))])
+    }
+  }
+  files.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+  const zip = zipFiles(files)
+  return { zip, sha1: createHash('sha1').update(zip).digest('hex'), format: layout.format }
 }
 
 /** Where `publish` puts things: `s3://bucket/prefix`, the endpoint (any S3-compatible one), and its region. */

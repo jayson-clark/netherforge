@@ -95,7 +95,8 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
         platform,
         source::readBytes,
         onMain = { mainThread.execute(it) },
-        loadedElsewhere = { player -> network.takeIf { it.connected && it.keepsPacks }?.players?.get(player.toString())?.pack }
+        loadedElsewhere = { player -> network.takeIf { it.connected && it.keepsPacks }?.players?.get(player.toString())?.pack },
+        prebuilt = { source.bundledPack }
     ).also { packs ->
         packs.onLoaded = { player, sha1 -> network.send(dev.netherforge.network.ServerFrame.PackLoaded(player.toString(), sha1)) }
     }

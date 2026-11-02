@@ -90,6 +90,11 @@ Copy the folder to the server and point `project:` at it. Don't edit a bundle
 by hand: the plugin checks it and refuses a changed one, so build a new one
 instead. See [bundles](../format/packages.md#bundles).
 
+With the game's data for the project's `minecraft` version (the editor's
+cache, or `--game-data <file>`), the build also makes the project's resource
+pack, so a server running that version sends it rather than building it as it
+starts. Without it the build says so, and each server builds the pack itself.
+
 ## Publishing and signing
 
 A bundle says it hasn't been changed; a **signature** says who made it. Make a
@@ -137,6 +142,11 @@ file changed at the URL is refused, not run), unpacks it into
 `plugins/NetherForge/bundles/`, and runs it as any bundle, its signature
 checked as above. `netherforge build --archive` writes the same file without
 uploading it.
+
+With `--packs-to s3://bucket/prefix`, `publish` also uploads the bundle's
+resource pack where servers' [`resource-pack.storage`](server-config.md)
+keeps packs (the same bucket and `prefix`), named by its hash: servers running
+the bundle find it there and upload nothing.
 
 ## What a project asks of your server
 

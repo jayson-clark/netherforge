@@ -52,6 +52,9 @@ Usage:
       a project with errors or an out-of-date netherforge.lock. --sign
       signs it with a private key (netherforge keygen); --archive also
       writes it as one file, <folder>.nfbundle, and prints its SHA-256.
+      With the game's data (the editor's cache, or --game-data <file>),
+      the project's resource pack is built into the bundle too, so a
+      server with that pack format sends it rather than building it.
   netherforge keygen <file>
       Make an Ed25519 key pair for signing bundles: the private key in
       <file>, the public key (what servers trust) in <file>.pub.
@@ -59,11 +62,13 @@ Usage:
       Add a signature to a built bundle: a network countersigning what it
       checked, so its servers trust only its key.
   netherforge publish [dir] --to s3://bucket/prefix [--endpoint <url>]
-                      [--sign <key>] [--public-url <url>]
+                      [--sign <key>] [--public-url <url>] [--packs-to <s3 url>]
       Build, sign and archive the bundle, and upload it and its listing
       (<namespace>-<version>.nfbundle and .json) to S3-compatible storage
       (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION). Prints what a
-      server's project setting takes to run it from there.
+      server's project setting takes to run it from there. --packs-to
+      s3://bucket/prefix uploads the bundle's resource pack where servers'
+      resource-pack.storage fetches packs, so they find it there.
   netherforge preview terrain/<id>.json --out <file>.png [--seed <n>]
                      [--x <n>] [--z <n>] [--size <cells>] [--step <blocks>]
                      [--scale <pixels>] [--slice x|z --at <n> [--width <n>] [--top <y>]]
@@ -146,6 +151,7 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
         to: { type: 'string' },
         endpoint: { type: 'string' },
         'public-url': { type: 'string' },
+        'packs-to': { type: 'string' },
         out: { type: 'string' },
         update: { type: 'boolean' },
         junit: { type: 'string' },
@@ -333,7 +339,16 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
     case 'lock':
       return lock(root, { update: values.update }, env)
     case 'build':
-      return build(root, { out: values.out, sign: values.sign, archive: values.archive }, env)
+      return build(
+        root,
+        {
+          out: values.out,
+          sign: values.sign,
+          archive: values.archive,
+          gameData: values['game-data'],
+        },
+        env,
+      )
     case 'publish':
       if (!values.to)
         return {
@@ -348,6 +363,8 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
           endpoint: values.endpoint,
           sign: values.sign,
           publicUrl: values['public-url'],
+          packsTo: values['packs-to'],
+          gameData: values['game-data'],
         },
         env,
       )

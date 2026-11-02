@@ -13,7 +13,7 @@ import { createHash } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
 import * as nf from '@netherforge/format'
-import { archive, put, signBundle, storage, type Storage } from './bundles.ts'
+import { archive, buildPack, put, signBundle, storage, type Storage } from './bundles.ts'
 import {
   BUNDLE_FILE,
   GAME_DATA_SCHEMA,
@@ -262,10 +262,11 @@ export function lock(
  */
 export function build(
   root: string,
-  options: { out?: string; sign?: string; archive?: boolean },
+  options: { out?: string; sign?: string; archive?: boolean; gameData?: string },
   env: NodeJS.ProcessEnv = process.env,
 ): Outcome {
   const input = readProject(root)
+  const game = loadGameData(input, options.gameData, env)
   const outline = load(root, input, env)
   const errors = outline.problems.filter(
     (it) => it.severity === 'error' || it.code === 'lock.missing' || it.code === 'lock.stale',
@@ -305,7 +306,29 @@ export function build(
     packages[name] = { version: manifest.version, hash: hashPackage(path.join(out, name)) }
   }
   const { formatVersion } = JSON.parse(input[MANIFEST_FILE]!) as { formatVersion: number }
-  const bundle = { formatVersion, project: namespace, packages }
+  // The resource pack servers would build as players join, built now with the game's data, so a server needn't.
+  const layout = nf.resourcePackLayout(
+    JSON.stringify(input),
+    JSON.stringify(readPackages(root, packageCache(env), input)),
+    game.json,
+    JSON.stringify(pngSizes(root, Object.keys(input))),
+  )
+  const pack = buildPack(out, namespace, layout)
+  let resourcePack: { sha1: string; format: number[] } | undefined
+  let packLine: string
+  if ('zip' in pack) {
+    writeFileSync(path.join(out, 'resource-pack.zip'), pack.zip)
+    resourcePack = { sha1: pack.sha1, format: pack.format }
+    packLine = `Built its resource pack (pack format ${pack.format.join('.')}, SHA-1 ${pack.sha1}).`
+  } else {
+    packLine = `No resource pack in the bundle: ${pack.reason}. A server builds it as it starts.`
+  }
+  const bundle = {
+    formatVersion,
+    project: namespace,
+    packages,
+    ...(resourcePack ? { resourcePack } : {}),
+  }
   const written = JSON.parse(
     nf.canonicalize('bundle', BUNDLE_FILE, JSON.stringify(bundle)),
   ) as CanonicalResult
@@ -315,7 +338,7 @@ export function build(
   // Where it is, as short as it can say it: from here when it's under here.
   const here = path.relative(process.cwd(), out)
   const shown = here && !here.startsWith('..') && !path.isAbsolute(here) ? here : out
-  const lines = [`Built ${shown}: ${namespace} ${version}${what}.`]
+  const lines = [`Built ${shown}: ${namespace} ${version}${what}.`, packLine]
   if (options.sign) {
     try {
       lines.push(`Signed as ${signBundle(out, path.resolve(options.sign))}.`)
@@ -337,7 +360,14 @@ export function build(
  */
 export async function publish(
   root: string,
-  options: { to: string; endpoint?: string; sign?: string; publicUrl?: string },
+  options: {
+    to: string
+    endpoint?: string
+    sign?: string
+    publicUrl?: string
+    packsTo?: string
+    gameData?: string
+  },
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<Outcome> {
   let store: Storage
@@ -356,7 +386,11 @@ export async function publish(
     }
     const name = `${manifest.namespace}-${manifest.version}`
     const out = path.join(work, name)
-    const built = build(root, { out, sign: options.sign, archive: true }, env)
+    const built = build(
+      root,
+      { out, sign: options.sign, archive: true, gameData: options.gameData },
+      env,
+    )
     if (built.code !== 0) return built
     const file = `${out}.nfbundle`
     const bytes = readFileSync(file)
@@ -396,7 +430,26 @@ export async function publish(
           : {}),
       }
     }
+    // The bundle's resource pack, where servers fetch packs from (resource-pack.storage): they find it there, built.
+    const packed = (bundle as { resourcePack?: { sha1: string } }).resourcePack
+    let packs: Storage | undefined
+    if (options.packsTo) {
+      try {
+        packs = storage(options.packsTo, options.endpoint, env)
+      } catch (e) {
+        return { out: built.out, err: [(e as Error).message], code: 2 }
+      }
+    }
     try {
+      if (packs && packed) {
+        const packKey = packs.prefix ? `${packs.prefix}/${packed.sha1}.zip` : `${packed.sha1}.zip`
+        await put(
+          packs,
+          packKey,
+          readFileSync(path.join(out, 'resource-pack.zip')),
+          'application/zip',
+        )
+      }
       for (const [file, target] of pictures)
         await put(store, key(target), readFileSync(path.join(root, file)), 'image/png')
       await put(store, key(`${name}.nfbundle`), bytes, 'application/zip')

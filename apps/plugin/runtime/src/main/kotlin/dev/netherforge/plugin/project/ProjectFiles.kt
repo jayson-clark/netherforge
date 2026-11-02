@@ -6,6 +6,7 @@ import dev.netherforge.format.game.GameData
 import dev.netherforge.format.json.CanonicalJson
 import dev.netherforge.format.project.BundleKind
 import dev.netherforge.format.project.BundleManifest
+import dev.netherforge.format.project.BundledResourcePack
 import dev.netherforge.format.project.ImageInfo
 import dev.netherforge.format.project.LockFile
 import dev.netherforge.format.project.Names
@@ -59,11 +60,17 @@ class ProjectFiles(
     private var packages: Map<String, DiskProjectSource> = emptyMap()
     private var rootFiles: Collection<String> = emptyList()
 
+    /** The resource pack a bundle was built with, and where it is: null for a project, or a bundle built without one. */
+    @Volatile
+    var bundledPack: Pair<BundledResourcePack, Path>? = null
+        private set
+
     /** The project's own folder: the configured one, or the project's inside a bundle. */
     val rootFolder: Path get() = root.root
 
     fun load(game: GameData?): Load {
         val bundle = configured.resolve(BundleManifest.FILE_NAME)
+        bundledPack = null
         return if (Files.isRegularFile(bundle)) loadBundle(bundle, game) else loadProject(game)
     }
 
@@ -135,6 +142,7 @@ class ProjectFiles(
                 }
             }
         }
+        bundledPack = manifest?.resourcePack?.let { it to configured.resolve(BundledResourcePack.FILE) }
         val project = manifest?.project?.takeIf { it in folders }
         root = DiskProjectSource(project?.let(configured::resolve) ?: configured)
         rootFiles = root.files()

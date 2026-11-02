@@ -1,10 +1,11 @@
 import { createPublicKey, verify } from 'node:crypto'
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage } from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { inflateRawSync } from 'node:zlib'
 import * as nf from '@netherforge/format'
+import { GAME_DATA_SCHEMA } from '@netherforge/format/constants'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { run } from './main.ts'
 
@@ -157,6 +158,46 @@ describe('publish', () => {
     } finally {
       server.close()
     }
+
+    // With the game's data and --packs-to: the bundle's resource pack, where servers' resource-pack.storage looks.
+    got.length = 0
+    const game = path.join(project, '..', 'game-data.json')
+    writeFileSync(
+      game,
+      JSON.stringify({ minecraft: '26.3', packFormat: [75, 0], schema: GAME_DATA_SCHEMA }),
+    )
+    const again = createServer((request: IncomingMessage, response) => {
+      got.push({ method: request.method!, url: request.url!, auth: '', body: Buffer.alloc(0) })
+      request.resume()
+      request.on('end', () => response.writeHead(200).end())
+    })
+    await new Promise<void>((resolve) => again.listen(0, '127.0.0.1', resolve))
+    try {
+      const port = (again.address() as { port: number }).port
+      const outcome = await run(
+        [
+          'publish',
+          project,
+          '--to',
+          's3://bundles',
+          '--packs-to',
+          's3://packs/rp/',
+          '--game-data',
+          game,
+        ].concat(['--endpoint', `http://127.0.0.1:${port}`]),
+        {
+          ...env,
+          AWS_ACCESS_KEY_ID: 'AKIDEXAMPLE',
+          AWS_SECRET_ACCESS_KEY: 'secret',
+          AWS_REGION: 'auto',
+        },
+      )
+      expect(outcome.code).toBe(0)
+      expect(got[0]!.url).toMatch(/^\/packs\/rp\/[0-9a-f]{40}\.zip$/)
+    } finally {
+      again.close()
+    }
+
     const missing = await run(['publish', project, '--to', 's3://packs'], env)
     expect(missing.err.join('\n')).toContain('AWS_ACCESS_KEY_ID')
   })

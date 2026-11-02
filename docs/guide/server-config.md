@@ -92,7 +92,9 @@ resource-pack:
 
 Packs are named by their hash, so servers running the same bundle share one
 upload, and a pack that's in the store already isn't uploaded again. A player
-is sent a pack once it's there.
+is sent a pack once it's there. `prefix:` puts them under a folder of the
+bucket; `netherforge publish --packs-to s3://<bucket>/<prefix>` uploads a
+bundle's pack there before any server runs it.
 
 **Across a network.** The hub remembers which pack each player's game has
 loaded, so a server whose pack is the one they already have doesn't send it

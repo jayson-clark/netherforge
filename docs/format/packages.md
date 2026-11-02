@@ -198,6 +198,24 @@ one that doesn't match the bundle is refused on any server
 (`runtime.bundle-signature`). See
 [publishing and signing](../guide/deploying.md#publishing-and-signing).
 
+`resourcePack`, when the bundle was built with the game's data, is the
+project's resource pack as players get it on joining (every pack but the
+`onDemand` ones, with the project's blocks and videos), built into
+`resource-pack.zip` beside the manifest: its `sha1` and the pack `format`
+(`[major, minor]`) it's for. A server whose game uses that format sends the
+zip as it is, once it matches its `sha1`; any other server builds its own.
+`sha1` is part of what a signature covers, so a signed bundle's pack is the
+one its author built.
+
+```json kind=bundle
+{
+  "formatVersion": 1,
+  "project": "shop",
+  "packages": { "shop": { "version": "1.0.0", "hash": "sha256:51e0…" } },
+  "resourcePack": { "sha1": "3b0f…", "format": [75, 0] }
+}
+```
+
 ## Copying instead
 
 **Copy into project**, on a dependency's resource in the editor's explorer,
