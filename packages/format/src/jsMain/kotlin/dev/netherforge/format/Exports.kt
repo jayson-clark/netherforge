@@ -81,7 +81,24 @@ private class MapPackages(packagesJson: String?) : PackageSources {
     val locations = LinkedHashSet<String>()
     val fetches = LinkedHashMap<String, GitFetchRequest>()
 
-    override fun open(namespace: String, request: PackageRequest): PackageLookup = when (request) {
+    override fun open(namespace: String, request: PackageRequest): PackageLookup {
+        val bundled = inputs.bundled ?: return resolve(request)
+        // As a server opens a bundle's packages (ProjectFiles.loadBundle): the server's own copy, else the bundle's.
+        inputs.provided[namespace]?.takeIf { namespace !in bundled }?.let { return OpenedPackage(MapProjectSource(it.files), it.hash) }
+        bundled[namespace]?.let { return OpenedPackage(MapProjectSource(it.files), it.hash) }
+        return PackageMissing(
+            if (namespace in inputs.leftOut) {
+                "the bundle leaves \"$namespace\" for the server to provide, and none was given (--provided <folder>)"
+            } else {
+                "the bundle has no package \"$namespace\""
+            }
+        )
+    }
+
+    // A bundle has no lock to hold to what resolves: it is what resolved.
+    override val checksLock: Boolean get() = inputs.bundled == null
+
+    private fun resolve(request: PackageRequest): PackageLookup = when (request) {
         is PackageRequest.Folder -> folder(request.location, null)
         is PackageRequest.Git -> {
             val fetched = inputs.git[request.key]

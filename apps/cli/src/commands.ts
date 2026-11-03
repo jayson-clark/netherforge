@@ -33,6 +33,7 @@ import {
   packageDir,
   readPackages,
   readProject,
+  type PackageFolder,
   type PackageInputs,
 } from './project.ts'
 
@@ -119,14 +120,23 @@ export function isCurrent(json: string): boolean {
 
 export function check(
   root: string,
-  options: { json?: boolean; gameData?: string; servers?: string[]; policy?: string },
+  options: {
+    json?: boolean
+    gameData?: string
+    servers?: string[]
+    policy?: string
+    provided?: string[]
+  },
   env: NodeJS.ProcessEnv = process.env,
 ): Outcome {
-  const input = readProject(root)
+  const bundle = isBundle(root) ? readBundle(root, options.provided ?? []) : null
+  const projectRoot = bundle?.root ?? root
+  const input = bundle?.input ?? readProject(root)
   const game = loadGameData(input, options.gameData, env)
-  const packages = readPackages(root, packageCache(env), input)
-  const outline = load(root, input, env, game.json, packages)
+  const packages = bundle?.packages ?? readPackages(root, packageCache(env), input)
+  const outline = load(projectRoot, input, env, game.json, packages)
   const problems = [
+    ...(bundle?.problems ?? []),
     ...outline.problems,
     ...networkProblems(input, options.servers),
     ...policyProblems(input, packages, options.policy),
@@ -146,6 +156,116 @@ export function check(
       : `${errors} error${errors === 1 ? '' : 's'}, ${warnings} warning${warnings === 1 ? '' : 's'}.`,
   )
   return { out, err, code }
+}
+
+/** Whether [dir] is a bundle `netherforge build` wrote (or an unpacked `.nfbundle`): it has a `netherforge-bundle.json`. */
+export function isBundle(dir: string): boolean {
+  return existsSync(path.join(dir, BUNDLE_FILE))
+}
+
+/** A bundle as `check` loads it: its project's folder and files, its packages by namespace, and what's wrong with it. */
+interface ReadBundle {
+  root: string
+  input: Record<string, string | null>
+  packages: PackageInputs
+  problems: Problem[]
+}
+
+/**
+ * The bundle at [dir] as a server loads it (`ProjectFiles.loadBundle`): its project and every package in its own
+ * folders, by the names `netherforge-bundle.json` lists, never the project's dependencies' locations; each held to the
+ * hash the manifest has for it. [provided] are the folders of packages the server provides (its `packages.provided`),
+ * which the bundle may leave out but mustn't carry.
+ */
+function readBundle(dir: string, provided: string[]): ReadBundle {
+  const problems: Problem[] = []
+  const at = (code: string, message: string, where?: string): Problem => ({
+    severity: 'error',
+    file: BUNDLE_FILE,
+    message,
+    code,
+    ...(where ? { path: where } : {}),
+  })
+  const parsed = JSON.parse(
+    nf.canonicalize('bundle', BUNDLE_FILE, readFileSync(path.join(dir, BUNDLE_FILE), 'utf8')),
+  ) as CanonicalResult
+  problems.push(...parsed.problems)
+  const manifest =
+    parsed.text == null
+      ? null
+      : (JSON.parse(parsed.text) as {
+          project: string
+          packages: Record<string, { hash: string }>
+          provided?: string[]
+        })
+  const server: Record<string, PackageFolder> = {}
+  for (const folder of provided) {
+    const file = path.join(folder, MANIFEST_FILE)
+    let namespace: string | undefined
+    try {
+      namespace = (JSON.parse(readFileSync(file, 'utf8')) as { namespace?: string }).namespace
+    } catch {
+      // Said below.
+    }
+    if (!namespace) {
+      problems.push(
+        at(
+          'runtime.provided-package',
+          `--provided ${folder}: there's no readable ${MANIFEST_FILE} there`,
+        ),
+      )
+      continue
+    }
+    server[namespace] = { files: readProject(folder), hash: hashPackage(folder) }
+  }
+  const bundled: Record<string, PackageFolder> = {}
+  for (const [name, { hash }] of Object.entries(manifest?.packages ?? {})) {
+    const where = `$.packages.${name}`
+    const folder = path.join(dir, name)
+    if (!/^[a-z0-9_]+$/.test(name) || !existsSync(path.join(folder, MANIFEST_FILE))) {
+      problems.push(at('runtime.bundle-hash', `The bundle has no folder for "${name}"`, where))
+      continue
+    }
+    const actual = hashPackage(folder)
+    if (actual !== hash)
+      problems.push(
+        at(
+          'runtime.bundle-hash',
+          `The package "${name}" in this bundle isn't the one it was built with (its files hash to ${actual}, not ${hash}): ` +
+            'build the bundle again rather than changing it',
+          where,
+        ),
+      )
+    if (name in server)
+      problems.push(
+        at(
+          'runtime.provided-package',
+          `This bundle carries its own "${name}", which the server provides (--provided): build it without it ` +
+            `(mark the dependency "provided": true, or netherforge build --exclude ${name})`,
+          where,
+        ),
+      )
+    bundled[name] = { files: readProject(folder), hash: actual }
+  }
+  const project = manifest?.project
+  if (manifest && !(project! in bundled))
+    problems.push(
+      at('runtime.bundle-hash', `The bundle lists no package "${manifest.project}"`, '$.project'),
+    )
+  const root = project && project in bundled ? path.join(dir, project) : dir
+  const input = project && project in bundled ? bundled[project]!.files : {}
+  return {
+    root,
+    input,
+    packages: {
+      folders: {},
+      git: {},
+      bundled,
+      provided: server,
+      leftOut: manifest?.provided ?? [],
+    },
+    problems,
+  }
 }
 
 /**

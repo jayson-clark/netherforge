@@ -2,8 +2,10 @@ package dev.netherforge.plugin.control
 
 import dev.netherforge.network.Auth
 import dev.netherforge.plugin.NetherForgeRuntime
+import dev.netherforge.plugin.session.RefusedProject
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
@@ -63,6 +65,9 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
 
     private data class Snapshot(
         val state: String,
+        /** Whether the project's scripts run, and why not when it's refused. */
+        val running: Boolean,
+        val refused: RefusedProject?,
         val players: Map<java.util.UUID, PlayerView>,
         val worlds: Set<String>,
         /** Whether every world's writes are paused (`POST /save` with `pause` and no world). */
@@ -160,17 +165,27 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
                 for (world in worlds - last?.worlds.orEmpty()) runtime.platform.worldManager.setSaving(world, false)
             }
         }
-        val now = Snapshot(runtime.network.state.word, players, worlds, pausedUntil != null, worldPauses.keys.toSet())
+        val session = runtime.session
+        val now = Snapshot(
+            runtime.network.state.word,
+            session.running,
+            session.refused,
+            players,
+            worlds,
+            pausedUntil != null,
+            worldPauses.keys.toSet()
+        )
         state = snapshot(now, tick)
         val before = last
         last = now
         if (before == null) return
-        if (before.state != now.state) {
+        if (before.state != now.state || before.running != now.running || before.refused != now.refused) {
             tell(
                 "state",
                 buildJsonObject {
                     put("state", now.state)
                     put("previous", before.state)
+                    running(now)
                 }
             )
         }
@@ -235,6 +250,7 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
                 put("project", it.name)
                 put("version", it.version)
             }
+            running(now)
             val counts = now.players.values.mapNotNull { it.world }.groupingBy { it }.eachCount()
             putJsonArray("worlds") {
                 for (world in now.worlds.sorted()) {
@@ -252,6 +268,20 @@ class Control(private val config: ControlConfig, private val runtime: NetherForg
             putJsonArray("paused_worlds") {
                 (if (now.paused) now.worlds else now.pausedWorlds).sorted().forEach { add(JsonPrimitive(it)) }
             }
+        }
+    }
+
+    /** Whether the project runs (`running`), and why not when it's refused (`refused`: its problem's code and message). */
+    private fun JsonObjectBuilder.running(now: Snapshot) {
+        put("running", now.running)
+        now.refused?.let { refused ->
+            put(
+                "refused",
+                buildJsonObject {
+                    refused.code?.let { put("code", it) }
+                    put("message", refused.message)
+                }
+            )
         }
     }
 

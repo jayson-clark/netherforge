@@ -142,6 +142,12 @@ export interface PackageFolder {
 export interface PackageInputs {
   folders: Record<string, PackageFolder | null>
   git: Record<string, GitFetched>
+  /** A bundle's packages by namespace: all a server loading it opens (format's `PackageInputs.bundled`). */
+  bundled?: Record<string, PackageFolder>
+  /** The packages the server provides, by namespace. */
+  provided?: Record<string, PackageFolder>
+  /** The namespaces the bundle leaves for the server to provide. */
+  leftOut?: string[]
 }
 
 /**

@@ -11,6 +11,21 @@ release is cut.
 
 ### Added
 
+- **`netherforge check <bundle folder>`** checks a bundle as `netherforge build`
+  wrote it (or an unpacked `.nfbundle`) the way a server loading it would: the
+  project with the packages the bundle carries, by the names in
+  `netherforge-bundle.json`, each held to its hash there (`runtime.bundle-hash`),
+  and with `--policy` every package's `requires`, a dependency's too.
+  `--provided <folder>` stands in for a package the server provides. Before,
+  `check` on a bundle's project looked for its dependencies where its source had
+  them (`package.missing`), so a network could only learn a bundle wouldn't run
+  under its policy by starting a server with it.
+- **The control endpoint says whether the project runs.** `GET /state` and the
+  `state` events carry `running` and, while the project is refused, `refused`
+  (the problem's `code`, such as `runtime.bundle-signature`, and its `message`).
+  With `network.require-project`, a server whose project is refused stays
+  `starting` instead of becoming `ready`, so no player is sent to a server
+  running nothing.
 - **`nf.test.allow_private({ package, host, port })`** stands in for the
   owner's `http.allow-private` in a script test, for the rest of the test: that
   package may reach that private address and port (optionally with its own

@@ -199,7 +199,10 @@ class ProjectSession internal constructor(
     }
 
     /** Why the project can't run at all, with the runtime problem to report if the format didn't already. */
-    private val refusal: Pair<String, Problem?>? = refusal(snapshot)
+    private val refusal: Refusal? = refusal(snapshot)
+
+    /** Why the project doesn't run, when it's refused: its problem's code (null for none) and message. Null otherwise. */
+    val refused: RefusedProject? get() = refusal?.let { RefusedProject(it.code, it.message) }
 
     // ---- the services: the one place a subsystem is registered ------------------
 
@@ -320,6 +323,7 @@ class ProjectSession internal constructor(
             { platform.players.get(it) },
             { snapshot },
             log,
+            running = { running },
             actionbar = { player, text -> platform.players.actionbar(player, text) },
             shutdownServer = { reason -> platform.shutdownServer(reason) }
         )
@@ -639,7 +643,7 @@ class ProjectSession internal constructor(
             platform.log.warn("${problem.file}${problem.line?.let { ":$it" }.orEmpty()}: ${problem.message}")
         }
         if (refusal != null) {
-            log.error("Not running ${config.project}: ${refusal.first}")
+            log.error("Not running ${config.project}: ${refusal.message}")
             return
         }
         // Files kept from before each package had a folder of its own are the project's (once).
@@ -815,7 +819,7 @@ class ProjectSession internal constructor(
     // ---- problems ---------------------------------------------------------------
 
     /** What's wrong with the project as it reads: the format's findings and the runtime's own (a refusal). */
-    val projectProblems: List<Problem> get() = snapshot.problems + loadProblems + listOfNotNull(refusal?.second)
+    val projectProblems: List<Problem> get() = snapshot.problems + loadProblems + listOfNotNull(refusal?.problem)
 
     /** Everything wrong now, as the editor's problems list shows it: the project's, then every service's. */
     fun problems(): List<Problem> = projectProblems + runtime.datapack.problems() + services.flatMap { it.problems() }
@@ -899,28 +903,33 @@ class ProjectSession internal constructor(
         return load.snapshot
     }
 
-    private fun refusal(snapshot: ProjectSnapshot): Pair<String, Problem?>? {
+    /** Why a project can't run: the [message] the log says, its problem's [code], and the [problem] to report if format didn't. */
+    private class Refusal(val message: String, val code: String?, val problem: Problem? = null)
+
+    private fun refusal(snapshot: ProjectSnapshot): Refusal? {
         // A policy the owner wrote that can't be read: nothing runs, rather than everything.
-        config.policyProblem?.let { return it to null }
+        config.policyProblem?.let { return Refusal(it, ProblemCodes.RUNTIME_POLICY.code) }
         if (waitsForHub) {
-            return "The project waits for the network's hub (network.require-hub): it starts once the hub welcomes this server" to
+            return Refusal(
+                "The project waits for the network's hub (network.require-hub): it starts once the hub welcomes this server",
                 null
+            )
         }
-        policy?.takeIf { it.stops }?.check(snapshot)?.firstOrNull()?.let { return "${it.file}: ${it.message}" to it }
+        policy?.takeIf { it.stops }?.check(snapshot)?.firstOrNull()?.let { return Refusal("${it.file}: ${it.message}", it.code, it) }
         // A bundle that isn't what it was built as, or dependencies a production server won't resolve.
-        loadProblems.firstOrNull { it.severity == Severity.ERROR }?.let { return "${it.file}: ${it.message}" to null }
+        loadProblems.firstOrNull { it.severity == Severity.ERROR }?.let { return Refusal("${it.file}: ${it.message}", it.code) }
         // An older or newer format among them: its message says which version the project is in.
         snapshot.problems.firstOrNull { it.file == ProjectManifest.FILE_NAME && it.severity == Severity.ERROR }?.let {
-            return "${ProjectManifest.FILE_NAME}: ${it.message}" to null
+            return Refusal("${ProjectManifest.FILE_NAME}: ${it.message}", it.code)
         }
-        val manifest = snapshot.manifest ?: return "there's no readable ${ProjectManifest.FILE_NAME}" to null
+        val manifest = snapshot.manifest ?: return Refusal("there's no readable ${ProjectManifest.FILE_NAME}", null)
         val target = MinecraftVersion.parse(manifest.minecraft)
         val supported = platform.info.supportedTargets
         if (target == null || supported.none { MinecraftVersion.parse(it) == target }) {
             val message = "This project targets Minecraft ${manifest.minecraft}, but this server runs NetherForge for Minecraft " +
                 "${supported.joinToString(" or ")}. Run it on a matching server, or change \"minecraft\" in ${ProjectManifest.FILE_NAME}."
-            return message to
-                ProblemCodes.RUNTIME_MINECRAFT_UNSUPPORTED.at(ProjectManifest.FILE_NAME, message, "$.minecraft")
+            val problem = ProblemCodes.RUNTIME_MINECRAFT_UNSUPPORTED.at(ProjectManifest.FILE_NAME, message, "$.minecraft")
+            return Refusal(message, problem.code, problem)
         }
         return null
     }
@@ -936,6 +945,9 @@ class ProjectSession internal constructor(
  */
 /** Sessions made in this JVM, for [ProjectSession.generation]. */
 private val GENERATIONS = AtomicInteger()
+
+/** Why a session's project doesn't run, as the control endpoint reports it: the problem's [code] (null for none) and [message]. */
+data class RefusedProject(val code: String?, val message: String)
 
 class Handover(val instances: List<InstanceRecord>, val data: Map<ScriptData.Owner, ScriptData.Kept>)
 

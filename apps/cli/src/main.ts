@@ -3,7 +3,16 @@ import { readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { keygen, signBundle } from './bundles.ts'
-import { build, check, format, generate, lock, publish, type Outcome } from './commands.ts'
+import {
+  build,
+  check,
+  format,
+  generate,
+  isBundle,
+  lock,
+  publish,
+  type Outcome,
+} from './commands.ts'
 import { findProjectRoot } from './project.ts'
 import { preview } from './preview.ts'
 import { gallery, render } from './render.ts'
@@ -32,6 +41,13 @@ Usage:
       Exits 1 if there are errors. Ids are checked against the game data
       the editor's dev server exported, when it has. With --policy, also
       what a network's policy.json refuses of what the project requires.
+  netherforge check  <bundle folder> [--json] [--game-data <file>]
+                     [--policy <file>] [--provided <folder>]...
+      Check a bundle as netherforge build wrote it (or an unpacked
+      .nfbundle) as a server loading it would: its project with the
+      packages it carries, by the names netherforge-bundle.json lists, each
+      held to its hash there; with --policy, every package's requires.
+      --provided names a package the server provides (packages.provided).
   netherforge format [dir] [--check]
       Rewrite project JSON in canonical form, as the editor saves it.
       With --check, change nothing and exit 1 if a file isn't canonical.
@@ -189,6 +205,7 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
         as: { type: 'string' },
         build: { type: 'boolean' },
         exclude: { type: 'string', multiple: true },
+        provided: { type: 'string', multiple: true },
         replace: { type: 'boolean' },
         'accept-eula': { type: 'boolean' },
         timeout: { type: 'string' },
@@ -213,6 +230,18 @@ export async function run(argv: string[], env: NodeJS.ProcessEnv = process.env):
     (command === 'preview' && values.structure === undefined) || command === 'render'
       ? path.resolve(dir)
       : null
+  // A bundle (`netherforge build`'s folder) is checked as a server loads it: no project root above it to find.
+  if (command === 'check' && isBundle(path.resolve(dir)))
+    return check(
+      path.resolve(dir),
+      {
+        json: values.json,
+        gameData: values['game-data'],
+        policy: values.policy,
+        provided: values.provided?.map((it) => path.resolve(it)),
+      },
+      env,
+    )
   const inWorkspace = isWorkspace(path.resolve(dir)) && findProjectRoot(dir) !== path.resolve(dir)
   if (command === 'setup' && inWorkspace) {
     const workspace = readWorkspace(path.resolve(dir))

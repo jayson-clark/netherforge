@@ -135,9 +135,20 @@ class PackageFolder(val files: Map<String, String?>, val hash: String? = null)
  * What the host found of a project's packages, as `loadProject` takes it:
  * every folder read, by location (null: no project there), and every git
  * fetch, by its request's key.
+ *
+ * Or, for a bundle (`netherforge check` on one), [bundled]: the packages the bundle carries, by namespace, which is
+ * all a server loading it opens (a dependency's location is never looked at, and `netherforge.lock` isn't checked).
+ * [provided] are the folders the server provides instead, by namespace, and [leftOut] the namespaces the bundle
+ * leaves for the server to provide (its `provided`), so a missing one says so.
  */
 @Serializable
-class PackageInputs(val folders: Map<String, PackageFolder?> = emptyMap(), val git: Map<String, GitFetched> = emptyMap())
+class PackageInputs(
+    val folders: Map<String, PackageFolder?> = emptyMap(),
+    val git: Map<String, GitFetched> = emptyMap(),
+    val bundled: Map<String, PackageFolder>? = null,
+    val provided: Map<String, PackageFolder> = emptyMap(),
+    val leftOut: List<String> = emptyList()
+)
 
 @Serializable
 class ResourcePackOutline(

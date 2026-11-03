@@ -137,6 +137,69 @@ describe('check', () => {
   })
 })
 
+describe('check on a bundle', () => {
+  /** The example built into a bundle somewhere else, so its dependencies' paths lead nowhere. */
+  const built = async () => {
+    const out = path.join(tmp, 'elsewhere', 'bundle')
+    expect(await run(['build', project, '--out', out], env)).toMatchObject({ code: 0 })
+    rmSync(library, { recursive: true })
+    return out
+  }
+
+  it("loads the packages the bundle carries, not the project's dependencies' paths", async () => {
+    const bundle = await built()
+    const outcome = await run(['check', bundle], env)
+    expect(outcome.out).toEqual(['No problems.'])
+    expect(outcome.code).toBe(0)
+  })
+
+  it("holds every package's requires to the policy, a dependency's too", async () => {
+    const bundle = await built()
+    const policy = path.join(tmp, 'policy.json')
+    writeFileSync(policy, JSON.stringify({ requires: { allow: ['db', 'web', 'bots', 'wasm'] } }))
+    const outcome = await run(['check', bundle, '--policy', policy, '--json'], env)
+    expect(outcome.code).toBe(1)
+    const report = JSON.parse(outcome.out[0]!)
+    expect(report.problems).toEqual([
+      expect.objectContaining({
+        code: 'runtime.policy',
+        file: 'library:netherforge.json',
+        message: expect.stringContaining('Package "library" requires http:api.example.com'),
+      }),
+    ])
+  })
+
+  it("is an error when a package's files aren't what the bundle hashed", async () => {
+    const bundle = await built()
+    writeFileSync(path.join(bundle, 'library/modules/phrases/init.lua'), 'return {}\n')
+    const outcome = await run(['check', bundle], env)
+    expect(outcome.code).toBe(1)
+    expect(outcome.out[0]).toMatch(
+      /^netherforge-bundle\.json: error \[runtime\.bundle-hash\]: The package "library" in this bundle isn't the one it was built with/,
+    )
+  })
+
+  it('takes a package the bundle leaves out from --provided, and refuses one it carries', async () => {
+    const out = path.join(tmp, 'elsewhere', 'bundle')
+    expect(await run(['build', project, '--out', out, '--exclude', 'library'], env)).toMatchObject({
+      code: 0,
+    })
+    const missing = await run(['check', out], env)
+    expect(missing.code).toBe(1)
+    expect(missing.out.join('\n')).toContain(
+      'the bundle leaves "library" for the server to provide',
+    )
+    expect(await run(['check', out, '--provided', library], env)).toMatchObject({
+      code: 0,
+      out: ['No problems.'],
+    })
+
+    const whole = await built()
+    const carried = await run(['check', whole, '--provided', path.join(whole, 'library')], env)
+    expect(carried.out.join('\n')).toContain('[runtime.provided-package]')
+  })
+})
+
 /** Changes the library, as working on it beside the project does: the lock no longer pins what resolves. */
 const changeLibrary = () =>
   writeFileSync(path.join(library, 'modules/phrases/init.lua'), 'return { opening = "Hail" }\n')
