@@ -34,7 +34,12 @@ import kotlin.concurrent.withLock
  *
  * Stream items ([stream]) are coalesced: an item joins the batch at the end
  * of the queue when there is one, so a burst of log lines goes out as one
- * notification rather than one each, and in order with everything else.
+ * notification rather than one each, and in order with everything else. The
+ * writer lets a batch that ends the queue fill for up to [LINGER_MILLIS]
+ * before sending it, so how a burst is batched doesn't depend on which thread
+ * the scheduler runs first (a writer woken by each line's batch would
+ * otherwise send them one by one on a busy machine); anything else queued
+ * after the batch ends the wait at once.
  *
  * An editor that refuses the hello (another protocol version) is final:
  * [onRefused] gets its sentence and the client stops. Retrying gives up after
@@ -135,9 +140,16 @@ class BridgeClient(
         while (pending > QUEUE_LIMIT && queue.size > 1) pending -= queue.removeFirst().size
     }
 
-    /** Everything waiting, waiting up to [POLL_MILLIS] for something. */
+    /**
+     * Everything waiting, waiting up to [POLL_MILLIS] for something, then up to [LINGER_MILLIS] while a batch that
+     * isn't full ends the queue (lines joining it don't wake this; anything queued after it does, and is sent now).
+     */
     private fun takeAll(): List<Outgoing> = lock.withLock {
         if (queue.isEmpty()) waiting.await(POLL_MILLIS, TimeUnit.MILLISECONDS)
+        var linger = TimeUnit.MILLISECONDS.toNanos(LINGER_MILLIS)
+        while (linger > 0 && (queue.lastOrNull() as? Batch<*>)?.let { it.items.size < MAX_BATCH } == true) {
+            linger = waiting.awaitNanos(linger)
+        }
         val all = queue.toList()
         queue.clear()
         pending = 0
@@ -338,6 +350,9 @@ class BridgeClient(
         private const val CONNECT_TIMEOUT_MILLIS = 2_000
         private const val HELLO_TIMEOUT_MILLIS = 10_000
         private const val POLL_MILLIS = 200L
+
+        /** How long a batch ending the queue may wait for more items before it's sent: unnoticeable in a console. */
+        private const val LINGER_MILLIS = 10L
         private const val STOP_WAIT_MILLIS = 2_000L
     }
 }

@@ -328,6 +328,10 @@ unmute`, and the admin API's `moderation` scope. `nf.network.report` sends
 
 ### Fixed
 
+- **A burst of console lines reaches the editor in a few frames on a busy
+  machine too.** The dev bridge's writer sent each line's batch as soon as it
+  woke, so on a loaded machine a burst went out one frame per line. A batch
+  now waits up to 10 ms for more lines before it's sent.
 - **Packages' own databases work behind PgBouncer in transaction mode.** A
   package's work on a PostgreSQL `own-databases` connection used session state
   (the connection's schema, a session advisory lock for migrations), so behind
