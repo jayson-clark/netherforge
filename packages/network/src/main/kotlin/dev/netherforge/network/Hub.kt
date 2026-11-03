@@ -196,6 +196,14 @@ class Hub(
     }
 
     /** When each connected server connected (Unix milliseconds), by name. */
+    /**
+     * The channels [server] has told the hub it listens to or answers on, as its grants allow (none when it isn't
+     * connected): what decides whether a message reaches it, or a request to it is passed on.
+     */
+    fun channelsOf(server: String): Set<String> = synchronized(lock) {
+        serverNamed(server)?.let(byName::get)?.channels.orEmpty()
+    }
+
     fun connectedSince(): Map<String, Long> = synchronized(lock) {
         byName.mapNotNull { (name, session) -> session.connectedSince?.let { name to it } }.toMap()
     }
