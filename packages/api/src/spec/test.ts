@@ -280,6 +280,20 @@ export const nfTest = (nfEvents: EventSpec[]): LuaClass => ({
         'nf.test.case("the weather is read", function()\n  nf.test.http(function(request)\n    if request.url == "https://api.weather.example/now" then\n      return { status = 200, body = nf.json.encode({ sky = "rain" }) }\n    end\n  end)\n  local forecast = require("weather")\n  forecast.refresh()\n  nf.test.advance(1)\n  assert(forecast.sky == "rain")\nend)',
     },
     {
+      name: 'allow_private',
+      doc: "Stands in for the server owner's `http.allow-private` (see the server config guide) for the rest of the test: `allowance.package` may reach the private address `allowance.host` at `allowance.port`, checked as a server checks the owner's entry (that package only, that port only, and the package still declares the host in `requires.http`). A test has no `config.yml`, so without this a request to a service beside the server, such as `127.0.0.1:9361`, is refused before `nf.test.http`'s handler sees it. Applies to `nf.http.request`, `nf.http.stream` and `nf.http.websocket`. Call it again for each more address.",
+      params: [
+        {
+          name: 'allowance',
+          type: 'TestPrivateAllowance',
+          doc: 'Which package may reach which address and port.',
+        },
+      ],
+      returns: [],
+      example:
+        'nf.test.case("the bridge is told", function()\n  nf.test.allow_private({ package = "acme_bridge", host = "127.0.0.1", port = 9361 })\n  nf.test.http(function(request)\n    if request.url == "http://127.0.0.1:9361/events" then return { status = 204 } end\n  end)\n  require("acme_bridge:events").send({ kind = "start" })\n  nf.test.advance(1)\nend)',
+    },
+    {
       name: 'disconnect',
       doc: 'Ends a connection from the far end, after what it already received: with `options.error` it breaks (reason `"failed"`, `detail` the error), otherwise the server finishes it (`"finished"`, a WebSocket with `options.code` and `options.reason`). Its `end` event follows at the next tick. Disconnecting one that has ended does nothing.',
       params: [
@@ -723,6 +737,26 @@ export const testShapes: LuaClass[] = [
         doc: 'The headers the script set, as it named them.',
       },
       { name: 'body', type: 'string?', doc: 'Its body, when it has one.' },
+    ],
+  },
+  {
+    name: 'TestPrivateAllowance',
+    doc: "What `nf.test.allow_private` takes: one entry of the owner's `http.allow-private`, in a test. A key that isn't one of these is an error.",
+    methods: false,
+    functions: [],
+    fields: [
+      { name: 'package', type: 'string', doc: "The package's namespace." },
+      {
+        name: 'host',
+        type: 'string',
+        doc: "The address (or `localhost`) it may reach though private. In a test a name isn't looked up.",
+      },
+      { name: 'port', type: 'integer', doc: 'The one port, from 1 to 65535.' },
+      {
+        name: 'requests_per_minute',
+        type: 'integer?',
+        doc: "Its own rate for these requests, as the owner's `requests-per-minute` on the entry (0 for no limit). Default: they count against the package's rate.",
+      },
     ],
   },
   {

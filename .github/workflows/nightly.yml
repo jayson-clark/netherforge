@@ -135,8 +135,57 @@ jobs:
         if: runner.os != 'macOS'
         run: pnpm --filter @netherforge/editor test:smoke
 
+  pgbouncer:
+    name: own databases behind PgBouncer
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    # PostgreSQL, and PgBouncer in front of it in transaction mode: the pooler NetherForge's own databases
+    # (store/OwnDatabase.kt) must stay correct behind. PgBouncerOwnDatabaseTest is skipped without them.
+    services:
+      postgres:
+        image: postgres:17@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
+        env:
+          POSTGRES_USER: nf
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: game
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U nf -d game" --health-interval 2s --health-timeout 5s --health-retries 30
+      pgbouncer:
+        image: edoburu/pgbouncer@sha256:8638aa563607256d3c7440437534195f1066a92b68015d89ae9d6b935b444a6d # 1.26.1
+        env:
+          DB_HOST: postgres
+          DB_USER: nf
+          DB_PASSWORD: secret
+          DB_NAME: game
+          POOL_MODE: transaction
+          AUTH_TYPE: scram-sha-256
+          MAX_PREPARED_STATEMENTS: '100'
+          DEFAULT_POOL_SIZE: '4'
+        ports: ['6432:5432']
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          rust: 'false'
+      - name: Own databases through PgBouncer
+        env:
+          NETHERFORGE_TEST_PGBOUNCER: jdbc:postgresql://localhost:6432/game?user=nf&password=secret
+          NETHERFORGE_TEST_POSTGRES: jdbc:postgresql://localhost:5432/game?user=nf&password=secret
+        run: node tools/gradle.mjs :plugin:runtime:test --tests 'dev.netherforge.plugin.store.PgBouncerOwnDatabaseTest'
+      - name: Test counts
+        if: success() || failure()
+        uses: ./.github/actions/junit-summary
+        with:
+          title: Own databases behind PgBouncer
+          path: apps/plugin/runtime/build/test-results/test
+
   report:
-    needs: [integration, editor]
+    needs: [integration, editor, pgbouncer]
     if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 5

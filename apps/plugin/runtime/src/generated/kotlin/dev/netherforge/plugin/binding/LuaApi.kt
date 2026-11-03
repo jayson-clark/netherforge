@@ -1668,6 +1668,17 @@ interface NfTestApi {
     fun http(caller: Caller, handler: LuaFunction)
 
     /**
+     * Stands in for the server owner's `http.allow-private` (see the server config guide) for the rest of
+     * the test: `allowance.package` may reach the private address `allowance.host` at `allowance.port`,
+     * checked as a server checks the owner's entry (that package only, that port only, and the package
+     * still declares the host in `requires.http`). A test has no `config.yml`, so without this a request
+     * to a service beside the server, such as `127.0.0.1:9361`, is refused before `nf.test.http`'s handler
+     * sees it. Applies to `nf.http.request`, `nf.http.stream` and `nf.http.websocket`. Call it again for
+     * each more address.
+     */
+    fun allowPrivate(caller: Caller, allowance: TestPrivateAllowance)
+
+    /**
      * Ends a connection from the far end, after what it already received: with `options.error` it breaks
      * (reason `"failed"`, `detail` the error), otherwise the server finishes it (`"finished"`, a WebSocket
      * with `options.code` and `options.reason`). Its `end` event follows at the next tick. Disconnecting

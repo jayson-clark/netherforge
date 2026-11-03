@@ -186,7 +186,10 @@ export const FUNCTION_GROUPS: Record<string, Group[]> = {
     group('Tests and time', 'case advance'),
     group('Players and their input', 'player raise click release input shown'),
     group('Worldgen', 'terrain'),
-    group('Web connections', 'http connections accept receive sent disconnect request oauth_token'),
+    group(
+      'Web connections',
+      'http allow_private connections accept receive sent disconnect request oauth_token',
+    ),
     group(
       'Server networks',
       'network_server network_status network_role network_reports network_publish network_received network_answer network_request network_write network_join network_quit network_send',

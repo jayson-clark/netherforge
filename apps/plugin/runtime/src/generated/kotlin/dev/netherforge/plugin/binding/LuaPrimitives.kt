@@ -1574,6 +1574,14 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         0
     }
 
+    fn("nf.test.allow_private") { call ->
+        val lua = call.lua
+        val caller = marshal.caller(lua, 1)
+        val allowance = call.arg(2, "allowance", TestPrivateAllowance.Codec)
+        api.nfTest.allowPrivate(caller, allowance)
+        0
+    }
+
     fn("nf.test.disconnect") { call ->
         val lua = call.lua
         val caller = marshal.caller(lua, 1)

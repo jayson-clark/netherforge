@@ -74,7 +74,10 @@ description: The dev bridge between the NetherForge editor and the plugin on its
 - **Streams** (`BridgeStream`): high-rate data as notifications carrying a
   batch, `{"items": [...]}`. The plugin's writer coalesces: an item joins the
   batch at the end of the outgoing queue, so a burst of log lines is a few
-  frames, in order with everything else. The console (`log` and
+  frames, in order with everything else. The writer lets a batch that ends
+  the queue fill for up to 10 ms (`LINGER_MILLIS`) before sending, so the
+  batching doesn't depend on thread scheduling; anything queued after it is
+  sent at once (`BridgeClientTest`'s slow burst). The console (`log` and
   `script_error` entries) and `profiler` (the profiler's samples, a batch of
   twenty ticks a second while the editor subscribes) are the streams. A
   stream is fed through `RuntimeLog.stream` (`BridgeOutput.stream`).

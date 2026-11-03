@@ -11,6 +11,11 @@ release is cut.
 
 ### Added
 
+- **`nf.test.allow_private({ package, host, port })`** stands in for the
+  owner's `http.allow-private` in a script test, for the rest of the test: that
+  package may reach that private address and port (optionally with its own
+  `requests_per_minute`), checked as the owner's entry is. Before, a test had no
+  way to answer a package's requests to a service beside its server.
 - **One world saved and paused on its own through the control endpoint.**
   `POST /save` and `POST /resume` take a `world`: only its writes stop, other
   worlds carry on, several can be paused at once, and a world's pause and the
@@ -322,6 +327,20 @@ unmute`, and the admin API's `moderation` scope. `nf.network.report` sends
   battery) while you work in it.
 
 ### Fixed
+
+- **A burst of console lines reaches the editor in a few frames on a busy
+  machine too.** The dev bridge's writer sent each line's batch as soon as it
+  woke, so on a loaded machine a burst went out one frame per line. A batch
+  now waits up to 10 ms for more lines before it's sent.
+- **Packages' own databases work behind PgBouncer in transaction mode.** A
+  package's work on a PostgreSQL `own-databases` connection used session state
+  (the connection's schema, a session advisory lock for migrations), so behind
+  a transaction pooler its statements could run in another package's schema or
+  `public`, and a migration lock could be left held. Each piece of work is now
+  one transaction that sets the schema for itself (`SET LOCAL`), and each
+  migration step takes the lock inside its own transaction. With PgBouncer,
+  use 1.21 or later with `max_prepared_statements` set, or
+  `prepareThreshold: 0` in the connection's `properties`.
 
 - **A dead admin stream no longer holds up logins.** A service placing
   players whose network vanished (a killed pod) left its stream open for about

@@ -2,11 +2,10 @@ package dev.netherforge.plugin.store
 
 import dev.netherforge.format.ProblemCodes
 import dev.netherforge.plugin.TestServer
-import java.util.concurrent.ConcurrentHashMap
+import dev.netherforge.plugin.store.TransactionPooler.Locks
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 import javax.sql.DataSource
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -14,12 +13,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * A package's own database (`nf.db()`) on a PostgreSQL connection the owner names for it (`own-databases`): H2 in
- * PostgreSQL mode is the server, shared by two [TestServer]s as two servers of one project would share it, with
- * PostgreSQL's advisory lock functions defined on it by [Locks] (they're PostgreSQL's own, which H2 hasn't).
+ * A package's own database (`nf.db()`) on a PostgreSQL connection the owner names for it (`own-databases`), behind a
+ * transaction pooler: [TransactionPooler] (H2 in PostgreSQL mode, a few backends handed out per transaction) is the
+ * server, shared by two [TestServer]s as two servers of one project would share it. [PgBouncerOwnDatabaseTest] runs
+ * the same tests against a real PostgreSQL behind a real PgBouncer.
  */
-class SharedOwnDatabaseTest {
-    private val serial = AtomicInteger()
+open class SharedOwnDatabaseTest {
     private val servers = ArrayList<TestServer>()
 
     private val executors = ArrayList<java.util.concurrent.ExecutorService>()
@@ -28,55 +27,27 @@ class SharedOwnDatabaseTest {
     fun close() {
         servers.forEach { it.close() }
         executors.forEach { it.shutdownNow() }
+        poolers.forEach { it.close() }
         Locks.reset()
     }
 
-    /** PostgreSQL's advisory locks, for H2: held by key across connections, like the server's. */
-    object Locks {
-        private val held = ConcurrentHashMap<Long, Boolean>()
+    private val poolers = ArrayList<TransactionPooler>()
 
-        /** Counted down by a try that found the lock held: the holder waits for one, so two servers really meet. */
-        @Volatile
-        var contended = CountDownLatch(1)
-        val refusals = AtomicInteger()
-
-        fun reset() {
-            held.clear()
-            contended = CountDownLatch(1)
-            refusals.set(0)
-        }
-
-        @JvmStatic
-        fun tryLock(key: Long): Boolean {
-            if (held.putIfAbsent(key, true) != null) {
-                refusals.incrementAndGet()
-                contended.countDown()
-                return false
-            }
-            // The first server keeps it until the second has tried (or a while has passed): they start together.
-            contended.await(5, TimeUnit.SECONDS)
-            return true
-        }
-
-        @JvmStatic
-        fun unlock(key: Long): Boolean = held.remove(key) != null
+    /** PostgreSQL behind a transaction pooler ([TransactionPooler]): every unit of work may land on another backend. */
+    protected open fun postgres(): (String, ConnectionConfig) -> DataSource {
+        val pooler = TransactionPooler().also { poolers += it }
+        return { _, _ -> pooler }
     }
 
-    /** One H2 database in PostgreSQL mode, and every connection to it made with the lock functions defined. */
-    private fun postgres(): (String, ConnectionConfig) -> DataSource {
-        val name = "shared${serial.incrementAndGet()}"
-        val source = org.h2.jdbcx.JdbcDataSource().apply {
-            setURL("jdbc:h2:mem:$name;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1")
-            user = "sa"
-        }
-        source.connection.use { connection ->
-            connection.createStatement().use {
-                it.execute("CREATE ALIAS IF NOT EXISTS pg_try_advisory_lock FOR \"${Locks::class.java.name}.tryLock\"")
-                it.execute("CREATE ALIAS IF NOT EXISTS pg_advisory_unlock FOR \"${Locks::class.java.name}.unlock\"")
-            }
-        }
-        return { _, _ -> source }
-    }
+    /** A connection to [sources]' database for the test's own checks, past the pooler where there's a way. */
+    protected open fun direct(sources: (String, ConnectionConfig) -> DataSource): java.sql.Connection =
+        (sources("game", connection()) as TransactionPooler).direct()
+
+    /** How many advisory locks are held on [sources]' database. */
+    protected open fun locksHeld(sources: (String, ConnectionConfig) -> DataSource): Int = Locks.held.size
+
+    /** Whether the database can make two servers' first lock meet, and count the refusals ([Locks.meet]). */
+    protected open val meets = true
 
     private fun connection(own: Set<String> = setOf("test")) =
         ConnectionConfig(DatabaseType.POSTGRES, "db.internal.example", 5432, "game", "nf_user", "secret", ownDatabases = own)
@@ -91,9 +62,14 @@ class SharedOwnDatabaseTest {
     private fun server(
         sources: (String, ConnectionConfig) -> DataSource,
         files: Map<String, Any> = migrations,
-        own: Set<String> = setOf("test")
+        own: Set<String> = setOf("test"),
+        namespace: String = "test"
     ) = TestServer(
-        mapOf(TestServer.MANIFEST to TestServer.manifest(requires = """{ "db": true }"""), "modules/t/init.lua" to "") + files,
+        mapOf(
+            TestServer.MANIFEST to TestServer.manifest(requires = """{ "db": true }""")
+                .replace("\"namespace\": \"test\"", "\"namespace\": \"$namespace\""),
+            "modules/t/init.lua" to ""
+        ) + files,
         start = false,
         databases = DatabasesConfig(mapOf("game" to connection(own))),
         connectionSources = sources
@@ -112,6 +88,7 @@ class SharedOwnDatabaseTest {
     @Test
     fun `two servers starting together on one PostgreSQL connection apply each migration once and share the data`() {
         val sources = postgres()
+        Locks.meet = meets
         val a = server(sources)
         val b = server(sources)
         // Each server is its own main thread, as two machines would be: a Lua state stays on the thread that made it.
@@ -132,8 +109,8 @@ class SharedOwnDatabaseTest {
             assertEquals(emptyList(), server.runtime.currentProblems().filter { it.code?.startsWith("migration.") == true })
         }
         // They met at the lock: the second waited, then found every step applied.
-        assertTrue(Locks.refusals.get() > 0)
-        val applied = sources("game", connection()).connection.use { connection ->
+        if (meets) assertTrue(Locks.refusals.get() > 0)
+        val applied = direct(sources).use { connection ->
             connection.createStatement().use { s ->
                 s.executeQuery("SELECT version FROM test.nf_migrations ORDER BY version").use { rows ->
                     buildList { while (rows.next()) add(rows.getInt(1)) }
@@ -141,6 +118,7 @@ class SharedOwnDatabaseTest {
             }
         }
         assertEquals(listOf(1, 2), applied)
+        assertEquals(0, locksHeld(sources), "every migration lock went with its transaction")
 
         assertEquals(
             listOf("written nil"),
@@ -175,6 +153,50 @@ class SharedOwnDatabaseTest {
         threadA.submit { a.close() }.get()
         threadB.submit { b.close() }.get()
         servers -= setOf(a, b)
+    }
+
+    @Test
+    fun `two packages on one pooled connection keep their tables apart`() {
+        val sources = postgres()
+        val chess = server(sources, own = setOf("chess"), namespace = "chess").also { it.start() }
+        val cards = server(sources, own = setOf("cards"), namespace = "cards").also { it.start() }
+        for (server in listOf(chess, cards)) assertTrue(server.runtime.session.running, "${server.runtime.currentProblems()}")
+        // Each unit of work runs on the next backend, which the other package's last one left in its own schema.
+        for ((server, winner) in listOf(chess to "alex", cards to "sam", chess to "kim", cards to "jo")) {
+            assertEquals(
+                listOf("written nil"),
+                run(
+                    server,
+                    """
+                    nf.task(function()
+                      local _, err = nf.db():execute("INSERT INTO games (winner) VALUES (?)", { "$winner" })
+                      log("written " .. tostring(err))
+                    end)
+                    """
+                )
+            )
+        }
+        for ((server, winners) in listOf(chess to "alex kim", cards to "sam jo")) {
+            assertEquals(
+                listOf("read $winners"),
+                run(
+                    server,
+                    """
+                    nf.task(function()
+                      local rows = nf.db():query("SELECT winner FROM games ORDER BY id")
+                      local names = {}
+                      for _, row in ipairs(rows) do names[#names + 1] = row.winner end
+                      log("read " .. table.concat(names, " "))
+                    end)
+                    """
+                )
+            )
+        }
+        val outside = direct(sources).use { connection ->
+            connection.metaData.getTables(null, "public", "games", null).use { it.next() }
+        }
+        assertTrue(!outside, "nothing was made in public")
+        assertEquals(0, locksHeld(sources))
     }
 
     @Test

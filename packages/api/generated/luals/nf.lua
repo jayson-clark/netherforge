@@ -1782,6 +1782,10 @@ function nf.test.oauth_token(flow, response) end
 ---@param handler fun(request: TestHttpRequest): TestHttpAnswer? Gets each request and returns its answer, or `nil` when it has none.
 function nf.test.http(handler) end
 
+--- Stands in for the server owner's `http.allow-private` (see the server config guide) for the rest of the test: `allowance.package` may reach the private address `allowance.host` at `allowance.port`, checked as a server checks the owner's entry (that package only, that port only, and the package still declares the host in `requires.http`). A test has no `config.yml`, so without this a request to a service beside the server, such as `127.0.0.1:9361`, is refused before `nf.test.http`'s handler sees it. Applies to `nf.http.request`, `nf.http.stream` and `nf.http.websocket`. Call it again for each more address.
+---@param allowance TestPrivateAllowance Which package may reach which address and port.
+function nf.test.allow_private(allowance) end
+
 --- Ends a connection from the far end, after what it already received: with `options.error` it breaks (reason `"failed"`, `detail` the error), otherwise the server finishes it (`"finished"`, a WebSocket with `options.code` and `options.reason`). Its `end` event follows at the next tick. Disconnecting one that has ended does nothing.
 ---@param connection HttpStream|WebSocket One from `nf.test.connections`.
 ---@param options? TestDisconnectOptions How it ends.
@@ -8536,6 +8540,13 @@ function Event:uncancel() end
 ---@field url string Its URL, as the script wrote it.
 ---@field headers table<string, string> The headers the script set, as it named them.
 ---@field body string? Its body, when it has one.
+
+--- What `nf.test.allow_private` takes: one entry of the owner's `http.allow-private`, in a test. A key that isn't one of these is an error.
+---@class TestPrivateAllowance
+---@field ["package"] string The package's namespace.
+---@field host string The address (or `localhost`) it may reach though private. In a test a name isn't looked up.
+---@field port integer The one port, from 1 to 65535.
+---@field requests_per_minute integer? Its own rate for these requests, as the owner's `requests-per-minute` on the entry (0 for no limit). Default: they count against the package's rate.
 
 --- What `nf.test.http`'s handler answers a request with: the response the script gets. A key that isn't one of these is an error.
 ---@class TestHttpAnswer

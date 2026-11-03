@@ -9299,6 +9299,44 @@ data class TestRequestOptions(val headers: Map<String, String>? = null, val body
     }
 }
 
+/**
+ * What `nf.test.allow_private` takes: one entry of the owner's `http.allow-private`, in a test. A key
+ * that isn't one of these is an error.
+ */
+data class TestPrivateAllowance(val `package`: String, val host: String, val port: Long, val requestsPerMinute: Long? = null) : LuaShape {
+    override fun push(call: LuaCall) = Codec.push(call, this)
+
+    object Codec : ShapeCodec<TestPrivateAllowance>("TestPrivateAllowance") {
+        val packageCodec = LuaCodecs.STRING
+        val hostCodec = LuaCodecs.STRING
+        val portCodec = LuaCodecs.INTEGER
+        val requestsPerMinuteCodec = LuaOptional(LuaCodecs.INTEGER)
+
+        override val pinned = false
+
+        override val fields: Map<String, LuaCodec<*>> = mapOf(
+            "package" to packageCodec,
+            "host" to hostCodec,
+            "port" to portCodec,
+            "requests_per_minute" to requestsPerMinuteCodec
+        )
+
+        override fun read(fields: ShapeReader) = TestPrivateAllowance(
+            `package` = fields.field("package", packageCodec),
+            host = fields.field("host", hostCodec),
+            port = fields.field("port", portCodec),
+            requestsPerMinute = fields.field("requests_per_minute", requestsPerMinuteCodec)
+        )
+
+        override fun write(fields: ShapeWriter, value: TestPrivateAllowance) {
+            fields.field("package", value.`package`, packageCodec)
+            fields.field("host", value.host, hostCodec)
+            fields.field("port", value.port, portCodec)
+            fields.field("requests_per_minute", value.requestsPerMinute, requestsPerMinuteCodec)
+        }
+    }
+}
+
 /** What `nf.test.request` gives back: the answer as the client got it. */
 data class TestWebResponse(val status: Long, val headers: Map<String, String>, val body: String) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)

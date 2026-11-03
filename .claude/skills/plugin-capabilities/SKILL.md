@@ -103,7 +103,10 @@ redirect's refusal are `nil, err` (`WorkFailed`).
   holds it to the declaration, the rate and `checkLiteral` (a name isn't resolved; `localhost` is loopback), then
   `ScriptTests.answer` calls the test's `nf.test.http` handler on `async.mainThread`. No answer (nil, no handler, a
   handler that fails) is the script's `nil, err` and is kept: `nf.test.advance` raises it at the test's line, and `run`
-  fails a test that ended with one unraised.
+  fails a test that ended with one unraised. A test has no `config.yml`: `nf.test.allow_private` (`NfTestImpl.allowPrivate`,
+  checked as `RuntimeConfig` reads an `allow-private` entry) adds a `PrivateAllowance` to `ScriptTests.privateAllowances`,
+  which `NfHttpImpl.allowances()` adds to the owner's under `config.testing` (streams and WebSockets too), cleared when
+  the test ends (`ScriptTests.stop`).
 - **One package, one private host and port** (`http.allow-private`,
   `PrivateAllowance`): `NfHttpImpl.allowances()` takes the owner's entries for
   `requirements.callingPackage()` (the package the host requirement is held to;

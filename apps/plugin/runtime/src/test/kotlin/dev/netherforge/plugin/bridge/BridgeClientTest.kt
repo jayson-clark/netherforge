@@ -28,6 +28,10 @@ import kotlin.test.fail
  * alone, and the client over a real socket), and when it gives up on an editor that has gone.
  */
 class BridgeClientTest {
+    private companion object {
+        const val ITEMS = 200
+    }
+
     @Test
     fun `the reader splits frames on newlines, drops a carriage return and ends cleanly`() {
         val reader = FrameReader(ByteArrayInputStream("one\r\n\ntwo\nlast".toByteArray()), 100)
@@ -76,6 +80,38 @@ class BridgeClientTest {
                     Thread.sleep(20)
                 }
                 assertTrue(harness.abandoned.get(), "gave up once the editor had been gone past the limit")
+            }
+        }
+    }
+
+    @Test
+    fun `a slow burst of stream items still goes out in a few batches, and in order`() {
+        ServerSocket(0).use { listener ->
+            Harness(listener).use { harness ->
+                harness.client.start()
+                harness.accept().use { socket ->
+                    harness.answerHello(socket)
+                    val stream = dev.netherforge.format.bridge.BridgeStream("test", kotlinx.serialization.serializer<String>())
+                    // An item a millisecond: a writer sending each batch as soon as it's woken would send them one by one
+                    // (as it did on a busy CI machine), whichever thread happened to run first.
+                    val producer = Thread {
+                        repeat(ITEMS) {
+                            harness.client.stream(stream, "item $it")
+                            Thread.sleep(1)
+                        }
+                    }.apply { start() }
+                    val seen = ArrayList<String>()
+                    var frames = 0
+                    while (seen.size < ITEMS) {
+                        val message = (JsonRpc.decode(readLine(socket)) as RpcFrame.Single).message
+                        seen += stream.decode((message as dev.netherforge.format.bridge.RpcNotification).params)
+                        frames++
+                    }
+                    producer.join()
+                    assertEquals((0 until ITEMS).map { "item $it" }, seen)
+                    // About one batch per linger (10 ms) of the producer's time, where without it there'd be one per item.
+                    assertTrue(frames <= ITEMS / 4, "$frames frames for $ITEMS items")
+                }
             }
         }
     }

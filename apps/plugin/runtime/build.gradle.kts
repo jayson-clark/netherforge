@@ -92,6 +92,11 @@ tasks.withType<Test>().configureEach {
     environment("UPDATE_GOLDEN", updateGolden)
     inputs.property("updateGolden", updateGolden)
     if (updateGolden == "1") outputs.upToDateWhen { false }
+    // PgBouncerOwnDatabaseTest runs only when these name a real PostgreSQL and PgBouncer (the nightly job): a result
+    // from without them (all skipped) must never be replayed, and with them the outcome is the servers', so it always runs.
+    val pgbouncer = listOf("NETHERFORGE_TEST_PGBOUNCER", "NETHERFORGE_TEST_POSTGRES").map { System.getenv(it).orEmpty() }
+    inputs.property("pgbouncer", pgbouncer.joinToString(" "))
+    if (pgbouncer.any { it.isNotEmpty() }) outputs.upToDateWhen { false }
 }
 
 // A flaky test is quarantined (`@Quarantined(issue)`, JUnit's tag "quarantine") until it's fixed: out of `test`, run
