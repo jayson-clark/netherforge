@@ -8543,7 +8543,7 @@ function Event:uncancel() end
 
 --- What `nf.test.allow_private` takes: one entry of the owner's `http.allow-private`, in a test. A key that isn't one of these is an error.
 ---@class TestPrivateAllowance
----@field package string The package's namespace.
+---@field ["package"] string The package's namespace.
 ---@field host string The address (or `localhost`) it may reach though private. In a test a name isn't looked up.
 ---@field port integer The one port, from 1 to 65535.
 ---@field requests_per_minute integer? Its own rate for these requests, as the owner's `requests-per-minute` on the entry (0 for no limit). Default: they count against the package's rate.

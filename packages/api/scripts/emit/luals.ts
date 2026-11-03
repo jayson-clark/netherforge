@@ -18,12 +18,17 @@ export function comment(doc: string): string[] {
   return doc ? doc.split('\n').map((line) => `--- ${line}`.trimEnd()) : []
 }
 
+/** The words `---@field` reads as a field's visibility (`---@field package name type`), not as its name. */
+const VISIBILITY = new Set(['public', 'protected', 'private', 'package'])
+
 /** A `---@field` line, its doc saying the version it needs when it has one. */
 function fieldLine(field: Field): string {
   const doc = field.since
     ? `${field.doc} (Since Minecraft ${sinceVersion(field.since)}.)`.trim()
     : field.doc
-  return `---@field ${field.name} ${field.type} ${doc}`.trimEnd()
+  // A field called one of those is written as a key, which LuaLS takes as the name.
+  const name = VISIBILITY.has(field.name) ? `["${field.name}"]` : field.name
+  return `---@field ${name} ${field.type} ${doc}`.trimEnd()
 }
 
 /** A parameter's type, with the `string` that names a project thing as its alias (`NodeName`). */
