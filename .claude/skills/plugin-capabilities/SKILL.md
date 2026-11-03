@@ -369,7 +369,7 @@ Servers behind one Velocity proxy, talking through a **hub** the proxy runs. Thr
   keeps a server `starting`; draining (`set_draining`, `/nf drain`, the admin API) stops sends to it; `/nf shutdown`
   drains, moves players and stops. `HubEvents` POSTs each change to the owner's webhook, signed. `network.wait-for-hub-
 seconds` (`NetworkLink.awaitWelcome`) and `require-hub` (`ProjectSession.waitsForHub`) hold the project until the hub
-  answers.
+  answers; `require-project` (`Network.life`, the session's `running`) keeps a server `starting` while its project is refused.
 - **Admin messages** (`POST /v1/players/<p>/message`): the text is MiniMessage, held by the hub to `RichText`
   (clicks `run_command`, `suggest_command`, `copy_to_clipboard`, `open_url`; hovers `show_text`; the value limit:
   400 otherwise), found by a tag scan that also looks inside a hover's text; the Velocity proxy holds the component
@@ -395,7 +395,7 @@ seconds` (`NetworkLink.awaitWelcome`) and `require-hub` (`ProjectSession.waitsFo
   → 404), and the snapshot keeps players by UUID with their world (`player_world` when it changes) and each world's
   players and `empty_seconds` (`worldEmptySince`).
 - **Outside the network but beside it**: `control/LocalHttp` (`Control`), a Unix socket or loopback port with a token
-  file, for whoever runs the server (`/state` with `last_tick`/`tick_ms` kept every tick in volatiles and read off the
+  file, for whoever runs the server (`/state` with `running` and `refused` from `ProjectSession.refused`, `last_tick`/`tick_ms` kept every tick in volatiles and read off the
   main thread, `/healthz` without a token, a watchdog thread's `stalled` after `stall-seconds`, `/events`, `/drain`, `/shutdown`, `/save` with pause, `/resume`,
   `/worlds/load|unload`); `policy.json` (format's `Policy`, `runtime.policy`, also sent by the hub as `policy.<role>`)
   allows and denies requirement kinds and lowers limits (`RuntimeConfig.under(policy)`); bundles are signed

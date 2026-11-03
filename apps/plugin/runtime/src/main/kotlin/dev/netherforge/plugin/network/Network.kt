@@ -71,6 +71,8 @@ class Network(
     private val online: (UUID) -> PlayerRef?,
     private val snapshot: () -> ProjectSnapshot?,
     private val log: RuntimeLog,
+    /** Whether the project's scripts are running: with `network.require-project`, the server isn't ready until they are. */
+    private val running: () -> Boolean = { true },
     /** Shows text on a player's action bar: a waiting send's place, when the script shows none. */
     private val actionbar: (UUID, String) -> Unit = { _, _ -> },
     /** Stops the server: the end of `/nf shutdown`. */
@@ -532,7 +534,7 @@ class Network(
     /** Once a tick: ready when nothing holds it back, idle when empty long enough, and `/nf shutdown`'s steps. */
     private fun life(now: Long) {
         val link = link()
-        if (link.state == Lifecycle.STARTING && holds.isEmpty()) {
+        if (link.state == Lifecycle.STARTING && holds.isEmpty() && (!config.requireProject || running())) {
             val started = java.lang.management.ManagementFactory.getRuntimeMXBean().startTime
             val millis = (System.currentTimeMillis() - started).coerceAtLeast(0)
             link.ready(millis)

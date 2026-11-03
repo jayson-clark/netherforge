@@ -1,6 +1,19 @@
 package dev.netherforge.plugin.control
 
+import dev.netherforge.format.ProblemCodes
+import dev.netherforge.format.project.BundleKind
+import dev.netherforge.format.project.BundleManifest
+import dev.netherforge.format.project.BundleSignature
+import dev.netherforge.format.project.BundledPackage
+import dev.netherforge.format.project.FormatVersion
 import dev.netherforge.plugin.TestServer
+import dev.netherforge.plugin.project.BundlesConfig
+import dev.netherforge.plugin.project.DiskProjectSource
+import dev.netherforge.plugin.project.ProjectFiles
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.InetSocketAddress
@@ -14,8 +27,10 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The local control endpoint: state, a stream of changes, and draining, saving and pausing writes, shutting down. */
@@ -147,6 +162,49 @@ class ControlTest {
             assertEquals(setOf("nether", "world"), server.platform.worldManager.notSaving)
             repeat(30) { server.tick() }
             assertEquals(emptySet(), server.platform.worldManager.notSaving)
+        }
+    }
+
+    @Test
+    fun `the state says whether the project runs, and why not when a bundle is refused`() {
+        val pair = java.security.KeyPairGenerator.getInstance("Ed25519").generateKeyPair()
+        val public = "ed25519:" + java.util.Base64.getEncoder().encodeToString(pair.public.encoded.takeLast(32).toByteArray())
+        val files = mapOf("test/" + TestServer.MANIFEST to TestServer.manifest(), "test/modules/t/init.lua" to """log("ran")""")
+        for ((signed, requireProject) in listOf(false to false, true to false, false to true)) {
+            val socket = folder.resolve("r$signed$requireProject.sock")
+            TestServer(
+                files,
+                start = false,
+                resolvesPackages = false,
+                writeManifest = false,
+                control = ControlConfig(socket = socket),
+                network = dev.netherforge.plugin.network.NetworkConfig(requireProject = requireProject),
+                bundles = BundlesConfig(requireSignature = true, trustedKeys = listOf(public))
+            ).use { server ->
+                val hash = ProjectFiles.hash(DiskProjectSource(server.project.resolve("test")))
+                val bundle = BundleManifest(FormatVersion.CURRENT, "test", mapOf("test" to BundledPackage("1.0.0", hash)))
+                val signature = java.security.Signature.getInstance("Ed25519").run {
+                    initSign(pair.private)
+                    update(bundle.signedText().toByteArray())
+                    java.util.Base64.getEncoder().encodeToString(sign())
+                }
+                val written = if (signed) bundle.copy(signatures = listOf(BundleSignature(public, signature))) else bundle
+                server.project.resolve(BundleManifest.FILE_NAME).writeText(BundleKind.write(written))
+                server.start()
+                repeat(10) { server.tick() }
+                val state = Json.parseToJsonElement(call(server, UnixDomainSocketAddress.of(socket), "GET", "/state").second).jsonObject
+                assertEquals(signed, state.getValue("running").jsonPrimitive.boolean, "$state")
+                if (signed) {
+                    assertNull(state["refused"])
+                    assertEquals("ready", state.getValue("state").jsonPrimitive.content)
+                } else {
+                    val refused = state.getValue("refused").jsonObject
+                    assertEquals(ProblemCodes.RUNTIME_BUNDLE_SIGNATURE.code, refused.getValue("code").jsonPrimitive.content)
+                    assertTrue(refused.getValue("message").jsonPrimitive.content.contains("isn't signed"), "$refused")
+                    // Refused, it's ready only when the owner didn't ask that the project run first.
+                    assertEquals(if (requireProject) "starting" else "ready", state.getValue("state").jsonPrimitive.content)
+                }
+            }
         }
     }
 

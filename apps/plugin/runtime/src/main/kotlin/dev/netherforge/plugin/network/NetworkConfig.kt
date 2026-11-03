@@ -42,6 +42,11 @@ data class NetworkConfig(
      * hub runs nothing rather than run without the network's policy. It starts by itself when the hub is there.
      */
     val requireHub: Boolean = false,
+    /**
+     * Whether the server is ready only once its project runs (`network.require-project`): a server whose project is
+     * refused (an unsigned bundle, a policy) stays starting, so nothing sends players to a server running nothing.
+     */
+    val requireProject: Boolean = false,
     /** How long this server may be empty before the hub hears it's idle (its webhook, `server_idle`); 0: never. */
     val idleAfterSeconds: Int = 0,
     /** What each package may send a minute: messages, requests, map writes and players sent. */

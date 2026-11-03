@@ -218,7 +218,10 @@ wasm:
 # wait-for-hub-seconds, the server waits that long as it starts for the hub
 # (what it may do, the network's policy for it) before starting its project;
 # with require-hub, the project doesn't run at all until the hub has welcomed
-# it, and starts by itself when it does. What each package may send
+# it, and starts by itself when it does. With require-project, the server
+# isn't ready (to the network, or to the control endpoint's /state) until its
+# project runs: one refused (an unsigned bundle, a policy) stays starting, so
+# no player is sent to a server running nothing. What each package may send
 # a minute (messages, requests, map writes, players sent) is
 # messages-per-minute; a request waits request-timeout-seconds for its answer.
 # What arrives is handed to scripts messages-per-tick a tick, at most
@@ -240,6 +243,7 @@ network:
   idle-after-seconds: 0
   wait-for-hub-seconds: 0
   require-hub: false
+  require-project: false
   messages-per-minute: 1200
   request-timeout-seconds: 10
   messages-per-tick: 1000
