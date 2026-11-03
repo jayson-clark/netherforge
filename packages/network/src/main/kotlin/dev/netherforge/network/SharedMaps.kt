@@ -150,10 +150,21 @@ class SharedMaps(private val limits: NetworkLimits, private val now: () -> Long)
 @Serializable
 data class SavedEntry(val value: JsonElement, val expiresAt: Long? = null)
 
+/**
+ * What the hub keeps between runs: the network's [maps], and the [credentials] the admin API put (by id; the file's are
+ * the file's), so they survive a restart and any hub reading the same store has them.
+ */
 @Serializable
-data class SavedMaps(val maps: Map<String, Map<String, SavedEntry>> = emptyMap(), val version: Int = 1)
+data class SavedMaps(
+    val maps: Map<String, Map<String, SavedEntry>> = emptyMap(),
+    val version: Int = 1,
+    val credentials: Map<String, StoredCredential> = emptyMap()
+) {
+    /** Never the secrets. */
+    override fun toString() = "SavedMaps(${maps.size} maps, credentials ${credentials.keys.sorted()})"
+}
 
-/** Where the hub keeps its maps between runs. */
+/** Where the hub keeps its maps (and the admin API's credentials) between runs. */
 interface MapStore {
     fun load(): SavedMaps?
 
@@ -171,6 +182,11 @@ class FileMapStore(private val file: Path) : MapStore {
         Files.createDirectories(file.parent)
         val temporary = file.resolveSibling("${file.fileName}.tmp")
         Files.writeString(temporary, Protocol.json.encodeToString(SavedMaps.serializer(), maps))
+        // It may hold credentials' secrets: the hub's user's alone, where the file system says who may read.
+        try {
+            Files.setPosixFilePermissions(temporary, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"))
+        } catch (_: UnsupportedOperationException) {
+        }
         try {
             Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         } catch (_: java.nio.file.AtomicMoveNotSupportedException) {

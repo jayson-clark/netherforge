@@ -42,6 +42,9 @@ import java.util.concurrent.atomic.AtomicInteger
  *   `{ "server" | "hold" | "fail" }` (placement).
  * - `GET`, `POST` `{ "player", "reason"?, "until"? }` and `DELETE /v1/bans[/<player>]`, the same for `/v1/mutes`,
  *   `GET /v1/reports`, `POST /v1/servers/<name>/disable` `{ "reason"? }` and `/enable` (moderation).
+ * - `GET /v1/credentials`, `PUT /v1/credentials/<id>` `{ "secret", "role"?, ... }` ([StoredCredential]) and
+ *   `DELETE /v1/credentials/<id>` (credentials): credentials usable as soon as they're put, kept in the hub's store,
+ *   their secrets never answered, logged or sent to events.
  *
  * Plain HTTP, like the hub's own port: keep it on localhost or the servers' network, or put TLS in front.
  */
@@ -234,6 +237,10 @@ class HubAdmin(
                 answer(exchange, 200, Answer())
             }
             parts == listOf("events") && method == "GET" -> events(exchange, client)
+            parts.firstOrNull() == "credentials" -> {
+                client.need(AdminScope.CREDENTIALS)
+                credentials(exchange, client, parts, method)
+            }
             parts.firstOrNull() in setOf("bans", "mutes", "reports") ||
                 (parts.size == 3 && parts[0] == "servers" && parts[2] in setOf("disable", "enable")) -> {
                 client.need(AdminScope.MODERATION)
@@ -286,6 +293,40 @@ class HubAdmin(
             parts.size == 3 && parts[2] == "enable" && method == "POST" -> {
                 hub.enable(parts[1], by)?.let { throw Fail(404, it) }
                 answer(exchange, 200, Answer(name = parts[1]))
+            }
+            else -> throw Fail(404, "there's no $method ${exchange.requestURI.path}")
+        }
+    }
+
+    @Serializable
+    data class CredentialView(val id: String, val role: String, val source: String)
+
+    @Serializable
+    data class Credentials(val credentials: List<CredentialView>)
+
+    /** The `credentials` scope's: list, put and remove. */
+    private fun credentials(exchange: HttpExchange, client: AdminClient, parts: List<String>, method: String) {
+        val by = "the admin client ${client.id}"
+        when {
+            parts.size == 1 && method == "GET" ->
+                answer(exchange, 200, Credentials(hub.credentialSources().map { CredentialView(it.id, it.role, it.source) }))
+            parts.size == 2 && method == "PUT" -> {
+                // The parser's own message quotes the body, and a secret with it.
+                val stored = body(text(exchange), StoredCredential.serializer(), quote = false)
+                val entry = try {
+                    stored.entry(parts[1])
+                } catch (e: IllegalArgumentException) {
+                    throw Fail(400, "${parts[1]}'s shares: ${e.message}")
+                }
+                entry.problem()?.let { throw Fail(400, it) }
+                hub.putCredential(entry, by)?.let { throw Fail(400, it) }
+                log.info("NetherForge hub: $by put the credential ${entry.id} (${entry.role})")
+                empty(exchange)
+            }
+            parts.size == 2 && method == "DELETE" -> {
+                hub.removeCredential(parts[1], by)?.let { throw Fail(404, it) }
+                log.info("NetherForge hub: $by removed the credential ${parts[1]}")
+                empty(exchange)
             }
             else -> throw Fail(404, "there's no $method ${exchange.requestURI.path}")
         }
@@ -417,10 +458,16 @@ class HubAdmin(
         return bytes.toString(Charsets.UTF_8)
     }
 
-    private fun <T> body(text: String, serializer: KSerializer<T>): T = try {
+    private fun <T> body(text: String, serializer: KSerializer<T>, quote: Boolean = true): T = try {
         json.decodeFromString(serializer, text)
     } catch (e: Exception) {
-        throw Fail(400, "the body isn't what this takes: ${e.message}")
+        val why = if (quote) ": ${e.message}" else " (${serializer.descriptor.serialName.substringAfterLast('.')})"
+        throw Fail(400, "the body isn't what this takes$why")
+    }
+
+    /** `204 No Content`. */
+    private fun empty(exchange: HttpExchange) {
+        exchange.sendResponseHeaders(204, -1)
     }
 
     private inline fun <reified T> answer(exchange: HttpExchange, status: Int, value: T) {

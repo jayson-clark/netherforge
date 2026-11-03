@@ -55,6 +55,7 @@ class StandaloneHub(private val folder: Path, private val log: HubLog) {
             settings.limits,
             store,
             credentials = credentials,
+            roleShares = settings.roleShares,
             groups = settings.groups,
             fallback = settings.fallback,
             policies = settings.rolePolicies,
@@ -99,7 +100,7 @@ class StandaloneHub(private val folder: Path, private val log: HubLog) {
                         seen = now
                         val fresh = HubSettings.read(folder.resolve(HubSettings.FILE)) {}
                         hub.setGroups(fresh.groups, fresh.fallback)
-                        hub.setCredentials(credentialsFile.read().map { entry -> entry.credential(fresh.roleShares) })
+                        hub.setCredentials(credentialsFile.read().map { entry -> entry.credential(fresh.roleShares) }, fresh.roleShares)
                         val clients = adminFile.read()
                         for (gone in adminClients.map { c -> c.id } - clients.map { c -> c.id }.toSet()) hub.detach(gone)
                         adminClients = clients

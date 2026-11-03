@@ -304,8 +304,8 @@ data class RuntimeConfig(
         }
 
         /**
-         * `http.allow-private:`, a list of `{ package, host, port }`: each lets one package reach one private host and
-         * port. An entry that isn't one is an error: an allowance the owner meant but that silently didn't apply would
+         * `http.allow-private:`, a list of `{ package, host, port, requests-per-minute? }`: each lets one package reach
+         * one private host and port, its requests there counted at a rate of their own when given. An entry that isn't one is an error: an allowance the owner meant but that silently didn't apply would
          * look like a bug in the package.
          */
         private fun allowPrivate(value: Any?): List<PrivateAllowance> {
@@ -321,7 +321,13 @@ data class RuntimeConfig(
                 val host = fields.text("host")?.trim()?.lowercase() ?: error("$at has no host (an address, or a name)")
                 if (host.any { it.isWhitespace() || it == '/' }) error("$at: \"$host\" isn't an address or a host name")
                 val port = fields.int("port")?.takeIf { it in 1..65535 } ?: error("$at needs a port from 1 to 65535")
-                PrivateAllowance(namespace, host.removePrefix("[").removeSuffix("]"), port)
+                val rate = if ("requests-per-minute" in fields) {
+                    fields.int("requests-per-minute")?.takeIf { it >= 0 }
+                        ?: error("$at: requests-per-minute is a whole number, 0 for no limit")
+                } else {
+                    null
+                }
+                PrivateAllowance(namespace, host.removePrefix("[").removeSuffix("]"), port, rate)
             }
         }
 

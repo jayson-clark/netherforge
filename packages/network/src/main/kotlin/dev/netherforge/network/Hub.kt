@@ -72,7 +72,9 @@ class Hub(
     /** Whether the proxy keeps players' resource packs as they switch (`clear-resource-packs=false`). */
     private val keepsPacks: Boolean = false,
     /** The audit log: one JSON line for each moderation action, credential change and server taken off. */
-    private val audit: (String) -> Unit = {}
+    private val audit: (String) -> Unit = {},
+    /** What the network shares with each role's credentials (`share.<role>`), for those the admin API puts. */
+    roleShares: Map<String, List<Share>> = emptyMap()
 ) {
     @Volatile
     private var policies: Map<String, String> = policies
@@ -94,7 +96,21 @@ class Hub(
     /** When this hub started (Unix milliseconds), and an id that's new on every start: a client tells a restart by them. */
     val started = clock()
     val instance: String = java.util.UUID.randomUUID().toString()
-    private var credentials: Map<String, Credential> = credentials.associateBy { it.id }
+
+    /** `credentials.properties`' credentials, as [setCredentials] last gave them. */
+    private var fileCredentials: Map<String, Credential> = credentials.associateBy { it.id }
+
+    /** The admin API's, kept in the store with the maps: an id in both is the API's. */
+    private val apiCredentials = java.util.TreeMap<String, CredentialEntry>()
+    private var roleShares: Map<String, List<Share>> = roleShares
+
+    /** The credentials servers may join with now: the file's, and the admin API's over them. */
+    private var credentials: Map<String, Credential> = fileCredentials
+
+    /** Each snapshot taken to save numbered, so one taken earlier never overwrites one taken later ([save]). */
+    private var snapshots = 0L
+    private val saving = Any()
+    private var saved = 0L
 
     /** The server each online player was on before the one they're on now: where `back` sends them. */
     private val cameFrom = HashMap<String, String>()
@@ -180,6 +196,14 @@ class Hub(
     }
 
     /** When each connected server connected (Unix milliseconds), by name. */
+    /**
+     * The channels [server] has told the hub it listens to or answers on, as its grants allow (none when it isn't
+     * connected): what decides whether a message reaches it, or a request to it is passed on.
+     */
+    fun channelsOf(server: String): Set<String> = synchronized(lock) {
+        serverNamed(server)?.let(byName::get)?.channels.orEmpty()
+    }
+
     fun connectedSince(): Map<String, Long> = synchronized(lock) {
         byName.mapNotNull { (name, session) -> session.connectedSince?.let { name to it } }.toMap()
     }
@@ -237,7 +261,26 @@ class Hub(
     init {
         require(secret == null || secret.isNotBlank()) { "a hub's shared secret can't be blank" }
         try {
-            store?.load()?.let(maps::restore)
+            store?.load()?.let { saved ->
+                maps.restore(saved)
+                for ((id, stored) in saved.credentials) {
+                    val entry = try {
+                        stored.entry(id)
+                    } catch (e: IllegalArgumentException) {
+                        log.warn("NetherForge hub: left out the saved credential $id: ${e.message}")
+                        continue
+                    }
+                    val problem = entry.problem()
+                    if (problem !=
+                        null
+                    ) {
+                        log.warn("NetherForge hub: left out the saved credential $id: $problem")
+                    } else {
+                        apiCredentials[id] = entry
+                    }
+                }
+                this.credentials = effectiveCredentials()
+            }
         } catch (e: Exception) {
             log.warn("NetherForge hub: couldn't read its saved maps (${e.message}); starting with none")
         }
@@ -267,21 +310,83 @@ class Hub(
     fun credentials(): List<Credential> = synchronized(lock) { credentials.values.toList() }
 
     /**
-     * Replaces the credentials servers may join with: a server whose credential is gone (revoked) or changed is
-     * disconnected at once, and one whose grants changed dials again under the new ones.
+     * Replaces the file's credentials (and, when given, what each role is shared): a server whose credential is gone
+     * (revoked) or changed is disconnected at once, and one whose grants changed dials again under the new ones. The
+     * admin API's stay, and win over the file's for an id in both.
      */
-    fun setCredentials(all: Collection<Credential>) {
+    fun setCredentials(all: Collection<Credential>, roleShares: Map<String, List<Share>>? = null) {
         val dropped = synchronized(lock) {
-            val next = all.associateBy { it.id }
-            val added = next.keys - credentials.keys
-            val removed = credentials.keys - next.keys
-            val changed = next.keys.filter { it in credentials && credentials[it] != next[it] }
-            if (added.isNotEmpty() || removed.isNotEmpty() || changed.isNotEmpty()) {
-                record("hub", "credentials", null, "added ${added.sorted()}, revoked ${removed.sorted()}, changed ${changed.sorted()}")
-            }
-            credentials = next
-            byName.values.filter { session -> session.credential != null && next[session.credential] != session.joinedWith }
+            fileCredentials = all.associateBy { it.id }
+            if (roleShares != null) this.roleShares = roleShares
+            applyCredentials("hub")
         }
+        disconnect(dropped)
+    }
+
+    /** Where a credential the hub has came from: `credentials.properties` or the admin API. */
+    data class CredentialSource(val id: String, val role: String, val source: String)
+
+    /** Every credential, with where it came from (an id in both is the API's). */
+    fun credentialSources(): List<CredentialSource> = synchronized(lock) {
+        credentials.values.sortedBy { it.id }.map {
+            CredentialSource(it.id, it.grants.role, if (it.id in apiCredentials) SOURCE_API else SOURCE_FILE)
+        }
+    }
+
+    /**
+     * The admin API's: adds [entry], or replaces the one with its id (its servers disconnected, as if it were removed),
+     * usable at once and kept in the store. Null when done, else why not ([CredentialEntry.problem]); throws
+     * [IllegalStateException] when it's in use but the store couldn't keep it.
+     */
+    fun putCredential(entry: CredentialEntry, by: String): String? {
+        entry.problem()?.let { return it }
+        val (dropped, snapshot) = synchronized(lock) {
+            apiCredentials[entry.id] = entry
+            applyCredentials(by) to snapshotLocked()
+        }
+        disconnect(dropped)
+        saveOrThrow(snapshot)
+        return null
+    }
+
+    /**
+     * The admin API's: removes the credential [id] it put, closing the connections that use it (one in the file too is
+     * then the file's again). Null when done, else why not; throws [IllegalStateException] when the store couldn't
+     * forget it.
+     */
+    fun removeCredential(id: String, by: String): String? {
+        val (dropped, snapshot) = synchronized(lock) {
+            if (apiCredentials.remove(id) == null) {
+                return if (id in fileCredentials) {
+                    "the credential \"$id\" is credentials.properties': take it out of the file"
+                } else {
+                    "there's no credential \"$id\""
+                }
+            }
+            applyCredentials(by) to snapshotLocked()
+        }
+        disconnect(dropped)
+        saveOrThrow(snapshot)
+        return null
+    }
+
+    private fun effectiveCredentials(): Map<String, Credential> =
+        fileCredentials + apiCredentials.mapValues { (_, entry) -> entry.credential(roleShares) }
+
+    /** Under the lock: the credentials as they are now, and the sessions whose credential went or changed. */
+    private fun applyCredentials(by: String): List<Session> {
+        val next = effectiveCredentials()
+        val added = next.keys - credentials.keys
+        val removed = credentials.keys - next.keys
+        val changed = next.keys.filter { it in credentials && credentials[it] != next[it] }
+        if (added.isNotEmpty() || removed.isNotEmpty() || changed.isNotEmpty()) {
+            record(by, "credentials", null, "added ${added.sorted()}, revoked ${removed.sorted()}, changed ${changed.sorted()}")
+        }
+        credentials = next
+        return byName.values.filter { session -> session.credential != null && next[session.credential] != session.joinedWith }
+    }
+
+    private fun disconnect(dropped: List<Session>) {
         runLater()
         for (session in dropped) {
             val why = if (session.credential !in credentials) "its credential was revoked" else "its credential changed"
@@ -400,7 +505,7 @@ class Hub(
             tellServers()
             if (now - lastSave >= SAVE_EVERY_MILLIS && maps.takeDirty()) {
                 lastSave = now
-                maps.snapshot()
+                snapshotLocked()
             } else {
                 null
             }
@@ -411,17 +516,37 @@ class Hub(
 
     /** Saves the maps and closes every connection. */
     fun close() {
-        val (all, snapshot) = synchronized(lock) { sessions.toList() to maps.snapshot() }
+        val (all, snapshot) = synchronized(lock) { sessions.toList() to snapshotLocked() }
         for (session in all) session.peer.close("the hub is stopping")
         save(snapshot)
     }
 
-    private fun save(snapshot: SavedMaps) {
-        val store = store ?: return
+    /** A numbered snapshot of what's saved: the maps and the admin API's credentials. */
+    private class Snapshot(val number: Long, val saved: SavedMaps)
+
+    /** Under the lock. */
+    private fun snapshotLocked(): Snapshot =
+        Snapshot(++snapshots, maps.snapshot().copy(credentials = apiCredentials.mapValues { it.value.stored() }))
+
+    /** Saves [snapshot] unless a later one was saved already: the timer's and the admin API's saves race. */
+    private fun save(snapshot: Snapshot) {
         try {
-            store.save(snapshot)
-        } catch (e: Exception) {
-            log.warn("NetherForge hub: couldn't save its maps: ${e.message}")
+            saveOrThrow(snapshot)
+        } catch (e: IllegalStateException) {
+            log.warn("NetherForge hub: ${e.message}")
+        }
+    }
+
+    private fun saveOrThrow(snapshot: Snapshot) {
+        val store = store ?: return
+        synchronized(saving) {
+            if (snapshot.number <= saved) return
+            try {
+                store.save(snapshot.saved)
+                saved = snapshot.number
+            } catch (e: Exception) {
+                throw IllegalStateException("couldn't save its maps and credentials: ${e.message}", e)
+            }
         }
     }
 
@@ -1732,6 +1857,10 @@ class Hub(
 
     companion object {
         private const val SAVE_EVERY_MILLIS = 5_000L
+
+        /** Where a credential came from ([credentialSources]). */
+        const val SOURCE_FILE = "file"
+        const val SOURCE_API = "api"
 
         /** How long a send may wait for room, at most. */
         const val MAX_WAIT_MILLIS = 10 * 60_000L

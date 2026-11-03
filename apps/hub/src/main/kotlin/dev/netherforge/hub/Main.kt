@@ -96,12 +96,8 @@ internal fun admins(folder: Path, args: List<String>): String {
             val id = args.getOrNull(1) ?: throw IllegalArgumentException("Usage: admins add <id> <scope,scope,...|*>")
             require(NetworkNames.isCredential(id)) { "\"$id\" isn't a client id: letters, digits, _ . -" }
             val words = args.drop(2).joinToString(",").split(',').map { it.trim() }.filter { it.isNotEmpty() }
-            require(words.isNotEmpty()) { "Say what it may do: ${AdminScope.entries.joinToString { it.word }}, or *" }
-            val scopes = if (words == listOf("*")) {
-                AdminScope.entries.toSet()
-            } else {
-                words.map { AdminScope.of(it) ?: throw IllegalArgumentException("\"$it\" isn't a scope") }.toSet()
-            }
+            require(words.isNotEmpty()) { "Say what it may do: ${AdminScope.entries.joinToString { it.word }}, or * (all but credentials)" }
+            val scopes = AdminScope.parse(words) { throw IllegalArgumentException("\"$it\" isn't a scope") }!!
             val all = file.read()
             require(all.none { it.id == id }) { "There's an admin client \"$id\" already: revoke it first for a new token." }
             val client = AdminClient(id, Auth.newSecret(), scopes)

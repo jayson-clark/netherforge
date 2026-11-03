@@ -114,6 +114,14 @@ class NetworkTest {
 
     private fun connected() = tickUntil { servers.all { it.runtime.network.connected } && hub.linked().size == servers.size }
 
+    /**
+     * Until the hub knows [server] listens to (or answers on) each of [channels] (`test:` names): a server says so on a
+     * tick after it connects, and the hub reads it on that connection's thread, so no count of ticks is sure to be
+     * enough. A message published or a request made before then doesn't reach it, as on a real network.
+     */
+    private fun listening(server: String, vararg channels: String) =
+        tickUntil { hub.channelsOf(server).containsAll(channels.map { "test:$it" }) }
+
     @Test
     fun `a message reaches every server listening, typed values and all, the sender's included`() {
         val listening = """
@@ -134,8 +142,8 @@ class NetworkTest {
         server("survival", listening)
         connected()
         tickUntil { lobby.logs.any { it.startsWith("up survival") } }
-        // Each says what it listens to on its next tick.
-        repeat(3) { servers.forEach { it.tick() } }
+        listening("lobby", "chat")
+        listening("survival", "chat")
         lobby.platform.commands.runConsole("say")
         tickUntil { servers.all { server -> server.logs.any { it.startsWith("heard") } } }
         for (server in servers) {
@@ -177,7 +185,7 @@ class NetworkTest {
             """
         )
         connected()
-        repeat(3) { servers.forEach { it.tick() } }
+        listening("survival", "prices")
         lobby.platform.commands.runConsole("ask")
         tickUntil { lobby.logs.any { it.startsWith("away") } }
         assertEquals(
@@ -309,7 +317,8 @@ class NetworkTest {
         val lobby = server("lobby", """nf.network.channel("chat"):on("message", function() end)""")
         server("survival", "")
         connected()
-        repeat(3) { servers.forEach { it.tick() } }
+        listening("lobby", "chat")
+        tickUntil { lobby.runtime.network.servers["survival"]?.linked == true }
         val said = lobby.platform.commands.runAsConsole("nf network").joinToString("\n").replace(Regex("<[^>]+>"), "")
         assertTrue(said.contains("In the network as lobby through its hub at 127.0.0.1:${hubServer.port}: connected"), said)
         assertTrue(said.contains("survival connected, 0 online"), said)
@@ -445,6 +454,8 @@ class NetworkTest {
         tickUntil { lobby.logs.size > before }
         assertEquals("party no instance of arena takes players now", lobby.logs.last())
 
+        listening("survival", "state")
+        listening("creative", "state")
         lobby.platform.commands.runConsole("ask")
         tickUntil { lobby.logs.last().startsWith("answered") }
         assertTrue(lobby.logs.last() in setOf("answered creative survival", "answered survival creative"), "one each: ${lobby.logs.last()}")
@@ -614,14 +625,22 @@ class NetworkTest {
               log(tostring(ok) .. " " .. err)
               ok, err = pcall(function() nf.network.map("scores"):set("k", 1) end)
               log(tostring(ok) .. " " .. err)
+            end)
+            nf.commands.register("ask", function()
               nf.task(function()
-                log("answer " .. tostring(nf.network.channel("ask"):request("lobby", "?")))
+                local answer, err = nf.network.channel("ask"):request("lobby", "?")
+                log("answer " .. tostring(answer or err))
               end)
             end)
             """,
             credential = credential
         )
         connected()
+        // Asked only once lobby answers on the channel: before the hub knows it does, a request fails at once (as it
+        // would on a real network), and which server's connection the hub hears first is up to the threads.
+        tickUntil { survival.logs.size == 3 }
+        listening("lobby", "ask")
+        survival.platform.commands.runConsole("ask")
         tickUntil { survival.logs.size == 4 }
         assertEquals("standard false test:news read", survival.logs[0])
         assertTrue(survival.logs[1].startsWith("false ") && survival.logs[1].contains("network.forbidden"), survival.logs[1])

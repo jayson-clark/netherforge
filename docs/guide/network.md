@@ -391,7 +391,9 @@ and `nf.test.network_status` to change that, for sends that wait).
 `nf.test.network_role({ role = "standard", owns = { "shop" } })` joins this
 server under a role, so what it may not do fails as on a real network;
 bans and mutes work in a test as on a network (its hub is a real one), and
-`nf.test.network_reports()` is what scripts reported. `network_publish`, `network_answer` (how another server answers requests),
+`nf.test.network_reports()` is what scripts reported. `network_publish`
+(`"admin:platform"` as the server publishes as an admin API client would, heard
+from `admin:platform`), `network_answer` (how another server answers requests),
 `network_request` (another server asks this one), `network_write` (another
 server writes a map), `network_join` and `network_quit` cover the rest; see
 [`nf.test`](../reference/nf.test.md#server-networks). To try it with real
@@ -472,6 +474,35 @@ or writing where it may not is an error at the script's line naming
 `network.forbidden` in `err`. A handler on a channel it may not listen to
 hears nothing, and the server's log says why. A less trusted server only
 sends players who are on it.
+
+**Credentials made on demand.** A service that starts servers as they're
+needed can make their credentials too, through the
+[admin API](#the-hubs-admin-api) with the `credentials` scope, and the
+credential is usable the moment the call answers, with no file to wait for:
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" -X PUT \
+  -d '{ "secret": "…at least 16 characters…", "role": "standard", "owns": ["arena"], "group": "arena" }' \
+  http://127.0.0.1:25591/v1/credentials/arena-7                          # 204: add, or replace
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:25591/v1/credentials   # list
+curl -H "Authorization: Bearer $TOKEN" -X DELETE http://127.0.0.1:25591/v1/credentials/arena-7   # 204: remove
+```
+
+The body takes what `credentials.properties` does, spelled as JSON: `secret`,
+`role` (`standard` unless given; the role's `share.<role>` applies), `owns`,
+`shares`, `presence`, `sendTo`, `group`, `register`, `names`, `addresses` and
+`moderation`; what the file would refuse is refused with `400`. Putting an id
+again replaces it, and the servers connected with the old secret are
+disconnected, as removing it does. The list gives each credential's `id`,
+`role` and `source` (`file` or `api`), never a secret, and no secret is
+logged or sent to events.
+
+The API's credentials are kept with the network's maps (`maps.json` beside
+the hub, or the hub's PostgreSQL store), so they're there after a restart and
+for any hub that starts on the same store. `credentials.properties` still
+gives the hub its credentials at start; reading it again leaves the API's in
+place, and an id in both is the API's. The API removes only its own: a
+credential from the file comes off in the file.
 
 ## Adding servers while the network runs
 
@@ -620,6 +651,12 @@ allow; `/nfhub admins revoke <id>` ends it and its streams.
 | `channels:publish` | `POST /v1/channels/publish` `{ "channel": "lobby:news", "value", "server", "group" }`.                                                                        |
 | `channels:read`    | Messages on the channels its stream listens to, and requests addressed to it.                                                                                 |
 | `placement`        | Deciding where players sent to a group, or logging in, go.                                                                                                    |
+| `moderation`       | Bans, mutes and reports, and taking servers off the network (see [moderating](#moderating-the-network)).                                                      |
+| `credentials`      | `GET /v1/credentials`, `PUT` and `DELETE /v1/credentials/<id>` (see [credentials made on demand](#servers-with-credentials)).                                 |
+
+`*` gives a client every scope but `credentials`, which can make a credential
+trusted with the whole network: a client has it only when it's named
+(`/nfhub admins add provisioner credentials,servers:write`).
 
 **Messages.** A message's `text` (and a title's `subtitle`) is MiniMessage,
 as scripts write it, so a service can put the answer to a question one click

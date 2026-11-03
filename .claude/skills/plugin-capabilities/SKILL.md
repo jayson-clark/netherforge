@@ -96,6 +96,14 @@ redirect's refusal are `nil, err` (`WorkFailed`).
   mapped address over as the `Inet4Address` it holds, so it's judged as that).
   Multicast, broadcast and `0.0.0.0`/`::` are never reachable. The owner's
   `http.allow-private-addresses` (`HttpConfig`, `config.yml`) allows the rest.
+- **A rate of its own per allowance**: an `allow-private` entry's `requests-per-minute` (`PrivateAllowance.requestsPerMinute`;
+  0 none) counts that package's requests to that host and port, as the URL writes them, in `NfHttpImpl.allowanceRates`
+  instead of the general `RequestRate`; redirects aren't counted again, as before.
+- **In a script test run** (`config.testing`) `nf.http.request` never reaches the network: `NfHttpImpl.answeredInTest`
+  holds it to the declaration, the rate and `checkLiteral` (a name isn't resolved; `localhost` is loopback), then
+  `ScriptTests.answer` calls the test's `nf.test.http` handler on `async.mainThread`. No answer (nil, no handler, a
+  handler that fails) is the script's `nil, err` and is kept: `nf.test.advance` raises it at the test's line, and `run`
+  fails a test that ended with one unraised.
 - **One package, one private host and port** (`http.allow-private`,
   `PrivateAllowance`): `NfHttpImpl.allowances()` takes the owner's entries for
   `requirements.callingPackage()` (the package the host requirement is held to;
@@ -339,7 +347,14 @@ Servers behind one Velocity proxy, talking through a **hub** the proxy runs. Thr
   its own players, `proxy` for a remote proxy; plus `presence`, `send-to`, `moderation`) are what the hub holds
   **every frame** to: anything else is `network.forbidden` to the sender and never reaches another server. A credential
   may pin a `group` and allow registering (`register`, `names`, `addresses`). Revoking drops its servers at once. The
-  shared secret is `trusted`. `nf.network.server_role()` says what the server may do.
+  shared secret is `trusted`. `nf.network.server_role()` says what the server may do. Credentials come from two
+  places: the file (`Hub.setCredentials`, at start and on reload) and the admin API (`PUT`/`DELETE /v1/credentials/<id>`,
+  `Hub.putCredential`/`removeCredential`, scope `credentials`, which `AdminScope.STAR` (`*`) leaves out). The API's
+  are `StoredCredential`s kept in `SavedMaps.credentials` (the store's, not a `netherforge:` map: every server reads
+  those) and saved at once; the hub's effective set is the file's with the API's over them (`effectiveCredentials`),
+  and both paths go through `applyCredentials`, which closes sessions whose `joinedWith` changed. `CredentialEntry.problem`
+  is the one validation for both. Saves are numbered (`Snapshot`) so the timer's and the API's never write an older
+  one over a newer. Secrets never go into logs, the audit line, answers or a parse error (`body(quote = false)`).
 - **Groups** (`network.group`, `network.capacity`; `GroupSettings` from `group.<name>.*`): instances of one game.
   Sending to a group picks an instance accepting players with room (`least` or `fill`; `send_players` keeps a party
   together); a send can wait (`wait`, `on_wait`, the hub's `max-waiting`) or fall back (`fallback`). Publishing and
@@ -371,6 +386,11 @@ seconds` (`NetworkLink.awaitWelcome`) and `require-hub` (`ProjectSession.waitsFo
   `Prometheus`): Prometheus's text format at `/metrics`, off without a port. The proxy plugin's `ProxyMetrics`
   (logins and refusals by reason, moves and failures, its link to a remote hub, labelled with `remote.name`) is served
   on the same port whether or not it runs the hub, the hub's appended when it does.
+- **The control endpoint's worlds** (`Control`): `/save` and `/resume` take a `world` (its own pause in `worldPauses`,
+  kept apart from the whole server's `pausedUntil`: a world saves again only when neither holds it; an unload ends it),
+  `/worlds/create` is `createWorld` (`Wrong` → 400 for a terrain or option that isn't one, `Refused` → 409, `Missing`
+  → 404), and the snapshot keeps players by UUID with their world (`player_world` when it changes) and each world's
+  players and `empty_seconds` (`worldEmptySince`).
 - **Outside the network but beside it**: `control/LocalHttp` (`Control`), a Unix socket or loopback port with a token
   file, for whoever runs the server (`/state` with `last_tick`/`tick_ms` kept every tick in volatiles and read off the
   main thread, `/healthz` without a token, a watchdog thread's `stalled` after `stall-seconds`, `/events`, `/drain`, `/shutdown`, `/save` with pause, `/resume`,

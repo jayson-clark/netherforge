@@ -71,6 +71,13 @@ internal class NfTestImpl(private val session: ProjectSession) : NfTestApi {
         if (ticks < 1) throw LuaApiException("bad argument 'ticks' (at least 1 expected, got $ticks)")
         // Each call in those ticks has its own budget, as on a server; the test's own is for its own code.
         session.scripts.host!!.detached { harness.advance(Math.toIntExact(ticks)) }
+        // A request nobody answered in those ticks fails the test here.
+        session.tests.raiseUnanswered()
+    }
+
+    override fun http(caller: Caller, handler: LuaFunction) {
+        harness
+        session.tests.answerHttp(caller.scope, handler)
     }
 
     override fun player(caller: Caller, name: String): LuaHandle.Player {
@@ -267,6 +274,19 @@ internal class NfTestImpl(private val session: ProjectSession) : NfTestApi {
     override fun networkPublish(caller: Caller, server: String, channel: String, value: LuaValue) {
         if (value.isNil) throw LuaApiException("bad argument 'value' (a value expected, got nil)")
         val json = value.json("value")
+        if (server.startsWith(ADMIN_PREFIX)) {
+            // A service outside the network, through the hub's admin API: heard from "admin:<client>".
+            harness
+            val client = server.removePrefix(ADMIN_PREFIX)
+            if (!NetworkNames.isCredential(client)) {
+                throw LuaApiException(
+                    "bad argument 'server' (an admin client's id expected after admin: letters, digits, _ . -; got \"$client\")"
+                )
+            }
+            link.adminPublish(client, full(caller, channel, "nf.test.network_publish"), json)
+                ?.let { throw LuaApiException("nf.test.network_publish: $it") }
+            return
+        }
         peer(server).send(ServerFrame.Publish(full(caller, channel, "nf.test.network_publish"), json))
     }
 
@@ -370,6 +390,9 @@ internal class NfTestImpl(private val session: ProjectSession) : NfTestApi {
         val CLOSE_CODES = 1000..4999
         val VERB = Regex("^[A-Z]{1,16}$")
         const val TICKS_PER_SECOND = 20
+
+        /** How `nf.test.network_publish` names an admin client rather than a server, as the hub names it to scripts. */
+        const val ADMIN_PREFIX = "admin:"
         val NAME = Regex("[A-Za-z0-9_]{3,16}")
     }
 }

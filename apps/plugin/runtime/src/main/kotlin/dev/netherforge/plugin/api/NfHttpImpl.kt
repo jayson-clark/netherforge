@@ -45,6 +45,9 @@ internal class NfHttpImpl(private val session: ProjectSession) : NfHttpApi {
     private val limits get() = session.config.http
     private val rate by lazy { RequestRate(limits.requestsPerMinute) }
 
+    /** A rate for each allowance with one of its own ([PrivateAllowance.requestsPerMinute]). */
+    private val allowanceRates = HashMap<PrivateAllowance, RequestRate>()
+
     override fun request(caller: Caller, options: HttpRequestOptions): CompletionStage<HttpResponse> =
         fetch(caller, options, "nf.http.request") { reply ->
             HttpResponse(reply.status.toLong(), reply.headers, reply.body, reply.url.toString())
@@ -63,10 +66,11 @@ internal class NfHttpImpl(private val session: ProjectSession) : NfHttpApi {
         // The narrow check: this host, for the package whose code is running. Redirects are held to the same one, bound to it here.
         session.requirements.check(Requirement.Http(host), what)
         val held = session.requirements.held(what)
-        rateRefusal(caller)?.let { return CompletableFuture.failedFuture(WorkFailed(it)) }
+        val allowances = allowances()
+        rateRefusal(caller, url, allowances)?.let { return CompletableFuture.failedFuture(WorkFailed(it)) }
+        if (session.config.testing != null) return answeredInTest(method, url, headers, body, allowances, read)
         val call = HttpCall(method, url, headers, body)
         val fetcher = session.http.fetcher
-        val allowances = allowances()
         return session.async.submit {
             read(fetcher.fetch(call, allowances) { redirectedTo -> held(Requirement.Http(redirectedTo)) })
         }
@@ -85,10 +89,12 @@ internal class NfHttpImpl(private val session: ProjectSession) : NfHttpApi {
         }
         session.requirements.check(Requirement.Http(HttpFetcher.hostOf(url)!!), "nf.http.stream")
         val held = session.requirements.held("nf.http.stream")
-        val request = ConnectionRequest(url, method, headers, body, format, emptyList(), allowances()) { host ->
+        val allowances = allowances()
+        val request = ConnectionRequest(url, method, headers, body, format, emptyList(), allowances) { host ->
             held(Requirement.Http(host))
         }
-        return session.connections.open(caller.scope, request, options.url, false, rateRefusal(caller)).handle as LuaHandle.HttpStream
+        val refusal = rateRefusal(caller, url, allowances)
+        return session.connections.open(caller.scope, request, options.url, false, refusal).handle as LuaHandle.HttpStream
     }
 
     override fun websocket(caller: Caller, options: WebSocketOptions): LuaHandle.WebSocket {
@@ -102,10 +108,53 @@ internal class NfHttpImpl(private val session: ProjectSession) : NfHttpApi {
             !TOKEN.matches(it)
         }?.let { throw LuaApiException("options.protocols has \"$it\", which isn't a protocol name") }
         session.requirements.check(Requirement.Http(url.host.lowercase()), "nf.http.websocket")
-        val request = ConnectionRequest(url, "GET", headers, null, null, protocols, allowances()) { host ->
+        val allowances = allowances()
+        val request = ConnectionRequest(url, "GET", headers, null, null, protocols, allowances) { host ->
             throw LuaApiException("WebSockets don't follow redirects (to $host)")
         }
-        return session.connections.open(caller.scope, request, options.url, true, rateRefusal(caller)).handle as LuaHandle.WebSocket
+        val refusal = rateRefusal(caller, url, allowances)
+        return session.connections.open(caller.scope, request, options.url, true, refusal).handle as LuaHandle.WebSocket
+    }
+
+    /**
+     * A test run's request (`nf.test.http`): nothing reaches the network. The address rules a literal URL meets on a
+     * server are held to first (a name isn't looked up; `localhost` is this machine), then the test's handler answers
+     * it on the main thread at the next tick, as the test's code.
+     */
+    private fun <T> answeredInTest(
+        method: String,
+        url: URI,
+        headers: Map<String, String>,
+        body: ByteArray?,
+        allowances: List<PrivateAllowance>,
+        read: (HttpReply) -> T
+    ): CompletionStage<T> {
+        try {
+            val host = url.host.lowercase()
+            val checked = okhttp3.HttpUrl.Builder().scheme(url.scheme).host(
+                if (host == "localhost" || host.endsWith(".localhost")) "127.0.0.1" else host.removePrefix("[").removeSuffix("]")
+            ).port(
+                if (url.port != -1) {
+                    url.port
+                } else if (url.scheme == "https") {
+                    443
+                } else {
+                    80
+                }
+            ).build()
+            session.http.fetcher.checkLiteral(checked, allowances)
+        } catch (e: WorkFailed) {
+            return CompletableFuture.failedFuture(e)
+        }
+        val done = CompletableFuture<T>()
+        session.async.mainThread.execute {
+            try {
+                done.complete(read(session.tests.answer(method, url, headers, body)))
+            } catch (e: Exception) {
+                done.completeExceptionally(e as? WorkFailed ?: WorkFailed(e.message ?: e.toString()))
+            }
+        }
+        return done
     }
 
     /**
@@ -149,8 +198,27 @@ internal class NfHttpImpl(private val session: ProjectSession) : NfHttpApi {
         return body
     }
 
-    /** Why the package can't start another request this minute, or null when it may (and it's counted). */
-    private fun rateRefusal(caller: Caller): String? {
+    /**
+     * Why the package can't start another request to [url] this minute, or null when it may (and it's counted). A
+     * request to the host and port of one of its [allowances] with a rate of its own counts against that instead (the
+     * host as the URL writes it, and the allowance names it).
+     */
+    private fun rateRefusal(caller: Caller, url: URI, allowances: List<PrivateAllowance>): String? {
+        val host = url.host.lowercase().removePrefix("[").removeSuffix("]")
+        val port = if (url.port != -1) {
+            url.port
+        } else if (url.scheme == "https" || url.scheme == "wss") {
+            443
+        } else {
+            80
+        }
+        val own = allowances.firstOrNull { it.requestsPerMinute != null && it.host == host && it.port == port }
+        if (own != null) {
+            val most = own.requestsPerMinute!!
+            if (most == 0 || allowanceRates.getOrPut(own) { RequestRate(most) }.tryStart(own.namespace)) return null
+            return "package \"${own.namespace}\" has made $most requests to $host:$port in the last minute, " +
+                "its limit there (requests-per-minute of its http.allow-private entry in config.yml)"
+        }
         if (rate.tryStart(caller.scope.namespace)) return null
         return "package \"${caller.scope.namespace}\" has made ${limits.requestsPerMinute} requests in the last minute, " +
             "the server's limit (http.requests-per-minute in config.yml)"

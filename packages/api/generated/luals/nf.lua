@@ -1778,6 +1778,10 @@ function nf.test.request(method, path, options) end
 ---@param response table The token endpoint's JSON answer, as a table.
 function nf.test.oauth_token(flow, response) end
 
+--- Answers this test's `nf.http.request` calls (and `nf.images.download`'s) with `handler`, for the rest of the test (another call replaces it). In a test no request reaches the network: each is checked as on a server first (the package declares the host, the owner's private-address rules and rate apply; a name isn't looked up, and `localhost` counts as this machine), then handed to the handler at the next tick, as the test's code. Its answer is the response the script gets, as it gave it: a redirect isn't followed. A request the handler answers `nil` to, or one made with no handler set, fails the test, naming its URL, and the script gets `nil, err`.
+---@param handler fun(request: TestHttpRequest): TestHttpAnswer? Gets each request and returns its answer, or `nil` when it has none.
+function nf.test.http(handler) end
+
 --- Ends a connection from the far end, after what it already received: with `options.error` it breaks (reason `"failed"`, `detail` the error), otherwise the server finishes it (`"finished"`, a WebSocket with `options.code` and `options.reason`). Its `end` event follows at the next tick. Disconnecting one that has ended does nothing.
 ---@param connection HttpStream|WebSocket One from `nf.test.connections`.
 ---@param options? TestDisconnectOptions How it ends.
@@ -1793,8 +1797,8 @@ function nf.test.stub_wasm(module, stub) end
 ---@param options? TestNetworkServerOptions Its group and room, when it's an instance of a group.
 function nf.test.network_server(name, options) end
 
---- Another server publishes `value` on a channel, to every server listening: this one's `message` handlers hear it at the next tick (`nf.test.advance(1)`).
----@param server string The other server's name, as `nf.test.network_server` added it.
+--- Another server publishes `value` on a channel, to every server listening: this one's `message` handlers hear it at the next tick (`nf.test.advance(1)`). With `server` `"admin:<client>"`, a service outside the network publishes it through the hub's admin API instead, as the hub delivers it: `event.server` is `"admin:<client>"`.
+---@param server string The other server's name, as `nf.test.network_server` added it, or `"admin:<client>"` for an admin API client (it needn't be added).
 ---@param channel string The channel's name, as `nf.network.channel` takes it.
 ---@param value any What it publishes.
 function nf.test.network_publish(server, channel, value) end
@@ -8525,6 +8529,19 @@ function Event:uncancel() end
 ---@field headers table<string, string>? Request headers by name.
 ---@field body string? The body. Default none.
 ---@field ip string? The address it comes from. Default `"127.0.0.1"`.
+
+--- A request a script made, as `nf.test.http`'s handler gets it.
+---@class TestHttpRequest
+---@field method string Its method (`"GET"`).
+---@field url string Its URL, as the script wrote it.
+---@field headers table<string, string> The headers the script set, as it named them.
+---@field body string? Its body, when it has one.
+
+--- What `nf.test.http`'s handler answers a request with: the response the script gets. A key that isn't one of these is an error.
+---@class TestHttpAnswer
+---@field status integer? The status code. Default `200`.
+---@field headers table<string, string>? Its headers (the script reads them by name in lowercase). Default none.
+---@field body string? Its body. Default empty.
 
 --- What `nf.test.request` gives back: the answer as the client got it.
 ---@class TestWebResponse

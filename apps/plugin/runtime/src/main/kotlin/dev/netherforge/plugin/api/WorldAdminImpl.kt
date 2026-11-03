@@ -71,7 +71,7 @@ internal fun projectTerrain(session: ProjectSession, reference: String): String 
  * The server's key of the project dimension type [reference] names (named as the calling package names it): an error
  * naming what there is when it names none, or one with errors (it isn't in the start-up datapack).
  */
-private fun projectDimensionType(session: ProjectSession, reference: String): String {
+internal fun projectDimensionType(session: ProjectSession, reference: String): String {
     val id = session.names.resource(DimensionTypeKind, reference)
     val snapshot = session.snapshot
     if (id !in snapshot.running(DimensionTypeKind)) {
