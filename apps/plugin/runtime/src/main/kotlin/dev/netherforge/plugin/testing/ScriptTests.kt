@@ -43,6 +43,9 @@ class ScriptTests internal constructor(
     /** What answers the test's `nf.http.request` calls (`nf.test.http`), in the scope that set it. */
     private var httpHandler: Pair<Scope, LuaFunction>? = null
 
+    /** `nf.test.allow_private`: the owner's `http.allow-private` entries this test stands in for, until it ends. */
+    internal val privateAllowances = ArrayList<dev.netherforge.plugin.http.PrivateAllowance>()
+
     /** Why each request the test left unanswered failed it, in order; [reported] of them already raised. */
     private val unanswered = ArrayList<String>()
     private var reported = 0
@@ -166,6 +169,7 @@ class ScriptTests internal constructor(
         scope = null
         httpHandler?.let { scripts.unref(it.second.ref) }
         httpHandler = null
+        privateAllowances.clear()
     }
 
     companion object {

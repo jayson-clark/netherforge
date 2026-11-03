@@ -163,7 +163,9 @@ internal class NfHttpImpl(private val session: ProjectSession) : NfHttpApi {
      */
     private fun allowances(): List<PrivateAllowance> {
         val namespace = session.requirements.callingPackage() ?: return emptyList()
-        return limits.allowPrivate.filter { it.namespace == namespace }
+        // In a test, `nf.test.allow_private` stands in for the owner's entries (a test has no config.yml).
+        val standIns = if (session.config.testing != null) session.tests.privateAllowances else emptyList()
+        return (limits.allowPrivate + standIns).filter { it.namespace == namespace }
     }
 
     /** [text] as a URL of one of [schemes] with a host, no credentials and a port that is one; else an error at the script's line. */

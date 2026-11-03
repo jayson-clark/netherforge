@@ -26,11 +26,13 @@ import dev.netherforge.plugin.binding.TestNetworkReport
 import dev.netherforge.plugin.binding.TestNetworkRole
 import dev.netherforge.plugin.binding.TestNetworkServerOptions
 import dev.netherforge.plugin.binding.TestNetworkStatus
+import dev.netherforge.plugin.binding.TestPrivateAllowance
 import dev.netherforge.plugin.binding.TestRequestOptions
 import dev.netherforge.plugin.binding.TestShownOptions
 import dev.netherforge.plugin.binding.TestWasmStub
 import dev.netherforge.plugin.binding.TestWebResponse
 import dev.netherforge.plugin.http.Connection
+import dev.netherforge.plugin.http.PrivateAllowance
 import dev.netherforge.plugin.http.TestConnections
 import dev.netherforge.plugin.lua.LuaApiException
 import dev.netherforge.plugin.lua.LuaFunction
@@ -78,6 +80,30 @@ internal class NfTestImpl(private val session: ProjectSession) : NfTestApi {
     override fun http(caller: Caller, handler: LuaFunction) {
         harness
         session.tests.answerHttp(caller.scope, handler)
+    }
+
+    override fun allowPrivate(caller: Caller, allowance: TestPrivateAllowance) {
+        harness
+        // Read as the owner's entry is (RuntimeConfig's http.allow-private), so a test allows only what a server could.
+        val namespace = allowance.`package`.trim()
+        if (!dev.netherforge.format.project.Names.isNamespace(namespace)) {
+            throw LuaApiException("bad argument 'allowance' (package: \"$namespace\" isn't a package's namespace)")
+        }
+        val host = allowance.host.trim().lowercase()
+        if (host.isEmpty() || host.any { it.isWhitespace() || it == '/' }) {
+            throw LuaApiException("bad argument 'allowance' (host: \"${allowance.host}\" isn't an address or a host name)")
+        }
+        if (allowance.port !in
+            1..MAX_PORT
+        ) {
+            throw LuaApiException("bad argument 'allowance' (port: from 1 to $MAX_PORT expected, got ${allowance.port})")
+        }
+        val rate = allowance.requestsPerMinute
+        if (rate != null && rate !in 0L..Int.MAX_VALUE.toLong()) {
+            throw LuaApiException("bad argument 'allowance' (requests_per_minute: a whole number, 0 for no limit, expected, got $rate)")
+        }
+        session.tests.privateAllowances +=
+            PrivateAllowance(namespace, host.removePrefix("[").removeSuffix("]"), allowance.port.toInt(), rate?.toInt())
     }
 
     override fun player(caller: Caller, name: String): LuaHandle.Player {
@@ -387,6 +413,7 @@ internal class NfTestImpl(private val session: ProjectSession) : NfTestApi {
     private fun fields(raisable: Raisable<*>) = raisable.event.payload?.fields?.keys?.sorted()?.joinToString(", ").orEmpty()
 
     private companion object {
+        const val MAX_PORT = 65535L
         val CLOSE_CODES = 1000..4999
         val VERB = Regex("^[A-Z]{1,16}$")
         const val TICKS_PER_SECOND = 20

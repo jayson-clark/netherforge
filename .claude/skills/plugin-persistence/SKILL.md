@@ -126,23 +126,41 @@ in memory.
   connection's `ownDatabases` moves those packages' `nf.db()` there:
   `RemoteDatabases.own(ns)` is an `OwnDatabase` (`store/OwnDatabase.kt`), a
   `SqlDatabase` over the connection's `RemoteDatabase` that runs every piece of
-  the package's work in its space (PostgreSQL: the schema `<ns>` through
-  `Connection.setSchema`; MySQL: the database `<database>_<ns>` through
-  `setCatalog`; made on first use, the connection put back after, since the
-  pool is shared with `nf.db("<name>")`). `DatabaseImpl.run` asks it before the
-  SQLite file (same lane, `database:<ns>`); `PackageSchemas` runs the
-  dialect's files (`MigrationFile.dialects`, `MigrationKind.dialectPathOf`;
-  `migration.dialect` when one lacks it) through `OwnDatabase.migrate`: the
-  lock first on the pool's connection (`pg_try_advisory_lock` polled to a
-  deadline, never `pg_advisory_lock`, which would hold a start for ever;
-  MySQL's `GET_LOCK` with a timeout; keys from a hash of the database and
-  namespace), then the space's `nf_migrations`, `MigrationAhead` for applied
-  versions the copy lacks (`migration.ahead`), each step in a transaction
-  (MySQL's split by `SqlText.statements`). The space separates by name only:
-  packages on one connection share its user. `SharedOwnDatabaseTest` starts two
-  servers on two threads (each Lua state stays on its own) against one H2 in
-  PostgreSQL mode, with the advisory lock functions as H2 aliases whose holder
-  waits until the other has tried.
+  the package's work in its space (PostgreSQL: the schema `<ns>`; MySQL: the
+  database `<database>_<ns>` through `setCatalog`, put back after, since the
+  pool is shared with `nf.db("<name>")`). **PostgreSQL keeps no session
+  state**, so it's correct behind a transaction pooler (PgBouncer's
+  `pool_mode = transaction`, which may run each transaction on another
+  backend and never resets one): every unit of work (`onLane`: a query, an
+  execute, a whole `db:transaction`) is one transaction starting with
+  `SELECT set_config('search_path', ?, true)` (`SET LOCAL`, bound), and
+  `Database.transaction` joins a transaction already open rather than
+  committing it early. Never `Connection.setSchema` or a session advisory
+  lock there. `DatabaseImpl.run` asks it before the SQLite file (same lane,
+  `database:<ns>`); `PackageSchemas` runs the dialect's files
+  (`MigrationFile.dialects`, `MigrationKind.dialectPathOf`;
+  `migration.dialect` when one lacks it) through `OwnDatabase.migrate`.
+  PostgreSQL: one transaction makes the schema and `nf_migrations`, then one
+  per missing step, each taking `pg_try_advisory_xact_lock` (polled to a
+  deadline, never a waiting lock, which would hold a start for ever),
+  re-reading `nf_migrations` and applying the step only if it's still
+  missing, so the lock, the step and its row commit together. The schema's
+  `CREATE SCHEMA` is under that lock too. MySQL: `GET_LOCK` with a timeout
+  around them all, each step in a transaction (split by
+  `SqlText.statements`). Lock keys come from a hash of the database and
+  namespace; `MigrationAhead` for applied versions the copy lacks
+  (`migration.ahead`). The space separates by name only: packages on one
+  connection share its user. `SharedOwnDatabaseTest` starts two servers on
+  two threads (each Lua state stays on its own) against
+  `TransactionPooler`: H2 in PostgreSQL mode with a few backends handed out
+  per transaction or autocommit statement, never reset, and the
+  transaction-scoped functions as aliases its commit and rollback end (H2's
+  own `set_config` does nothing, so the fake renames calls to
+  `fake_set_config`); `Locks.meet` makes the first lock holder wait until
+  the other has tried. `PgBouncerOwnDatabaseTest` runs the same tests on a
+  real PostgreSQL behind a real PgBouncer when `NETHERFORGE_TEST_PGBOUNCER`
+  and `NETHERFORGE_TEST_POSTGRES` are set (the nightly `pgbouncer` job), and
+  is skipped otherwise.
 - `/nf data` (`admin/DataCommand.kt`) shows it: table sizes (by namespace), a
   table's first rows, one saved table's JSON (`show player|centity|named`),
   and `export` (every table into `exports/store-<time>.json` on the lane,

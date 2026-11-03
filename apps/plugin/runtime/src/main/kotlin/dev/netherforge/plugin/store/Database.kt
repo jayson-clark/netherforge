@@ -332,12 +332,16 @@ class Database private constructor(
             return database
         }
 
-        /** Runs [work] as one transaction on [connection]: committed when it returns, rolled back when it throws. */
-        fun transaction(connection: Connection, work: () -> Unit) {
+        /**
+         * Runs [work] as one transaction on [connection]: committed when it returns, rolled back when it throws. Inside a
+         * transaction already open there (an own database's, [OwnDatabase]), it's part of that one, which commits or rolls
+         * back as a whole.
+         */
+        fun <T> transaction(connection: Connection, work: () -> T): T {
+            if (!connection.autoCommit) return work()
             connection.autoCommit = false
             try {
-                work()
-                connection.commit()
+                return work().also { connection.commit() }
             } catch (e: Throwable) {
                 runCatching { connection.rollback() }
                 throw e

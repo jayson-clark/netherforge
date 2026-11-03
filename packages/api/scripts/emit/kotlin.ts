@@ -85,7 +85,18 @@ export function kdoc(doc: string, indent: string): string[] {
   return [`${indent}/**`, ...lines.map((it) => `${indent} * ${it}`), `${indent} */`]
 }
 
-const KEYWORDS = new Set(['as', 'in', 'is', 'fun', 'object', 'val', 'var', 'when', 'class'])
+const KEYWORDS = new Set([
+  'as',
+  'in',
+  'is',
+  'fun',
+  'object',
+  'package',
+  'val',
+  'var',
+  'when',
+  'class',
+])
 
 export const ident = (name: string) => (KEYWORDS.has(name) ? `\`${name}\`` : name)
 

@@ -11,7 +11,7 @@ A table of functions: call them with a dot.
 | [Tests and time](#tests-and-time) | [`case`](#case) [`advance`](#advance) |
 | [Players and their input](#players-and-their-input) | [`player`](#player) [`raise`](#raise) [`click`](#click) [`release`](#release) [`input`](#input) [`shown`](#shown) |
 | [Worldgen](#worldgen) | [`terrain`](#terrain) |
-| [Web connections](#web-connections) | [`http`](#http) [`connections`](#connections) [`accept`](#accept) [`receive`](#receive) [`sent`](#sent) [`disconnect`](#disconnect) [`request`](#request) [`oauth_token`](#oauth_token) |
+| [Web connections](#web-connections) | [`http`](#http) [`allow_private`](#allow_private) [`connections`](#connections) [`accept`](#accept) [`receive`](#receive) [`sent`](#sent) [`disconnect`](#disconnect) [`request`](#request) [`oauth_token`](#oauth_token) |
 | [Server networks](#server-networks) | [`network_server`](#network_server) [`network_status`](#network_status) [`network_role`](#network_role) [`network_reports`](#network_reports) [`network_publish`](#network_publish) [`network_received`](#network_received) [`network_answer`](#network_answer) [`network_request`](#network_request) [`network_write`](#network_write) [`network_join`](#network_join) [`network_quit`](#network_quit) [`network_send`](#network_send) |
 | [WebAssembly](#webassembly) | [`stub_wasm`](#stub_wasm) |
 
@@ -194,6 +194,25 @@ nf.test.case("the weather is read", function()
   forecast.refresh()
   nf.test.advance(1)
   assert(forecast.sky == "rain")
+end)
+```
+
+### `nf.test.allow_private(allowance)` {#allow_private}
+
+Stands in for the server owner's `http.allow-private` (see the server config guide) for the rest of the test: `allowance.package` may reach the private address `allowance.host` at `allowance.port`, checked as a server checks the owner's entry (that package only, that port only, and the package still declares the host in `requires.http`). A test has no `config.yml`, so without this a request to a service beside the server, such as `127.0.0.1:9361`, is refused before `nf.test.http`'s handler sees it. Applies to `nf.http.request`, `nf.http.stream` and `nf.http.websocket`. Call it again for each more address.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `allowance` | [`TestPrivateAllowance`](types.md#testprivateallowance) | Which package may reach which address and port. |
+
+```lua
+nf.test.case("the bridge is told", function()
+  nf.test.allow_private({ package = "acme_bridge", host = "127.0.0.1", port = 9361 })
+  nf.test.http(function(request)
+    if request.url == "http://127.0.0.1:9361/events" then return { status = 204 } end
+  end)
+  require("acme_bridge:events").send({ kind = "start" })
+  nf.test.advance(1)
 end)
 ```
 

@@ -831,6 +831,73 @@ class ScriptTestRunnerTest {
     }
 
     @Test
+    fun `a test stands in for the owner's private-address allowance, for that package and port only`() {
+        val (events, _) = run(
+            mapOf(
+                "netherforge.json" to
+                    manifest.replace(
+                        "\"minecraft\": \"26.3\"",
+                        "\"minecraft\": \"26.3\",\n  \"requires\": { \"http\": [\"127.0.0.1\", \"localhost\"] }"
+                    ),
+                "tests/bridge_test.lua" to """
+                    local function ask(url)
+                      local got, why
+                      nf.http.request({ url = url }, function(response, err) got, why = response, err end)
+                      nf.test.advance(1)
+                      return got, why
+                    end
+
+                    nf.test.case("the allowed address is answered", function()
+                      nf.test.allow_private({ package = "test", host = "127.0.0.1", port = 9361 })
+                      nf.test.http(function(request)
+                        if request.url == "http://127.0.0.1:9361/events" then return { status = 204 } end
+                      end)
+                      local got, why = ask("http://127.0.0.1:9361/events")
+                      assert(got and got.status == 204, tostring(why))
+                      local _, other = ask("http://127.0.0.1:9000/events")
+                      assert(tostring(other):find("loopback"), "another port is still refused: " .. tostring(other))
+                    end)
+
+                    nf.test.case("localhost, with a rate of its own", function()
+                      nf.test.allow_private({ package = "test", host = "localhost", port = 8080, requests_per_minute = 1 })
+                      nf.test.http(function() return { body = "ok" } end)
+                      local got, why = ask("http://localhost:8080/")
+                      assert(got and got.body == "ok", tostring(why))
+                      local _, limited = ask("http://localhost:8080/")
+                      assert(limited, "the second request in the minute is over its rate")
+                    end)
+
+                    nf.test.case("another package's allowance doesn't help", function()
+                      nf.test.allow_private({ package = "other", host = "127.0.0.1", port = 9361 })
+                      nf.test.http(function() return { body = "never" } end)
+                      local got, why = ask("http://127.0.0.1:9361/events")
+                      assert(got == nil and tostring(why):find("loopback"), tostring(why))
+                    end)
+
+                    nf.test.case("it lasts only for its test", function()
+                      nf.test.http(function() return { body = "never" } end)
+                      local got, why = ask("http://127.0.0.1:9361/events")
+                      assert(got == nil and tostring(why):find("loopback"), tostring(why))
+                    end)
+
+                    nf.test.case("an allowance is checked as the owner's is", function()
+                      for _, bad in ipairs({
+                        { package = "Not A Namespace", host = "127.0.0.1", port = 1 },
+                        { package = "test", host = "127.0.0.1/x", port = 1 },
+                        { package = "test", host = "127.0.0.1", port = 0 },
+                        { package = "test", host = "127.0.0.1", port = 1, requests_per_minute = -1 },
+                      }) do
+                        local ok, err = pcall(nf.test.allow_private, bad)
+                        assert(not ok and tostring(err):find("bad argument 'allowance'"), tostring(err))
+                      end
+                    end)
+                """
+            )
+        )
+        expectStatuses(events, Status.PASSED, Status.PASSED, Status.PASSED, Status.PASSED, Status.PASSED)
+    }
+
+    @Test
     fun `a test plays the other servers of a network of its own`() {
         val (events, _) = run(
             mapOf(

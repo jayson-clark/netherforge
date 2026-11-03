@@ -3344,6 +3344,17 @@ A request a script made, as `nf.test.http`'s handler gets it.
 | `headers` | `table<string, string>` | The headers the script set, as it named them. |
 | `body` | `string?` | Its body, when it has one. |
 
+### TestPrivateAllowance {#testprivateallowance}
+
+What `nf.test.allow_private` takes: one entry of the owner's `http.allow-private`, in a test. A key that isn't one of these is an error.
+
+| Field | Type | |
+| --- | --- | --- |
+| `package` | `string` | The package's namespace. |
+| `host` | `string` | The address (or `localhost`) it may reach though private. In a test a name isn't looked up. |
+| `port` | `integer` | The one port, from 1 to 65535. |
+| `requests_per_minute` | `integer?` | Its own rate for these requests, as the owner's `requests-per-minute` on the entry (0 for no limit). Default: they count against the package's rate. |
+
 ### TestHttpAnswer {#testhttpanswer}
 
 What `nf.test.http`'s handler answers a request with: the response the script gets. A key that isn't one of these is an error.

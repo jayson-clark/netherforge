@@ -701,6 +701,16 @@ databases:
 - A package's own database needs only its `requires.db`: `own-databases` is
   where it lives, not who may open the connection by name (`packages`).
 - `/nf requires` and the startup log say where each package's own database is.
+- **Behind a connection pooler.** PostgreSQL own databases work behind
+  PgBouncer in `session` or `transaction` pool mode: each piece of a
+  package's work is one transaction that picks the package's schema for
+  itself (`SET LOCAL search_path`), and the migration lock belongs to the
+  migration's transaction, so nothing depends on getting the same backend
+  twice. Two things PgBouncer needs from you in transaction mode: version
+  1.21 or later with `max_prepared_statements` set (the PostgreSQL driver
+  prepares statements it runs often), or else `prepareThreshold: 0` under
+  the connection's `properties`. Behind a pooler, set `pool-size` for the
+  pooler's client connections, not the database's.
 - A dev server reads this section too: leave `own-databases` out of its
   `config.yml`, and the project is written and tested on SQLite as before.
 

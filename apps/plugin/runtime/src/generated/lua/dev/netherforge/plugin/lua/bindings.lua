@@ -9244,6 +9244,10 @@ namespaces["nf.test"] = function(scope, ns)
     prim["nf.test.http"](scope, handler)
   end
 
+  function ns.allow_private(allowance)
+    prim["nf.test.allow_private"](scope, allowance)
+  end
+
   function ns.disconnect(connection, options)
     prim["nf.test.disconnect"](scope, connection, options)
   end

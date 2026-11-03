@@ -310,6 +310,24 @@ end)
 A request the handler answers `nil` to, or one made with no handler, fails the
 test with its URL, so a request the test didn't expect never goes unnoticed.
 
+A test has no `config.yml`, so a request to a service beside the server (a
+private address the owner allows one package with `http.allow-private`) is
+refused before the handler sees it. The test stands in for that allowance with
+[`nf.test.allow_private`](../reference/nf.test.md#allow_private), checked the
+same way: that package only, that port only, until the test ends.
+
+```lua
+nf.test.case("the bridge is told", function()
+  nf.test.allow_private({ package = "acme_bridge", host = "127.0.0.1", port = 9361 })
+  nf.test.http(function(request)
+    if request.url == "http://127.0.0.1:9361/events" then
+      return { status = 204 }
+    end
+  end)
+  -- ...call the bridge, then nf.test.advance(1)...
+end)
+```
+
 Each connection a script opens is held by the test, which plays the other side:
 
 ```lua
