@@ -711,6 +711,10 @@ end
 
 -- ---------------------------------------------------------------- making strings
 
+-- Whether the library's own `rep` ignores a separator: Luau's is Lua 5.1's,
+-- and would return "aa" for `rep("a", 2, "-")` without a word.
+local REP_IGNORES_SEP = raw.rep("a", 2, "-") == "aa"
+
 function caps.string.rep(s, n, sep)
   if
     sep == nil
@@ -732,6 +736,14 @@ function caps.string.rep(s, n, sep)
     end
     making("string.rep", size > count and size or count + 0.0)
   end
+  if REP_IGNORES_SEP and sep ~= nil and sep ~= "" and count ~= nil then
+    -- As Lua 5.4 does it: the separator between each copy, none at the ends.
+    if count <= 0 then
+      return ""
+    end
+    local between = tostring(sep)
+    return raw.rep(tostring(s) .. between, count - 1) .. tostring(s)
+  end
   return raw.rep(s, n, sep)
 end
 
@@ -742,12 +754,17 @@ local NUMBER_TEXT = 520
 -- What a format string makes, kept per format string: `fixed`, the most its
 -- own text and its number conversions come to, and in its array part the
 -- arguments whose size depends on their text: `%s` by its argument's
--- position, `%q` by its position negated. A spec the library would refuse
--- ends it: the library stops there too.
+-- position, `%q` by its position negated; and in `whole` the arguments an
+-- integer conversion takes (`%d`, `%x`, `%c`...). A spec the library would
+-- refuse ends it: the library stops there too.
 local formats, formats_count = {}, 0
 
+-- `d`, `i`, `o`, `u`, `x`, `X`, `c`: the conversions that take an integer.
+local INTEGER_CONVERSIONS =
+  { [100] = true, [105] = true, [111] = true, [117] = true, [120] = true, [88] = true, [99] = true }
+
 local function format_spec(fmt)
-  local spec = { fixed = #fmt + 0.0 }
+  local spec = { fixed = #fmt + 0.0, whole = {} }
   local i, arg = 1, 0
   while true do
     local at = find(fmt, "%", i, true)
@@ -770,6 +787,9 @@ local function format_spec(fmt)
         spec.fixed = spec.fixed + 2
       else
         spec.fixed = spec.fixed + NUMBER_TEXT
+        if INTEGER_CONVERSIONS[letter] then
+          spec.whole[#spec.whole + 1] = arg
+        end
       end
       i = spec_end + 2
     end
@@ -787,6 +807,17 @@ function caps.string.format(fmt, ...)
     return raw.format(fmt, ...)
   end
   local spec = formats[fmt] or format_spec(fmt)
+  -- Lua 5.4 refuses a number with a fraction where an integer goes; Luau would
+  -- drop the fraction and say nothing (`%d` of 2.5 is "2"), so it's refused here.
+  local whole = spec.whole
+  for k = 1, #whole do
+    local n = tonumber((select(whole[k], ...)))
+    if n ~= nil and tointeger(n) == nil then
+      refuse(
+        format("bad argument #%d to 'format' (number has no integer representation)", whole[k] + 1)
+      )
+    end
+  end
   local size = spec.fixed
   local args
   for k = 1, #spec do

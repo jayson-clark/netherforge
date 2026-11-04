@@ -305,9 +305,37 @@ local t = {5, 3, 9} table.sort(t) log(table.concat(t, " "))
 log(string.match("key = value", "^(%w+)%s*=%s*(%w+)$"))"#,
     )
     .unwrap();
-    // Luau's `string.rep` has no separator (it's Lua 5.1's), and ignores one.
     assert_eq!(
         logs,
-        ["ababab\t7-x-1.50\ta_b_c\t1,2,3", "3 5 9", "key\tvalue"]
+        ["ab-ab-ab\t7-x-1.50\ta_b_c\t1,2,3", "3 5 9", "key\tvalue"]
     );
+}
+
+#[test]
+fn rep_with_a_separator_does_what_lua_5_4_does() {
+    // Luau's own `rep` ignores a separator; the cap writes it.
+    let logs = run(
+        &host(),
+        r#"log(("x"):rep(3, ", "), ("x"):rep(1, "-"), ("x"):rep(0, "-"), string.rep(7, 2, 0))"#,
+    )
+    .unwrap();
+    assert_eq!(logs, ["x, x, x\tx\t\t707"]);
+}
+
+#[test]
+fn an_integer_conversion_of_a_fraction_is_an_error_as_on_lua_5_4() {
+    // Luau's own `format` would write `2`.
+    let message = refused(r#"local s = string.format("%d items", 2.5)"#, 1);
+    assert_has(
+        &message,
+        "bad argument #2 to 'format' (number has no integer representation)",
+    );
+    let message = refused(r#"local s = ("%s is %x"):format("n", 1.5)"#, 1);
+    assert_has(&message, "bad argument #3 to 'format'");
+    let logs = run(
+        &host(),
+        r#"log(string.format("%d %x %c %5.1f", 2.0, 255, 65, 2.5))"#,
+    )
+    .unwrap();
+    assert_eq!(logs, ["2 ff A   2.5"]);
 }

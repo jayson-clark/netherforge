@@ -88,9 +88,8 @@ becomes.
 5. **The prelude's own uses** (`math.type`, `math.tointeger`, `math.ult`, `string.pack`'s
    integer formats, `%d`). Each becomes `is_whole(n)` (`n == floor(n)`, finite) or goes with
    the code that moves to Rust. Luau has no `math.type`, so scripts that called it get the
-   same error any missing function gives. **`%d` changes**: Lua 5.4's `string.format("%d", 2.5)`
-   errors ("number has no integer representation"), and Luau's truncates it to `"2"`. The
-   prelude formats whole numbers only, so it's unaffected; scripts get Luau's behaviour.
+   same error any missing function gives. **`%d` keeps its meaning**: Luau's own `string.format("%d", 2.5)` writes `"2"`, where Lua
+   5.4's raises "number has no integer representation". The caps refuse it as Lua 5.4 does.
 
 ### What scripts see
 
@@ -169,8 +168,10 @@ What replaces `LuaHost`, the prelude's `guard` and `sandbox` modules, and the me
   caps and `refuse` are compiled without debug information, so the library's own errors (a bad
   argument), which it locates at its caller, aren't located there. The host then locates such a
   message at the traceback's first script frame. `tests/caps.rs` is `HangTest` on Luau.
-  - Luau's `string.rep` has no separator (it's Lua 5.1's) and ignores one. The cap still
-    counts it, which only makes it refuse sooner.
+  - Luau's own `string.rep` has no separator (it's Lua 5.1's) and silently ignores one, so the
+    cap writes it, as Lua 5.4 does (`REP_IGNORES_SEP`, probed once).
+  - Luau's own `%d` (and `%x`, `%c`...) drops a fraction; the cap on `format` refuses one with
+    Lua 5.4's message.
   - Luau has no `__gc` for tables, so the cap on `setmetatable` refusing `__gc` changes
     nothing there. It stays for the Kotlin runtime.
 
