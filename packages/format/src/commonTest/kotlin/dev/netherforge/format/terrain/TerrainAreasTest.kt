@@ -3,10 +3,12 @@ package dev.netherforge.format.terrain
 import dev.netherforge.format.ProblemSink
 import dev.netherforge.format.TestFiles
 import dev.netherforge.format.block.BlockKind
+import dev.netherforge.format.editor.TerrainPreviewResult
 import dev.netherforge.format.json.CanonicalJson
 import dev.netherforge.format.project.MapProjectSource
 import dev.netherforge.format.project.Projects
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -463,6 +465,30 @@ class TerrainAreasTest {
         val far = TerrainPreview.map(g, -50_000, -50_000, 256, 400)
         assertFalse(far.decorationsShown)
         assertEquals(emptyList(), far.decorations)
+    }
+
+    /**
+     * A close map (with its decorations) and a slice along each axis of `areas.json`'s world:
+     * `testdata/terrain/preview.json`, which the Rust port's preview is held to.
+     */
+    @Test
+    fun aPreviewIsTheSameOnEveryPlatform() {
+        val g = compile(everything).withStructures(mapOf("tree" to tree)).bind(7L, -64, 320)
+        val previews = mapOf(
+            "map" to TerrainPreview.map(g, -40, -40, 24, 4),
+            "far" to TerrainPreview.map(g, -50_000, -50_000, 32, 400),
+            "x" to TerrainPreview.slice(g, true, 5, -20, 40),
+            "z" to TerrainPreview.slice(g, false, -9, 10, 24)
+        )
+        val actual = CanonicalJson.print(
+            JsonObject(previews.mapValues { (_, p) -> Json.encodeToJsonElement(TerrainPreviewResult.serializer(), p) })
+        ) + "\n"
+        val golden = "packages/format/testdata/terrain/preview.json"
+        if (TestFiles.updateGolden) {
+            TestFiles.write(golden, actual)
+            return
+        }
+        assertEquals(TestFiles.read(golden), actual)
     }
 
     // ---- the same on every platform ----------------------------------------------------------------------

@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use netherforge_format::kind::terrain::TerrainFile;
 use netherforge_format::kind::terrain::compiled::{self, CompiledTerrain, StructureTemplate};
 use netherforge_format::kind::terrain::generate::{ChunkBuffer, TerrainGenerator};
+use netherforge_format::kind::terrain::preview;
 use serde_json::Value;
 
 fn testdata(name: &str) -> String {
@@ -111,8 +112,8 @@ fn a_world_with_a_density_is_kotlins() {
     assert_eq!(lines, golden("density.txt"));
 }
 
-#[test]
-fn a_world_of_everything_is_kotlins() {
+/// `areas.json`'s world, with `tree.json` linked in.
+fn everything() -> CompiledTerrain {
     let tree: Value = serde_json::from_str(&testdata("tree.json")).unwrap();
     let ints = |v: &Value| {
         v.as_array()
@@ -134,7 +135,12 @@ fn a_world_of_everything_is_kotlins() {
         blocks: ints(&tree["blocks"]),
         with_entity: Default::default(),
     };
-    let w = compile("areas.json").with_structures(&BTreeMap::from([("tree".to_owned(), template)]));
+    compile("areas.json").with_structures(&BTreeMap::from([("tree".to_owned(), template)]))
+}
+
+#[test]
+fn a_world_of_everything_is_kotlins() {
+    let w = everything();
     let mut lines = vec![palette_line(&w)];
     for seed in [7, -123_456_789_012_345] {
         let g = w.bind(seed, -64, 320, None);
@@ -151,4 +157,51 @@ fn a_world_of_everything_is_kotlins() {
         }
     }
     assert_eq!(lines, golden("areas.txt"));
+}
+
+/// The editor's preview of that world: a close map with its decorations, a far
+/// one without, and a slice along each axis, as `preview.json` (Kotlin's
+/// `TerrainAreasTest`) says.
+#[test]
+fn a_preview_is_kotlins() {
+    let g = everything().bind(7, -64, 320, None);
+    let none = Vec::new;
+    let actual = serde_json::json!({
+        "map": preview::map(&g, -40, -40, 24, 4, none),
+        "far": preview::map(&g, -50_000, -50_000, 32, 400, none),
+        "x": preview::slice(&g, true, 5, -20, 40, none),
+        "z": preview::slice(&g, false, -9, 10, 24, none),
+    });
+    let expected: Value = serde_json::from_str(&testdata("preview.json")).unwrap();
+    for (name, want) in expected.as_object().unwrap() {
+        for (field, value) in want.as_object().unwrap() {
+            assert_eq!(&actual[name][field], value, "{name}.{field}");
+        }
+        assert_eq!(&actual[name], want, "{name}");
+    }
+    assert!(actual["map"]["decorationsShown"].as_bool().unwrap());
+    assert!(!actual["map"]["decorations"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn a_scripts_failure_is_shown_where_the_message_says() {
+    use netherforge_format::kind::terrain::scripts::ScriptFailure;
+    let failure = ScriptFailure {
+        file: "terrain/t.lua".into(),
+        stage: "height".into(),
+        message: "lib/hills.lua:12: attempt to index nil".into(),
+    };
+    assert_eq!(
+        serde_json::to_value(&failure).unwrap(),
+        serde_json::json!({ "stage": "height", "message": "lib/hills.lua:12: attempt to index nil", "file": "lib/hills.lua", "line": 12 })
+    );
+    let bare = ScriptFailure {
+        message: "out of memory".into(),
+        ..failure
+    };
+    assert_eq!(
+        serde_json::to_value(&bare).unwrap()["file"],
+        "terrain/t.lua"
+    );
+    assert!(serde_json::to_value(&bare).unwrap()["line"].is_null());
 }
