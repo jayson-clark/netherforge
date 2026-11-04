@@ -53,6 +53,22 @@ impl BlockState {
     }
 }
 
+/// Its id and its properties, as an object (`{"id": …, "properties": {…}}`).
+impl serde::Serialize for BlockState {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let properties: serde_json::Map<String, serde_json::Value> = self
+            .properties
+            .iter()
+            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+            .collect();
+        let mut out = serializer.serialize_struct("BlockState", 2)?;
+        out.serialize_field("id", &self.id)?;
+        out.serialize_field("properties", &properties)?;
+        out.end()
+    }
+}
+
 /// `id[key=value,…]`, its properties sorted.
 impl fmt::Display for BlockState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

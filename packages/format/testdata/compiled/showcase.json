@@ -1320,10 +1320,26 @@
           "spread": [0, 0, 0],
           "force": false,
           "toColor": 16777215,
-          "sizeCurve": {},
-          "speedCurve": {},
-          "radiusCurve": {},
-          "colorCurve": {}
+          "sizeCurve": {
+            "times": [0],
+            "values": [1],
+            "easings": ["linear"]
+          },
+          "speedCurve": {
+            "times": [0],
+            "values": [0.6],
+            "easings": ["linear"]
+          },
+          "radiusCurve": {
+            "times": [0],
+            "values": [1.6],
+            "easings": ["linear"]
+          },
+          "colorCurve": {
+            "times": [0],
+            "colors": [16777215],
+            "easings": ["linear"]
+          }
         },
         {
           "name": "ring",
@@ -1347,10 +1363,26 @@
           "spread": [0, 0, 0],
           "force": false,
           "toColor": 16777215,
-          "sizeCurve": {},
-          "speedCurve": {},
-          "radiusCurve": {},
-          "colorCurve": {}
+          "sizeCurve": {
+            "times": [0],
+            "values": [1.2],
+            "easings": ["linear"]
+          },
+          "speedCurve": {
+            "times": [0],
+            "values": [0],
+            "easings": ["linear"]
+          },
+          "radiusCurve": {
+            "times": [18, 34],
+            "values": [0.3, 2.5],
+            "easings": ["linear", "ease_out"]
+          },
+          "colorCurve": {
+            "times": [18, 34],
+            "colors": [15914239, 9059583],
+            "easings": ["linear", "ease_in"]
+          }
         },
         {
           "name": "rise",
@@ -1375,10 +1407,26 @@
           "spread": [0, 0, 0],
           "force": false,
           "toColor": 16777215,
-          "sizeCurve": {},
-          "speedCurve": {},
-          "radiusCurve": {},
-          "colorCurve": {}
+          "sizeCurve": {
+            "times": [0],
+            "values": [1],
+            "easings": ["linear"]
+          },
+          "speedCurve": {
+            "times": [0],
+            "values": [0.25],
+            "easings": ["linear"]
+          },
+          "radiusCurve": {
+            "times": [0],
+            "values": [0.4],
+            "easings": ["linear"]
+          },
+          "colorCurve": {
+            "times": [0],
+            "colors": [16777215],
+            "easings": ["linear"]
+          }
         }
       ]
     },
@@ -1410,9 +1458,21 @@
           "spread": [0, 0, 0],
           "force": false,
           "toColor": 16777215,
-          "sizeCurve": {},
-          "speedCurve": {},
-          "colorCurve": {}
+          "sizeCurve": {
+            "times": [0],
+            "values": [0.6],
+            "easings": ["linear"]
+          },
+          "speedCurve": {
+            "times": [0],
+            "values": [0],
+            "easings": ["linear"]
+          },
+          "colorCurve": {
+            "times": [0],
+            "colors": [12946687],
+            "easings": ["linear"]
+          }
         },
         {
           "name": "spark",
@@ -1437,10 +1497,26 @@
           "spread": [0, 0, 0],
           "force": false,
           "toColor": 16777215,
-          "sizeCurve": {},
-          "speedCurve": {},
-          "radiusCurve": {},
-          "colorCurve": {}
+          "sizeCurve": {
+            "times": [0],
+            "values": [1],
+            "easings": ["linear"]
+          },
+          "speedCurve": {
+            "times": [0],
+            "values": [0.03],
+            "easings": ["linear"]
+          },
+          "radiusCurve": {
+            "times": [0],
+            "values": [0.3],
+            "easings": ["linear"]
+          },
+          "colorCurve": {
+            "times": [0],
+            "colors": [16777215],
+            "easings": ["linear"]
+          }
         }
       ]
     },
@@ -1475,10 +1551,26 @@
             "id": "minecraft:stone",
             "properties": {}
           },
-          "sizeCurve": {},
-          "speedCurve": {},
-          "radiusCurve": {},
-          "colorCurve": {}
+          "sizeCurve": {
+            "times": [0],
+            "values": [1],
+            "easings": ["linear"]
+          },
+          "speedCurve": {
+            "times": [0],
+            "values": [0.2],
+            "easings": ["linear"]
+          },
+          "radiusCurve": {
+            "times": [0],
+            "values": [1.5],
+            "easings": ["linear"]
+          },
+          "colorCurve": {
+            "times": [0],
+            "colors": [16777215],
+            "easings": ["linear"]
+          }
         },
         {
           "name": "flash",
@@ -1501,9 +1593,21 @@
           "spread": [0, 0, 0],
           "force": false,
           "toColor": 16777215,
-          "sizeCurve": {},
-          "speedCurve": {},
-          "colorCurve": {}
+          "sizeCurve": {
+            "times": [0],
+            "values": [1],
+            "easings": ["linear"]
+          },
+          "speedCurve": {
+            "times": [0],
+            "values": [0],
+            "easings": ["linear"]
+          },
+          "colorCurve": {
+            "times": [0],
+            "colors": [16777215],
+            "easings": ["linear"]
+          }
         },
         {
           "name": "ring",
@@ -1527,10 +1631,26 @@
           "spread": [0, 0, 0],
           "force": false,
           "toColor": 16777215,
-          "sizeCurve": {},
-          "speedCurve": {},
-          "radiusCurve": {},
-          "colorCurve": {}
+          "sizeCurve": {
+            "times": [0],
+            "values": [1.5],
+            "easings": ["linear"]
+          },
+          "speedCurve": {
+            "times": [0],
+            "values": [0],
+            "easings": ["linear"]
+          },
+          "radiusCurve": {
+            "times": [0, 20],
+            "values": [0.5, 4],
+            "easings": ["linear", "ease_out"]
+          },
+          "colorCurve": {
+            "times": [0, 20],
+            "colors": [16765773, 16726815],
+            "easings": ["linear", "ease_in"]
+          }
         },
         {
           "name": "sparks",
@@ -1554,11 +1674,31 @@
           "spread": [0, 0, 0],
           "force": false,
           "toColor": 16777215,
-          "rateCurve": {},
-          "sizeCurve": {},
-          "speedCurve": {},
-          "radiusCurve": {},
-          "colorCurve": {}
+          "rateCurve": {
+            "times": [2, 30],
+            "values": [6, 0],
+            "easings": ["linear", "linear"]
+          },
+          "sizeCurve": {
+            "times": [0],
+            "values": [1],
+            "easings": ["linear"]
+          },
+          "speedCurve": {
+            "times": [0],
+            "values": [0.15],
+            "easings": ["linear"]
+          },
+          "radiusCurve": {
+            "times": [0],
+            "values": [0.3],
+            "easings": ["linear"]
+          },
+          "colorCurve": {
+            "times": [0],
+            "colors": [16777215],
+            "easings": ["linear"]
+          }
         }
       ]
     },
@@ -1590,10 +1730,26 @@
           "spread": [0, 0, 0],
           "force": false,
           "toColor": 16777215,
-          "sizeCurve": {},
-          "speedCurve": {},
-          "radiusCurve": {},
-          "colorCurve": {}
+          "sizeCurve": {
+            "times": [0],
+            "values": [0.8],
+            "easings": ["linear"]
+          },
+          "speedCurve": {
+            "times": [0],
+            "values": [0],
+            "easings": ["linear"]
+          },
+          "radiusCurve": {
+            "times": [0],
+            "values": [0.5],
+            "easings": ["linear"]
+          },
+          "colorCurve": {
+            "times": [0, 20],
+            "colors": [8382719, 13925375],
+            "easings": ["linear", "linear"]
+          }
         }
       ]
     },
@@ -1624,10 +1780,26 @@
           "spread": [0, 0, 0],
           "force": false,
           "toColor": 8382719,
-          "sizeCurve": {},
-          "speedCurve": {},
-          "radiusCurve": {},
-          "colorCurve": {}
+          "sizeCurve": {
+            "times": [0],
+            "values": [0.7],
+            "easings": ["linear"]
+          },
+          "speedCurve": {
+            "times": [0],
+            "values": [0],
+            "easings": ["linear"]
+          },
+          "radiusCurve": {
+            "times": [0],
+            "values": [0.25],
+            "easings": ["linear"]
+          },
+          "colorCurve": {
+            "times": [0],
+            "colors": [12946687],
+            "easings": ["linear"]
+          }
         },
         {
           "name": "sparks",
@@ -1652,10 +1824,26 @@
           "spread": [0, 0, 0],
           "force": false,
           "toColor": 16777215,
-          "sizeCurve": {},
-          "speedCurve": {},
-          "radiusCurve": {},
-          "colorCurve": {}
+          "sizeCurve": {
+            "times": [0],
+            "values": [1],
+            "easings": ["linear"]
+          },
+          "speedCurve": {
+            "times": [0],
+            "values": [0.02],
+            "easings": ["linear"]
+          },
+          "radiusCurve": {
+            "times": [0],
+            "values": [0.2],
+            "easings": ["linear"]
+          },
+          "colorCurve": {
+            "times": [0],
+            "colors": [16777215],
+            "easings": ["linear"]
+          }
         }
       ]
     }
@@ -1665,7 +1853,55 @@
       "id": "avenue",
       "length": 16,
       "skippable": true,
-      "path": {},
+      "path": {
+        "positions": [
+          {
+            "time": 0,
+            "value": [0, 30, -24],
+            "easing": "ease_in_out"
+          },
+          {
+            "time": 5,
+            "value": [16, 18, 60],
+            "easing": "ease_in_out"
+          },
+          {
+            "time": 10,
+            "value": [-16, 14, 150],
+            "easing": "ease_in_out"
+          },
+          {
+            "time": 16,
+            "value": [0, 40, 270],
+            "easing": "ease_out"
+          }
+        ],
+        "rotations": [
+          {
+            "time": 0,
+            "yaw": 0,
+            "pitch": 35,
+            "easing": "ease_in_out"
+          },
+          {
+            "time": 5,
+            "yaw": 30,
+            "pitch": 25,
+            "easing": "ease_in_out"
+          },
+          {
+            "time": 10,
+            "yaw": -30,
+            "pitch": 25,
+            "easing": "ease_in_out"
+          },
+          {
+            "time": 16,
+            "yaw": 180,
+            "pitch": 40
+          }
+        ]
+      },
       "cues": [
         {
           "time": 0.5,
@@ -1693,7 +1929,42 @@
       "id": "flyby",
       "length": 6,
       "skippable": true,
-      "path": {},
+      "path": {
+        "positions": [
+          {
+            "time": 0,
+            "value": [0, 6, -12]
+          },
+          {
+            "time": 3,
+            "value": [10, 8, 0],
+            "easing": "ease_in_out"
+          },
+          {
+            "time": 6,
+            "value": [0, 10, 12],
+            "easing": "ease_out"
+          }
+        ],
+        "rotations": [
+          {
+            "time": 0,
+            "yaw": 0,
+            "pitch": 25
+          },
+          {
+            "time": 3,
+            "yaw": 90,
+            "pitch": 20,
+            "easing": "ease_in_out"
+          },
+          {
+            "time": 6,
+            "yaw": 180,
+            "pitch": 30
+          }
+        ]
+      },
       "cues": [
         {
           "time": 0.5,
@@ -2325,6 +2596,7 @@
       "rows": 3,
       "size": 27,
       "title": "<#e8d8ff>Altar",
+      "skin": "ui/altar",
       "shared": false,
       "locked": true,
       "slots": {
@@ -2385,6 +2657,7 @@
       "rows": 3,
       "size": 27,
       "title": "<dark_gray>Village shop",
+      "skin": "ui/shop",
       "shared": false,
       "locked": true,
       "slots": {

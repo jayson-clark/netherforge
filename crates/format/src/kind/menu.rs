@@ -1,5 +1,5 @@
 //! `menus/<id>/menu.json`: a menu window, its slots and its script. Format's
-//! `MenuFile`, `MenuKind` and `MenuValidator`.
+//! `MenuFile`, `MenuKind` and `MenuValidator`; it compiles to a `CompiledMenu`.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -87,6 +87,15 @@ impl MenuType {
         }
     }
 
+    /// How many slots wide its window is.
+    pub fn columns(self) -> i32 {
+        match self {
+            MenuType::Hopper => 5,
+            MenuType::Dispenser | MenuType::Dropper | MenuType::Crafter => 3,
+            _ => 9,
+        }
+    }
+
     pub fn size(self, rows: i32) -> i32 {
         if self == MenuType::Chest {
             rows * 9
@@ -127,6 +136,10 @@ impl Document for MenuFile {
 
     fn script(&self) -> Option<&ScriptDef> {
         self.script.as_ref()
+    }
+
+    fn compile(&self, id: &str, _cx: &Context) -> Option<Box<dyn crate::document::Compiled>> {
+        crate::document::compiled(compile(id, self))
     }
 
     /// What depends on the menu's type and size, a slot's key, its item's
@@ -183,5 +196,58 @@ impl Document for MenuFile {
                 Some(it) => item::check(it, &format!("{at}.item"), sink, cx.game),
             }
         }
+    }
+}
+
+/// A menu as the server opens it: its type and size decided, slots by index.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct CompiledMenu {
+    pub id: String,
+    pub name: Option<String>,
+    #[serde(rename = "type")]
+    pub kind: MenuType,
+    pub rows: i32,
+    pub size: i32,
+    pub title: Option<String>,
+    pub skin: Option<String>,
+    pub shared: bool,
+    pub locked: bool,
+    /// By index, ascending.
+    pub slots: std::collections::BTreeMap<i32, SlotDef>,
+    pub script: Option<ScriptDef>,
+}
+
+impl CompiledMenu {
+    pub fn slot(&self, index: i32) -> Option<&SlotDef> {
+        self.slots.get(&index)
+    }
+}
+
+/// `file` (the menu `id`) as it opens, for a file whose checks found no errors.
+pub fn compile(id: &str, file: &MenuFile) -> CompiledMenu {
+    let kind = file.kind.unwrap_or(MenuType::Chest);
+    let rows = match kind {
+        MenuType::Chest => file.rows.unwrap_or(DEFAULT_ROWS),
+        _ => kind.fixed_slots() / kind.columns(),
+    };
+    CompiledMenu {
+        id: id.to_owned(),
+        name: file.name.clone(),
+        kind,
+        rows,
+        size: kind.size(rows),
+        title: file.title.clone(),
+        skin: file.skin.clone(),
+        shared: file.shared.unwrap_or(false),
+        locked: file.locked.unwrap_or(true),
+        slots: file
+            .slots
+            .iter()
+            .map(|(key, slot)| {
+                let index = key.0.parse().expect("a checked slot's key is its index");
+                (index, slot.clone())
+            })
+            .collect(),
+        script: file.script.clone(),
     }
 }

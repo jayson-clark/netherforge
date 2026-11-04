@@ -3,7 +3,10 @@
 //! `ParticleOptions` and `ParticleEffectValidator`: its duration, emitter
 //! names, burst, rate, count, every, size, colours and speed are its fields'
 //! rules; what depends on its particle, shape, motion and timeline is
-//! checked here. (Its sampler and compiler come with the runtime's effects.)
+//! checked here. It compiles to a `CompiledEffect` (`compiled`).
+
+pub mod compiled;
+pub mod sample;
 
 use std::collections::HashSet;
 
@@ -30,9 +33,6 @@ pub const MAX_RATE: f64 = 256.0;
 pub const MAX_COUNT: i32 = 100;
 pub const MIN_SIZE: f64 = 0.01;
 pub const MAX_SIZE: f64 = 4.0;
-pub const DEFAULT_COUNT: i32 = 1;
-pub const DEFAULT_SIZE: f64 = 1.0;
-pub const DEFAULT_COLOR: &str = "#ffffff";
 
 pub const BLOCK_CODES: BlockStateCodes = BlockStateCodes {
     state: codes::PARTICLE_BLOCK_STATE,
@@ -746,6 +746,10 @@ impl Document for ParticleEffectFile {
             }
         }
         out
+    }
+
+    fn compile(&self, id: &str, cx: &Context) -> Option<Box<dyn crate::document::Compiled>> {
+        crate::document::compiled(compiled::compile(id, self, cx.game))
     }
 
     fn validate(&self, cx: &Context, sink: &mut ProblemSink) {

@@ -19,15 +19,7 @@ fn root() -> PathBuf {
 
 /// The kinds whose compilers aren't ported yet: the golden's entries for them are left out,
 /// and a kind here that compiles anyway is a failure (this list only shrinks).
-const NOT_YET: &[&str] = &[
-    "menu",
-    "cutscene",
-    "particle_effect",
-    "terrain",
-    "datapack",
-    "resource_pack",
-    "resourcePacks",
-];
+const NOT_YET: &[&str] = &["terrain", "datapack", "resource_pack", "resourcePacks"];
 
 #[test]
 fn the_examples_compile_as_the_goldens_say() {

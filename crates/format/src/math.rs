@@ -93,7 +93,7 @@ pub fn radians_to_degrees(radians: f64) -> f64 {
 /// JOML's conventions, which Paper exposes: column-major storage
 /// (`element(row, col) == values[col * 4 + row]`); builders post-multiply
 /// (`translate` then `scale` is `T * S`); `rotate_xyz` applies X, then Y, then Z.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub struct Matrix4 {
     pub values: [f64; 16],
 }

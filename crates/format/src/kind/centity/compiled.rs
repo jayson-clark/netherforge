@@ -10,7 +10,7 @@ use super::{
     AnimationBlend, BodyDef, CentityFile, Channel, DisplayDef, HealthBarDef, HealthDef, HitboxDef,
     LoopMode, NodeDef, PhysicsDef, PhysicsShape, SpawningDef, Transform,
 };
-use crate::animation::{Easing, Keyframe};
+use crate::animation::Keyframe;
 use crate::canonical::Map;
 use crate::math::{BoundingBox, Matrix4, Vec3, degrees_to_radians, shortest_delta};
 use crate::resolve::resolved;
@@ -170,25 +170,11 @@ pub struct Track {
 impl Track {
     /// The pose at `time`, holding the first and last key outside the keyed range.
     pub fn sample(&self, time: f64) -> Vec3 {
-        let (first, last) = (&self.keys[0], &self.keys[self.keys.len() - 1]);
-        if time <= first.time {
-            return first.value;
+        let at = crate::animation::segment(&self.keys, |k| k.time, |k| k.easing, time);
+        let (a, b, t) = (self.keys[at.from].value, self.keys[at.to].value, at.t);
+        if at.from == at.to {
+            return a;
         }
-        if time >= last.time {
-            return last.value;
-        }
-        // The first key past `time`.
-        let next = self.keys.partition_point(|k| k.time <= time);
-        let (from, to) = (&self.keys[next - 1], &self.keys[next]);
-        let span = to.time - from.time;
-        if span <= 0.0 {
-            return to.value;
-        }
-        let t = from
-            .easing
-            .unwrap_or(Easing::Linear)
-            .apply((time - from.time) / span);
-        let (a, b) = (from.value, to.value);
         match self.channel {
             Channel::Rotation => Vec3(
                 a.0 + shortest_delta(a.0, b.0) * t,

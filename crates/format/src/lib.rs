@@ -20,6 +20,7 @@ pub mod noise;
 pub mod package;
 pub mod problem;
 pub mod project;
+pub mod random;
 pub mod read;
 pub mod reference;
 pub mod resolve;

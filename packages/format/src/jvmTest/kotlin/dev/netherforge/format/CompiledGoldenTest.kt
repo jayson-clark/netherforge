@@ -124,8 +124,14 @@ class CompiledGoldenTest {
         private fun getter(type: Class<*>, name: String) = runCatching {
             val capital = name.replaceFirstChar { it.uppercase() }
             type.methods.firstOrNull {
+                // A value class's getter is mangled: `getSkin-<hash>`.
                 it.parameterCount == 0 &&
-                    (it.name == "get$capital" || it.name == "is$capital" || (name.startsWith("is") && it.name == name))
+                    (
+                        it.name == "get$capital" ||
+                            it.name.startsWith("get$capital-") ||
+                            it.name == "is$capital" ||
+                            (name.startsWith("is") && it.name == name)
+                        )
             }
         }.getOrNull()
 

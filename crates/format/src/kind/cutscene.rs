@@ -1,7 +1,8 @@
 //! `cutscenes/<id>.json`: a camera path a script plays for a player. Format's
 //! `CutsceneFile`, `CutsceneKind` and `CutsceneValidator`: the length, pitch,
 //! a cue's duration and event name, and how many keys a track holds are
-//! their fields' rules; what depends on the length is checked here.
+//! their fields' rules; what depends on the length is checked here. It
+//! compiles to a `CompiledCutscene` (format's `CutsceneCompiler`).
 
 use std::collections::HashSet;
 
@@ -19,8 +20,6 @@ pub const MAX_LENGTH: f64 = 3600.0;
 pub const MAX_KEYS: usize = 4096;
 /// How far from the origin a position may be: the world's own limit.
 pub const MAX_COORDINATE: f64 = 3.0e7;
-/// Seconds a cue's text stays, unless it says.
-pub const DEFAULT_DURATION: f64 = 3.0;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -149,6 +148,10 @@ impl Document for CutsceneFile {
         }
     }
 
+    fn compile(&self, id: &str, _cx: &Context) -> Option<Box<dyn crate::document::Compiled>> {
+        crate::document::compiled(compile(id, self))
+    }
+
     fn validate(&self, _: &Context, sink: &mut ProblemSink) {
         let length = self.length();
         // A length it says is its field's rule; one from its keys is checked here.
@@ -234,5 +237,96 @@ impl Document for CutsceneFile {
                 );
             }
         }
+    }
+}
+
+/// A cutscene ready to play or draw: keys in time order, its length decided,
+/// cues in time order (those at one time in the file's).
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct CompiledCutscene {
+    pub id: String,
+    /// Seconds, always more than 0.
+    pub length: f64,
+    /// Whether the player may end it early by sneaking, when a script says nothing.
+    pub skippable: bool,
+    pub path: CameraPath,
+    pub cues: Vec<CompiledCue>,
+}
+
+impl CompiledCutscene {
+    /// Where the camera is at `time` seconds.
+    pub fn pose_at(&self, time: f64) -> CameraPose {
+        self.path.at(time)
+    }
+}
+
+/// A cue as it plays: its duration its schema's default when it says none.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CompiledCue {
+    pub time: f64,
+    pub event: Option<String>,
+    pub text: Option<String>,
+    /// Seconds its text stays.
+    pub duration: f64,
+}
+
+/// Where the camera is and which way it looks: yaw and pitch in degrees, the
+/// yaw not wrapped (a turn through 180 stays continuous).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CameraPose {
+    pub position: crate::math::Vec3,
+    pub yaw: f64,
+    pub pitch: f64,
+}
+
+/// The camera's two tracks, each in time order and never empty, sampled as a
+/// centity's channels are (`animation::segment`), a yaw turning the short way
+/// round: shared by the server and the editor, so a preview can't disagree.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct CameraPath {
+    pub positions: Vec<Keyframe>,
+    pub rotations: Vec<RotationKey>,
+}
+
+impl CameraPath {
+    pub fn at(&self, time: f64) -> CameraPose {
+        let p = crate::animation::segment(&self.positions, |k| k.time, |k| k.easing, time);
+        let (a, b) = (self.positions[p.from].value, self.positions[p.to].value);
+        let position = if p.from == p.to { a } else { a + (b - a) * p.t };
+        let r = crate::animation::segment(&self.rotations, |k| k.time, |k| k.easing, time);
+        let (a, b) = (&self.rotations[r.from], &self.rotations[r.to]);
+        let (yaw, pitch) = match r.from == r.to {
+            true => (a.yaw, a.pitch),
+            false => (
+                a.yaw + crate::math::shortest_delta(a.yaw, b.yaw) * r.t,
+                a.pitch + (b.pitch - a.pitch) * r.t,
+            ),
+        };
+        CameraPose {
+            position,
+            yaw,
+            pitch,
+        }
+    }
+}
+
+/// `file` (the cutscene `id`) as it plays, for a file whose checks found no errors.
+pub fn compile(id: &str, file: &CutsceneFile) -> CompiledCutscene {
+    assert!(
+        !file.camera.position.is_empty() && !file.camera.rotation.is_empty(),
+        "cutscene \"{id}\" needs a key on each track"
+    );
+    CompiledCutscene {
+        id: id.to_owned(),
+        length: file.length(),
+        skippable: file.skippable.unwrap_or(false),
+        path: CameraPath {
+            positions: by_time(&file.camera.position, |k| k.time),
+            rotations: by_time(&file.camera.rotation, |k| k.time),
+        },
+        cues: by_time(&file.cues, |c| c.time)
+            .iter()
+            .map(crate::resolve::resolved::<Cue, CompiledCue>)
+            .collect(),
     }
 }
