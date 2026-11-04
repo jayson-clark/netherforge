@@ -162,6 +162,15 @@ impl Host {
     pub fn with_clock(limits: Limits, clock: Rc<dyn Clock>) -> mlua::Result<Host> {
         let lua = Lua::new();
         lua.set_memory_limit(limits.memory_bytes)?;
+        let guard = Rc::new(RefCell::new(Guard {
+            limits,
+            clock,
+            frames: Vec::new(),
+            since_clock: 0,
+        }));
+        // The caps go into the real `string` and `table` before they're made
+        // read-only, so the string metatable (`("x"):rep(n)`) reaches them too.
+        install_caps(&lua, &guard)?;
         // The real globals become the base: everything not whitelisted goes,
         // then they're made read-only (`luaL_sandbox`), so no script can change
         // `string.format` for every other. They must hold only what scripts may
@@ -178,12 +187,6 @@ impl Host {
         }
         lua.sandbox(true)?;
 
-        let guard = Rc::new(RefCell::new(Guard {
-            limits,
-            clock,
-            frames: Vec::new(),
-            since_clock: 0,
-        }));
         let interrupt_guard = guard.clone();
         lua.set_interrupt(move |lua| {
             let mut guard = interrupt_guard.borrow_mut();
@@ -191,7 +194,7 @@ impl Host {
                 return Ok(VmState::Continue);
             };
             if frame.location.is_none() {
-                frame.location = running_location(lua);
+                frame.location = project_location(lua);
             }
             let stop = frame.stop.clone().expect("a stopped frame has its stop");
             // A script may catch this with `pcall`, so the frame keeps why it
@@ -410,13 +413,14 @@ fn unknown_scope(scope: ScopeId) -> Failure {
     }
 }
 
-/// Where the running Luau function is, if it's a script's.
-fn running_location(lua: &Lua) -> Option<Location> {
-    (0..4).find_map(|level| {
+/// Where the innermost script frame on the stack is: the first function from
+/// a project chunk (`@path`), past the host's own and the library's.
+fn project_location(lua: &Lua) -> Option<Location> {
+    (0..32).find_map(|level| {
         lua.inspect_stack(level, |debug| {
-            let line = debug.current_line()?;
             let source = debug.source();
             let chunk = source.source.as_deref()?.strip_prefix('@')?.to_owned();
+            let line = debug.current_line()?;
             Some(Location {
                 chunk,
                 line: line as u32,
@@ -425,6 +429,96 @@ fn running_location(lua: &Lua) -> Option<Location> {
         .flatten()
     })
 }
+
+/// The caps on the standard library (format's `caps.lua`, shared with the
+/// Kotlin runtime): the functions whose work isn't bounded by their
+/// arguments' size, which no interrupt can stop once they're running, are
+/// replaced by ones that work out what the call could cost first.
+fn install_caps(lua: &Lua, guard: &Rc<RefCell<Guard>>) -> mlua::Result<()> {
+    let globals = lua.globals();
+    let string: Table = globals.get("string")?;
+    let table: Table = globals.get("table")?;
+    let raw = lua.create_table()?;
+    for name in ["rep", "format", "find", "match", "gmatch", "gsub", "pack"] {
+        raw.raw_set(name, string.raw_get::<Value>(name)?)?;
+    }
+    for name in ["concat", "move", "insert", "remove", "sort"] {
+        raw.raw_set(name, table.raw_get::<Value>(name)?)?;
+    }
+    // What the caps ask of a table: whether it has a metatable at all, even
+    // one that hides itself with `__metatable` (Luau has no
+    // `debug.getmetatable`).
+    raw.raw_set(
+        "getmetatable",
+        lua.create_function(|_, value: Value| {
+            Ok(match value {
+                Value::Table(t) => t.metatable(),
+                _ => None,
+            })
+        })?,
+    )?;
+
+    let (max_string, max_work) = {
+        let guard = guard.borrow();
+        (guard.limits.max_string_bytes, guard.limits.max_work)
+    };
+    let limits = lua.create_table()?;
+    limits.raw_set("max_string", max_string as f64)?;
+    limits.raw_set("max_work", max_work)?;
+
+    // Work a capped call is about to do counts towards the next look at the
+    // clock, so a loop of calls each under the caps still meets the time
+    // limit.
+    let spend_guard = guard.clone();
+    let spend = lua.create_function(move |_, steps: f64| {
+        let mut guard = spend_guard.borrow_mut();
+        let interrupts = (steps / STEPS_PER_INTERRUPT).min(u32::MAX as f64) as u32;
+        guard.since_clock = guard.since_clock.saturating_add(interrupts);
+        Ok(())
+    })?;
+    let locate = lua.create_function(|lua, message: String| {
+        Ok(match project_location(lua) {
+            Some(at) if !message.starts_with(&at.chunk) => format!("{at}: {message}"),
+            _ => message,
+        })
+    })?;
+    let stripped = || mlua::chunk::Compiler::new().set_debug_level(0);
+    let refuse: Function = lua
+        .load("local locate, error = ...\nreturn function(message) error(locate(message), 0) end")
+        .set_name("=nf/refuse")
+        .set_compiler(stripped())
+        .call((locate, globals.get::<Function>("error")?))?;
+    // Without its debug information, the library's own errors (a bad
+    // argument), which it locates at its caller, aren't located inside the
+    // caps, and the host finds the script's line instead.
+    let caps: Table = lua
+        .load(CAPS)
+        .set_name("=nf/caps")
+        .set_compiler(stripped())
+        .call((raw, limits, spend, refuse))?;
+    for (name, f) in caps
+        .get::<Table>("string")?
+        .pairs::<String, Function>()
+        .flatten()
+    {
+        string.raw_set(name, f)?;
+    }
+    for (name, f) in caps
+        .get::<Table>("table")?
+        .pairs::<String, Function>()
+        .flatten()
+    {
+        table.raw_set(name, f)?;
+    }
+    globals.raw_set("setmetatable", caps.get::<Function>("setmetatable")?)?;
+    Ok(())
+}
+
+const CAPS: &str = include_str!("../../../packages/format/src/commonMain/lua/caps.lua");
+
+/// About how many steps of a capped call's work (each about a nanosecond)
+/// one interrupt stands for: a loop iteration or a call.
+const STEPS_PER_INTERRUPT: f64 = 5.0;
 
 fn failure_of(error: &mlua::Error) -> Failure {
     match error {
@@ -438,18 +532,39 @@ fn failure_of(error: &mlua::Error) -> Failure {
     }
 }
 
-/// Luau's message, split from the traceback mlua appends to it.
+/// Luau's message, split from the traceback mlua appends to it. A message
+/// that doesn't say where it's from (the library's, raised inside the caps,
+/// which have no lines) is located at the traceback's first script frame.
 fn error_with_traceback(text: &str) -> Failure {
-    match text.split_once("\nstack traceback:\n") {
-        Some((message, traceback)) => Failure::Error {
-            message: message.to_owned(),
-            traceback: Some(traceback.to_owned()),
-        },
-        None => Failure::Error {
-            message: text.to_owned(),
-            traceback: None,
-        },
+    let (message, traceback) = match text.split_once("\nstack traceback:\n") {
+        Some((message, traceback)) => (message, Some(traceback)),
+        None => (text, None),
+    };
+    let message = match traceback.and_then(first_script_frame) {
+        Some(at) if located(message).is_none() => format!("{at}: {message}"),
+        _ => message.to_owned(),
+    };
+    Failure::Error {
+        message,
+        traceback: traceback.map(str::to_owned),
     }
+}
+
+/// The `path.lua:12` a message or a traceback line starts with, if it's a
+/// script's (a project path, `.lua` or `.luau`).
+fn located(text: &str) -> Option<&str> {
+    let text = text.trim_start();
+    let (path, rest) = text.split_once(':')?;
+    let digits = rest
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(rest.len());
+    let script = path.ends_with(".lua") || path.ends_with(".luau");
+    (script && digits > 0 && rest[digits..].starts_with(':'))
+        .then(|| &text[..path.len() + 1 + digits])
+}
+
+fn first_script_frame(traceback: &str) -> Option<&str> {
+    traceback.lines().find_map(located)
 }
 
 fn set_memory_category(lua: &Lua, category: u8) {

@@ -30,6 +30,10 @@
 -- a pattern that only backtracks on unlucky input is refused on a long enough
 -- string even when the string at hand would have been quick; the message
 -- says what to do instead.
+--
+-- It runs under Lua 5.4 (the Kotlin runtime, terrain previews) and under Luau
+-- (the Rust runtime, see the rust-runtime skill), so it uses only what both
+-- have: Luau's missing `math.tointeger` and `math.ult` are written out below.
 
 local raw, limits, spend, refuse = ...
 
@@ -38,7 +42,28 @@ local type, tostring, tonumber, select, rawget, setmetatable, pcall =
 local byte, sub, char = string.byte, string.sub, string.char
 local format, find, gsub, gmatch, concat = raw.format, raw.find, raw.gsub, raw.gmatch, raw.concat
 local pack, unpack = table.pack, table.unpack
-local tointeger, log, max, floor, ult = math.tointeger, math.log, math.max, math.floor, math.ult
+local log, max, floor = math.log, math.max, math.floor
+
+-- A whole number (or a string of one) as an integer, else nil: Lua 5.4's own,
+-- or the same for Luau's numbers, which are all floats.
+local tointeger = math.tointeger
+  or function(x)
+    local n = tonumber(x)
+    if n ~= nil and n == floor(n) and n - n == 0 then
+      return n
+    end
+    return nil
+  end
+
+-- Whether `a < b` as unsigned 64-bit integers: Lua 5.4's own, or the same for
+-- whole numbers in Luau (a negative one is above every non-negative one).
+local ult = math.ult
+  or function(a, b)
+    if (a < 0) == (b < 0) then
+      return a < b
+    end
+    return b < 0
+  end
 local raw_getmetatable = raw.getmetatable
 
 local MAX_STRING = limits.max_string

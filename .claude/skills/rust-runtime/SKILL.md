@@ -150,6 +150,20 @@ What replaces `LuaHost`, the prelude's `guard` and `sandbox` modules, and the me
 - **No proper tail calls.** Luau keeps a frame for `return f()`, so endless tail recursion is
   a stack overflow (an error), not a loop for the budget to stop.
 
-Still to come in the host: the library's caps (`caps.lua`, under Luau's library: an
-interrupt never fires inside `string.rep` or a pattern match), the prelude's event core,
-tasks and `require`, and generated bindings.
+- **The library's caps are format's `caps.lua`**, the same file the Kotlin runtime runs: it's
+  written for both dialects (Luau's missing `math.tointeger` and `math.ult` are written out in
+  it), so there's one cost model, not two. `install_caps` runs it before the libraries are
+  made read-only, with the library's own functions (`raw`, plus a native `getmetatable` that
+  sees past `__metatable`, since Luau has no `debug.getmetatable`), a `spend` that moves the
+  next look at the clock closer (`STEPS_PER_INTERRUPT`: a step of the caps' model is about a
+  nanosecond, an interrupt about five), and a `refuse` that raises at the script's line. The
+  caps and `refuse` are compiled without debug information, so the library's own errors (a bad
+  argument), which it locates at its caller, aren't located there. The host then locates such a
+  message at the traceback's first script frame. `tests/caps.rs` is `HangTest` on Luau.
+  - Luau's `string.rep` has no separator (it's Lua 5.1's) and ignores one. The cap still
+    counts it, which only makes it refuse sooner.
+  - Luau has no `__gc` for tables, so the cap on `setmetatable` refusing `__gc` changes
+    nothing there. It stays for the Kotlin runtime.
+
+Still to come in the host: the prelude's event core, tasks and `require`, and generated
+bindings.
