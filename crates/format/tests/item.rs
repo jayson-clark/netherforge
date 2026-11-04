@@ -149,3 +149,15 @@ fn a_project_items_look_is_every_field_it_shares_with_a_stack() {
     );
     assert_eq!(serde_json::to_value(file.look()).unwrap(), look);
 }
+
+#[test]
+fn every_kinds_rules_name_their_problems() {
+    use netherforge_format::kind::{dialog::DialogFile, item::ItemFile, menu::MenuFile};
+    for uncoded in [
+        rules::uncoded::<ItemFile>(),
+        rules::uncoded::<MenuFile>(),
+        rules::uncoded::<DialogFile>(),
+    ] {
+        assert_eq!(uncoded, Vec::<String>::new());
+    }
+}

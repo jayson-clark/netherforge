@@ -250,7 +250,15 @@ pub fn uncoded<T: JsonSchema>() -> Vec<String> {
                     out.push(at.to_owned());
                 }
                 for (k, v) in map {
-                    visit(v, &format!("{at}/{k}"), out);
+                    let child = format!("{at}/{k}");
+                    // `properties` and `$defs` map names to schemas: a name isn't a constraint.
+                    if k == "properties" || k == "$defs" {
+                        for (name, schema) in v.as_object().into_iter().flatten() {
+                            visit(schema, &format!("{child}/{name}"), out);
+                        }
+                    } else {
+                        visit(v, &child, out);
+                    }
                 }
             }
             Value::Array(items) => {

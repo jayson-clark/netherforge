@@ -465,7 +465,7 @@ unchanged.
   Checks across resources (`reference.*`, `font.*`, `item.kind-mismatch`) are left out until they're ported. The examples are
   valid projects, so a ported kind must report no errors in them, and must write them back to
   the same bytes. When the Rust side takes over, the goldens are written from it. Ported:
-  `buff` (all its rules are fields'), `item`, `menu` (its type and size, slot keys, items' and scripts' checks), `module` (with `ModuleRequires`, worked out once per
+  `buff` (all its rules are fields'), `dialog`, `item`, `menu` (its type and size, slot keys, items' and scripts' checks), `module` (with `ModuleRequires`, worked out once per
   project in `Source`).
 
 Next in format: reading each resource with its kind's model and checks (kind by kind, each
