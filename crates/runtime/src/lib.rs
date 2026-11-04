@@ -11,6 +11,7 @@ use netherforge_luau::{Host, ScopeId};
 
 pub mod modules;
 pub mod scripts;
+pub mod session;
 
 pub use modules::{Modules, Owner, Project};
 pub use scripts::{Delivered, Log, MAX_ERRORS, Report, Scripts, Target};
