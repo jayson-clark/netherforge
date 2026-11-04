@@ -3,6 +3,7 @@
 
 pub mod advancement;
 pub mod biome;
+pub mod block;
 pub mod buff;
 pub mod cutscene;
 pub mod dialog;
@@ -71,6 +72,7 @@ pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
         "biome" => crate::document::load::<biome::BiomeFile>(&text(), &path, &cx).1,
         "game_block" => crate::document::load::<game_block::GameBlockFile>(&text(), &path, &cx).1,
         "cutscene" => crate::document::load::<cutscene::CutsceneFile>(&text(), &path, &cx).1,
+        "block" => crate::document::load::<block::BlockFile>(&text(), &path, &cx).1,
         "particle_effect" => {
             crate::document::load::<particle::ParticleEffectFile>(&text(), &path, &cx).1
         }
@@ -112,6 +114,7 @@ pub fn write_back(found: &Found, text: &str) -> Option<Result<String, Box<Proble
         "biome" => again::<biome::BiomeFile>(text, &path),
         "game_block" => again::<game_block::GameBlockFile>(text, &path),
         "cutscene" => again::<cutscene::CutsceneFile>(text, &path),
+        "block" => again::<block::BlockFile>(text, &path),
         "particle_effect" => again::<particle::ParticleEffectFile>(text, &path),
         "screen" => again::<screen::ScreenFile>(text, &path),
         "video" => again::<video::VideoFile>(text, &path),

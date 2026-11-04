@@ -172,6 +172,9 @@ fn own(code: &str) -> bool {
         "advancement.cycle",
         "build.id-taken",
         "screen.place",
+        "block.carrier",
+        "block.carriers",
+        "block.vanilla-looks",
         "screen_font.grid",
     ];
     let across =

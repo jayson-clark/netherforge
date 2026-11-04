@@ -9,14 +9,14 @@ use std::collections::{BTreeSet, HashMap};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+pub use super::block::BlockTool;
+use super::block::is_hardness;
 use crate::document::{Context, Document};
 use crate::game::{self, GameData, Registry};
 use crate::problem::{ProblemSink, codes};
 
 /// What a tag is written with in `blocks`.
 pub const TAG: &str = "#";
-/// The hardness of a block nobody can break.
-pub const UNBREAKABLE: f64 = -1.0;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -43,26 +43,6 @@ impl GameBlockFile {
     /// Whether mining it takes something the game wouldn't, so the server counts it.
     pub fn mined_by_server(&self) -> bool {
         self.hardness.is_some() || self.tool.is_some() || self.requires_tool.is_some()
-    }
-}
-
-/// A block's tool, and the game's tag of the blocks it mines fastest.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum BlockTool {
-    Pickaxe,
-    Axe,
-    Shovel,
-    Hoe,
-}
-
-impl BlockTool {
-    pub fn tag(self) -> String {
-        format!(
-            "{}:mineable/{}",
-            game::NAMESPACE,
-            crate::canonical::name_of(&self)
-        )
     }
 }
 
@@ -154,7 +134,7 @@ impl Document for GameBlockFile {
             }
         }
         if let Some(hardness) = self.hardness
-            && (!hardness.is_finite() || (hardness < 0.0 && hardness != UNBREAKABLE))
+            && !is_hardness(hardness)
         {
             sink.report(
                 codes::GAME_BLOCK_HARDNESS,

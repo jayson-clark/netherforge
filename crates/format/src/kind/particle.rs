@@ -578,11 +578,11 @@ impl EmitterDef {
         let on_shape = format!("on a {}", shape.name());
         // One channel: allowed here, not beside its constant, keys inside the timeline and at distinct ticks.
         let channel = |name: &str,
-                           times: Vec<i32>,
-                           allowed: bool,
-                           where_: &str,
-                           constant: bool,
-                           sink: &mut ProblemSink| {
+                       times: Vec<i32>,
+                       allowed: bool,
+                       where_: &str,
+                       constant: bool,
+                       sink: &mut ProblemSink| {
             if times.is_empty() {
                 return;
             }
