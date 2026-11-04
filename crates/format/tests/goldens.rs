@@ -172,6 +172,7 @@ fn own(code: &str) -> bool {
         "advancement.cycle",
         "build.id-taken",
         "screen.place",
+        "structure.pool-element",
         "block.carrier",
         "block.carriers",
         "block.vanilla-looks",
@@ -202,7 +203,7 @@ fn the_ported_kinds_problems_are_formats() {
             let Some(problems) = kind::read(&found, &source) else {
                 continue;
             };
-            let path = found.kind.path_of(&found.id, &found.group);
+            let path = kind::document_path(&found);
             let location = found.kind.location_of(&found.id, &found.group);
             let mut actual: Vec<String> = problems
                 .iter()
@@ -266,7 +267,7 @@ fn the_ported_kinds_examples_write_back() {
             {
                 different.push(format!("{}: {}", dir.display(), p.to_json()));
             }
-            let path = found.kind.path_of(&found.id, &found.group);
+            let path = kind::document_path(&found);
             let Some(text) = read(&path) else { continue };
             let Some(again) = kind::write_back(&found, &text) else {
                 continue;

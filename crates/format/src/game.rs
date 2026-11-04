@@ -17,6 +17,7 @@ pub enum Registry {
     ParticleType,
     PlacedFeature,
     SoundEvent,
+    Biome,
 }
 
 use std::collections::BTreeMap;

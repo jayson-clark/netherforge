@@ -19,6 +19,7 @@ pub mod recipe;
 pub mod screen;
 pub mod screen_font;
 pub mod sky;
+pub mod structure;
 pub mod video;
 
 use std::collections::BTreeSet;
@@ -50,11 +51,23 @@ impl<'a> Source<'a> {
     }
 }
 
+/// The document a resource is read from: its main file, or the document
+/// beside it for a file that has one (a structure's `.json`).
+pub fn document_path(found: &Found) -> String {
+    let kind = found.kind;
+    match kind.companion_document {
+        Some(_) => kind
+            .companion_path_of(&found.id, &found.group)
+            .expect("a companion document has a path"),
+        None => kind.path_of(&found.id, &found.group),
+    }
+}
+
 /// A scanned resource read and checked on its own, if its kind is ported:
 /// its problems. `None` is a kind not ported yet: this match is the one list
 /// of the kinds that are.
 pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
-    let path = found.kind.path_of(&found.id, &found.group);
+    let path = document_path(found);
     let text = || (source.read)(&path).unwrap_or_default();
     let cx = crate::document::Context {
         id: &found.id,
@@ -73,6 +86,11 @@ pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
         "game_block" => crate::document::load::<game_block::GameBlockFile>(&text(), &path, &cx).1,
         "cutscene" => crate::document::load::<cutscene::CutsceneFile>(&text(), &path, &cx).1,
         "block" => crate::document::load::<block::BlockFile>(&text(), &path, &cx).1,
+        // A structure generates by itself only with its document beside it.
+        "structure" if !source.files.contains(&path) => Vec::new(),
+        "structure" => {
+            crate::document::load::<structure::StructureGeneration>(&text(), &path, &cx).1
+        }
         "particle_effect" => {
             crate::document::load::<particle::ParticleEffectFile>(&text(), &path, &cx).1
         }
@@ -99,7 +117,7 @@ pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
 /// A scanned resource read and written again, canonically, if it's a document
 /// of a ported kind: the text, or the problem it didn't parse with.
 pub fn write_back(found: &Found, text: &str) -> Option<Result<String, Box<Problem>>> {
-    let path = found.kind.path_of(&found.id, &found.group);
+    let path = document_path(found);
     fn again<T: crate::document::Document>(text: &str, path: &str) -> Result<String, Box<Problem>> {
         crate::read::parse::<T>(text, path).map(|v| crate::document::write(&v, path))
     }
@@ -115,6 +133,7 @@ pub fn write_back(found: &Found, text: &str) -> Option<Result<String, Box<Proble
         "game_block" => again::<game_block::GameBlockFile>(text, &path),
         "cutscene" => again::<cutscene::CutsceneFile>(text, &path),
         "block" => again::<block::BlockFile>(text, &path),
+        "structure" => again::<structure::StructureGeneration>(text, &path),
         "particle_effect" => again::<particle::ParticleEffectFile>(text, &path),
         "screen" => again::<screen::ScreenFile>(text, &path),
         "video" => again::<video::VideoFile>(text, &path),
