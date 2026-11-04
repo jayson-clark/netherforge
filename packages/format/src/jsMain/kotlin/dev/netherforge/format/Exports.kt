@@ -181,10 +181,12 @@ class PackLayoutResult(val format: List<Int>? = null, val files: Map<String, Pac
  * The project's resource pack as a server would build it as players join (every pack but the `onDemand` ones, the
  * project's blocks and videos), laid out for `netherforge build` to zip into the bundle: from the project in
  * [filesJson] and [packagesJson] as [loadProject] takes them, the game's data ([gameDataJson], which says the pack
- * format) and PNGs' sizes ([sizesJson]).
+ * format) and PNGs' sizes ([sizesJson]). [excludedJson] lists the packages the bundle leaves for the server to
+ * provide: when one of them (as it resolved here) adds anything to the pack, there's no layout, since the server
+ * builds the pack with its own copy; when none does, the pack is the same without them.
  */
 @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-fun resourcePackLayout(filesJson: String, packagesJson: String?, gameDataJson: String?, sizesJson: String?): String {
+fun resourcePackLayout(filesJson: String, packagesJson: String?, gameDataJson: String?, sizesJson: String?, excludedJson: String?): String {
     val result = PackLayoutResult.serializer()
     val game =
         gameDataJson?.let(::gameData) ?: return encode(result, PackLayoutResult(reason = "no game data, so the pack format isn't known"))
@@ -192,13 +194,25 @@ fun resourcePackLayout(filesJson: String, packagesJson: String?, gameDataJson: S
     val files = CanonicalJson.json.decodeFromString<Map<String, String?>>(filesJson)
     val size = sizesJson?.let(::sizes).orEmpty()
     val snapshot = Projects.load(MapProjectSource(files, sizes = size), game, MapPackages(packagesJson))
+    val excluded = excludedJson?.let { CanonicalJson.json.decodeFromString<List<String>>(it) }.orEmpty().sorted()
+    val adding = excluded.filter { name ->
+        snapshot.packages[name]?.snapshot?.let(dev.netherforge.format.resourcepack.PackLayout::needed) !=
+            false
+    }
+    if (adding.isNotEmpty()) {
+        val names = adding.joinToString(", ")
+        return encode(
+            result,
+            PackLayoutResult(reason = "$names, which the server provides, adds to the pack, so the server builds it with its own copy")
+        )
+    }
     val videos = dev.netherforge.format.resourcepack.VideoSound.of(snapshot)
-    val blocks = snapshot.everywhere(dev.netherforge.format.block.BlockKind)
-    if (snapshot.everywhere(dev.netherforge.format.resourcepack.ResourcePackKind).isEmpty() && blocks.isEmpty() && videos.isEmpty()) {
+    if (!dev.netherforge.format.resourcepack.PackLayout.needed(snapshot)) {
         return encode(result, PackLayoutResult(reason = "the project has no resource packs, blocks or videos"))
     }
     val joined = snapshot.compiledResourcePacks.values.filter { !it.onDemand }
     val description = snapshot.manifest?.name?.takeIf { it.isNotBlank() } ?: "NetherForge"
+    val blocks = snapshot.everywhere(dev.netherforge.format.block.BlockKind)
     val plan = dev.netherforge.format.block.BlockKind.plan(blocks, snapshot.namespace, game)
     val layout = dev.netherforge.format.resourcepack.PackLayout.build(joined, format, description, plan, snapshot.vanilla, videos) { path ->
         size[path]?.takeIf { it.size == 2 }?.let { it[0] to it[1] }

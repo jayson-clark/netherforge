@@ -11,6 +11,23 @@ release is cut.
 
 ### Added
 
+- **Resource packs scripts write.** `packs/<name>/` in a package's own
+  `nf.files` folder, with a `pack.json` and its pictures and sounds, is that
+  package's resource pack `<name>`: built with the rest as the server starts and
+  by `nf.packs.rebuild()`, and sent to whoever has it. Its glyphs work in text as
+  any pack's do. So art that arrives while the server runs reaches players on a
+  deployed project, whose folder is read-only. A written pack with errors builds
+  from its last good copy (kept across restarts), or is left out, so the rest
+  still builds (`runtime.written-pack`).
+- **`file:write_base64(data)` and `file:read_base64()`** write and read a file's
+  bytes, for files that aren't text, such as the PNG `image:encode()` gives.
+- **A bundle that leaves out a package with no resources still carries its
+  built resource pack.** `netherforge build` builds `resource-pack.zip` when no
+  package it leaves for the server to provide (`provided`, `--exclude`) adds to
+  the pack (no resource packs, blocks or videos of its own), so servers don't
+  each build the same pack at start. A server whose copy of such a package does
+  add to it builds its own.
+
 - **`netherforge check <bundle folder>`** checks a bundle as `netherforge build`
   wrote it (or an unpacked `.nfbundle`) the way a server loading it would: the
   project with the packages the bundle carries, by the names in

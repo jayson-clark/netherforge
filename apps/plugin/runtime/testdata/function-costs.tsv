@@ -253,10 +253,12 @@ File:name	15
 File:parent	15
 File:path	15
 File:read	15
+File:read_base64	15
 File:read_json	15
 File:rename	17
 File:size	15
 File:write	17
+File:write_base64	17
 File:write_json	18
 HttpStream:close	15
 HttpStream:on	141

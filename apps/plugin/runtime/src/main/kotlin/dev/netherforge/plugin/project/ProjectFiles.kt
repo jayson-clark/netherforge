@@ -23,6 +23,7 @@ import dev.netherforge.format.project.ProjectManifest
 import dev.netherforge.format.project.ProjectSnapshot
 import dev.netherforge.format.project.ProjectSource
 import dev.netherforge.format.project.Projects
+import dev.netherforge.format.resourcepack.PackLayout
 import dev.netherforge.format.wasm.WasmInfo
 import java.nio.file.Files
 import java.nio.file.Path
@@ -60,8 +61,27 @@ class ProjectFiles(
     /** Whether bundles must be signed, and by whom. */
     private val bundles: BundlesConfig = BundlesConfig(),
     /** The folders of the packages the server provides (`packages.provided` in `config.yml`). */
-    private val provided: List<Path> = emptyList()
+    private val provided: List<Path> = emptyList(),
+    /** `nf.files`' root: each package's `packs/<name>/` there is a resource pack its scripts wrote ([WrittenPacks]). */
+    writtenPacks: Path? = null,
+    /** Where the written packs' last good copies are kept. */
+    keptPacks: Path? = null
 ) : ProjectSource {
+    private val written = WrittenPacks(writtenPacks, keptPacks)
+
+    /** The project's namespace, as the last [load] read its manifest: what a project path's written pack is the package of. */
+    @Volatile
+    private var home: String = ""
+
+    /** [problem] as the owner reads it: one in a pack the scripts wrote names the file in their `nf.files` folder. */
+    fun shown(problem: Problem): Problem = written.shown(problem, home)
+
+    /** Whether the last [load] read any resource pack a package's scripts wrote. */
+    val readsWrittenPacks: Boolean get() = written.any
+
+    /** The `pack.json` of every resource pack the last [load] read that scripts wrote, as a reload names it. */
+    fun writtenPackFiles(): List<String> = written.packFiles(home)
+
     /** One load: the snapshot, what the runtime found wrong besides it (a project it won't run), and every file. */
     class Load(val snapshot: ProjectSnapshot, val problems: List<Problem>, val files: Set<String>)
 
@@ -106,8 +126,8 @@ class ProjectFiles(
     }
 
     /** [entry] as format is given it: the server's copy, named as such in its problems. */
-    private fun opened(entry: Pair<Provided, DiskProjectSource>) =
-        OpenedPackage(entry.second, hash(entry.second), from = "the server's, from ${entry.first.folder}")
+    private fun opened(namespace: String, entry: Pair<Provided, DiskProjectSource>) =
+        OpenedPackage(written.over(namespace, entry.second), hash(entry.second), from = "the server's, from ${entry.first.folder}")
 
     /** Which provided packages the load used: those the snapshot has, whose folder is the server's. */
     private fun inUse(snapshot: ProjectSnapshot, server: Map<String, Pair<Provided, DiskProjectSource>>) =
@@ -127,12 +147,28 @@ class ProjectFiles(
     var bundledPack: Pair<BundledResourcePack, Path>? = null
         private set
 
+    /** Why the bundle's [bundledPack] isn't used though it has one (a package the server provides adds to the pack), or null. */
+    @Volatile
+    var bundledPackIgnored: String? = null
+        private set
+
     /** The project's own folder: the configured one, or the project's inside a bundle. */
     val rootFolder: Path get() = root.root
 
     fun load(game: GameData?): Load {
+        val load = written.load { loadOnce(game) }
+        // The bundle's pack was built without them, and they may number the glyphs differently.
+        if (bundledPack != null && written.any) {
+            bundledPackIgnored = "packages' scripts wrote resource packs of their own"
+            bundledPack = null
+        }
+        return load
+    }
+
+    private fun loadOnce(game: GameData?): Load {
         val bundle = configured.resolve(BundleManifest.FILE_NAME)
         bundledPack = null
+        bundledPackIgnored = null
         val problems = mutableListOf<Problem>()
         val server = readProvided(problems)
         val load = if (Files.isRegularFile(bundle)) loadBundle(bundle, game, server) else loadProject(game, server)
@@ -142,24 +178,25 @@ class ProjectFiles(
 
     private fun loadProject(game: GameData?, server: Map<String, Pair<Provided, DiskProjectSource>>): Load {
         root = DiskProjectSource(configured)
-        rootFiles = root.files()
+        rootFiles = rootFilesOf(root)
         val opened = LinkedHashMap<String, DiskProjectSource>()
         val sources = object : PackageSources {
             override fun open(namespace: String, request: PackageRequest): PackageLookup {
                 server[namespace]?.let { entry ->
                     opened[namespace] = entry.second
-                    return opened(entry)
+                    return opened(namespace, entry)
                 }
                 if (!resolves) return PackageMissing()
                 return when (request) {
                     is PackageRequest.Folder -> {
                         val folder = configured.resolve(request.location).normalize()
                         if (!Files.isRegularFile(folder.resolve(ProjectManifest.FILE_NAME))) return PackageMissing()
-                        OpenedPackage(DiskProjectSource(folder).also { opened[namespace] = it })
+                        val source = DiskProjectSource(folder).also { opened[namespace] = it }
+                        OpenedPackage(written.over(namespace, source))
                     }
                     is PackageRequest.Git -> openGit(request)?.let { (source, commit) ->
                         opened[namespace] = source
-                        OpenedPackage(source, hash(source), commit)
+                        OpenedPackage(written.over(namespace, source), hash(source), commit)
                     } ?: PackageMissing(
                         when {
                             request.commit == null ->
@@ -215,7 +252,7 @@ class ProjectFiles(
         bundledPack = manifest?.resourcePack?.let { it to configured.resolve(BundledResourcePack.FILE) }
         val project = manifest?.project?.takeIf { it in folders }
         root = DiskProjectSource(project?.let(configured::resolve) ?: configured)
-        rootFiles = root.files()
+        rootFiles = rootFilesOf(root)
         packages = folders.filter { it != project }.associateWith { DiskProjectSource(configured.resolve(it)) }
         if (manifest != null && project == null) {
             problems +=
@@ -258,8 +295,8 @@ class ProjectFiles(
         packages = withServer
         val sources = object : PackageSources {
             override fun open(namespace: String, request: PackageRequest): PackageLookup {
-                server[namespace]?.takeIf { namespace !in folders }?.let { return opened(it) }
-                packages[namespace]?.takeIf { namespace in folders }?.let { return OpenedPackage(it) }
+                server[namespace]?.takeIf { namespace !in folders }?.let { return opened(namespace, it) }
+                packages[namespace]?.takeIf { namespace in folders }?.let { return OpenedPackage(written.over(namespace, it)) }
                 return PackageMissing(
                     if (namespace in leftOut) {
                         "the bundle leaves \"$namespace\" for the server to provide, and this server provides no such package " +
@@ -274,7 +311,22 @@ class ProjectFiles(
         }
         val snapshot = Projects.load(this, game, sources)
         packages = withServer.filterKeys { it in folders || it in snapshot.packages }
+        // The bundle's pack was built from what it carries: a package from the server that adds to it makes it another pack.
+        val adding = snapshot.packages.filter { (name, pkg) -> name !in folders && PackLayout.needed(pkg.snapshot) }.keys
+        if (bundledPack != null && adding.isNotEmpty()) {
+            bundledPackIgnored = "the server's ${adding.sorted().joinToString(", ")} adds to it"
+            bundledPack = null
+        }
         return Load(snapshot, problems, allFiles())
+    }
+
+    /** [source]'s files, with the packs its scripts wrote, in the namespace its manifest says ([home]). */
+    private fun rootFilesOf(source: DiskProjectSource): Collection<String> {
+        home = source.read(ProjectManifest.FILE_NAME)
+            ?.let { (ManifestKind.parse(it, ProjectManifest.FILE_NAME) as? CanonicalJson.Parsed.Ok)?.value?.namespace }
+            .orEmpty()
+        val files = source.files()
+        return if (home.isEmpty()) files else written.withPacks(home, files)
     }
 
     /** The project's own files, as the last [load] listed them: what format loads it from. */
@@ -327,6 +379,7 @@ class ProjectFiles(
 
     private fun sourceOf(path: String): Pair<DiskProjectSource, String>? {
         val (pkg, local) = PackagePaths.split(path)
+        written.sourceOf(pkg ?: home, local)?.let { return it }
         val source = if (pkg == null) root else packages[pkg] ?: return null
         return source to local
     }

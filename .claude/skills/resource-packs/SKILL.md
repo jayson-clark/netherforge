@@ -227,6 +227,29 @@ resends the project's pack to whoever lacks its build and each pushed pack to wh
 out of every script's way. `resource_pack.on-demand` refuses what every player needs (blocks, the HUD, the game's
 textures, models, sounds) in such a pack.
 
+## Packs scripts write
+
+`packs/<name>/` in a package's `nf.files` folder (`<data>/<namespace>/packs/<name>/pack.json`) is that package's
+resource pack `<name>`: `WrittenPacks` (in `project/`, used by `ProjectFiles`) lays it into the package's source as
+`resource_packs/<name>/` (`over` for a package's source, `withPacks` for the project's files, `sourceOf` for reads),
+so format loads, checks and numbers it like any other, and `nf.packs.rebuild` (whose reload also names
+`writtenPackFiles()`, new packs included) builds it. It's never in a package's hash (`ProjectFiles.hash` reads the
+`DiskProjectSource` alone), and a bundle's `resource-pack.zip` isn't used while there's one (`readsWrittenPacks`):
+it was built without them, and they can renumber glyphs. A written pack named like one in `resource_packs/` isn't
+read (`runtime.written-pack`). Since an error in any pack keeps the whole last build (and at start there's none),
+`WrittenPacks.load` loads again while a written pack has errors: from its last good copy (`<state>/written-packs/`,
+copied after each clean load, kept across restarts), then without it, its problems reported as warnings at the
+script's file (`shown`, which `ProjectSession.projectProblems` maps every problem through).
+
+## Bundles that leave packages out
+
+`PackLayout.needed(snapshot)` (a resource pack, a block or a video's sound, the packages' included) is the one
+test of whether there's a pack at all; on a package's own snapshot it says whether that package adds to it.
+`netherforge build` passes the packages it leaves out to `resourcePackLayout`, which builds the pack when none
+of them (as resolved) adds to it, the bundle's pack being the same without them. On a server, `ProjectFiles` drops
+`bundledPack` when a package from the server (not in the bundle) does add to it (`bundledPackIgnored` says why,
+and `Packs` logs it), so it builds its own.
+
 ## Block models
 
 `pack.json`'s `blocks` (`BlockModelDef`, `RefKind.BLOCK_MODEL`) is what a block's `model` points

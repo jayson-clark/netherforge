@@ -4,13 +4,16 @@ import dev.netherforge.format.ProblemCodes
 import dev.netherforge.format.project.BundleKind
 import dev.netherforge.format.project.BundleManifest
 import dev.netherforge.format.project.BundledPackage
+import dev.netherforge.format.project.BundledResourcePack
 import dev.netherforge.format.project.FormatVersion
 import dev.netherforge.plugin.TestServer
 import java.nio.file.Path
+import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Packages the server provides (`packages.provided`): loaded in place of the project's copy, held to its range, and never carried by a bundle. */
@@ -98,6 +101,42 @@ class ProvidedPackagesTest {
             val problem = server.runtime.currentProblems().single { it.code == ProblemCodes.RUNTIME_PROVIDED_PACKAGE.code }
             assertEquals("$.packages.bridge", problem.path)
             assertTrue("--exclude bridge" in problem.message, problem.message)
+        }
+    }
+
+    @Test
+    fun `a bundle's built pack is sent while the server's copy adds nothing to it, and built here once it does`() {
+        val files = project().mapKeys { "test/${it.key}" } + bridge("the server's", "1.4.0").mapKeys { "../server/bridge/${it.key}" }
+        TestServer(
+            files,
+            start = false,
+            resolvesPackages = false,
+            writeManifest = false,
+            provided = listOf("../server/bridge")
+        ).use { server ->
+            val hash = ProjectFiles.hash(DiskProjectSource(server.project.resolve("test")))
+            val pack = BundledResourcePack("0".repeat(40), listOf(75, 0))
+            val manifest = BundleManifest(
+                FormatVersion.CURRENT,
+                "test",
+                mapOf("test" to BundledPackage("1.0.0", hash)),
+                resourcePack = pack,
+                provided = listOf("bridge")
+            )
+            server.project.resolve(BundleManifest.FILE_NAME).writeText(BundleKind.write(manifest))
+            server.start()
+            assertTrue(server.runtime.session.running, "${server.runtime.currentProblems()}")
+            assertEquals(pack, server.runtime.source.bundledPack?.first, "the server's bridge has no resources")
+            assertNull(server.runtime.source.bundledPackIgnored)
+
+            // The owner's copy now brings a pack of its own: the bundle's was built without it.
+            val bridge = server.project.resolve("../server/bridge").normalize()
+            bridge.resolve("resource_packs/icons").createDirectories()
+            bridge.resolve("resource_packs/icons/pack.json").writeText("{}")
+            server.runtime.reloadAll()
+            assertTrue(server.runtime.session.running, "${server.runtime.currentProblems()}")
+            assertNull(server.runtime.source.bundledPack)
+            assertEquals("the server's bridge adds to it", server.runtime.source.bundledPackIgnored)
         }
     }
 

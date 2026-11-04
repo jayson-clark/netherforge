@@ -640,3 +640,41 @@ without a deploy.
 An `onDemand` pack can't draw what every player's game needs whoever it was
 sent to: blocks, the HUD, or the game's own textures, models or sounds
 (`resource_pack.on-demand`).
+
+### Packs scripts write
+
+A deployed project's folder is read-only, so art that arrives while the server
+runs (pictures a web service hands out, this week's top items, players'
+uploads) goes into the package's own `nf.files` folder instead: `packs/<name>/`
+there, with a `pack.json` and its `textures/` and `sounds/` laid out as in
+`resource_packs/<name>/`, is the package's resource pack `<name>`, read with
+the rest whenever the server starts and whenever `nf.packs.rebuild()` runs.
+`file:write_base64` writes a picture's bytes (`image:encode()` is a PNG's):
+
+```lua
+nf.task(function()
+  local image = assert(nf.images.download({ url = "https://cdn.example.com/banner.png" }))
+  assert(nf.files.get("packs/featured/textures/banner.png")):write_base64(image:encode())
+  assert(nf.files.get("packs/featured/pack.json")):write_json({
+    onDemand = true,
+    glyphs = { banner = { texture = "banner.png", height = 64, ascent = 48 } },
+  })
+  nf.packs.rebuild()
+end)
+```
+
+It's that package's pack as if it were in its `resource_packs/`: built in its
+namespace, its glyphs `<glyph:featured/banner>` to its scripts, an `onDemand`
+one pushed by name. It can't take the name of a pack the package has in
+`resource_packs/` (`runtime.written-pack`, and it isn't read). It counts
+toward the package's `files:` limit in `config.yml`. The editor never sees it:
+it's the server's, not the project's.
+
+A written pack with errors doesn't keep the rest from building. The server
+reports its problems as warnings at the files the script wrote, and builds the
+pack's last good copy instead. It keeps that copy beside its state
+(`plugins/NetherForge/written-packs/`), so a restart keeps it too. A pack that
+was never good is left out until it's fixed and `nf.packs.rebuild()` reads it
+again (`runtime.written-pack` says which). A bundle's built pack
+(`resource-pack.zip`) doesn't hold written packs, so a server that has any
+builds its own.

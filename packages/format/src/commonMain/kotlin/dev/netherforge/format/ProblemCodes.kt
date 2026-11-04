@@ -1128,6 +1128,13 @@ object ProblemCodes {
             GUIDE_DEV_LOOP,
             "The server doesn't say which resource pack format it uses, so no resource pack was built."
         )
+    val RUNTIME_WRITTEN_PACK =
+        warning(
+            "runtime.written-pack",
+            RESOURCE_PACK,
+            "A resource pack a package's scripts wrote (`packs/<name>/` in its `nf.files` folder) isn't used: it has errors (its " +
+                "last good copy runs, if it had one), or the package has a resource pack of that name already."
+        )
     val RUNTIME_BLOCKS =
         error(
             "runtime.blocks",
@@ -1188,6 +1195,7 @@ object ProblemCodes {
         RUNTIME_UNBUNDLED, RUNTIME_BUNDLE_HASH, RUNTIME_PROVIDED_PACKAGE, RUNTIME_BUNDLE_SIGNATURE, RUNTIME_POLICY, RUNTIME_PLUGIN_MISSING,
         RUNTIME_WEB_DISABLED, RUNTIME_NETWORK_DISABLED,
         RUNTIME_BOTS_DISABLED, RUNTIME_BLOCKS, RUNTIME_TERRAIN, RUNTIME_DIMENSION_TYPE, RUNTIME_RESTART, RUNTIME_DATAPACK,
-        SETTINGS_FILE, SETTINGS_VALUE, SETTINGS_UNKNOWN, SCRIPT_ERROR, SCRIPT_SLOW, PARTICLES_BUDGET, RUNTIME_PACK_FORMAT
+        SETTINGS_FILE, SETTINGS_VALUE, SETTINGS_UNKNOWN, SCRIPT_ERROR, SCRIPT_SLOW, PARTICLES_BUDGET, RUNTIME_PACK_FORMAT,
+        RUNTIME_WRITTEN_PACK
     )
 }

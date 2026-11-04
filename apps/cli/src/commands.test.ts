@@ -322,9 +322,13 @@ describe('build', () => {
     expect(Object.keys(bundle.packages)).toEqual(['showcase'])
     expect(bundle.provided).toEqual(['library'])
     expect(existsSync(path.join(out, 'library'))).toBe(false)
-    // The server's copy may bring other resources: the pack is the server's to build.
+    // The library brings resource packs of its own: the pack is the server's to build, with its copy.
     expect(existsSync(path.join(out, 'resource-pack.zip'))).toBe(false)
     expect(bundle.resourcePack).toBeUndefined()
+    expect(excluded.out[1]).toBe(
+      'No resource pack in the bundle: library, which the server provides, adds to the pack, so the server builds it ' +
+        'with its own copy. A server builds it as it starts.',
+    )
 
     // The same from the dependency's own mark.
     const manifest = path.join(project, 'netherforge.json')
@@ -340,6 +344,45 @@ describe('build', () => {
       code: 2,
       err: ['--exclude nothing: the project doesn\'t depend on a package "nothing".'],
     })
+  })
+
+  it('builds the pack still when the package it leaves out adds nothing to it', async () => {
+    const game = path.join(tmp, 'game-data.json')
+    writeFileSync(
+      game,
+      JSON.stringify({ minecraft: '26.3', packFormat: [75, 0], schema: GAME_DATA_SCHEMA }),
+    )
+    const manifest = (namespace: string, more: object = {}) =>
+      JSON.stringify({
+        formatVersion: JSON.parse(readFileSync(path.join(project, 'netherforge.json'), 'utf8'))
+          .formatVersion,
+        name: namespace,
+        namespace,
+        version: '1.0.0',
+        minecraft: '26.3',
+        ...more,
+      })
+    // A project with a pack of its own, and a bridge to the systems around the server that is only scripts.
+    const solo = path.join(tmp, 'solo')
+    const bridge = path.join(tmp, 'bridge')
+    mkdirSync(path.join(solo, 'resource_packs', 'ui'), { recursive: true })
+    mkdirSync(path.join(bridge, 'modules', 'api'), { recursive: true })
+    writeFileSync(
+      path.join(solo, 'netherforge.json'),
+      manifest('solo', { dependencies: { bridge: { path: '../bridge', provided: true } } }),
+    )
+    writeFileSync(path.join(solo, 'resource_packs', 'ui', 'pack.json'), '{ "name": "UI" }')
+    writeFileSync(path.join(bridge, 'netherforge.json'), manifest('bridge'))
+    writeFileSync(path.join(bridge, 'modules', 'api', 'init.lua'), 'return {}\n')
+    expect(await run(['lock', solo], env)).toMatchObject({ code: 0 })
+    const out = path.join(tmp, 'solo-bundle')
+    const built = await run(['build', solo, '--out', out, '--game-data', game], env)
+    expect(built, built.out.join('\n')).toMatchObject({ code: 0 })
+    expect(built.out[1]).toMatch(/^Built its resource pack/)
+    const bundle = JSON.parse(readFileSync(path.join(out, 'netherforge-bundle.json'), 'utf8'))
+    expect(bundle.provided).toEqual(['bridge'])
+    expect(bundle.resourcePack.format).toEqual([75, 0])
+    expect(existsSync(path.join(out, 'resource-pack.zip'))).toBe(true)
   })
 
   it('builds into build/<namespace>-<version> by default', async () => {

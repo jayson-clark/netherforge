@@ -440,7 +440,10 @@ export const FUNCTION_GROUPS: Record<string, Group[]> = {
   ],
   File: [
     group('Paths', 'path name parent child exists is_folder'),
-    group('Reading and writing', 'read write append lines read_json write_json'),
+    group(
+      'Reading and writing',
+      'read write append lines read_json write_json read_base64 write_base64',
+    ),
     group('Files and folders', 'size modified_time children rename copy_to create_folder delete'),
   ],
 }

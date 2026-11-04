@@ -1,6 +1,7 @@
 package dev.netherforge.format.resourcepack
 
 import dev.netherforge.format.block.BlockCarriers
+import dev.netherforge.format.block.BlockKind
 import dev.netherforge.format.block.VanillaBlockStates
 import dev.netherforge.format.block.VanillaFile
 import dev.netherforge.format.item.ItemDef
@@ -300,6 +301,15 @@ data class VideoSound(val namespace: String, val id: String, val projectPath: St
 }
 
 object PackLayout {
+    /**
+     * Whether [snapshot] puts anything in the resource pack: a resource pack, a block (its note block states are
+     * drawn by the pack) or a video's sound, the packages' included ([ProjectSnapshot.everywhere]). A package's own
+     * snapshot says whether that package alone adds to it, which is what lets a bundle that leaves a package out for
+     * the server to provide still carry its built pack.
+     */
+    fun needed(snapshot: ProjectSnapshot): Boolean = snapshot.everywhere(ResourcePackKind).isNotEmpty() ||
+        snapshot.everywhere(BlockKind).isNotEmpty() ||
+        VideoSound.of(snapshot).isNotEmpty()
 
     sealed interface Entry {
         data class Text(val text: String) : Entry

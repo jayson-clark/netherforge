@@ -10,11 +10,17 @@ A table of functions: call them with a dot.
 
 ### `nf.packs.rebuild()` {#rebuild}
 
-Reads the project's resource packs from disk again and builds them, at the end of this tick: for art that changes without a deploy (a job that writes this week's banners into `resource_packs/featured/`). A pack whose files changed is sent again to every player who has it (the project's to everyone online, an `onDemand` one to whoever it was pushed to); one that didn't change sends nothing. A pack with errors keeps its last good build, as a save in the editor does.
+Reads the project's resource packs from disk again and builds them, at the end of this tick: for art that changes without a deploy. That's the project's and its packages' `resource_packs/` (on a server you can write to), and the resource packs packages' scripts wrote into their own `nf.files` folder: `packs/<name>/`, with a `pack.json` and its pictures and sounds as in `resource_packs/<name>/`, is the package's resource pack `<name>` (its glyphs are `<glyph:<name>/<key>>` to its scripts, and an `onDemand` one is pushed by name), which works on a deployed project too and survives restarts. A pack whose files changed is sent again to every player who has it (the project's to everyone online, an `onDemand` one to whoever it was pushed to); one that didn't change sends nothing. A pack in `resource_packs/` with errors keeps its last good build, as a save in the editor does; one the scripts wrote with errors is built from its last good copy, or left out, so the rest still builds, and the server's log says why (`runtime.written-pack`). A written pack can't take a name the package has in `resource_packs/`.
 
 ```lua
--- Every Monday at 9, after the job that downloads the week's banners.
-nf.schedule.weekly("mon", "09:00", function()
+-- This week's banner, downloaded into a pack of the package's own, sent to whoever has it.
+nf.task(function()
+  local image = assert(nf.images.download({ url = "https://cdn.example.com/banner.png" }))
+  assert(nf.files.get("packs/featured/textures/banner.png")):write_base64(image:encode())
+  assert(nf.files.get("packs/featured/pack.json")):write_json({
+    onDemand = true,
+    glyphs = { banner = { texture = "banner.png", height = 64, ascent = 48 } },
+  })
   nf.packs.rebuild()
 end)
 ```

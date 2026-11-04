@@ -819,7 +819,7 @@ class ProjectSession internal constructor(
     // ---- problems ---------------------------------------------------------------
 
     /** What's wrong with the project as it reads: the format's findings and the runtime's own (a refusal). */
-    val projectProblems: List<Problem> get() = snapshot.problems + loadProblems + listOfNotNull(refusal?.problem)
+    val projectProblems: List<Problem> get() = snapshot.problems.map(source::shown) + loadProblems + listOfNotNull(refusal?.problem)
 
     /** Everything wrong now, as the editor's problems list shows it: the project's, then every service's. */
     fun problems(): List<Problem> = projectProblems + runtime.datapack.problems() + services.flatMap { it.problems() }
