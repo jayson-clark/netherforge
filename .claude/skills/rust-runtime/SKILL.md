@@ -257,4 +257,9 @@ polls every wait once at the room's tick boundary and calls back the ready ones 
 host's guarded call) with `value, err`. Nothing is delivered inside the call, and game logic
 never runs off the room's thread. Tasks waiting on a value come with the prelude's tasks.
 
-Still to come: the events registry, and the runtime that implements `:on`, timers and tasks.
+- **The events registry** (`events.rs`, `crate::events`): every built-in event with its owner,
+  payload shape, `cancellable`, `bubbles`, `writable`, `options`, `local` and `since`, and
+  `BY_CLASS`, each class's events with inheritance resolved (`events::of("Mob", "death")` is
+  `Living`'s). Kotlin's `Events.kt`, as data.
+
+Still to come: the runtime that implements `:on`, timers and tasks.

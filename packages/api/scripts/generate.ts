@@ -43,6 +43,7 @@ import {
   apiRust,
   bindRust,
   codecsRust,
+  eventsRust,
   handlesRust,
   shapesRust,
   unionsRust,
@@ -132,6 +133,7 @@ writeDir(
     ['codecs.rs', codecsRust(boundRust)],
     ['bindings.rs', bindRust(boundRust.classes)],
     ['unported.rs', unportedRust(boundRust.classes)],
+    ['events.rs', eventsRust(api)],
   ]),
   '.rs',
 )

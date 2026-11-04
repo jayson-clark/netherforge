@@ -45,6 +45,7 @@ pub mod unported;
 
 pub mod bind;
 pub mod codec;
+pub mod events;
 pub mod handle;
 pub mod pending;
 pub mod values;

@@ -23,8 +23,9 @@
  * `Option` of one when they may be a single nil), and an `async` function returns a
  * `Pending` of its value.
  */
-import { GENERATED_BY } from './common.ts'
+import { eventedClasses, GENERATED_BY, sinceVersion } from './common.ts'
 import {
+  classEvents,
   pascal,
   reachable,
   type Bindings,
@@ -33,6 +34,7 @@ import {
   type FnBinding,
   type ReturnBinding,
 } from './bindings.ts'
+import type { ApiSpec } from '../../src/types.ts'
 
 const KEYWORDS = new Set(
   (
@@ -708,5 +710,58 @@ export function unportedRust(classes: ClassBinding[]): string {
     }
     lines.push('}')
   }
+  return finish(lines)
+}
+
+/** `events.rs`: every built-in event, and what each class may listen for. */
+export function eventsRust(spec: ApiSpec): string {
+  const lines = [
+    ...header(
+      [
+        "Every built-in event, by owning class (the spec's `events`), and each class's",
+        "events by name, its own and those it inherits up its chain (a `Mob`'s `death`",
+        "is `Living`'s), a class's own replacing one of the same name further up.",
+      ],
+      ['crate::events::EventType'],
+    ),
+  ]
+  const events = eventedClasses(spec).flatMap((cls) => cls.events.map((event) => ({ cls, event })))
+  const index = new Map(events.map(({ cls, event }, k) => [`${cls.name} ${event.name}`, k]))
+  const list = (items: string[] | undefined) =>
+    `&[${(items ?? []).map((it) => JSON.stringify(it)).join(', ')}]`
+  lines.push('/// Every built-in event.', 'pub const EVENTS: &[EventType] = &[')
+  for (const { cls, event } of events)
+    lines.push(
+      '    EventType {',
+      `        owner: ${JSON.stringify(cls.name)},`,
+      `        name: ${JSON.stringify(event.name)},`,
+      `        payload: ${event.payload ? JSON.stringify(event.payload) : 'None'},`.replace(
+        /payload: "(.*)",/,
+        'payload: Some("$1"),',
+      ),
+      `        cancellable: ${!!event.cancellable},`,
+      `        bubbles: ${!!event.bubbles},`,
+      `        writable: ${list(event.writable)},`,
+      `        options: ${list(event.options)},`,
+      `        local: ${!!event.local},`,
+      `        since: ${event.since ? `Some(${JSON.stringify(sinceVersion(event.since))})` : 'None'},`,
+      '    },',
+    )
+  lines.push(
+    '];',
+    '',
+    "/// Each evented class's events: indices into [`EVENTS`].",
+    'pub const BY_CLASS: &[(&str, &[(&str, usize)])] = &[',
+  )
+  for (const cls of spec.classes) {
+    const own = classEvents(spec, cls)
+    if (!own.length) continue
+    const entries = own.map(
+      ({ event, owner }) =>
+        `(${JSON.stringify(event.name)}, ${index.get(`${owner.name} ${event.name}`)})`,
+    )
+    lines.push(`    (${JSON.stringify(cls.name)}, &[${entries.join(', ')}]),`)
+  }
+  lines.push('];')
   return finish(lines)
 }
