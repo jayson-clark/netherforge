@@ -44,14 +44,20 @@ becomes.
    integer is written `%d` and a float keeps a point (`2.0`) so that it reads back as a float.
    With one type, the point means nothing:
    - **Writing**: a whole number in the safe range is written as an integer (`2`). Anything
-     else is written as the shortest text that reads back as the same double (Rust's `{}` for
-     `f64`, ryu), with an exponent past 1e21 as JavaScript does. NaN and infinities are still
+     else is written as the shortest text that reads back as the same double (Rust's own
+     formatting), with an exponent from 1e21 and below 1e-6, as JavaScript writes them
+     (`json::number`). NaN and infinities are still
      refused. `CodecNumbers` (the C `%g` emulation) goes: there's no C library's text to match
      any more, because Rust writes the numbers on both sides.
    - **Reading**: a JSON number is a double. **An integer literal outside the safe range reads
      as a string of its digits**, so an id in an HTTP response survives `nf.json.decode`
      instead of turning into the nearest double. A literal with a fraction or an exponent is a
-     double whatever its size.
+     double whatever its size, and so is an integer past 64 bits (serde_json reads it as one),
+     which no service sends as a number.
+   - The codec is `crates/luau/src/json.rs`, the prelude's `json.lua` in Rust. Handles and
+     locations are written through its `Tags` trait, which the runtime implements once they
+     exist. A string's bytes that aren't UTF-8 are written as U+FFFD, since JSON text is
+     UTF-8. The Lua codec wrote them raw, which made invalid JSON.
    - Canonical JSON (format's writer, project files) is unaffected: project files hold no
      numbers that big, and format checks the safe range where a field is whole.
 2. **Saved data** (`data()` tables and centity records, saved through the codec). It goes

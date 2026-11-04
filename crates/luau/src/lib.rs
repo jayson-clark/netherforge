@@ -5,6 +5,7 @@
 mod clock;
 mod failure;
 mod host;
+pub mod json;
 mod limits;
 
 pub use clock::{Clock, ManualClock, SystemClock};

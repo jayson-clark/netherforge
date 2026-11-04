@@ -366,6 +366,25 @@ impl Host {
         self.invoke(scope, budget, &f, ())
     }
 
+    /// Charges the running call `steps` for work done on its behalf that no
+    /// interrupt counts (the JSON codec's walk over a script's table, the
+    /// runtime's over an option table), and says why it must stop, if it
+    /// must. The stop is kept, so it's reported even if the script catches
+    /// it. The caller stops its work there.
+    pub fn charge(&self, steps: u64) -> Option<Stop> {
+        let mut guard = self.0.guard.borrow_mut();
+        let frame = guard.frames.last_mut()?;
+        if frame.stop.is_none() {
+            frame.used = frame.used.saturating_add(steps);
+            if frame.used > frame.budget {
+                frame.stop = Some(Stop::Budget {
+                    budget: frame.budget,
+                });
+            }
+        }
+        frame.stop.clone()
+    }
+
     /// The scope whose call is running, if any.
     pub fn running_scope(&self) -> Option<ScopeId> {
         self.0.guard.borrow().frames.last().map(|f| f.scope)

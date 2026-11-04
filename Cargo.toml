@@ -11,6 +11,7 @@ rust-version = "1.90"
 
 [workspace.dependencies]
 mlua = { version = "0.12", features = ["luau"] }
+serde_json = "1"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
