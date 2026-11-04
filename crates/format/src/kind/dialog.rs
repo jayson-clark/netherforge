@@ -65,13 +65,8 @@ pub enum DialogType {
 }
 
 impl DialogType {
-    pub fn id(self) -> &'static str {
-        match self {
-            DialogType::Notice => "notice",
-            DialogType::Confirmation => "confirmation",
-            DialogType::MultiAction => "multi_action",
-            DialogType::DialogList => "dialog_list",
-        }
+    pub fn id(self) -> String {
+        crate::canonical::name_of(&self)
     }
 
     /// The most buttons it shows, when there's a limit.

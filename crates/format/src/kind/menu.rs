@@ -63,16 +63,8 @@ pub enum MenuType {
 }
 
 impl MenuType {
-    pub fn id(self) -> &'static str {
-        match self {
-            MenuType::Chest => "chest",
-            MenuType::Barrel => "barrel",
-            MenuType::ShulkerBox => "shulker_box",
-            MenuType::Hopper => "hopper",
-            MenuType::Dispenser => "dispenser",
-            MenuType::Dropper => "dropper",
-            MenuType::Crafter => "crafter",
-        }
+    pub fn id(self) -> String {
+        crate::canonical::name_of(&self)
     }
 
     /// How many slots a type always has (a chest's depend on its rows).

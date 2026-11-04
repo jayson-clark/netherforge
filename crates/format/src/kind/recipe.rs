@@ -83,31 +83,14 @@ pub enum RecipeCategory {
 }
 
 impl RecipeCategory {
-    fn id(self) -> &'static str {
-        match self {
-            RecipeCategory::Building => "building",
-            RecipeCategory::Redstone => "redstone",
-            RecipeCategory::Equipment => "equipment",
-            RecipeCategory::Misc => "misc",
-            RecipeCategory::Food => "food",
-            RecipeCategory::Blocks => "blocks",
-        }
+    fn id(self) -> String {
+        crate::canonical::name_of(&self)
     }
 }
 
 impl RecipeType {
-    pub fn id(self) -> &'static str {
-        match self {
-            RecipeType::Shaped => "shaped",
-            RecipeType::Shapeless => "shapeless",
-            RecipeType::Furnace => "furnace",
-            RecipeType::Blasting => "blasting",
-            RecipeType::Smoking => "smoking",
-            RecipeType::CampfireCooking => "campfire_cooking",
-            RecipeType::SmithingTransform => "smithing_transform",
-            RecipeType::Stonecutting => "stonecutting",
-            RecipeType::Station => "station",
-        }
+    pub fn id(self) -> String {
+        crate::canonical::name_of(&self)
     }
 
     pub fn cooking(self) -> bool {

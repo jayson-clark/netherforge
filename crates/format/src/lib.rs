@@ -17,5 +17,6 @@ pub mod rules;
 pub mod script;
 pub mod settings;
 pub mod snapshot;
+pub mod worldgen;
 
 pub use problem::{Location, Problem, ProblemCode, ProblemSink, Severity, codes};

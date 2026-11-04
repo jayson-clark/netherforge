@@ -27,6 +27,9 @@ impl GameData for Game {
             0
         }
     }
+    fn particle_options(&self, _: &str) -> Option<String> {
+        None
+    }
 }
 
 fn problems(json: &str, game: Option<&dyn GameData>) -> Vec<String> {

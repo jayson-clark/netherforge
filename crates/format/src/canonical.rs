@@ -220,3 +220,11 @@ impl Serialize for Free {
         sorted(&self.0).serialize(s)
     }
 }
+
+/// An enum's name as files spell it: serde's, so it's written in one place.
+pub fn name_of<T: Serialize>(value: &T) -> String {
+    match serde_json::to_value(value) {
+        Ok(serde_json::Value::String(name)) => name,
+        _ => panic!("a name-only enum serializes as its name"),
+    }
+}
