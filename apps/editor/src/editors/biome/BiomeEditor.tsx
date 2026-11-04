@@ -159,6 +159,7 @@ function ClimateSection({ model, edit }: { model: BiomeFile; edit: Edit }) {
         placeholder={String(BIOME_DEFAULTS.downfall)}
         step={0.05}
         min={0}
+        max={1}
         onChange={(value) => edit((d) => setClimate(d, 'downfall', value))}
       />
       <TriStateField
