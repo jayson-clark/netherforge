@@ -84,32 +84,33 @@ Focused guides live in `.claude/skills/<name>/SKILL.md`. **Read the skill for
 an area before changing it.** They're plain Markdown, so any agent or person
 can follow these paths.
 
-| Skill                                                                      | Read it when you're…                                                                   |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| [project-format](.claude/skills/project-format/SKILL.md)                   | changing what a project file can contain, or how it's validated                        |
-| [game-data](.claude/skills/game-data/SKILL.md)                             | touching anything that knows about blocks, items, shapes, fonts or textures            |
-| [minecraft-versions](.claude/skills/minecraft-versions/SKILL.md)           | adding or bumping a Minecraft version, or using a version-gated feature                |
-| [testing](.claude/skills/testing/SKILL.md)                                 | writing tests, updating goldens, or changing CI                                        |
-| [plugin-runtime](.claude/skills/plugin-runtime/SKILL.md)                   | working in `apps/plugin/`                                                              |
-| [plugin-sandbox](.claude/skills/plugin-sandbox/SKILL.md)                   | touching the Lua sandbox, the prelude, the profiler or the debugger                    |
-| [plugin-capabilities](.claude/skills/plugin-capabilities/SKILL.md)         | adding a power scripts must declare: network, web, wasm, other plugins, settings       |
-| [plugin-world](.claude/skills/plugin-world/SKILL.md)                       | working on blocks, terrains, worlds, structures, loot, mob goals, cutscenes or screens |
-| [plugin-persistence](.claude/skills/plugin-persistence/SKILL.md)           | touching the store, saved data, migrations or anything a restart must keep             |
-| [plugin-bots](.claude/skills/plugin-bots/SKILL.md)                         | working on fake players, or adding a player action or event                            |
-| [lua-api](.claude/skills/lua-api/SKILL.md)                                 | adding or changing anything scripts can call                                           |
-| [hot-reload](.claude/skills/hot-reload/SKILL.md)                           | touching the dev bridge or what happens when a file is saved                           |
-| [entities-and-physics](.claude/skills/entities-and-physics/SKILL.md)       | working on centity runtime behaviour, hitboxes or physics                              |
-| [menus-and-dialogs](.claude/skills/menus-and-dialogs/SKILL.md)             | working on menu windows, items or dialogs                                              |
-| [resource-packs](.claude/skills/resource-packs/SKILL.md)                   | touching how resource packs are built, served or previewed                             |
-| [editor-ui](.claude/skills/editor-ui/SKILL.md)                             | working in `apps/editor/src` (the hub: layers, store, registry, testing)               |
-| [editor-workbench](.claude/skills/editor-workbench/SKILL.md)               | working on the workbench: docks, explorer, menus, widgets, palette                     |
-| [editor-lua](.claude/skills/editor-lua/SKILL.md)                           | touching the editor's debugger client or lua-language-server                           |
-| [editor-packages](.claude/skills/editor-packages/SKILL.md)                 | touching dependencies, package paths or templates in the editor                        |
-| [editor-viewports](.claude/skills/editor-viewports/SKILL.md)               | touching viewports, timelines, block models or map previews                            |
-| [editor-resource-editors](.claude/skills/editor-resource-editors/SKILL.md) | changing one resource editor (menu, recipe, terrain, cutscene…)                        |
-| [tauri-backend](.claude/skills/tauri-backend/SKILL.md)                     | working in `apps/editor/src-tauri`                                                     |
-| [run-netherforge](.claude/skills/run-netherforge/SKILL.md)                 | launching the editor and a dev server to check a change for real                       |
-| [release](.claude/skills/release/SKILL.md)                                 | bumping the version, cutting a release, signing, the updater, the docs site            |
+| Skill                                                                      | Read it when you're…                                                                           |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [project-format](.claude/skills/project-format/SKILL.md)                   | changing what a project file can contain, or how it's validated                                |
+| [game-data](.claude/skills/game-data/SKILL.md)                             | touching anything that knows about blocks, items, shapes, fonts or textures                    |
+| [minecraft-versions](.claude/skills/minecraft-versions/SKILL.md)           | adding or bumping a Minecraft version, or using a version-gated feature                        |
+| [testing](.claude/skills/testing/SKILL.md)                                 | writing tests, updating goldens, or changing CI                                                |
+| [plugin-runtime](.claude/skills/plugin-runtime/SKILL.md)                   | working in `apps/plugin/`                                                                      |
+| [plugin-sandbox](.claude/skills/plugin-sandbox/SKILL.md)                   | touching the Lua sandbox, the prelude, the profiler or the debugger                            |
+| [plugin-capabilities](.claude/skills/plugin-capabilities/SKILL.md)         | adding a power scripts must declare: network, web, wasm, other plugins, settings               |
+| [plugin-world](.claude/skills/plugin-world/SKILL.md)                       | working on blocks, terrains, worlds, structures, loot, mob goals, cutscenes or screens         |
+| [plugin-persistence](.claude/skills/plugin-persistence/SKILL.md)           | touching the store, saved data, migrations or anything a restart must keep                     |
+| [plugin-bots](.claude/skills/plugin-bots/SKILL.md)                         | working on fake players, or adding a player action or event                                    |
+| [lua-api](.claude/skills/lua-api/SKILL.md)                                 | adding or changing anything scripts can call                                                   |
+| [hot-reload](.claude/skills/hot-reload/SKILL.md)                           | touching the dev bridge or what happens when a file is saved                                   |
+| [entities-and-physics](.claude/skills/entities-and-physics/SKILL.md)       | working on centity runtime behaviour, hitboxes or physics                                      |
+| [menus-and-dialogs](.claude/skills/menus-and-dialogs/SKILL.md)             | working on menu windows, items or dialogs                                                      |
+| [resource-packs](.claude/skills/resource-packs/SKILL.md)                   | touching how resource packs are built, served or previewed                                     |
+| [editor-ui](.claude/skills/editor-ui/SKILL.md)                             | working in `apps/editor/src` (the hub: layers, store, registry, testing)                       |
+| [editor-workbench](.claude/skills/editor-workbench/SKILL.md)               | working on the workbench: docks, explorer, menus, widgets, palette                             |
+| [editor-lua](.claude/skills/editor-lua/SKILL.md)                           | touching the editor's debugger client or lua-language-server                                   |
+| [editor-packages](.claude/skills/editor-packages/SKILL.md)                 | touching dependencies, package paths or templates in the editor                                |
+| [editor-viewports](.claude/skills/editor-viewports/SKILL.md)               | touching viewports, timelines, block models or map previews                                    |
+| [editor-resource-editors](.claude/skills/editor-resource-editors/SKILL.md) | changing one resource editor (menu, recipe, terrain, cutscene…)                                |
+| [tauri-backend](.claude/skills/tauri-backend/SKILL.md)                     | working in `apps/editor/src-tauri`                                                             |
+| [run-netherforge](.claude/skills/run-netherforge/SKILL.md)                 | launching the editor and a dev server to check a change for real                               |
+| [rust-runtime](.claude/skills/rust-runtime/SKILL.md)                       | porting the runtime or format to Rust, working in `crates/`, or anything about numbers in Luau |
+| [release](.claude/skills/release/SKILL.md)                                 | bumping the version, cutting a release, signing, the updater, the docs site                    |
 
 If a design decision took thought, write it in the relevant skill or a code
 comment, not here.
