@@ -130,3 +130,90 @@ fn the_manifests_problems_are_formats() {
         failures.join("\n")
     );
 }
+
+/// Problems about one resource alone; a reference's (`reference.*`) is a check across resources.
+fn own(code: &str) -> bool {
+    !code.starts_with("reference.") && !layouts(code)
+}
+
+#[test]
+fn the_ported_kinds_problems_are_formats() {
+    use netherforge_format::kind;
+    let mut failures = Vec::new();
+    let mut checked = 0;
+    for entry in std::fs::read_dir(invalid()).unwrap() {
+        let dir = entry.unwrap().path();
+        let expected: Vec<Value> =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("expected.json")).unwrap())
+                .unwrap();
+        let mut files = BTreeSet::new();
+        files_in(&dir, &dir, &mut files);
+        files.remove("expected.json");
+        for found in netherforge_format::snapshot::scan(&files).resources {
+            if !kind::PORTED.contains(&found.kind.id) {
+                continue;
+            }
+            let path = found.kind.path_of(&found.id, &found.group);
+            let text = std::fs::read_to_string(dir.join(&path)).unwrap();
+            let actual: Vec<String> = kind::read(&found, &text)
+                .unwrap()
+                .iter()
+                .map(|p| p.to_json())
+                .filter(|p| own(p["code"].as_str().unwrap_or("")))
+                .map(|p| p.to_string())
+                .collect();
+            let wanted: Vec<String> = expected
+                .iter()
+                .filter(|p| p["file"] == path.as_str() && own(p["code"].as_str().unwrap_or("")))
+                .map(|p| p.to_string())
+                .collect();
+            checked += wanted.len();
+            if actual != wanted {
+                failures.push(format!(
+                    "{} {path}:\n  actual:   {actual:#?}\n  expected: {wanted:#?}",
+                    dir.file_name().unwrap().to_string_lossy()
+                ));
+            }
+        }
+    }
+    assert!(checked > 0, "no problems checked");
+    assert!(
+        failures.is_empty(),
+        "{} files differ:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}
+
+/// Every resource of a ported kind in the examples writes back to the same bytes.
+#[test]
+fn the_ported_kinds_examples_write_back() {
+    use netherforge_format::kind;
+    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+    let mut different = Vec::new();
+    let mut written = 0;
+    for entry in std::fs::read_dir(&examples).unwrap() {
+        let dir = entry.unwrap().path();
+        if !dir.join(FILE_NAME).exists() {
+            continue;
+        }
+        let mut files = BTreeSet::new();
+        files_in(&dir, &dir, &mut files);
+        for found in netherforge_format::snapshot::scan(&files).resources {
+            if !kind::PORTED.contains(&found.kind.id) {
+                continue;
+            }
+            let path = found.kind.path_of(&found.id, &found.group);
+            let text = std::fs::read_to_string(dir.join(&path)).unwrap();
+            let again = kind::write_back(&found, &text)
+                .expect("a ported kind")
+                .expect("an example parses");
+            written += 1;
+            if again != text {
+                different.push(format!("{}/{path}:\n{again}", dir.display()));
+            }
+        }
+    }
+    assert!(written > 0, "no examples of ported kinds");
+    assert!(different.is_empty(), "{different:#?}");
+}

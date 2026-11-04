@@ -3,7 +3,9 @@
 //! every side, so a file nobody changed is never a diff.
 
 pub mod canonical;
+pub mod document;
 pub mod json;
+pub mod kind;
 pub mod kinds;
 pub mod manifest;
 pub mod names;

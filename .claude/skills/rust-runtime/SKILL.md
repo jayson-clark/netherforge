@@ -423,6 +423,15 @@ unchanged.
   usable id and its main or companion file (`project.id`, `project.missing-file`,
   `project.stray-file`). The goldens agree on every one of those codes in every case.
 
+- **Kinds, one by one** (`kind/<kind>.rs`, listed in `kind::PORTED`): each document kind is a
+  `Document` (`document.rs`): its `SCHEMA` from a file one folder deep, which `schema_at`
+  adjusts for the folders the file is really in (group folders add `../`, as `schemaAt` does),
+  its `canonical()`, and its own `validate`. `kind::read` dispatches a scanned resource to its
+  kind. Every ported kind is held by `tests/goldens.rs` to the goldens' problems in its files
+  (`reference.*`, the checks across resources, left out until they're ported) and to the
+  examples, which must write back to the same bytes. To port a kind: its model and checks in
+  `kind/`, an arm in `kind::read` and `kind::write_back`, its id in `PORTED`. Ported: `buff`.
+
 Next in format: reading each resource with its kind's model and checks (kind by kind, each
 with its goldens, until the harness compares whole cases), then the checks across resources
 (references), then the snapshot as the runtime takes it.
