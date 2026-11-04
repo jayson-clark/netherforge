@@ -447,8 +447,31 @@ unchanged.
 - **Defaults are declared once, in the field's schema** (`extend("default" = ...)`), where the
   editor's fields will read them, instead of Kotlin's constant plus `…OrDefault` getter for each
   (the dimension type had 20). The checker also takes `multipleOf` (a height in steps of 16).
-- **One definition of a pattern**: a colour is `rules::RGB` (or `ARGB`), named by every field that
-  takes one (Kotlin defined `#rrggbb` five times).
+- **One definition of a pattern**: a colour is `rules::RGB` (or `ARGB`, `RGB_LOWERCASE`), named by every field that
+  takes one (Kotlin defined `#rrggbb` five times); an id is `names::ID_PATTERN` with `ID_RULE`, a world
+  name `WORLD_NAME_PATTERN`, a node name `NODE_NAME_PATTERN`. A hand-written check that shares a
+  field's pattern asks `rules::matches_pattern`.
+- **Ruled strings** (`ruled_string!` in `rules.rs`): a string with a rule of its own wherever a model
+  has one is a newtype whose schema carries its pattern, `x-problem` and `x-rule`, so a field of it
+  (or a map keyed by it, as `Entries<PackKey, _>`) needs no attribute. A resource pack's keys,
+  texture, model and sound paths, a terrain's names and a centity's worlds are; about 25 pack fields
+  share `TexturePath`. Ordered as map keys are (`canonical::key_order`).
+- **Enum names are serde's**: `canonical::name_of(&value)` gives a variant's name as the file
+  writes it, so no kind spells its enum's names a second time in an `id()` match.
+- **`GameData` is format's**: registries and tags by the game's key (`minecraft:worldgen/biome`),
+  with `Registry` a shorthand for the ones checks name often (`Registry::Biome.key()`), plus a
+  particle's data kind, a block's properties and the data pack format. A check reports "has no"
+  through `lacks`: the facts know the registry and it hasn't got the id, which is format's
+  `has(...) == false` (an unknown registry says nothing). `block_state` parses `id[k=v]` and checks
+  it against `block_properties`, with each kind's codes (`BlockStateCodes`).
+- **What a check can see** (`document::Context`): the resource's id and location, the files in its
+  folder, a reader for them (`read`: a pack's model files, a datapack's JSON), and the game. A
+  problem in another file of the resource (a sound file, a model file, a datapack's entry, a
+  terrain's `.lua`) goes into the same sink with its own file (`code.at(file, ...)`).
+- **Format's other homes**: `math` (`Vec3`, `BoundingBox`), `animation` (`Keyframe`, `Easing`,
+  `by_time`), `noise` (`NoiseDef`), `worldgen` (`GenerationStep`, `SpawnRange`), `block_state`.
+- **A field rule and a hand check may both report a doubly wrong value** where Kotlin reported once
+  (a cue's duration with no text, `every` without `burst`): only doubly wrong files differ.
 - **Not yet**: a kind's checks that depend on the target Minecraft version (`requireFeature`:
   `project.feature`, against format's feature table), and what a kind writes into the start-up
   datapack (a sky's biome twins); both come with the feature table and the datapack.
@@ -475,15 +498,21 @@ unchanged.
 - **What the goldens hold a kind to**: `tests/goldens.rs` compares a ported kind's problems with
   the goldens' by what's wrong and where (severity, file, path, code, position, related), not
   their wording, since the field rules word themselves; each kind's own tests hold its wording. A parse problem is compared by file and code only: kotlinx gives no path or position for a custom type's error (an ingredient's), where the reader gives both.
-  Checks across resources (`reference.*`, `font.*`, and the kinds' `crossCheck`s: `ACROSS` in the harness) are left out until they're ported. The examples are
+  Checks across resources (`reference.*`, `font.*`, and the kinds' `crossCheck`s) are left out until they're ported: a problem whose `related` names another file is one by itself, the rest are listed in the harness's `ACROSS`, and a code both sides report (`MIXED`: a pack's replaced name, a datapack's reference) is held to "what's reported is expected" until then. A companion's file (a terrain's `.lua`) is the resource's, and `kind::document_path` is where a kind's document is (a structure's is its companion `.json`). The examples are
   valid projects, so a ported kind must report no errors in them, and must write them back to
-  the same bytes. When the Rust side takes over, the goldens are written from it. Ported:
-  `buff` (all its rules are fields'), `dialog`, `item`, `menu` (its type and size, slot keys, items' and scripts' checks), `recipe` (mostly its own checks: which fields a recipe has depends on its type), `loot_table`, `sky`, `dimension_type`, `advancement`, `module`, and the files kinds `build`, `map`, `migration` and `wasm` (`kind/files.rs`; a WASM module's checks read its binary, a check across files ported with the WASM reader) (with `ModuleRequires`, worked out once per
-  project in `Source`).
+  the same bytes. When the Rust side takes over, the goldens are written from it. **Every kind's
+  own checks are ported** (all 27 and the manifest), each agreeing with every golden problem that
+  isn't a check across resources: the documents (`advancement`, `biome`, `block`, `buff`, `centity`,
+  `cutscene`, `datapack`, `dialog`, `dimension_type`, `game_block`, `item`, `loot_table`, `menu`,
+  `particle_effect`, `recipe`, `resource_pack`, `screen`, `screen_font`, `sky`, `structure`'s
+  generation, `terrain`, `video`), `module`, and the files kinds `build`, `map`, `migration` and
+  `wasm` (`kind/files.rs`; a WASM module's checks read its binary, a check across files ported with
+  the WASM reader) (with `ModuleRequires`, worked out once per project in `Source`).
 
-Next in format: reading each resource with its kind's model and checks (kind by kind, each
-with its goldens, until the harness compares whole cases), then the checks across resources
-(references), then the snapshot as the runtime takes it.
+Next in format: the checks across resources (references, each kind's `crossCheck`, until `ACROSS`
+and `MIXED` are empty and the harness compares whole cases), the feature table, then the
+snapshot as the runtime takes it. The compilers (a centity's, a terrain's generator, a pack's
+build, the start-up datapack) come with the runtime pieces that use them.
 
 ## One source for each thing
 
