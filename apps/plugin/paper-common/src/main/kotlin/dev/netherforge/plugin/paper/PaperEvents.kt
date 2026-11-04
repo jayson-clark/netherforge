@@ -356,6 +356,22 @@ class PaperEvents(
         if (platform.entities.tagOf(event.entity) != null) event.isCancelled = true
     }
 
+    /**
+     * A click on an entity the server doesn't have: one of [PaperClientEntities]' when it says so. A 1.21.x client
+     * sends a right click twice (the point it hit, then a plain interaction), so only the one with the point counts,
+     * as since 26.1 every right click has one.
+     */
+    @EventHandler
+    fun onClickClientEntity(event: com.destroystokyo.paper.event.player.PlayerUseUnknownEntityEvent) {
+        val entity = platform.clientEntities.clicked(event.player, event.entityId) ?: return
+        val button = when {
+            event.isAttack -> ClickButton.LEFT
+            event.hand == EquipmentSlot.HAND && event.clickedRelativePosition != null -> ClickButton.RIGHT
+            else -> return
+        }
+        runtime.entityClicked(entity, ref(event.player), button, PaperPlatform.sight(event.player))
+    }
+
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     fun onLeftClickEntity(event: PrePlayerAttackEntityEvent) {
         val entity = event.attacked

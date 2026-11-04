@@ -319,6 +319,7 @@ How `nf.centities.spawn` spawns one. A key that isn't one of these is an error.
 | --- | --- | --- |
 | `temporary` | `boolean?` | Not saved: its entities aren't kept with their chunk, the server forgets it on a restart, and it's removed when the script that spawned it unloads (a reload of it, or its centity removed), so nothing it made is left behind. What a shot, a damage number or a summoned helper is. `keep()` makes it a normal one. Default `false`. |
 | `lifetime` | `integer?` | Removed this many ticks after it's spawned (its `remove` handlers hear it), loaded or not: at least 1. A centity with a lifetime is temporary too. Default: none. |
+| `viewers` | [`Player`](player.md)`[]?` | Only these players ever see it: it's **private**. Its nodes are sent to their clients alone and the server keeps no entities for it, so a private centity costs nothing for anyone else, however many there are: a page, a menu or a marker of one player's own. Everything else works as for any centity (its script, clicks on its hitboxes, `world:raycast`). `show_to` and `hide_from` add and take away viewers. Only a temporary centity can be private (`temporary` or a `lifetime`), and `keep` leaves it temporary. Default: everyone sees it. |
 
 ### BodySettings {#bodysettings}
 

@@ -639,8 +639,10 @@ internal class CentityImpl(private val session: ProjectSession) : CentityApi {
         return true
     }
 
-    override fun isHiddenFrom(self: LuaHandle.Centity, player: LuaHandle.Player): Boolean =
-        instance(self)?.hiddenFrom?.contains(playerId(player)) == true
+    override fun isHiddenFrom(self: LuaHandle.Centity, player: LuaHandle.Player): Boolean = instance(self)?.sees(playerId(player)) == false
+
+    override fun viewers(self: LuaHandle.Centity): List<LuaHandle.Player>? =
+        instance(self)?.viewers?.map { LuaHandle.Player(it.toString()) }
 
     override fun viewRange(self: LuaHandle.Centity): Double? = instance(self)?.viewRange
 

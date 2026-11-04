@@ -14,6 +14,7 @@ import dev.netherforge.format.bridge.BotPackAnswer
 import dev.netherforge.format.bridge.BotState
 import dev.netherforge.format.bridge.BotTarget
 import dev.netherforge.format.bridge.BotTargetKind
+import dev.netherforge.plugin.paper.ClientEntityLookup
 import dev.netherforge.plugin.platform.BotAim
 import net.minecraft.commands.arguments.blocks.BlockStateParser
 import net.minecraft.core.BlockPos
@@ -126,6 +127,7 @@ import net.minecraft.world.phys.HitResult
 import net.minecraft.world.phys.Vec3
 import org.bukkit.Bukkit
 import org.bukkit.Location
+import org.bukkit.craftbukkit.entity.CraftEntity
 import org.bukkit.plugin.Plugin
 import java.net.URI
 import java.net.http.HttpClient
@@ -140,6 +142,7 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.math.min
+import net.minecraft.world.level.Level as MojangLevel
 
 /**
  * One bot: a vanilla client's half of a connection, played in the server.
@@ -167,6 +170,8 @@ internal class Bot(
     private val packAnswer: BotPackAnswer,
     /** Where to put it once it's in the world, if not where it last was. */
     private val joinAt: Location?,
+    /** Entities its client may have though no world does (`PaperClientEntities`), as the client knows them. */
+    private val clientEntities: ClientEntityLookup,
     private var onJoined: ((Result<BotInfo>) -> Unit)?
 ) {
     val name: String get() = profile.name()
@@ -1045,12 +1050,17 @@ internal class Bot(
             aim?.entity
                 ?: uuid?.let { runCatching { UUID.fromString(it) }.getOrNull() ?: throw IllegalArgumentException("\"$it\" isn't a UUID") }
         if (id == null) return inSight(game) to null
-        val entity = level.getEntity(id) ?: throw IllegalArgumentException("there's no entity $id in ${level.world.name}")
+        val entity = level.getEntity(id) ?: (clientEntities.byId(id) as? CraftEntity)?.handle
+            ?: throw IllegalArgumentException("there's no entity $id in ${level.world.name}")
         check(screen.entities.values.any { it.first == id }) {
             "$name's client doesn't know entity $id (it's hidden from them, or too far away to be sent)"
         }
         return entity to aim?.at?.let { Vec3(it.x, it.y, it.z) }
     }
+
+    /** The entity its client knows as network id [id]: the level's, or a client entity no level has. */
+    private fun known(level: MojangLevel, id: Int): Entity? =
+        level.getEntity(id) ?: (clientEntities.byNetworkId(id) as? CraftEntity)?.handle
 
     /** What the bot is looking at, within reach, as the client picks it: the nearest entity in front of any block. */
     private fun inSight(game: ServerGamePacketListenerImpl): Entity {
@@ -1061,7 +1071,7 @@ internal class Bot(
         val block = player.level().clip(ClipContext(eye, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player))
         val blockDistance = if (block.type == HitResult.Type.MISS) reach else block.location.distanceTo(eye)
         val known = screen.entities.keys
-        return known.mapNotNull { player.level().getEntity(it) }
+        return known.mapNotNull { known(player.level(), it) }
             // What the client's crosshair can land on: not displays, not spectators.
             .filter { it.isPickable && !it.isSpectator }
             .mapNotNull { entity ->
@@ -1311,7 +1321,7 @@ internal class Bot(
             teams = screen.teams(),
             playerList = screen.playerList(),
             entities = screen.entities.entries
-                .mapNotNull { (id, known) -> level.getEntity(id)?.let { Triple(known, it, it.position().distanceTo(at)) } }
+                .mapNotNull { (id, known) -> known(level, id)?.let { Triple(known, it, it.position().distanceTo(at)) } }
                 .filter { it.third <= NEARBY }
                 .sortedBy { it.third }
                 .take(MAX_NEARBY)
@@ -1342,7 +1352,7 @@ internal class Bot(
         val block = level.clip(ClipContext(eye, eye.add(look.scale(blockReach)), ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player))
         val blockDistance = if (block.type == HitResult.Type.MISS) Double.MAX_VALUE else block.location.distanceTo(eye)
         val entityEnd = eye.add(look.scale(player.entityInteractionRange()))
-        val entity = screen.entities.keys.mapNotNull { level.getEntity(it) }
+        val entity = screen.entities.keys.mapNotNull { known(level, it) }
             .filter { it.isPickable && !it.isSpectator }
             .mapNotNull { e ->
                 e.boundingBox.inflate(e.pickRadius.toDouble()).clip(eye, entityEnd).orElse(null)?.let { Triple(e, it, it.distanceTo(eye)) }

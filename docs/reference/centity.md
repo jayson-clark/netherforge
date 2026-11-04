@@ -19,7 +19,7 @@ A `data()` table, `Item.data` and `nf.json` can keep one: it is saved as what id
 | [Body and movement](#body-and-movement) | [`has_body`](#has_body) [`body`](#body) [`set_body`](#set_body) [`velocity`](#velocity) [`set_velocity`](#set_velocity) [`add_velocity`](#add_velocity) [`walk_velocity`](#walk_velocity) [`set_walk_velocity`](#set_walk_velocity) [`jump`](#jump) [`is_on_ground`](#is_on_ground) [`is_in_liquid`](#is_in_liquid) [`wall`](#wall) [`launch`](#launch) [`is_launched`](#is_launched) [`stop_flight`](#stop_flight) |
 | [Pathfinding](#pathfinding) | [`move_to`](#move_to) [`stop_pathing`](#stop_pathing) [`has_path`](#has_path) [`path_target`](#path_target) |
 | [Animation](#animation) | [`play_animation`](#play_animation) [`stop_animation`](#stop_animation) [`pause_animation`](#pause_animation) [`resume_animation`](#resume_animation) [`is_animation_playing`](#is_animation_playing) [`playing_animations`](#playing_animations) [`animations`](#animations) [`animation_tick`](#animation_tick) [`seek_animation`](#seek_animation) [`animation_speed`](#animation_speed) [`set_animation_speed`](#set_animation_speed) |
-| [Glow and visibility](#glow-and-visibility) | [`is_glowing`](#is_glowing) [`set_glowing`](#set_glowing) [`glow_color`](#glow_color) [`set_glow_color`](#set_glow_color) [`hide_from`](#hide_from) [`show_to`](#show_to) [`is_hidden_from`](#is_hidden_from) [`view_range`](#view_range) [`set_view_range`](#set_view_range) |
+| [Glow and visibility](#glow-and-visibility) | [`is_glowing`](#is_glowing) [`set_glowing`](#set_glowing) [`glow_color`](#glow_color) [`set_glow_color`](#set_glow_color) [`hide_from`](#hide_from) [`show_to`](#show_to) [`is_hidden_from`](#is_hidden_from) [`viewers`](#viewers) [`view_range`](#view_range) [`set_view_range`](#set_view_range) |
 | [Events](#events) | [`on`](#on) [`once`](#once) [`emit`](#emit) and 20 events |
 
 ## Identity and lifetime {#identity-and-lifetime}
@@ -72,9 +72,9 @@ Gives it this many ticks more before it's removed, from now. A centity with a li
 
 ### `centity:keep()` {#keep}
 
-Makes a natural or temporary centity a normal one: it is saved from now on (it comes back after a restart), is never removed for being far from players or because a script unloaded or a lifetime ran out, and no longer counts against a cap. Nothing happens to one that is already normal.
+Makes a natural or temporary centity a normal one: it is saved from now on (it comes back after a restart), is never removed for being far from players or because a script unloaded or a lifetime ran out, and no longer counts against a cap. Nothing happens to one that is already normal, or to a private one (spawned with `viewers`), which stays temporary.
 
-**Returns** `boolean`: Whether it was natural or temporary: `false` for one that was already normal, and once it is removed.
+**Returns** `boolean`: Whether it was natural or temporary: `false` for one that was already normal, for a private one, and once it is removed.
 
 ```lua
 this:on("click", function(event)
@@ -795,7 +795,7 @@ Sets the colour every block and item display node glows in (the same as `set_glo
 
 ### `centity:hide_from(player)` {#hide_from}
 
-Hides the whole centity from one player: they don't see its nodes and can't click its hitboxes. Everyone else still does. It stays hidden from them when they leave and come back, and when its chunk unloads and loads again, until `show_to`, a server restart or the centity's removal. Hiding it from someone offline counts for when they join.
+Hides the whole centity from one player: they don't see its nodes and can't click its hitboxes. Everyone else still does. It stays hidden from them when they leave and come back, and when its chunk unloads and loads again, until `show_to`, a server restart or the centity's removal. Hiding it from someone offline counts for when they join. A private centity (spawned with `viewers`) stops being shown to them: they're no longer among its viewers.
 
 | Parameter | Type | |
 | --- | --- | --- |
@@ -811,7 +811,7 @@ end)
 
 ### `centity:show_to(player)` {#show_to}
 
-Shows it to a player it was hidden from.
+Shows it to a player it was hidden from. A private centity (spawned with `viewers`) is shown to them from now on: they become one of its viewers.
 
 | Parameter | Type | |
 | --- | --- | --- |
@@ -821,13 +821,19 @@ Shows it to a player it was hidden from.
 
 ### `centity:is_hidden_from(player)` {#is_hidden_from}
 
-Whether `hide_from` hid it from a player.
+Whether `hide_from` hid it from a player; for a private centity, whether they aren't one of its viewers.
 
 | Parameter | Type | |
 | --- | --- | --- |
 | `player` | [`Player`](player.md) |  |
 
 **Returns** `boolean`
+
+### `centity:viewers()` {#viewers}
+
+The only players a private centity is shown to (`nf.centities.spawn`'s `viewers`, then `show_to` and `hide_from`), online or not; `nil` for one everyone can see, and once it's removed.
+
+**Returns** [`Player`](player.md)`[]?`
 
 ### `centity:view_range()` {#view_range}
 

@@ -40,7 +40,7 @@ class CentityClicks internal constructor(
     fun click(entity: UUID, player: PlayerRef, button: ClickButton, sight: Ray?): Boolean {
         val (instance, name) = owner(entity) ?: return false
         // The server keeps a hidden interaction from being clicked; this says so for any platform.
-        if (instance.removed || player.uuid in instance.hiddenFrom) return true
+        if (instance.removed || !instance.sees(player.uuid)) return true
         val clicked = instance.indexOf(name) ?: return true
         val target = pick(instance, clicked, sight) ?: return true
         // `spawning.keepOnInteract`: a click that reaches a node keeps a natural one, before scripts hear it.
@@ -57,7 +57,7 @@ class CentityClicks internal constructor(
      */
     fun clickTarget(entity: UUID, player: UUID, sight: Ray?): Pair<Instance, String?>? {
         val (instance, name) = owner(entity) ?: return null
-        if (instance.removed || player in instance.hiddenFrom) return null
+        if (instance.removed || !instance.sees(player)) return null
         val clicked = instance.indexOf(name) ?: return instance to null
         return instance to pick(instance, clicked, sight)?.let { instance.definition.nodes[it.index].name }
     }

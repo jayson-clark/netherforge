@@ -28,6 +28,7 @@ import dev.netherforge.plugin.binding.TouchEvent
 import dev.netherforge.plugin.platform.ClickButton
 import dev.netherforge.plugin.platform.DisplayLook
 import dev.netherforge.plugin.platform.DisplayPose
+import dev.netherforge.plugin.platform.EntityOps
 import dev.netherforge.plugin.platform.EntityRole
 import dev.netherforge.plugin.platform.EntityTag
 import dev.netherforge.plugin.platform.Location
@@ -76,6 +77,11 @@ import kotlin.math.sqrt
  * node's body): `spawn` after a new instance's script has run, `remove`
  * before it unloads, `chunk_load` and `chunk_unload` as its anchor's chunk
  * comes and goes, and clicks along their path from node to `nf`.
+ *
+ * A **private** instance ([Instance.viewers]) is made of client entities
+ * ([Platform.clientEntities]) only its viewers' clients have, so it costs
+ * the server and everyone else nothing; every entity call goes through
+ * [ops], which picks the instance's kind.
  *
  * Instances whose definition is gone (deleted, or never loaded) are kept as
  * **inert** records: their entities stay where they are and they come back to
@@ -280,8 +286,8 @@ class Centities(
     }
 
     /** A temporary instance whose centity is gone: its entities are removed, as an inert one's are when it's removed. */
-    private fun discard(record: InstanceRecord) {
-        entitiesOf(record).forEach { platform.entities.remove(it) }
+    private fun discard(record: InstanceRecord, entities: EntityOps = platform.entities) {
+        entitiesOf(record).forEach { entities.remove(it) }
         onRemoved(record.id)
     }
 
@@ -316,6 +322,7 @@ class Centities(
      * returns. Null when there's no such centity or no such world. A
      * [natural] one is temporary (see [Instance.natural]): the spawner makes those. A [temporary] one
      * (see [Instance.temporary]) goes with the scope [owner] and, given [lifetime], that many ticks from now.
+     * Given [viewers], it's private (see [Instance.viewers]): only they see it, and it must be temporary.
      */
     fun spawn(
         centity: String,
@@ -324,7 +331,8 @@ class Centities(
         natural: Boolean = false,
         temporary: Boolean = false,
         owner: Int? = null,
-        lifetime: Long? = null
+        lifetime: Long? = null,
+        viewers: Set<UUID>? = null
     ): Instance? {
         val definition = definitions[centity] ?: return null
         if (!platform.worlds.exists(at.world)) return null
@@ -335,6 +343,11 @@ class Centities(
         if (instance.temporary) {
             instance.owner = owner
             instance.expires = lifetime?.let { scripts.now + it }
+        }
+        if (viewers != null) {
+            // Nothing private is ever saved: a viewer's client is all there is of it.
+            require(instance.temporary) { "only a temporary centity can be private" }
+            instance.viewers = LinkedHashSet(viewers)
         }
         instances[instance.id] = instance
         obstacles.add(instance)
@@ -388,7 +401,7 @@ class Centities(
         for (entity in instance.entityIds()) {
             owners.remove(entity)
             // An entity in an unloaded chunk is cleaned up as a stray when it loads.
-            platform.entities.remove(entity)
+            ops(instance).remove(entity)
         }
         instances.remove(instance.id)
         obstacles.remove(instance)
@@ -413,15 +426,16 @@ class Centities(
     /**
      * Makes a natural or temporary instance a normal one: its entities are
      * saved with their chunks and the store hears of it at the end of the
-     * tick, so it survives a restart. False when it was neither.
+     * tick, so it survives a restart. False when it was neither, and for a
+     * private one, which stays temporary: its viewers' clients are all there is of it.
      */
     fun keep(instance: Instance): Boolean {
-        if (instance.removed || !instance.transient) return false
+        if (instance.removed || !instance.transient || instance.viewers != null) return false
         instance.natural = false
         instance.temporary = false
         instance.owner = null
         instance.expires = null
-        for (entity in instance.entityIds()) platform.entities.setPersistent(entity, true)
+        for (entity in instance.entityIds()) ops(instance).setPersistent(entity, true)
         changed(instance.id)
         return true
     }
@@ -470,7 +484,7 @@ class Centities(
      */
     fun unfollow(instance: Instance): Boolean {
         if (instance.follower == null) return false
-        if (instance.followMounted) instance.anchorEntity?.let(platform.entities::dismount)
+        if (instance.followMounted) instance.anchorEntity?.let(ops(instance)::dismount)
         instance.follower = null
         instance.followMounted = false
         return true
@@ -503,7 +517,7 @@ class Centities(
         val player = instance.follower
         instance.turnTo(player?.let { platform.worldEntities.bodyYaw(it) } ?: at.yaw)
         val vehicle = instance.anchorEntity
-        instance.followMounted = vehicle != null && player != null && platform.entities.mount(player, vehicle)
+        instance.followMounted = vehicle != null && player != null && ops(instance).mount(player, vehicle)
     }
 
     /**
@@ -549,7 +563,7 @@ class Centities(
                 instance.entityIds().forEach { owners.remove(it) }
                 if (instance.transient) {
                     // Nothing to come back to life for: it was never saved.
-                    discard(record(instance))
+                    discard(record(instance), ops(instance))
                     scripts.dropTarget(handle(instance))
                     continue
                 }
@@ -600,7 +614,7 @@ class Centities(
         if (instance.removed) return
         if (!instance.temporary) {
             instance.temporary = true
-            for (entity in instance.entityIds()) platform.entities.setPersistent(entity, false)
+            for (entity in instance.entityIds()) ops(instance).setPersistent(entity, false)
             // The store forgets it at the end of the tick: it isn't saved any more.
             changed(instance.id)
             stored.remove(instance.id)?.let { store.delete(instance.id) }
@@ -762,7 +776,7 @@ class Centities(
      */
     private fun riderShift(instance: Instance, vehicle: UUID?): Vec3? {
         if (!instance.followMounted || vehicle == null) return null
-        val actual = platform.entities.location(vehicle) ?: return null
+        val actual = ops(instance).location(vehicle) ?: return null
         val wanted = instance.anchor
         return Vec3(wanted.x - actual.x, wanted.y - actual.y, wanted.z - actual.z)
     }
@@ -786,7 +800,7 @@ class Centities(
         if (!instance.poseDirty && !instance.forceSync && !instance.moved && !instance.followMounted) return
 
         val anchor = instance.anchor
-        val entities = platform.entities
+        val entities = ops(instance)
         val vehicle = parts.time(SYNC_ANCHOR) { syncAnchor(instance) }
         val world = parts.time(SYNC_PLACE) { shiftedBy(instance.placed(), riderShift(instance, vehicle)) }
         val cull = cullSize(world)
@@ -886,16 +900,16 @@ class Centities(
         val vehicle = instance.anchorEntity ?: return null
         val look = DisplayLook(viewRange = instance.viewRange / Instance.DEFAULT_VIEW_RANGE, teleportTicks = instance.moveTicks())
         if (instance.forceSync || instance.pushedLooks[vehicle] != look) {
-            platform.entities.setLook(vehicle, look)
+            ops(instance).setLook(vehicle, look)
             instance.pushedLooks[vehicle] = look
         }
         // Riding a followed player, it moves with them: a teleport would get it off.
-        if (instance.moved && !instance.followMounted) platform.entities.teleport(vehicle, instance.anchor)
+        if (instance.moved && !instance.followMounted) ops(instance).teleport(vehicle, instance.anchor)
         return vehicle
     }
 
     private fun ride(instance: Instance, vehicle: UUID, entity: UUID) {
-        if (platform.entities.mount(vehicle, entity)) instance.riders += entity else instance.riders -= entity
+        if (ops(instance).mount(vehicle, entity)) instance.riders += entity else instance.riders -= entity
     }
 
     /**
@@ -929,7 +943,7 @@ class Centities(
         val shown = drawn(instance, index, target)
         val pushed = Instance.PushedPose(shown.values.toList(), cull)
         if (instance.forceSync || instance.pushedPoses[entity] != pushed) {
-            platform.entities.setPose(entity, DisplayPose(shown, ticks, cull))
+            ops(instance).setPose(entity, DisplayPose(shown, ticks, cull))
             instance.pushedPoses[entity] = pushed
         }
     }
@@ -1003,13 +1017,13 @@ class Centities(
         val world = instance.placed()
         val cull = cullSize(world)
         val anchor = instance.anchor
-        val entities = platform.entities
+        val entities = ops(instance)
         if (instance.anchorEntity == null) {
             entities.spawnAnchor(anchor, EntityTag(instance.id, ANCHOR_NODE, EntityRole.ANCHOR))?.let { entity ->
                 instance.anchorEntity = entity
                 owners[entity] = instance to ANCHOR_NODE
                 if (instance.transient) entities.setPersistent(entity, false)
-                for (player in instance.hiddenFrom) entities.setHidden(player, entity, true)
+                showNew(instance, entity)
             }
         }
         for ((index, node) in definition.nodes.withIndex()) {
@@ -1051,9 +1065,22 @@ class Centities(
         into[node] = entity
         owners[entity] = instance to node
         // A temporary instance's entities aren't saved with their chunk, so a crash can't leave them behind.
-        if (instance.transient) platform.entities.setPersistent(entity, false)
-        for (player in instance.hiddenFrom) platform.entities.setHidden(player, entity, true)
+        if (instance.transient) ops(instance).setPersistent(entity, false)
+        showNew(instance, entity)
     }
+
+    /** Who sees a new entity of [instance]: a private one's viewers, or everyone it isn't hidden from. */
+    private fun showNew(instance: Instance, entity: UUID) {
+        val viewers = instance.viewers
+        if (viewers != null) {
+            platform.clientEntities.setViewers(entity, viewers.toSet())
+        } else {
+            for (player in instance.hiddenFrom) platform.entities.setHidden(player, entity, true)
+        }
+    }
+
+    /** The entities [instance] is made of: a private one's are client entities, only its viewers' clients have them. */
+    private fun ops(instance: Instance): EntityOps = if (instance.viewers != null) platform.clientEntities else platform.entities
 
     // ---- per-player visibility ---------------------------------------------------
 
@@ -1061,9 +1088,17 @@ class Centities(
      * Hides [instance] from [player] (every display and hitbox), or shows it
      * again. The record is ours: the server forgets when the player leaves or
      * the chunk unloads, and [playerJoined] and [entitiesLoaded] say it again.
+     * A private instance's viewers lose or gain [player] instead.
      */
     fun setHidden(instance: Instance, player: UUID, hidden: Boolean) {
         if (instance.removed) return
+        val viewers = instance.viewers
+        if (viewers != null) {
+            if (!(if (hidden) viewers.remove(player) else viewers.add(player))) return
+            val now = viewers.toSet()
+            for (entity in instance.shownEntities()) platform.clientEntities.setViewers(entity, now)
+            return
+        }
         val changed = if (hidden) instance.hiddenFrom.add(player) else instance.hiddenFrom.remove(player)
         if (!changed) return
         for (entity in instance.shownEntities()) platform.entities.setHidden(player, entity, hidden)
@@ -1079,7 +1114,7 @@ class Centities(
 
     private fun retire(instance: Instance, entity: UUID) {
         forget(entity, instance)
-        if (!platform.entities.remove(entity)) instance.orphans += entity
+        if (!ops(instance).remove(entity)) instance.orphans += entity
     }
 
     /**
@@ -1089,7 +1124,10 @@ class Centities(
      * it was last put, which may be the next chunk over.)
      */
     private fun dropGone(instance: Instance) {
-        val entities = platform.entities
+        // A private one's client entities go only when we remove them, and asking for each of every page's every tick
+        // was ~9% of a hub's tick at 250 players.
+        if (instance.viewers != null) return
+        val entities = ops(instance)
         fun gone(entity: UUID, at: Location) = !entities.isLoaded(entity) && platform.worlds.entitiesLoaded(at)
         val anchor = instance.anchor
         val goneDisplays = instance.displays.filterValues { gone(it, instance.pushedSpots[it] ?: anchor) }
@@ -1134,7 +1172,7 @@ class Centities(
      */
     private fun sweepOrphans(instance: Instance) {
         if (instance.orphans.isEmpty()) return
-        instance.orphans.forEach { platform.entities.remove(it) }
+        instance.orphans.forEach { ops(instance).remove(it) }
         instance.orphans.clear()
         changed(instance.id)
     }

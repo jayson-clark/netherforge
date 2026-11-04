@@ -246,7 +246,7 @@ class FakeBots(private val platform: FakePlatform) : BotOps {
                 val (target, at) = target(bot, action.entity, aim)
                 aimed(bot, target, action.entity == null && aim == null, action.at?.let { Triple(it.x, it.y, it.z) } ?: at)
                 val hand = hand(action.hand)
-                if (target in platform.entities.all) {
+                if (target in platform.entities.all || target in platform.clientEntities.all) {
                     // A centity's: the click goes to it, the main hand's only.
                     if (hand == "main_hand") events!!.entityClicked(target, bot.ref, ClickButton.RIGHT, sight(bot))
                 } else {
@@ -257,7 +257,7 @@ class FakeBots(private val platform: FakePlatform) : BotOps {
                 alive()
                 val (target, at) = target(bot, action.entity, aim)
                 aimed(bot, target, action.entity == null && aim == null, action.at?.let { Triple(it.x, it.y, it.z) } ?: at)
-                if (target in platform.entities.all) {
+                if (target in platform.entities.all || target in platform.clientEntities.all) {
                     events!!.entityClicked(target, bot.ref, ClickButton.LEFT, sight(bot))
                 } else {
                     platform.worldEntities.body(target)?.takeIf { it.living }?.let {
@@ -437,9 +437,14 @@ class FakeBots(private val platform: FakePlatform) : BotOps {
             return hit to null
         }
         val tagged = platform.entities.all[id]
+        val private = platform.clientEntities.all[id]
         val body = platform.worldEntities.body(id)
-        check(tagged != null || body != null) { "there's no entity $id in ${bot.location.world}" }
-        val hidden = tagged?.hiddenFrom?.contains(bot.ref.uuid) ?: body!!.hiddenFrom.contains(bot.ref.uuid)
+        check(tagged != null || private != null || body != null) { "there's no entity $id in ${bot.location.world}" }
+        val hidden = when {
+            tagged != null -> bot.ref.uuid in tagged.hiddenFrom
+            private != null -> bot.ref.uuid !in private.viewers
+            else -> bot.ref.uuid in body!!.hiddenFrom
+        }
         check(!hidden) { "${bot.ref.name}'s client doesn't know entity $id (it's hidden from them, or too far away to be sent)" }
         return id to aim?.at?.let { Triple(it.x, it.y, it.z) }
     }
@@ -451,7 +456,7 @@ class FakeBots(private val platform: FakePlatform) : BotOps {
 
     /** Looks at [target] ([at], or its middle) and checks it's within reach of the eyes, as the real bots do. */
     private fun aimAt(bot: FakePlayer, target: UUID, at: Triple<Double, Double, Double>?) {
-        val tagged = platform.entities.all[target]
+        val tagged = platform.entities.all[target] ?: platform.clientEntities.all[target]
         val (where, width, height) = tagged?.let { Triple(it.location, it.width, it.height) }
             ?: platform.worldEntities.body(target)!!.let { Triple(it.location, it.width, it.height) }
         val (x, y, z) = at ?: Triple(where.x, where.y + height / 2, where.z)
@@ -823,8 +828,8 @@ class FakeBots(private val platform: FakePlatform) : BotOps {
         val body = platform.worldEntities.raycast(ray.world, origin, direction, REACH, setOf(bot.ref.uuid))
             ?.takeIf { hit -> platform.worldEntities.body(hit.id)?.hiddenFrom?.contains(bot.ref.uuid) != true }
             ?.let { hit -> Triple(hit.id.toString(), platform.worldEntities.body(hit.id)?.kind ?: "minecraft:player", hit.position) }
-        val hitbox = platform.entities.hitboxes
-            .filter { it.location.world == ray.world && bot.ref.uuid !in it.hiddenFrom }
+        val hitbox = hitboxesSeenBy(bot)
+            .filter { it.location.world == ray.world }
             .mapNotNull { box ->
                 val half = box.width / 2
                 val l = box.location
@@ -854,6 +859,10 @@ class FakeBots(private val platform: FakePlatform) : BotOps {
 
     private fun length(v: Vec3) = sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
 
+    /** NetherForge's hitboxes [bot]'s client has: those not hidden from it, and the client ones it's a viewer of. */
+    private fun hitboxesSeenBy(bot: FakePlayer): List<FakeEntity> = platform.entities.hitboxes.filter { bot.ref.uuid !in it.hiddenFrom } +
+        platform.clientEntities.hitboxes.filter { bot.ref.uuid in it.viewers }
+
     private fun faceOf(normal: Vec3) = when {
         normal.y > 0.5 -> "up"
         normal.y < -0.5 -> "down"
@@ -873,8 +882,7 @@ class FakeBots(private val platform: FakePlatform) : BotOps {
         val bodies = (platform.players.byId.values + platform.worldEntities.mobs.values)
             .filter { it.id != bot.ref.uuid && bot.ref.uuid !in it.hiddenFrom }
             .map { Triple(it.id, it.kind, it.location) }
-        val hitboxes = platform.entities.hitboxes
-            .filter { bot.ref.uuid !in it.hiddenFrom }
+        val hitboxes = hitboxesSeenBy(bot)
             .map { Triple(it.id, "minecraft:interaction", it.location) }
         return (bodies + hitboxes)
             .filter { (_, _, where) -> where.world == at.world }

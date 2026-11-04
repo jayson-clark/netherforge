@@ -178,6 +178,31 @@ this:show_to(player)
 Hiding lasts while the server runs, through the player leaving and coming
 back and the chunk unloading.
 
+### One player's own: private centities
+
+Something only one player (or a few) should ever see, such as their own menu,
+page or marker, is best spawned **private**, with `viewers`:
+
+```lua
+local page = nf.centities.spawn("menu", place, { temporary = true, viewers = { player } })
+page:show_to(friend)    -- a viewer too, from now on
+page:hide_from(player)  -- not any more
+page:viewers()          -- who sees it
+```
+
+A private centity's nodes are sent to its viewers' clients alone, and the
+server keeps no entities for it. Everything else works as usual: its script,
+animations, clicks on its hitboxes, `world:raycast`. This is about cost. A
+centity hidden with `hide_from` is still the server's: each tick, every one of
+its entities is checked against every player near it, so a page each for 100
+players standing together, all hidden from each other, costs the square of
+that (100 pages times 100 players). Private ones cost only what their viewers
+are sent.
+
+Only a temporary centity can be private (`temporary` or a `lifetime`): its
+viewers' clients are all there is of it, so there's nothing to save, and
+`keep` leaves it temporary.
+
 A script can also move nodes directly:
 
 ```lua

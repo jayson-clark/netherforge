@@ -36,6 +36,7 @@ class FakePlatform(
     override val log = FakeLog()
     override val worlds = FakeWorlds(this)
     override val entities = FakeEntities(this)
+    override val clientEntities = FakeClientEntities(this)
     override val players = FakePlayers(this)
     override val commands = FakeCommands(this)
     override val performance = FakePerformance()

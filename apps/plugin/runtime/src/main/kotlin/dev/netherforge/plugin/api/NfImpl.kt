@@ -138,6 +138,13 @@ internal class NfCentitiesImpl(private val session: ProjectSession) : NfCentitie
         val scope = caller.scope
         val lifetime = options?.lifetime
         if (lifetime != null && lifetime < 1) throw LuaApiException("bad argument 'options.lifetime' (at least 1 expected, got $lifetime)")
+        val temporary = options?.temporary == true || lifetime != null
+        val viewers = options?.viewers?.map { java.util.UUID.fromString(it.id) }?.toSet()
+        if (viewers != null && !temporary) {
+            throw LuaApiException(
+                "bad argument 'options.viewers' (only a temporary centity can be private: give it `temporary = true` or a `lifetime`)"
+            )
+        }
         if (centities.definition(id) == null) throw LuaApiException(session.notInProject("centity", kind, centities.definitionIds()))
         val at = place.resolve(place.world?.name ?: session.scriptWorld(scope))
         val instance = centities.spawn(
@@ -146,7 +153,8 @@ internal class NfCentitiesImpl(private val session: ProjectSession) : NfCentitie
             place.yaw ?: 0.0,
             temporary = options?.temporary == true,
             owner = scope.id,
-            lifetime = lifetime
+            lifetime = lifetime,
+            viewers = viewers
         ) ?: return null
         return LuaHandle.Centity(instance.id.toString())
     }

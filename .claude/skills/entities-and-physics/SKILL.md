@@ -385,6 +385,36 @@ resolved rules are rebuilt).
   `defaultBiome`, `lights` and `defaultLight` set a place's biome and light,
   `NaturalSpawner.random` takes a seed.
 
+## Private instances (`viewers`)
+
+`nf.centities.spawn(..., { temporary = true, viewers = { ... } })` sets `Instance.viewers` (null: public) before
+anything is made, and `Centities.ops(instance)` sends every entity call of a private one to
+`Platform.clientEntities` (`ClientEntityOps`, `platform/Displays.kt`) instead of `Platform.entities`. Nothing else
+in the pipeline knows: sync, reconcile, riding, poses and clicks are the same code. The differences:
+
+- **Why it exists.** A real entity hidden with `hide_from` is still in the server's tracker, which checks every
+  entity against every player near it each tick. Kosmoi's hub (a launcher page of ~370 displays per player, all
+  at one spot, each hidden from everyone else) spent ~75% of its tick in `ChunkMap$TrackedEntity.updatePlayer`
+  and `CraftPlayer.canSee` at 100 players: 550 ms ticks, growing as players². Client entities aren't in a
+  world, so the tracker never sees them.
+- **Who sees it.** `Instance.sees(player)`: a viewer of a private one, or anyone a public one isn't hidden
+  from (`CentityClicks` asks it). `Centities.setHidden` on a private instance edits `viewers` and pushes
+  `setViewers` to each entity; `hiddenFrom` stays empty. New entities get the viewers in `showNew`.
+- **Only temporary.** `spawn` requires it (`NfImpl` says so as a Lua error first) and `keep` refuses: nothing
+  private is ever in the store, and `stop()` removes temporary instances, so no record or handover carries one.
+- **On Paper** (`paper-common/PaperClientEntities`, a `PaperEntities` whose `make` is `World.createEntity`, so
+  every display set-up is shared): packets from `paper-internals/version/ClientEntityWire` (add entity with its
+  non-default data, `packDirty` changes, position sync, passengers read from ids, remove; bundled, ≤ 4000 a
+  bundle). A `Watch` per viewer and chunk is polled at `ServerTickEndEvent` with `Player.isChunkSent`; a chunk
+  unloaded for them, joining, quitting, respawning and changing worlds make the client forget, and the next
+  poll sends again. A move into another chunk the client has keeps it (no flicker). Riding is between client
+  entities only; only the vehicle's moves are sent. A click is Paper's `PlayerUseUnknownEntityEvent`
+  (`PaperEvents.onClickClientEntity`; on 1.21.x only the right click with a point counts), checked by
+  `PaperClientEntities.clicked`: an interaction the player's client has, within 8 blocks of their eyes. Paper
+  bots find these through `ClientEntityLookup` to click them.
+- **On the fake**: `FakeClientEntities` (a `FakeEntities`; `seenBy(player)`), and fake bots see and click the
+  hitboxes they're viewers of. Tests: `PrivateCentityTest`, and `ClientEntityOpsContract` on both servers.
+
 ## Instances: transforms, anchors, looks and loading
 
 - **Local transforms are the truth**, not matrices. A script's setter writes

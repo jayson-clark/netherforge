@@ -1897,8 +1897,8 @@ function Centity:lifetime() end
 ---@return boolean # `false` once it's removed.
 function Centity:set_lifetime(ticks) end
 
---- Makes a natural or temporary centity a normal one: it is saved from now on (it comes back after a restart), is never removed for being far from players or because a script unloaded or a lifetime ran out, and no longer counts against a cap. Nothing happens to one that is already normal.
----@return boolean # Whether it was natural or temporary: `false` for one that was already normal, and once it is removed.
+--- Makes a natural or temporary centity a normal one: it is saved from now on (it comes back after a restart), is never removed for being far from players or because a script unloaded or a lifetime ran out, and no longer counts against a cap. Nothing happens to one that is already normal, or to a private one (spawned with `viewers`), which stays temporary.
+---@return boolean # Whether it was natural or temporary: `false` for one that was already normal, for a private one, and once it is removed.
 function Centity:keep() end
 
 --- One of its nodes by name, or `nil` if it has none by that name.
@@ -2219,20 +2219,24 @@ function Centity:glow_color() end
 ---@return boolean # `false` once it's removed, or when it has no block or item display.
 function Centity:set_glow_color(color) end
 
---- Hides the whole centity from one player: they don't see its nodes and can't click its hitboxes. Everyone else still does. It stays hidden from them when they leave and come back, and when its chunk unloads and loads again, until `show_to`, a server restart or the centity's removal. Hiding it from someone offline counts for when they join.
+--- Hides the whole centity from one player: they don't see its nodes and can't click its hitboxes. Everyone else still does. It stays hidden from them when they leave and come back, and when its chunk unloads and loads again, until `show_to`, a server restart or the centity's removal. Hiding it from someone offline counts for when they join. A private centity (spawned with `viewers`) stops being shown to them: they're no longer among its viewers.
 ---@param player Player
 ---@return boolean # `false` once it's removed.
 function Centity:hide_from(player) end
 
---- Shows it to a player it was hidden from.
+--- Shows it to a player it was hidden from. A private centity (spawned with `viewers`) is shown to them from now on: they become one of its viewers.
 ---@param player Player
 ---@return boolean # `false` once it's removed.
 function Centity:show_to(player) end
 
---- Whether `hide_from` hid it from a player.
+--- Whether `hide_from` hid it from a player; for a private centity, whether they aren't one of its viewers.
 ---@param player Player
 ---@return boolean
 function Centity:is_hidden_from(player) end
+
+--- The only players a private centity is shown to (`nf.centities.spawn`'s `viewers`, then `show_to` and `hide_from`), online or not; `nil` for one everyone can see, and once it's removed.
+---@return Player[]?
+function Centity:viewers() end
 
 --- How far away its displays are drawn, in blocks: 64 unless `set_view_range` changed it. `nil` once it's removed.
 ---@return number?
@@ -7187,6 +7191,7 @@ function Event:uncancel() end
 ---@class CentitySpawnOptions
 ---@field temporary boolean? Not saved: its entities aren't kept with their chunk, the server forgets it on a restart, and it's removed when the script that spawned it unloads (a reload of it, or its centity removed), so nothing it made is left behind. What a shot, a damage number or a summoned helper is. `keep()` makes it a normal one. Default `false`.
 ---@field lifetime integer? Removed this many ticks after it's spawned (its `remove` handlers hear it), loaded or not: at least 1. A centity with a lifetime is temporary too. Default: none.
+---@field viewers Player[]? Only these players ever see it: it's **private**. Its nodes are sent to their clients alone and the server keeps no entities for it, so a private centity costs nothing for anyone else, however many there are: a page, a menu or a marker of one player's own. Everything else works as for any centity (its script, clicks on its hitboxes, `world:raycast`). `show_to` and `hide_from` add and take away viewers. Only a temporary centity can be private (`temporary` or a `lifetime`), and `keep` leaves it temporary. Default: everyone sees it.
 
 --- A centity's body, as `centity:body()` gives it and `centity:set_body` takes it: the fields of `centity.json`'s `body`, in Lua spelling. Every field is optional to `set_body`. A key that isn't one of these is an error.
 ---@class BodySettings

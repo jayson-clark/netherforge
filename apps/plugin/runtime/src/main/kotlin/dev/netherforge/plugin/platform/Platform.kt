@@ -32,6 +32,9 @@ interface Platform {
     val log: PlatformLog
     val worlds: WorldOps
     val entities: EntityOps
+
+    /** Entities only their viewers' clients know of: what private centities are made of. */
+    val clientEntities: ClientEntityOps
     val players: PlayerOps
     val commands: CommandOps
 

@@ -145,6 +145,18 @@ class Instance(val id: UUID, declared: CompiledCentity, anchor: Location, yaw: D
      */
     val hiddenFrom = LinkedHashSet<UUID>()
 
+    /**
+     * The only players a **private** instance is shown to (`nf.centities.spawn`'s `viewers`, then `show_to` and
+     * `hide_from`), online or not; null for one everyone sees but [hiddenFrom]. A private instance's entities are
+     * client entities ([dev.netherforge.plugin.platform.ClientEntityOps]): only its viewers' clients have them.
+     * Set once, before anything is made; only a [temporary] instance is private, and it stays temporary.
+     */
+    var viewers: LinkedHashSet<UUID>? = null
+        internal set
+
+    /** Whether [player] sees it: one of a private instance's [viewers], or anyone it isn't hidden from. */
+    fun sees(player: UUID): Boolean = viewers?.contains(player) ?: (player !in hiddenFrom)
+
     /** Where `move_to` is walking it, if anywhere: see [CentityPaths]. Runtime state, dropped by [redefine]. */
     internal var walk: Walk? = null
 
