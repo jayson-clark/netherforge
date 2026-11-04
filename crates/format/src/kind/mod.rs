@@ -3,6 +3,7 @@
 
 pub mod buff;
 pub mod dialog;
+pub mod files;
 pub mod item;
 pub mod loot;
 pub mod menu;
@@ -66,6 +67,10 @@ pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
         "recipe" => crate::document::load::<recipe::RecipeFile>(&text(), &path, &cx).1,
         "loot_table" => crate::document::load::<loot::LootTableFile>(&text(), &path, &cx).1,
         "module" => module::check(found, source),
+        "build" => files::build(found),
+        "migration" => files::migration(found),
+        // A map is its world's files; a WASM module's checks read its binary.
+        "map" | "wasm" => Vec::new(),
         _ => return None,
     })
 }

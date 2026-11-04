@@ -467,7 +467,7 @@ unchanged.
   Checks across resources (`reference.*`, `font.*`, `item.kind-mismatch`, `loot.cycle`) are left out until they're ported. The examples are
   valid projects, so a ported kind must report no errors in them, and must write them back to
   the same bytes. When the Rust side takes over, the goldens are written from it. Ported:
-  `buff` (all its rules are fields'), `dialog`, `item`, `menu` (its type and size, slot keys, items' and scripts' checks), `recipe` (mostly its own checks: which fields a recipe has depends on its type), `loot_table`, `module` (with `ModuleRequires`, worked out once per
+  `buff` (all its rules are fields'), `dialog`, `item`, `menu` (its type and size, slot keys, items' and scripts' checks), `recipe` (mostly its own checks: which fields a recipe has depends on its type), `loot_table`, `module`, and the files kinds `build`, `map`, `migration` and `wasm` (`kind/files.rs`; a WASM module's checks read its binary, a check across files ported with the WASM reader) (with `ModuleRequires`, worked out once per
   project in `Source`).
 
 Next in format: reading each resource with its kind's model and checks (kind by kind, each
