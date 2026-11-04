@@ -59,8 +59,92 @@ impl<'de> Deserialize<'de> for Key {
     }
 }
 
-/// A string-keyed map in format's order.
-pub type Map<V> = std::collections::BTreeMap<Key, V>;
+/// A map as a file has it: read in the file's order (which is the order its
+/// checks report problems in, as format's), written in format's order (by
+/// `K`'s: [`Key`]'s for strings, declaration order for an enum).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Entries<K, V>(pub Vec<(K, V)>);
+
+/// A string-keyed map.
+pub type Map<V> = Entries<Key, V>;
+
+impl<K, V> Default for Entries<K, V> {
+    fn default() -> Self {
+        Entries(Vec::new())
+    }
+}
+
+impl<K: PartialEq, V> Entries<K, V> {
+    pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
+        self.0.iter().map(|(k, v)| (k, v))
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    pub fn get(&self, key: &K) -> Option<&V> {
+        self.0.iter().find(|(k, _)| k == key).map(|(_, v)| v)
+    }
+}
+
+impl<V> Entries<Key, V> {
+    /// The value for string key `key`.
+    pub fn get_str(&self, key: &str) -> Option<&V> {
+        self.0.iter().find(|(k, _)| k.0 == key).map(|(_, v)| v)
+    }
+}
+
+impl<K, V> FromIterator<(K, V)> for Entries<K, V> {
+    fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> Self {
+        Entries(iter.into_iter().collect())
+    }
+}
+
+impl<K, V> IntoIterator for Entries<K, V> {
+    type Item = (K, V);
+    type IntoIter = std::vec::IntoIter<(K, V)>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<K: Serialize + Ord, V: Serialize> Serialize for Entries<K, V> {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut sorted: Vec<&(K, V)> = self.0.iter().collect();
+        sorted.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut map = s.serialize_map(Some(sorted.len()))?;
+        for (k, v) in sorted {
+            map.serialize_entry(k, v)?;
+        }
+        map.end()
+    }
+}
+
+impl<'de, K: Deserialize<'de>, V: Deserialize<'de>> Deserialize<'de> for Entries<K, V> {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct Visit<K, V>(std::marker::PhantomData<(K, V)>);
+        impl<'de, K: Deserialize<'de>, V: Deserialize<'de>> serde::de::Visitor<'de> for Visit<K, V> {
+            type Value = Entries<K, V>;
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("an object")
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut out = Vec::new();
+                while let Some(entry) = map.next_entry()? {
+                    out.push(entry);
+                }
+                Ok(Entries(out))
+            }
+        }
+        d.deserialize_map(Visit(std::marker::PhantomData))
+    }
+}
 
 /// `value` as its file: printed by the canonical rules, and a newline.
 pub fn write<T: Serialize>(value: &T) -> String {

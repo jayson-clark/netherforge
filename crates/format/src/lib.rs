@@ -5,7 +5,9 @@
 pub mod canonical;
 pub mod json;
 pub mod manifest;
+pub mod names;
 pub mod problem;
 pub mod read;
+pub mod settings;
 
 pub use problem::{Location, Problem, ProblemCode, ProblemSink, Severity, codes};

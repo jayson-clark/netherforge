@@ -390,15 +390,25 @@ unchanged.
   comma (serde calls one before `}` "key must be a string"). `tests/read.rs` holds it to the
   goldens' parse problems.
 
-- **Canonical models** (`canonical.rs`): a string-keyed map is `canonical::Map<V>`, a
-  `BTreeMap` by `Key`, whose order is kotlinx's `ordered` (whole-number keys first, as numbers,
-  then the rest as strings); an enum-keyed map is a `BTreeMap` by the enum, whose derived order
-  is its declaration's, which is format's. Fields are serde's `camelCase`, an absent optional
+- **Canonical models** (`canonical.rs`): a map is `Entries<K, V>` (`Map<V>` for string keys),
+  **read in the file's order and written in format's**. The order matters both ways: Kotlin's
+  checks walk a map in the file's order (a `LinkedHashMap`), so problems come out in that
+  order (the loader's sort by file and line is stable), while writing sorts by `K`: `Key`'s
+  order is kotlinx's `ordered` (whole-number keys first, as numbers, then the rest as strings),
+  and an enum's derived order is its declaration's, which is format's. Fields are serde's `camelCase`, an absent optional
   is left out (`skip_serializing_if`), and a sealed type is `#[serde(tag = "type")]`, which
   writes the tag first as kotlinx does. `canonical::write` prints a model as its file.
 - **`netherforge.json`** (`manifest.rs`): `Manifest` and everything in it, and `canonical()`
   (`ManifestKind`'s: the schema, sets sorted, worlds that say nothing dropped). Every manifest
   in the examples and the goldens reads, and the examples' write back to the same bytes.
 
-Next in format: the manifest's checks (the `manifest-*` goldens), names, the
+- **The manifest's checks** (`manifest::load`, `listing_files`): `Projects.loadManifest`, with
+  `names.rs` (format's `Names`; Rust's `regex` has no lookahead, so a pattern's length limit is
+  checked on its own), `MinecraftVersion`, and the settings' checks and reading
+  (`settings.rs`). `tests/goldens.rs` runs every `testdata/invalid` case and compares its
+  `netherforge.json` problems with `expected.json`'s: all 51 agree, leaving out the checks
+  across files (`project.world-height`, dependencies, exports) until those are ported. The
+  harness grows with each kind until it compares whole cases.
+
+Next in format: the
 registry of kinds and the snapshot, then each kind with its golden tests.
