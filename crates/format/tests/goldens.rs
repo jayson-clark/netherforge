@@ -238,7 +238,11 @@ fn the_ported_kinds_problems_are_formats() {
                 .iter()
                 .filter(|p| {
                     let file = p["file"].as_str().unwrap_or("");
-                    (file == path || file == location || file.starts_with(&format!("{location}/")))
+                    let companion = found.kind.companion_path_of(&found.id, &found.group);
+                    (file == path
+                        || file == location
+                        || file.starts_with(&format!("{location}/"))
+                        || companion.as_deref() == Some(file))
                         && own_problem(p)
                 })
                 .map(what_and_where)

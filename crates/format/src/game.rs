@@ -110,6 +110,15 @@ pub fn normalize(id: &str) -> String {
     }
 }
 
+/// Whether a reference that may be the project's names the game's instead
+/// (format's `RefKind.isGame`): `minecraft:…`, or a `#tag` in no other namespace.
+pub fn is_games(text: &str) -> bool {
+    match text.strip_prefix('#') {
+        Some(tag) => tag.split_once(':').is_none_or(|(n, _)| n == NAMESPACE),
+        None => text.split_once(':').is_some_and(|(n, _)| n == NAMESPACE),
+    }
+}
+
 /// The pattern of a game id, namespaced or not (`GameIds.isValid`), for a field's rule.
 pub const ID_PATTERN: &str = r"^([a-z0-9_.-]+:)?[a-z0-9_./-]+$";
 

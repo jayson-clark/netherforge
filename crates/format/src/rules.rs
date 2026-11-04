@@ -233,6 +233,11 @@ fn broken(value: &Value, schema: &Value) -> Option<String> {
             {
                 return Some(format!("must be more than {}", format_number(over)));
             }
+            if let Some(under) = number(schema, "exclusiveMaximum")
+                && n >= under
+            {
+                return Some(format!("must be less than {}", format_number(under)));
+            }
             None
         }
         Value::String(s) => {
@@ -279,6 +284,15 @@ fn broken(value: &Value, schema: &Value) -> Option<String> {
             }
             None
         }
+        Value::Object(entries) => {
+            let count = entries.len() as f64;
+            if let Some(max) = number(schema, "maxProperties")
+                && count > max
+            {
+                return Some(format!("must have at most {}", format_number(max)));
+            }
+            None
+        }
         _ => None,
     }
 }
@@ -294,6 +308,7 @@ const CONSTRAINTS: &[&str] = &[
     "maxLength",
     "minItems",
     "maxItems",
+    "maxProperties",
 ];
 
 /// The places in `T`'s schema with a constraint but no `x-problem` (or one

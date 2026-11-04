@@ -806,18 +806,6 @@ fn check_hitbox(node: &NodeDef, hitbox: &HitboxDef, at: &str, sink: &mut Problem
     }
 }
 
-/// Whether a biome entry is the game's (the project's are references).
-fn is_games(text: &str) -> bool {
-    match text.strip_prefix('#') {
-        Some(tag) => tag
-            .split_once(':')
-            .is_none_or(|(n, _)| n == game::NAMESPACE),
-        None => text
-            .split_once(':')
-            .is_some_and(|(n, _)| n == game::NAMESPACE),
-    }
-}
-
 /// A biome or block id, or `#tag`: well formed, and with game data, one the game has.
 fn spawning_id(
     text: &str,
@@ -881,7 +869,7 @@ fn check_range(range: &SpawnRange, at: &str, sink: &mut ProblemSink) {
 fn check_spawning(spawning: &SpawningDef, sink: &mut ProblemSink, game: Option<&dyn GameData>) {
     let at = "$.spawning";
     for (index, biome) in spawning.biomes.iter().flatten().enumerate() {
-        if is_games(biome) {
+        if game::is_games(biome) {
             spawning_id(
                 biome,
                 "biome",

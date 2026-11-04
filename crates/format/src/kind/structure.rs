@@ -132,18 +132,6 @@ pub enum PoolProjection {
     TerrainMatching,
 }
 
-/// Whether a biome entry is the game's (the project's are references): `minecraft:…`, or a tag in no other namespace.
-fn is_games(text: &str) -> bool {
-    match text.strip_prefix('#') {
-        Some(tag) => tag
-            .split_once(':')
-            .is_none_or(|(n, _)| n == game::NAMESPACE),
-        None => text
-            .split_once(':')
-            .is_some_and(|(n, _)| n == game::NAMESPACE),
-    }
-}
-
 /// A biome list is ids, or one `#tag`: the game takes a tag only on its own.
 fn check_biomes(biomes: &[String], sink: &mut ProblemSink, game: Option<&dyn GameData>) {
     if biomes.is_empty() {
@@ -164,7 +152,7 @@ fn check_biomes(biomes: &[String], sink: &mut ProblemSink, game: Option<&dyn Gam
         return;
     }
     for (index, text) in biomes.iter().enumerate() {
-        if !is_games(text) {
+        if !game::is_games(text) {
             continue;
         }
         let at = Some(format!("$.biomes[{index}]"));
