@@ -57,6 +57,18 @@ pub trait Document: Serialize + DeserializeOwned + Clone + schemars::JsonSchema 
     fn compile(&self, _id: &str, _cx: &Context) -> Option<Box<dyn Compiled>> {
         None
     }
+
+    /// What this kind's running resources (`running`, by key, the packages' in their own namespaces) put in the
+    /// start-up datapack, by path: one file each, or files for them all together. None for most kinds.
+    fn datapack(
+        _running: &[(crate::reference::ResourceKey, &Self)],
+        _cx: &crate::startup::Context,
+    ) -> Vec<(String, crate::startup::Entry)>
+    where
+        Self: Sized,
+    {
+        Vec::new()
+    }
 }
 
 /// What a resource compiled to (`Document::compile`), whichever kind's: `Project::compiled`

@@ -99,6 +99,29 @@ pub struct AdvancementCriterion {
 }
 
 impl Document for AdvancementFile {
+    /// Each its file in the game's format; none for one whose icon's item isn't running.
+    fn datapack(
+        running: &[(crate::reference::ResourceKey, &Self)],
+        cx: &crate::startup::Context,
+    ) -> Vec<(String, crate::startup::Entry)> {
+        use crate::startup::advancement;
+        running
+            .iter()
+            .filter_map(|(key, file)| {
+                let json = advancement::of(file, cx)?;
+                Some((
+                    format!(
+                        "data/{}/{}/{}.json",
+                        key.namespace,
+                        advancement::FOLDER,
+                        key.path
+                    ),
+                    crate::startup::Entry::json(&json),
+                ))
+            })
+            .collect()
+    }
+
     fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
         self.across(cx, sink);
     }

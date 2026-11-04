@@ -101,6 +101,19 @@ pub enum SpawnCategory {
     Axolotl,
 }
 
+impl SpawnCategory {
+    /// Every category, in their order.
+    pub const ALL: [SpawnCategory; 7] = [
+        SpawnCategory::Monster,
+        SpawnCategory::Animal,
+        SpawnCategory::WaterAnimal,
+        SpawnCategory::WaterAmbient,
+        SpawnCategory::WaterUndergroundCreature,
+        SpawnCategory::Ambient,
+        SpawnCategory::Axolotl,
+    ];
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorldConfig {

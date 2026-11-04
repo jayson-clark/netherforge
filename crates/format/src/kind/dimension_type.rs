@@ -89,7 +89,7 @@ pub enum DimensionTypeSky {
     None,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct DimensionTypeColors {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -129,6 +129,53 @@ impl DimensionTypeFile {
 }
 
 impl Document for DimensionTypeFile {
+    /// Each its file in the game's format; and the main world's dimension, when the manifest names a running
+    /// one for it, as the game's own overworld type (the server makes its main world as an overworld itself).
+    fn datapack(
+        running: &[(crate::reference::ResourceKey, &Self)],
+        cx: &crate::startup::Context,
+    ) -> Vec<(String, crate::startup::Entry)> {
+        use crate::startup::dimension;
+        let file = |key: &crate::reference::ResourceKey| {
+            format!(
+                "data/{}/{}/{}.json",
+                key.namespace,
+                dimension::FOLDER,
+                key.path
+            )
+        };
+        let mut out: Vec<(String, crate::startup::Entry)> = running
+            .iter()
+            .map(|(key, f)| {
+                (
+                    file(key),
+                    crate::startup::Entry::json(&dimension::of(f, cx)),
+                )
+            })
+            .collect();
+        let main = cx.main_world.and_then(|main| {
+            let named = cx
+                .project
+                .manifest
+                .as_ref()?
+                .worlds
+                .as_ref()?
+                .get_str(main)?
+                .dimension_type
+                .as_ref()?;
+            let key = crate::reference::resolve_any(cx.home(), named)?;
+            running.iter().find(|(k, _)| *k == key).map(|(_, f)| *f)
+        });
+        if let Some(main) = main {
+            let overworld = cx.resolve(dimension::OVERWORLD);
+            out.push((
+                file(&overworld),
+                crate::startup::Entry::json(&dimension::of(main, cx)),
+            ));
+        }
+        out
+    }
+
     fn datapack_entries(&self, id: &str) -> Vec<(&'static str, String)> {
         vec![("dimension_type", id.to_owned())]
     }

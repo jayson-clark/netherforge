@@ -1,0 +1,30 @@
+{
+  "biomes": [
+    "minecraft:plains",
+    "minecraft:desert"
+  ],
+  "spacing": 24,
+  "separation": 6,
+  "terrainAdaptation": "beard_thin",
+  "pools": {
+    "houses": {
+      "elements": [
+        {
+          "structure": "house"
+        },
+        {
+          "structure": "hut",
+          "weight": 3
+        }
+      ]
+    },
+    "roads": {
+      "projection": "terrain_matching",
+      "elements": [
+        {
+          "structure": "road"
+        }
+      ]
+    }
+  }
+}

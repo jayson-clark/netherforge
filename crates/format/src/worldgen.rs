@@ -24,6 +24,21 @@ pub enum GenerationStep {
 }
 
 impl GenerationStep {
+    /// Every step, in the game's order.
+    pub const ALL: [GenerationStep; 11] = [
+        GenerationStep::RawGeneration,
+        GenerationStep::Lakes,
+        GenerationStep::LocalModifications,
+        GenerationStep::UndergroundStructures,
+        GenerationStep::SurfaceStructures,
+        GenerationStep::Strongholds,
+        GenerationStep::UndergroundOres,
+        GenerationStep::UndergroundDecoration,
+        GenerationStep::FluidSprings,
+        GenerationStep::VegetalDecoration,
+        GenerationStep::TopLayerModification,
+    ];
+
     pub fn id(self) -> String {
         crate::canonical::name_of(&self)
     }

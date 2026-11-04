@@ -188,6 +188,22 @@ fn check_biomes(biomes: &[String], sink: &mut ProblemSink, game: Option<&dyn Gam
 }
 
 impl Document for StructureGeneration {
+    /// The structures that generate, with the game's registries and templates they need: a piece may be any
+    /// running structure, generating or not.
+    fn datapack(
+        running: &[(crate::reference::ResourceKey, &Self)],
+        cx: &crate::startup::Context,
+    ) -> Vec<(String, crate::startup::Entry)> {
+        let structures: std::collections::BTreeSet<crate::reference::ResourceKey> = cx
+            .project
+            .everywhere("structure")
+            .into_iter()
+            .filter(|(_, r)| !r.errors)
+            .map(|(name, _)| cx.key(&name))
+            .collect();
+        crate::startup::structure::files(running, &structures, cx)
+    }
+
     /// Its structure, its set and its pools.
     fn datapack_entries(&self, id: &str) -> Vec<(&'static str, String)> {
         let pools = std::iter::once(START_POOL)

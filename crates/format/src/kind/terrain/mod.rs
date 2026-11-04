@@ -976,6 +976,26 @@ impl TerrainFile {
 }
 
 impl Document for TerrainFile {
+    /// Terrains that fill containers from loot tables need the empty table the game unpacks them with.
+    fn datapack(
+        _: &[(crate::reference::ResourceKey, &Self)],
+        cx: &crate::startup::Context,
+    ) -> Vec<(String, crate::startup::Entry)> {
+        use crate::startup::generated_loot;
+        let loot = cx
+            .project
+            .compiled::<compiled::CompiledTerrain>()
+            .iter()
+            .any(|(_, t)| !t.loot.is_empty());
+        match loot {
+            true => vec![(
+                generated_loot::DATAPACK_PATH.to_owned(),
+                generated_loot::entry(),
+            )],
+            false => Vec::new(),
+        }
+    }
+
     fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
         self.across(cx, sink);
     }

@@ -116,6 +116,8 @@ pub trait DocumentKind: Sync {
     fn schema(&self) -> &'static crate::schema::Schema;
     /// The model `json` (a document of the kind) reads as, if it does.
     fn model(&self, json: &serde_json::Value) -> Option<Box<dyn Model>>;
+    /// What the kind's running resources put in the start-up datapack (`Document::datapack`).
+    fn datapack(&self, cx: &crate::startup::Context) -> Vec<(String, crate::startup::Entry)>;
 }
 
 struct Of<T>(std::marker::PhantomData<fn() -> T>);
@@ -146,6 +148,10 @@ impl<T: crate::document::Document> DocumentKind for Of<T> {
         serde_json::from_value::<T>(json.clone())
             .ok()
             .map(|m| Box::new(m) as Box<dyn Model>)
+    }
+
+    fn datapack(&self, cx: &crate::startup::Context) -> Vec<(String, crate::startup::Entry)> {
+        T::datapack(&crate::startup::keyed(cx, cx.project.running::<T>()), cx)
     }
 }
 

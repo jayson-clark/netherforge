@@ -219,6 +219,24 @@ fn known(
 pub const FOLDER: &str = "worldgen/biome";
 
 impl Document for BiomeFile {
+    /// Its file in the game's format; none while a datapack's feature it names isn't in the pack.
+    fn datapack(
+        running: &[(crate::reference::ResourceKey, &Self)],
+        cx: &crate::startup::Context,
+    ) -> Vec<(String, crate::startup::Entry)> {
+        use crate::startup::biome;
+        running
+            .iter()
+            .filter(|(_, file)| biome::writes(file, cx))
+            .map(|(key, file)| {
+                (
+                    format!("data/{}/{}/{}.json", key.namespace, biome::FOLDER, key.path),
+                    crate::startup::Entry::json(&biome::of(file, cx)),
+                )
+            })
+            .collect()
+    }
+
     fn datapack_entries(&self, id: &str) -> Vec<(&'static str, String)> {
         vec![(FOLDER, id.to_owned())]
     }
@@ -448,4 +466,30 @@ fn inversion(mine: &[String], theirs: &[String]) -> Option<(String, String)> {
         }
     }
     None
+}
+
+impl BiomeSpawn {
+    /// Its group's size: at least 1, and its max never below its min.
+    pub fn group_range(&self) -> (i32, i32) {
+        let min = self.group.as_ref().and_then(|g| g.min).unwrap_or(1);
+        let max = self
+            .group
+            .as_ref()
+            .and_then(|g| g.max)
+            .unwrap_or(min)
+            .max(min);
+        (min, max)
+    }
+}
+
+/// The name the server knows a biome by, as a file in namespace `home` writes it: a tag with the game's
+/// namespace, the game's own as it is, the project's in full (`ruby_grove` in `showcase` is `showcase:ruby_grove`).
+pub fn key_of(text: &str, home: &str) -> Option<String> {
+    if let Some(tag) = text.strip_prefix('#') {
+        return Some(format!("#{}", game::normalize(tag)));
+    }
+    if crate::reference::RefKind::Biome.is_game(text) {
+        return Some(text.to_owned());
+    }
+    crate::reference::resolve_any(home, text).map(|k| k.to_string())
 }

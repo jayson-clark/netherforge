@@ -30,6 +30,7 @@ pub mod schema;
 pub mod script;
 pub mod settings;
 pub mod snapshot;
+pub mod startup;
 pub mod vanilla;
 pub mod worldgen;
 

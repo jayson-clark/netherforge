@@ -243,6 +243,14 @@ fn duplicates<'a>(keys: impl Iterator<Item = (usize, Option<&'a str>)>) -> Vec<(
 }
 
 impl Document for DialogFile {
+    /// The dialogs on the pause screen or the quick actions key, and the tags that put them there.
+    fn datapack(
+        running: &[(crate::reference::ResourceKey, &Self)],
+        cx: &crate::startup::Context,
+    ) -> Vec<(String, crate::startup::Entry)> {
+        crate::startup::dialog::files(running, cx)
+    }
+
     const SCHEMA: &'static str = "../../.netherforge/schema/dialog.schema.json";
     const SCRIPTED: bool = true;
 

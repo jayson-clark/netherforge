@@ -333,6 +333,29 @@ fn against_game(
 }
 
 impl Document for PackMeta {
+    /// Its files for the server's data pack format, as they are: none when it isn't written for it.
+    fn datapack(
+        _: &[(crate::reference::ResourceKey, &Self)],
+        cx: &crate::startup::Context,
+    ) -> Vec<(String, crate::startup::Entry)> {
+        if !cx.pass_through {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        for (name, compiled) in cx.project.compiled::<CompiledDatapack>() {
+            let Some(location) = crate::startup::location(cx.project, "datapack", &name) else {
+                continue;
+            };
+            for (target, path) in compiled.files_for(cx.pack_format()) {
+                out.push((
+                    target,
+                    crate::startup::Entry::Copy(format!("{location}/{}", path.file)),
+                ));
+            }
+        }
+        out
+    }
+
     /// Its files, placed: what the start-up datapack takes of it.
     fn compile(&self, id: &str, cx: &Context) -> Option<Box<dyn crate::document::Compiled>> {
         let files = cx.files.expect("a datapack's files are known");

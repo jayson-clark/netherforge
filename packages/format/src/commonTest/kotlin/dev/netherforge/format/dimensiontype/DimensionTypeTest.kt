@@ -46,13 +46,8 @@ class DimensionTypeTest {
     private fun json(pack: Map<String, DatapackEntry>, path: String): JsonObject =
         CanonicalJson.json.parseToJsonElement((pack.getValue(path) as DatapackEntry.Text).text).jsonObject
 
-    private val deep = """
-        { "minY": -128, "height": 512, "logicalHeight": 256, "skyLight": false, "ceiling": true, "ambientLight": 0.1,
-          "fixedTime": true, "sky": "none", "colors": { "sky": "#102030", "fog": "#405060", "clouds": "#C0FFFFFF" },
-          "cloudHeight": 300, "bedWorks": false, "respawnAnchorWorks": true, "piglinSafe": true, "raids": false,
-          "ultrawarm": true, "monsterSpawnLight": { "min": 7, "max": 7 }, "monsterSpawnBlockLight": 15,
-          "infiniburn": "#minecraft:infiniburn_nether", "coordinateScale": 8 }
-    """.trimIndent()
+    /** A dimension type that says everything: `testdata/datapack/deep.json`, which the Rust port reads too. */
+    private val deep = TestFiles.read("packages/format/testdata/datapack/deep.json")!!
 
     @Test
     fun aDimensionReadsAndWritesBackCanonically() {

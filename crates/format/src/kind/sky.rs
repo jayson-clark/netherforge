@@ -52,6 +52,14 @@ pub struct SkyFile {
 pub const NIGHT_FEATURE: &str = "sky-night";
 
 impl Document for SkyFile {
+    /// Each sky's twin of every biome the server has, per step of its fade, and its night.
+    fn datapack(
+        running: &[(crate::reference::ResourceKey, &Self)],
+        cx: &crate::startup::Context,
+    ) -> Vec<(String, crate::startup::Entry)> {
+        crate::startup::sky::files(running, cx)
+    }
+
     const SCHEMA: &'static str = "../.netherforge/schema/sky.schema.json";
 
     fn set_schema(&mut self, schema: Option<String>) {
