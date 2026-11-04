@@ -327,3 +327,36 @@ project path; a module is a folder `modules/<id>/` with an `init.lua`, started o
 
 Not ported yet: packages (`acme:api`, exports, namespaces), group folders (`modules/(x)/m`),
 and where the session's reload restarts dependents.
+
+## The Platform boundary (`packages/platform`, `crates/platform`)
+
+The roadmap's "describe `Platform` and `PlatformEvents` in a language-neutral spec, and generate
+each side from it". The spec is TypeScript like `packages/api`'s: a file per area
+(`src/spec/teams.ts`), each declaration a record, an enum, a union, an interface (a group, or a
+callback the runtime hands over) or an object (`CommandSender`: values with methods, made by one
+side). Types are strings in Kotlin's spelling (`src/types.ts`, parsed by `src/type.ts`).
+
+- **It was read from the Kotlin interfaces**, not copied by hand: `scripts/extract.ts` runs
+  `src/kotlin.ts` (a parser for the subset of Kotlin `platform/` is written in) over every file.
+  Until the Kotlin side is generated from the spec, `spec.test.ts` holds the two to each other,
+  signatures only (docs may move to the spec): a change to a Kotlin interface is made with
+  `pnpm --filter @netherforge/platform extract`. A plain class is a record unless it holds
+  callbacks; an interface method with a body is kept, marked `defaulted`.
+- **Types it doesn't declare** are `EXTERNAL`: format's (`Vec3`, `ItemDef`...), the Lua API's
+  (`GameEvents`, `WatchedEvent`, `ArgumentType`, generated from `packages/api` for each
+  language), and two of the runtime's. In Rust they're placeholders (`external::*`, carrying a
+  `Dynamic`) until their side is ported.
+- **The Rust target** (`scripts/rust.ts`, `pnpm generate`, covered by the generated-files check):
+  records are structs (Kotlin's defaults in their docs), enums are enums with each entry's values
+  as methods (`EntityFlag::settable`) and `ALL`, a union is an enum of case structs
+  (`InventoryRefPlayer`, so a case can be named alone), interfaces and objects are traits
+  (`ClientEntityOps: EntityOps`). An interface is `&dyn` when returned (a group, borrowed from the
+  platform) and `Rc<dyn>` when taken (a callback). `Set<T>` is a `Vec<T>` of distinct items,
+  `Map` a `HashMap`, a function a boxed `Fn`, `UUID` a `Uuid`, `Any` a `Dynamic`. A Kotlin
+  overload (`contents(ref)`, `contents(ref, filter)`) is named by its last parameter in Rust
+  (`contents_with_filter`).
+
+Still to come: the Kotlin side generated from the spec (then `extract.ts` and the drift test
+go), the FFM glue between them, the coarse crossings the roadmap asks for (per-tick batches,
+handles as integers, flat buffers: annotations on the spec's methods), and the server's raised
+events (`GameEvents`) in Rust, from `packages/api`'s `raised`.

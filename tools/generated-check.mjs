@@ -21,8 +21,9 @@ const generated = [
   'packages/api/generated',
   'docs/reference',
   'apps/plugin/runtime/src/generated',
-  // The Rust runtime's bindings.
+  // The Rust runtime's bindings and Platform.
   'crates/api/src/generated',
+  'crates/platform/src/generated',
   // tauri-specta's output: the UI's command bindings and the commands permission.
   'apps/editor/src/core/backend/generated',
   'apps/editor/src-tauri/permissions/generated',
@@ -37,6 +38,14 @@ const generators = [
   {
     name: 'the Lua API outputs (packages/api)',
     command: [process.execPath, '--experimental-strip-types', 'packages/api/scripts/generate.ts'],
+  },
+  {
+    name: 'the Platform outputs (packages/platform)',
+    command: [
+      process.execPath,
+      '--experimental-strip-types',
+      'packages/platform/scripts/generate.ts',
+    ],
   },
   {
     name: "the editor's command bindings (src-tauri's `bindings` example)",

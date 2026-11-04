@@ -98,6 +98,8 @@ const plans = {
       ['pnpm', '--filter', '@netherforge/api', 'generate'],
       existsSync(path.join(root, 'packages/api/package.json')),
     ],
+    // The Rust runtime's Platform traits and types, from the Platform spec.
+    ['Platform outputs', ['pnpm', '--filter', '@netherforge/platform', 'generate']],
     // The UI's command bindings and the commands permission, from the Rust command list.
     [
       'Editor command bindings',

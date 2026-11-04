@@ -156,6 +156,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "netherforge-platform"
+version = "0.0.0"
+
+[[package]]
 name = "netherforge-runtime"
 version = "0.0.0"
 dependencies = [
