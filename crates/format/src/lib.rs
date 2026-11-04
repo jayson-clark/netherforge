@@ -17,6 +17,7 @@ pub mod manifest;
 pub mod math;
 pub mod names;
 pub mod noise;
+pub mod package;
 pub mod problem;
 pub mod project;
 pub mod read;

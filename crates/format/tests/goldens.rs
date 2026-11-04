@@ -226,7 +226,7 @@ fn whole_cases_are_formats() {
             files: &files,
             read: &read,
         };
-        let loaded = netherforge_format::project::load(&source, None);
+        let loaded = netherforge_format::project::load(&source, Default::default());
         let mut actual: Vec<String> = loaded
             .problems
             .iter()

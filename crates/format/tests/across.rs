@@ -20,7 +20,10 @@ fn problems(files: &[(&str, &str)], game: Option<&dyn GameData>) -> Vec<String> 
             files: &names,
             read: &read,
         },
-        game,
+        project::Options {
+            game,
+            ..Default::default()
+        },
     )
     .problems
     .iter()
@@ -174,7 +177,7 @@ fn sized(texts: &[(&str, &str)], pictures: &[(&str, [u32; 2])]) -> Vec<String> {
         texts,
         sizes: pictures,
     };
-    project::load(&source, None)
+    project::load(&source, Default::default())
         .problems
         .iter()
         .filter(|p| !matches!(p.code.as_deref(), Some("project.no-manifest")))
@@ -264,29 +267,33 @@ fn a_feature_needs_its_minecraft() {
         let files: BTreeSet<String> = ["netherforge.json", "skies/red.json"]
             .map(String::from)
             .into();
-        let read = |p: &str| {
-            Some(if p == "netherforge.json" {
-                text.clone()
-            } else {
-                sky.to_owned()
-            })
+        let read = |p: &str| match p {
+            "netherforge.json" => Some(text.clone()),
+            "skies/red.json" => Some(sky.to_owned()),
+            _ => None,
         };
         let source = project::Files {
             files: &files,
             read: &read,
         };
-        project::load_with(&source, None, FeatureTable(&table))
-            .problems
-            .iter()
-            .map(|p| {
-                format!(
-                    "{} {}: {}",
-                    p.code.as_deref().unwrap(),
-                    p.path.as_deref().unwrap_or(""),
-                    p.message
-                )
-            })
-            .collect()
+        project::load(
+            &source,
+            project::Options {
+                features: FeatureTable(&table),
+                ..Default::default()
+            },
+        )
+        .problems
+        .iter()
+        .map(|p| {
+            format!(
+                "{} {}: {}",
+                p.code.as_deref().unwrap(),
+                p.path.as_deref().unwrap_or(""),
+                p.message
+            )
+        })
+        .collect()
     };
     assert_eq!(
         found("26.3"),

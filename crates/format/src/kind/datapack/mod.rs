@@ -456,12 +456,19 @@ impl PackMeta {
                     ));
                     continue;
                 }
-            } else if path.namespace != game::NAMESPACE {
+            } else if path.namespace != game::NAMESPACE || cx.in_package() {
+                let may = if cx.in_package() {
+                    format!("its own namespace, \"{home}\"")
+                } else {
+                    format!(
+                        "the project's namespace, \"{home}\", or \"{}\"",
+                        game::NAMESPACE
+                    )
+                };
                 sink.problems.push(codes::DATAPACK_NAMESPACE.at(
                     &at,
                     format!(
-                        "A datapack here writes only the project's namespace, \"{home}\", or \"{}\", not \"{}\"",
-                        game::NAMESPACE,
+                        "A datapack here writes only {may}, not \"{}\"",
                         path.namespace
                     ),
                     None,

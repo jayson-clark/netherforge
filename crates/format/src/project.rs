@@ -15,6 +15,7 @@ use serde_json::Value;
 use crate::game::GameData;
 use crate::kind::{self, Doc, Source};
 use crate::manifest::{self, Manifest};
+use crate::package::{PackageSources, ResolvedPackage};
 use crate::problem::{Problem, ProblemSink};
 use crate::reference::{self, Defined, RefKind, RefScope, ReferenceIndex, index::RefUse};
 use crate::snapshot::{self, Found};
@@ -51,8 +52,11 @@ pub struct Project<'a> {
     pub references: ReferenceIndex,
     /// The game's facts it was read with.
     game: Option<&'a dyn GameData>,
-    /// Where it was read from.
-    source: &'a dyn ProjectSource,
+    /// The packages it depends on, their own dependencies included, by namespace: each loaded on
+    /// its own, in its own namespace. None for a package's own project.
+    pub packages: BTreeMap<String, LoadedPackage<'a>>,
+    /// Whether it's a package, checked on its own in its own namespace.
+    pub in_package: bool,
     /// Every problem, by file and then line (each file's in the order they were found).
     pub problems: Vec<Problem>,
 }
@@ -98,6 +102,56 @@ pub struct ImageInfo {
     pub opaque_columns: Option<Vec<bool>>,
 }
 
+/// A project in a folder on disk: its files listed as it's opened, read as they're asked for.
+pub struct Folder {
+    root: std::path::PathBuf,
+    files: BTreeSet<String>,
+}
+
+impl Folder {
+    /// The project in `root`, if it's a folder.
+    pub fn open(root: impl Into<std::path::PathBuf>) -> Option<Folder> {
+        fn walk(dir: &std::path::Path, base: &std::path::Path, out: &mut BTreeSet<String>) {
+            let Ok(entries) = std::fs::read_dir(dir) else {
+                return;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    walk(&path, base, out);
+                } else if let Ok(relative) = path.strip_prefix(base) {
+                    out.insert(relative.to_string_lossy().replace('\\', "/"));
+                }
+            }
+        }
+        let root = root.into();
+        if !root.is_dir() {
+            return None;
+        }
+        let mut files = BTreeSet::new();
+        walk(&root, &root, &mut files);
+        Some(Folder { root, files })
+    }
+
+    /// Where it is on disk.
+    pub fn root(&self) -> &std::path::Path {
+        &self.root
+    }
+}
+
+impl ProjectSource for Folder {
+    fn files(&self) -> &BTreeSet<String> {
+        &self.files
+    }
+
+    fn read(&self, path: &str) -> Option<String> {
+        if !self.files.contains(path) {
+            return None;
+        }
+        std::fs::read_to_string(self.root.join(path)).ok()
+    }
+}
+
 /// A project's files and a way to read them, and nothing of their bytes.
 pub struct Files<'a> {
     pub files: &'a BTreeSet<String>,
@@ -114,18 +168,116 @@ impl ProjectSource for Files<'_> {
     }
 }
 
-/// Reads and checks the project in `source`, held to the real feature table.
-pub fn load<'a>(source: &'a dyn ProjectSource, game: Option<&'a dyn GameData>) -> Project<'a> {
-    load_with(source, game, crate::features::CURRENT)
+/// How a project is loaded: the game's facts (none: the checks that need them
+/// say nothing), the feature table targets are held to (a test's own, since
+/// the real one may hold nothing a test could rely on), and where its packages
+/// come from (nowhere: every dependency is missing).
+#[derive(Clone, Copy)]
+pub struct Options<'a> {
+    pub game: Option<&'a dyn GameData>,
+    pub features: crate::features::FeatureTable<'a>,
+    pub packages: &'a dyn PackageSources,
 }
 
-/// Reads and checks the project in `source`, its target held to `features`
-/// (a test's own table, since the real one may hold nothing a test could rely on).
-pub fn load_with<'a>(
-    source: &'a dyn ProjectSource,
-    game: Option<&'a dyn GameData>,
-    features: crate::features::FeatureTable<'a>,
-) -> Project<'a> {
+impl Default for Options<'_> {
+    fn default() -> Self {
+        Options {
+            game: None,
+            features: crate::features::CURRENT,
+            packages: &crate::package::NoPackages,
+        }
+    }
+}
+
+/// A package the project depends on: as it was found, and as it loaded on its own, in its own namespace.
+pub struct LoadedPackage<'a> {
+    pub resolved: ResolvedPackage<'a>,
+    pub project: Project<'a>,
+}
+
+/// One project's (or package's) files read, each resource checked on its own.
+struct Reading {
+    home: String,
+    manifest: Option<Manifest>,
+    manifest_text: Option<String>,
+    vanilla: Option<crate::vanilla::VanillaFile>,
+    default_font: Option<crate::font::DefaultFontFile>,
+    resources: Vec<Resource>,
+    problems: Vec<Problem>,
+}
+
+/// Loads the project in `source` and every package it depends on. Each
+/// package is read and checked on its own, in its own namespace; the project
+/// (and each package) can name what the packages it depends on export, and
+/// nothing else of theirs.
+pub fn load<'a>(source: &dyn ProjectSource, options: Options<'a>) -> Project<'a> {
+    let mut root = read(source, None, &options);
+    let mut problems = std::mem::take(&mut root.problems);
+    let lock_text = root
+        .manifest
+        .as_ref()
+        .and_then(|_| source.read(crate::package::LOCK_FILE));
+    let mut resolution = match &root.manifest {
+        Some(manifest) => crate::package::resolve(
+            manifest,
+            options.packages,
+            crate::package::parse_lock(lock_text.as_deref()).as_ref(),
+        ),
+        None => crate::package::Resolution {
+            packages: BTreeMap::new(),
+            order: Vec::new(),
+            problems: Vec::new(),
+        },
+    };
+    problems.extend(resolution.problems.iter().cloned());
+    if options.packages.checks_lock() && root.manifest.is_some() {
+        crate::package::check_lock(lock_text.as_deref(), &resolution, &mut problems);
+    }
+    let readings: Vec<(String, Reading)> = resolution
+        .order
+        .iter()
+        .map(|ns| {
+            (
+                ns.clone(),
+                read(&*resolution.packages[ns].source, Some(ns), &options),
+            )
+        })
+        .collect();
+    let mut defined: BTreeMap<String, Defined> = readings
+        .iter()
+        .map(|(ns, reading)| (ns.clone(), defined_with_exports(reading)))
+        .collect();
+    defined.insert(root.home.clone(), defined_with_exports(&root));
+    let mut packages = BTreeMap::new();
+    for (namespace, reading) in readings {
+        let resolved = resolution.packages.remove(&namespace).expect("resolved");
+        let project = check(
+            reading,
+            &*resolved.source,
+            &defined,
+            &options,
+            BTreeMap::new(),
+            true,
+        );
+        packages.insert(namespace, LoadedPackage { resolved, project });
+    }
+    for (namespace, package) in &packages {
+        problems.extend(
+            package
+                .project
+                .problems
+                .iter()
+                .cloned()
+                .map(|p| crate::package::in_package(namespace, p)),
+        );
+    }
+    root.problems = problems;
+    check(root, source, &defined, &options, packages, false)
+}
+
+/// One project's (or package's) files, classified and each resource read and
+/// checked on its own; `home` is the namespace it's loaded as (its manifest's, for the project).
+fn read(source: &dyn ProjectSource, home: Option<&str>, options: &Options) -> Reading {
     let read = |path: &str| source.read(path);
     let files: BTreeSet<String> = source
         .files()
@@ -155,13 +307,12 @@ pub fn load_with<'a>(
         }),
         false => None,
     };
-
     let scan = snapshot::scan(&files);
     problems.extend(scan.problems);
     let mut reader = Source::new(&files, &read);
-    reader.game = game;
+    reader.game = options.game;
     reader.minecraft = minecraft;
-    reader.features = Some(features);
+    reader.features = Some(options.features);
     let resources: Vec<Resource> = scan
         .resources
         .into_iter()
@@ -175,11 +326,44 @@ pub fn load_with<'a>(
             })
         })
         .collect();
+    let home = match home {
+        Some(home) => home.to_owned(),
+        None => manifest
+            .as_ref()
+            .map(|m| m.namespace.clone())
+            .unwrap_or_default(),
+    };
+    Reading {
+        home,
+        manifest,
+        manifest_text,
+        vanilla,
+        default_font,
+        resources,
+        problems,
+    }
+}
 
-    let home = manifest
-        .as_ref()
-        .map(|m| m.namespace.clone())
-        .unwrap_or_default();
+/// `reading` checked against itself and what it can name of the packages it
+/// depends on (`defined`, by namespace): with `packages`, the project's
+/// project holding them. `in_package` for a package checked on its own.
+fn check<'a>(
+    reading: Reading,
+    source: &dyn ProjectSource,
+    defined: &BTreeMap<String, Defined>,
+    options: &Options<'a>,
+    packages: BTreeMap<String, LoadedPackage<'a>>,
+    in_package: bool,
+) -> Project<'a> {
+    let Reading {
+        home,
+        manifest,
+        manifest_text,
+        vanilla,
+        default_font,
+        resources,
+        mut problems,
+    } = reading;
     // The manifest names resources too (a world's terrain): its references are found and checked like any file's.
     let manifest_json = manifest
         .as_ref()
@@ -200,9 +384,30 @@ pub fn load_with<'a>(
         })
         .chain(manifest_uses)
         .collect();
-    let defined = defined(&home, &resources);
+    // Its own namespace, all of it; of each package it depends on, what that exports.
+    let mut namespaces = BTreeMap::new();
+    if let Some(own) = defined.get(&home) {
+        namespaces.insert(
+            home.clone(),
+            Defined {
+                exported: None,
+                ..own.clone()
+            },
+        );
+    }
+    for name in manifest
+        .iter()
+        .flat_map(|m| m.dependencies.iter().flat_map(|d| d.iter()))
+        .map(|(k, _)| &k.0)
+    {
+        if *name != home
+            && let Some(theirs) = defined.get(name)
+        {
+            namespaces.insert(name.clone(), theirs.clone());
+        }
+    }
     let references = ReferenceIndex {
-        namespaces: BTreeMap::from([(home.clone(), defined)]),
+        namespaces,
         home,
         uses,
     };
@@ -212,11 +417,11 @@ pub fn load_with<'a>(
         default_font,
         resources,
         references,
-        game,
-        source,
+        game: options.game,
+        packages,
+        in_package,
         problems: Vec::new(),
     };
-
     let mut sink = ProblemSink::new(manifest::FILE_NAME);
     exports(&project, &mut sink);
     report_references(&project.references, &mut sink);
@@ -224,7 +429,7 @@ pub fn load_with<'a>(
     problems.extend(sink.problems);
     for resource in &project.resources {
         problems.extend(resource.problems.iter().cloned());
-        problems.extend(across(&project, resource));
+        problems.extend(across(&project, source, resource));
     }
     // The loader's order: by file, then line, keeping the order they were found in otherwise.
     problems.sort_by(|a, b| {
@@ -234,6 +439,27 @@ pub fn load_with<'a>(
     });
     project.problems = problems;
     project
+}
+
+/// What a reading defines, with the part it exports.
+fn defined_with_exports(reading: &Reading) -> Defined {
+    let exported = |kind: &str, id: &str| {
+        let folder = crate::kinds::by_id(kind).map(|k| k.folder);
+        reading
+            .manifest
+            .as_ref()
+            .and_then(|m| m.exports.as_ref())
+            .and_then(|e| e.get_str(folder.unwrap_or_default()))
+            .is_some_and(|ids| ids.iter().any(|i| i == id))
+    };
+    Defined {
+        exported: Some(Box::new(defined(
+            &reading.home,
+            &reading.resources,
+            &exported,
+        ))),
+        ..defined(&reading.home, &reading.resources, &|_, _| true)
+    }
 }
 
 /// Every broken reference the file of `sink` makes, reported in it.
@@ -253,9 +479,10 @@ fn report_references(references: &ReferenceIndex, sink: &mut ProblemSink) {
 
 /// What `resource` says about the rest of the project: its kind's checks
 /// across resources, its stacks', and its references'.
-fn across(project: &Project, resource: &Resource) -> Vec<Problem> {
+fn across(project: &Project, source: &dyn ProjectSource, resource: &Resource) -> Vec<Problem> {
     let cx = Across {
         project,
+        source,
         found: &resource.found,
     };
     let Some(document) = &resource.document else {
@@ -272,6 +499,7 @@ fn across(project: &Project, resource: &Resource) -> Vec<Problem> {
 /// and the project around it.
 pub struct Across<'a> {
     project: &'a Project<'a>,
+    source: &'a dyn ProjectSource,
     pub found: &'a Found,
 }
 
@@ -305,22 +533,22 @@ impl<'a> Across<'a> {
 
     /// Whether `image` reads pixels at all.
     pub fn reads_images(&self) -> bool {
-        self.project.source.reads_images()
+        self.source.reads_images()
     }
 
     /// A PNG's pixel facts by project path.
     pub fn image(&self, path: &str) -> Option<ImageInfo> {
-        self.project.source.image(path)
+        self.source.image(path)
     }
 
     /// Whether `size` knows pictures' sizes at all.
     pub fn reads_sizes(&self) -> bool {
-        self.project.source.reads_sizes()
+        self.source.reads_sizes()
     }
 
     /// A PNG's `[width, height]` by project path.
     pub fn size(&self, path: &str) -> Option<[u32; 2]> {
-        self.project.source.size(path)
+        self.source.size(path)
     }
 
     /// The files in the resource's folder, relative to it.
@@ -330,7 +558,7 @@ impl<'a> Across<'a> {
 
     /// A project file's text.
     pub fn read_file(&self, path: &str) -> Option<String> {
-        self.project.source.read(path)
+        self.source.read(path)
     }
 
     /// What the project's own resources put in the start-up datapack, by
@@ -353,6 +581,11 @@ impl<'a> Across<'a> {
     /// `fonts/default.json`, when it's there and reads.
     pub fn default_font(&self) -> Option<&'a crate::font::DefaultFontFile> {
         self.project.default_font.as_ref()
+    }
+
+    /// Whether the resource is a package's, checked on its own in its own namespace.
+    pub fn in_package(&self) -> bool {
+        self.project.in_package
     }
 
     /// Every resource of a kind (by its id) that read, by id.
@@ -409,8 +642,12 @@ impl<'a> Across<'a> {
 /// What a project's resources define, by the kinds of reference that can name
 /// them: each kind's ids, a pack's entries, and what its datapacks define in
 /// its namespace.
-fn defined(home: &str, resources: &[Resource]) -> Defined {
-    let read = || resources.iter().filter(|r| r.read);
+fn defined(home: &str, resources: &[Resource], include: &dyn Fn(&str, &str) -> bool) -> Defined {
+    let read = || {
+        resources
+            .iter()
+            .filter(|r| r.read && include(r.found.kind.id, &r.found.id))
+    };
     let ids = |kind: &str| -> BTreeSet<String> {
         read()
             .filter(|r| r.found.kind.id == kind)

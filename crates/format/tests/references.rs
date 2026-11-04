@@ -3,29 +3,12 @@
 //! written by Kotlin's walker): a reference a model doesn't mark (or marks
 //! that Kotlin doesn't) shows up as a difference.
 
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use netherforge_format::manifest::FILE_NAME;
 use netherforge_format::project;
 use netherforge_format::reference::RefKind;
 use netherforge_format::schema;
-
-fn files_in(dir: &Path, base: &Path, out: &mut BTreeSet<String>) {
-    for entry in std::fs::read_dir(dir).unwrap() {
-        let path = entry.unwrap().path();
-        if path.is_dir() {
-            files_in(&path, base, out);
-        } else {
-            out.insert(
-                path.strip_prefix(base)
-                    .unwrap()
-                    .to_string_lossy()
-                    .replace('\\', "/"),
-            );
-        }
-    }
-}
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -45,14 +28,15 @@ fn every_reference_in_the_examples_is_found() {
         let Ok(expected) = std::fs::read_to_string(&golden) else {
             continue;
         };
-        let mut files = BTreeSet::new();
-        files_in(&dir, &dir, &mut files);
-        let read = |p: &str| std::fs::read_to_string(dir.join(p)).ok();
-        let source = project::Files {
-            files: &files,
-            read: &read,
-        };
-        let loaded = project::load(&source, None);
+        let source = project::Folder::open(&dir).unwrap();
+        let packages = netherforge_format::package::Folders { root: dir.clone() };
+        let loaded = project::load(
+            &source,
+            project::Options {
+                packages: &packages,
+                ..Default::default()
+            },
+        );
         let actual = serde_json::to_value(&loaded.references.uses).unwrap();
         let expected: serde_json::Value = serde_json::from_str(&expected).unwrap();
         compared += 1;
@@ -75,29 +59,12 @@ fn every_reference_in_the_examples_is_found() {
                 "{name}:\n  missing: {missing:#?}\n  extra: {extra:#?}"
             ));
         }
-        // An example is a valid project: it loads without errors. Packages
-        // aren't loaded yet (`project`'s note), so a reference into a dependency is set aside.
-        let dependencies: Vec<String> = loaded
-            .manifest
+        // An example is a valid project: it loads without errors, its packages and all.
+        for p in loaded
+            .problems
             .iter()
-            .flat_map(|m| {
-                m.dependencies
-                    .iter()
-                    .flat_map(|d| d.iter().map(|(k, _)| k.to_string()))
-            })
-            .collect();
-        let into_dependency = |p: &netherforge_format::Problem| {
-            p.code.as_deref() == Some("reference.namespace")
-                && dependencies
-                    .iter()
-                    .any(|d| p.message.starts_with(&format!("\"{d}\"")))
-        };
-        for p in loaded.problems.iter().filter(|p| {
-            p.code
-                .as_deref()
-                .is_some_and(|c| c.starts_with("reference."))
-                && !into_dependency(p)
-        }) {
+            .filter(|p| p.severity == netherforge_format::Severity::Error)
+        {
             different.push(format!("{name}: {}", p.to_json()));
         }
     }

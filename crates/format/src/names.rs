@@ -77,6 +77,16 @@ pub fn is_namespace(text: &str) -> bool {
 pub fn is_version(text: &str) -> bool {
     SEMVER.is_match(text)
 }
+/// A semantic version's parts, `major`, `minor`, `patch` and its prerelease (empty for none).
+pub fn version_parts(text: &str) -> Option<[&str; 4]> {
+    let c = SEMVER.captures(text)?;
+    let part = |i| c.get(i).map_or("", |m| m.as_str());
+    Some([part(1), part(2), part(3), part(4)])
+}
+/// A path segment of a file or folder: letters, digits, `_`, `.` and `-`, not starting with `.` or `-`.
+pub fn is_segment(text: &str) -> bool {
+    SEGMENT.is_match(text)
+}
 pub fn is_node_name(text: &str) -> bool {
     NODE_NAME.is_match(text)
 }
