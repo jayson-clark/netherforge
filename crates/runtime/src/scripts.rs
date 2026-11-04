@@ -42,6 +42,14 @@ pub struct Report {
     pub gave_up: bool,
 }
 
+/// A line a script logged (`log`, `print`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Log {
+    pub scope: ScopeId,
+    pub line: String,
+    pub location: Option<netherforge_luau::Location>,
+}
+
 /// What an event is raised on: a handle (by its userdata), or `nf`.
 #[derive(Clone)]
 pub enum Target {
@@ -138,6 +146,7 @@ struct State {
     due: BTreeMap<(u64, u64), ()>,
     tasks: HashMap<u64, Task>,
     reports: Vec<Report>,
+    logs: Vec<Log>,
     /// Ids of waits handed to running tasks, which they're woken with.
     next_token: u64,
 }
@@ -212,8 +221,38 @@ impl Scripts {
     pub fn open(&self, name: &str, memory_key: &str, budget: u64) -> mlua::Result<ScopeId> {
         let host = &self.host();
         let scope = host.open_scope(name, memory_key)?;
-        let nf = netherforge_api::nf_for(host.lua(), scope)?;
-        host.env(scope).expect("just opened").raw_set("nf", nf)?;
+        let lua = host.lua();
+        let env = host.env(scope).expect("just opened");
+        env.raw_set("nf", netherforge_api::nf_for(lua, scope)?)?;
+        // A scope's own `_G` is its environment.
+        env.raw_set("_G", env.clone())?;
+        let scripts = Rc::downgrade(&self.0);
+        let log = lua.create_function(move |lua, parts: mlua::Variadic<Value>| {
+            let Some(inner) = scripts.upgrade() else {
+                return Ok(());
+            };
+            let mut texts = Vec::with_capacity(parts.len());
+            for part in parts.iter() {
+                let text: String = lua.coerce_string(part.clone())?.map_or_else(
+                    || match part {
+                        Value::Nil => "nil".to_owned(),
+                        Value::Boolean(b) => b.to_string(),
+                        other => format!("{}: {:p}", other.type_name(), other.to_pointer()),
+                    },
+                    |s| s.to_string_lossy(),
+                );
+                texts.push(text);
+            }
+            let location = netherforge_luau::script_location(lua);
+            inner.state.borrow_mut().logs.push(Log {
+                scope,
+                line: texts.join("\t"),
+                location,
+            });
+            Ok(())
+        })?;
+        env.raw_set("log", log.clone())?;
+        env.raw_set("print", log)?;
         self.0.state.borrow_mut().scopes.insert(
             scope,
             ScopeInfo {
@@ -309,6 +348,24 @@ impl Scripts {
             .scopes
             .get(&scope)
             .map_or(0, |s| s.budget)
+    }
+
+    /// Whether `scope` is open and its script hasn't failed.
+    pub fn is_live(&self, scope: ScopeId) -> bool {
+        self.live(scope)
+    }
+
+    /// `scope`'s body failed (a module's, while it was required): reported,
+    /// and what it made goes.
+    pub fn fail_body(&self, scope: ScopeId, failure: Failure) {
+        self.report(scope, "body", failure, false);
+        self.disable(scope);
+    }
+
+    /// What scripts have logged since the last time: the scope, the line, and
+    /// where it was logged from.
+    pub fn take_logs(&self) -> Vec<Log> {
+        std::mem::take(&mut self.0.state.borrow_mut().logs)
     }
 
     fn live(&self, scope: ScopeId) -> bool {

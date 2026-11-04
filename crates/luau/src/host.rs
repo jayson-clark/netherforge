@@ -454,7 +454,7 @@ fn unknown_scope(scope: ScopeId) -> Failure {
 
 /// Where the innermost script frame on the stack is: the first function from
 /// a project chunk (`@path`), past the host's own and the library's.
-fn project_location(lua: &Lua) -> Option<Location> {
+pub fn project_location(lua: &Lua) -> Option<Location> {
     (0..32).find_map(|level| {
         lua.inspect_stack(level, |debug| {
             let source = debug.source();

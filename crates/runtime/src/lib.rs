@@ -9,9 +9,11 @@ use netherforge_api::api::{LuaApi, NfApi, SubscriptionApi, TaskApi};
 use netherforge_api::{ApiError, ApiResult, Runtime};
 use netherforge_luau::{Host, ScopeId};
 
+pub mod modules;
 pub mod scripts;
 
-pub use scripts::{Delivered, MAX_ERRORS, Report, Scripts, Target};
+pub use modules::{Modules, Owner, Project};
+pub use scripts::{Delivered, Log, MAX_ERRORS, Report, Scripts, Target};
 
 /// The API as the runtime implements it so far, every other class unported.
 struct Api {

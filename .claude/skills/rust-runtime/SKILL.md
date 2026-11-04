@@ -301,4 +301,29 @@ Not ported yet (the Kotlin runtime does them): `:on` on handles other than `nf` 
 service's liveness), `nf.wait_for` on a handle, checking a writable field's value as it's
 assigned (`events.check`), the same error within five seconds only counted, the per-scope time
 per tick (`maxTickMillis`, which holds back timers and tick handlers), time per scope and the
-profiler, an async function's waiting form (no callback, in a task), and `require`.
+profiler, and an async function's waiting form (no callback, in a task).
+
+## Modules (`crates/runtime/src/modules.rs`)
+
+The Kotlin `Modules` and the prelude's `scopes`, in Rust. A `Project` is the files' text by
+project path; a module is a folder `modules/<id>/` with an `init.lua`, started on its first
+`require` or by `start()` (all, in name order).
+
+- **Resolution** is `Modules.resolve`'s: dots are folders, a folder may be required by its
+  `init.lua`; the caller's own files first (a module's folder, or a resource script's folder),
+  then the module the first part names. A file beside a resource's script runs in the
+  requiring scope itself, once per scope (so each instance has its own copy); requiring the
+  script's own file is an error. The messages are Kotlin's.
+- **Each file runs once per scope it runs in** (`loaded`, by scope and path, `true` for a file
+  that returns nothing), and a second require while it runs is "circular require of ...".
+  A module file runs as the module's code wherever it's required from: it's a call in on the
+  module's scope (its `nf`, its memory category), whose steps are charged to the requirer.
+- **A failed module** is disabled and reported once; its next requirer is told
+  "module "x" failed to load; fix it and save to reload".
+- `dependents(id)` is every other scope that required the module, which its reload restarts.
+  `reload(id, project)` closes the module's scope and starts it from the new files.
+- Every scope also gets `_G` (its own environment), and `log` and `print`, whose lines
+  (`Scripts::take_logs`) carry the script's location.
+
+Not ported yet: packages (`acme:api`, exports, namespaces), group folders (`modules/(x)/m`),
+and where the session's reload restarts dependents.

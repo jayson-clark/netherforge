@@ -11,6 +11,6 @@ pub mod random;
 
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use failure::{Failure, Location, Stop};
-pub use host::{Host, ScopeId, WeakHost};
+pub use host::{Host, ScopeId, WeakHost, project_location as script_location};
 pub use limits::Limits;
 pub use mlua;
