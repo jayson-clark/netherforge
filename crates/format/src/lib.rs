@@ -2,7 +2,9 @@
 //! (see the rust-runtime skill, "Format"). One format: the same bytes on
 //! every side, so a file nobody changed is never a diff.
 
+pub mod canonical;
 pub mod json;
+pub mod manifest;
 pub mod problem;
 pub mod read;
 

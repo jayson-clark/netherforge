@@ -390,5 +390,15 @@ unchanged.
   comma (serde calls one before `}` "key must be a string"). `tests/read.rs` holds it to the
   goldens' parse problems.
 
-Next in format: `netherforge.json`, names, the
+- **Canonical models** (`canonical.rs`): a string-keyed map is `canonical::Map<V>`, a
+  `BTreeMap` by `Key`, whose order is kotlinx's `ordered` (whole-number keys first, as numbers,
+  then the rest as strings); an enum-keyed map is a `BTreeMap` by the enum, whose derived order
+  is its declaration's, which is format's. Fields are serde's `camelCase`, an absent optional
+  is left out (`skip_serializing_if`), and a sealed type is `#[serde(tag = "type")]`, which
+  writes the tag first as kotlinx does. `canonical::write` prints a model as its file.
+- **`netherforge.json`** (`manifest.rs`): `Manifest` and everything in it, and `canonical()`
+  (`ManifestKind`'s: the schema, sets sorted, worlds that say nothing dropped). Every manifest
+  in the examples and the goldens reads, and the examples' write back to the same bytes.
+
+Next in format: the manifest's checks (the `manifest-*` goldens), names, the
 registry of kinds and the snapshot, then each kind with its golden tests.
