@@ -328,6 +328,31 @@ project path; a module is a folder `modules/<id>/` with an `init.lua`, started o
 Not ported yet: packages (`acme:api`, exports, namespaces), group folders (`modules/(x)/m`),
 and where the session's reload restarts dependents.
 
+## Sessions (`crates/runtime/src/session.rs`)
+
+`Session` is the Kotlin `ProjectSession` as far as the ported services go: the project read through
+format with its packages (`project::load`), refused when `netherforge.json` has an error or doesn't
+read, or when it targets a Minecraft the Platform doesn't run (`runtime.minecraft-unsupported`,
+Kotlin's words), otherwise its services started in a `Room`, ticked, reloaded and stopped.
+
+- **Services are one list** (`services()`): a `Service` starts, ticks and hears every hook in
+  registration order, stops in reverse, and a kind of resource reloads through the one service whose
+  `reloads()` names it. `reload(changed paths)` reads the project again and hands each changed kind's
+  ids to its service; a change to `netherforge.json` or the lock restarts the session whole.
+- **Modules** are the first service: every module of the project's without errors starts in a
+  scope of its own (`Modules`), and one that changed restarts from its new files with every module
+  that required it.
+- **Reports go to the Platform's log**: a script's failure as a warning (an error once it gave up
+  after `MAX_ERRORS`), a line it logged as info with its scope and place
+  (`[module door] hello (modules/door/init.lua:1)`), and the project's errors as warnings as it
+  starts. What a session's packages may use is what the manifest's `requires` says, by the names its
+  model gives them.
+
+Not yet: the game's facts from the Platform (`external::GameData` is a placeholder, so format reads
+without them), packages' modules (a module is the project's own), per-package grants, the bridge to
+the editor, the debugger, and every service but modules (centities, menus, dialogs, items...),
+each with the compiler it needs.
+
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 
 The roadmap's "describe `Platform` and `PlatformEvents` in a language-neutral spec, and generate
@@ -355,6 +380,13 @@ side). Types are strings in Kotlin's spelling (`src/types.ts`, parsed by `src/ty
   `Map` a `HashMap`, a function a boxed `Fn`, `UUID` a `Uuid`, `Any` a `Dynamic`. A Kotlin
   overload (`contents(ref)`, `contents(ref, filter)`) is named by its last parameter in Rust
   (`contents_with_filter`).
+
+- **Fakes are generated too** (`unported.rs`): `Unported` implements every interface of the spec,
+  its groups itself and every other answer a panic naming the method ("TeamOps::names isn't on
+  this platform"); `FakeX` is `X` with every method defaulting to `Unported`'s (a blanket impl
+  makes it an `X`). A test's fake implements `FakePlatform` and the `Fake` groups it means
+  (`tests/session.rs`: the log and the server's info), so it's written as the ported runtime needs
+  it and can't drift from the spec. Kotlin's hand-written `FakePlatform` (testkit) has no Rust twin.
 
 Still to come: the Kotlin side generated from the spec (then `extract.ts` and the drift test
 go), the FFM glue between them, the coarse crossings the roadmap asks for (per-tick batches,
