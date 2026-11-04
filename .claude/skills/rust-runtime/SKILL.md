@@ -360,3 +360,21 @@ Still to come: the Kotlin side generated from the spec (then `extract.ts` and th
 go), the FFM glue between them, the coarse crossings the roadmap asks for (per-tick batches,
 handles as integers, flat buffers: annotations on the spec's methods), and the server's raised
 events (`GameEvents`) in Rust, from `packages/api`'s `raised`.
+
+## Format (`crates/format`)
+
+`packages/format` in Rust, ported area by area; Kotlin's stays the writer until a kind is ported
+here. The rule is byte-identical output: a file the Kotlin side wrote reads and prints back
+unchanged.
+
+- **The printer** (`json.rs`): `CanonicalJson.print`, `formatNumber`, `quote`, `childPath`.
+  Numbers take Rust's shortest round-trip digits (`{:e}`) and lay them out as format does (a
+  point past 21 digits or 5 zeros becomes an exponent: `1e+21`, `1e-7`). It prints a
+  `serde_json::Value` in the order its entries are given (`preserve_order`); the models put
+  maps in canonical order. `tests/json.rs` holds it to every project file in `examples/`
+  (118 files), leaving out what format doesn't write (`.luarc.json`, a pack's Minecraft
+  models).
+
+Next in format: problems and their catalogue, the strict reader (unknown keys, missing keys,
+bad enum values, with format's messages, path and line), `netherforge.json`, names, the
+registry of kinds and the snapshot, then each kind with its golden tests.
