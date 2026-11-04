@@ -630,7 +630,8 @@ Next in format: the compilers, with the runtime pieces that use them. The compil
 - **Terrain**: `kind/terrain/compiled.rs` (the compiler, `with_structures`, `with_script_blocks`),
   `generate.rs` (the generator, its `Sampler` with interior caches, the stages), `density.rs`. The fixtures of
   Kotlin's terrain goldens are files in `testdata/terrain` both sides read (`hills.json`, `areas.json`,
-  `tree.json`, `density.json`).
+  `tree.json`, `density.json`). The editor's map and slice are `preview.rs` (`TerrainPreview`,
+  `testdata/terrain/preview.json`); a script failure serialises straight as the editor's `TerrainScriptError`.
 - **Terrain scripts run on the runtime's host** (`crates/terrain`): the generator's `TerrainScript`/`ScriptState`
   traits are format's, the Luau host is `netherforge-terrain`, so format stays free of Luau (and buildable to
   WebAssembly). Each state is a `netherforge-luau` `Host` in a per-thread pool; `glue.luau` is `terrain-glue.lua`
@@ -638,6 +639,18 @@ Next in format: the compilers, with the runtime pieces that use them. The compil
   `math.random` stream, `Random::lua_seeded`; a plan's splitmix64). The API scripts see is unchanged, so the
   scripted worlds agree with `script.txt` and `plans.txt` hash for hash. What Luau can't say: `math.type` is by
   whole-number-ness, a world seed past 2^53 rounds, `1 << 40` is `2 ^ 40`.
+- **Datapacks and resource packs compile per resource, and are built across them**: a resource pack's
+  `compile_all` (`kind/resource_pack/compiled.rs`) numbers glyphs across every pack, so the compiled packs are
+  `Project::compiled_resource_packs` (none while any pack has errors), not `compiled::<C>()`. Its parts are
+  `fonts.rs` (`PackFonts`' layout), `hud.rs` (HUD lines, half-even rounding as Kotlin's), `sounds.rs`, `models.rs`.
+- **The built pack** is `build.rs` (`PackLayout`): every file a player's pack holds, `Entry::{Text, Copy, Bytes}`;
+  the blocks' plan is `carriers::plan`, and the pictures a build draws are written by `png.rs` (stored deflate,
+  byte for byte Kotlin's). `tests/pack_build.rs` agrees with `testdata/packs/<example>.json`, which Kotlin's
+  `PackBuildGoldenTest` writes (bytes as SHA-256).
+- **The start-up datapack** is `startup::build`: each kind says its files once (`Document::datapack`, given its
+  running resources), dispatched through `kinds::ALL`, so there's no list of kinds that write files. Biomes,
+  dimension types, structures, advancements, dialogs, skies' twins and generated loot are `startup`'s submodules;
+  the text (MiniMessage to JSON) comes in as `TextJson`. `tests/startup.rs` agrees with `testdata/datapack`.
 
 ## One source for each thing
 
