@@ -4,5 +4,6 @@
 
 pub mod json;
 pub mod problem;
+pub mod read;
 
 pub use problem::{Location, Problem, ProblemCode, ProblemSink, Severity, codes};

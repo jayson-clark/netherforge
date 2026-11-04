@@ -381,6 +381,14 @@ unchanged.
   so a code that isn't in the catalogue doesn't compile, and there's one list. When the Kotlin
   side goes, the catalogue moves into this crate and the page is written from it.
 
-Next in format: the strict reader (unknown keys, missing keys,
-bad enum values, with format's messages, path and line), `netherforge.json`, names, the
+- **The strict reader** (`read.rs`, `read::parse::<T>(text, file)`): serde models with
+  `deny_unknown_fields`, `serde_path_to_error` for the path, and format's messages and
+  positions as the golden tests have them, which are kotlinx's: an unknown key at the object
+  that has it, with its first character's line and column (serde doesn't say where a type's
+  own error is, so `locate` walks the text along the path to find the key); a missing key; a
+  value that isn't one of an enum's (no position, as kotlinx); a trailing comma just past the
+  comma (serde calls one before `}` "key must be a string"). `tests/read.rs` holds it to the
+  goldens' parse problems.
+
+Next in format: `netherforge.json`, names, the
 registry of kinds and the snapshot, then each kind with its golden tests.

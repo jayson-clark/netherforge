@@ -13,6 +13,8 @@ rust-version = "1.90"
 [workspace.dependencies]
 mlua = { version = "0.12", features = ["luau"] }
 serde_json = { version = "1", features = ["preserve_order"] }
+serde = { version = "1", features = ["derive"] }
+serde_path_to_error = "0.1"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
