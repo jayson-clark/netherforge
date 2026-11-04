@@ -375,6 +375,12 @@ unchanged.
   (118 files), leaving out what format doesn't write (`.luarc.json`, a pack's Minecraft
   models).
 
-Next in format: problems and their catalogue, the strict reader (unknown keys, missing keys,
+- **Problems** (`problem.rs`): `Problem`, `ProblemSink`, `Severity`, as format's. **The
+  catalogue is format's**: `build.rs` reads `docs/format/problems.md` (which Kotlin's
+  `ProblemCodes` writes through its golden test) into constants, `codes::PROJECT_NAMESPACE`,
+  so a code that isn't in the catalogue doesn't compile, and there's one list. When the Kotlin
+  side goes, the catalogue moves into this crate and the page is written from it.
+
+Next in format: the strict reader (unknown keys, missing keys,
 bad enum values, with format's messages, path and line), `netherforge.json`, names, the
 registry of kinds and the snapshot, then each kind with its golden tests.

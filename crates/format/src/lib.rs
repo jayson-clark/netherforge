@@ -3,3 +3,6 @@
 //! every side, so a file nobody changed is never a diff.
 
 pub mod json;
+pub mod problem;
+
+pub use problem::{Location, Problem, ProblemCode, ProblemSink, Severity, codes};
