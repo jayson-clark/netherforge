@@ -48,7 +48,11 @@ fn every_reference_in_the_examples_is_found() {
         let mut files = BTreeSet::new();
         files_in(&dir, &dir, &mut files);
         let read = |p: &str| std::fs::read_to_string(dir.join(p)).ok();
-        let loaded = project::load(&files, &read, None);
+        let source = project::Files {
+            files: &files,
+            read: &read,
+        };
+        let loaded = project::load(&source, None);
         let actual = serde_json::to_value(&loaded.references.uses).unwrap();
         let expected: serde_json::Value = serde_json::from_str(&expected).unwrap();
         compared += 1;

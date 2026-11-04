@@ -159,16 +159,6 @@ const NOT_YET: &[&str] = &[
     "project.world-height",
     "project.dependency",
     "project.export",
-    "screen_font.grid",
-    "resource_pack.vanilla-missing",
-    "resource_pack.hud-hide",
-    "resource_pack.sound-event",
-    "resource_pack.image",
-    "resource_pack.picture-size",
-    "resource_pack.too-many-glyphs",
-    "resource_pack.replace-size",
-    "resource_pack.replace-shape",
-    "resource_pack.replace-name",
     "datapack.namespace",
     "datapack.conflict",
     "datapack.reference",
@@ -244,7 +234,11 @@ fn whole_cases_are_formats() {
         files_in(&dir, &dir, &mut files);
         files.remove("expected.json");
         let read = |p: &str| std::fs::read_to_string(dir.join(p)).ok();
-        let loaded = netherforge_format::project::load(&files, &read, None);
+        let source = netherforge_format::project::Files {
+            files: &files,
+            read: &read,
+        };
+        let loaded = netherforge_format::project::load(&source, None);
         let mut actual: Vec<String> = loaded
             .problems
             .iter()

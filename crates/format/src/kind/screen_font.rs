@@ -158,6 +158,30 @@ impl ScreenFontFile {
 }
 
 impl Document for ScreenFontFile {
+    /// A bitmap font's picture cuts into its grid of characters.
+    fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        let Some(file) = self.file.as_deref() else {
+            return;
+        };
+        if self.kind != ScreenFontType::Bitmap || !cx.reads_sizes() || !cx.files().contains(file) {
+            return;
+        }
+        let Some((across, down)) = self.grid() else {
+            return;
+        };
+        let location = cx.found.kind.location_of(cx.id(), &cx.found.group);
+        let Some([width, height]) = cx.size(&format!("{location}/{file}")) else {
+            return;
+        };
+        if !(width as usize).is_multiple_of(across) || !(height as usize).is_multiple_of(down) {
+            sink.report(
+                codes::SCREEN_FONT_GRID,
+                format!("The picture is {width} by {height} pixels, which doesn't cut into {across} characters across and {down} rows"),
+                Some("$.chars".into()),
+            );
+        }
+    }
+
     const SCHEMA: &'static str = "../../.netherforge/schema/screen_font.schema.json";
 
     fn set_schema(&mut self, schema: Option<String>) {

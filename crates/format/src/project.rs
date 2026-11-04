@@ -39,7 +39,7 @@ impl Resource {
 }
 
 /// A project read and checked.
-pub struct Project<'g> {
+pub struct Project<'a> {
     pub manifest: Option<Manifest>,
     /// `client/vanilla.json`, when it's there and reads.
     pub vanilla: Option<crate::vanilla::VanillaFile>,
@@ -50,18 +50,75 @@ pub struct Project<'g> {
     /// What its references can name, and every reference its files make.
     pub references: ReferenceIndex,
     /// The game's facts it was read with.
-    game: Option<&'g dyn GameData>,
+    game: Option<&'a dyn GameData>,
+    /// Where it was read from.
+    source: &'a dyn ProjectSource,
     /// Every problem, by file and then line (each file's in the order they were found).
     pub problems: Vec<Problem>,
 }
 
-/// Reads and checks the project whose files are `files`, read by `read`.
-pub fn load<'g>(
-    files: &BTreeSet<String>,
-    read: &dyn Fn(&str) -> Option<String>,
-    game: Option<&'g dyn GameData>,
-) -> Project<'g> {
-    let files: BTreeSet<String> = files
+/// Read access to a project's files (format's `ProjectSource`): paths are
+/// project-relative with `/`. The plugin reads the disk, the editor its open
+/// workspace, tests a map. What only a file's bytes say (a picture's pixels)
+/// comes from the host, when it reads them.
+pub trait ProjectSource {
+    /// Every file in the project.
+    fn files(&self) -> &BTreeSet<String>;
+    /// A file's text, if it's there.
+    fn read(&self, path: &str) -> Option<String>;
+    /// Whether `image` reads pixels at all: then `None` for a texture that's there means it can't be read.
+    fn reads_images(&self) -> bool {
+        false
+    }
+    /// A PNG's pixel facts, when this source reads them and the file is a readable picture.
+    fn image(&self, _path: &str) -> Option<ImageInfo> {
+        None
+    }
+    /// Whether `size` answers at all: a source that reads images does, and one that only measures headers says so.
+    fn reads_sizes(&self) -> bool {
+        self.reads_images()
+    }
+    /// A PNG's `[width, height]` in pixels, where known.
+    fn size(&self, path: &str) -> Option<[u32; 2]> {
+        self.image(path).map(|i| [i.width, i.height])
+    }
+}
+
+/// What only a picture's pixels say (`ImageInfo`): its size, and how far its
+/// opaque columns reach (what a bitmap glyph's advance is measured from).
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageInfo {
+    pub width: u32,
+    pub height: u32,
+    /// The rightmost column holding a pixel that isn't fully transparent, plus one.
+    pub opaque_width: u32,
+    /// Whether each column, left to right, holds such a pixel; a host may leave it out for a picture no wider than a font's sheet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opaque_columns: Option<Vec<bool>>,
+}
+
+/// A project's files and a way to read them, and nothing of their bytes.
+pub struct Files<'a> {
+    pub files: &'a BTreeSet<String>,
+    pub read: &'a dyn Fn(&str) -> Option<String>,
+}
+
+impl ProjectSource for Files<'_> {
+    fn files(&self) -> &BTreeSet<String> {
+        self.files
+    }
+
+    fn read(&self, path: &str) -> Option<String> {
+        (self.read)(path)
+    }
+}
+
+/// Reads and checks the project in `source`.
+pub fn load<'a>(source: &'a dyn ProjectSource, game: Option<&'a dyn GameData>) -> Project<'a> {
+    let read = |path: &str| source.read(path);
+    let files: BTreeSet<String> = source
+        .files()
         .iter()
         .filter(|f| !f.starts_with(".git/") && !f.starts_with(".netherforge/"))
         .cloned()
@@ -91,13 +148,13 @@ pub fn load<'g>(
 
     let scan = snapshot::scan(&files);
     problems.extend(scan.problems);
-    let mut source = Source::new(&files, read);
-    source.game = game;
+    let mut reader = Source::new(&files, &read);
+    reader.game = game;
     let resources: Vec<Resource> = scan
         .resources
         .into_iter()
         .filter_map(|found| {
-            let read = kind::read(&found, &source)?;
+            let read = kind::read(&found, &reader)?;
             Some(Resource {
                 read: read.document.is_some() || !found.kind.is_document(),
                 found,
@@ -144,6 +201,7 @@ pub fn load<'g>(
         resources,
         references,
         game,
+        source,
         problems: Vec::new(),
     };
 
@@ -229,6 +287,31 @@ impl<'a> Across<'a> {
     /// `client/vanilla.json`, when it's there and reads.
     pub fn vanilla(&self) -> Option<&'a crate::vanilla::VanillaFile> {
         self.project.vanilla.as_ref()
+    }
+
+    /// Whether `image` reads pixels at all.
+    pub fn reads_images(&self) -> bool {
+        self.project.source.reads_images()
+    }
+
+    /// A PNG's pixel facts by project path.
+    pub fn image(&self, path: &str) -> Option<ImageInfo> {
+        self.project.source.image(path)
+    }
+
+    /// Whether `size` knows pictures' sizes at all.
+    pub fn reads_sizes(&self) -> bool {
+        self.project.source.reads_sizes()
+    }
+
+    /// A PNG's `[width, height]` by project path.
+    pub fn size(&self, path: &str) -> Option<[u32; 2]> {
+        self.project.source.size(path)
+    }
+
+    /// The files in the resource's folder, relative to it.
+    pub fn files(&self) -> &'a BTreeSet<String> {
+        &self.found.inside
     }
 
     /// `fonts/default.json`, when it's there and reads.

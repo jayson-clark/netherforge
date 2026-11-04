@@ -8,8 +8,12 @@
 //! client), and what other packs replace are checks across resources. (Its
 //! build comes with the runtime's pack.)
 
+mod across;
+pub use across::texture_path;
+pub mod fonts;
 pub mod hud;
 pub mod models;
+pub mod replaced;
 pub mod sounds;
 
 use std::collections::{BTreeSet, HashSet};
@@ -341,7 +345,7 @@ impl SoundDef {
 }
 
 /// The files under one of a resource's folders, relative to it.
-fn under<'a>(files: &'a BTreeSet<String>, folder: &str) -> BTreeSet<&'a str> {
+pub(crate) fn under<'a>(files: &'a BTreeSet<String>, folder: &str) -> BTreeSet<&'a str> {
     let prefix = format!("{folder}/");
     files
         .iter()
@@ -418,6 +422,10 @@ impl Check<'_> {
 }
 
 impl Document for ResourcePackFile {
+    fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        self.across(cx, sink);
+    }
+
     const SCHEMA: &'static str = "../../.netherforge/schema/resource_pack.schema.json";
 
     fn set_schema(&mut self, schema: Option<String>) {

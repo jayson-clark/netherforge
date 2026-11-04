@@ -15,23 +15,29 @@ fn problems(files: &[(&str, &str)], game: Option<&dyn GameData>) -> Vec<String> 
             .find(|(q, _)| *q == p)
             .map(|(_, t)| t.to_string())
     };
-    project::load(&names, &read, game)
-        .problems
-        .iter()
-        .filter(|p| p.code.as_deref() != Some("project.no-manifest"))
-        .map(|p| {
-            format!(
-                "{} {}{}: {}",
-                p.code.as_deref().unwrap(),
-                p.file,
-                p.path
-                    .as_deref()
-                    .map(|a| format!(" {a}"))
-                    .unwrap_or_default(),
-                p.message
-            )
-        })
-        .collect()
+    project::load(
+        &project::Files {
+            files: &names,
+            read: &read,
+        },
+        game,
+    )
+    .problems
+    .iter()
+    .filter(|p| p.code.as_deref() != Some("project.no-manifest"))
+    .map(|p| {
+        format!(
+            "{} {}{}: {}",
+            p.code.as_deref().unwrap(),
+            p.file,
+            p.path
+                .as_deref()
+                .map(|a| format!(" {a}"))
+                .unwrap_or_default(),
+            p.message
+        )
+    })
+    .collect()
 }
 
 #[test]
@@ -128,6 +134,89 @@ fn a_stack_of_a_project_item_is_that_items_kind() {
         ),
         [
             r#"item.kind-mismatch menus/shop/menu.json $.slots["0"].item.kind: Item "ruby" is a minecraft:emerald, not a minecraft:diamond: leave kind out"#
+        ]
+    );
+}
+
+/// A project whose pictures' sizes are known (as the CLI measures their headers).
+struct Sized<'a> {
+    files: BTreeSet<String>,
+    texts: &'a [(&'a str, &'a str)],
+    sizes: &'a [(&'a str, [u32; 2])],
+}
+
+impl project::ProjectSource for Sized<'_> {
+    fn files(&self) -> &BTreeSet<String> {
+        &self.files
+    }
+    fn read(&self, path: &str) -> Option<String> {
+        self.texts
+            .iter()
+            .find(|(p, _)| *p == path)
+            .map(|(_, t)| t.to_string())
+    }
+    fn reads_sizes(&self) -> bool {
+        true
+    }
+    fn size(&self, path: &str) -> Option<[u32; 2]> {
+        self.sizes.iter().find(|(p, _)| *p == path).map(|(_, s)| *s)
+    }
+}
+
+fn sized(texts: &[(&str, &str)], pictures: &[(&str, [u32; 2])]) -> Vec<String> {
+    let files = texts
+        .iter()
+        .map(|(p, _)| p.to_string())
+        .chain(pictures.iter().map(|(p, _)| p.to_string()))
+        .collect();
+    let source = Sized {
+        files,
+        texts,
+        sizes: pictures,
+    };
+    project::load(&source, None)
+        .problems
+        .iter()
+        .filter(|p| !matches!(p.code.as_deref(), Some("project.no-manifest")))
+        .map(|p| {
+            format!(
+                "{} {}: {}",
+                p.code.as_deref().unwrap(),
+                p.path.as_deref().unwrap_or(""),
+                p.message
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn a_picture_fits_a_fonts_sheet() {
+    let pack = r#"{ "glyphs": { "tall": { "texture": "tall.png" }, "wide": { "texture": "wide.png", "height": 8 } } }"#;
+    assert_eq!(
+        sized(
+            &[("resource_packs/ui/pack.json", pack)],
+            &[
+                ("resource_packs/ui/textures/tall.png", [16, 300]),
+                ("resource_packs/ui/textures/wide.png", [257, 8]),
+            ]
+        ),
+        [
+            "resource_pack.picture-size $.glyphs.tall.texture: Glyph tall is 16×300 pixels; Minecraft draws a font picture over 256 pixels tall blank, so use one at most 256 tall",
+            "resource_pack.picture-size $.glyphs.wide.texture: Glyph wide is 257×8 pixels; a picture over 256 pixels wide is drawn in equal pieces of 256 or less, and 257 doesn't cut into any. Pad it with transparent columns to 258 pixels wide",
+        ]
+    );
+}
+
+#[test]
+fn a_bitmap_fonts_picture_cuts_into_its_grid() {
+    let font = r#"{ "type": "bitmap", "file": "font.png", "chars": ["ab", "cd"] }"#;
+    assert_eq!(
+        sized(
+            &[("screen_fonts/big/font.json", font)],
+            &[("screen_fonts/big/font.png", [17, 16])]
+        ),
+        [
+            "screen_font.grid $.chars: The picture is 17 by 16 pixels, which doesn't cut into 2 characters across and 2 rows"
         ]
     );
 }
