@@ -49,6 +49,7 @@ const plans = {
     ['lua-language-server (pinned)', ['node', 'tools/luals.mjs']],
     ['TypeScript: unit tests', ['pnpm', '-r', '--if-present', 'test']],
     ['Rust: editor backend', ['cargo', 'test', '--manifest-path', cargoManifest], hasEditor],
+    ['Rust: runtime crates', ['cargo', 'test', '--workspace']],
   ],
   lint: [
     formatJs,
@@ -70,6 +71,11 @@ const plans = {
       ],
       hasEditor,
     ],
+    ['Rust: rustfmt (runtime crates)', ['cargo', 'fmt', '--all', '--check']],
+    [
+      'Rust: clippy (runtime crates)',
+      ['cargo', 'clippy', '--workspace', '--all-targets', '--', '-D', 'warnings'],
+    ],
     ['Lua: stylua', ['pnpm', 'exec', 'stylua', '--check', ...luaDirs]],
     // The prelude's modules and format's terrain glue, type-checked by the pinned LuaLS (the editor's own; fetched, cached).
     ['Lua: lua-language-server (the plugin, format)', ['node', 'tools/lint-prelude.mjs']],
@@ -81,6 +87,7 @@ const plans = {
     ['Kotlin: ktlint', gradle('ktlintFormat')],
     ['Prettier', ['pnpm', 'exec', 'prettier', '--write', '.']],
     ['Rust: rustfmt', ['cargo', 'fmt', '--manifest-path', cargoManifest], hasEditor],
+    ['Rust: rustfmt (runtime crates)', ['cargo', 'fmt', '--all']],
     ['Lua: stylua', ['pnpm', 'exec', 'stylua', ...luaDirs]],
   ],
   generate: [

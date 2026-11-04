@@ -92,3 +92,64 @@ becomes.
 - Whole numbers print without a point (`print(2.0)` is `2`), as Luau prints them.
 - `Int64` values are strings: compare them as strings of equal length, or hand them to the
   API that wants them. Nothing in the API does arithmetic on them.
+
+## Where things are
+
+| Path           | What it is                                                                                   |
+| -------------- | -------------------------------------------------------------------------------------------- |
+| `Cargo.toml`   | The runtime's workspace (`crates/*`). The editor's backend is still its own workspace.       |
+| `crates/luau/` | `netherforge-luau`: the Luau host. One state per room, scopes, the guards, memory per scope. |
+
+`pnpm test` runs `cargo test --workspace`, and `pnpm lint` runs rustfmt and clippy on it.
+
+## The host (`crates/luau`)
+
+What replaces `LuaHost`, the prelude's `guard` and `sandbox` modules, and the memory census.
+
+- **The base is the real globals, stripped.** `Host::new` removes every global not in `BASE` (a
+  whitelist: no `os`, `debug`, `getfenv`/`setfenv`, `loadstring`, `require`, `collectgarbage`,
+  `print`, `_G`), then `Lua::sandbox(true)` makes the globals and every library read-only. That
+  replaces the per-scope library proxies, and `rawset` on a library fails on its own. They have
+  to be the real globals, not a copy: a scope's environment is `safeenv` (as
+  `luaL_sandboxthread`'s proxy is, so `math.floor` is resolved at load time rather than looked
+  up per call), and in a `safeenv` environment **Luau resolves a builtin's name straight from
+  the real globals, past the environment's `__index`**. A copy left `os` and `_G` reachable from
+  every script (`what_scripts_dont_get` holds it). A scope that assigns a global of its own
+  name (`math = ...`) gets its own, as before.
+- **A scope** is an environment table over the base (`open_scope(name, memory_key)`). Chunks
+  are loaded into it under their project path (`@modules/m/init.lua`), so Luau's messages and
+  tracebacks speak the editor's language. A `Failure::Error` keeps the message and the
+  traceback apart (mlua appends one to every runtime error).
+- **One interrupt does the guarding.** Luau calls it on every function call and every loop's
+  backward jump, on every thread, so there's nothing to arm per coroutine and no hook for the
+  debugger to share. Each call in is a frame (`invoke(scope, budget, f, args)`):
+  - **The budget counts steps (interrupts), not instructions.** Luau doesn't count
+    instructions. A step is a call or a loop iteration, so a script's `budget` means "how many
+    iterations and calls", which is closer to what a developer can reason about anyway.
+  - **The time limit** is read from the injectable `Clock` every `clock_every` (256) steps. A
+    nested call in gets what's left of its caller's deadline, if that's sooner.
+  - **A nested call in's steps are charged to its caller** when it returns, so a loop of
+    call-ins can't outrun its own budget.
+  - **A stop is sticky.** The interrupt raises an error, which `pcall` can catch, so the frame
+    keeps the stop and its location: every interrupt after it raises again, and `invoke` reports
+    the call stopped whatever it returned.
+- **Memory is the allocator's.** `Limits::memory_bytes` is mlua's allocator limit for the
+  state, so an allocation past it fails (`Failure::Memory`), exactly. No census and no
+  periodic `collectgarbage("count")`.
+- **Memory per scope is Luau's memory categories.** `invoke` sets the running thread's
+  category (`lua_setmemcat`) to the scope's, and Luau charges every object to the category it
+  was allocated under and credits its free back to that category. So `scope_memory` is exact
+  at any moment, and a script churning garbage doesn't look like a leak
+  (`churning_garbage_isnt_a_leak`). Luau has only 256 categories (0 is the host's), so a
+  category is per **memory key**, not per scope: the runtime passes the script's resource, so
+  a centity's instances share one, and past 255 keys new ones share the last. A coroutine
+  inherits its creator's category, so a task stays its scope's wherever it's resumed from.
+- **Blame**: when an allocation fails, the scope holding the most is blamed if that's at
+  least a quarter of the limit (`take_blamed`), and the runtime stops it at the end of the
+  tick, as today.
+- **No proper tail calls.** Luau keeps a frame for `return f()`, so endless tail recursion is
+  a stack overflow (an error), not a loop for the budget to stop.
+
+Still to come in the host: the library's caps (`caps.lua`, under Luau's library: an
+interrupt never fires inside `string.rep` or a pattern match), the prelude's event core,
+tasks and `require`, and generated bindings.

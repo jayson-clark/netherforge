@@ -1,0 +1,14 @@
+[package]
+name = "netherforge-luau"
+description = "NetherForge's Luau host: scopes, the budget and time limit, memory per scope"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+mlua.workspace = true
+
+[lints]
+workspace = true
