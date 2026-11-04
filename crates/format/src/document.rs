@@ -67,6 +67,13 @@ pub fn write<T: Document>(value: &T, path: &str) -> String {
 /// A document read from the file at `path` and checked on its own: the value
 /// when it parsed, and its problems.
 pub fn load<T: Document>(text: &str, path: &str, cx: &Context) -> (Option<T>, Vec<Problem>) {
+    // Every rule a kind declares names its problem: checked on every kind any test loads, so
+    // no list of kinds can leave one out.
+    debug_assert_eq!(
+        crate::rules::uncoded::<T>(),
+        Vec::<String>::new(),
+        "{path}: a rule with no x-problem"
+    );
     match crate::read::parse::<T>(text, path) {
         Err(problem) => (None, vec![*problem]),
         Ok(value) => {

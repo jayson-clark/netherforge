@@ -1,4 +1,4 @@
-//! NetherForge's runtime in Rust (phase 1 of ludicraft's ROADMAP.md): what a
+//! NetherForge's runtime in Rust (phase 1 of the cost roadmap, ../ROADMAP.md): what a
 //! room runs. So far its scripts: scopes, events, timers and tasks. See the
 //! rust-runtime skill.
 

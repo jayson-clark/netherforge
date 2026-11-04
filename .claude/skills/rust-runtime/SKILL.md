@@ -1,12 +1,12 @@
 ---
 name: rust-runtime
-description: The port of the plugin's runtime to Rust with Luau scripts (phase 1 of ludicraft's ROADMAP.md) - where the crates are, the decisions taken along the way, and first of all how numbers work once every Lua number is a double. Read before touching anything under crates/, or before porting a piece of apps/plugin/runtime.
+description: The port of the plugin's runtime to Rust with Luau scripts (phase 1 of the cost roadmap, ../ROADMAP.md) - where the crates are, the decisions taken along the way, and first of all how numbers work once every Lua number is a double. Read before touching anything under crates/, or before porting a piece of apps/plugin/runtime.
 ---
 
 # The Rust runtime
 
 The runtime (`apps/plugin/runtime/`) and `packages/format` are being ported to Rust, and
-scripts move from Lua 5.4 to Luau (phase 1 of `ludicraft/ROADMAP.md`). The Kotlin runtime stays
+scripts move from Lua 5.4 to Luau (phase 1 of the cost roadmap, `../ROADMAP.md`). The Kotlin runtime stays
 the reference until the Rust one passes the integration scenarios; then it's deleted. Nothing
 is deployed, so the port changes formats and APIs freely and migrates the examples in the
 same change: no shims.
