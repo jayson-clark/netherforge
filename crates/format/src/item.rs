@@ -552,7 +552,7 @@ fn adventure_block(block: &str, path: &str, sink: &mut ProblemSink, game: Option
     let Some(game) = game else { return };
     let normal = game::normalize(id);
     let missing = if tag {
-        !game.has_tag(Registry::Block, &normal)
+        game.tag(Registry::Block, &normal).is_none()
     } else {
         !game.has(Registry::Block, &normal)
     };

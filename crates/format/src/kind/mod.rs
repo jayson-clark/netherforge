@@ -7,6 +7,7 @@ pub mod buff;
 pub mod dialog;
 pub mod dimension_type;
 pub mod files;
+pub mod game_block;
 pub mod item;
 pub mod loot;
 pub mod menu;
@@ -62,6 +63,7 @@ pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
         "loot_table" => crate::document::load::<loot::LootTableFile>(&text(), &path, &cx).1,
         "sky" => crate::document::load::<sky::SkyFile>(&text(), &path, &cx).1,
         "biome" => crate::document::load::<biome::BiomeFile>(&text(), &path, &cx).1,
+        "game_block" => crate::document::load::<game_block::GameBlockFile>(&text(), &path, &cx).1,
         "dimension_type" => {
             crate::document::load::<dimension_type::DimensionTypeFile>(&text(), &path, &cx).1
         }
@@ -93,6 +95,7 @@ pub fn write_back(found: &Found, text: &str) -> Option<Result<String, Box<Proble
         "loot_table" => again::<loot::LootTableFile>(text, &path),
         "sky" => again::<sky::SkyFile>(text, &path),
         "biome" => again::<biome::BiomeFile>(text, &path),
+        "game_block" => again::<game_block::GameBlockFile>(text, &path),
         "dimension_type" => again::<dimension_type::DimensionTypeFile>(text, &path),
         "advancement" => again::<advancement::AdvancementFile>(text, &path),
         _ => return None,

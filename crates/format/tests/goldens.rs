@@ -153,7 +153,16 @@ fn what_and_where(p: &Value) -> String {
     Value::Object(o).to_string()
 }
 
-/// Problems about one resource alone; a reference's (`reference.*`) is a check across resources.
+/// Problems about one resource alone: not a reference's (`reference.*`), nor one
+/// that points at another file (a check across resources too).
+fn own_problem(p: &Value) -> bool {
+    let file = &p["file"];
+    let elsewhere = p["related"]
+        .as_array()
+        .is_some_and(|r| r.iter().any(|l| &l["file"] != file));
+    !elsewhere && own(p["code"].as_str().unwrap_or(""))
+}
+
 fn own(code: &str) -> bool {
     // A project item's own kind, the project's default font: checks across resources too.
     // Each kind's `crossCheck` in format: they come with the checks across resources.
@@ -162,7 +171,6 @@ fn own(code: &str) -> bool {
         "loot.cycle",
         "advancement.cycle",
         "build.id-taken",
-        "biome.feature-order",
     ];
     let across =
         code.starts_with("reference.") || code.starts_with("font.") || ACROSS.contains(&code);
@@ -194,7 +202,7 @@ fn the_ported_kinds_problems_are_formats() {
             let mut actual: Vec<String> = problems
                 .iter()
                 .map(|p| p.to_json())
-                .filter(|p| own(p["code"].as_str().unwrap_or("")))
+                .filter(own_problem)
                 .map(|p| what_and_where(&p))
                 .collect();
             actual.sort();
@@ -203,7 +211,7 @@ fn the_ported_kinds_problems_are_formats() {
                 .filter(|p| {
                     let file = p["file"].as_str().unwrap_or("");
                     (file == path || file == location || file.starts_with(&format!("{location}/")))
-                        && own(p["code"].as_str().unwrap_or(""))
+                        && own_problem(p)
                 })
                 .map(what_and_where)
                 .collect();

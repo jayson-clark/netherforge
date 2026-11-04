@@ -218,7 +218,7 @@ pub fn check_ingredient(
             if !valid(tag) {
                 sink.report(codes.invalid, format!("\"#{tag}\" isn't an item tag"), at);
             } else if let Some(game) = game
-                && !game.has_tag(Registry::Item, &game::normalize(tag))
+                && game.tag(Registry::Item, &game::normalize(tag)).is_none()
             {
                 sink.report(
                     codes.unknown_tag,

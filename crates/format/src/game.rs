@@ -24,8 +24,8 @@ pub trait GameData {
     fn minecraft_version(&self) -> &str;
     /// Whether `registry` has `id` (namespaced).
     fn has(&self, registry: Registry, id: &str) -> bool;
-    /// Whether the block tag `id` exists (namespaced, without `#`).
-    fn has_tag(&self, registry: Registry, id: &str) -> bool;
+    /// The ids `registry`'s tag `id` holds (namespaced, without `#`); `None` for a tag it doesn't have.
+    fn tag(&self, registry: Registry, id: &str) -> Option<Vec<String>>;
     /// How much damage an item takes before it breaks; 0 for one that doesn't.
     fn item_durability(&self, id: &str) -> u32;
     /// The options a particle takes (`dust`'s colour, `block`'s state), by their kind's name;

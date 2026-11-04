@@ -17,8 +17,8 @@ impl GameData for Game {
                 | (Registry::Block, "minecraft:stone")
         )
     }
-    fn has_tag(&self, _: Registry, id: &str) -> bool {
-        id == "minecraft:logs"
+    fn tag(&self, _: Registry, id: &str) -> Option<Vec<String>> {
+        (id == "minecraft:logs").then(|| vec!["minecraft:oak_log".into()])
     }
     fn item_durability(&self, id: &str) -> u32 {
         if id == "minecraft:diamond_sword" {
