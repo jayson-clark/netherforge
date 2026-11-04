@@ -9,6 +9,7 @@ pub mod loot;
 pub mod menu;
 pub mod module;
 pub mod recipe;
+pub mod sky;
 
 use std::collections::BTreeSet;
 
@@ -66,6 +67,7 @@ pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
         "dialog" => crate::document::load::<dialog::DialogFile>(&text(), &path, &cx).1,
         "recipe" => crate::document::load::<recipe::RecipeFile>(&text(), &path, &cx).1,
         "loot_table" => crate::document::load::<loot::LootTableFile>(&text(), &path, &cx).1,
+        "sky" => crate::document::load::<sky::SkyFile>(&text(), &path, &cx).1,
         "module" => module::check(found, source),
         "build" => files::build(found),
         "migration" => files::migration(found),
@@ -89,6 +91,7 @@ pub fn write_back(found: &Found, text: &str) -> Option<Result<String, Box<Proble
         "dialog" => again::<dialog::DialogFile>(text, &path),
         "recipe" => again::<recipe::RecipeFile>(text, &path),
         "loot_table" => again::<loot::LootTableFile>(text, &path),
+        "sky" => again::<sky::SkyFile>(text, &path),
         _ => return None,
     })
 }

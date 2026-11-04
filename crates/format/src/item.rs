@@ -59,7 +59,7 @@ macro_rules! item_with_look {
             #[serde(skip_serializing_if = "Option::is_none")]
             pub equipment: Option<EquipmentDef>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            #[schemars(regex(pattern = r"^#[0-9a-fA-F]{6}$"), extend("x-problem" = "item.color", "x-rule" = "#RRGGBB"))]
+            #[schemars(extend("pattern" = crate::rules::RGB, "x-problem" = "item.color", "x-rule" = "#RRGGBB"))]
             pub color: Option<String>,
             #[serde(skip_serializing_if = "Option::is_none")]
             pub profile: Option<String>,

@@ -23,7 +23,7 @@ pub struct BuffFile {
     pub icon: Option<String>,
     /// Its colour, `#rrggbb`, for a HUD or a bar.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(regex(pattern = r"^#[0-9a-fA-F]{6}$"), extend("x-problem" = "buff.color", "x-rule" = "#rrggbb"))]
+    #[schemars(extend("pattern" = crate::rules::RGB, "x-problem" = "buff.color", "x-rule" = "#rrggbb"))]
     pub color: Option<String>,
     /// Whether it's bad for whoever has it. Default false.
     #[serde(skip_serializing_if = "Option::is_none")]
