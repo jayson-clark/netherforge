@@ -357,11 +357,7 @@ fn nearest_animation(id: &str) -> Option<&'static str> {
 /// have, a kind or a project item, a durable item that can't stack, ids two
 /// modifiers share, and names near enough to say which was meant.
 pub fn check(item: &ItemDef, at: &str, sink: &mut ProblemSink, game: Option<&dyn GameData>) {
-    let id_valid = |id: &str| {
-        regex::Regex::new(game::ID_PATTERN)
-            .expect("a pattern")
-            .is_match(id)
-    };
+    let id_valid = |id: &str| game::is_id(id);
     if item.kind.is_empty() {
         // A project item's kind is its definition's, checked where the project can see it.
         if item.item.is_none() {
@@ -542,10 +538,7 @@ fn adventure_block(block: &str, path: &str, sink: &mut ProblemSink, game: Option
     if block == "*" || !is_game {
         return;
     }
-    if !regex::Regex::new(game::ID_PATTERN)
-        .expect("a pattern")
-        .is_match(id)
-    {
+    if !game::is_id(id) {
         sink.report(
             codes::ITEM_BLOCK,
             format!(

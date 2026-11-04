@@ -193,14 +193,13 @@ fn broken(value: &Value, schema: &Value) -> Option<String> {
             {
                 return Some(format!("must be at most {} characters", format_number(max)));
             }
-            if let Some(pattern) = schema.get("pattern").and_then(Value::as_str) {
-                let re = regex::Regex::new(pattern).ok()?;
-                if !re.is_match(s) {
-                    return Some(match rule {
-                        Some(rule) => format!("must be {rule}"),
-                        None => format!("doesn't match {pattern}"),
-                    });
-                }
+            if let Some(pattern) = schema.get("pattern").and_then(Value::as_str)
+                && !matches(pattern, s)?
+            {
+                return Some(match rule {
+                    Some(rule) => format!("must be {rule}"),
+                    None => format!("doesn't match {pattern}"),
+                });
             }
             None
         }
@@ -271,4 +270,20 @@ pub fn uncoded<T: JsonSchema>() -> Vec<String> {
     }
     visit(schema.as_value(), "#", &mut out);
     out
+}
+
+/// Whether `text` matches `pattern`, each pattern compiled once.
+fn matches(pattern: &str, text: &str) -> Option<bool> {
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    thread_local! {
+        static COMPILED: RefCell<HashMap<String, regex::Regex>> = RefCell::new(HashMap::new());
+    }
+    COMPILED.with(|compiled| {
+        let mut compiled = compiled.borrow_mut();
+        if !compiled.contains_key(pattern) {
+            compiled.insert(pattern.to_owned(), regex::Regex::new(pattern).ok()?);
+        }
+        Some(compiled[pattern].is_match(text))
+    })
 }

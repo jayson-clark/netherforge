@@ -444,6 +444,8 @@ unchanged.
   change: the examples rewritten by Kotlin's writer, the reference goldens regenerated).
   `look()`'s copy is held to every look field by a test. A project item's missing `kind` is
   now the `item.kind` problem (Kotlin made it a parse error).
+- **Patterns are compiled once**: names' and ids' checks are `names::is_*` and `game::is_id` (a
+  `LazyLock` each), and `rules` caches a schema's patterns, so no check compiles a regex.
 - **Shared pieces**: `item.rs` is `ItemDef` (a stack, in menus, loot, recipes and items) with
   its rules on its fields (`Rules.item`'s ranges and patterns, about half of it) and `check`,
   the rest (ids the game must have, a durable item that can't stack, modifiers sharing an id,
@@ -462,10 +464,10 @@ unchanged.
 - **What the goldens hold a kind to**: `tests/goldens.rs` compares a ported kind's problems with
   the goldens' by what's wrong and where (severity, file, path, code, position, related), not
   their wording, since the field rules word themselves; each kind's own tests hold its wording. A parse problem is compared by file and code only: kotlinx gives no path or position for a custom type's error (an ingredient's), where the reader gives both.
-  Checks across resources (`reference.*`, `font.*`, `item.kind-mismatch`) are left out until they're ported. The examples are
+  Checks across resources (`reference.*`, `font.*`, `item.kind-mismatch`, `loot.cycle`) are left out until they're ported. The examples are
   valid projects, so a ported kind must report no errors in them, and must write them back to
   the same bytes. When the Rust side takes over, the goldens are written from it. Ported:
-  `buff` (all its rules are fields'), `dialog`, `item`, `menu` (its type and size, slot keys, items' and scripts' checks), `recipe` (mostly its own checks: which fields a recipe has depends on its type), `module` (with `ModuleRequires`, worked out once per
+  `buff` (all its rules are fields'), `dialog`, `item`, `menu` (its type and size, slot keys, items' and scripts' checks), `recipe` (mostly its own checks: which fields a recipe has depends on its type), `loot_table`, `module` (with `ModuleRequires`, worked out once per
   project in `Source`).
 
 Next in format: reading each resource with its kind's model and checks (kind by kind, each

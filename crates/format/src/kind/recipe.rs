@@ -227,11 +227,7 @@ pub fn check_ingredient(
     sink: &mut ProblemSink,
     game: Option<&dyn GameData>,
 ) {
-    let valid = |id: &str| {
-        regex::Regex::new(game::ID_PATTERN)
-            .expect("a pattern")
-            .is_match(id)
-    };
+    let valid = |id: &str| game::is_id(id);
     let at = Some(at.to_owned());
     match ingredient {
         Ingredient::Item(_) => {}

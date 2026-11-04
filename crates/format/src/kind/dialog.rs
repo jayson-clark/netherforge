@@ -13,7 +13,6 @@ use crate::item::{self, ItemDef};
 use crate::problem::{ProblemSink, codes};
 use crate::script::{self, ScriptDef};
 
-const NODE_NAME: &str = r"^[A-Za-z0-9_-]{1,64}$";
 pub const MIN_COLUMNS: i32 = 1;
 pub const MAX_COLUMNS: i32 = 8;
 
@@ -226,9 +225,7 @@ pub struct DialogButton {
 }
 
 fn usable(key: &str) -> bool {
-    regex::Regex::new(NODE_NAME)
-        .expect("a pattern")
-        .is_match(key)
+    crate::names::is_node_name(key)
 }
 
 /// The second of two usable keys that are the same, at their path.

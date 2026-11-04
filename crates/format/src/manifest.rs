@@ -518,7 +518,10 @@ fn check_listing(listing: &Listing, sink: &mut crate::ProblemSink) {
                 "$.listing.tags",
             );
         }
-        let tag = regex::Regex::new("^[a-z0-9][a-z0-9-]{0,31}$").expect("a valid pattern");
+        static TAG: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+            regex::Regex::new("^[a-z0-9][a-z0-9-]{0,31}$").expect("a valid pattern")
+        });
+        let tag = &*TAG;
         for (index, t) in tags.iter().enumerate() {
             if !tag.is_match(t) {
                 report(

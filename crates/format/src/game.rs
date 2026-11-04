@@ -11,6 +11,7 @@ pub enum Registry {
     Enchantment,
     Attribute,
     DataComponentType,
+    LootTable,
 }
 
 pub trait GameData {
@@ -37,3 +38,8 @@ pub fn normalize(id: &str) -> String {
 
 /// The pattern of a game id, namespaced or not (`GameIds.isValid`), for a field's rule.
 pub const ID_PATTERN: &str = r"^([a-z0-9_.-]+:)?[a-z0-9_./-]+$";
+
+/// Whether `id` is a game id, namespaced or not (`GameIds.isValid`).
+pub fn is_id(id: &str) -> bool {
+    crate::names::is_game_id(id)
+}

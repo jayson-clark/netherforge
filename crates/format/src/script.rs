@@ -35,10 +35,7 @@ impl ScriptDef {
 
 /// What a script's rules can't say: that its file is there.
 pub fn check(script: &ScriptDef, at: &str, cx: &Context, sink: &mut ProblemSink) {
-    let shaped =
-        regex::Regex::new(r"^([A-Za-z0-9_][A-Za-z0-9_.-]*/)*[A-Za-z0-9_][A-Za-z0-9_.-]*\.lua$")
-            .expect("a pattern")
-            .is_match(&script.file);
+    let shaped = crate::names::is_relative_file(&script.file) && script.file.ends_with(".lua");
     if shaped && cx.files.is_some_and(|files| !files.contains(&script.file)) {
         sink.report(
             codes::SCRIPT_MISSING,
