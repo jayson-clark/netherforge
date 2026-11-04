@@ -219,7 +219,7 @@ fn conditions(
                 let valid = game::is_id(enchantment);
                 if let Some(game) = game
                     && valid
-                    && !game.has(Registry::Enchantment, &game::normalize(enchantment))
+                    && game.lacks(Registry::Enchantment, &game::normalize(enchantment))
                 {
                     sink.report(
                         codes::LOOT_UNKNOWN_ENCHANTMENT,
@@ -296,7 +296,7 @@ impl Document for LootTableFile {
                                 Some(format!("{at}.table")),
                             );
                         } else if let Some(game) = cx.game
-                            && !game.has(Registry::LootTable, table)
+                            && game.lacks(Registry::LootTable, table)
                         {
                             sink.report(
                                 codes::LOOT_UNKNOWN_VANILLA,

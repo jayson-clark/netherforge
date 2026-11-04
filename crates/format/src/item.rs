@@ -374,7 +374,7 @@ pub fn check(item: &ItemDef, at: &str, sink: &mut ProblemSink, game: Option<&dyn
             Some(format!("{at}.kind")),
         );
     } else if let Some(game) = game
-        && !game.has(Registry::Item, &game::normalize(&item.kind))
+        && game.lacks(Registry::Item, &game::normalize(&item.kind))
     {
         sink.report(
             codes::ITEM_UNKNOWN,
@@ -388,7 +388,7 @@ pub fn check(item: &ItemDef, at: &str, sink: &mut ProblemSink, game: Option<&dyn
     }
     if let Some(game) = game {
         for (id, _) in item.enchantments.iter().flat_map(|e| e.iter()) {
-            if id_valid(&id.0) && !game.has(Registry::Enchantment, &game::normalize(&id.0)) {
+            if id_valid(&id.0) && game.lacks(Registry::Enchantment, &game::normalize(&id.0)) {
                 sink.report(
                     codes::ITEM_UNKNOWN_ENCHANTMENT,
                     format!(
@@ -429,7 +429,7 @@ pub fn check(item: &ItemDef, at: &str, sink: &mut ProblemSink, game: Option<&dyn
         if let Some(game) = game {
             for (index, m) in modifiers.iter().enumerate() {
                 if id_valid(&m.attribute)
-                    && !game.has(Registry::Attribute, &game::normalize(&m.attribute))
+                    && game.lacks(Registry::Attribute, &game::normalize(&m.attribute))
                 {
                     sink.report(
                         codes::ITEM_UNKNOWN_ATTRIBUTE,
@@ -487,7 +487,7 @@ pub fn check(item: &ItemDef, at: &str, sink: &mut ProblemSink, game: Option<&dyn
                 Some(path),
             );
         } else if let Some(game) = game
-            && !game.has(Registry::DataComponentType, &format!("minecraft:{line}"))
+            && game.lacks(Registry::DataComponentType, &format!("minecraft:{line}"))
         {
             sink.report(
                 codes::ITEM_UNKNOWN_TOOLTIP_COMPONENT,
@@ -552,9 +552,9 @@ fn adventure_block(block: &str, path: &str, sink: &mut ProblemSink, game: Option
     let Some(game) = game else { return };
     let normal = game::normalize(id);
     let missing = if tag {
-        game.tag(Registry::Block, &normal).is_none()
+        game.tag_of(Registry::Block, &normal).is_none()
     } else {
-        !game.has(Registry::Block, &normal)
+        game.lacks(Registry::Block, &normal)
     };
     if missing {
         let what = if tag {

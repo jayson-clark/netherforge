@@ -120,7 +120,7 @@ impl Document for AdvancementFile {
                 }
                 (Some(kind), None) => {
                     if let Some(game) = cx.game
-                        && !game.has(Registry::Item, &game::normalize(kind))
+                        && game.lacks(Registry::Item, &game::normalize(kind))
                     {
                         sink.report(
                             codes::ADVANCEMENT_UNKNOWN_ICON,
@@ -173,7 +173,7 @@ impl Document for AdvancementFile {
                 ),
                 Some(trigger) => {
                     if let Some(game) = cx.game
-                        && !game.has(Registry::TriggerType, trigger)
+                        && game.lacks(Registry::TriggerType, trigger)
                     {
                         sink.report(
                             codes::ADVANCEMENT_UNKNOWN_TRIGGER,

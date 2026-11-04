@@ -183,7 +183,7 @@ impl Document for DimensionTypeFile {
                     Some("$.infiniburn".into()),
                 );
             } else if let Some(game) = cx.game
-                && game.tag(Registry::Block, &game::normalize(id)).is_none()
+                && game.tag_of(Registry::Block, &game::normalize(id)).is_none()
             {
                 sink.report(
                     codes::DIMENSION_TYPE_INFINIBURN_TAG,

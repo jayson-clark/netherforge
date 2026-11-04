@@ -180,9 +180,9 @@ fn check_biomes(biomes: &[String], sink: &mut ProblemSink, game: Option<&dyn Gam
         let Some(game) = game else { continue };
         let normal = game::normalize(id);
         let missing = if tagged {
-            game.tag(Registry::Biome, &normal).is_none()
+            game.tag_of(Registry::Biome, &normal).is_none()
         } else {
-            !game.has(Registry::Biome, &normal)
+            game.lacks(Registry::Biome, &normal)
         };
         if missing {
             let noun = if tagged { "tag" } else { "biome" };

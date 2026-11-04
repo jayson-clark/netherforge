@@ -2,23 +2,40 @@ use netherforge_format::game::{self, GameData, Registry};
 use netherforge_format::item::{self, ItemDef};
 use netherforge_format::{ProblemSink, rules};
 
-struct Game;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::LazyLock;
+
+/// The game's facts the tests ask for.
+struct Game {
+    registries: BTreeMap<&'static str, BTreeSet<String>>,
+    logs: BTreeSet<String>,
+}
+
+static GAME: LazyLock<Game> = LazyLock::new(|| {
+    let set = |ids: &[&str]| ids.iter().map(|s| s.to_string()).collect::<BTreeSet<_>>();
+    Game {
+        registries: BTreeMap::from([
+            (
+                Registry::Item.key(),
+                set(&["minecraft:bread", "minecraft:diamond_sword"]),
+            ),
+            (Registry::Enchantment.key(), set(&["minecraft:sharpness"])),
+            (Registry::Block.key(), set(&["minecraft:stone"])),
+            (Registry::Attribute.key(), set(&["minecraft:attack_damage"])),
+        ]),
+        logs: set(&["minecraft:oak_log"]),
+    }
+});
+
 impl GameData for Game {
     fn minecraft_version(&self) -> &str {
         "26.3"
     }
-    fn has(&self, registry: Registry, id: &str) -> bool {
-        matches!(
-            (registry, id),
-            (
-                Registry::Item,
-                "minecraft:bread" | "minecraft:diamond_sword"
-            ) | (Registry::Enchantment, "minecraft:sharpness")
-                | (Registry::Block, "minecraft:stone")
-        )
+    fn registry(&self, key: &str) -> Option<&BTreeSet<String>> {
+        self.registries.get(key)
     }
-    fn tag(&self, _: Registry, id: &str) -> Option<Vec<String>> {
-        (id == "minecraft:logs").then(|| vec!["minecraft:oak_log".into()])
+    fn tag(&self, _: &str, id: &str) -> Option<&BTreeSet<String>> {
+        (id == "minecraft:logs").then_some(&self.logs)
     }
     fn item_durability(&self, id: &str) -> u32 {
         if id == "minecraft:diamond_sword" {
@@ -30,7 +47,7 @@ impl GameData for Game {
     fn particle(&self, _: &str) -> Option<game::ParticleData> {
         None
     }
-    fn block_properties(&self, _: &str) -> Option<std::collections::BTreeMap<String, Vec<String>>> {
+    fn block_properties(&self, _: &str) -> Option<BTreeMap<String, Vec<String>>> {
         None
     }
 }
@@ -89,7 +106,7 @@ fn what_a_schema_cant_say() {
                 "attributeModifiers":[{"id":"a","attribute":"minecraft:speed","amount":1,"operation":"add_value"},{"id":"minecraft:a","attribute":"minecraft:speed","amount":1,"operation":"add_value"}],
                 "canBreak":["minecraft:stone","minecraft:air","#minecraft:logs","#minecraft:none","ruby_ore"],
                 "hiddenTooltipComponents":["painting_variant"]}"##,
-            Some(&Game)
+            Some(&*GAME)
         ),
         [
             "item.max-stack-size-durable $.maxStackSize: An item with durability can't stack: maxStackSize must be 1",

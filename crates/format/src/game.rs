@@ -3,7 +3,10 @@
 //! checks need it. A project loads without it, and the checks that need it
 //! say nothing then.
 
-/// A registry of the game's.
+use std::collections::{BTreeMap, BTreeSet};
+
+/// A registry of the game's the checks name often; any other is named by its
+/// key (`minecraft:worldgen/placed_feature`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Registry {
     Item,
@@ -20,21 +23,60 @@ pub enum Registry {
     Biome,
 }
 
-use std::collections::BTreeMap;
+impl Registry {
+    /// Its key, as the game names it: `minecraft:worldgen/biome`.
+    pub fn key(self) -> &'static str {
+        match self {
+            Registry::Item => "minecraft:item",
+            Registry::Block => "minecraft:block",
+            Registry::Enchantment => "minecraft:enchantment",
+            Registry::Attribute => "minecraft:attribute",
+            Registry::DataComponentType => "minecraft:data_component_type",
+            Registry::LootTable => "minecraft:loot_table",
+            Registry::TriggerType => "minecraft:trigger_type",
+            Registry::EntityType => "minecraft:entity_type",
+            Registry::ParticleType => "minecraft:particle_type",
+            Registry::PlacedFeature => "minecraft:worldgen/placed_feature",
+            Registry::SoundEvent => "minecraft:sound_event",
+            Registry::Biome => "minecraft:worldgen/biome",
+        }
+    }
+}
 
 pub trait GameData {
     /// The Minecraft version the facts are from.
     fn minecraft_version(&self) -> &str;
-    /// Whether `registry` has `id` (namespaced).
-    fn has(&self, registry: Registry, id: &str) -> bool;
-    /// The ids `registry`'s tag `id` holds (namespaced, without `#`); `None` for a tag it doesn't have.
-    fn tag(&self, registry: Registry, id: &str) -> Option<Vec<String>>;
+    /// The ids (namespaced) in the registry of `key`; `None` for one the facts don't have.
+    fn registry(&self, key: &str) -> Option<&BTreeSet<String>>;
+    /// The ids the registry of `key`'s tag `id` holds (namespaced, without `#`); `None` for a tag it doesn't have.
+    fn tag(&self, key: &str, id: &str) -> Option<&BTreeSet<String>>;
     /// How much damage an item takes before it breaks; 0 for one that doesn't.
     fn item_durability(&self, id: &str) -> u32;
     /// What options a particle takes; `None` for one the game doesn't have.
     fn particle(&self, id: &str) -> Option<ParticleData>;
     /// A block's properties and the values each may be; `None` for a block the game doesn't have.
     fn block_properties(&self, id: &str) -> Option<BTreeMap<String, Vec<String>>>;
+    /// The data pack format the server reads, `[major, minor]`.
+    fn data_pack_format(&self) -> Option<[i32; 2]> {
+        None
+    }
+
+    /// Whether `registry` has `id` (namespaced).
+    fn has(&self, registry: Registry, id: &str) -> bool {
+        self.registry(registry.key())
+            .is_some_and(|r| r.contains(id))
+    }
+
+    /// Whether the facts know `registry` and it hasn't got `id`: what a check reports on.
+    fn lacks(&self, registry: Registry, id: &str) -> bool {
+        self.registry(registry.key())
+            .is_some_and(|r| !r.contains(id))
+    }
+
+    /// `registry`'s tag `id`, as `tag` gives it.
+    fn tag_of(&self, registry: Registry, id: &str) -> Option<&BTreeSet<String>> {
+        self.tag(registry.key(), id)
+    }
 }
 
 /// What a particle type is: which options a spawn of it carries (Paper's `Particle.dataType`).

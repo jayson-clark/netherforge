@@ -58,9 +58,10 @@ pub fn expand(entry: &str, game: Option<&dyn GameData>) -> BTreeSet<String> {
     }
     let normal = game::normalize(id);
     if tag {
-        game.and_then(|g| g.tag(Registry::Block, &normal))
+        game.and_then(|g| g.tag_of(Registry::Block, &normal))
             .into_iter()
             .flatten()
+            .cloned()
             .collect()
     } else {
         BTreeSet::from([normal])
@@ -98,7 +99,7 @@ impl Document for GameBlockFile {
             }
             let normal = game::normalize(id);
             if let Some(game) = game {
-                if tag && game.tag(Registry::Block, &normal).is_none() {
+                if tag && game.tag_of(Registry::Block, &normal).is_none() {
                     sink.report(
                         codes::GAME_BLOCK_UNKNOWN,
                         format!(
@@ -108,7 +109,7 @@ impl Document for GameBlockFile {
                         Some(at),
                     );
                     continue;
-                } else if !tag && !game.has(Registry::Block, &normal) {
+                } else if !tag && game.lacks(Registry::Block, &normal) {
                     sink.report(
                         codes::GAME_BLOCK_UNKNOWN,
                         format!(

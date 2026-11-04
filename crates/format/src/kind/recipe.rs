@@ -218,7 +218,7 @@ pub fn check_ingredient(
             if !valid(tag) {
                 sink.report(codes.invalid, format!("\"#{tag}\" isn't an item tag"), at);
             } else if let Some(game) = game
-                && game.tag(Registry::Item, &game::normalize(tag)).is_none()
+                && game.tag_of(Registry::Item, &game::normalize(tag)).is_none()
             {
                 sink.report(
                     codes.unknown_tag,
@@ -237,7 +237,7 @@ pub fn check_ingredient(
             } else if game::normalize(kind) == "minecraft:air" {
                 sink.report(codes.invalid, "An ingredient can't be air", at);
             } else if let Some(game) = game
-                && !game.has(Registry::Item, &game::normalize(kind))
+                && game.lacks(Registry::Item, &game::normalize(kind))
             {
                 sink.report(
                     codes.unknown_item,

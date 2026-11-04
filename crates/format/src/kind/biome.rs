@@ -200,7 +200,7 @@ fn known(
 ) {
     if let Some(game) = game
         && game::is_id(id)
-        && !game.has(registry, &game::normalize(id))
+        && game.lacks(registry, &game::normalize(id))
     {
         sink.report(
             code,
