@@ -65,7 +65,7 @@ pub struct PackOverlay {
 }
 
 /// A data pack format, `major.minor`, as the game compares them.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct PackFormat {
     pub major: i32,
     pub minor: i32,
@@ -133,6 +133,25 @@ pub struct CompiledDatapack {
     pub formats: (PackFormat, PackFormat),
     pub overlays: Vec<(String, (PackFormat, PackFormat))>,
     pub files: Vec<DatapackPath>,
+}
+
+/// A range of formats as `{ "start": …, "endInclusive": … }`, and an overlay as its directory and formats:
+/// how `testdata/compiled` writes them.
+impl Serialize for CompiledDatapack {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let range = |(start, end): (PackFormat, PackFormat)| serde_json::json!({ "start": start, "endInclusive": end });
+        let overlays: Vec<Value> = self
+            .overlays
+            .iter()
+            .map(|(directory, formats)| serde_json::json!({ "directory": directory, "formats": range(*formats) }))
+            .collect();
+        let mut out = serializer.serialize_struct("CompiledDatapack", 3)?;
+        out.serialize_field("formats", &range(self.formats))?;
+        out.serialize_field("overlays", &overlays)?;
+        out.serialize_field("files", &self.files)?;
+        out.end()
+    }
 }
 
 impl CompiledDatapack {
@@ -314,6 +333,15 @@ fn against_game(
 }
 
 impl Document for PackMeta {
+    /// Its files, placed: what the start-up datapack takes of it.
+    fn compile(&self, id: &str, cx: &Context) -> Option<Box<dyn crate::document::Compiled>> {
+        let files = cx.files.expect("a datapack's files are known");
+        let compiled = CompiledDatapack::of(self, files.iter());
+        crate::document::compiled(
+            compiled.unwrap_or_else(|| panic!("datapack {id} compiled with unreadable formats")),
+        )
+    }
+
     fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
         self.across(cx, sink);
     }

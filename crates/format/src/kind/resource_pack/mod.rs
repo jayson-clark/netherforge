@@ -10,6 +10,7 @@
 
 mod across;
 pub use across::texture_path;
+pub mod compiled;
 pub mod fonts;
 pub mod hud;
 pub mod models;
@@ -33,10 +34,7 @@ use sounds::SoundPath;
 pub const FILE_NAME: &str = "pack.json";
 pub const TEXTURES: &str = "textures";
 pub const TEXTURE_EXTENSION: &str = ".png";
-/// The private use characters glyphs and skins are numbered in (`PackFonts.PUA_COUNT`).
-pub const PUA_COUNT: usize = 0xF800 - 0xE000;
-/// How far a font can move the cursor either way (`PackFonts.MAX_OFFSET`).
-pub const MAX_OFFSET: i32 = (1 << 11) - 1;
+pub use fonts::{MAX_OFFSET, PUA_COUNT};
 /// A texture's path under `textures/`: a relative path to a PNG inside the folder.
 pub const TEXTURE_PATH_PATTERN: &str =
     r"^([A-Za-z0-9_][A-Za-z0-9_.-]*/)*[A-Za-z0-9_][A-Za-z0-9_.-]*\.png$";
@@ -422,6 +420,13 @@ impl Check<'_> {
 }
 
 impl Document for ResourcePackFile {
+    /// It with the model files its looks name, read: the rest is built with every other pack (`compiled::compile_all`).
+    fn compile(&self, _id: &str, cx: &Context) -> Option<Box<dyn crate::document::Compiled>> {
+        let none = BTreeSet::new();
+        let read = |path: &str| cx.read.and_then(|r| r(path));
+        crate::document::compiled(compiled::read(self, cx.files.unwrap_or(&none), &read))
+    }
+
     fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
         self.across(cx, sink);
     }

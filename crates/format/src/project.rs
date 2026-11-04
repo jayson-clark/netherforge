@@ -66,6 +66,10 @@ pub struct Project<'a> {
     pub in_package: bool,
     /// Every problem, by file and then line (each file's in the order they were found).
     pub problems: Vec<Problem>,
+    /// Every pack, the packages' included (by `everywhere`'s names), compiled together (glyphs are numbered
+    /// across them all); none when any has errors, so a server keeps its last good build.
+    pub compiled_resource_packs:
+        BTreeMap<String, crate::kind::resource_pack::compiled::CompiledResourcePack>,
 }
 
 /// Read access to a project's files (format's `ProjectSource`): paths are
@@ -107,6 +111,20 @@ pub struct ImageInfo {
     /// Whether each column, left to right, holds such a pixel; a host may leave it out for a picture no wider than a font's sheet.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opaque_columns: Option<Vec<bool>>,
+}
+
+impl ImageInfo {
+    /// The opaque width of the columns from `from` until `until` alone, counted from `from`. Without
+    /// `opaque_columns` every column left of `opaque_width` is taken to hold a pixel.
+    pub fn opaque_width_between(&self, from: u32, until: u32) -> u32 {
+        match &self.opaque_columns {
+            None => self.opaque_width.min(until).saturating_sub(from),
+            Some(columns) => (from..until)
+                .rev()
+                .find(|x| columns.get(*x as usize).copied().unwrap_or(false))
+                .map_or(0, |x| x - from + 1),
+        }
+    }
 }
 
 /// A project in a folder on disk: its files listed as it's opened, read as they're asked for.
@@ -431,6 +449,7 @@ fn check<'a>(
         packages,
         in_package,
         problems: Vec::new(),
+        compiled_resource_packs: BTreeMap::new(),
     };
     let mut sink = ProblemSink::new(manifest::FILE_NAME);
     exports(&project, &mut sink);
@@ -474,6 +493,7 @@ fn check<'a>(
             );
         }
     }
+    project.compiled_resource_packs = build_packs(&project, source);
     // The loader's order: by file, then line, keeping the order they were found in otherwise.
     problems.sort_by(|a, b| {
         a.file
@@ -482,6 +502,53 @@ fn check<'a>(
     });
     project.problems = problems;
     project
+}
+
+/// Every pack of `project` and its packages built together, or none when any
+/// has errors (`ResourcePackKind.build`): a package's pictures are its source's.
+fn build_packs(
+    project: &Project,
+    source: &dyn ProjectSource,
+) -> BTreeMap<String, crate::kind::resource_pack::compiled::CompiledResourcePack> {
+    use crate::kind::resource_pack::{compiled, sounds, under};
+    let packs = project.everywhere("resource_pack");
+    if packs.iter().any(|(_, r)| r.errors) {
+        return BTreeMap::new();
+    }
+    let inputs: BTreeMap<String, compiled::PackInput> = packs
+        .iter()
+        .filter_map(|(name, resource)| {
+            let read = resource
+                .compiled
+                .as_ref()?
+                .as_any()
+                .downcast_ref::<compiled::ResourcePackRead>()?;
+            let id = name.rsplit(':').next().unwrap_or(name);
+            let (sound_files, _) = sounds::files(id, under(&resource.found.inside, sounds::FOLDER));
+            let texture_files = under(&resource.found.inside, crate::kind::resource_pack::TEXTURES)
+                .into_iter()
+                .map(str::to_owned)
+                .collect();
+            Some((
+                name.clone(),
+                compiled::PackInput {
+                    read,
+                    sound_files,
+                    texture_files,
+                },
+            ))
+        })
+        .collect();
+    let image = |path: &str| match path.split_once(':') {
+        Some((namespace, local)) => project
+            .packages
+            .get(namespace)?
+            .resolved
+            .source
+            .image(local),
+        None => source.image(path),
+    };
+    compiled::compile_all(project.namespace(), &inputs, &image)
 }
 
 /// What `resource` (with no errors) compiles to, with what its own checks saw: a package's from

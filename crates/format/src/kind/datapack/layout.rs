@@ -29,10 +29,11 @@ pub fn is_name(text: &str) -> bool {
 }
 
 /// One file of a project datapack, placed: the overlay it's in, and the registry entry or tag it is.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct DatapackPath {
     /// Its path inside the datapack's folder.
     pub file: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub overlay: Option<String>,
     pub namespace: String,
     /// The registry, as its folder under `data/<namespace>/` (`worldgen/placed_feature`).

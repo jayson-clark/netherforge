@@ -19,7 +19,7 @@ fn root() -> PathBuf {
 
 /// The kinds whose compilers aren't ported yet: the golden's entries for them are left out,
 /// and a kind here that compiles anyway is a failure (this list only shrinks).
-const NOT_YET: &[&str] = &["datapack", "resource_pack", "resourcePacks"];
+const NOT_YET: &[&str] = &[];
 
 #[test]
 fn the_examples_compile_as_the_goldens_say() {
@@ -59,6 +59,10 @@ fn the_examples_compile_as_the_goldens_say() {
                 actual.insert(kind.id.to_owned(), Value::Object(resources));
             }
         }
+        actual.insert(
+            "resourcePacks".to_owned(),
+            serde_json::to_value(&loaded.compiled_resource_packs).unwrap(),
+        );
         for (kind, resources) in expected.as_object().unwrap() {
             if NOT_YET.contains(&kind.as_str()) {
                 continue;

@@ -369,3 +369,57 @@ fn resolve<'a>(reference: &'a str, textures: &'a Map<String, Value>) -> Option<&
     }
     None
 }
+
+/// A model file as the pack builds it: its JSON, and which of its texture
+/// variables name the pack's own textures (by their path under `textures/`).
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+pub struct Model {
+    pub json: Value,
+    pub textures: crate::canonical::Map<String>,
+}
+
+impl Model {
+    /// The pack textures it draws, each once, in its variables' order.
+    pub fn pack_textures(&self) -> Vec<&str> {
+        let mut out: Vec<&str> = Vec::new();
+        for (_, texture) in self.textures.iter() {
+            if !out.contains(&texture.as_str()) {
+                out.push(texture);
+            }
+        }
+        out
+    }
+
+    /// The pack texture breaking a block of it throws up: its `particle`'s, else the first of its own.
+    pub fn particle(&self) -> Option<&str> {
+        self.textures
+            .get_str("particle")
+            .or_else(|| self.textures.iter().next().map(|(_, t)| t))
+            .map(String::as_str)
+    }
+}
+
+/// `json` (a model file, already checked) as the pack builds it, `textures`
+/// the files under the pack's `textures/`.
+pub fn read(json: &Value, textures: &std::collections::BTreeSet<String>) -> Model {
+    let pack = json
+        .get("textures")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter_map(|(name, value)| {
+            let text = value.as_str()?;
+            if text.starts_with('#') || text.contains(':') {
+                return None;
+            }
+            let file = format!("{text}.png");
+            textures
+                .contains(&file)
+                .then(|| (crate::canonical::Key(name.clone()), file))
+        })
+        .collect();
+    Model {
+        json: json.clone(),
+        textures: pack,
+    }
+}

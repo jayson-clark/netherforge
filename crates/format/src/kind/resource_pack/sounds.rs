@@ -96,12 +96,15 @@ pub fn files<'a>(
 }
 
 /// One sound event as it's built: the files (under `sounds/`) it picks among, and how it plays them.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct Sound {
     pub key: String,
     pub files: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub volume: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub pitch: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub subtitle: Option<String>,
     pub stream: bool,
 }
