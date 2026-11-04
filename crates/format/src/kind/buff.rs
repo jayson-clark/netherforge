@@ -1,16 +1,16 @@
 //! `buffs/<id>.json`: a buff or a debuff scripts put on a player or a centity
-//! for a while. Format's `BuffFile` and `BuffKind`.
+//! for a while. Format's `BuffFile` and `BuffKind`. Every rule is a field's.
 
-use std::sync::LazyLock;
-
-use regex::Regex;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::canonical::Map;
 use crate::document::Document;
-use crate::problem::{ProblemSink, codes};
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// A buff or a debuff scripts put on a player or a centity for a while
+/// (`player:add_buff`): what it adds to their stats while it lasts, what it
+/// cures and what keeps it off, and how it's shown for a HUD to draw.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BuffFile {
     #[serde(rename = "$schema", skip_serializing_if = "Option::is_none")]
@@ -18,29 +18,41 @@ pub struct BuffFile {
     /// What players read it as.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    /// `<pack>/<key>`: a glyph to draw it by.
+    /// `<pack>/<key>`: a glyph of the project's resource packs to draw it by.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
-    /// `#rrggbb`.
+    /// Its colour, `#rrggbb`, for a HUD or a bar.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(regex(pattern = r"^#[0-9a-fA-F]{6}$"), extend("x-problem" = "buff.color", "x-rule" = "#rrggbb"))]
     pub color: Option<String>,
+    /// Whether it's bad for whoever has it. Default false.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub debuff: Option<bool>,
-    /// What it adds to stats while it lasts.
+    /// What it adds to stats while it lasts: `{ "defense": 8, "move": 0.25 }`, negative to take away.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("propertyNames" = {
+        "pattern": "^[a-z][a-z0-9_]{0,63}$",
+        "x-problem": "buff.stat",
+        "x-rule": "a stat name: lowercase letters, digits and _"
+    }))]
     pub stats: Option<Map<f64>>,
+    /// Buffs it takes away as it comes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cures: Option<Vec<String>>,
+    /// Buffs that keep it from taking hold while they last.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blocked_by: Option<Vec<String>>,
+    /// What another of it does to one that's still going. Default `longest`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stacking: Option<BuffStacking>,
+    /// The most ticks it can have left. Default: no limit.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 1), extend("x-problem" = "buff.ticks"))]
     pub max_ticks: Option<i32>,
 }
 
-/// What adding a buff someone already has does.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// What adding a buff someone already has does: keep the longer time, add the times, or start again.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum BuffStacking {
     Longest,
@@ -48,50 +60,10 @@ pub enum BuffStacking {
     Replace,
 }
 
-/// A stat's name: what `player:stat` takes.
-pub static STAT_NAME: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new("^[a-z][a-z0-9_]{0,63}$").expect("a pattern"));
-static COLOR: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new("^#[0-9a-fA-F]{6}$").expect("a pattern"));
-
 impl Document for BuffFile {
     const SCHEMA: &'static str = "../.netherforge/schema/buff.schema.json";
 
     fn set_schema(&mut self, schema: Option<String>) {
         self.schema = schema;
-    }
-
-    fn validate(&self, sink: &mut ProblemSink) {
-        if let Some(color) = &self.color
-            && !COLOR.is_match(color)
-        {
-            sink.report(
-                codes::BUFF_COLOR,
-                "color must be #rrggbb",
-                Some("$.color".into()),
-            );
-        }
-        for (stat, value) in self.stats.iter().flat_map(|s| s.iter()) {
-            if !STAT_NAME.is_match(&stat.0) {
-                sink.report(
-                    codes::BUFF_STAT,
-                    format!("\"{stat}\" isn't a stat name: lowercase letters, digits and _"),
-                    Some("$.stats".into()),
-                );
-            } else if !value.is_finite() {
-                sink.report(
-                    codes::BUFF_STAT,
-                    format!("{stat} must be a number"),
-                    Some(format!("$.stats.{stat}")),
-                );
-            }
-        }
-        if self.max_ticks.is_some_and(|t| t < 1) {
-            sink.report(
-                codes::BUFF_TICKS,
-                "maxTicks must be at least 1",
-                Some("$.maxTicks".into()),
-            );
-        }
     }
 }

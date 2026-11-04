@@ -8,7 +8,7 @@ use serde::de::DeserializeOwned;
 use crate::kinds::split_package;
 use crate::problem::{Problem, ProblemSink};
 
-pub trait Document: Serialize + DeserializeOwned + Clone {
+pub trait Document: Serialize + DeserializeOwned + Clone + schemars::JsonSchema {
     /// The schema the kind's files name, from a file one folder deep
     /// (`../.netherforge/schema/buff.schema.json`).
     const SCHEMA: &'static str;
@@ -21,7 +21,8 @@ pub trait Document: Serialize + DeserializeOwned + Clone {
         self.clone()
     }
 
-    /// Its own checks, on itself alone.
+    /// Its checks on itself alone that its fields' rules can't say (see
+    /// `rules`): those run first, from its schema.
     fn validate(&self, _sink: &mut ProblemSink) {}
 }
 
@@ -50,6 +51,10 @@ pub fn load<T: Document>(text: &str, path: &str) -> (Option<T>, Vec<Problem>) {
         Err(problem) => (None, vec![*problem]),
         Ok(value) => {
             let mut sink = ProblemSink::new(path);
+            // The file as it's written (its maps in their order), against the model's rules.
+            let json: serde_json::Value =
+                serde_json::from_str(text).expect("it parsed as the model");
+            crate::rules::check::<T>(&json, &mut sink);
             value.validate(&mut sink);
             (Some(value), sink.problems)
         }

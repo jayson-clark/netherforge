@@ -423,16 +423,31 @@ unchanged.
   usable id and its main or companion file (`project.id`, `project.missing-file`,
   `project.stray-file`). The goldens agree on every one of those codes in every case.
 
+- **The models are the single source** (decided after the first kinds: format defined each
+  resource type four times by hand, in Kotlin, the format docs, schemas generated from Kotlin's
+  serializers, and the Rust copy, and wrote its simple rules as hundreds of hand-coded checks).
+  A model derives serde and `JsonSchema` (schemars), so its JSON Schema comes from it, and
+  later its TypeScript types (specta, as the editor's commands already are).
+- **Simple rules are a field's**, declared once as schema constraints (`range`, `regex`,
+  `length`, item counts, `propertyNames` for a map's keys) with `x-problem` (the code) and, for
+  a pattern, `x-rule` (what it means in words). `rules::check` walks the document as written
+  against its schema and words each broken rule from a template (`maxTicks must be at least
+1`, `color must be #rrggbb`), and the editor reads the same constraints in the schema.
+  `rules::uncoded::<T>()` lists a constraint with no code, which each kind's tests assert is
+  none. A kind's `validate` keeps only what a schema can't say (a slot inside its menu's size).
 - **Kinds, one by one** (`kind/<kind>.rs`, listed in `kind::PORTED`): each document kind is a
   `Document` (`document.rs`): its `SCHEMA` from a file one folder deep, which `schema_at`
   adjusts for the folders the file is really in (group folders add `../`, as `schemaAt` does),
-  its `canonical()`, and its own `validate`. `kind::read` dispatches a scanned resource to its
-  kind. Every ported kind is held by `tests/goldens.rs` to the goldens' problems in its files
-  (`reference.*`, the checks across resources, left out until they're ported) and to the
-  examples, which must write back to the same bytes. To port a kind: its model and checks in
-  `kind/`, an arm in `kind::read` and `kind::write_back`, its id in `PORTED`. A files kind (`module`) has no model, only its checks. The examples are
-  valid projects, so a ported kind must report no errors in them. Ported: `buff`, `module`
-  (with `ModuleRequires`, the modules scripts require, worked out once per project in `Source`).
+  its `canonical()`, and its `validate`. `kind::read` dispatches a scanned resource to its kind.
+  A files kind (`module`) has no model, only its checks.
+- **What the goldens hold a kind to**: `tests/goldens.rs` compares a ported kind's problems with
+  the goldens' by what's wrong and where (severity, file, path, code, position, related), not
+  their wording, since the field rules word themselves; each kind's own tests hold its wording.
+  `reference.*` (checks across resources) is left out until it's ported. The examples are
+  valid projects, so a ported kind must report no errors in them, and must write them back to
+  the same bytes. When the Rust side takes over, the goldens are written from it. Ported:
+  `buff` (all its rules are fields'), `module` (with `ModuleRequires`, worked out once per
+  project in `Source`).
 
 Next in format: reading each resource with its kind's model and checks (kind by kind, each
 with its goldens, until the harness compares whole cases), then the checks across resources

@@ -159,3 +159,34 @@ pub fn set(list: &[String]) -> Vec<String> {
     out.dedup();
     out
 }
+
+impl schemars::JsonSchema for Key {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Key".into()
+    }
+    fn inline_schema() -> bool {
+        true
+    }
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({ "type": "string" })
+    }
+}
+
+/// A map's schema: an object of `V`s, keyed as `K` says (an enum's names).
+impl<K: schemars::JsonSchema, V: schemars::JsonSchema> schemars::JsonSchema for Entries<K, V> {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        format!("Map_of_{}", V::schema_name()).into()
+    }
+    fn inline_schema() -> bool {
+        true
+    }
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let values = generator.subschema_for::<V>();
+        let keys = generator.subschema_for::<K>();
+        schemars::json_schema!({
+            "type": "object",
+            "additionalProperties": values,
+            "propertyNames": keys,
+        })
+    }
+}

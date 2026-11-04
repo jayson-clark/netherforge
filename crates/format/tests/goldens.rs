@@ -131,6 +131,22 @@ fn the_manifests_problems_are_formats() {
     );
 }
 
+/// What a problem says is wrong and where, not its wording: the Rust port words
+/// its field rules from their schema (`rules`), so only these must agree.
+fn what_and_where(p: &Value) -> String {
+    let keep = [
+        "severity", "file", "path", "line", "column", "code", "related",
+    ];
+    let o: serde_json::Map<String, Value> = p
+        .as_object()
+        .unwrap()
+        .iter()
+        .filter(|(k, _)| keep.contains(&k.as_str()))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    Value::Object(o).to_string()
+}
+
 /// Problems about one resource alone; a reference's (`reference.*`) is a check across resources.
 fn own(code: &str) -> bool {
     !code.starts_with("reference.") && !layouts(code)
@@ -157,24 +173,24 @@ fn the_ported_kinds_problems_are_formats() {
             }
             let path = found.kind.path_of(&found.id, &found.group);
             let location = found.kind.location_of(&found.id, &found.group);
-            let mut read_problems = kind::read(&found, &source).unwrap();
-            // The loader's order: by file (stable).
-            read_problems.sort_by(|a, b| a.file.cmp(&b.file));
-            let actual: Vec<String> = read_problems
+            let mut actual: Vec<String> = kind::read(&found, &source)
+                .unwrap()
                 .iter()
                 .map(|p| p.to_json())
                 .filter(|p| own(p["code"].as_str().unwrap_or("")))
-                .map(|p| p.to_string())
+                .map(|p| what_and_where(&p))
                 .collect();
-            let wanted: Vec<String> = expected
+            actual.sort();
+            let mut wanted: Vec<String> = expected
                 .iter()
                 .filter(|p| {
                     let file = p["file"].as_str().unwrap_or("");
                     (file == path || file == location || file.starts_with(&format!("{location}/")))
                         && own(p["code"].as_str().unwrap_or(""))
                 })
-                .map(|p| p.to_string())
+                .map(what_and_where)
                 .collect();
+            wanted.sort();
             checked += wanted.len();
             if actual != wanted {
                 failures.push(format!(
