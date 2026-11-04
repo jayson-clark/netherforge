@@ -6,6 +6,7 @@ pub mod biome;
 pub mod block;
 pub mod buff;
 pub mod cutscene;
+pub mod datapack;
 pub mod dialog;
 pub mod dimension_type;
 pub mod files;
@@ -91,6 +92,7 @@ pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
         "game_block" => crate::document::load::<game_block::GameBlockFile>(&text(), &path, &cx).1,
         "cutscene" => crate::document::load::<cutscene::CutsceneFile>(&text(), &path, &cx).1,
         "block" => crate::document::load::<block::BlockFile>(&text(), &path, &cx).1,
+        "datapack" => crate::document::load::<datapack::PackMeta>(&text(), &path, &cx).1,
         "resource_pack" => {
             crate::document::load::<resource_pack::ResourcePackFile>(&text(), &path, &cx).1
         }
@@ -141,6 +143,7 @@ pub fn write_back(found: &Found, text: &str) -> Option<Result<String, Box<Proble
         "game_block" => again::<game_block::GameBlockFile>(text, &path),
         "cutscene" => again::<cutscene::CutsceneFile>(text, &path),
         "block" => again::<block::BlockFile>(text, &path),
+        "datapack" => again::<datapack::PackMeta>(text, &path),
         "resource_pack" => again::<resource_pack::ResourcePackFile>(text, &path),
         "structure" => again::<structure::StructureGeneration>(text, &path),
         "particle_effect" => again::<particle::ParticleEffectFile>(text, &path),

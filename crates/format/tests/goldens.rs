@@ -185,6 +185,8 @@ fn own(code: &str) -> bool {
         "resource_pack.too-many-glyphs",
         "resource_pack.replace-size",
         "resource_pack.replace-shape",
+        "datapack.namespace",
+        "datapack.conflict",
     ];
     let across =
         code.starts_with("reference.") || code.starts_with("font.") || ACROSS.contains(&code);
@@ -195,7 +197,7 @@ fn own(code: &str) -> bool {
 /// replaced name that isn't a path, and one the game hasn't got): until the
 /// latter are ported, what's reported must be expected, but not all that's
 /// expected is reported.
-const MIXED: &[&str] = &["resource_pack.replace-name"];
+const MIXED: &[&str] = &["resource_pack.replace-name", "datapack.reference"];
 
 fn mixed(p: &str) -> bool {
     MIXED
