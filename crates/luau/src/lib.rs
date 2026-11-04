@@ -7,6 +7,7 @@ mod failure;
 mod host;
 pub mod json;
 mod limits;
+pub mod random;
 
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use failure::{Failure, Location, Stop};

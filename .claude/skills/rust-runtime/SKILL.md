@@ -79,7 +79,9 @@ becomes.
    express (`bit32` is 32 bits). **They move into Rust**: a `Random` is userdata holding the
    xoshiro256** state, and the terrain's seeds and hashes are computed natively.
    - The algorithms stay, so the streams don't change: the same seed gives the same numbers as
-     today's prelude, and `Random`'s tests keep their expected values. A seed is a whole number
+     today's prelude. `crates/luau/src/random.rs` is the generator, and `tests/random.rs` holds
+     it to numbers made by running the prelude's own Lua on Lua 5.4 (words, dice, fractions
+     and a wide range, for five seeds). A seed is a whole number
      (`integer`), and a seed too big for that is an `Int64` string.
    - `math.random` is Luau's own (PCG32 in Luau, seeded per room by the runtime), which also
      makes it deterministic per room's seed, as the roadmap wants for replays.
