@@ -14,6 +14,59 @@ use serde_json::{Map, Value};
 use crate::json::{child_path, format_number};
 use crate::problem::{ProblemCode, ProblemSink};
 
+/// A string with a rule of its own, wherever a model has one: a newtype whose
+/// schema is the pattern, the problem it is when broken, and the rule in
+/// words, so every field (and map key) of it shares the one definition.
+/// Ordered as a map key is (`canonical::key_order`).
+#[macro_export]
+macro_rules! ruled_string {
+    ($(#[$m:meta])* $name:ident, $pattern:expr, $problem:literal, $rule:expr) => {
+        $(#[$m])*
+        #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+        #[serde(transparent)]
+        pub struct $name(pub String);
+
+        impl Ord for $name {
+            fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+                $crate::canonical::key_order(&self.0, &other.0)
+            }
+        }
+
+        impl PartialOrd for $name {
+            fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+                Some(self.cmp(other))
+            }
+        }
+
+        impl std::ops::Deref for $name {
+            type Target = str;
+            fn deref(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+
+        impl schemars::JsonSchema for $name {
+            fn schema_name() -> std::borrow::Cow<'static, str> {
+                stringify!($name).into()
+            }
+            fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+                schemars::json_schema!({
+                    "type": "string",
+                    "pattern": $pattern,
+                    "x-problem": $problem,
+                    "x-rule": $rule,
+                })
+            }
+        }
+    };
+}
+
 /// Checks `value` (a document as its file has it) against `T`'s rules.
 pub fn check<T: JsonSchema>(value: &Value, sink: &mut ProblemSink) {
     let schema = schema_for!(T);
@@ -305,3 +358,9 @@ pub const RGB: &str = r"^#[0-9a-fA-F]{6}$";
 pub const RGB_LOWERCASE: &str = r"^#[0-9a-f]{6}$";
 /// A colour with alpha allowed, `#rrggbb` or `#aarrggbb` (clouds).
 pub const ARGB: &str = r"^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$";
+
+/// Whether `text` matches `pattern` (a valid one), compiled once: for a
+/// hand-written check that shares a field's pattern.
+pub fn matches_pattern(pattern: &str, text: &str) -> bool {
+    matches(pattern, text).expect("a valid pattern")
+}

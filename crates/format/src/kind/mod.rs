@@ -16,6 +16,7 @@ pub mod menu;
 pub mod module;
 pub mod particle;
 pub mod recipe;
+pub mod resource_pack;
 pub mod screen;
 pub mod screen_font;
 pub mod sky;
@@ -31,7 +32,7 @@ use crate::snapshot::Found;
 /// what's worked out across them once (the modules scripts require).
 pub struct Source<'a> {
     pub files: &'a BTreeSet<String>,
-    pub read: &'a dyn Fn(&str) -> Option<String>,
+    pub read: crate::document::ReadFile<'a>,
     pub required_modules: BTreeSet<String>,
     pub game: Option<&'a dyn crate::game::GameData>,
 }
@@ -69,8 +70,12 @@ pub fn document_path(found: &Found) -> String {
 pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
     let path = document_path(found);
     let text = || (source.read)(&path).unwrap_or_default();
+    let location = found.kind.location_of(&found.id, &found.group);
+    let inside = |file: &str| (source.read)(&format!("{location}/{file}"));
     let cx = crate::document::Context {
         id: &found.id,
+        location: &location,
+        read: Some(&inside),
         files: Some(&found.inside),
         game: source.game,
     };
@@ -86,6 +91,9 @@ pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
         "game_block" => crate::document::load::<game_block::GameBlockFile>(&text(), &path, &cx).1,
         "cutscene" => crate::document::load::<cutscene::CutsceneFile>(&text(), &path, &cx).1,
         "block" => crate::document::load::<block::BlockFile>(&text(), &path, &cx).1,
+        "resource_pack" => {
+            crate::document::load::<resource_pack::ResourcePackFile>(&text(), &path, &cx).1
+        }
         // A structure generates by itself only with its document beside it.
         "structure" if !source.files.contains(&path) => Vec::new(),
         "structure" => {
@@ -133,6 +141,7 @@ pub fn write_back(found: &Found, text: &str) -> Option<Result<String, Box<Proble
         "game_block" => again::<game_block::GameBlockFile>(text, &path),
         "cutscene" => again::<cutscene::CutsceneFile>(text, &path),
         "block" => again::<block::BlockFile>(text, &path),
+        "resource_pack" => again::<resource_pack::ResourcePackFile>(text, &path),
         "structure" => again::<structure::StructureGeneration>(text, &path),
         "particle_effect" => again::<particle::ParticleEffectFile>(text, &path),
         "screen" => again::<screen::ScreenFile>(text, &path),

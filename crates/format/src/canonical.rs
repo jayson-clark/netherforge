@@ -14,24 +14,28 @@ use crate::json::print;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Key(pub String);
 
-impl Key {
-    fn number(&self) -> Option<i32> {
-        // Kotlin's `toIntOrNull`: an optional sign and digits, within an i32.
-        self.0.parse::<i32>().ok()
+impl Ord for Key {
+    fn cmp(&self, other: &Self) -> Ordering {
+        key_order(&self.0, &other.0)
     }
 }
 
-impl Ord for Key {
-    fn cmp(&self, other: &Self) -> Ordering {
-        let a = self.number().unwrap_or(i32::MAX);
-        let b = other.number().unwrap_or(i32::MAX);
-        a.cmp(&b).then_with(|| self.0.cmp(&other.0))
-    }
+/// Format's order of two map keys: whole numbers first, as numbers, then the rest as strings.
+pub fn key_order(a: &str, b: &str) -> Ordering {
+    let number = |k: &str| k.parse::<i32>().ok().unwrap_or(i32::MAX);
+    number(a).cmp(&number(b)).then_with(|| a.cmp(b))
 }
 
 impl PartialOrd for Key {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+impl std::ops::Deref for Key {
+    type Target = str;
+    fn deref(&self) -> &str {
+        &self.0
     }
 }
 

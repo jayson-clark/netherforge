@@ -177,10 +177,30 @@ fn own(code: &str) -> bool {
         "block.carriers",
         "block.vanilla-looks",
         "screen_font.grid",
+        "resource_pack.vanilla-missing",
+        "resource_pack.hud-hide",
+        "resource_pack.sound-event",
+        "resource_pack.image",
+        "resource_pack.picture-size",
+        "resource_pack.too-many-glyphs",
+        "resource_pack.replace-size",
+        "resource_pack.replace-shape",
     ];
     let across =
         code.starts_with("reference.") || code.starts_with("font.") || ACROSS.contains(&code);
     !across && !layouts(code)
+}
+
+/// Codes a kind's own checks and its checks across resources both report (a
+/// replaced name that isn't a path, and one the game hasn't got): until the
+/// latter are ported, what's reported must be expected, but not all that's
+/// expected is reported.
+const MIXED: &[&str] = &["resource_pack.replace-name"];
+
+fn mixed(p: &str) -> bool {
+    MIXED
+        .iter()
+        .any(|code| p.contains(&format!("\"code\":\"{code}\"")))
 }
 
 #[test]
@@ -222,6 +242,8 @@ fn the_ported_kinds_problems_are_formats() {
                 .map(what_and_where)
                 .collect();
             wanted.sort();
+            // A mixed code's expected problem nothing reported is a check across resources'.
+            wanted.retain(|w| !mixed(w) || actual.contains(w));
             checked += wanted.len();
             if actual != wanted {
                 failures.push(format!(
