@@ -19,6 +19,8 @@ pub enum Registry {
     SoundEvent,
 }
 
+use std::collections::BTreeMap;
+
 pub trait GameData {
     /// The Minecraft version the facts are from.
     fn minecraft_version(&self) -> &str;
@@ -28,9 +30,30 @@ pub trait GameData {
     fn tag(&self, registry: Registry, id: &str) -> Option<Vec<String>>;
     /// How much damage an item takes before it breaks; 0 for one that doesn't.
     fn item_durability(&self, id: &str) -> u32;
-    /// The options a particle takes (`dust`'s colour, `block`'s state), by their kind's name;
-    /// `None` for one that takes none or isn't known.
-    fn particle_options(&self, id: &str) -> Option<String>;
+    /// What options a particle takes; `None` for one the game doesn't have.
+    fn particle(&self, id: &str) -> Option<ParticleData>;
+    /// A block's properties and the values each may be; `None` for a block the game doesn't have.
+    fn block_properties(&self, id: &str) -> Option<BTreeMap<String, Vec<String>>>;
+}
+
+/// What a particle type is: which options a spawn of it carries (Paper's `Particle.dataType`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ParticleData {
+    /// No options: flame, end rod, flash.
+    None,
+    /// A colour and a size.
+    Dust,
+    /// A colour, the colour it fades to, and a size.
+    DustTransition,
+    /// A colour: entity effects, tinted leaves.
+    Color,
+    /// A block state: block, falling dust, block markers.
+    Block,
+    /// An item stack.
+    Item,
+    /// Options of another kind (a vibration's path, a shriek's delay).
+    Other,
 }
 
 pub const NAMESPACE: &str = "minecraft";

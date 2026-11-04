@@ -3,6 +3,7 @@
 //! every side, so a file nobody changed is never a diff.
 
 pub mod animation;
+pub mod block_state;
 pub mod canonical;
 pub mod document;
 pub mod game;

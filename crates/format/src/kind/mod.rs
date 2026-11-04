@@ -13,6 +13,7 @@ pub mod item;
 pub mod loot;
 pub mod menu;
 pub mod module;
+pub mod particle;
 pub mod recipe;
 pub mod screen;
 pub mod screen_font;
@@ -70,6 +71,9 @@ pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
         "biome" => crate::document::load::<biome::BiomeFile>(&text(), &path, &cx).1,
         "game_block" => crate::document::load::<game_block::GameBlockFile>(&text(), &path, &cx).1,
         "cutscene" => crate::document::load::<cutscene::CutsceneFile>(&text(), &path, &cx).1,
+        "particle_effect" => {
+            crate::document::load::<particle::ParticleEffectFile>(&text(), &path, &cx).1
+        }
         "screen" => crate::document::load::<screen::ScreenFile>(&text(), &path, &cx).1,
         "video" => crate::document::load::<video::VideoFile>(&text(), &path, &cx).1,
         "screen_font" => {
@@ -108,6 +112,7 @@ pub fn write_back(found: &Found, text: &str) -> Option<Result<String, Box<Proble
         "biome" => again::<biome::BiomeFile>(text, &path),
         "game_block" => again::<game_block::GameBlockFile>(text, &path),
         "cutscene" => again::<cutscene::CutsceneFile>(text, &path),
+        "particle_effect" => again::<particle::ParticleEffectFile>(text, &path),
         "screen" => again::<screen::ScreenFile>(text, &path),
         "video" => again::<video::VideoFile>(text, &path),
         "screen_font" => again::<screen_font::ScreenFontFile>(text, &path),

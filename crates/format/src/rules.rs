@@ -301,5 +301,7 @@ fn matches(pattern: &str, text: &str) -> Option<bool> {
 
 /// A colour, `#rrggbb`: the one definition every field that takes one names.
 pub const RGB: &str = r"^#[0-9a-fA-F]{6}$";
+/// A colour in lowercase, `#rrggbb`, as particle effects write theirs.
+pub const RGB_LOWERCASE: &str = r"^#[0-9a-f]{6}$";
 /// A colour with alpha allowed, `#rrggbb` or `#aarrggbb` (clouds).
 pub const ARGB: &str = r"^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$";

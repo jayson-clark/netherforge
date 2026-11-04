@@ -233,9 +233,11 @@ impl Document for BiomeFile {
                 sink,
                 game,
             );
-            if let Some(options) =
-                game.and_then(|g| g.particle_options(&game::normalize(&particle.particle)))
+            if let Some(options) = game
+                .and_then(|g| g.particle(&game::normalize(&particle.particle)))
+                .filter(|d| *d != game::ParticleData::None)
             {
+                let options = name_of(&options);
                 sink.report(
                     codes::BIOME_PARTICLE,
                     format!("\"{}\" takes options ({options}), which a biome's particle can't give: use one that takes none", particle.particle),

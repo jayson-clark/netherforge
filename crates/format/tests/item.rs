@@ -1,4 +1,4 @@
-use netherforge_format::game::{GameData, Registry};
+use netherforge_format::game::{self, GameData, Registry};
 use netherforge_format::item::{self, ItemDef};
 use netherforge_format::{ProblemSink, rules};
 
@@ -27,7 +27,10 @@ impl GameData for Game {
             0
         }
     }
-    fn particle_options(&self, _: &str) -> Option<String> {
+    fn particle(&self, _: &str) -> Option<game::ParticleData> {
+        None
+    }
+    fn block_properties(&self, _: &str) -> Option<std::collections::BTreeMap<String, Vec<String>>> {
         None
     }
 }
