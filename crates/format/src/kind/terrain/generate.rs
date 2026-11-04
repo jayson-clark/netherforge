@@ -165,8 +165,9 @@ impl Stages {
 /// (format's `ScriptRunner`). Its random numbers and noises are the generator's
 /// (`ScriptSeeds`); how a state runs the script is the host's.
 pub trait TerrainScript: Send + Sync {
-    /// The stages the script returns (none when its body fails): the same in every state.
-    fn stages(&self) -> Stages;
+    /// The stages the script returns (none when its body fails): the same in
+    /// every state, so the first state made says (loading one if none is yet).
+    fn stages(&self, generator: &TerrainGenerator) -> Stages;
     fn take(&self, generator: &TerrainGenerator) -> Box<dyn ScriptState>;
     fn give(&self, state: Box<dyn ScriptState>);
     /// Lets go of every state (one in use goes as it's given back).
@@ -223,6 +224,7 @@ pub trait TerrainScripts {
 
 /// The seeds a script's `math.random` takes for each call, and its noises:
 /// from the world's seed alone, so a script's world is the same everywhere.
+#[derive(Clone, Copy, Debug)]
 pub struct ScriptSeeds {
     height: i32,
     terrain: i32,
@@ -541,7 +543,10 @@ impl TerrainGenerator {
     }
 
     fn stages(&self) -> Stages {
-        self.script.as_ref().map(|s| s.stages()).unwrap_or_default()
+        self.script
+            .as_ref()
+            .map(|s| s.stages(self))
+            .unwrap_or_default()
     }
 
     /// Whether a place's biome can differ from its column's: the file has volume areas, or its script a `biome` stage.

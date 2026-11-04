@@ -412,7 +412,7 @@ class TerrainVolumesTest {
         val source = """
             local terrain = ...
             local plan = terrain.plan("numbers", 16, function(cell_x, cell_z)
-              return { math.random(), math.random(1, 6), math.random(-1000000, 1000000), math.random(1 << 40) }
+              return { math.random(), math.random(1, 6), math.random(-1000000, 1000000), math.random(2 ^ 40) }
             end)
             return {
               terrain = function(chunk)

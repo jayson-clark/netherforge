@@ -185,6 +185,14 @@ impl Host {
         for name in unlisted {
             base.raw_set(name, Value::Nil)?;
         }
+        // The string metatable is the library's: `getmetatable("")` says nothing of it, so no script reaches
+        // `string` through it (what the Kotlin runtime's sandbox and format's terrain glue did).
+        if let Some(strings) = lua
+            .load("return getmetatable('')")
+            .call::<Option<Table>>(())?
+        {
+            strings.raw_set("__metatable", false)?;
+        }
         lua.sandbox(true)?;
 
         let interrupt_guard = guard.clone();

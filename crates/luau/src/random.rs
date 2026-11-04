@@ -26,6 +26,19 @@ impl Random {
         Random { s }
     }
 
+    /// Lua 5.4's own `math.randomseed(n1, n2)`: the state `[n1, 0xff, n2, 0]`,
+    /// its first 16 words thrown away. What a terrain script's `math.random`
+    /// is seeded with for each call, so it draws the numbers it drew on Lua 5.4.
+    pub fn lua_seeded(n1: i64, n2: i64) -> Random {
+        let mut random = Random {
+            s: [n1 as u64, 0xff, n2 as u64, 0],
+        };
+        for _ in 0..16 {
+            random.next_word();
+        }
+        random
+    }
+
     /// The next 64 bits.
     pub fn next_word(&mut self) -> u64 {
         let s = &mut self.s;

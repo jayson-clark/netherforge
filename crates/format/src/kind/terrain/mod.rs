@@ -10,6 +10,7 @@
 pub mod compiled;
 pub mod density;
 pub mod generate;
+pub mod scripts;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
