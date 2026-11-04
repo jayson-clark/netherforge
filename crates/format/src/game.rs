@@ -12,6 +12,7 @@ pub enum Registry {
     Attribute,
     DataComponentType,
     LootTable,
+    TriggerType,
 }
 
 pub trait GameData {

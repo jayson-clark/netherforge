@@ -156,10 +156,15 @@ fn what_and_where(p: &Value) -> String {
 /// Problems about one resource alone; a reference's (`reference.*`) is a check across resources.
 fn own(code: &str) -> bool {
     // A project item's own kind, the project's default font: checks across resources too.
-    let across = code.starts_with("reference.")
-        || code.starts_with("font.")
-        || code == "item.kind-mismatch"
-        || code == "loot.cycle";
+    // Each kind's `crossCheck` in format: they come with the checks across resources.
+    const ACROSS: &[&str] = &[
+        "item.kind-mismatch",
+        "loot.cycle",
+        "advancement.cycle",
+        "build.id-taken",
+    ];
+    let across =
+        code.starts_with("reference.") || code.starts_with("font.") || ACROSS.contains(&code);
     !across && !layouts(code)
 }
 
@@ -179,13 +184,13 @@ fn the_ported_kinds_problems_are_formats() {
         let read = |p: &str| std::fs::read_to_string(dir.join(p)).ok();
         let source = kind::Source::new(&files, &read);
         for found in netherforge_format::snapshot::scan(&files).resources {
-            if !kind::PORTED.contains(&found.kind.id) {
+            // A kind not ported yet answers `None`.
+            let Some(problems) = kind::read(&found, &source) else {
                 continue;
-            }
+            };
             let path = found.kind.path_of(&found.id, &found.group);
             let location = found.kind.location_of(&found.id, &found.group);
-            let mut actual: Vec<String> = kind::read(&found, &source)
-                .unwrap()
+            let mut actual: Vec<String> = problems
                 .iter()
                 .map(|p| p.to_json())
                 .filter(|p| own(p["code"].as_str().unwrap_or("")))
@@ -238,10 +243,9 @@ fn the_ported_kinds_examples_write_back() {
         let read = |p: &str| std::fs::read_to_string(dir.join(p)).ok();
         let source = kind::Source::new(&files, &read);
         for found in netherforge_format::snapshot::scan(&files).resources {
-            if !kind::PORTED.contains(&found.kind.id) {
+            let Some(problems) = kind::read(&found, &source) else {
                 continue;
-            }
-            let problems = kind::read(&found, &source).expect("a ported kind");
+            };
             for p in problems
                 .iter()
                 .filter(|p| p.severity == netherforge_format::Severity::Error)

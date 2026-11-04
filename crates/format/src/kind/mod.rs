@@ -1,6 +1,7 @@
 //! The kinds ported so far, each beside its model, and reading a scanned
 //! resource of one.
 
+pub mod advancement;
 pub mod buff;
 pub mod dialog;
 pub mod files;
@@ -15,17 +16,6 @@ use std::collections::BTreeSet;
 
 use crate::problem::Problem;
 use crate::snapshot::Found;
-
-/// The kinds whose resources this crate reads so far.
-pub const PORTED: &[&str] = &[
-    "buff",
-    "dialog",
-    "item",
-    "loot_table",
-    "menu",
-    "module",
-    "recipe",
-];
 
 /// What a resource is read from: the project's files, a way to read one, and
 /// what's worked out across them once (the modules scripts require).
@@ -52,7 +42,8 @@ impl<'a> Source<'a> {
 }
 
 /// A scanned resource read and checked on its own, if its kind is ported:
-/// its problems.
+/// its problems. `None` is a kind not ported yet: this match is the one list
+/// of the kinds that are.
 pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
     let path = found.kind.path_of(&found.id, &found.group);
     let text = || (source.read)(&path).unwrap_or_default();
@@ -68,6 +59,9 @@ pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
         "recipe" => crate::document::load::<recipe::RecipeFile>(&text(), &path, &cx).1,
         "loot_table" => crate::document::load::<loot::LootTableFile>(&text(), &path, &cx).1,
         "sky" => crate::document::load::<sky::SkyFile>(&text(), &path, &cx).1,
+        "advancement" => {
+            crate::document::load::<advancement::AdvancementFile>(&text(), &path, &cx).1
+        }
         "module" => module::check(found, source),
         "build" => files::build(found),
         "migration" => files::migration(found),
@@ -92,6 +86,7 @@ pub fn write_back(found: &Found, text: &str) -> Option<Result<String, Box<Proble
         "recipe" => again::<recipe::RecipeFile>(text, &path),
         "loot_table" => again::<loot::LootTableFile>(text, &path),
         "sky" => again::<sky::SkyFile>(text, &path),
+        "advancement" => again::<advancement::AdvancementFile>(text, &path),
         _ => return None,
     })
 }

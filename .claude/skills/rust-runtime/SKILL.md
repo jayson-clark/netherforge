@@ -459,17 +459,20 @@ unchanged.
   path and budget are field rules; `check` asks that the file is there). `game.rs` is the `GameData` the checks ask (registries, tags, durability):
   a project loads without it, and those checks say nothing then. `canonical::Free` is
   free-form JSON (an item's `data`), written sorted however deep as kotlinx does.
-- **Kinds, one by one** (`kind/<kind>.rs`, listed in `kind::PORTED`): each document kind is a
+- **Kinds, one by one** (`kind/<kind>.rs`; `kind::read`'s match is the one list of the ported kinds, a kind not ported answering `None`): each document kind is a
   `Document` (`document.rs`): its `SCHEMA` from a file one folder deep, which `schema_at`
   adjusts for the folders the file is really in (group folders add `../`, as `schemaAt` does),
   its `canonical()`, and its `validate`. `kind::read` dispatches a scanned resource to its kind.
   A files kind (`module`) has no model, only its checks. A scripted kind says so
   (`Document::SCRIPTED`, `script()`), and `load` checks the Lua files beside its script are named
-  so `require` can reach them (`script.file-name`), for every such kind at once.
+  so `require` can reach them (`script.file-name`), for every such kind at once. To port a kind:
+  its model and checks in `kind/`, and an arm in `kind::read` and `kind::write_back`. There's no
+  separate list of ported kinds: one once drifted from the match (rustfmt split it a line apiece
+  and new entries missed it), and six kinds' goldens silently didn't run.
 - **What the goldens hold a kind to**: `tests/goldens.rs` compares a ported kind's problems with
   the goldens' by what's wrong and where (severity, file, path, code, position, related), not
   their wording, since the field rules word themselves; each kind's own tests hold its wording. A parse problem is compared by file and code only: kotlinx gives no path or position for a custom type's error (an ingredient's), where the reader gives both.
-  Checks across resources (`reference.*`, `font.*`, `item.kind-mismatch`, `loot.cycle`) are left out until they're ported. The examples are
+  Checks across resources (`reference.*`, `font.*`, and the kinds' `crossCheck`s: `ACROSS` in the harness) are left out until they're ported. The examples are
   valid projects, so a ported kind must report no errors in them, and must write them back to
   the same bytes. When the Rust side takes over, the goldens are written from it. Ported:
   `buff` (all its rules are fields'), `dialog`, `item`, `menu` (its type and size, slot keys, items' and scripts' checks), `recipe` (mostly its own checks: which fields a recipe has depends on its type), `loot_table`, `sky`, `module`, and the files kinds `build`, `map`, `migration` and `wasm` (`kind/files.rs`; a WASM module's checks read its binary, a check across files ported with the WASM reader) (with `ModuleRequires`, worked out once per
