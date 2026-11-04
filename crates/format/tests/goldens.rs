@@ -149,14 +149,18 @@ fn the_ported_kinds_problems_are_formats() {
         let mut files = BTreeSet::new();
         files_in(&dir, &dir, &mut files);
         files.remove("expected.json");
+        let read = |p: &str| std::fs::read_to_string(dir.join(p)).ok();
+        let source = kind::Source::new(&files, &read);
         for found in netherforge_format::snapshot::scan(&files).resources {
             if !kind::PORTED.contains(&found.kind.id) {
                 continue;
             }
             let path = found.kind.path_of(&found.id, &found.group);
-            let text = std::fs::read_to_string(dir.join(&path)).unwrap();
-            let actual: Vec<String> = kind::read(&found, &text)
-                .unwrap()
+            let location = found.kind.location_of(&found.id, &found.group);
+            let mut read_problems = kind::read(&found, &source).unwrap();
+            // The loader's order: by file (stable).
+            read_problems.sort_by(|a, b| a.file.cmp(&b.file));
+            let actual: Vec<String> = read_problems
                 .iter()
                 .map(|p| p.to_json())
                 .filter(|p| own(p["code"].as_str().unwrap_or("")))
@@ -164,7 +168,11 @@ fn the_ported_kinds_problems_are_formats() {
                 .collect();
             let wanted: Vec<String> = expected
                 .iter()
-                .filter(|p| p["file"] == path.as_str() && own(p["code"].as_str().unwrap_or("")))
+                .filter(|p| {
+                    let file = p["file"].as_str().unwrap_or("");
+                    (file == path || file == location || file.starts_with(&format!("{location}/")))
+                        && own(p["code"].as_str().unwrap_or(""))
+                })
                 .map(|p| p.to_string())
                 .collect();
             checked += wanted.len();
@@ -185,7 +193,8 @@ fn the_ported_kinds_problems_are_formats() {
     );
 }
 
-/// Every resource of a ported kind in the examples writes back to the same bytes.
+/// Every resource of a ported kind in the examples (valid projects) has no
+/// problems, and a document writes back to the same bytes.
 #[test]
 fn the_ported_kinds_examples_write_back() {
     use netherforge_format::kind;
@@ -199,15 +208,25 @@ fn the_ported_kinds_examples_write_back() {
         }
         let mut files = BTreeSet::new();
         files_in(&dir, &dir, &mut files);
+        let read = |p: &str| std::fs::read_to_string(dir.join(p)).ok();
+        let source = kind::Source::new(&files, &read);
         for found in netherforge_format::snapshot::scan(&files).resources {
             if !kind::PORTED.contains(&found.kind.id) {
                 continue;
             }
+            let problems = kind::read(&found, &source).expect("a ported kind");
+            for p in problems
+                .iter()
+                .filter(|p| p.severity == netherforge_format::Severity::Error)
+            {
+                different.push(format!("{}: {}", dir.display(), p.to_json()));
+            }
             let path = found.kind.path_of(&found.id, &found.group);
-            let text = std::fs::read_to_string(dir.join(&path)).unwrap();
-            let again = kind::write_back(&found, &text)
-                .expect("a ported kind")
-                .expect("an example parses");
+            let Some(text) = read(&path) else { continue };
+            let Some(again) = kind::write_back(&found, &text) else {
+                continue;
+            };
+            let again = again.expect("an example parses");
             written += 1;
             if again != text {
                 different.push(format!("{}/{path}:\n{again}", dir.display()));

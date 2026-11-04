@@ -430,7 +430,9 @@ unchanged.
   kind. Every ported kind is held by `tests/goldens.rs` to the goldens' problems in its files
   (`reference.*`, the checks across resources, left out until they're ported) and to the
   examples, which must write back to the same bytes. To port a kind: its model and checks in
-  `kind/`, an arm in `kind::read` and `kind::write_back`, its id in `PORTED`. Ported: `buff`.
+  `kind/`, an arm in `kind::read` and `kind::write_back`, its id in `PORTED`. A files kind (`module`) has no model, only its checks. The examples are
+  valid projects, so a ported kind must report no errors in them. Ported: `buff`, `module`
+  (with `ModuleRequires`, the modules scripts require, worked out once per project in `Source`).
 
 Next in format: reading each resource with its kind's model and checks (kind by kind, each
 with its goldens, until the harness compares whole cases), then the checks across resources
