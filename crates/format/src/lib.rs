@@ -24,6 +24,7 @@ pub mod schema;
 pub mod script;
 pub mod settings;
 pub mod snapshot;
+pub mod vanilla;
 pub mod worldgen;
 
 pub use problem::{Location, Problem, ProblemCode, ProblemSink, Severity, codes};

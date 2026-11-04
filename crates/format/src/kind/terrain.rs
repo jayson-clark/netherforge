@@ -959,6 +959,10 @@ impl TerrainFile {
 }
 
 impl Document for TerrainFile {
+    fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        self.across(cx, sink);
+    }
+
     const SCHEMA: &'static str = "../.netherforge/schema/terrain.schema.json";
 
     fn set_schema(&mut self, schema: Option<String>) {
@@ -1007,6 +1011,43 @@ impl Document for TerrainFile {
                 ),
                 None,
             ));
+        }
+    }
+}
+
+impl TerrainFile {
+    /// A block it places (a `customBlock`, its script's `customBlocks`) is a plain cube, not one a centity draws.
+    fn across(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        use crate::reference::RefKind;
+        let references = cx.references();
+        let placed = |path: &str| {
+            path.ends_with(".customBlock") || path.starts_with("$.script.customBlocks[")
+        };
+        for use_ in references.uses_in(&sink.file) {
+            if use_.kind != RefKind::Block || !placed(&use_.path) {
+                continue;
+            }
+            let Some(id) = references.own(RefKind::Block, &use_.text) else {
+                continue;
+            };
+            let Some(centity) = cx
+                .model::<super::block::BlockFile>(&id)
+                .and_then(|b| b.centity.as_deref())
+            else {
+                continue;
+            };
+            sink.problems.push(
+                codes::TERRAIN_CUSTOM_BLOCK
+                    .at(
+                        &sink.file,
+                        format!("Block \"{}\" is drawn by the centity \"{centity}\", so a terrain can't place it: use a block that's a plain cube", use_.text),
+                        Some(use_.path.clone()),
+                    )
+                    .with_related(vec![crate::Location {
+                        file: cx.path_of("block", &id),
+                        path: Some("$.centity".into()),
+                    }]),
+            );
         }
     }
 }

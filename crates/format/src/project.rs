@@ -41,6 +41,8 @@ impl Resource {
 /// A project read and checked.
 pub struct Project<'g> {
     pub manifest: Option<Manifest>,
+    /// `client/vanilla.json`, when it's there and reads.
+    pub vanilla: Option<crate::vanilla::VanillaFile>,
     /// Every resource of a ported kind, in format's order (kind by kind, by id).
     pub resources: Vec<Resource>,
     /// What its references can name, and every reference its files make.
@@ -67,6 +69,15 @@ pub fn load<'g>(
     let (manifest, manifest_problems) = manifest::load(manifest_text.as_deref());
     problems.extend(manifest_problems);
     problems.extend(manifest::listing_files(manifest.as_ref(), &files));
+    let minecraft = manifest.as_ref().map(|m| m.minecraft.as_str());
+    let vanilla = match files.contains(crate::vanilla::FILE) {
+        true => read(crate::vanilla::FILE).and_then(|text| {
+            let (file, found) = crate::vanilla::load(&text, minecraft);
+            problems.extend(found);
+            file
+        }),
+        false => None,
+    };
 
     let scan = snapshot::scan(&files);
     problems.extend(scan.problems);
@@ -118,6 +129,7 @@ pub fn load<'g>(
     };
     let mut project = Project {
         manifest,
+        vanilla,
         resources,
         references,
         game,
@@ -159,12 +171,12 @@ fn report_references(references: &ReferenceIndex, sink: &mut ProblemSink) {
 /// What `resource` says about the rest of the project: its kind's checks
 /// across resources, its stacks', and its references'.
 fn across(project: &Project, resource: &Resource) -> Vec<Problem> {
-    let Some(document) = &resource.document else {
-        return Vec::new();
-    };
     let cx = Across {
         project,
         found: &resource.found,
+    };
+    let Some(document) = &resource.document else {
+        return kind::files::cross_check(&resource.found, &cx);
     };
     let mut sink = ProblemSink::new(&document.path);
     document.model.cross_check(&cx, &mut sink);
@@ -201,6 +213,11 @@ impl<'a> Across<'a> {
     /// The project's target Minecraft version, when its manifest reads.
     pub fn minecraft(&self) -> Option<&'a str> {
         self.project.manifest.as_ref().map(|m| m.minecraft.as_str())
+    }
+
+    /// `client/vanilla.json`, when it's there and reads.
+    pub fn vanilla(&self) -> Option<&'a crate::vanilla::VanillaFile> {
+        self.project.vanilla.as_ref()
     }
 
     /// Every resource of a kind (by its id) that read, by id.

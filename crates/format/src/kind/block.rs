@@ -217,6 +217,10 @@ impl BlockFile {
 }
 
 impl Document for BlockFile {
+    fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        self.across(cx, sink);
+    }
+
     const SCHEMA: &'static str = "../../.netherforge/schema/block.schema.json";
 
     fn set_schema(&mut self, schema: Option<String>) {
@@ -261,6 +265,102 @@ impl Document for BlockFile {
         }
         if let Some(s) = &self.script {
             script::check(s, "$.script", cx, sink);
+        }
+    }
+}
+
+impl BlockFile {
+    /// Its game sounds, whether its carrier has a state left for it, and what its carrier means for it.
+    fn across(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        let game_data = cx.game();
+        if self.sound.is_some()
+            && let Some(game_data) = game_data
+        {
+            let missing: Vec<String> = [self.place_sound(), self.break_sound()]
+                .into_iter()
+                .filter(|s| game_data.lacks(game::Registry::SoundEvent, s))
+                .collect();
+            if !missing.is_empty() {
+                sink.report(
+                    codes::BLOCK_SOUND,
+                    format!("The game has no {} sound", missing.join(" or ")),
+                    Some("$.sound".into()),
+                );
+            }
+        }
+        let carrier = self.carrier();
+        let noun = name_of(&carrier).replace('_', " ");
+        let capacity = super::carriers::capacity(game_data, carrier);
+        // The states the blocks before it take, in name order (a block that turns takes one per way it faces).
+        let taken: usize = cx
+            .models::<BlockFile>()
+            .filter(|(id, b)| *id < cx.id() && b.carrier() == carrier)
+            .map(|(_, b)| b.states())
+            .sum();
+        if capacity > 0 && taken + self.states() > capacity {
+            let turns = match self.rotation() {
+                BlockRotation::None => String::new(),
+                rotation => format!(
+                    " (it turns, which takes a state for each of its {} ways)",
+                    rotation.facings().len()
+                ),
+            };
+            sink.report(
+                codes::BLOCK_CARRIERS,
+                format!(
+                    "The game has {capacity} {noun} states to hold blocks in, and the {noun} blocks up to this one take {}{turns}",
+                    taken + self.states()
+                ),
+                Some("$".into()),
+            );
+        }
+        if carrier == BlockCarrier::Tripwire {
+            if self.hardness.is_some_and(|h| h != 0.0) {
+                sink.report(
+                    codes::BLOCK_CARRIER,
+                    "Tripwire breaks at once whatever the block's hardness: a tripwire block can't take longer to mine",
+                    Some("$.hardness".into()),
+                );
+            }
+            let drawn = cx
+                .vanilla()
+                .is_some_and(|v| v.blockstates.get_str(super::carriers::TRIPWIRE).is_some());
+            if !drawn {
+                sink.report(
+                    codes::BLOCK_VANILLA_LOOKS,
+                    format!(
+                        "Drawing tripwire blocks takes the game's own look of tripwire, which the editor writes into {} from your Minecraft: open the project in the editor with {} imported. Until then these blocks look like string",
+                        crate::vanilla::FILE,
+                        crate::vanilla::import_hint(cx.minecraft())
+                    ),
+                    Some("$.carrier".into()),
+                );
+            }
+        }
+        // A model that isn't a whole cube, on a note block, leaves see-through holes where the neighbours' faces are hidden.
+        if carrier == BlockCarrier::NoteBlock && self.centity.is_none() {
+            let look = self.model.as_deref().and_then(|m| {
+                cx.references()
+                    .resolve(crate::reference::RefKind::BlockModel, m)
+                    .filter(|k| k.namespace == cx.home())
+            });
+            let shaped = look.is_some_and(|look| {
+                cx.model::<super::resource_pack::ResourcePackFile>(look.pack())
+                    .and_then(|pack| {
+                        pack.blocks
+                            .iter()
+                            .find(|(k, _)| k.0 == look.key())
+                            .map(|(_, b)| b)
+                    })
+                    .is_some_and(|block| block.model.is_some())
+            });
+            if shaped {
+                sink.report(
+                    codes::BLOCK_CARRIER,
+                    "A note block is an opaque cube, so the blocks beside it don't draw the faces that touch it: unless this model fills the whole block, those faces show through. A shape that isn't a cube wants \"carrier\": \"leaves\" (solid) or \"tripwire\" (no collision)",
+                    Some("$.model".into()),
+                );
+            }
         }
     }
 }

@@ -239,6 +239,10 @@ fn conditions(
 }
 
 impl Document for LootTableFile {
+    fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        self.across(cx, sink);
+    }
+
     const SCHEMA: &'static str = "../.netherforge/schema/loot_table.schema.json";
 
     fn set_schema(&mut self, schema: Option<String>) {
@@ -310,6 +314,75 @@ impl Document for LootTableFile {
                         }
                     }
                     _ => {}
+                }
+            }
+        }
+    }
+}
+
+impl LootTableFile {
+    /// Every entry, with its path: pools in name order, entries in theirs.
+    pub fn entries(&self) -> Vec<(String, &LootEntry)> {
+        let mut pools: Vec<_> = self.pools.iter().collect();
+        pools.sort_by(|a, b| a.0.0.cmp(&b.0.0));
+        pools
+            .into_iter()
+            .flat_map(|(name, pool)| {
+                let at = child_path("$.pools", &name.0);
+                pool.entries
+                    .iter()
+                    .enumerate()
+                    .map(move |(i, e)| (format!("{at}.entries[{i}]"), e))
+            })
+            .collect()
+    }
+
+    /// No table it includes includes it again.
+    fn across(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        let own = |table: &str| {
+            cx.references()
+                .own(crate::reference::RefKind::LootTable, table)
+        };
+        for (at, entry) in self.entries() {
+            let LootEntry::Table { table, .. } = entry else {
+                continue;
+            };
+            let Some(start) = own(table) else { continue };
+            let mut seen = std::collections::BTreeSet::new();
+            let mut queue = std::collections::VecDeque::from([start.clone()]);
+            while let Some(id) = queue.pop_front() {
+                if id == cx.id() {
+                    let through = if start == cx.id() {
+                        ""
+                    } else {
+                        " (through its entries)"
+                    };
+                    sink.problems.push(
+                        codes::LOOT_CYCLE
+                            .at(
+                                &sink.file,
+                                format!("\"{table}\" includes this table again{through}, so a roll would never end"),
+                                Some(format!("{at}.table")),
+                            )
+                            .with_related(vec![crate::Location {
+                                file: cx.path_of("loot_table", &start),
+                                path: None,
+                            }]),
+                    );
+                    break;
+                }
+                if !seen.insert(id.clone()) {
+                    continue;
+                }
+                let Some(next) = cx.model::<LootTableFile>(&id) else {
+                    continue;
+                };
+                for (_, inner) in next.entries() {
+                    if let LootEntry::Table { table, .. } = inner
+                        && let Some(id) = own(table)
+                    {
+                        queue.push_back(id);
+                    }
                 }
             }
         }

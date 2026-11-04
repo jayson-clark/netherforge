@@ -99,6 +99,10 @@ pub struct AdvancementCriterion {
 }
 
 impl Document for AdvancementFile {
+    fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        self.across(cx, sink);
+    }
+
     const SCHEMA: &'static str = "../.netherforge/schema/advancement.schema.json";
 
     fn set_schema(&mut self, schema: Option<String>) {
@@ -222,6 +226,45 @@ impl Document for AdvancementFile {
                     );
                 }
             }
+        }
+    }
+}
+
+impl AdvancementFile {
+    /// Its parents don't lead back to it.
+    fn across(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        let Some(parent) = &self.parent else { return };
+        let own = |file: &AdvancementFile| {
+            file.parent.as_deref().and_then(|p| {
+                cx.references()
+                    .own(crate::reference::RefKind::Advancement, p)
+            })
+        };
+        let Some(start) = own(self) else { return };
+        let mut seen = std::collections::BTreeSet::new();
+        let mut next = Some(start.clone());
+        while let Some(id) = next.filter(|n| seen.insert(n.clone())) {
+            if id == cx.id() {
+                let through = if start == cx.id() {
+                    ""
+                } else {
+                    " through its parents"
+                };
+                sink.problems.push(
+                    codes::ADVANCEMENT_CYCLE
+                        .at(
+                            &sink.file,
+                            format!("\"{parent}\" leads back to this advancement{through}, so it would hang from itself"),
+                            Some("$.parent".into()),
+                        )
+                        .with_related(vec![crate::Location {
+                            file: cx.path_of("advancement", &start),
+                            path: None,
+                        }]),
+                );
+                return;
+            }
+            next = cx.model::<AdvancementFile>(&id).and_then(own);
         }
     }
 }

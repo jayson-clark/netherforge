@@ -56,6 +56,10 @@ pub trait GameData {
     fn particle(&self, id: &str) -> Option<ParticleData>;
     /// A block's properties and the values each may be; `None` for a block the game doesn't have.
     fn block_properties(&self, id: &str) -> Option<BTreeMap<String, Vec<String>>>;
+    /// A block's default value of `property`; `None` when the facts don't say.
+    fn block_default(&self, _id: &str, _property: &str) -> Option<String> {
+        None
+    }
     /// The data pack format the server reads, `[major, minor]`.
     fn data_pack_format(&self) -> Option<[i32; 2]> {
         None

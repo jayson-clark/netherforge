@@ -216,6 +216,10 @@ fn known(
 }
 
 impl Document for BiomeFile {
+    fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        self.across(cx, sink);
+    }
+
     const SCHEMA: &'static str = "../.netherforge/schema/biome.schema.json";
 
     fn set_schema(&mut self, schema: Option<String>) {
@@ -374,4 +378,67 @@ impl Document for BiomeFile {
             }
         }
     }
+}
+
+impl BiomeFile {
+    /// Its features in each step in an order no other biome contradicts: the game can't place both otherwise.
+    fn across(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        let references = cx.references();
+        let keys = |features: &[String]| -> Vec<String> {
+            features
+                .iter()
+                .map(|f| {
+                    references
+                        .resolve(crate::reference::RefKind::PlacedFeature, f)
+                        .map_or_else(|| f.clone(), |k| k.to_string())
+                })
+                .collect()
+        };
+        for (step, features) in self.features.iter() {
+            let mine = keys(features);
+            let at = crate::json::child_path("$.features", &crate::canonical::name_of(step));
+            for (other, file) in cx.models::<BiomeFile>() {
+                if other == cx.id() {
+                    continue;
+                }
+                let theirs = keys(file.features.get(step).map_or(&[][..], |f| f));
+                let Some((first, second)) = inversion(&mine, &theirs) else {
+                    continue;
+                };
+                sink.problems.push(
+                    crate::codes::BIOME_FEATURE_ORDER
+                        .at(
+                            &sink.file,
+                            format!("\"{first}\" comes before \"{second}\" here, but after it in biome \"{other}\": the game can't place both in one world, so list them in the same order"),
+                            Some(at.clone()),
+                        )
+                        .with_related(vec![crate::Location {
+                            file: cx.path_of("biome", other),
+                            path: Some(at.clone()),
+                        }]),
+                );
+                break;
+            }
+        }
+    }
+}
+
+/// Two of `mine` that `theirs` has the other way round, the first such pair.
+fn inversion(mine: &[String], theirs: &[String]) -> Option<(String, String)> {
+    let at: std::collections::HashMap<&str, usize> = theirs
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (f.as_str(), i))
+        .collect();
+    for (i, first) in mine.iter().enumerate() {
+        let Some(a) = at.get(first.as_str()) else {
+            continue;
+        };
+        for second in &mine[i + 1..] {
+            if at.get(second.as_str()).is_some_and(|b| b < a) {
+                return Some((first.clone(), second.clone()));
+            }
+        }
+    }
+    None
 }

@@ -188,6 +188,10 @@ fn check_biomes(biomes: &[String], sink: &mut ProblemSink, game: Option<&dyn Gam
 }
 
 impl Document for StructureGeneration {
+    fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        self.across(cx, sink);
+    }
+
     const SCHEMA: &'static str = "../.netherforge/schema/structure_generation.schema.json";
 
     fn set_schema(&mut self, schema: Option<String>) {
@@ -223,6 +227,31 @@ impl Document for StructureGeneration {
                     "A pool picks from at least one structure",
                     Some(child_path(&at, "elements")),
                 );
+            }
+        }
+    }
+}
+
+impl StructureGeneration {
+    /// Its pools pick from the project's structures.
+    fn across(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        let kind = crate::kinds::by_id("structure").expect("structures are a kind");
+        for (name, pool) in self.pools.iter() {
+            for (index, element) in pool.elements.iter().enumerate() {
+                if !cx.has("structure", &element.structure) {
+                    sink.report(
+                        codes::STRUCTURE_POOL_ELEMENT,
+                        format!(
+                            "There's no structure \"{}\" ({}) in the project to pick from",
+                            element.structure,
+                            kind.location_of(&element.structure, "")
+                        ),
+                        Some(format!(
+                            "{}.elements[{index}].structure",
+                            crate::json::child_path("$.pools", &name.0)
+                        )),
+                    );
+                }
             }
         }
     }

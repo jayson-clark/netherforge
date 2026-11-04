@@ -71,7 +71,7 @@ fn every_reference_in_the_examples_is_found() {
                 "{name}:\n  missing: {missing:#?}\n  extra: {extra:#?}"
             ));
         }
-        // An example is a valid project: every reference it makes names something. Packages
+        // An example is a valid project: it loads without errors. Packages
         // aren't loaded yet (`project`'s note), so a reference into a dependency is set aside.
         let dependencies: Vec<String> = loaded
             .manifest

@@ -143,3 +143,102 @@ pub fn migration(found: &Found) -> Vec<Problem> {
     }
     problems
 }
+
+/// A files kind's checks across the project: a build whose id a structure has
+/// too, a migration's number against the others'.
+pub fn cross_check(found: &Found, cx: &crate::project::Across) -> Vec<Problem> {
+    match found.kind.id {
+        "build" if cx.has("structure", &found.id) => vec![codes::BUILD_ID_TAKEN.at(
+            &found.kind.path_of(&found.id, &found.group),
+            format!(
+                "{} has the id \"{}\" too, and scripts name structures and builds alike: rename one",
+                cx.path_of("structure", &found.id),
+                found.id
+            ),
+            None,
+        )],
+        "migration" => migrations(found, cx),
+        _ => Vec::new(),
+    }
+}
+
+/// The dialects a migration has a version for.
+fn dialects_of(found: &Found) -> std::collections::BTreeSet<&str> {
+    found
+        .inside
+        .iter()
+        .filter_map(|f| f.split_once('/').map(|(d, _)| d))
+        .filter(|d| DIALECTS.contains(d))
+        .collect()
+}
+
+fn pad(number: u32) -> String {
+    format!("{number:03}")
+}
+
+/// A number used twice, one that doesn't follow the one before it, or a dialect others have and it hasn't.
+fn migrations(found: &Found, cx: &crate::project::Across) -> Vec<Problem> {
+    let main = found.kind.path_of(&found.id, &found.group);
+    let Some(number) = migration_number(&found.id) else {
+        return Vec::new();
+    };
+    let mut numbered: Vec<(u32, &Found)> = cx
+        .read("migration")
+        .filter_map(|r| Some((migration_number(&r.found.id)?, &r.found)))
+        .collect();
+    numbered.sort_by(|a, b| (a.0, &a.1.id).cmp(&(b.0, &b.1.id)));
+    let same: Vec<&Found> = numbered
+        .iter()
+        .filter(|(n, _)| *n == number)
+        .map(|(_, f)| *f)
+        .collect();
+    if same.len() > 1 {
+        if same[0].id != found.id {
+            return vec![codes::MIGRATION_DUPLICATE.at(
+                &main,
+                format!(
+                    "Migration {} is also {}; the numbers must be unique",
+                    pad(number),
+                    cx.path_of("migration", &same[0].id)
+                ),
+                None,
+            )];
+        }
+        return Vec::new();
+    }
+    let mut problems = Vec::new();
+    // A dialect some migration has a version for, which this one hasn't: the steps would differ between servers.
+    let mine = dialects_of(found);
+    let all: std::collections::BTreeSet<&str> =
+        numbered.iter().flat_map(|(_, f)| dialects_of(f)).collect();
+    for dialect in all.difference(&mine) {
+        let (folder, file) = main.rsplit_once('/').expect("a migration is in its folder");
+        problems.push(codes::MIGRATION_DIALECTS.at(
+            &main,
+            format!(
+                "Other migrations have a {dialect} version and this one hasn't: add {folder}/{dialect}/{file}, so every server runs the same steps"
+            ),
+            None,
+        ));
+    }
+    let before = numbered
+        .iter()
+        .rev()
+        .find(|(n, _)| *n < number)
+        .map_or(0, |(n, _)| *n);
+    if before + 1 != number {
+        problems.push(codes::MIGRATION_GAP.at(
+            &main,
+            format!(
+                "Migration {} follows {}: the numbers run {}, {}, {} with none skipped",
+                pad(number),
+                pad(before),
+                pad(1),
+                pad(2),
+                pad(3)
+            ),
+            None,
+        ));
+    }
+    problems
+}

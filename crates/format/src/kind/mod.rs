@@ -5,6 +5,7 @@ pub mod advancement;
 pub mod biome;
 pub mod block;
 pub mod buff;
+pub mod carriers;
 pub mod centity;
 pub mod cutscene;
 pub mod datapack;

@@ -153,25 +153,17 @@ fn what_and_where(p: &Value) -> String {
     Value::Object(o).to_string()
 }
 
-/// Problems about one resource alone: not a reference's (`reference.*`), nor one
-/// that points at another file (a check across resources too).
-fn own_problem(p: &Value) -> bool {
-    let file = &p["file"];
-    let elsewhere = p["related"]
-        .as_array()
-        .is_some_and(|r| r.iter().any(|l| &l["file"] != file));
-    !elsewhere && own(p["code"].as_str().unwrap_or(""))
-}
-
-const ACROSS_CODES: &[&str] = &[
-    "loot.cycle",
-    "advancement.cycle",
-    "build.id-taken",
-    "screen.place",
-    "structure.pool-element",
-    "block.carrier",
-    "block.carriers",
-    "block.vanilla-looks",
+/// The codes whose checks across the project aren't ported yet, set aside on
+/// both sides until they are. Done when it's empty.
+const NOT_YET: &[&str] = &[
+    "font.advance",
+    "font.code-point",
+    "font.minecraft",
+    "font.needed",
+    "font.stale",
+    "project.world-height",
+    "project.dependency",
+    "project.export",
     "screen_font.grid",
     "resource_pack.vanilla-missing",
     "resource_pack.hud-hide",
@@ -181,93 +173,11 @@ const ACROSS_CODES: &[&str] = &[
     "resource_pack.too-many-glyphs",
     "resource_pack.replace-size",
     "resource_pack.replace-shape",
+    "resource_pack.replace-name",
     "datapack.namespace",
     "datapack.conflict",
+    "datapack.reference",
 ];
-
-fn own(code: &str) -> bool {
-    // A project item's own kind, the project's default font: checks across resources too.
-    // Each kind's `crossCheck` in format: they come with the checks across resources.
-
-    let across =
-        code.starts_with("reference.") || code.starts_with("font.") || ACROSS_CODES.contains(&code);
-    !across && !layouts(code)
-}
-
-/// Codes a kind's own checks and its checks across resources both report (a
-/// replaced name that isn't a path, and one the game hasn't got): until the
-/// latter are ported, what's reported must be expected, but not all that's
-/// expected is reported.
-const MIXED: &[&str] = &["resource_pack.replace-name", "datapack.reference"];
-
-fn mixed(p: &str) -> bool {
-    MIXED
-        .iter()
-        .any(|code| p.contains(&format!("\"code\":\"{code}\"")))
-}
-
-#[test]
-fn the_ported_kinds_problems_are_formats() {
-    use netherforge_format::kind;
-    let mut failures = Vec::new();
-    let mut checked = 0;
-    for entry in std::fs::read_dir(invalid()).unwrap() {
-        let dir = entry.unwrap().path();
-        let expected: Vec<Value> =
-            serde_json::from_str(&std::fs::read_to_string(dir.join("expected.json")).unwrap())
-                .unwrap();
-        let mut files = BTreeSet::new();
-        files_in(&dir, &dir, &mut files);
-        files.remove("expected.json");
-        let read = |p: &str| std::fs::read_to_string(dir.join(p)).ok();
-        let source = kind::Source::new(&files, &read);
-        for found in netherforge_format::snapshot::scan(&files).resources {
-            // A kind not ported yet answers `None`.
-            let Some(problems) = kind::read(&found, &source).map(|r| r.problems) else {
-                continue;
-            };
-            let path = kind::document_path(&found);
-            let location = found.kind.location_of(&found.id, &found.group);
-            let mut actual: Vec<String> = problems
-                .iter()
-                .map(|p| p.to_json())
-                .filter(own_problem)
-                .map(|p| what_and_where(&p))
-                .collect();
-            actual.sort();
-            let mut wanted: Vec<String> = expected
-                .iter()
-                .filter(|p| {
-                    let file = p["file"].as_str().unwrap_or("");
-                    let companion = found.kind.companion_path_of(&found.id, &found.group);
-                    (file == path
-                        || file == location
-                        || file.starts_with(&format!("{location}/"))
-                        || companion.as_deref() == Some(file))
-                        && own_problem(p)
-                })
-                .map(what_and_where)
-                .collect();
-            wanted.sort();
-            // A mixed code's expected problem nothing reported is a check across resources'.
-            wanted.retain(|w| !mixed(w) || actual.contains(w));
-            checked += wanted.len();
-            if actual != wanted {
-                failures.push(format!(
-                    "{} {path}:\n  actual:   {actual:#?}\n  expected: {wanted:#?}",
-                    dir.file_name().unwrap().to_string_lossy()
-                ));
-            }
-        }
-    }
-    assert!(checked > 0, "no problems checked");
-    assert!(
-        failures.is_empty(),
-        "{} files differ:\n{}",
-        failures.len(),
-        failures.join("\n")
-    );
-}
 
 /// Every resource of a ported kind in the examples (valid projects) has no
 /// problems, and a document writes back to the same bytes.
@@ -313,26 +223,11 @@ fn the_ported_kinds_examples_write_back() {
 }
 
 /// Each case whole: every problem `project::load` reports against every one
-/// `expected.json` lists, by what's wrong and where. Codes whose checks aren't
-/// ported yet are set aside on both sides.
+/// `expected.json` lists, by what's wrong and where (each kind's tests hold
+/// its wording).
 #[test]
 fn whole_cases_are_formats() {
-    const NOT_YET: &[&str] = &[
-        "game_block.twice",
-        "biome.feature-order",
-        "terrain.custom-block",
-    ];
-    let not_yet = |p: &Value| {
-        let code = p["code"].as_str().unwrap_or("");
-        code.starts_with("font.")
-            || NOT_YET.contains(&code)
-            || ACROSS_CODES.contains(&code)
-            || MIXED.contains(&code)
-            || matches!(
-                code,
-                "project.world-height" | "project.dependency" | "project.export"
-            )
-    };
+    let not_yet = |p: &Value| NOT_YET.contains(&p["code"].as_str().unwrap_or(""));
     let mut failures = Vec::new();
     let mut cases = 0;
     for entry in std::fs::read_dir(invalid()).unwrap() {

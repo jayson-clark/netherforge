@@ -70,6 +70,10 @@ pub fn expand(entry: &str, game: Option<&dyn GameData>) -> BTreeSet<String> {
 }
 
 impl Document for GameBlockFile {
+    fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        self.across(cx, sink);
+    }
+
     const SCHEMA: &'static str = "../.netherforge/schema/game_block.schema.json";
 
     fn set_schema(&mut self, schema: Option<String>) {
@@ -151,6 +155,59 @@ impl Document for GameBlockFile {
                  its loot. Name drops of the project's to drop them for any tool",
                 Some("$.requiresTool".into()),
             );
+        }
+    }
+}
+
+impl GameBlockFile {
+    /// Each block has one set of rules, and none is one the project's own blocks are held in.
+    fn across(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        let game = cx.game();
+        let mut earlier: std::collections::BTreeMap<String, &str> = Default::default();
+        for (id, file) in cx.models::<GameBlockFile>() {
+            if id >= cx.id() {
+                continue;
+            }
+            for entry in &file.blocks {
+                for block in expand(entry, game) {
+                    earlier.entry(block).or_insert(id);
+                }
+            }
+        }
+        let mut carriers: Vec<super::block::BlockCarrier> = Vec::new();
+        for (_, block) in cx.models::<super::block::BlockFile>() {
+            if !carriers.contains(&block.carrier()) {
+                carriers.push(block.carrier());
+            }
+        }
+        let held: BTreeSet<String> = carriers
+            .into_iter()
+            .flat_map(|c| super::carriers::blocks_of(game, c))
+            .collect();
+        for (index, entry) in self.blocks.iter().enumerate() {
+            let at = format!("$.blocks[{index}]");
+            let blocks = expand(entry, game);
+            if let Some((block, other)) = blocks.iter().find_map(|b| Some((b, *earlier.get(b)?))) {
+                sink.problems.push(
+                    codes::GAME_BLOCK_TWICE
+                        .at(
+                            &sink.file,
+                            format!("{block} already has the rules of game block \"{other}\": each block has one set of rules"),
+                            Some(at.clone()),
+                        )
+                        .with_related(vec![crate::Location {
+                            file: cx.path_of("game_block", other),
+                            path: Some("$.blocks".into()),
+                        }]),
+                );
+            }
+            if let Some(block) = blocks.iter().find(|b| held.contains(*b)) {
+                sink.report(
+                    codes::GAME_BLOCK_CARRIER,
+                    format!("The project's own blocks are held in {block}, so the server takes its states for the project's: it can't mine it as one of the game's"),
+                    Some(at),
+                );
+            }
         }
     }
 }

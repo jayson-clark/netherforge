@@ -122,6 +122,10 @@ pub struct ScreenVideo {
 }
 
 impl Document for ScreenFile {
+    fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        self.across(cx, sink);
+    }
+
     const SCHEMA: &'static str = "../../.netherforge/schema/screen.schema.json";
 
     fn set_schema(&mut self, schema: Option<String>) {
@@ -137,6 +141,46 @@ impl Document for ScreenFile {
     fn validate(&self, cx: &Context, sink: &mut ProblemSink) {
         if let Some(s) = &self.script {
             script::check(s, "$.script", cx, sink);
+        }
+    }
+}
+
+impl ScreenFile {
+    /// The blocks it hangs on, `x,y,z`.
+    fn blocks(&self) -> std::collections::BTreeSet<(i32, i32, i32)> {
+        let Some(place) = &self.place else {
+            return Default::default();
+        };
+        let (right_x, right_z) = place.facing.right();
+        (0..self.width)
+            .flat_map(|column| {
+                (0..self.height).map(move |row| {
+                    (
+                        place.x + right_x * column,
+                        place.y - row,
+                        place.z + right_z * column,
+                    )
+                })
+            })
+            .collect()
+    }
+
+    /// No screen before it (by id) hangs on a block it does.
+    fn across(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        let Some(place) = &self.place else { return };
+        let mine = self.blocks();
+        for (other, file) in cx.models::<ScreenFile>() {
+            if other >= cx.id() || file.place.as_ref().map(|p| &p.world) != Some(&place.world) {
+                continue;
+            }
+            if file.blocks().iter().any(|b| mine.contains(b)) {
+                sink.report(
+                    crate::codes::SCREEN_PLACE,
+                    format!("It hangs where screen \"{other}\" does, in {}", place.world),
+                    Some("$.place".into()),
+                );
+                return;
+            }
         }
     }
 }
