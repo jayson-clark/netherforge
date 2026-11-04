@@ -39,7 +39,15 @@ import {
   unionsKotlin,
 } from './emit/kotlin.ts'
 import { bindingsLua, schemaLua } from './emit/lua.ts'
-import { apiRust, handlesRust, shapesRust, unionsRust } from './emit/rust.ts'
+import {
+  apiRust,
+  bindRust,
+  codecsRust,
+  handlesRust,
+  shapesRust,
+  unionsRust,
+  unportedRust,
+} from './emit/rust.ts'
 import { raisableKotlin } from './emit/raisable.ts'
 import { dispatchKotlin, platformKotlin, raisedEvents } from './emit/raised.ts'
 import { luals, lualsGates, lualsSurfaces } from './emit/luals.ts'
@@ -119,6 +127,9 @@ writeDir(
     ['shapes.rs', shapesRust(bound)],
     ['unions.rs', unionsRust(bound)],
     ['api.rs', apiRust(classes)],
+    ['codecs.rs', codecsRust(bound)],
+    ['bindings.rs', bindRust(classes)],
+    ['unported.rs', unportedRust(classes)],
   ]),
   '.rs',
 )

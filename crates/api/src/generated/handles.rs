@@ -5,6 +5,8 @@
 //! class it is: a `Mob` converts into the `Living` and the `Entity` it is,
 //! keeping its key.
 
+use crate::handle::{HandleClass, Key, KeyPart};
+
 /// One spawned centity: `this` in the centity's script, and what `nf.centities.spawn`, `nf.centities.get` and `nf.centities.all` return. A handle stays valid as long as the instance exists; after it's removed its methods return `nil` or `false` rather than erroring.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Centity {
@@ -532,3 +534,817 @@ pub const CHAINS: &[&[&str]] = &[
     &["Random"],
     &["Hud"],
 ];
+
+impl HandleClass for Centity {
+    const NAME: &'static str = "Centity";
+    const ROOT: &'static str = "Centity";
+    const CLASSES: &'static [&'static str] = &["Centity"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(id)] => Some(Centity { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Node {
+    const NAME: &'static str = "Node";
+    const ROOT: &'static str = "Node";
+    const CLASSES: &'static [&'static str] = &["Node"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.centity.clone()), KeyPart::Str(self.name.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(centity), KeyPart::Str(name)] => Some(Node { centity: centity.clone(), name: name.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Image {
+    const NAME: &'static str = "Image";
+    const ROOT: &'static str = "Image";
+    const CLASSES: &'static [&'static str] = &["Image"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.number.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(number)] => Some(Image { number: number.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Entity {
+    const NAME: &'static str = "Entity";
+    const ROOT: &'static str = "Entity";
+    const CLASSES: &'static [&'static str] = &["Entity", "Living", "DroppedItem", "Mob", "Mannequin", "Player", "Bot"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(id)] => Some(Entity { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Living {
+    const NAME: &'static str = "Living";
+    const ROOT: &'static str = "Entity";
+    const CLASSES: &'static [&'static str] = &["Living", "Mob", "Mannequin", "Player", "Bot"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(id)] => Some(Living { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Mob {
+    const NAME: &'static str = "Mob";
+    const ROOT: &'static str = "Entity";
+    const CLASSES: &'static [&'static str] = &["Mob"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(id)] => Some(Mob { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for DroppedItem {
+    const NAME: &'static str = "DroppedItem";
+    const ROOT: &'static str = "Entity";
+    const CLASSES: &'static [&'static str] = &["DroppedItem"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(id)] => Some(DroppedItem { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Mannequin {
+    const NAME: &'static str = "Mannequin";
+    const ROOT: &'static str = "Entity";
+    const CLASSES: &'static [&'static str] = &["Mannequin"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(id)] => Some(Mannequin { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Player {
+    const NAME: &'static str = "Player";
+    const ROOT: &'static str = "Entity";
+    const CLASSES: &'static [&'static str] = &["Player", "Bot"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(id)] => Some(Player { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Bot {
+    const NAME: &'static str = "Bot";
+    const ROOT: &'static str = "Entity";
+    const CLASSES: &'static [&'static str] = &["Bot"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(id)] => Some(Bot { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Sender {
+    const NAME: &'static str = "Sender";
+    const ROOT: &'static str = "Sender";
+    const CLASSES: &'static [&'static str] = &["Sender"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(id)] => Some(Sender { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for World {
+    const NAME: &'static str = "World";
+    const ROOT: &'static str = "World";
+    const CLASSES: &'static [&'static str] = &["World"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.name.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(name)] => Some(World { name: name.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for WorldBorder {
+    const NAME: &'static str = "WorldBorder";
+    const ROOT: &'static str = "WorldBorder";
+    const CLASSES: &'static [&'static str] = &["WorldBorder"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.owner.clone()), KeyPart::Str(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(owner), KeyPart::Str(id)] => Some(WorldBorder { owner: owner.clone(), id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Block {
+    const NAME: &'static str = "Block";
+    const ROOT: &'static str = "Block";
+    const CLASSES: &'static [&'static str] = &["Block", "CustomBlock"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.world.clone()), KeyPart::Int(self.position.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(world), KeyPart::Int(position)] => Some(Block { world: world.clone(), position: position.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for CustomBlock {
+    const NAME: &'static str = "CustomBlock";
+    const ROOT: &'static str = "Block";
+    const CLASSES: &'static [&'static str] = &["CustomBlock"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.world.clone()), KeyPart::Int(self.position.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(world), KeyPart::Int(position)] => Some(CustomBlock { world: world.clone(), position: position.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for ProjectBlock {
+    const NAME: &'static str = "ProjectBlock";
+    const ROOT: &'static str = "ProjectBlock";
+    const CLASSES: &'static [&'static str] = &["ProjectBlock"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(id)] => Some(ProjectBlock { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Inventory {
+    const NAME: &'static str = "Inventory";
+    const ROOT: &'static str = "Inventory";
+    const CLASSES: &'static [&'static str] = &["Inventory"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.holder.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(holder)] => Some(Inventory { holder: holder.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for BossBar {
+    const NAME: &'static str = "BossBar";
+    const ROOT: &'static str = "BossBar";
+    const CLASSES: &'static [&'static str] = &["BossBar"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(id)] => Some(BossBar { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Sidebar {
+    const NAME: &'static str = "Sidebar";
+    const ROOT: &'static str = "Sidebar";
+    const CLASSES: &'static [&'static str] = &["Sidebar"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.player.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(player)] => Some(Sidebar { player: player.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Team {
+    const NAME: &'static str = "Team";
+    const ROOT: &'static str = "Team";
+    const CLASSES: &'static [&'static str] = &["Team"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.name.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(name)] => Some(Team { name: name.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Database {
+    const NAME: &'static str = "Database";
+    const ROOT: &'static str = "Database";
+    const CLASSES: &'static [&'static str] = &["Database"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.namespace.clone()), KeyPart::Str(self.connection.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(namespace), KeyPart::Str(connection)] => Some(Database { namespace: namespace.clone(), connection: connection.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Menu {
+    const NAME: &'static str = "Menu";
+    const ROOT: &'static str = "Menu";
+    const CLASSES: &'static [&'static str] = &["Menu"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(id)] => Some(Menu { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Slot {
+    const NAME: &'static str = "Slot";
+    const ROOT: &'static str = "Slot";
+    const CLASSES: &'static [&'static str] = &["Slot"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.menu.clone()), KeyPart::Int(self.index.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(menu), KeyPart::Int(index)] => Some(Slot { menu: menu.clone(), index: index.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for MenuTemplate {
+    const NAME: &'static str = "MenuTemplate";
+    const ROOT: &'static str = "MenuTemplate";
+    const CLASSES: &'static [&'static str] = &["MenuTemplate"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(id)] => Some(MenuTemplate { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Dialog {
+    const NAME: &'static str = "Dialog";
+    const ROOT: &'static str = "Dialog";
+    const CLASSES: &'static [&'static str] = &["Dialog"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(id)] => Some(Dialog { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Button {
+    const NAME: &'static str = "Button";
+    const ROOT: &'static str = "Button";
+    const CLASSES: &'static [&'static str] = &["Button"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.dialog.clone()), KeyPart::Str(self.key.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(dialog), KeyPart::Str(key)] => Some(Button { dialog: dialog.clone(), key: key.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for ProjectItem {
+    const NAME: &'static str = "ProjectItem";
+    const ROOT: &'static str = "ProjectItem";
+    const CLASSES: &'static [&'static str] = &["ProjectItem"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(id)] => Some(ProjectItem { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Effect {
+    const NAME: &'static str = "Effect";
+    const ROOT: &'static str = "Effect";
+    const CLASSES: &'static [&'static str] = &["Effect"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.number.clone()), KeyPart::Str(self.kind.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(number), KeyPart::Str(kind)] => Some(Effect { number: number.clone(), kind: kind.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for HttpStream {
+    const NAME: &'static str = "HttpStream";
+    const ROOT: &'static str = "HttpStream";
+    const CLASSES: &'static [&'static str] = &["HttpStream"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.number.clone()), KeyPart::Str(self.url.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(number), KeyPart::Str(url)] => Some(HttpStream { number: number.clone(), url: url.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for WebSocket {
+    const NAME: &'static str = "WebSocket";
+    const ROOT: &'static str = "WebSocket";
+    const CLASSES: &'static [&'static str] = &["WebSocket"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.number.clone()), KeyPart::Str(self.url.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(number), KeyPart::Str(url)] => Some(WebSocket { number: number.clone(), url: url.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Route {
+    const NAME: &'static str = "Route";
+    const ROOT: &'static str = "Route";
+    const CLASSES: &'static [&'static str] = &["Route"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.number.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(number)] => Some(Route { number: number.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for WebResponse {
+    const NAME: &'static str = "WebResponse";
+    const ROOT: &'static str = "WebResponse";
+    const CLASSES: &'static [&'static str] = &["WebResponse"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.number.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(number)] => Some(WebResponse { number: number.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for OAuthFlow {
+    const NAME: &'static str = "OAuthFlow";
+    const ROOT: &'static str = "OAuthFlow";
+    const CLASSES: &'static [&'static str] = &["OAuthFlow"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.number.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(number)] => Some(OAuthFlow { number: number.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for WasmInstance {
+    const NAME: &'static str = "WasmInstance";
+    const ROOT: &'static str = "WasmInstance";
+    const CLASSES: &'static [&'static str] = &["WasmInstance"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.number.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(number)] => Some(WasmInstance { number: number.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for WasmProcess {
+    const NAME: &'static str = "WasmProcess";
+    const ROOT: &'static str = "WasmProcess";
+    const CLASSES: &'static [&'static str] = &["WasmProcess"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.number.clone()), KeyPart::Str(self.module.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(number), KeyPart::Str(module)] => Some(WasmProcess { number: number.clone(), module: module.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for NetworkChannel {
+    const NAME: &'static str = "NetworkChannel";
+    const ROOT: &'static str = "NetworkChannel";
+    const CLASSES: &'static [&'static str] = &["NetworkChannel"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.name.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(name)] => Some(NetworkChannel { name: name.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for NetworkHold {
+    const NAME: &'static str = "NetworkHold";
+    const ROOT: &'static str = "NetworkHold";
+    const CLASSES: &'static [&'static str] = &["NetworkHold"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(id)] => Some(NetworkHold { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for NetworkMap {
+    const NAME: &'static str = "NetworkMap";
+    const ROOT: &'static str = "NetworkMap";
+    const CLASSES: &'static [&'static str] = &["NetworkMap"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.name.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(name)] => Some(NetworkMap { name: name.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Cutscene {
+    const NAME: &'static str = "Cutscene";
+    const ROOT: &'static str = "Cutscene";
+    const CLASSES: &'static [&'static str] = &["Cutscene"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.number.clone()), KeyPart::Str(self.kind.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(number), KeyPart::Str(kind)] => Some(Cutscene { number: number.clone(), kind: kind.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Screen {
+    const NAME: &'static str = "Screen";
+    const ROOT: &'static str = "Screen";
+    const CLASSES: &'static [&'static str] = &["Screen"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.id.clone()), KeyPart::Str(self.player.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(id), KeyPart::Str(player)] => Some(Screen { id: id.clone(), player: player.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Playback {
+    const NAME: &'static str = "Playback";
+    const ROOT: &'static str = "Playback";
+    const CLASSES: &'static [&'static str] = &["Playback"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.number.clone()), KeyPart::Str(self.video.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(number), KeyPart::Str(video)] => Some(Playback { number: number.clone(), video: video.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for File {
+    const NAME: &'static str = "File";
+    const ROOT: &'static str = "File";
+    const CLASSES: &'static [&'static str] = &["File"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.path.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(path)] => Some(File { path: path.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Subscription {
+    const NAME: &'static str = "Subscription";
+    const ROOT: &'static str = "Subscription";
+    const CLASSES: &'static [&'static str] = &["Subscription"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(id)] => Some(Subscription { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Task {
+    const NAME: &'static str = "Task";
+    const ROOT: &'static str = "Task";
+    const CLASSES: &'static [&'static str] = &["Task"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(id)] => Some(Task { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Schedule {
+    const NAME: &'static str = "Schedule";
+    const ROOT: &'static str = "Schedule";
+    const CLASSES: &'static [&'static str] = &["Schedule"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.number.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(number)] => Some(Schedule { number: number.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Random {
+    const NAME: &'static str = "Random";
+    const ROOT: &'static str = "Random";
+    const CLASSES: &'static [&'static str] = &["Random"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(id)] => Some(Random { id: id.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Hud {
+    const NAME: &'static str = "Hud";
+    const ROOT: &'static str = "Hud";
+    const CLASSES: &'static [&'static str] = &["Hud"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Str(self.player.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Str(player)] => Some(Hud { player: player.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl Handle {
+    /// What identifies the thing: its root class's key.
+    pub fn key(&self) -> Key {
+        match self {
+            Handle::Centity(h) => h.key(),
+            Handle::Node(h) => h.key(),
+            Handle::Image(h) => h.key(),
+            Handle::Entity(h) => h.key(),
+            Handle::Living(h) => h.key(),
+            Handle::Mob(h) => h.key(),
+            Handle::DroppedItem(h) => h.key(),
+            Handle::Mannequin(h) => h.key(),
+            Handle::Player(h) => h.key(),
+            Handle::Bot(h) => h.key(),
+            Handle::Sender(h) => h.key(),
+            Handle::World(h) => h.key(),
+            Handle::WorldBorder(h) => h.key(),
+            Handle::Block(h) => h.key(),
+            Handle::CustomBlock(h) => h.key(),
+            Handle::ProjectBlock(h) => h.key(),
+            Handle::Inventory(h) => h.key(),
+            Handle::BossBar(h) => h.key(),
+            Handle::Sidebar(h) => h.key(),
+            Handle::Team(h) => h.key(),
+            Handle::Database(h) => h.key(),
+            Handle::Menu(h) => h.key(),
+            Handle::Slot(h) => h.key(),
+            Handle::MenuTemplate(h) => h.key(),
+            Handle::Dialog(h) => h.key(),
+            Handle::Button(h) => h.key(),
+            Handle::ProjectItem(h) => h.key(),
+            Handle::Effect(h) => h.key(),
+            Handle::HttpStream(h) => h.key(),
+            Handle::WebSocket(h) => h.key(),
+            Handle::Route(h) => h.key(),
+            Handle::WebResponse(h) => h.key(),
+            Handle::OAuthFlow(h) => h.key(),
+            Handle::WasmInstance(h) => h.key(),
+            Handle::WasmProcess(h) => h.key(),
+            Handle::NetworkChannel(h) => h.key(),
+            Handle::NetworkHold(h) => h.key(),
+            Handle::NetworkMap(h) => h.key(),
+            Handle::Cutscene(h) => h.key(),
+            Handle::Screen(h) => h.key(),
+            Handle::Playback(h) => h.key(),
+            Handle::File(h) => h.key(),
+            Handle::Subscription(h) => h.key(),
+            Handle::Task(h) => h.key(),
+            Handle::Schedule(h) => h.key(),
+            Handle::Random(h) => h.key(),
+            Handle::Hud(h) => h.key(),
+        }
+    }
+
+    /// The handle of class `class` with `key`, if that class has such keys.
+    pub fn from_key(class: &str, key: &[KeyPart]) -> Option<Handle> {
+        match class {
+            "Centity" => Centity::from_key(key).map(Handle::Centity),
+            "Node" => Node::from_key(key).map(Handle::Node),
+            "Image" => Image::from_key(key).map(Handle::Image),
+            "Entity" => Entity::from_key(key).map(Handle::Entity),
+            "Living" => Living::from_key(key).map(Handle::Living),
+            "Mob" => Mob::from_key(key).map(Handle::Mob),
+            "DroppedItem" => DroppedItem::from_key(key).map(Handle::DroppedItem),
+            "Mannequin" => Mannequin::from_key(key).map(Handle::Mannequin),
+            "Player" => Player::from_key(key).map(Handle::Player),
+            "Bot" => Bot::from_key(key).map(Handle::Bot),
+            "Sender" => Sender::from_key(key).map(Handle::Sender),
+            "World" => World::from_key(key).map(Handle::World),
+            "WorldBorder" => WorldBorder::from_key(key).map(Handle::WorldBorder),
+            "Block" => Block::from_key(key).map(Handle::Block),
+            "CustomBlock" => CustomBlock::from_key(key).map(Handle::CustomBlock),
+            "ProjectBlock" => ProjectBlock::from_key(key).map(Handle::ProjectBlock),
+            "Inventory" => Inventory::from_key(key).map(Handle::Inventory),
+            "BossBar" => BossBar::from_key(key).map(Handle::BossBar),
+            "Sidebar" => Sidebar::from_key(key).map(Handle::Sidebar),
+            "Team" => Team::from_key(key).map(Handle::Team),
+            "Database" => Database::from_key(key).map(Handle::Database),
+            "Menu" => Menu::from_key(key).map(Handle::Menu),
+            "Slot" => Slot::from_key(key).map(Handle::Slot),
+            "MenuTemplate" => MenuTemplate::from_key(key).map(Handle::MenuTemplate),
+            "Dialog" => Dialog::from_key(key).map(Handle::Dialog),
+            "Button" => Button::from_key(key).map(Handle::Button),
+            "ProjectItem" => ProjectItem::from_key(key).map(Handle::ProjectItem),
+            "Effect" => Effect::from_key(key).map(Handle::Effect),
+            "HttpStream" => HttpStream::from_key(key).map(Handle::HttpStream),
+            "WebSocket" => WebSocket::from_key(key).map(Handle::WebSocket),
+            "Route" => Route::from_key(key).map(Handle::Route),
+            "WebResponse" => WebResponse::from_key(key).map(Handle::WebResponse),
+            "OAuthFlow" => OAuthFlow::from_key(key).map(Handle::OAuthFlow),
+            "WasmInstance" => WasmInstance::from_key(key).map(Handle::WasmInstance),
+            "WasmProcess" => WasmProcess::from_key(key).map(Handle::WasmProcess),
+            "NetworkChannel" => NetworkChannel::from_key(key).map(Handle::NetworkChannel),
+            "NetworkHold" => NetworkHold::from_key(key).map(Handle::NetworkHold),
+            "NetworkMap" => NetworkMap::from_key(key).map(Handle::NetworkMap),
+            "Cutscene" => Cutscene::from_key(key).map(Handle::Cutscene),
+            "Screen" => Screen::from_key(key).map(Handle::Screen),
+            "Playback" => Playback::from_key(key).map(Handle::Playback),
+            "File" => File::from_key(key).map(Handle::File),
+            "Subscription" => Subscription::from_key(key).map(Handle::Subscription),
+            "Task" => Task::from_key(key).map(Handle::Task),
+            "Schedule" => Schedule::from_key(key).map(Handle::Schedule),
+            "Random" => Random::from_key(key).map(Handle::Random),
+            "Hud" => Hud::from_key(key).map(Handle::Hud),
+            _ => None,
+        }
+    }
+}

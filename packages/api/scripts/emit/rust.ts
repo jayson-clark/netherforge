@@ -155,7 +155,7 @@ export function handlesRust(classes: ClassBinding[]): string {
         'class it is: a `Mob` converts into the `Living` and the `Entity` it is,',
         'keeping its key.',
       ],
-      [],
+      ['crate::handle::{HandleClass, Key, KeyPart}'],
     ),
   ]
   for (const binding of handles) {
@@ -202,6 +202,52 @@ export function handlesRust(classes: ClassBinding[]): string {
     'pub const CHAINS: &[&[&str]] = &[',
     ...handles.map((it) => `    &[${it.handle!.chain.map((c) => JSON.stringify(c)).join(', ')}],`),
     '];',
+  )
+  for (const binding of handles) {
+    const handle = binding.handle!
+    const parts = handle.fields.map((field, k) => {
+      const variant = field.type === 'string' ? 'Str' : 'Int'
+      return { field: ident(field.name), variant, k }
+    })
+    lines.push(
+      '',
+      `impl HandleClass for ${handle.name} {`,
+      `    const NAME: &'static str = ${JSON.stringify(handle.name)};`,
+      `    const ROOT: &'static str = ${JSON.stringify(handle.root)};`,
+      `    const CLASSES: &'static [&'static str] = &[${handle.descendants.map((c) => JSON.stringify(c)).join(', ')}];`,
+      '    fn key(&self) -> Key {',
+      `        vec![${parts.map((p) => `KeyPart::${p.variant}(self.${p.field}.clone())`).join(', ')}]`,
+      '    }',
+      '    fn from_key(key: &[KeyPart]) -> Option<Self> {',
+      `        match key {`,
+      `            [${parts.map((p) => `KeyPart::${p.variant}(${p.field.replace('r#', '')})`).join(', ')}] => Some(${handle.name} { ${parts.map((p) => `${p.field}: ${p.field.replace('r#', '')}.clone()`).join(', ')} }),`,
+      '            _ => None,',
+      '        }',
+      '    }',
+      '}',
+    )
+  }
+  lines.push(
+    '',
+    'impl Handle {',
+    "    /// What identifies the thing: its root class's key.",
+    '    pub fn key(&self) -> Key {',
+    '        match self {',
+    ...handles.map((it) => `            Handle::${it.handle!.name}(h) => h.key(),`),
+    '        }',
+    '    }',
+    '',
+    '    /// The handle of class `class` with `key`, if that class has such keys.',
+    '    pub fn from_key(class: &str, key: &[KeyPart]) -> Option<Handle> {',
+    '        match class {',
+    ...handles.map(
+      (it) =>
+        `            ${JSON.stringify(it.handle!.name)} => ${it.handle!.name}::from_key(key).map(Handle::${it.handle!.name}),`,
+    ),
+    '            _ => None,',
+    '        }',
+    '    }',
+    '}',
   )
   return finish(lines)
 }
@@ -329,9 +375,12 @@ export function apiRust(classes: ClassBinding[]): string {
       ],
     ),
     "/// Every class's implementation.",
-    'pub trait LuaApi {',
+    'pub trait LuaApi: crate::Runtime {',
+    // Every class is unported until the runtime implements it: the port goes a class at a
+    // time (see the rust-runtime skill). A class's own trait has no defaults.
     ...withFunctions.map(
-      (it) => `    fn ${snake(it.cls.name).toLowerCase()}(&self) -> &dyn ${traitName(it)};`,
+      (it) =>
+        `    fn ${snake(it.cls.name).toLowerCase()}(&self) -> &dyn ${traitName(it)} { &crate::unported::Unported }`,
     ),
     '}',
   ]
@@ -341,6 +390,288 @@ export function apiRust(classes: ClassBinding[]): string {
       if (index) lines.push('')
       lines.push(...rustdoc(fn.fn.doc, '    '), `    ${signature(binding, fn)}`)
     })
+    lines.push('}')
+  }
+  return finish(lines)
+}
+
+// ---- codecs.rs and bind.rs: the glue -----------------------------------------------
+
+/** A Rust expression for [codec]'s codec (a zero-sized value): `Opt(List(Str))`. */
+function codecExpr(codec: Codec, boxed: Set<string> = new Set()): string {
+  switch (codec.kind) {
+    case 'string':
+      return 'Str'
+    case 'number':
+      return 'Num'
+    case 'integer':
+      return 'Int'
+    case 'boolean':
+      return 'Bool'
+    case 'function':
+      return 'Func'
+    case 'any':
+      return `Any { table: ${codec.table} }`
+    case 'choice':
+      return `Choice(&[${codec.choices.map((it) => JSON.stringify(it)).join(', ')}])`
+    case 'optional':
+      // `any` is any value already, nil included.
+      if (codec.inner.kind === 'any') return 'Any { table: false }'
+      if (codec.inner.kind === 'optional') return codecExpr(codec.inner, boxed)
+      return `Opt(${codecExpr(codec.inner, boxed)})`
+    case 'list':
+      return `List(${codecExpr(codec.item)})`
+    case 'map':
+      return `Map(${codecExpr(codec.key)}, ${codecExpr(codec.value)})`
+    case 'union':
+      return codec.handlesOnly
+        ? `AnyHandle(&[${codec.members.map((m) => JSON.stringify(m.kind === 'handle' ? m.cls.name : '')).join(', ')}])`
+        : `codecs::${codec.name}`
+    case 'handle':
+      return `HandleOf::<handles::${codec.cls.name}>::default()`
+    case 'runtime':
+      return `${codec.name}Codec`
+    case 'shape':
+      return boxed.has(codec.name) ? `Boxed(codecs::${codec.name})` : `codecs::${codec.name}`
+  }
+}
+
+const GLUE_USES = [
+  'mlua::{Lua, Table, Value}',
+  'crate::codec::*',
+  'crate::{codecs, handles, shapes, unions}',
+]
+
+export function codecsRust(bindings: Bindings): string {
+  const reach = reachable(bindings.shapes)
+  const lines = [
+    ...header(
+      [
+        'A codec for each shape and union that crosses: a shape read strictly (a key',
+        "that isn't a field is a mistake), pushed as a table of the fields that are",
+        'set; a union by the first member whose kind of value it is.',
+      ],
+      GLUE_USES,
+    ),
+  ]
+  for (const shape of bindings.shapes) {
+    const name = shape.shape.name
+    const boxed = new Set(
+      [...(reach.get(name) ?? [])].filter((other) => reach.get(other)?.has(name)),
+    )
+    const fields = shape.fields.map((f) => ({ ...f, expr: codecExpr(f.codec, boxed) }))
+    lines.push(
+      '#[derive(Clone, Copy, Default)]',
+      `pub struct ${name};`,
+      `impl Codec for ${name} {`,
+      `    type T = shapes::${name};`,
+      `    fn expected(&self) -> String { ${JSON.stringify(name)}.into() }`,
+      '    fn accepts(&self, value: &Value) -> bool { matches!(value, Value::Table(t) if t.metatable().is_none()) }',
+      `    fn read(&self, lua: &Lua, value: Value, at: &str) -> crate::ApiResult<shapes::${name}> {`,
+      `        let t = shape_table(&value, at, ${JSON.stringify(name)}, &[${fields.map((f) => JSON.stringify(f.name)).join(', ')}])?;`,
+      `        let _ = (&lua, &t);`,
+      `        Ok(shapes::${name} {`,
+      ...fields.map(
+        (f) =>
+          `            ${ident(f.name)}: field(lua, t, at, ${JSON.stringify(f.name)}, ${f.expr})?,`,
+      ),
+      '        })',
+      '    }',
+      `    fn push(&self, lua: &Lua, value: shapes::${name}) -> mlua::Result<Value> {`,
+      `        let t: Table = lua.create_table_with_capacity(0, ${fields.length})?;`,
+      ...fields.map(
+        (f) =>
+          `        set_field(lua, &t, ${JSON.stringify(f.name)}, ${f.expr}, value.${ident(f.name)})?;`,
+      ),
+      ...(fields.length ? [] : ['        let _ = value;']),
+      '        Ok(Value::Table(t))',
+      '    }',
+      '}',
+      '',
+    )
+  }
+  for (const [name, union] of bindings.unions) {
+    if (union.handlesOnly) continue
+    const members = union.members.map((m) => ({ variant: variantName(m), expr: codecExpr(m) }))
+    lines.push(
+      '#[derive(Clone, Copy, Default)]',
+      `pub struct ${name};`,
+      `impl Codec for ${name} {`,
+      `    type T = unions::${name};`,
+      '    fn expected(&self) -> String {',
+      `        or_list(vec![${members.map((m) => `${m.expr}.expected()`).join(', ')}])`,
+      '    }',
+      '    fn accepts(&self, value: &Value) -> bool {',
+      `        ${members.map((m) => `${m.expr}.accepts(value)`).join(' || ')}`,
+      '    }',
+      `    fn read(&self, lua: &Lua, value: Value, at: &str) -> crate::ApiResult<unions::${name}> {`,
+      ...members.map(
+        (m) =>
+          `        if ${m.expr}.accepts(&value) { return ${m.expr}.read(lua, value, at).map(unions::${name}::${m.variant}); }`,
+      ),
+      '        Err(mismatch(at, &self.expected(), &value))',
+      '    }',
+      `    fn push(&self, lua: &Lua, value: unions::${name}) -> mlua::Result<Value> {`,
+      '        match value {',
+      ...members.map(
+        (m) => `            unions::${name}::${m.variant}(v) => ${m.expr}.push(lua, v),`,
+      ),
+      '        }',
+      '    }',
+      '}',
+      '',
+    )
+  }
+  return finish(lines)
+}
+
+/** How a script calls it, in a message: `Player:ban`, `nf.server.set_motd`. */
+const called = (binding: ClassBinding, fn: FnBinding) =>
+  `${binding.cls.name}${fn.method ? ':' : '.'}${fn.fn.name}`
+
+/** The Rust function a binding is: `centity_play_animation`, `nf_server_tick`. */
+const glueName = (binding: ClassBinding, fn: FnBinding) =>
+  `${snake(binding.cls.name).toLowerCase()}_${fn.fn.name}`
+
+function glue(binding: ClassBinding, fn: FnBinding): string[] {
+  const lines: string[] = []
+  const args: string[] = []
+  let index = 0
+  if (fn.method) {
+    lines.push(
+      `let Some(this) = args.first().filter(|v| HandleOf::<handles::${binding.cls.name}>::default().accepts(v)).cloned() else {`,
+      `    return Err(mlua::Error::runtime("call ${binding.cls.name} methods with ':' (${called(binding, fn)})"));`,
+      '};',
+      `let this = HandleOf::<handles::${binding.cls.name}>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;`,
+    )
+    args.push('&this')
+    index += 1
+  } else {
+    lines.push(
+      `let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("${called(binding, fn)} needs a calling script"))? };`,
+    )
+    args.push('&caller')
+  }
+  const scope = fn.method ? 'host_scope(lua)' : 'Some(caller.scope)'
+  if (fn.fn.requires)
+    lines.push(
+      `api.requires(${scope}, ${JSON.stringify(fn.fn.requires)}, ${JSON.stringify(called(binding, fn))}).map_err(|e| mlua::Error::runtime(e.0))?;`,
+    )
+  for (const param of fn.params) {
+    const name = `a_${param.name}`
+    lines.push(
+      `let ${name} = arg(lua, args, ${index}, ${JSON.stringify(param.name)}, ${codecExpr(param.codec)})?;`,
+    )
+    args.push(name)
+    index += 1
+  }
+  const trait = snake(binding.cls.name).toLowerCase()
+  const invoke = `api.${trait}().${ident(fn.fn.name)}(${args.join(', ')})`
+  const returns = fn.returns
+  switch (returns.kind) {
+    case 'none':
+      lines.push(`${invoke}.map_err(|e| mlua::Error::runtime(e.0))?;`, 'Ok(MultiValue::new())')
+      break
+    case 'one':
+      lines.push(
+        `Ok(MultiValue::from_vec(vec![result(lua, ${codecExpr(returns.codec)}, ${invoke})?]))`,
+      )
+      break
+    case 'tuple': {
+      lines.push(`let r = ${invoke}.map_err(|e| mlua::Error::runtime(e.0))?;`)
+      const pushed = returns.codecs.map((codec, k) => `${codecExpr(codec)}.push(lua, r.${k})?`)
+      if (returns.optional)
+        lines.push('let Some(r) = r else { return Ok(MultiValue::from_vec(vec![Value::Nil])) };')
+      lines.push(`Ok(MultiValue::from_vec(vec![${pushed.join(', ')}]))`)
+      break
+    }
+    case 'async':
+      // The work has started (or the call failed, keeping nothing): only now is the callback
+      // kept, and the wait's id goes back for `Task:cancel`.
+      lines.push(
+        `let pending = ${invoke}.map_err(|e| mlua::Error::runtime(e.0))?;`,
+        `let callback = args.get(${index}).cloned();`,
+        `let id = crate::pending::defer(lua, ${scope}, pending, ${codecExpr(returns.codec)}, callback, ${JSON.stringify(called(binding, fn))})?;`,
+        'Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))',
+      )
+      break
+  }
+  return [
+    `fn ${glueName(binding, fn)}(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {`,
+    ...(fn.method ? ['    let _ = scope;'] : []),
+    ...lines.map((l) => `    ${l}`),
+    '}',
+    '',
+  ]
+}
+
+export function bindRust(classes: ClassBinding[]): string {
+  const lines = [
+    ...header(
+      [
+        "Each function's binding: it reads its arguments from Luau with their codecs,",
+        'calls the API trait, and pushes what it returns. The only place Luau values',
+        'meet Rust types.',
+      ],
+      [
+        'mlua::{Lua, MultiValue, Value}',
+        'netherforge_luau::ScopeId',
+        'crate::api::LuaApi',
+        'crate::bind::{Binding, host_scope}',
+        'crate::codec::*',
+        'crate::{codecs, handles}',
+      ],
+    ),
+  ]
+  const entries: string[] = []
+  for (const binding of classes)
+    for (const fn of binding.functions) {
+      lines.push(...glue(binding, fn))
+      entries.push(
+        `    Binding { class: ${JSON.stringify(binding.cls.name)}, name: ${JSON.stringify(fn.fn.name)}, method: ${fn.method}, call: ${glueName(binding, fn)} },`,
+      )
+    }
+  lines.push(
+    '/// Every binding, by class.',
+    'pub const BINDINGS: &[Binding] = &[',
+    ...entries,
+    '];',
+  )
+  return finish(lines)
+}
+
+/** `unported.rs`: every class implemented as "not on the Rust runtime yet". */
+export function unportedRust(classes: ClassBinding[]): string {
+  const lines = [
+    ...header(
+      [
+        "Every class's functions, each an error saying it isn't on the Rust runtime yet:",
+        "what `LuaApi`'s accessors give until the runtime implements that class.",
+      ],
+      [
+        'std::collections::BTreeMap',
+        'mlua::{Function, Value}',
+        'crate::api::*',
+        'crate::{ApiError, ApiResult, Caller, Pending, handles, shapes, unions, values}',
+      ],
+    ),
+    "/// The API as far as the Rust runtime hasn't ported it.",
+    'pub struct Unported;',
+    '',
+    'fn unported<T>(called: &str) -> ApiResult<T> {',
+    '    Err(ApiError(format!("{called} isn\'t on the Rust runtime yet")))',
+    '}',
+  ]
+  for (const binding of classes.filter((it) => it.functions.length)) {
+    lines.push('', `impl ${traitName(binding)} for Unported {`)
+    for (const fn of binding.functions) {
+      const sig = signature(binding, fn).replace(/;$/, '')
+      // Unused parameters are fine: they're named after the spec's.
+      lines.push(
+        `    #[allow(unused_variables)]`,
+        `    ${sig} { unported(${JSON.stringify(called(binding, fn))}) }`,
+      )
+    }
     lines.push('}')
   }
   return finish(lines)

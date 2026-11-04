@@ -201,5 +201,48 @@ runtimes can't disagree about what crosses. `pnpm lint`'s generated-files check 
 - The generated modules are `#[rustfmt::skip]` and allow clippy's lints, so the emitter doesn't
   have to write rustfmt's layout.
 
-Still to come: the glue that reads a call's arguments from Luau, calls the trait and pushes
-the results (`LuaPrimitives.kt`'s half), handles as userdata, and the events registry.
+- **The glue** (`bindings.rs`, `codecs.rs`): a Rust function per binding reads its arguments
+  with their codecs (`codec.rs`, the Kotlin `LuaCodec.kt` with its messages), calls the trait
+  and pushes what it returns, listed in `BINDINGS`. Codecs are zero-sized types composed at
+  compile time (`Opt(List(Str))`, a unit struct per shape and union), so a call builds none.
+  A shape is read strictly (`unknown field 'options.colour' (fields: ...)`), and a bad choice
+  says what it got (`got "mauve"`).
+- **Unported classes.** `LuaApi`'s accessors default to `Unported` (`unported.rs`), whose every
+  function fails with "`BossBar:exists` isn't on the Rust runtime yet", so the runtime ports
+  a class at a time. A class's own trait has no defaults: once a class is implemented, it
+  must match the spec. **The end of the port removes the defaults**, so a class left out
+  stops building.
+- `crate::Runtime` is what every binding asks around its call: `requires` (the one
+  capability check, before anything is read).
+
+## Handles (`crates/api/src/handle.rs`)
+
+- **A handle is one userdata type** (`HandleData`) for every class: its class (which can
+  become more specific: an `Entity` that turns out to be a `Mob`) and its root's key. Its
+  `__index` looks the method up in its class's table (its own and its chain's, built once by
+  `install`), and `__newindex` refuses: "a BossBar handle is shared by every script and can't
+  be changed". There's nothing left for the old `rawset` refusal to guard.
+- **One userdata per thing**: a weak-valued registry table by root and key (`push_key`). So
+  `a == b` and `rawequal(a, b)` hold for two handles to the same thing, and a handle no
+  script holds is collected. `__eq` compares root and key besides.
+- `typeof(handle)` is `"handle"`, and mlua hides the metatable (`getmetatable` gives `false`).
+- A method called with `.` fails with "call BossBar methods with ':'".
+
+## `nf` per scope (`crates/api/src/bind.rs`)
+
+Each scope gets its own `nf` (`nf_for(lua, scope)`), whose `__index` binds a function to the
+scope the first time the scope reads it and keeps it (namespaces below it the same way). A
+function then calls the API as the scope whose **code** read it, wherever it's called from: a
+module's function called during another scope's call is still the module's. That's the
+prelude's `make_nf(scope)`, without making 900 closures for every scope that opens. `nf`
+refuses assignment. Handle methods use the running scope, as before.
+
+## Async values (`crates/api/src/pending.rs`)
+
+An `async` function's trait method returns a `Pending<T>` (a future). The binding hands it to
+`pending::defer` with the script's callback and returns the wait's id. `pending::deliver`
+polls every wait once at the room's tick boundary and calls back the ready ones (through the
+host's guarded call) with `value, err`. Nothing is delivered inside the call, and game logic
+never runs off the room's thread. Tasks waiting on a value come with the prelude's tasks.
+
+Still to come: the events registry and `:on`, and the prelude's `impl: "lua"` functions.

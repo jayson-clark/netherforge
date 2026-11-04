@@ -28,7 +28,37 @@ pub mod unions;
 #[path = "generated/api.rs"]
 pub mod api;
 
+#[rustfmt::skip]
+#[allow(clippy::all, unused_imports, unused_variables)]
+#[path = "generated/codecs.rs"]
+pub mod codecs;
+
+#[rustfmt::skip]
+#[allow(clippy::all, unused_imports, unused_variables)]
+#[path = "generated/bindings.rs"]
+pub mod bindings;
+
+#[rustfmt::skip]
+#[allow(clippy::all, unused_imports, unused_variables)]
+#[path = "generated/unported.rs"]
+pub mod unported;
+
+pub mod bind;
+pub mod codec;
+pub mod handle;
+pub mod pending;
 pub mod values;
+
+pub use bind::{install, nf_for};
+pub use netherforge_luau::json::MAX_SAFE_INTEGER;
+
+/// What the runtime does around every binding, whatever its class.
+pub trait Runtime {
+    /// Whether the package `scope` belongs to declared `requirement`
+    /// (`requires` in its `netherforge.json`): the one check, before anything
+    /// is read or done. `called` names the function (`nf.http.request`).
+    fn requires(&self, scope: Option<ScopeId>, requirement: &str, called: &str) -> ApiResult<()>;
+}
 
 /// What a call into the API did wrong, as the script is told: its message
 /// (`bad argument 'radius' (a number from 0 up)`), raised at the script's line.

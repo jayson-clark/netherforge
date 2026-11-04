@@ -9,89 +9,89 @@ use mlua::{Function, Value};
 use crate::{ApiResult, Caller, Pending, handles, shapes, unions, values};
 
 /// Every class's implementation.
-pub trait LuaApi {
-    fn nf(&self) -> &dyn NfApi;
-    fn nf_server(&self) -> &dyn NfServerApi;
-    fn nf_commands(&self) -> &dyn NfCommandsApi;
-    fn nf_players(&self) -> &dyn NfPlayersApi;
-    fn nf_bots(&self) -> &dyn NfBotsApi;
-    fn nf_worlds(&self) -> &dyn NfWorldsApi;
-    fn nf_structures(&self) -> &dyn NfStructuresApi;
-    fn nf_centities(&self) -> &dyn NfCentitiesApi;
-    fn nf_spawning(&self) -> &dyn NfSpawningApi;
-    fn nf_menus(&self) -> &dyn NfMenusApi;
-    fn nf_dialogs(&self) -> &dyn NfDialogsApi;
-    fn nf_items(&self) -> &dyn NfItemsApi;
-    fn nf_blocks(&self) -> &dyn NfBlocksApi;
-    fn nf_recipes(&self) -> &dyn NfRecipesApi;
-    fn nf_loot(&self) -> &dyn NfLootApi;
-    fn nf_bossbars(&self) -> &dyn NfBossbarsApi;
-    fn nf_teams(&self) -> &dyn NfTeamsApi;
-    fn nf_schedule(&self) -> &dyn NfScheduleApi;
-    fn nf_economy(&self) -> &dyn NfEconomyApi;
-    fn nf_placeholders(&self) -> &dyn NfPlaceholdersApi;
-    fn nf_particles(&self) -> &dyn NfParticlesApi;
-    fn nf_cutscenes(&self) -> &dyn NfCutscenesApi;
-    fn nf_screens(&self) -> &dyn NfScreensApi;
-    fn nf_images(&self) -> &dyn NfImagesApi;
-    fn nf_files(&self) -> &dyn NfFilesApi;
-    fn nf_text(&self) -> &dyn NfTextApi;
-    fn nf_looks(&self) -> &dyn NfLooksApi;
-    fn nf_packs(&self) -> &dyn NfPacksApi;
-    fn nf_json(&self) -> &dyn NfJsonApi;
-    fn nf_encoding(&self) -> &dyn NfEncodingApi;
-    fn nf_crypto(&self) -> &dyn NfCryptoApi;
-    fn nf_http(&self) -> &dyn NfHttpApi;
-    fn nf_web(&self) -> &dyn NfWebApi;
-    fn nf_wasm(&self) -> &dyn NfWasmApi;
-    fn nf_network(&self) -> &dyn NfNetworkApi;
-    fn nf_time(&self) -> &dyn NfTimeApi;
-    fn nf_random(&self) -> &dyn NfRandomApi;
-    fn nf_test(&self) -> &dyn NfTestApi;
-    fn centity(&self) -> &dyn CentityApi;
-    fn node(&self) -> &dyn NodeApi;
-    fn image(&self) -> &dyn ImageApi;
-    fn entity(&self) -> &dyn EntityApi;
-    fn living(&self) -> &dyn LivingApi;
-    fn mob(&self) -> &dyn MobApi;
-    fn droppeditem(&self) -> &dyn DroppedItemApi;
-    fn mannequin(&self) -> &dyn MannequinApi;
-    fn player(&self) -> &dyn PlayerApi;
-    fn bot(&self) -> &dyn BotApi;
-    fn sender(&self) -> &dyn SenderApi;
-    fn world(&self) -> &dyn WorldApi;
-    fn worldborder(&self) -> &dyn WorldBorderApi;
-    fn block(&self) -> &dyn BlockApi;
-    fn customblock(&self) -> &dyn CustomBlockApi;
-    fn projectblock(&self) -> &dyn ProjectBlockApi;
-    fn inventory(&self) -> &dyn InventoryApi;
-    fn bossbar(&self) -> &dyn BossBarApi;
-    fn sidebar(&self) -> &dyn SidebarApi;
-    fn team(&self) -> &dyn TeamApi;
-    fn database(&self) -> &dyn DatabaseApi;
-    fn menu(&self) -> &dyn MenuApi;
-    fn slot(&self) -> &dyn SlotApi;
-    fn menutemplate(&self) -> &dyn MenuTemplateApi;
-    fn dialog(&self) -> &dyn DialogApi;
-    fn button(&self) -> &dyn ButtonApi;
-    fn projectitem(&self) -> &dyn ProjectItemApi;
-    fn effect(&self) -> &dyn EffectApi;
-    fn httpstream(&self) -> &dyn HttpStreamApi;
-    fn websocket(&self) -> &dyn WebSocketApi;
-    fn route(&self) -> &dyn RouteApi;
-    fn webresponse(&self) -> &dyn WebResponseApi;
-    fn oauthflow(&self) -> &dyn OAuthFlowApi;
-    fn wasminstance(&self) -> &dyn WasmInstanceApi;
-    fn wasmprocess(&self) -> &dyn WasmProcessApi;
-    fn networkchannel(&self) -> &dyn NetworkChannelApi;
-    fn networkhold(&self) -> &dyn NetworkHoldApi;
-    fn networkmap(&self) -> &dyn NetworkMapApi;
-    fn cutscene(&self) -> &dyn CutsceneApi;
-    fn screen(&self) -> &dyn ScreenApi;
-    fn playback(&self) -> &dyn PlaybackApi;
-    fn file(&self) -> &dyn FileApi;
-    fn schedule(&self) -> &dyn ScheduleApi;
-    fn hud(&self) -> &dyn HudApi;
+pub trait LuaApi: crate::Runtime {
+    fn nf(&self) -> &dyn NfApi { &crate::unported::Unported }
+    fn nf_server(&self) -> &dyn NfServerApi { &crate::unported::Unported }
+    fn nf_commands(&self) -> &dyn NfCommandsApi { &crate::unported::Unported }
+    fn nf_players(&self) -> &dyn NfPlayersApi { &crate::unported::Unported }
+    fn nf_bots(&self) -> &dyn NfBotsApi { &crate::unported::Unported }
+    fn nf_worlds(&self) -> &dyn NfWorldsApi { &crate::unported::Unported }
+    fn nf_structures(&self) -> &dyn NfStructuresApi { &crate::unported::Unported }
+    fn nf_centities(&self) -> &dyn NfCentitiesApi { &crate::unported::Unported }
+    fn nf_spawning(&self) -> &dyn NfSpawningApi { &crate::unported::Unported }
+    fn nf_menus(&self) -> &dyn NfMenusApi { &crate::unported::Unported }
+    fn nf_dialogs(&self) -> &dyn NfDialogsApi { &crate::unported::Unported }
+    fn nf_items(&self) -> &dyn NfItemsApi { &crate::unported::Unported }
+    fn nf_blocks(&self) -> &dyn NfBlocksApi { &crate::unported::Unported }
+    fn nf_recipes(&self) -> &dyn NfRecipesApi { &crate::unported::Unported }
+    fn nf_loot(&self) -> &dyn NfLootApi { &crate::unported::Unported }
+    fn nf_bossbars(&self) -> &dyn NfBossbarsApi { &crate::unported::Unported }
+    fn nf_teams(&self) -> &dyn NfTeamsApi { &crate::unported::Unported }
+    fn nf_schedule(&self) -> &dyn NfScheduleApi { &crate::unported::Unported }
+    fn nf_economy(&self) -> &dyn NfEconomyApi { &crate::unported::Unported }
+    fn nf_placeholders(&self) -> &dyn NfPlaceholdersApi { &crate::unported::Unported }
+    fn nf_particles(&self) -> &dyn NfParticlesApi { &crate::unported::Unported }
+    fn nf_cutscenes(&self) -> &dyn NfCutscenesApi { &crate::unported::Unported }
+    fn nf_screens(&self) -> &dyn NfScreensApi { &crate::unported::Unported }
+    fn nf_images(&self) -> &dyn NfImagesApi { &crate::unported::Unported }
+    fn nf_files(&self) -> &dyn NfFilesApi { &crate::unported::Unported }
+    fn nf_text(&self) -> &dyn NfTextApi { &crate::unported::Unported }
+    fn nf_looks(&self) -> &dyn NfLooksApi { &crate::unported::Unported }
+    fn nf_packs(&self) -> &dyn NfPacksApi { &crate::unported::Unported }
+    fn nf_json(&self) -> &dyn NfJsonApi { &crate::unported::Unported }
+    fn nf_encoding(&self) -> &dyn NfEncodingApi { &crate::unported::Unported }
+    fn nf_crypto(&self) -> &dyn NfCryptoApi { &crate::unported::Unported }
+    fn nf_http(&self) -> &dyn NfHttpApi { &crate::unported::Unported }
+    fn nf_web(&self) -> &dyn NfWebApi { &crate::unported::Unported }
+    fn nf_wasm(&self) -> &dyn NfWasmApi { &crate::unported::Unported }
+    fn nf_network(&self) -> &dyn NfNetworkApi { &crate::unported::Unported }
+    fn nf_time(&self) -> &dyn NfTimeApi { &crate::unported::Unported }
+    fn nf_random(&self) -> &dyn NfRandomApi { &crate::unported::Unported }
+    fn nf_test(&self) -> &dyn NfTestApi { &crate::unported::Unported }
+    fn centity(&self) -> &dyn CentityApi { &crate::unported::Unported }
+    fn node(&self) -> &dyn NodeApi { &crate::unported::Unported }
+    fn image(&self) -> &dyn ImageApi { &crate::unported::Unported }
+    fn entity(&self) -> &dyn EntityApi { &crate::unported::Unported }
+    fn living(&self) -> &dyn LivingApi { &crate::unported::Unported }
+    fn mob(&self) -> &dyn MobApi { &crate::unported::Unported }
+    fn droppeditem(&self) -> &dyn DroppedItemApi { &crate::unported::Unported }
+    fn mannequin(&self) -> &dyn MannequinApi { &crate::unported::Unported }
+    fn player(&self) -> &dyn PlayerApi { &crate::unported::Unported }
+    fn bot(&self) -> &dyn BotApi { &crate::unported::Unported }
+    fn sender(&self) -> &dyn SenderApi { &crate::unported::Unported }
+    fn world(&self) -> &dyn WorldApi { &crate::unported::Unported }
+    fn worldborder(&self) -> &dyn WorldBorderApi { &crate::unported::Unported }
+    fn block(&self) -> &dyn BlockApi { &crate::unported::Unported }
+    fn customblock(&self) -> &dyn CustomBlockApi { &crate::unported::Unported }
+    fn projectblock(&self) -> &dyn ProjectBlockApi { &crate::unported::Unported }
+    fn inventory(&self) -> &dyn InventoryApi { &crate::unported::Unported }
+    fn bossbar(&self) -> &dyn BossBarApi { &crate::unported::Unported }
+    fn sidebar(&self) -> &dyn SidebarApi { &crate::unported::Unported }
+    fn team(&self) -> &dyn TeamApi { &crate::unported::Unported }
+    fn database(&self) -> &dyn DatabaseApi { &crate::unported::Unported }
+    fn menu(&self) -> &dyn MenuApi { &crate::unported::Unported }
+    fn slot(&self) -> &dyn SlotApi { &crate::unported::Unported }
+    fn menutemplate(&self) -> &dyn MenuTemplateApi { &crate::unported::Unported }
+    fn dialog(&self) -> &dyn DialogApi { &crate::unported::Unported }
+    fn button(&self) -> &dyn ButtonApi { &crate::unported::Unported }
+    fn projectitem(&self) -> &dyn ProjectItemApi { &crate::unported::Unported }
+    fn effect(&self) -> &dyn EffectApi { &crate::unported::Unported }
+    fn httpstream(&self) -> &dyn HttpStreamApi { &crate::unported::Unported }
+    fn websocket(&self) -> &dyn WebSocketApi { &crate::unported::Unported }
+    fn route(&self) -> &dyn RouteApi { &crate::unported::Unported }
+    fn webresponse(&self) -> &dyn WebResponseApi { &crate::unported::Unported }
+    fn oauthflow(&self) -> &dyn OAuthFlowApi { &crate::unported::Unported }
+    fn wasminstance(&self) -> &dyn WasmInstanceApi { &crate::unported::Unported }
+    fn wasmprocess(&self) -> &dyn WasmProcessApi { &crate::unported::Unported }
+    fn networkchannel(&self) -> &dyn NetworkChannelApi { &crate::unported::Unported }
+    fn networkhold(&self) -> &dyn NetworkHoldApi { &crate::unported::Unported }
+    fn networkmap(&self) -> &dyn NetworkMapApi { &crate::unported::Unported }
+    fn cutscene(&self) -> &dyn CutsceneApi { &crate::unported::Unported }
+    fn screen(&self) -> &dyn ScreenApi { &crate::unported::Unported }
+    fn playback(&self) -> &dyn PlaybackApi { &crate::unported::Unported }
+    fn file(&self) -> &dyn FileApi { &crate::unported::Unported }
+    fn schedule(&self) -> &dyn ScheduleApi { &crate::unported::Unported }
+    fn hud(&self) -> &dyn HudApi { &crate::unported::Unported }
 }
 
 /// Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.images`, `nf.files`, `nf.text`, `nf.looks`, `nf.packs`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
