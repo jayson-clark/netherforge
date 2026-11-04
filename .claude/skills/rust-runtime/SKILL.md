@@ -485,34 +485,81 @@ unchanged.
   path and budget are field rules; `check` asks that the file is there). `game.rs` is the `GameData` the checks ask (registries, tags, durability):
   a project loads without it, and those checks say nothing then. `canonical::Free` is
   free-form JSON (an item's `data`), written sorted however deep as kotlinx does.
-- **Kinds, one by one** (`kind/<kind>.rs`; `kind::read`'s match is the one list of the ported kinds, a kind not ported answering `None`): each document kind is a
-  `Document` (`document.rs`): its `SCHEMA` from a file one folder deep, which `schema_at`
-  adjusts for the folders the file is really in (group folders add `../`, as `schemaAt` does),
-  its `canonical()`, and its `validate`. `kind::read` dispatches a scanned resource to its kind.
-  A files kind (`module`) has no model, only its checks. A scripted kind says so
-  (`Document::SCRIPTED`, `script()`), and `load` checks the Lua files beside its script are named
-  so `require` can reach them (`script.file-name`), for every such kind at once. To port a kind:
-  its model and checks in `kind/`, and an arm in `kind::read` and `kind::write_back`. There's no
-  separate list of ported kinds: one once drifted from the match (rustfmt split it a line apiece
-  and new entries missed it), and six kinds' goldens silently didn't run.
-- **What the goldens hold a kind to**: `tests/goldens.rs` compares a ported kind's problems with
-  the goldens' by what's wrong and where (severity, file, path, code, position, related), not
-  their wording, since the field rules word themselves; each kind's own tests hold its wording. A parse problem is compared by file and code only: kotlinx gives no path or position for a custom type's error (an ingredient's), where the reader gives both.
-  Checks across resources (`reference.*`, `font.*`, and the kinds' `crossCheck`s) are left out until they're ported: a problem whose `related` names another file is one by itself, the rest are listed in the harness's `ACROSS`, and a code both sides report (`MIXED`: a pack's replaced name, a datapack's reference) is held to "what's reported is expected" until then. A companion's file (a terrain's `.lua`) is the resource's, and `kind::document_path` is where a kind's document is (a structure's is its companion `.json`). The examples are
-  valid projects, so a ported kind must report no errors in them, and must write them back to
-  the same bytes. When the Rust side takes over, the goldens are written from it. **Every kind's
-  own checks are ported** (all 27 and the manifest), each agreeing with every golden problem that
-  isn't a check across resources: the documents (`advancement`, `biome`, `block`, `buff`, `centity`,
-  `cutscene`, `datapack`, `dialog`, `dimension_type`, `game_block`, `item`, `loot_table`, `menu`,
-  `particle_effect`, `recipe`, `resource_pack`, `screen`, `screen_font`, `sky`, `structure`'s
-  generation, `terrain`, `video`), `module`, and the files kinds `build`, `map`, `migration` and
-  `wasm` (`kind/files.rs`; a WASM module's checks read its binary, a check across files ported with
-  the WASM reader) (with `ModuleRequires`, worked out once per project in `Source`).
+- **Kinds, one by one** (`kind/<kind>.rs`): `kind::document_kind` is **the one list** of the document
+  kinds, each id to its model behind one face (`DocumentKind`: read, write back, schema), which
+  reading, writing back and the checks across the project all go by; `kind::read` adds the files
+  kinds (`module`, `build`, `migration`, `map`, `wasm`). There was a second match for writing back;
+  before that, a hand-kept list of ported kinds once drifted from the match (rustfmt split it a line
+  apiece) and six kinds' goldens silently didn't run. Each document kind is a `Document`
+  (`document.rs`): its `SCHEMA` from a file one folder deep, which `schema_at` adjusts for the
+  folders the file is really in (group folders add `../`, as `schemaAt` does), its `canonical()`,
+  its `validate`, its `cross_check`, and the entries it puts in the start-up datapack
+  (`datapack_entries`). A scripted kind says so (`Document::SCRIPTED`, `script()`), and `load`
+  checks the Lua files beside its script are named so `require` can reach them
+  (`script.file-name`), for every such kind at once.
+- **What the goldens hold**: `tests/goldens.rs` loads each `testdata/invalid` case whole
+  (`project::load`) and compares its problems with `expected.json`'s by what's wrong and where
+  (severity, file, path, code, position, related), not their wording, since the field rules word
+  themselves; each kind's own tests hold its wording, and the manifest's and the layout's harnesses
+  compare exact messages. A parse problem is compared by file and code only: kotlinx gives no
+  path or position for a custom type's error (an ingredient's), where the reader gives both.
+  **All 51 cases agree, nothing set aside.** The examples are valid projects: each loads without
+  errors (`tests/references.rs`) and writes its documents (and `fonts/default.json`) back to the
+  same bytes. When the Rust side takes over, the goldens are written from it. The goldens load
+  without game data or pictures, as Kotlin's do, so what needs those has tests of its own
+  (`tests/across.rs`).
 
-Next in format: the checks across resources (references, each kind's `crossCheck`, until `ACROSS`
-and `MIXED` are empty and the harness compares whole cases), the feature table, then the
-snapshot as the runtime takes it. The compilers (a centity's, a terrain's generator, a pack's
-build, the start-up datapack) come with the runtime pieces that use them.
+### References and the checks across the project
+
+- **One walk of a document by its schema** (`schema.rs`): `schema::of::<T>()` makes a model's
+  schema once and keeps it, and `Schema::walk` goes through a document as written, visiting every
+  schema that describes each value (its field's, the `Option` or tagged enum branch it is, an
+  `allOf`'s parts) with a state its items and entries inherit. The field rules (`rules::check`),
+  the references and the stacks are all visitors of it.
+- **A reference is marked on its field**: `extend("x-ref" = "item")`, Kotlin's `@Ref`, and
+  MiniMessage text `extend("x-minimessage" = true)`, Kotlin's `@MiniMessage`, whose
+  `<glyph:pack/key>` tags name glyphs. A mark on a list or a map holds for its items or values,
+  never a map's keys. A ruled string carries its own (`TexturePath` is a `texture` reference
+  wherever it's used, `ModelPath` a `model`, `SoundPath` a `sound_file`), so about 30 pack fields
+  need no attribute. `reference::RefKind` is format's `RefKind`, its names serde's and its facts
+  (noun, scope, registry...) one match from a macro. Kotlin's pack `models` map wasn't marked, so a
+  model file's rename missed it: marked in both now. `tests/references.rs` holds every reference
+  the examples make to format's `testdata/references` goldens, and every mark to a `RefKind`.
+  A glyph tag's place in its text is in UTF-16 code units, as the editor counts.
+- **An ingredient has a real schema** (a string, or `{ "item": <item reference> }`), where it was
+  any JSON; so its project item is found like any reference, and the editor can read it.
+- **`project::load`** (`project.rs`) is `Projects.load` for one project: the manifest,
+  `fonts/default.json` (`font.rs`), `client/vanilla.json` (`vanilla.rs`), the scan, each resource
+  read on its own, what the project defines (`reference::Defined`: each kind's ids, packs' entries,
+  datapacks' registry entries and tags in its namespace), every reference its files make, then each
+  resource against the rest. It reads from a `ProjectSource` (format's: files, their text, and a
+  picture's pixels or size when the host reads them; `Files` for files alone).
+- **What a check across resources sees** (`project::Across`, Kotlin's `KindContext`): the resource,
+  every other resource's model by type (`models::<BlockFile>()`, found by downcasting, so no kind
+  needs a second name for its model), ids that read, places, the references, the default font,
+  `client/vanilla.json`, the game, and pictures. A kind's `Document::cross_check` reports into its
+  sink, a problem in another of its files with that file. A files kind's are `files::cross_check`.
+- **Every stack is found by its schema**: `ItemDef` is marked `x-stack`, and `item::check_stacks`
+  checks each one in any document against the project item it names (`item.kind-mismatch`), where
+  Kotlin's menus, loot, recipes, dialogs and particles each called `checkStack` by hand.
+- **The references' check** is `ReferenceIndex.check` with Kotlin's messages, for every reference
+  of every document and the manifest. Each kind's `cross_check` is only what a reference means
+  beyond existing.
+- **A carrier's states** (`kind/carriers.rs`, `BlockCarriers`' pools) are counted by listing them,
+  as the pack build's plan will take them, so a block's capacity has one definition.
+- **A terrain in a world**: a height in the world is marked `x-world-y`, its range written once from
+  `LIMITS` (it was the same two numbers ten times), and its checks of heights together take the
+  height. `TerrainFile::in_world` is what a world's dimension type adds (`project.world-height`).
+
+Not yet in the project load: **packages** (a manifest's dependencies resolved and loaded each in its
+own namespace, what they export, the lock, `testdata/packages`' goldens; until then a reference to
+a dependency's namespace says the project doesn't depend on it, and `tests/references.rs` sets
+exactly those aside in the showcase), a WASM module's checks (with the WASM reader), and the game's
+blocks checked across packages.
+
+Next in format: the feature table (`requireFeature`), then the snapshot as the runtime takes it
+(with packages). The compilers (a centity's, a terrain's generator, a pack's build, the start-up
+datapack) come with the runtime pieces that use them.
 
 ## One source for each thing
 
