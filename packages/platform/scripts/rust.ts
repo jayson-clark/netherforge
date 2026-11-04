@@ -220,21 +220,40 @@ function decl(d: Decl, cx: Context): string[] {
   }
 }
 
-function trait(d: InterfaceDecl, cx: Context): string[] {
-  const lines = [...rustdoc(d.doc, ''), `pub trait ${d.name}${d.extends ? `: ${d.extends}` : ''} {`]
+/** A trait's members, once: each one's doc, its signature, and what it returns. */
+interface Member {
+  doc: string | undefined
+  name: string
+  /** Its parameters' names, as the signature has them. */
+  params: string[]
+  /** `fn name(&self, a: A) -> R`, without the `;`. */
+  signature: string
+  /** What an implementation without a body takes its parameters as: `fn name(&self, _: A) -> R`. */
+  unnamed: string
+  returns: string
+}
+
+function members(d: InterfaceDecl, cx: Context): Member[] {
+  const out: Member[] = []
+  const member = (
+    doc: string | undefined,
+    name: string,
+    params: [string, string][],
+    returns: string,
+  ) => {
+    const tail = returns === '()' ? '' : ` -> ${returns}`
+    out.push({
+      doc,
+      name,
+      params: params.map(([n]) => n),
+      signature: `fn ${name}(&self${params.map(([n, t]) => `, ${n}: ${t}`).join('')})${tail}`,
+      unnamed: `fn ${name}(&self${params.map(([, t]) => `, _: ${t}`).join('')})${tail}`,
+      returns,
+    })
+  }
   // An object's values are what its methods read.
-  for (const f of d.fields ?? [])
-    lines.push(
-      ...rustdoc(f.doc, '    '),
-      `    fn ${snake(f.name)}(&self) -> ${typeOf(f.type, cx, 'out')};`,
-      '',
-    )
-  for (const p of d.properties)
-    lines.push(
-      ...rustdoc(p.doc, '    '),
-      `    fn ${snake(p.name)}(&self) -> ${typeOf(p.type, cx, 'out')};`,
-      '',
-    )
+  for (const f of [...(d.fields ?? []), ...d.properties])
+    member(f.doc, snake(f.name), [], typeOf(f.type, cx, 'out'))
   // Kotlin overloads a name (`contents(ref)`, `contents(ref, filter)`); Rust can't, so a later
   // one is named by its last parameter: `contents_with_filter`.
   const seen = new Set<string>()
@@ -243,16 +262,87 @@ function trait(d: InterfaceDecl, cx: Context): string[] {
     if (seen.has(name))
       name = `${name}_with_${snake(m.params[m.params.length - 1]!.name).replace(/^r#/, '')}`
     seen.add(name)
-    const params = m.params.map((p) => `${snake(p.name)}: ${typeOf(p.type, cx, 'in')}`)
-    const returns = typeOf(m.returns, cx, 'out')
-    lines.push(
-      ...rustdoc(m.doc, '    '),
-      `    fn ${name}(&self${params.map((p) => `, ${p}`).join('')})${returns === '()' ? '' : ` -> ${returns}`};`,
-      '',
-    )
+    const params = m.params.map((p): [string, string] => [snake(p.name), typeOf(p.type, cx, 'in')])
+    member(m.doc, name, params, typeOf(m.returns, cx, 'out'))
   }
+  return out
+}
+
+function trait(d: InterfaceDecl, cx: Context): string[] {
+  const lines = [...rustdoc(d.doc, ''), `pub trait ${d.name}${d.extends ? `: ${d.extends}` : ''} {`]
+  for (const m of members(d, cx)) lines.push(...rustdoc(m.doc, '    '), `    ${m.signature};`, '')
   if (lines[lines.length - 1] === '') lines.pop()
   lines.push('}', '')
+  return lines
+}
+
+/**
+ * `Unported`: every interface of the spec implemented by one stand-in, whose
+ * groups are itself and whose every other answer is a panic naming it
+ * (`TeamOps::create isn't on this platform`). A fake implements the groups it
+ * means and hands back `&Unported` for the rest, so it's written as the
+ * runtime's ported parts need it, and the compiler holds it to the spec.
+ */
+function unported(all: Decl[], cx: Context): string[] {
+  const lines = [
+    `// ${GENERATED_BY}`,
+    '',
+    "//! `Unported`: the Platform's every group, each answer a panic naming it.",
+    '',
+    'use super::*;',
+    '',
+    '/// Every group of the Platform, none of them there: a fake starts from it.',
+    '#[derive(Clone, Copy, Debug, Default)]',
+    'pub struct Unported;',
+    '',
+    '/// What asking `Unported` anything but a group does.',
+    '#[track_caller]',
+    'pub fn unported(what: &str) -> ! {',
+    '    panic!("{what} isn\'t on this platform")',
+    '}',
+    '',
+  ]
+  for (const d of all) {
+    if (d.kind !== 'interface' && d.kind !== 'object') continue
+    lines.push(`impl ${d.name} for Unported {`)
+    for (const m of members(d, cx)) {
+      const group = /^&dyn \w+$/.test(m.returns)
+      const name = m.signature.slice(3, m.signature.indexOf('('))
+      lines.push(
+        `    ${m.unnamed} {`,
+        group ? '        &Unported' : `        unported("${d.name}::${name}")`,
+        '    }',
+        '',
+      )
+    }
+    if (lines[lines.length - 1] === '') lines.pop()
+    lines.push('}', '')
+    // What a fake implements of `X` when it means only some of it: the rest is `Unported`'s.
+    const fake = `Fake${d.name}`
+    lines.push(
+      `/// A [\`${d.name}\`] that means only some of it: implement this, and every method it`,
+      "/// doesn't answers as [`Unported`] does.",
+      `pub trait ${fake}${d.extends ? `: ${d.extends}` : ''} {`,
+    )
+    for (const m of members(d, cx))
+      lines.push(
+        `    ${m.signature} {`,
+        `        <Unported as ${d.name}>::${m.name}(&Unported${m.params.map((p) => `, ${p}`).join('')})`,
+        '    }',
+        '',
+      )
+    if (lines[lines.length - 1] === '') lines.pop()
+    lines.push('}', '', `impl<T: ${fake}> ${d.name} for T {`)
+    for (const m of members(d, cx))
+      lines.push(
+        `    ${m.signature} {`,
+        `        ${fake}::${m.name}(self${m.params.map((p) => `, ${p}`).join('')})`,
+        '    }',
+        '',
+      )
+    if (lines[lines.length - 1] === '') lines.pop()
+    lines.push('}', '')
+  }
   return lines
 }
 
@@ -290,6 +380,7 @@ export function platformRust(
         .trimEnd()}\n`,
     )
   }
+  out.set('unported.rs', `${unported(all, cx).join('\n').trimEnd()}\n`)
   out.set(
     'external.rs',
     [
@@ -324,10 +415,12 @@ export function platformRust(
       'pub use crate::{Dynamic, PlatformError, Uuid};',
       '',
       'pub mod external;',
+      'pub mod unported;',
       '',
       ...modules.map((m) => `mod ${m};`),
       '',
       ...modules.map((m) => `pub use ${m}::*;`),
+      'pub use unported::*;',
       '',
     ].join('\n'),
   )

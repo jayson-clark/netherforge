@@ -10,6 +10,7 @@ pub use std::rc::Rc;
 pub use crate::{Dynamic, PlatformError, Uuid};
 
 pub mod external;
+pub mod unported;
 
 mod attributes;
 mod bots;
@@ -60,3 +61,4 @@ pub use teams::*;
 pub use windows::*;
 pub use world_admin::*;
 pub use worlds::*;
+pub use unported::*;
