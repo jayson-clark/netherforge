@@ -1,0 +1,115 @@
+{
+  "terrain": {
+    "meadow": {
+      "palette": [
+        {
+          "state": "minecraft:air"
+        },
+        {
+          "state": "minecraft:water"
+        },
+        {
+          "state": "minecraft:stone"
+        },
+        {
+          "state": "minecraft:grass_block"
+        },
+        {
+          "state": "minecraft:dirt"
+        },
+        {
+          "state": "minecraft:bedrock"
+        }
+      ],
+      "base": 64,
+      "seaLevel": -64,
+      "fluid": 1,
+      "noises": [],
+      "layers": [
+        {
+          "block": 3,
+          "thickness": 1
+        },
+        {
+          "block": 4,
+          "thickness": 3
+        }
+      ],
+      "underwater": [
+        {
+          "block": 3,
+          "thickness": 1
+        },
+        {
+          "block": 4,
+          "thickness": 3
+        }
+      ],
+      "stone": 2,
+      "floorBlock": 5,
+      "floorThickness": 1,
+      "caves": [],
+      "ores": [],
+      "decorations": [],
+      "temperature": {
+        "frequency": 0.002,
+        "octaves": 2
+      },
+      "humidity": {
+        "frequency": 0.002,
+        "octaves": 2
+      },
+      "jitter": {
+        "frequency": 0.02,
+        "octaves": 2
+      },
+      "jitterAmplitude": 16,
+      "blend": 16,
+      "areas": [
+        {
+          "name": "default",
+          "biome": "minecraft:plains",
+          "temperatureMin": -1,
+          "temperatureMax": 1,
+          "humidityMin": -1,
+          "humidityMax": 1,
+          "terrain": {
+            "base": 64,
+            "scale": 1,
+            "noises": [],
+            "densityScale": 1,
+            "densityNoises": []
+          },
+          "climate": []
+        }
+      ],
+      "vanillaStructures": false,
+      "templates": {},
+      "climate": [],
+      "loot": []
+    }
+  },
+  "centity": {
+    "board": {
+      "id": "board",
+      "name": "Board",
+      "nodes": [
+        {
+          "name": "text",
+          "parentIndex": -1,
+          "transform": {},
+          "display": {
+            "type": "text",
+            "text": "<gray>…",
+            "billboard": "vertical",
+            "alignment": "center",
+            "background": "#a0101018",
+            "lineWidth": 260
+          }
+        }
+      ],
+      "animations": []
+    }
+  },
+  "resourcePacks": {}
+}

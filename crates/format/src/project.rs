@@ -32,6 +32,9 @@ pub struct Resource {
     pub errors: bool,
     /// What the server runs of a package's resource: its model with every reference written in full.
     pub qualified: Option<Box<dyn kind::Model>>,
+    /// What it compiled to, when it has no errors and its kind compiles (`Document::compile`):
+    /// a package's from its `qualified` model, named `ns:id`.
+    pub compiled: Option<Box<dyn crate::document::Compiled>>,
 }
 
 impl Resource {
@@ -329,6 +332,7 @@ fn read(source: &dyn ProjectSource, home: Option<&str>, options: &Options) -> Re
                 document: read.document,
                 errors: false,
                 qualified: None,
+                compiled: None,
             })
         })
         .collect();
@@ -447,6 +451,7 @@ fn check<'a>(
         problems.extend(found);
     }
     let home = project.references.home.clone();
+    let minecraft = project.manifest.as_ref().map(|m| m.minecraft.clone());
     for (resource, errors) in project.resources.iter_mut().zip(errors) {
         resource.errors = errors;
         // A package's resources run beside the project's, so they name everything in full.
@@ -458,6 +463,16 @@ fn check<'a>(
             let json = reference::qualify(document.schema, &document.json, &home);
             resource.qualified = kind.model(&json);
         }
+        if !errors {
+            resource.compiled = compile(
+                resource,
+                &home,
+                in_package,
+                source,
+                options,
+                minecraft.as_deref(),
+            );
+        }
     }
     // The loader's order: by file, then line, keeping the order they were found in otherwise.
     problems.sort_by(|a, b| {
@@ -467,6 +482,38 @@ fn check<'a>(
     });
     project.problems = problems;
     project
+}
+
+/// What `resource` (with no errors) compiles to, with what its own checks saw: a package's from
+/// its qualified model, named as the server running it names it (`ns:id`).
+fn compile(
+    resource: &Resource,
+    home: &str,
+    in_package: bool,
+    source: &dyn ProjectSource,
+    options: &Options,
+    minecraft: Option<&str>,
+) -> Option<Box<dyn crate::document::Compiled>> {
+    let found = &resource.found;
+    let (model, id) = match in_package {
+        true => (
+            resource.qualified.as_deref()?,
+            crate::kinds::package_path(home, &found.id),
+        ),
+        false => (resource.document.as_ref()?.model.as_ref(), found.id.clone()),
+    };
+    let location = found.kind.location_of(&found.id, &found.group);
+    let inside = |file: &str| source.read(&format!("{location}/{file}"));
+    let cx = crate::document::Context {
+        id: &found.id,
+        location: &location,
+        read: Some(&inside),
+        files: Some(&found.inside),
+        game: options.game,
+        minecraft,
+        features: Some(options.features),
+    };
+    model.compile(&id, &cx)
 }
 
 /// What a reading defines, with the part it exports.
@@ -542,6 +589,36 @@ impl<'a> Project<'a> {
                 })
         });
         own.chain(theirs).collect()
+    }
+
+    /// What the server runs of the resources that compile to `C` (`Document::compile`), the
+    /// packages' included, by the name `everywhere` gives them: each with no errors.
+    pub fn compiled<C: 'static>(&self) -> Vec<(String, &C)> {
+        fn typed<C: 'static>(r: &Resource) -> Option<&C> {
+            r.compiled.as_ref()?.as_any().downcast_ref::<C>()
+        }
+        let own = self
+            .resources
+            .iter()
+            .filter_map(|r| Some((r.found.id.clone(), typed::<C>(r)?)));
+        let theirs = self.packages.iter().flat_map(|(namespace, package)| {
+            package.project.resources.iter().filter_map(move |r| {
+                Some((
+                    crate::kinds::package_path(namespace, &r.found.id),
+                    typed::<C>(r)?,
+                ))
+            })
+        });
+        own.chain(theirs).collect()
+    }
+
+    /// Every resource of `kind` that compiled, the packages' included, by the name `everywhere`
+    /// gives it.
+    pub fn compiled_of(&self, kind: &str) -> Vec<(String, &dyn crate::document::Compiled)> {
+        self.everywhere(kind)
+            .into_iter()
+            .filter_map(|(name, r)| Some((name, r.compiled.as_deref()?)))
+            .collect()
     }
 
     /// The manifest of `namespace`: the project's own, or a package's.

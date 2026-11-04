@@ -50,6 +50,35 @@ pub trait Document: Serialize + DeserializeOwned + Clone + schemars::JsonSchema 
     fn datapack_entries(&self, _id: &str) -> Vec<(&'static str, String)> {
         Vec::new()
     }
+
+    /// The form the server runs of the resource `id` (`ns:id` for a package's), for a resource
+    /// whose checks found no errors: `None` for a kind that runs its model as it is
+    /// (`Project::running` gives those). `cx` is what its own checks saw.
+    fn compile(&self, _id: &str, _cx: &Context) -> Option<Box<dyn Compiled>> {
+        None
+    }
+}
+
+/// What a resource compiled to (`Document::compile`), whichever kind's: `Project::compiled`
+/// gives it back typed, and it writes itself as JSON (what `testdata/compiled` holds).
+pub trait Compiled: std::any::Any + Send + Sync {
+    fn as_any(&self) -> &dyn std::any::Any;
+    fn json(&self) -> serde_json::Value;
+}
+
+impl<T: Serialize + std::any::Any + Send + Sync> Compiled for T {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn json(&self) -> serde_json::Value {
+        serde_json::to_value(self).expect("a compiled form writes as JSON")
+    }
+}
+
+/// `value` as a compiled form, for a kind's `compile`.
+pub fn compiled<T: Compiled>(value: T) -> Option<Box<dyn Compiled>> {
+    Some(Box::new(value))
 }
 
 /// Reads a file by its path, if it's there.

@@ -1,0 +1,38 @@
+{
+  "menu": {
+    "shop": {
+      "id": "shop",
+      "name": "Shop",
+      "type": "chest",
+      "rows": 3,
+      "size": 27,
+      "title": "<dark_gray>Shop",
+      "shared": false,
+      "locked": true,
+      "slots": {
+        "11": {
+          "item": {
+            "kind": "minecraft:bread",
+            "name": "<yellow>Bread",
+            "count": 4
+          }
+        },
+        "13": {
+          "item": {
+            "item": "lucky_charm"
+          }
+        },
+        "15": {
+          "item": {
+            "kind": "minecraft:barrier",
+            "name": "<red>Close"
+          }
+        }
+      },
+      "script": {
+        "file": "script.lua"
+      }
+    }
+  },
+  "resourcePacks": {}
+}

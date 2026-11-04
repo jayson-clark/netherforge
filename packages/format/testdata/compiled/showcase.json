@@ -1,0 +1,6205 @@
+{
+  "resource_pack": {
+    "library:gems": {
+      "file": {
+        "$schema": "../../.netherforge/schema/resource_pack.schema.json",
+        "name": "Library gems",
+        "items": {
+          "gem": {
+            "texture": "item/gem.png"
+          }
+        }
+      },
+      "models": {}
+    },
+    "ui": {
+      "file": {
+        "$schema": "../../.netherforge/schema/resource_pack.schema.json",
+        "name": "Showcase UI",
+        "description": "Every look and sound the showcase has: items, blocks, menus, glyphs, tooltips, armour and the HUD",
+        "skins": {
+          "altar": {
+            "texture": "gui/altar.png",
+            "height": 168,
+            "ascent": 13,
+            "type": "chest",
+            "rows": 3
+          },
+          "shop": {
+            "texture": "gui/shop.png",
+            "height": 168,
+            "ascent": 13,
+            "type": "chest",
+            "rows": 3
+          }
+        },
+        "glyphs": {
+          "coin": {
+            "texture": "glyph/coin.png"
+          },
+          "spark": {
+            "texture": "glyph/spark.png"
+          },
+          "wisp": {
+            "texture": "glyph/wisp.png"
+          }
+        },
+        "items": {
+          "candy": {
+            "texture": "item/candy.png"
+          },
+          "circlet": {
+            "texture": "item/circlet.png"
+          },
+          "crown": {
+            "texture": "item/crown.png"
+          },
+          "crystal": {
+            "model": "crystal.json"
+          },
+          "crystal_glass": {
+            "block": "ui/crystal_glass"
+          },
+          "crystal_lit": {
+            "model": "crystal_lit.json"
+          },
+          "dart": {
+            "model": "dart.json"
+          },
+          "glow_lamp": {
+            "block": "ui/glow_lamp"
+          },
+          "glow_pickaxe": {
+            "texture": "item/glow_pickaxe.png",
+            "parent": "minecraft:item/handheld"
+          },
+          "lantern": {
+            "texture": "item/lantern.png"
+          },
+          "owl_body": {
+            "model": "owl_body.json"
+          },
+          "owl_head": {
+            "model": "owl_head.json"
+          },
+          "owl_head_blink": {
+            "model": "owl_head_blink.json"
+          },
+          "owl_wing": {
+            "model": "owl_wing.json"
+          },
+          "ruby": {
+            "texture": "item/ruby.png"
+          },
+          "ruby_ore": {
+            "block": "ui/ruby_ore"
+          },
+          "shard": {
+            "texture": "item/shard.png"
+          }
+        },
+        "tooltips": {
+          "fancy": {
+            "background": "tooltip/background.png",
+            "frame": "tooltip/frame.png"
+          },
+          "glow": {
+            "background": "tooltip/glow_background.png",
+            "frame": "tooltip/glow_frame.png"
+          }
+        },
+        "equipment": {
+          "circlet": {
+            "humanoid": "equipment/circlet.png"
+          },
+          "ruby": {
+            "humanoid": "armor/ruby.png",
+            "humanoidLeggings": "armor/ruby_leggings.png"
+          }
+        },
+        "blocks": {
+          "crystal_glass": {
+            "texture": "block/crystal_glass.png"
+          },
+          "glow_lamp": {
+            "top": "block/glow_lamp_top.png",
+            "bottom": "block/glow_lamp_top.png",
+            "side": "block/glow_lamp_side.png"
+          },
+          "ruby_crystal": {
+            "model": "crystal.json"
+          },
+          "ruby_ore": {
+            "texture": "block/ruby_ore.png"
+          }
+        },
+        "sounds": {
+          "chime": {
+            "volume": 0.8,
+            "pitch": 1.1,
+            "subtitle": "Chime rings"
+          },
+          "crystal_break": {
+            "subtitle": "Crystal shatters"
+          },
+          "crystal_place": {
+            "subtitle": "Crystal settles"
+          },
+          "hum": {
+            "volume": 0.7,
+            "subtitle": "Altar hums"
+          },
+          "infuse": {
+            "subtitle": "Glow infuses"
+          },
+          "minecraft:block.deepslate_bricks.break": {
+            "files": ["crystal_break.ogg"],
+            "pitch": 0.7,
+            "subtitle": "subtitles.block.generic.break"
+          }
+        },
+        "hud": {
+          "bars": {
+            "treasure": {
+              "full": "hud/treasure_full.png",
+              "empty": "hud/treasure_empty.png",
+              "segments": 3,
+              "x": -91,
+              "y": 52,
+              "gap": 1
+            }
+          },
+          "texts": {
+            "treasure_label": {
+              "x": -91
+            }
+          }
+        }
+      },
+      "models": {
+        "crystal.json": {
+          "json": {
+            "credit": "A ruby crystal: a tall shard with two leaning beside it",
+            "textures": {
+              "0": "block/ruby_ore",
+              "particle": "block/ruby_ore"
+            },
+            "elements": [
+              {
+                "from": [6, 0, 6],
+                "to": [10, 14, 10],
+                "rotation": {
+                  "angle": 0,
+                  "axis": "y",
+                  "origin": [8, 0, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 4, 14],
+                    "texture": "#0"
+                  },
+                  "east": {
+                    "uv": [4, 0, 8, 14],
+                    "texture": "#0"
+                  },
+                  "south": {
+                    "uv": [8, 0, 12, 14],
+                    "texture": "#0"
+                  },
+                  "west": {
+                    "uv": [12, 0, 16, 14],
+                    "texture": "#0"
+                  },
+                  "up": {
+                    "uv": [0, 12, 4, 16],
+                    "texture": "#0"
+                  },
+                  "down": {
+                    "uv": [4, 12, 8, 16],
+                    "texture": "#0"
+                  }
+                }
+              },
+              {
+                "from": [2, 0, 7],
+                "to": [5, 8, 10],
+                "rotation": {
+                  "x": 0,
+                  "y": 30,
+                  "z": 25,
+                  "origin": [4, 0, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 3, 8],
+                    "texture": "#0"
+                  },
+                  "east": {
+                    "uv": [3, 0, 6, 8],
+                    "texture": "#0"
+                  },
+                  "south": {
+                    "uv": [6, 0, 9, 8],
+                    "texture": "#0"
+                  },
+                  "west": {
+                    "uv": [9, 0, 12, 8],
+                    "texture": "#0"
+                  },
+                  "up": {
+                    "uv": [12, 0, 15, 3],
+                    "texture": "#0"
+                  }
+                }
+              },
+              {
+                "from": [11, 0, 6],
+                "to": [14, 10, 9],
+                "rotation": {
+                  "angle": -22.5,
+                  "axis": "z",
+                  "origin": [12, 0, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 3, 10],
+                    "texture": "#0"
+                  },
+                  "east": {
+                    "uv": [3, 0, 6, 10],
+                    "texture": "#0"
+                  },
+                  "south": {
+                    "uv": [6, 0, 9, 10],
+                    "texture": "#0"
+                  },
+                  "west": {
+                    "uv": [9, 0, 12, 10],
+                    "texture": "#0"
+                  },
+                  "up": {
+                    "uv": [12, 0, 15, 3],
+                    "texture": "#0"
+                  }
+                }
+              }
+            ],
+            "display": {
+              "thirdperson_righthand": {
+                "rotation": [0, 45, 0],
+                "translation": [0, 2, 0],
+                "scale": [0.5, 0.5, 0.5]
+              },
+              "firstperson_righthand": {
+                "rotation": [0, 45, 0],
+                "scale": [0.5, 0.5, 0.5]
+              },
+              "gui": {
+                "rotation": [30, 225, 0],
+                "translation": [0, -1, 0],
+                "scale": [0.8, 0.8, 0.8]
+              },
+              "fixed": {
+                "scale": [0.6, 0.6, 0.6]
+              }
+            }
+          },
+          "textures": {
+            "0": "block/ruby_ore.png",
+            "particle": "block/ruby_ore.png"
+          }
+        },
+        "crystal_lit.json": {
+          "json": {
+            "credit": "The ruby crystal, glowing: its shards a little taller, drawn at full light",
+            "textures": {
+              "0": "block/ruby_ore",
+              "particle": "block/ruby_ore"
+            },
+            "elements": [
+              {
+                "from": [6, 0, 6],
+                "to": [10, 16, 10],
+                "rotation": {
+                  "angle": 0,
+                  "axis": "y",
+                  "origin": [8, 0, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 4, 14],
+                    "texture": "#0"
+                  },
+                  "east": {
+                    "uv": [4, 0, 8, 14],
+                    "texture": "#0"
+                  },
+                  "south": {
+                    "uv": [8, 0, 12, 14],
+                    "texture": "#0"
+                  },
+                  "west": {
+                    "uv": [12, 0, 16, 14],
+                    "texture": "#0"
+                  },
+                  "up": {
+                    "uv": [0, 12, 4, 16],
+                    "texture": "#0"
+                  },
+                  "down": {
+                    "uv": [4, 12, 8, 16],
+                    "texture": "#0"
+                  }
+                },
+                "light_emission": 15
+              },
+              {
+                "from": [2, 0, 7],
+                "to": [5, 10, 10],
+                "rotation": {
+                  "x": 0,
+                  "y": 30,
+                  "z": 25,
+                  "origin": [4, 0, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 3, 8],
+                    "texture": "#0"
+                  },
+                  "east": {
+                    "uv": [3, 0, 6, 8],
+                    "texture": "#0"
+                  },
+                  "south": {
+                    "uv": [6, 0, 9, 8],
+                    "texture": "#0"
+                  },
+                  "west": {
+                    "uv": [9, 0, 12, 8],
+                    "texture": "#0"
+                  },
+                  "up": {
+                    "uv": [12, 0, 15, 3],
+                    "texture": "#0"
+                  }
+                },
+                "light_emission": 15
+              },
+              {
+                "from": [11, 0, 6],
+                "to": [14, 12, 9],
+                "rotation": {
+                  "angle": -22.5,
+                  "axis": "z",
+                  "origin": [12, 0, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 3, 10],
+                    "texture": "#0"
+                  },
+                  "east": {
+                    "uv": [3, 0, 6, 10],
+                    "texture": "#0"
+                  },
+                  "south": {
+                    "uv": [6, 0, 9, 10],
+                    "texture": "#0"
+                  },
+                  "west": {
+                    "uv": [9, 0, 12, 10],
+                    "texture": "#0"
+                  },
+                  "up": {
+                    "uv": [12, 0, 15, 3],
+                    "texture": "#0"
+                  }
+                },
+                "light_emission": 15
+              }
+            ],
+            "display": {
+              "thirdperson_righthand": {
+                "rotation": [0, 45, 0],
+                "translation": [0, 2, 0],
+                "scale": [0.5, 0.5, 0.5]
+              },
+              "firstperson_righthand": {
+                "rotation": [0, 45, 0],
+                "scale": [0.5, 0.5, 0.5]
+              },
+              "gui": {
+                "rotation": [30, 225, 0],
+                "translation": [0, -1, 0],
+                "scale": [0.8, 0.8, 0.8]
+              },
+              "fixed": {
+                "scale": [0.6, 0.6, 0.6]
+              }
+            }
+          },
+          "textures": {
+            "0": "block/ruby_ore.png",
+            "particle": "block/ruby_ore.png"
+          }
+        },
+        "dart.json": {
+          "json": {
+            "credit": "A throwing dart, pointing along +Z: steel point, birch shaft, gold band, red flights",
+            "textures": {
+              "shaft": "dart/shaft",
+              "steel": "dart/steel",
+              "flight": "dart/flight",
+              "band": "dart/band",
+              "particle": "dart/steel"
+            },
+            "elements": [
+              {
+                "from": [7.5, 7.5, 1],
+                "to": [8.5, 8.5, 11],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 1, 1],
+                    "texture": "#shaft"
+                  },
+                  "south": {
+                    "uv": [0, 0, 1, 1],
+                    "texture": "#shaft"
+                  },
+                  "east": {
+                    "uv": [0, 0, 10, 1],
+                    "texture": "#shaft"
+                  },
+                  "west": {
+                    "uv": [0, 0, 10, 1],
+                    "texture": "#shaft"
+                  },
+                  "up": {
+                    "uv": [0, 0, 1, 10],
+                    "texture": "#shaft"
+                  },
+                  "down": {
+                    "uv": [0, 0, 1, 10],
+                    "texture": "#shaft"
+                  }
+                }
+              },
+              {
+                "from": [7.2, 7.2, 4],
+                "to": [8.8, 8.8, 5],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 2, 2],
+                    "texture": "#band"
+                  },
+                  "south": {
+                    "uv": [0, 0, 2, 2],
+                    "texture": "#band"
+                  },
+                  "east": {
+                    "uv": [0, 0, 1, 2],
+                    "texture": "#band"
+                  },
+                  "west": {
+                    "uv": [0, 0, 1, 2],
+                    "texture": "#band"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#band"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#band"
+                  }
+                }
+              },
+              {
+                "from": [7.1, 7.1, 11],
+                "to": [8.9, 8.9, 13],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 2, 2],
+                    "texture": "#steel"
+                  },
+                  "south": {
+                    "uv": [0, 0, 2, 2],
+                    "texture": "#steel"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2, 2],
+                    "texture": "#steel"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2, 2],
+                    "texture": "#steel"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2, 2],
+                    "texture": "#steel"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2, 2],
+                    "texture": "#steel"
+                  }
+                }
+              },
+              {
+                "from": [7.4, 7.4, 13],
+                "to": [8.6, 8.6, 14.5],
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 1, 1],
+                    "texture": "#steel"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#steel"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#steel"
+                  },
+                  "up": {
+                    "uv": [0, 0, 1, 2],
+                    "texture": "#steel"
+                  },
+                  "down": {
+                    "uv": [0, 0, 1, 2],
+                    "texture": "#steel"
+                  }
+                }
+              },
+              {
+                "from": [7.75, 7.75, 14.5],
+                "to": [8.25, 8.25, 16],
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 1, 1],
+                    "texture": "#steel"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#steel"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#steel"
+                  },
+                  "up": {
+                    "uv": [0, 0, 1, 2],
+                    "texture": "#steel"
+                  },
+                  "down": {
+                    "uv": [0, 0, 1, 2],
+                    "texture": "#steel"
+                  }
+                }
+              },
+              {
+                "from": [7.9, 5, 0],
+                "to": [8.1, 11, 4],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 1, 6],
+                    "texture": "#flight"
+                  },
+                  "south": {
+                    "uv": [0, 0, 1, 6],
+                    "texture": "#flight"
+                  },
+                  "east": {
+                    "uv": [0, 0, 4, 6],
+                    "texture": "#flight"
+                  },
+                  "west": {
+                    "uv": [0, 0, 4, 6],
+                    "texture": "#flight"
+                  },
+                  "up": {
+                    "uv": [0, 0, 1, 4],
+                    "texture": "#flight"
+                  },
+                  "down": {
+                    "uv": [0, 0, 1, 4],
+                    "texture": "#flight"
+                  }
+                }
+              },
+              {
+                "from": [5, 7.9, 0],
+                "to": [11, 8.1, 4],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 6, 1],
+                    "texture": "#flight"
+                  },
+                  "south": {
+                    "uv": [0, 0, 6, 1],
+                    "texture": "#flight"
+                  },
+                  "east": {
+                    "uv": [0, 0, 4, 1],
+                    "texture": "#flight"
+                  },
+                  "west": {
+                    "uv": [0, 0, 4, 1],
+                    "texture": "#flight"
+                  },
+                  "up": {
+                    "uv": [0, 0, 6, 4],
+                    "texture": "#flight"
+                  },
+                  "down": {
+                    "uv": [0, 0, 6, 4],
+                    "texture": "#flight"
+                  }
+                }
+              }
+            ],
+            "display": {
+              "gui": {
+                "rotation": [0, 90, -45],
+                "scale": [1.2, 1.2, 1.2]
+              },
+              "ground": {
+                "scale": [0.5, 0.5, 0.5]
+              },
+              "fixed": {
+                "rotation": [0, 90, -45]
+              }
+            }
+          },
+          "textures": {
+            "band": "dart/band.png",
+            "flight": "dart/flight.png",
+            "particle": "dart/steel.png",
+            "shaft": "dart/shaft.png",
+            "steel": "dart/steel.png"
+          }
+        },
+        "owl_body.json": {
+          "json": {
+            "credit": "The owl's body: a feathered barrel with a cream front, a tail and two feet",
+            "textures": {
+              "feathers": "owl/feathers",
+              "belly": "owl/belly",
+              "wing": "owl/wing",
+              "beak": "owl/beak",
+              "particle": "owl/feathers"
+            },
+            "elements": [
+              {
+                "from": [3, 0, 4],
+                "to": [13, 13, 12],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 10, 13],
+                    "texture": "#feathers"
+                  },
+                  "south": {
+                    "uv": [0, 0, 10, 13],
+                    "texture": "#belly"
+                  },
+                  "east": {
+                    "uv": [0, 0, 8, 13],
+                    "texture": "#feathers"
+                  },
+                  "west": {
+                    "uv": [0, 0, 8, 13],
+                    "texture": "#feathers"
+                  },
+                  "up": {
+                    "uv": [0, 0, 10, 8],
+                    "texture": "#feathers"
+                  },
+                  "down": {
+                    "uv": [0, 0, 10, 8],
+                    "texture": "#feathers"
+                  }
+                }
+              },
+              {
+                "from": [5, 0.5, 1.5],
+                "to": [11, 2, 4],
+                "rotation": {
+                  "angle": 22.5,
+                  "axis": "x",
+                  "origin": [8, 1, 4]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 6, 1.5],
+                    "texture": "#wing"
+                  },
+                  "south": {
+                    "uv": [0, 0, 6, 1.5],
+                    "texture": "#wing"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2.5, 1.5],
+                    "texture": "#wing"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2.5, 1.5],
+                    "texture": "#wing"
+                  },
+                  "up": {
+                    "uv": [0, 0, 6, 2.5],
+                    "texture": "#wing"
+                  },
+                  "down": {
+                    "uv": [0, 0, 6, 2.5],
+                    "texture": "#wing"
+                  }
+                }
+              },
+              {
+                "from": [4.5, 0, 12],
+                "to": [7, 1, 14],
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 2.5, 1],
+                    "texture": "#beak"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#beak"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#beak"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2.5, 2],
+                    "texture": "#beak"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2.5, 2],
+                    "texture": "#beak"
+                  }
+                }
+              },
+              {
+                "from": [9, 0, 12],
+                "to": [11.5, 1, 14],
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 2.5, 1],
+                    "texture": "#beak"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#beak"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#beak"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2.5, 2],
+                    "texture": "#beak"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2.5, 2],
+                    "texture": "#beak"
+                  }
+                }
+              }
+            ]
+          },
+          "textures": {
+            "beak": "owl/beak.png",
+            "belly": "owl/belly.png",
+            "feathers": "owl/feathers.png",
+            "particle": "owl/feathers.png",
+            "wing": "owl/wing.png"
+          }
+        },
+        "owl_head.json": {
+          "json": {
+            "credit": "The owl's head, eyes open (they glow): it turns about the neck at the model's middle",
+            "textures": {
+              "feathers": "owl/feathers",
+              "face": "owl/face",
+              "eye": "owl/eye",
+              "beak": "owl/beak",
+              "particle": "owl/feathers"
+            },
+            "elements": [
+              {
+                "from": [2.5, 8, 3],
+                "to": [13.5, 17.5, 13],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 11, 9.5],
+                    "texture": "#feathers"
+                  },
+                  "south": {
+                    "uv": [0, 0, 11, 9.5],
+                    "texture": "#face"
+                  },
+                  "east": {
+                    "uv": [0, 0, 10, 9.5],
+                    "texture": "#feathers"
+                  },
+                  "west": {
+                    "uv": [0, 0, 10, 9.5],
+                    "texture": "#feathers"
+                  },
+                  "up": {
+                    "uv": [0, 0, 11, 10],
+                    "texture": "#feathers"
+                  },
+                  "down": {
+                    "uv": [0, 0, 11, 10],
+                    "texture": "#feathers"
+                  }
+                }
+              },
+              {
+                "from": [3, 17.5, 7],
+                "to": [5.5, 20.5, 9.5],
+                "rotation": {
+                  "angle": 22.5,
+                  "axis": "z",
+                  "origin": [4, 17.5, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "south": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2.5, 2.5],
+                    "texture": "#feathers"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2.5, 2.5],
+                    "texture": "#feathers"
+                  }
+                }
+              },
+              {
+                "from": [10.5, 17.5, 7],
+                "to": [13, 20.5, 9.5],
+                "rotation": {
+                  "angle": -22.5,
+                  "axis": "z",
+                  "origin": [12, 17.5, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "south": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2.5, 2.5],
+                    "texture": "#feathers"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2.5, 2.5],
+                    "texture": "#feathers"
+                  }
+                }
+              },
+              {
+                "from": [3.5, 11.5, 13],
+                "to": [7, 15, 13.5],
+                "light_emission": 15,
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 3.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "east": {
+                    "uv": [0, 0, 0.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "west": {
+                    "uv": [0, 0, 0.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "up": {
+                    "uv": [0, 0, 3.5, 0.5],
+                    "texture": "#eye"
+                  },
+                  "down": {
+                    "uv": [0, 0, 3.5, 0.5],
+                    "texture": "#eye"
+                  }
+                }
+              },
+              {
+                "from": [9, 11.5, 13],
+                "to": [12.5, 15, 13.5],
+                "light_emission": 15,
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 3.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "east": {
+                    "uv": [0, 0, 0.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "west": {
+                    "uv": [0, 0, 0.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "up": {
+                    "uv": [0, 0, 3.5, 0.5],
+                    "texture": "#eye"
+                  },
+                  "down": {
+                    "uv": [0, 0, 3.5, 0.5],
+                    "texture": "#eye"
+                  }
+                }
+              },
+              {
+                "from": [7, 9.5, 13],
+                "to": [9, 12.5, 14.5],
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 2, 3],
+                    "texture": "#beak"
+                  },
+                  "east": {
+                    "uv": [0, 0, 1.5, 3],
+                    "texture": "#beak"
+                  },
+                  "west": {
+                    "uv": [0, 0, 1.5, 3],
+                    "texture": "#beak"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2, 1.5],
+                    "texture": "#beak"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2, 1.5],
+                    "texture": "#beak"
+                  }
+                }
+              }
+            ]
+          },
+          "textures": {
+            "beak": "owl/beak.png",
+            "eye": "owl/eye.png",
+            "face": "owl/face.png",
+            "feathers": "owl/feathers.png",
+            "particle": "owl/feathers.png"
+          }
+        },
+        "owl_head_blink.json": {
+          "json": {
+            "credit": "The owl's head with its eyes shut, for blinking",
+            "textures": {
+              "feathers": "owl/feathers",
+              "face": "owl/face",
+              "eye": "owl/lid",
+              "beak": "owl/beak",
+              "particle": "owl/feathers"
+            },
+            "elements": [
+              {
+                "from": [2.5, 8, 3],
+                "to": [13.5, 17.5, 13],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 11, 9.5],
+                    "texture": "#feathers"
+                  },
+                  "south": {
+                    "uv": [0, 0, 11, 9.5],
+                    "texture": "#face"
+                  },
+                  "east": {
+                    "uv": [0, 0, 10, 9.5],
+                    "texture": "#feathers"
+                  },
+                  "west": {
+                    "uv": [0, 0, 10, 9.5],
+                    "texture": "#feathers"
+                  },
+                  "up": {
+                    "uv": [0, 0, 11, 10],
+                    "texture": "#feathers"
+                  },
+                  "down": {
+                    "uv": [0, 0, 11, 10],
+                    "texture": "#feathers"
+                  }
+                }
+              },
+              {
+                "from": [3, 17.5, 7],
+                "to": [5.5, 20.5, 9.5],
+                "rotation": {
+                  "angle": 22.5,
+                  "axis": "z",
+                  "origin": [4, 17.5, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "south": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2.5, 2.5],
+                    "texture": "#feathers"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2.5, 2.5],
+                    "texture": "#feathers"
+                  }
+                }
+              },
+              {
+                "from": [10.5, 17.5, 7],
+                "to": [13, 20.5, 9.5],
+                "rotation": {
+                  "angle": -22.5,
+                  "axis": "z",
+                  "origin": [12, 17.5, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "south": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2.5, 2.5],
+                    "texture": "#feathers"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2.5, 2.5],
+                    "texture": "#feathers"
+                  }
+                }
+              },
+              {
+                "from": [3.5, 11.5, 13],
+                "to": [7, 15, 13.5],
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 3.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "east": {
+                    "uv": [0, 0, 0.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "west": {
+                    "uv": [0, 0, 0.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "up": {
+                    "uv": [0, 0, 3.5, 0.5],
+                    "texture": "#eye"
+                  },
+                  "down": {
+                    "uv": [0, 0, 3.5, 0.5],
+                    "texture": "#eye"
+                  }
+                }
+              },
+              {
+                "from": [9, 11.5, 13],
+                "to": [12.5, 15, 13.5],
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 3.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "east": {
+                    "uv": [0, 0, 0.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "west": {
+                    "uv": [0, 0, 0.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "up": {
+                    "uv": [0, 0, 3.5, 0.5],
+                    "texture": "#eye"
+                  },
+                  "down": {
+                    "uv": [0, 0, 3.5, 0.5],
+                    "texture": "#eye"
+                  }
+                }
+              },
+              {
+                "from": [7, 9.5, 13],
+                "to": [9, 12.5, 14.5],
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 2, 3],
+                    "texture": "#beak"
+                  },
+                  "east": {
+                    "uv": [0, 0, 1.5, 3],
+                    "texture": "#beak"
+                  },
+                  "west": {
+                    "uv": [0, 0, 1.5, 3],
+                    "texture": "#beak"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2, 1.5],
+                    "texture": "#beak"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2, 1.5],
+                    "texture": "#beak"
+                  }
+                }
+              }
+            ]
+          },
+          "textures": {
+            "beak": "owl/beak.png",
+            "eye": "owl/lid.png",
+            "face": "owl/face.png",
+            "feathers": "owl/feathers.png",
+            "particle": "owl/feathers.png"
+          }
+        },
+        "owl_wing.json": {
+          "json": {
+            "credit": "One wing, hanging from the shoulder at the model's middle",
+            "textures": {
+              "wing": "owl/wing",
+              "particle": "owl/wing"
+            },
+            "elements": [
+              {
+                "from": [7, -1, 3.5],
+                "to": [9, 8, 12.5],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 2, 9],
+                    "texture": "#wing"
+                  },
+                  "south": {
+                    "uv": [0, 0, 2, 9],
+                    "texture": "#wing"
+                  },
+                  "east": {
+                    "uv": [0, 0, 9, 9],
+                    "texture": "#wing"
+                  },
+                  "west": {
+                    "uv": [0, 0, 9, 9],
+                    "texture": "#wing"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2, 9],
+                    "texture": "#wing"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2, 9],
+                    "texture": "#wing"
+                  }
+                }
+              },
+              {
+                "from": [7.25, -3, 6],
+                "to": [8.75, -1, 12],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 1.5, 2],
+                    "texture": "#wing"
+                  },
+                  "south": {
+                    "uv": [0, 0, 1.5, 2],
+                    "texture": "#wing"
+                  },
+                  "east": {
+                    "uv": [0, 0, 6, 2],
+                    "texture": "#wing"
+                  },
+                  "west": {
+                    "uv": [0, 0, 6, 2],
+                    "texture": "#wing"
+                  },
+                  "down": {
+                    "uv": [0, 0, 1.5, 6],
+                    "texture": "#wing"
+                  }
+                }
+              }
+            ]
+          },
+          "textures": {
+            "particle": "owl/wing.png",
+            "wing": "owl/wing.png"
+          }
+        }
+      }
+    }
+  },
+  "particle_effect": {
+    "burst": {
+      "id": "burst",
+      "duration": 40,
+      "loop": false,
+      "emitters": [
+        {
+          "name": "gather",
+          "particle": "minecraft:enchant",
+          "kind": "none",
+          "start": 0,
+          "end": 20,
+          "rate": 8,
+          "shape": {
+            "type": "sphere",
+            "radius": 1.6,
+            "surface": true
+          },
+          "distribution": "random",
+          "spin": 0,
+          "offset": [0, 0, 0],
+          "rotation": {
+            "values": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+          },
+          "motion": "inward",
+          "count": 1,
+          "spread": [0, 0, 0],
+          "force": false,
+          "toColor": 16777215,
+          "sizeCurve": {},
+          "speedCurve": {},
+          "radiusCurve": {},
+          "colorCurve": {}
+        },
+        {
+          "name": "ring",
+          "particle": "minecraft:dust",
+          "kind": "dust",
+          "start": 18,
+          "end": 34,
+          "burst": 40,
+          "every": 4,
+          "shape": {
+            "type": "ring"
+          },
+          "distribution": "even",
+          "spin": 6,
+          "offset": [0, 0.2, 0],
+          "rotation": {
+            "values": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+          },
+          "motion": "random",
+          "count": 1,
+          "spread": [0, 0, 0],
+          "force": false,
+          "toColor": 16777215,
+          "sizeCurve": {},
+          "speedCurve": {},
+          "radiusCurve": {},
+          "colorCurve": {}
+        },
+        {
+          "name": "rise",
+          "particle": "minecraft:end_rod",
+          "kind": "none",
+          "start": 20,
+          "end": 40,
+          "burst": 16,
+          "shape": {
+            "type": "disc",
+            "radius": 0.4
+          },
+          "distribution": "random",
+          "spin": 0,
+          "offset": [0, 0, 0],
+          "rotation": {
+            "values": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+          },
+          "motion": "direction",
+          "direction": [0, 1, 0],
+          "count": 1,
+          "spread": [0, 0, 0],
+          "force": false,
+          "toColor": 16777215,
+          "sizeCurve": {},
+          "speedCurve": {},
+          "radiusCurve": {},
+          "colorCurve": {}
+        }
+      ]
+    },
+    "lamp_glow": {
+      "id": "lamp_glow",
+      "duration": 20,
+      "loop": false,
+      "emitters": [
+        {
+          "name": "glimmer",
+          "particle": "minecraft:dust",
+          "kind": "dust",
+          "start": 0,
+          "end": 20,
+          "burst": 3,
+          "every": 10,
+          "shape": {
+            "type": "box",
+            "size": [0.8, 0.3, 0.8]
+          },
+          "distribution": "random",
+          "spin": 0,
+          "offset": [0, 0, 0],
+          "rotation": {
+            "values": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+          },
+          "motion": "random",
+          "count": 1,
+          "spread": [0, 0, 0],
+          "force": false,
+          "toColor": 16777215,
+          "sizeCurve": {},
+          "speedCurve": {},
+          "colorCurve": {}
+        },
+        {
+          "name": "spark",
+          "particle": "minecraft:glow",
+          "kind": "none",
+          "start": 0,
+          "end": 20,
+          "burst": 1,
+          "shape": {
+            "type": "disc",
+            "radius": 0.3
+          },
+          "distribution": "random",
+          "spin": 0,
+          "offset": [0, 0, 0],
+          "rotation": {
+            "values": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+          },
+          "motion": "direction",
+          "direction": [0, 1, 0],
+          "count": 1,
+          "spread": [0, 0, 0],
+          "force": false,
+          "toColor": 16777215,
+          "sizeCurve": {},
+          "speedCurve": {},
+          "radiusCurve": {},
+          "colorCurve": {}
+        }
+      ]
+    },
+    "shockwave": {
+      "id": "shockwave",
+      "duration": 30,
+      "loop": false,
+      "emitters": [
+        {
+          "name": "debris",
+          "particle": "minecraft:block",
+          "kind": "block",
+          "start": 0,
+          "end": 30,
+          "burst": 20,
+          "shape": {
+            "type": "disc",
+            "radius": 1.5
+          },
+          "distribution": "random",
+          "spin": 0,
+          "offset": [0, 0, 0],
+          "rotation": {
+            "values": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+          },
+          "motion": "random",
+          "count": 1,
+          "spread": [0.1, 0.3, 0.1],
+          "force": false,
+          "toColor": 16777215,
+          "blockState": {
+            "id": "minecraft:stone",
+            "properties": {}
+          },
+          "sizeCurve": {},
+          "speedCurve": {},
+          "radiusCurve": {},
+          "colorCurve": {}
+        },
+        {
+          "name": "flash",
+          "particle": "minecraft:flash",
+          "kind": "none",
+          "start": 0,
+          "end": 30,
+          "burst": 1,
+          "shape": {
+            "type": "point"
+          },
+          "distribution": "random",
+          "spin": 0,
+          "offset": [0, 0, 0],
+          "rotation": {
+            "values": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+          },
+          "motion": "random",
+          "count": 1,
+          "spread": [0, 0, 0],
+          "force": false,
+          "toColor": 16777215,
+          "sizeCurve": {},
+          "speedCurve": {},
+          "colorCurve": {}
+        },
+        {
+          "name": "ring",
+          "particle": "minecraft:dust",
+          "kind": "dust",
+          "start": 0,
+          "end": 20,
+          "burst": 48,
+          "every": 5,
+          "shape": {
+            "type": "ring"
+          },
+          "distribution": "even",
+          "spin": 0,
+          "offset": [0, 0.1, 0],
+          "rotation": {
+            "values": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+          },
+          "motion": "random",
+          "count": 1,
+          "spread": [0, 0, 0],
+          "force": false,
+          "toColor": 16777215,
+          "sizeCurve": {},
+          "speedCurve": {},
+          "radiusCurve": {},
+          "colorCurve": {}
+        },
+        {
+          "name": "sparks",
+          "particle": "minecraft:end_rod",
+          "kind": "none",
+          "start": 2,
+          "end": 30,
+          "rate": 3,
+          "shape": {
+            "type": "sphere",
+            "radius": 0.3
+          },
+          "distribution": "random",
+          "spin": 0,
+          "offset": [0, 0, 0],
+          "rotation": {
+            "values": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+          },
+          "motion": "outward",
+          "count": 1,
+          "spread": [0, 0, 0],
+          "force": false,
+          "toColor": 16777215,
+          "rateCurve": {},
+          "sizeCurve": {},
+          "speedCurve": {},
+          "radiusCurve": {},
+          "colorCurve": {}
+        }
+      ]
+    },
+    "sparkle": {
+      "id": "sparkle",
+      "duration": 20,
+      "loop": false,
+      "emitters": [
+        {
+          "name": "main",
+          "particle": "minecraft:dust",
+          "kind": "dust",
+          "start": 0,
+          "end": 20,
+          "burst": 10,
+          "every": 4,
+          "shape": {
+            "type": "sphere",
+            "radius": 0.5
+          },
+          "distribution": "random",
+          "spin": 0,
+          "offset": [0, 0, 0],
+          "rotation": {
+            "values": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+          },
+          "motion": "random",
+          "count": 1,
+          "spread": [0, 0, 0],
+          "force": false,
+          "toColor": 16777215,
+          "sizeCurve": {},
+          "speedCurve": {},
+          "radiusCurve": {},
+          "colorCurve": {}
+        }
+      ]
+    },
+    "trail": {
+      "id": "trail",
+      "duration": 40,
+      "loop": true,
+      "emitters": [
+        {
+          "name": "motes",
+          "particle": "minecraft:dust_color_transition",
+          "kind": "dust_transition",
+          "start": 0,
+          "end": 40,
+          "rate": 1.5,
+          "shape": {
+            "type": "sphere",
+            "radius": 0.25
+          },
+          "distribution": "random",
+          "spin": 0,
+          "offset": [0, 0, 0],
+          "rotation": {
+            "values": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+          },
+          "motion": "random",
+          "count": 1,
+          "spread": [0, 0, 0],
+          "force": false,
+          "toColor": 8382719,
+          "sizeCurve": {},
+          "speedCurve": {},
+          "radiusCurve": {},
+          "colorCurve": {}
+        },
+        {
+          "name": "sparks",
+          "particle": "minecraft:end_rod",
+          "kind": "none",
+          "start": 0,
+          "end": 40,
+          "rate": 0.15,
+          "shape": {
+            "type": "sphere",
+            "radius": 0.2
+          },
+          "distribution": "random",
+          "spin": 0,
+          "offset": [0, 0, 0],
+          "rotation": {
+            "values": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+          },
+          "motion": "direction",
+          "direction": [0, -1, 0],
+          "count": 1,
+          "spread": [0, 0, 0],
+          "force": false,
+          "toColor": 16777215,
+          "sizeCurve": {},
+          "speedCurve": {},
+          "radiusCurve": {},
+          "colorCurve": {}
+        }
+      ]
+    }
+  },
+  "cutscene": {
+    "avenue": {
+      "id": "avenue",
+      "length": 16,
+      "skippable": true,
+      "path": {},
+      "cues": [
+        {
+          "time": 0.5,
+          "text": "<gold>The NetherForge Showcase",
+          "duration": 3
+        },
+        {
+          "time": 5,
+          "text": "<gray>One booth for every part of the engine",
+          "duration": 3
+        },
+        {
+          "time": 10,
+          "text": "<gray>…and worlds beyond the avenue",
+          "duration": 3
+        },
+        {
+          "time": 15,
+          "event": "end_of_avenue",
+          "duration": 3
+        }
+      ]
+    },
+    "flyby": {
+      "id": "flyby",
+      "length": 6,
+      "skippable": true,
+      "path": {},
+      "cues": [
+        {
+          "time": 0.5,
+          "text": "<gold>The village at dawn",
+          "duration": 2
+        },
+        {
+          "time": 3,
+          "event": "turn",
+          "duration": 3
+        }
+      ]
+    }
+  },
+  "datapack": {
+    "ruby_boulders": {
+      "formats": {
+        "start": {
+          "major": 94,
+          "minor": 0
+        },
+        "endInclusive": {
+          "major": 121,
+          "minor": 2147483647
+        }
+      },
+      "overlays": [
+        {
+          "directory": "mc1_21",
+          "formats": {
+            "start": {
+              "major": 94,
+              "minor": 0
+            },
+            "endInclusive": {
+              "major": 94,
+              "minor": 2147483647
+            }
+          }
+        },
+        {
+          "directory": "mc26_1",
+          "formats": {
+            "start": {
+              "major": 101,
+              "minor": 0
+            },
+            "endInclusive": {
+              "major": 107,
+              "minor": 2147483647
+            }
+          }
+        },
+        {
+          "directory": "mc26_3",
+          "formats": {
+            "start": {
+              "major": 121,
+              "minor": 0
+            },
+            "endInclusive": {
+              "major": 121,
+              "minor": 2147483647
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "data/showcase/worldgen/placed_feature/ruby_boulders.json",
+          "namespace": "showcase",
+          "registry": "worldgen/placed_feature",
+          "path": "ruby_boulders",
+          "tag": false
+        },
+        {
+          "file": "mc1_21/data/showcase/worldgen/configured_feature/ruby_boulder.json",
+          "overlay": "mc1_21",
+          "namespace": "showcase",
+          "registry": "worldgen/configured_feature",
+          "path": "ruby_boulder",
+          "tag": false
+        },
+        {
+          "file": "mc26_1/data/showcase/worldgen/configured_feature/ruby_boulder.json",
+          "overlay": "mc26_1",
+          "namespace": "showcase",
+          "registry": "worldgen/configured_feature",
+          "path": "ruby_boulder",
+          "tag": false
+        },
+        {
+          "file": "mc26_3/data/showcase/worldgen/feature/ruby_boulder.json",
+          "overlay": "mc26_3",
+          "namespace": "showcase",
+          "registry": "worldgen/feature",
+          "path": "ruby_boulder",
+          "tag": false
+        }
+      ]
+    }
+  },
+  "terrain": {
+    "plaza": {
+      "palette": [
+        {
+          "state": "minecraft:air"
+        },
+        {
+          "state": "minecraft:water"
+        },
+        {
+          "state": "minecraft:stone"
+        },
+        {
+          "state": "minecraft:smooth_stone"
+        },
+        {
+          "state": "minecraft:bedrock"
+        }
+      ],
+      "base": 64,
+      "seaLevel": -64,
+      "fluid": 1,
+      "noises": [],
+      "layers": [
+        {
+          "block": 3,
+          "thickness": 1
+        }
+      ],
+      "underwater": [
+        {
+          "block": 3,
+          "thickness": 1
+        }
+      ],
+      "stone": 2,
+      "floorBlock": 4,
+      "floorThickness": 1,
+      "caves": [],
+      "ores": [],
+      "decorations": [],
+      "temperature": {
+        "frequency": 0.002,
+        "octaves": 2
+      },
+      "humidity": {
+        "frequency": 0.002,
+        "octaves": 2
+      },
+      "jitter": {
+        "frequency": 0.02,
+        "octaves": 2
+      },
+      "jitterAmplitude": 16,
+      "blend": 16,
+      "areas": [
+        {
+          "name": "default",
+          "biome": "minecraft:plains",
+          "temperatureMin": -1,
+          "temperatureMax": 1,
+          "humidityMin": -1,
+          "humidityMax": 1,
+          "terrain": {
+            "base": 64,
+            "scale": 1,
+            "noises": [],
+            "densityScale": 1,
+            "densityNoises": []
+          },
+          "climate": []
+        }
+      ],
+      "vanillaStructures": false,
+      "templates": {},
+      "climate": [],
+      "loot": []
+    },
+    "ruby_hills": {
+      "palette": [
+        {
+          "state": "minecraft:air"
+        },
+        {
+          "state": "minecraft:water"
+        },
+        {
+          "state": "minecraft:snow_block"
+        },
+        {
+          "state": "minecraft:dirt"
+        },
+        {
+          "state": "minecraft:stone"
+        },
+        {
+          "state": "minecraft:grass_block"
+        },
+        {
+          "state": "minecraft:sand"
+        },
+        {
+          "state": "minecraft:bedrock"
+        },
+        {
+          "state": "minecraft:coal_ore"
+        },
+        {
+          "state": "minecraft:iron_ore"
+        },
+        {
+          "name": "ruby_ore"
+        },
+        {
+          "state": "minecraft:poppy"
+        }
+      ],
+      "base": 66,
+      "seaLevel": 62,
+      "fluid": 1,
+      "noises": [
+        {
+          "name": "detail",
+          "noise": {
+            "frequency": 0.04,
+            "octaves": 2
+          },
+          "amplitude": 3
+        },
+        {
+          "name": "hills",
+          "noise": {
+            "frequency": 0.004,
+            "octaves": 4
+          },
+          "amplitude": 28
+        }
+      ],
+      "layers": [
+        {
+          "block": 5,
+          "thickness": 1
+        },
+        {
+          "block": 3,
+          "thickness": 3
+        }
+      ],
+      "underwater": [
+        {
+          "block": 6,
+          "thickness": 2
+        },
+        {
+          "block": 3,
+          "thickness": 2
+        }
+      ],
+      "stone": 4,
+      "floorBlock": 7,
+      "floorThickness": 5,
+      "caves": [
+        {
+          "name": "caverns",
+          "type": "cheese",
+          "noise": {
+            "frequency": 0.03,
+            "octaves": 2
+          },
+          "threshold": 0.55,
+          "minY": -56,
+          "maxY": 56,
+          "depth": 4,
+          "areas": [],
+          "fade": 0
+        }
+      ],
+      "ores": [
+        {
+          "name": "coal",
+          "block": 8,
+          "replace": [4],
+          "size": 12,
+          "veins": 16,
+          "minY": 0,
+          "maxY": 96,
+          "distribution": "uniform",
+          "areas": []
+        },
+        {
+          "name": "iron",
+          "block": 9,
+          "replace": [4],
+          "size": 8,
+          "veins": 10,
+          "minY": -32,
+          "maxY": 64,
+          "distribution": "uniform",
+          "areas": []
+        },
+        {
+          "name": "ruby",
+          "block": 10,
+          "replace": [4],
+          "size": 5,
+          "veins": 6,
+          "minY": -48,
+          "maxY": 32,
+          "distribution": "triangle",
+          "areas": [2]
+        }
+      ],
+      "decorations": [
+        {
+          "name": "flowers",
+          "block": 11,
+          "placement": "surface",
+          "count": 10,
+          "chance": 1,
+          "noise": {
+            "frequency": 0.03
+          },
+          "threshold": 0.2,
+          "areas": [1],
+          "on": ["minecraft:grass_block"],
+          "rotate": false,
+          "loot": -1,
+          "onCustom": []
+        },
+        {
+          "name": "oaks",
+          "block": 0,
+          "structure": "oak_tree",
+          "placement": "surface",
+          "count": 2,
+          "chance": 0.6,
+          "threshold": 0,
+          "areas": [1],
+          "on": ["minecraft:grass_block"],
+          "rotate": true,
+          "loot": -1,
+          "onCustom": []
+        },
+        {
+          "name": "ruby_crystals",
+          "block": 10,
+          "placement": "caveFloor",
+          "count": 4,
+          "chance": 1,
+          "threshold": 0,
+          "areas": [],
+          "maxY": 32,
+          "on": [],
+          "rotate": false,
+          "loot": -1,
+          "onCustom": []
+        }
+      ],
+      "temperature": {
+        "frequency": 0.002,
+        "octaves": 2
+      },
+      "humidity": {
+        "frequency": 0.002,
+        "octaves": 2
+      },
+      "jitter": {
+        "frequency": 0.02,
+        "octaves": 2
+      },
+      "jitterAmplitude": 24,
+      "blend": 24,
+      "areas": [
+        {
+          "name": "grove",
+          "biome": "ruby_grove",
+          "temperatureMin": 0.3,
+          "temperatureMax": 1,
+          "humidityMin": 0.2,
+          "humidityMax": 1,
+          "terrain": {
+            "base": 66,
+            "scale": 1,
+            "noises": [],
+            "densityScale": 1,
+            "densityNoises": [
+              {
+                "name": "ledges",
+                "noise": {
+                  "frequency": 0.04,
+                  "octaves": 2
+                },
+                "amplitude": 5,
+                "squash": 2
+              }
+            ]
+          },
+          "climate": []
+        },
+        {
+          "name": "plains",
+          "biome": "minecraft:plains",
+          "temperatureMin": -0.2,
+          "temperatureMax": 1,
+          "humidityMin": -1,
+          "humidityMax": 1,
+          "terrain": {
+            "base": 66,
+            "scale": 0.7,
+            "noises": [],
+            "densityScale": 1,
+            "densityNoises": []
+          },
+          "climate": []
+        },
+        {
+          "name": "snowy",
+          "biome": "minecraft:snowy_plains",
+          "temperatureMin": -1,
+          "temperatureMax": -0.2,
+          "humidityMin": -1,
+          "humidityMax": 1,
+          "layers": [
+            {
+              "block": 2,
+              "thickness": 1
+            },
+            {
+              "block": 3,
+              "thickness": 3
+            }
+          ],
+          "terrain": {
+            "base": 66,
+            "scale": 1.6,
+            "noises": [
+              {
+                "name": "peaks",
+                "noise": {
+                  "frequency": 0.012,
+                  "fractal": "ridged",
+                  "octaves": 3
+                },
+                "amplitude": 22
+              }
+            ],
+            "densityScale": 1,
+            "densityNoises": []
+          },
+          "climate": []
+        }
+      ],
+      "vanillaStructures": true,
+      "density": {
+        "noises": []
+      },
+      "templates": {},
+      "climate": [],
+      "loot": []
+    },
+    "sky_islands": {
+      "palette": [
+        {
+          "state": "minecraft:air"
+        },
+        {
+          "state": "minecraft:calcite"
+        },
+        {
+          "state": "minecraft:moss_block"
+        },
+        {
+          "state": "minecraft:dirt"
+        },
+        {
+          "state": "minecraft:amethyst_block"
+        },
+        {
+          "name": "ruby_ore"
+        },
+        {
+          "state": "minecraft:small_amethyst_bud[facing=up]"
+        }
+      ],
+      "base": 0,
+      "seaLevel": -64,
+      "fluid": 0,
+      "noises": [],
+      "layers": [
+        {
+          "block": 2,
+          "thickness": 1
+        },
+        {
+          "block": 3,
+          "thickness": 2
+        }
+      ],
+      "underwater": [
+        {
+          "block": 2,
+          "thickness": 1
+        },
+        {
+          "block": 3,
+          "thickness": 2
+        }
+      ],
+      "stone": 1,
+      "floorBlock": 0,
+      "floorThickness": 0,
+      "caves": [],
+      "ores": [
+        {
+          "name": "amethyst",
+          "block": 4,
+          "replace": [1],
+          "size": 10,
+          "veins": 4,
+          "minY": 88,
+          "maxY": 136,
+          "distribution": "uniform",
+          "areas": []
+        },
+        {
+          "name": "ruby",
+          "block": 5,
+          "replace": [1],
+          "size": 6,
+          "veins": 14,
+          "minY": 88,
+          "maxY": 136,
+          "distribution": "uniform",
+          "areas": []
+        }
+      ],
+      "decorations": [
+        {
+          "name": "buds",
+          "block": 6,
+          "placement": "surface",
+          "count": 10,
+          "chance": 1,
+          "threshold": 0,
+          "areas": [],
+          "on": ["minecraft:moss_block"],
+          "rotate": false,
+          "loot": -1,
+          "onCustom": []
+        },
+        {
+          "name": "spires",
+          "block": 0,
+          "structure": "crystal_spire",
+          "placement": "surface",
+          "count": 3,
+          "chance": 0.6,
+          "threshold": 0,
+          "areas": [],
+          "on": ["minecraft:moss_block"],
+          "rotate": true,
+          "loot": -1,
+          "onCustom": []
+        }
+      ],
+      "temperature": {
+        "frequency": 0.002,
+        "octaves": 2
+      },
+      "humidity": {
+        "frequency": 0.002,
+        "octaves": 2
+      },
+      "jitter": {
+        "frequency": 0.02,
+        "octaves": 2
+      },
+      "jitterAmplitude": 16,
+      "blend": 16,
+      "areas": [
+        {
+          "name": "isles",
+          "biome": "glow_grove",
+          "temperatureMin": -1,
+          "temperatureMax": 1,
+          "humidityMin": -1,
+          "humidityMax": 1,
+          "terrain": {
+            "base": 0,
+            "scale": 1,
+            "noises": [],
+            "densityScale": 1,
+            "densityNoises": []
+          },
+          "climate": []
+        }
+      ],
+      "vanillaStructures": false,
+      "script": {
+        "file": "terrain/sky_islands.lua",
+        "budget": 20000,
+        "noises": []
+      },
+      "density": {
+        "noises": [],
+        "islands": {
+          "y": 112,
+          "thickness": 64,
+          "noise": {
+            "frequency": 0.012,
+            "octaves": 2
+          },
+          "threshold": 0.12,
+          "areas": []
+        }
+      },
+      "templates": {},
+      "climate": [],
+      "loot": []
+    }
+  },
+  "menu": {
+    "altar": {
+      "id": "altar",
+      "name": "Altar",
+      "type": "chest",
+      "rows": 3,
+      "size": 27,
+      "title": "<#e8d8ff>Altar",
+      "shared": false,
+      "locked": true,
+      "slots": {
+        "22": {
+          "item": {
+            "name": "<light_purple>Infuse",
+            "lore": ["<gray>Set something in the ring first"],
+            "item": "shard"
+          }
+        },
+        "4": {
+          "item": {
+            "kind": "minecraft:amethyst_cluster",
+            "name": "<light_purple>The ring",
+            "lore": [
+              "<gray>Set what you'd infuse in the ring below,",
+              "<gray>then press the shard beneath it"
+            ]
+          }
+        }
+      },
+      "script": {
+        "file": "script.lua"
+      }
+    },
+    "backpack": {
+      "id": "backpack",
+      "name": "Backpack",
+      "type": "chest",
+      "rows": 1,
+      "size": 9,
+      "title": "<dark_gray>Backpack: kept with you",
+      "shared": false,
+      "locked": true,
+      "slots": {},
+      "script": {
+        "file": "script.lua"
+      }
+    },
+    "board": {
+      "id": "board",
+      "name": "Community board",
+      "type": "chest",
+      "rows": 1,
+      "size": 9,
+      "title": "<dark_gray>Community board",
+      "shared": true,
+      "locked": true,
+      "slots": {},
+      "script": {
+        "file": "script.lua"
+      }
+    },
+    "shop": {
+      "id": "shop",
+      "name": "Village shop",
+      "type": "chest",
+      "rows": 3,
+      "size": 27,
+      "title": "<dark_gray>Village shop",
+      "shared": false,
+      "locked": true,
+      "slots": {
+        "11": {
+          "item": {
+            "kind": "minecraft:bread",
+            "name": "<yellow>Bread",
+            "lore": ["<gray><glyph:ui/coin> 2"],
+            "count": 4
+          }
+        },
+        "12": {
+          "item": {
+            "lore": ["<gray><glyph:ui/coin> 20"],
+            "item": "library:gem"
+          }
+        },
+        "13": {
+          "item": {
+            "lore": ["<gray><glyph:ui/coin> 50"],
+            "item": "ruby"
+          }
+        },
+        "15": {
+          "item": {
+            "kind": "minecraft:barrier",
+            "name": "<red>Close"
+          }
+        }
+      },
+      "script": {
+        "file": "script.lua"
+      }
+    }
+  },
+  "centity": {
+    "bouncer": {
+      "id": "bouncer",
+      "name": "Bouncer",
+      "nodes": [
+        {
+          "name": "ball",
+          "parentIndex": -1,
+          "transform": {
+            "translation": [-0.3, 0, -0.3],
+            "scale": [0.6, 0.6, 0.6]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:magenta_glazed_terracotta"
+          },
+          "hitbox": {}
+        }
+      ],
+      "animations": [],
+      "script": {
+        "file": "script.lua"
+      },
+      "body": {
+        "width": 0.6,
+        "height": 0.6,
+        "gravity": 32,
+        "maxFallSpeed": 78.4,
+        "drag": 0.33,
+        "liquidDrag": 0.98,
+        "liquidGravity": 0.25,
+        "acceleration": 20,
+        "airAcceleration": 5,
+        "friction": 24,
+        "stepHeight": 0,
+        "bounce": 0.6,
+        "fly": false,
+        "blocks": true
+      }
+    },
+    "crate": {
+      "id": "crate",
+      "name": "Wooden crate",
+      "nodes": [
+        {
+          "name": "box",
+          "parentIndex": -1,
+          "transform": {
+            "translation": [0, 3, 0]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:oak_planks"
+          },
+          "hitbox": {},
+          "physics": {
+            "gravity": 32,
+            "bounciness": 0.2,
+            "friction": 0.6,
+            "drag": 0.02,
+            "angularDrag": 0.05,
+            "maxSpeed": 60,
+            "maxSpin": 3600,
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        }
+      ],
+      "animations": [],
+      "script": {
+        "file": "script.lua"
+      }
+    },
+    "crystal": {
+      "id": "crystal",
+      "name": "Ruby crystal",
+      "nodes": [
+        {
+          "name": "gem",
+          "parentIndex": -1,
+          "transform": {
+            "translation": [0, 1, 0]
+          },
+          "display": {
+            "type": "model",
+            "model": "ui/crystal"
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.4, -0.5, -0.4],
+                "max": [0.4, 0.5, 0.4]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pedestal",
+          "parentIndex": -1,
+          "transform": {
+            "translation": [-0.375, 0, -0.375],
+            "scale": [0.75, 0.5, 0.75]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:polished_blackstone"
+          }
+        }
+      ],
+      "animations": [
+        {
+          "name": "spin",
+          "length": 4,
+          "loop": "loop",
+          "autoplay": true,
+          "tracks": [
+            {
+              "nodeIndex": 0,
+              "channel": "rotation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [0, 0, 0]
+                },
+                {
+                  "time": 1,
+                  "value": [0, 90, 0]
+                },
+                {
+                  "time": 2,
+                  "value": [0, 180, 0]
+                },
+                {
+                  "time": 3,
+                  "value": [0, 270, 0]
+                },
+                {
+                  "time": 4,
+                  "value": [0, 360, 0]
+                }
+              ]
+            }
+          ],
+          "blend": "replace"
+        }
+      ],
+      "script": {
+        "file": "script.lua"
+      }
+    },
+    "dart": {
+      "id": "dart",
+      "name": "Dart",
+      "nodes": [
+        {
+          "name": "nose",
+          "parentIndex": -1,
+          "transform": {},
+          "display": {
+            "type": "model",
+            "model": "ui/dart"
+          }
+        }
+      ],
+      "animations": [],
+      "script": {
+        "file": "script.lua"
+      }
+    },
+    "display_item": {
+      "id": "display_item",
+      "name": "Item on show",
+      "nodes": [
+        {
+          "name": "item",
+          "parentIndex": -1,
+          "transform": {
+            "translation": [0, 0.5, 0],
+            "scale": [0.6, 0.6, 0.6]
+          },
+          "display": {
+            "type": "item",
+            "item": "minecraft:paper",
+            "itemTransform": "fixed"
+          }
+        }
+      ],
+      "animations": [
+        {
+          "name": "turn",
+          "length": 6,
+          "loop": "loop",
+          "autoplay": true,
+          "tracks": [
+            {
+              "nodeIndex": 0,
+              "channel": "rotation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [0, 0, 0]
+                },
+                {
+                  "time": 6,
+                  "value": [0, 360, 0]
+                }
+              ]
+            }
+          ],
+          "blend": "replace"
+        }
+      ]
+    },
+    "door": {
+      "id": "door",
+      "name": "Swinging door",
+      "nodes": [
+        {
+          "name": "hinge",
+          "parentIndex": -1,
+          "transform": {
+            "translation": [-0.5, 0, 0]
+          }
+        },
+        {
+          "name": "lintel",
+          "parentIndex": -1,
+          "transform": {
+            "translation": [-0.75, 2, -0.125],
+            "scale": [1.5, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:stripped_dark_oak_log[axis=x]"
+          }
+        },
+        {
+          "name": "post_l",
+          "parentIndex": -1,
+          "transform": {
+            "translation": [-0.75, 0, -0.125],
+            "scale": [0.25, 2, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:stripped_dark_oak_log"
+          }
+        },
+        {
+          "name": "post_r",
+          "parentIndex": -1,
+          "transform": {
+            "translation": [0.5, 0, -0.125],
+            "scale": [0.25, 2, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:stripped_dark_oak_log"
+          }
+        },
+        {
+          "name": "knob_back",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [0.8, 0.95, -0.15625],
+            "scale": [0.0625, 0.0625, 0.0625]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:gold_block"
+          }
+        },
+        {
+          "name": "knob_front",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [0.8, 0.95, 0.09375],
+            "scale": [0.0625, 0.0625, 0.0625]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:gold_block"
+          }
+        },
+        {
+          "name": "panel",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [0, 0, -0.09375],
+            "scale": [1, 2, 0.1875]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:spruce_planks"
+          },
+          "hitbox": {}
+        }
+      ],
+      "animations": [
+        {
+          "name": "close",
+          "length": 0.8,
+          "loop": "once",
+          "autoplay": false,
+          "tracks": [
+            {
+              "nodeIndex": 0,
+              "channel": "rotation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [0, 95, 0],
+                  "easing": "ease_in"
+                },
+                {
+                  "time": 0.55,
+                  "value": [0, 0, 0],
+                  "easing": "ease_out"
+                },
+                {
+                  "time": 0.65,
+                  "value": [0, 4, 0],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 0.8,
+                  "value": [0, 0, 0]
+                }
+              ]
+            }
+          ],
+          "blend": "replace"
+        },
+        {
+          "name": "open",
+          "length": 0.8,
+          "loop": "hold",
+          "autoplay": false,
+          "tracks": [
+            {
+              "nodeIndex": 0,
+              "channel": "rotation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [0, 0, 0],
+                  "easing": "ease_out"
+                },
+                {
+                  "time": 0.6,
+                  "value": [0, 100, 0],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 0.8,
+                  "value": [0, 95, 0]
+                }
+              ]
+            }
+          ],
+          "blend": "replace"
+        }
+      ],
+      "script": {
+        "file": "script.lua"
+      }
+    },
+    "dummy": {
+      "id": "dummy",
+      "name": "Training dummy",
+      "nodes": [
+        {
+          "name": "root",
+          "parentIndex": -1,
+          "transform": {}
+        },
+        {
+          "name": "body",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.3, 0.6, -0.2],
+            "scale": [0.6, 0.9, 0.4]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:hay_block"
+          },
+          "hitbox": {}
+        },
+        {
+          "name": "head",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.25, 1.5, -0.25],
+            "scale": [0.5, 0.5, 0.5]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:carved_pumpkin"
+          },
+          "hitbox": {}
+        },
+        {
+          "name": "post",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.06, 0, -0.06],
+            "scale": [0.12, 0.6, 0.12]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:oak_fence"
+          }
+        }
+      ],
+      "animations": [
+        {
+          "name": "wobble",
+          "length": 0.5,
+          "loop": "once",
+          "autoplay": false,
+          "tracks": [
+            {
+              "nodeIndex": 0,
+              "channel": "rotation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [0, 0, 0]
+                },
+                {
+                  "time": 0.15,
+                  "value": [-12, 0, 0],
+                  "easing": "ease_out"
+                },
+                {
+                  "time": 0.5,
+                  "value": [0, 0, 0],
+                  "easing": "ease_in_out"
+                }
+              ]
+            }
+          ],
+          "blend": "replace"
+        }
+      ],
+      "script": {
+        "file": "script.lua"
+      },
+      "health": {
+        "max": 20,
+        "removeOnDeath": false,
+        "bar": {
+          "segments": 10,
+          "showTicks": 0,
+          "offset": 0.35,
+          "glyph": "▮",
+          "filled": "<red>",
+          "empty": "<dark_gray>"
+        }
+      }
+    },
+    "kiosk": {
+      "id": "kiosk",
+      "name": "Kiosk",
+      "nodes": [
+        {
+          "name": "root",
+          "parentIndex": -1,
+          "transform": {}
+        },
+        {
+          "name": "button",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.2, 1, -0.2],
+            "scale": [0.4, 0.12, 0.4]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:gold_block"
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [0, 0, 0],
+                "max": [1, 2, 1]
+              }
+            ]
+          }
+        },
+        {
+          "name": "label",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [0, 1.55, 0]
+          },
+          "display": {
+            "type": "text",
+            "text": "<yellow>Click me",
+            "billboard": "center"
+          }
+        },
+        {
+          "name": "pedestal",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.35, 0, -0.35],
+            "scale": [0.7, 1, 0.7]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:polished_blackstone_bricks"
+          },
+          "hitbox": {}
+        }
+      ],
+      "animations": [
+        {
+          "name": "press",
+          "length": 0.3,
+          "loop": "once",
+          "autoplay": false,
+          "tracks": [
+            {
+              "nodeIndex": 1,
+              "channel": "translation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [-0.2, 1, -0.2]
+                },
+                {
+                  "time": 0.1,
+                  "value": [-0.2, 0.95, -0.2],
+                  "easing": "ease_out"
+                },
+                {
+                  "time": 0.3,
+                  "value": [-0.2, 1, -0.2]
+                }
+              ]
+            }
+          ],
+          "blend": "replace"
+        }
+      ]
+    },
+    "lamp": {
+      "id": "lamp",
+      "name": "Floating lamp",
+      "nodes": [
+        {
+          "name": "float",
+          "parentIndex": -1,
+          "transform": {
+            "translation": [0, 0.75, 0]
+          }
+        },
+        {
+          "name": "label",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [0, 0.85, 0]
+          },
+          "display": {
+            "type": "text",
+            "text": "<yellow>Lamp",
+            "billboard": "center"
+          }
+        },
+        {
+          "name": "light",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.25, 0, -0.25],
+            "scale": [0.5, 0.5, 0.5]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:sea_lantern"
+          },
+          "hitbox": {}
+        }
+      ],
+      "animations": [
+        {
+          "name": "bob",
+          "length": 2,
+          "loop": "loop",
+          "autoplay": true,
+          "tracks": [
+            {
+              "nodeIndex": 0,
+              "channel": "translation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [0, 0.75, 0],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 1,
+                  "value": [0, 1, 0],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 2,
+                  "value": [0, 0.75, 0]
+                }
+              ]
+            },
+            {
+              "nodeIndex": 0,
+              "channel": "rotation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [0, 0, 0]
+                },
+                {
+                  "time": 0.5,
+                  "value": [0, 45, 0]
+                },
+                {
+                  "time": 1,
+                  "value": [0, 90, 0]
+                },
+                {
+                  "time": 1.5,
+                  "value": [0, 135, 0]
+                },
+                {
+                  "time": 2,
+                  "value": [0, 180, 0]
+                }
+              ]
+            }
+          ],
+          "blend": "replace"
+        },
+        {
+          "name": "squash",
+          "length": 0.5,
+          "loop": "once",
+          "autoplay": false,
+          "tracks": [
+            {
+              "nodeIndex": 0,
+              "channel": "scale",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [1, 1, 1],
+                  "easing": "ease_out"
+                },
+                {
+                  "time": 0.1,
+                  "value": [1.35, 0.65, 1.35],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 0.25,
+                  "value": [0.85, 1.2, 0.85],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 0.4,
+                  "value": [1.05, 0.95, 1.05],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 0.5,
+                  "value": [1, 1, 1]
+                }
+              ]
+            }
+          ],
+          "blend": "additive"
+        }
+      ],
+      "script": {
+        "file": "script.lua"
+      }
+    },
+    "owl": {
+      "id": "owl",
+      "name": "Clockwork owl",
+      "nodes": [
+        {
+          "name": "root",
+          "parentIndex": -1,
+          "transform": {},
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.45, 0, -0.45],
+                "max": [0.45, 2.8, 0.45]
+              }
+            ]
+          }
+        },
+        {
+          "name": "bar",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.4, 1, -0.09375],
+            "scale": [0.8, 0.125, 0.1875]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:stripped_dark_oak_log[axis=x]"
+          }
+        },
+        {
+          "name": "base",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.375, 0, -0.375],
+            "scale": [0.75, 0.125, 0.75]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:dark_oak_planks"
+          }
+        },
+        {
+          "name": "owl",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [0, 1.125, 0]
+          }
+        },
+        {
+          "name": "post",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.09375, 0.125, -0.09375],
+            "scale": [0.1875, 0.875, 0.1875]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:stripped_dark_oak_log"
+          }
+        },
+        {
+          "name": "body",
+          "parentIndex": 3,
+          "transform": {
+            "translation": [0, 0.5, 0]
+          },
+          "display": {
+            "type": "model",
+            "model": "ui/owl_body"
+          }
+        },
+        {
+          "name": "head",
+          "parentIndex": 5,
+          "transform": {
+            "translation": [0, 0.3125, 0]
+          },
+          "display": {
+            "type": "model",
+            "model": "ui/owl_head"
+          }
+        },
+        {
+          "name": "wing_l",
+          "parentIndex": 5,
+          "transform": {
+            "translation": [-0.38, 0.1875, 0]
+          },
+          "display": {
+            "type": "model",
+            "model": "ui/owl_wing"
+          }
+        },
+        {
+          "name": "wing_r",
+          "parentIndex": 5,
+          "transform": {
+            "translation": [0.38, 0.1875, 0]
+          },
+          "display": {
+            "type": "model",
+            "model": "ui/owl_wing"
+          }
+        }
+      ],
+      "animations": [
+        {
+          "name": "breathe",
+          "length": 3,
+          "loop": "loop",
+          "autoplay": true,
+          "tracks": [
+            {
+              "nodeIndex": 5,
+              "channel": "scale",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [1, 1, 1],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 1.5,
+                  "value": [1.03, 1.04, 1.03],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 3,
+                  "value": [1, 1, 1]
+                }
+              ]
+            }
+          ],
+          "blend": "additive"
+        },
+        {
+          "name": "flap",
+          "length": 0.75,
+          "loop": "once",
+          "autoplay": false,
+          "tracks": [
+            {
+              "nodeIndex": 3,
+              "channel": "translation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [0, 0, 0],
+                  "easing": "ease_out"
+                },
+                {
+                  "time": 0.3,
+                  "value": [0, 0.35, 0],
+                  "easing": "ease_in"
+                },
+                {
+                  "time": 0.6,
+                  "value": [0, 0, 0]
+                }
+              ]
+            },
+            {
+              "nodeIndex": 7,
+              "channel": "rotation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [0, 0, 0],
+                  "easing": "ease_out"
+                },
+                {
+                  "time": 0.15,
+                  "value": [0, 0, -80],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 0.3,
+                  "value": [0, 0, -15],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 0.45,
+                  "value": [0, 0, -80],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 0.75,
+                  "value": [0, 0, 0]
+                }
+              ]
+            },
+            {
+              "nodeIndex": 8,
+              "channel": "rotation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [0, 0, 0],
+                  "easing": "ease_out"
+                },
+                {
+                  "time": 0.15,
+                  "value": [0, 0, 80],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 0.3,
+                  "value": [0, 0, 15],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 0.45,
+                  "value": [0, 0, 80],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 0.75,
+                  "value": [0, 0, 0]
+                }
+              ]
+            }
+          ],
+          "blend": "replace"
+        }
+      ],
+      "script": {
+        "file": "script.lua"
+      }
+    },
+    "placard": {
+      "id": "placard",
+      "name": "Placard",
+      "nodes": [
+        {
+          "name": "text",
+          "parentIndex": -1,
+          "transform": {},
+          "display": {
+            "type": "text",
+            "text": "<gray>…",
+            "billboard": "fixed",
+            "alignment": "left",
+            "background": "#c0101018",
+            "lineWidth": 240
+          }
+        }
+      ],
+      "animations": []
+    },
+    "pool": {
+      "id": "pool",
+      "name": "Pool table",
+      "nodes": [
+        {
+          "name": "root",
+          "parentIndex": -1,
+          "transform": {}
+        },
+        {
+          "name": "ball_1",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [1.25, 0.125, 0]
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.125, -0.125, -0.125],
+                "max": [0.125, 0.125, 0.125]
+              }
+            ]
+          },
+          "physics": {
+            "gravity": 32,
+            "mass": 0.17,
+            "bounciness": 0.92,
+            "friction": 0.2,
+            "drag": 0.02,
+            "angularDrag": 0.45,
+            "maxSpeed": 60,
+            "maxSpin": 9000,
+            "shape": "sphere",
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        },
+        {
+          "name": "ball_10",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [2.0294, 0.125, 0.45]
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.125, -0.125, -0.125],
+                "max": [0.125, 0.125, 0.125]
+              }
+            ]
+          },
+          "physics": {
+            "gravity": 32,
+            "mass": 0.17,
+            "bounciness": 0.92,
+            "friction": 0.2,
+            "drag": 0.02,
+            "angularDrag": 0.45,
+            "maxSpeed": 60,
+            "maxSpin": 9000,
+            "shape": "sphere",
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        },
+        {
+          "name": "ball_11",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [2.2892, 0.125, -0.6]
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.125, -0.125, -0.125],
+                "max": [0.125, 0.125, 0.125]
+              }
+            ]
+          },
+          "physics": {
+            "gravity": 32,
+            "mass": 0.17,
+            "bounciness": 0.92,
+            "friction": 0.2,
+            "drag": 0.02,
+            "angularDrag": 0.45,
+            "maxSpeed": 60,
+            "maxSpin": 9000,
+            "shape": "sphere",
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        },
+        {
+          "name": "ball_12",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [2.2892, 0.125, -0.3]
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.125, -0.125, -0.125],
+                "max": [0.125, 0.125, 0.125]
+              }
+            ]
+          },
+          "physics": {
+            "gravity": 32,
+            "mass": 0.17,
+            "bounciness": 0.92,
+            "friction": 0.2,
+            "drag": 0.02,
+            "angularDrag": 0.45,
+            "maxSpeed": 60,
+            "maxSpin": 9000,
+            "shape": "sphere",
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        },
+        {
+          "name": "ball_13",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [2.2892, 0.125, 0]
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.125, -0.125, -0.125],
+                "max": [0.125, 0.125, 0.125]
+              }
+            ]
+          },
+          "physics": {
+            "gravity": 32,
+            "mass": 0.17,
+            "bounciness": 0.92,
+            "friction": 0.2,
+            "drag": 0.02,
+            "angularDrag": 0.45,
+            "maxSpeed": 60,
+            "maxSpin": 9000,
+            "shape": "sphere",
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        },
+        {
+          "name": "ball_14",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [2.2892, 0.125, 0.3]
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.125, -0.125, -0.125],
+                "max": [0.125, 0.125, 0.125]
+              }
+            ]
+          },
+          "physics": {
+            "gravity": 32,
+            "mass": 0.17,
+            "bounciness": 0.92,
+            "friction": 0.2,
+            "drag": 0.02,
+            "angularDrag": 0.45,
+            "maxSpeed": 60,
+            "maxSpin": 9000,
+            "shape": "sphere",
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        },
+        {
+          "name": "ball_15",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [2.2892, 0.125, 0.6]
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.125, -0.125, -0.125],
+                "max": [0.125, 0.125, 0.125]
+              }
+            ]
+          },
+          "physics": {
+            "gravity": 32,
+            "mass": 0.17,
+            "bounciness": 0.92,
+            "friction": 0.2,
+            "drag": 0.02,
+            "angularDrag": 0.45,
+            "maxSpeed": 60,
+            "maxSpin": 9000,
+            "shape": "sphere",
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        },
+        {
+          "name": "ball_2",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [1.5098, 0.125, -0.15]
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.125, -0.125, -0.125],
+                "max": [0.125, 0.125, 0.125]
+              }
+            ]
+          },
+          "physics": {
+            "gravity": 32,
+            "mass": 0.17,
+            "bounciness": 0.92,
+            "friction": 0.2,
+            "drag": 0.02,
+            "angularDrag": 0.45,
+            "maxSpeed": 60,
+            "maxSpin": 9000,
+            "shape": "sphere",
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        },
+        {
+          "name": "ball_3",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [1.5098, 0.125, 0.15]
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.125, -0.125, -0.125],
+                "max": [0.125, 0.125, 0.125]
+              }
+            ]
+          },
+          "physics": {
+            "gravity": 32,
+            "mass": 0.17,
+            "bounciness": 0.92,
+            "friction": 0.2,
+            "drag": 0.02,
+            "angularDrag": 0.45,
+            "maxSpeed": 60,
+            "maxSpin": 9000,
+            "shape": "sphere",
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        },
+        {
+          "name": "ball_4",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [1.7696, 0.125, -0.3]
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.125, -0.125, -0.125],
+                "max": [0.125, 0.125, 0.125]
+              }
+            ]
+          },
+          "physics": {
+            "gravity": 32,
+            "mass": 0.17,
+            "bounciness": 0.92,
+            "friction": 0.2,
+            "drag": 0.02,
+            "angularDrag": 0.45,
+            "maxSpeed": 60,
+            "maxSpin": 9000,
+            "shape": "sphere",
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        },
+        {
+          "name": "ball_5",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [1.7696, 0.125, 0]
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.125, -0.125, -0.125],
+                "max": [0.125, 0.125, 0.125]
+              }
+            ]
+          },
+          "physics": {
+            "gravity": 32,
+            "mass": 0.17,
+            "bounciness": 0.92,
+            "friction": 0.2,
+            "drag": 0.02,
+            "angularDrag": 0.45,
+            "maxSpeed": 60,
+            "maxSpin": 9000,
+            "shape": "sphere",
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        },
+        {
+          "name": "ball_6",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [1.7696, 0.125, 0.3]
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.125, -0.125, -0.125],
+                "max": [0.125, 0.125, 0.125]
+              }
+            ]
+          },
+          "physics": {
+            "gravity": 32,
+            "mass": 0.17,
+            "bounciness": 0.92,
+            "friction": 0.2,
+            "drag": 0.02,
+            "angularDrag": 0.45,
+            "maxSpeed": 60,
+            "maxSpin": 9000,
+            "shape": "sphere",
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        },
+        {
+          "name": "ball_7",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [2.0294, 0.125, -0.45]
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.125, -0.125, -0.125],
+                "max": [0.125, 0.125, 0.125]
+              }
+            ]
+          },
+          "physics": {
+            "gravity": 32,
+            "mass": 0.17,
+            "bounciness": 0.92,
+            "friction": 0.2,
+            "drag": 0.02,
+            "angularDrag": 0.45,
+            "maxSpeed": 60,
+            "maxSpin": 9000,
+            "shape": "sphere",
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        },
+        {
+          "name": "ball_8",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [2.0294, 0.125, -0.15]
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.125, -0.125, -0.125],
+                "max": [0.125, 0.125, 0.125]
+              }
+            ]
+          },
+          "physics": {
+            "gravity": 32,
+            "mass": 0.17,
+            "bounciness": 0.92,
+            "friction": 0.2,
+            "drag": 0.02,
+            "angularDrag": 0.45,
+            "maxSpeed": 60,
+            "maxSpin": 9000,
+            "shape": "sphere",
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        },
+        {
+          "name": "ball_9",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [2.0294, 0.125, 0.15]
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.125, -0.125, -0.125],
+                "max": [0.125, 0.125, 0.125]
+              }
+            ]
+          },
+          "physics": {
+            "gravity": 32,
+            "mass": 0.17,
+            "bounciness": 0.92,
+            "friction": 0.2,
+            "drag": 0.02,
+            "angularDrag": 0.45,
+            "maxSpeed": 60,
+            "maxSpin": 9000,
+            "shape": "sphere",
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        },
+        {
+          "name": "ball_cue",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-1.25, 0.125, 0]
+          },
+          "hitbox": {
+            "boxes": [
+              {
+                "min": [-0.125, -0.125, -0.125],
+                "max": [0.125, 0.125, 0.125]
+              }
+            ]
+          },
+          "physics": {
+            "gravity": 32,
+            "mass": 0.17,
+            "bounciness": 0.92,
+            "friction": 0.2,
+            "drag": 0.02,
+            "angularDrag": 0.45,
+            "maxSpeed": 60,
+            "maxSpin": 9000,
+            "shape": "sphere",
+            "rotates": true,
+            "sleeps": true,
+            "blocks": true,
+            "entities": true
+          }
+        },
+        {
+          "name": "label",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [0, 1.2, 0]
+          },
+          "display": {
+            "type": "text",
+            "text": "<gray>pool",
+            "billboard": "center",
+            "alignment": "center"
+          }
+        },
+        {
+          "name": "table",
+          "parentIndex": 0,
+          "transform": {}
+        },
+        {
+          "name": "ball_1_skin",
+          "parentIndex": 1,
+          "transform": {
+            "translation": [-0.125, -0.125, -0.125],
+            "scale": [0.25, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:yellow_concrete"
+          }
+        },
+        {
+          "name": "ball_10_skin",
+          "parentIndex": 2,
+          "transform": {
+            "translation": [-0.125, -0.125, -0.125],
+            "scale": [0.25, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:light_blue_concrete"
+          }
+        },
+        {
+          "name": "ball_11_skin",
+          "parentIndex": 3,
+          "transform": {
+            "translation": [-0.125, -0.125, -0.125],
+            "scale": [0.25, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:pink_concrete"
+          }
+        },
+        {
+          "name": "ball_12_skin",
+          "parentIndex": 4,
+          "transform": {
+            "translation": [-0.125, -0.125, -0.125],
+            "scale": [0.25, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:lime_concrete"
+          }
+        },
+        {
+          "name": "ball_13_skin",
+          "parentIndex": 5,
+          "transform": {
+            "translation": [-0.125, -0.125, -0.125],
+            "scale": [0.25, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:magenta_concrete"
+          }
+        },
+        {
+          "name": "ball_14_skin",
+          "parentIndex": 6,
+          "transform": {
+            "translation": [-0.125, -0.125, -0.125],
+            "scale": [0.25, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:cyan_concrete"
+          }
+        },
+        {
+          "name": "ball_15_skin",
+          "parentIndex": 7,
+          "transform": {
+            "translation": [-0.125, -0.125, -0.125],
+            "scale": [0.25, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:gray_concrete"
+          }
+        },
+        {
+          "name": "ball_2_skin",
+          "parentIndex": 8,
+          "transform": {
+            "translation": [-0.125, -0.125, -0.125],
+            "scale": [0.25, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:blue_concrete"
+          }
+        },
+        {
+          "name": "ball_3_skin",
+          "parentIndex": 9,
+          "transform": {
+            "translation": [-0.125, -0.125, -0.125],
+            "scale": [0.25, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:red_concrete"
+          }
+        },
+        {
+          "name": "ball_4_skin",
+          "parentIndex": 10,
+          "transform": {
+            "translation": [-0.125, -0.125, -0.125],
+            "scale": [0.25, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:purple_concrete"
+          }
+        },
+        {
+          "name": "ball_5_skin",
+          "parentIndex": 11,
+          "transform": {
+            "translation": [-0.125, -0.125, -0.125],
+            "scale": [0.25, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:orange_concrete"
+          }
+        },
+        {
+          "name": "ball_6_skin",
+          "parentIndex": 12,
+          "transform": {
+            "translation": [-0.125, -0.125, -0.125],
+            "scale": [0.25, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:green_concrete"
+          }
+        },
+        {
+          "name": "ball_7_skin",
+          "parentIndex": 13,
+          "transform": {
+            "translation": [-0.125, -0.125, -0.125],
+            "scale": [0.25, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:brown_concrete"
+          }
+        },
+        {
+          "name": "ball_8_skin",
+          "parentIndex": 14,
+          "transform": {
+            "translation": [-0.125, -0.125, -0.125],
+            "scale": [0.25, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:black_concrete"
+          }
+        },
+        {
+          "name": "ball_9_skin",
+          "parentIndex": 15,
+          "transform": {
+            "translation": [-0.125, -0.125, -0.125],
+            "scale": [0.25, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:light_gray_concrete"
+          }
+        },
+        {
+          "name": "ball_cue_skin",
+          "parentIndex": 16,
+          "transform": {
+            "translation": [-0.125, -0.125, -0.125],
+            "scale": [0.25, 0.25, 0.25]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:white_concrete"
+          }
+        },
+        {
+          "name": "bed",
+          "parentIndex": 18,
+          "transform": {
+            "translation": [-2.5, -0.2, -1.25],
+            "scale": [5, 0.2, 2.5]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:green_concrete"
+          },
+          "hitbox": {}
+        },
+        {
+          "name": "rail_east",
+          "parentIndex": 18,
+          "transform": {
+            "translation": [2.5, 0, -1.04],
+            "scale": [0.15, 0.22, 2.08]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:dark_oak_log"
+          },
+          "hitbox": {}
+        },
+        {
+          "name": "rail_north_0",
+          "parentIndex": 18,
+          "transform": {
+            "translation": [-2.29, 0, -1.4],
+            "scale": [2.08, 0.22, 0.15]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:dark_oak_log"
+          },
+          "hitbox": {}
+        },
+        {
+          "name": "rail_north_1",
+          "parentIndex": 18,
+          "transform": {
+            "translation": [0.21, 0, -1.4],
+            "scale": [2.08, 0.22, 0.15]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:dark_oak_log"
+          },
+          "hitbox": {}
+        },
+        {
+          "name": "rail_south_0",
+          "parentIndex": 18,
+          "transform": {
+            "translation": [-2.29, 0, 1.25],
+            "scale": [2.08, 0.22, 0.15]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:dark_oak_log"
+          },
+          "hitbox": {}
+        },
+        {
+          "name": "rail_south_1",
+          "parentIndex": 18,
+          "transform": {
+            "translation": [0.21, 0, 1.25],
+            "scale": [2.08, 0.22, 0.15]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:dark_oak_log"
+          },
+          "hitbox": {}
+        },
+        {
+          "name": "rail_west",
+          "parentIndex": 18,
+          "transform": {
+            "translation": [-2.65, 0, -1.04],
+            "scale": [0.15, 0.22, 2.08]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:dark_oak_log"
+          },
+          "hitbox": {}
+        },
+        {
+          "name": "skirt",
+          "parentIndex": 18,
+          "transform": {
+            "translation": [-2.65, -0.55, -1.4],
+            "scale": [5.3, 0.35, 2.8]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:dark_oak_planks"
+          },
+          "hitbox": {}
+        }
+      ],
+      "animations": [],
+      "script": {
+        "file": "script.lua"
+      }
+    },
+    "runner": {
+      "id": "runner",
+      "name": "Runner",
+      "nodes": [
+        {
+          "name": "root",
+          "parentIndex": -1,
+          "transform": {}
+        },
+        {
+          "name": "body",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.25, 0, -0.25],
+            "scale": [0.5, 0.5, 0.5]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:slime_block"
+          },
+          "hitbox": {}
+        },
+        {
+          "name": "label",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [0, 0.9, 0]
+          },
+          "display": {
+            "type": "text",
+            "text": "<green>Runner",
+            "billboard": "center"
+          }
+        }
+      ],
+      "animations": [],
+      "script": {
+        "file": "script.lua"
+      },
+      "properties": {
+        "dz": 2.5
+      }
+    },
+    "shrine_keeper": {
+      "id": "shrine_keeper",
+      "name": "Shrine keeper",
+      "nodes": [
+        {
+          "name": "root",
+          "parentIndex": -1,
+          "transform": {}
+        },
+        {
+          "name": "hood",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.22, 1.25, -0.22],
+            "scale": [0.44, 0.44, 0.44]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:light_gray_wool"
+          },
+          "hitbox": {}
+        },
+        {
+          "name": "lantern_pivot",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [0.42, 1.75, 0.09]
+          }
+        },
+        {
+          "name": "name",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [0, 2.05, 0]
+          },
+          "display": {
+            "type": "text",
+            "text": "<light_purple>Shrine keeper\n<gray>right-click me",
+            "billboard": "center"
+          }
+        },
+        {
+          "name": "robe",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.3, 0, -0.2],
+            "scale": [0.6, 1.25, 0.4]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:purple_wool"
+          },
+          "hitbox": {}
+        },
+        {
+          "name": "staff",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [0.38, 0, 0.05],
+            "scale": [0.08, 1.75, 0.08]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:stripped_dark_oak_log"
+          }
+        },
+        {
+          "name": "face",
+          "parentIndex": 1,
+          "transform": {
+            "translation": [0.15, 0.15, 0.97],
+            "scale": [0.7, 0.6, 0.05]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:black_concrete"
+          }
+        },
+        {
+          "name": "lantern",
+          "parentIndex": 2,
+          "transform": {
+            "translation": [-0.15, -0.36, -0.15],
+            "scale": [0.3, 0.3, 0.3]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:soul_lantern[hanging=true]"
+          }
+        }
+      ],
+      "animations": [
+        {
+          "name": "bow",
+          "length": 1,
+          "loop": "once",
+          "autoplay": false,
+          "tracks": [
+            {
+              "nodeIndex": 1,
+              "channel": "translation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [-0.22, 1.25, -0.22],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 0.4,
+                  "value": [-0.22, 1.12, -0.1],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 1,
+                  "value": [-0.22, 1.25, -0.22]
+                }
+              ]
+            },
+            {
+              "nodeIndex": 1,
+              "channel": "rotation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [0, 0, 0],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 0.4,
+                  "value": [20, 0, 0],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 1,
+                  "value": [0, 0, 0]
+                }
+              ]
+            }
+          ],
+          "blend": "replace"
+        },
+        {
+          "name": "idle",
+          "length": 4,
+          "loop": "loop",
+          "autoplay": true,
+          "tracks": [
+            {
+              "nodeIndex": 2,
+              "channel": "rotation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [0, 0, -8],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 2,
+                  "value": [0, 0, 8],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 4,
+                  "value": [0, 0, -8]
+                }
+              ]
+            }
+          ],
+          "blend": "replace"
+        }
+      ],
+      "script": {
+        "file": "script.lua"
+      }
+    },
+    "tortoise": {
+      "id": "tortoise",
+      "name": "Tortoise",
+      "nodes": [
+        {
+          "name": "root",
+          "parentIndex": -1,
+          "transform": {}
+        },
+        {
+          "name": "head",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.15, 0.25, 0.5],
+            "scale": [0.3, 0.28, 0.32]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:green_terracotta"
+          }
+        },
+        {
+          "name": "label",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [0, 1.2, 0]
+          },
+          "display": {
+            "type": "text",
+            "text": "<green>Tortoise",
+            "billboard": "center"
+          }
+        },
+        {
+          "name": "leg_back_left",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [0.2, 0, -0.45],
+            "scale": [0.2, 0.25, 0.2]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:green_terracotta"
+          }
+        },
+        {
+          "name": "leg_back_right",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.4, 0, -0.45],
+            "scale": [0.2, 0.25, 0.2]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:green_terracotta"
+          }
+        },
+        {
+          "name": "leg_front_left",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [0.2, 0, 0.25],
+            "scale": [0.2, 0.25, 0.2]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:green_terracotta"
+          }
+        },
+        {
+          "name": "leg_front_right",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.4, 0, 0.25],
+            "scale": [0.2, 0.25, 0.2]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:green_terracotta"
+          }
+        },
+        {
+          "name": "shell",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.45, 0.2, -0.55],
+            "scale": [0.9, 0.45, 1.1]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:moss_block"
+          },
+          "hitbox": {}
+        },
+        {
+          "name": "shell_top",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.35, 0.65, -0.45],
+            "scale": [0.7, 0.2, 0.9]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:mossy_cobblestone"
+          }
+        }
+      ],
+      "animations": [
+        {
+          "name": "idle",
+          "length": 4,
+          "loop": "loop",
+          "autoplay": true,
+          "tracks": [
+            {
+              "nodeIndex": 1,
+              "channel": "translation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [-0.15, 0.25, 0.5],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 2,
+                  "value": [-0.15, 0.3, 0.55],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 4,
+                  "value": [-0.15, 0.25, 0.5]
+                }
+              ]
+            }
+          ],
+          "blend": "replace"
+        },
+        {
+          "name": "munch",
+          "length": 1,
+          "loop": "once",
+          "autoplay": false,
+          "tracks": [
+            {
+              "nodeIndex": 1,
+              "channel": "translation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [-0.15, 0.25, 0.5]
+                },
+                {
+                  "time": 0.25,
+                  "value": [-0.15, 0.15, 0.62],
+                  "easing": "ease_out"
+                },
+                {
+                  "time": 0.5,
+                  "value": [-0.15, 0.25, 0.5]
+                },
+                {
+                  "time": 0.75,
+                  "value": [-0.15, 0.15, 0.62],
+                  "easing": "ease_out"
+                },
+                {
+                  "time": 1,
+                  "value": [-0.15, 0.25, 0.5]
+                }
+              ]
+            }
+          ],
+          "blend": "replace"
+        },
+        {
+          "name": "walk",
+          "length": 1,
+          "loop": "loop",
+          "autoplay": false,
+          "tracks": [
+            {
+              "nodeIndex": 3,
+              "channel": "translation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [0.2, 0, -0.45]
+                },
+                {
+                  "time": 0.5,
+                  "value": [0.2, 0.08, -0.4],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 1,
+                  "value": [0.2, 0, -0.45]
+                }
+              ]
+            },
+            {
+              "nodeIndex": 4,
+              "channel": "translation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [-0.4, 0.08, -0.4],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 0.5,
+                  "value": [-0.4, 0, -0.45]
+                },
+                {
+                  "time": 1,
+                  "value": [-0.4, 0.08, -0.4]
+                }
+              ]
+            },
+            {
+              "nodeIndex": 5,
+              "channel": "translation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [0.2, 0.08, 0.3],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 0.5,
+                  "value": [0.2, 0, 0.25]
+                },
+                {
+                  "time": 1,
+                  "value": [0.2, 0.08, 0.3]
+                }
+              ]
+            },
+            {
+              "nodeIndex": 6,
+              "channel": "translation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [-0.4, 0, 0.25]
+                },
+                {
+                  "time": 0.5,
+                  "value": [-0.4, 0.08, 0.3],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 1,
+                  "value": [-0.4, 0, 0.25]
+                }
+              ]
+            }
+          ],
+          "blend": "replace"
+        }
+      ],
+      "script": {
+        "file": "script.lua"
+      },
+      "spawning": {
+        "worlds": ["hills"],
+        "biomes": ["ruby_grove"],
+        "light": {
+          "min": 8
+        },
+        "blocks": ["minecraft:grass_block"],
+        "weight": 8,
+        "group": {
+          "min": 1,
+          "max": 2
+        },
+        "cap": 3,
+        "despawnDistance": 96
+      }
+    },
+    "tower": {
+      "id": "tower",
+      "name": "Stone tower",
+      "nodes": [
+        {
+          "name": "base",
+          "parentIndex": -1,
+          "transform": {
+            "translation": [-0.5, 0, -0.5]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:stone_bricks"
+          },
+          "hitbox": {}
+        },
+        {
+          "name": "keep",
+          "parentIndex": -1,
+          "transform": {
+            "translation": [-0.5, 1, -0.5]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:chiseled_stone_bricks"
+          },
+          "hitbox": {}
+        },
+        {
+          "name": "turret",
+          "parentIndex": -1,
+          "transform": {
+            "translation": [0, 2, 0]
+          }
+        },
+        {
+          "name": "cap",
+          "parentIndex": 2,
+          "transform": {
+            "translation": [-0.5, 0, -0.5]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:oak_stairs[facing=east]"
+          },
+          "hitbox": {
+            "shape": "collision"
+          }
+        },
+        {
+          "name": "flag",
+          "parentIndex": 2,
+          "transform": {
+            "translation": [0, 1.2, 0],
+            "scale": [0.5, 0.5, 0.5]
+          },
+          "display": {
+            "type": "item",
+            "item": "minecraft:red_banner",
+            "itemTransform": "fixed"
+          }
+        }
+      ],
+      "animations": [
+        {
+          "name": "flutter",
+          "length": 1.6,
+          "loop": "loop",
+          "autoplay": true,
+          "tracks": [
+            {
+              "nodeIndex": 4,
+              "channel": "rotation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [0, -12, 0],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 0.8,
+                  "value": [0, 12, 0],
+                  "easing": "ease_in_out"
+                },
+                {
+                  "time": 1.6,
+                  "value": [0, -12, 0]
+                }
+              ]
+            }
+          ],
+          "blend": "replace"
+        },
+        {
+          "name": "spin",
+          "length": 1.5,
+          "loop": "once",
+          "autoplay": false,
+          "tracks": [
+            {
+              "nodeIndex": 2,
+              "channel": "rotation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [0, 0, 0],
+                  "easing": "ease_in"
+                },
+                {
+                  "time": 0.6,
+                  "value": [0, 120, 0]
+                },
+                {
+                  "time": 0.9,
+                  "value": [0, 240, 0],
+                  "easing": "ease_out"
+                },
+                {
+                  "time": 1.5,
+                  "value": [0, 360, 0]
+                }
+              ]
+            }
+          ],
+          "blend": "replace"
+        }
+      ],
+      "script": {
+        "file": "script.lua"
+      }
+    },
+    "wisp": {
+      "id": "wisp",
+      "name": "End wisp",
+      "nodes": [
+        {
+          "name": "root",
+          "parentIndex": -1,
+          "transform": {
+            "scale": [0.3, 0.3, 0.3]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:sea_lantern"
+          }
+        }
+      ],
+      "animations": [],
+      "spawning": {
+        "worlds": ["world_the_end"],
+        "biomes": ["#minecraft:is_end"],
+        "light": {
+          "max": 7
+        },
+        "blocks": ["minecraft:end_stone"],
+        "height": {
+          "min": 40
+        },
+        "weight": 4,
+        "group": {
+          "min": 1,
+          "max": 3
+        },
+        "cap": 6,
+        "despawnDistance": 80,
+        "time": "night",
+        "when": "wisp_season"
+      }
+    }
+  },
+  "resourcePacks": {
+    "library:gems": {
+      "namespace": "library",
+      "id": "gems",
+      "name": "Library gems",
+      "skins": {},
+      "glyphs": {},
+      "items": {
+        "gem": {
+          "texture": "item/gem.png"
+        }
+      },
+      "tooltips": {},
+      "equipment": {},
+      "blocks": {},
+      "sounds": {},
+      "key": "library:gems",
+      "models": {},
+      "spriteReplacements": {},
+      "textureReplacements": {},
+      "soundReplacements": {},
+      "modelReplacements": {},
+      "onDemand": false
+    },
+    "ui": {
+      "namespace": "showcase",
+      "id": "ui",
+      "name": "Showcase UI",
+      "description": "Every look and sound the showcase has: items, blocks, menus, glyphs, tooltips, armour and the HUD",
+      "skins": {
+        "altar": {
+          "key": "altar",
+          "def": {
+            "texture": "gui/altar.png",
+            "height": 168,
+            "ascent": 13,
+            "type": "chest",
+            "rows": 3
+          },
+          "char": "",
+          "cells": ""
+        },
+        "shop": {
+          "key": "shop",
+          "def": {
+            "texture": "gui/shop.png",
+            "height": 168,
+            "ascent": 13,
+            "type": "chest",
+            "rows": 3
+          },
+          "char": "",
+          "cells": ""
+        }
+      },
+      "glyphs": {
+        "coin": {
+          "key": "coin",
+          "def": {
+            "texture": "glyph/coin.png"
+          },
+          "char": "",
+          "cells": ""
+        },
+        "spark": {
+          "key": "spark",
+          "def": {
+            "texture": "glyph/spark.png"
+          },
+          "char": "",
+          "cells": ""
+        },
+        "wisp": {
+          "key": "wisp",
+          "def": {
+            "texture": "glyph/wisp.png"
+          },
+          "char": "",
+          "cells": ""
+        }
+      },
+      "items": {
+        "candy": {
+          "texture": "item/candy.png"
+        },
+        "circlet": {
+          "texture": "item/circlet.png"
+        },
+        "crown": {
+          "texture": "item/crown.png"
+        },
+        "crystal": {
+          "model": "crystal.json"
+        },
+        "crystal_glass": {
+          "block": "ui/crystal_glass"
+        },
+        "crystal_lit": {
+          "model": "crystal_lit.json"
+        },
+        "dart": {
+          "model": "dart.json"
+        },
+        "glow_lamp": {
+          "block": "ui/glow_lamp"
+        },
+        "glow_pickaxe": {
+          "texture": "item/glow_pickaxe.png",
+          "parent": "minecraft:item/handheld"
+        },
+        "lantern": {
+          "texture": "item/lantern.png"
+        },
+        "owl_body": {
+          "model": "owl_body.json"
+        },
+        "owl_head": {
+          "model": "owl_head.json"
+        },
+        "owl_head_blink": {
+          "model": "owl_head_blink.json"
+        },
+        "owl_wing": {
+          "model": "owl_wing.json"
+        },
+        "ruby": {
+          "texture": "item/ruby.png"
+        },
+        "ruby_ore": {
+          "block": "ui/ruby_ore"
+        },
+        "shard": {
+          "texture": "item/shard.png"
+        }
+      },
+      "tooltips": {
+        "fancy": {
+          "background": "tooltip/background.png",
+          "frame": "tooltip/frame.png"
+        },
+        "glow": {
+          "background": "tooltip/glow_background.png",
+          "frame": "tooltip/glow_frame.png"
+        }
+      },
+      "equipment": {
+        "circlet": {
+          "humanoid": "equipment/circlet.png"
+        },
+        "ruby": {
+          "humanoid": "armor/ruby.png",
+          "humanoidLeggings": "armor/ruby_leggings.png"
+        }
+      },
+      "blocks": {
+        "crystal_glass": {
+          "texture": "block/crystal_glass.png"
+        },
+        "glow_lamp": {
+          "top": "block/glow_lamp_top.png",
+          "bottom": "block/glow_lamp_top.png",
+          "side": "block/glow_lamp_side.png"
+        },
+        "ruby_crystal": {
+          "model": "crystal.json"
+        },
+        "ruby_ore": {
+          "texture": "block/ruby_ore.png"
+        }
+      },
+      "sounds": {
+        "chime": {
+          "key": "chime",
+          "files": ["chime.ogg"],
+          "volume": 0.8,
+          "pitch": 1.1,
+          "subtitle": "Chime rings",
+          "stream": false
+        },
+        "crystal_break": {
+          "key": "crystal_break",
+          "files": ["crystal_break.ogg"],
+          "subtitle": "Crystal shatters",
+          "stream": false
+        },
+        "crystal_place": {
+          "key": "crystal_place",
+          "files": ["crystal_place.ogg"],
+          "subtitle": "Crystal settles",
+          "stream": false
+        },
+        "hum": {
+          "key": "hum",
+          "files": ["hum.ogg"],
+          "volume": 0.7,
+          "subtitle": "Altar hums",
+          "stream": false
+        },
+        "infuse": {
+          "key": "infuse",
+          "files": ["infuse.ogg"],
+          "subtitle": "Glow infuses",
+          "stream": false
+        }
+      },
+      "key": "ui",
+      "models": {
+        "crystal.json": {
+          "json": {
+            "credit": "A ruby crystal: a tall shard with two leaning beside it",
+            "textures": {
+              "0": "block/ruby_ore",
+              "particle": "block/ruby_ore"
+            },
+            "elements": [
+              {
+                "from": [6, 0, 6],
+                "to": [10, 14, 10],
+                "rotation": {
+                  "angle": 0,
+                  "axis": "y",
+                  "origin": [8, 0, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 4, 14],
+                    "texture": "#0"
+                  },
+                  "east": {
+                    "uv": [4, 0, 8, 14],
+                    "texture": "#0"
+                  },
+                  "south": {
+                    "uv": [8, 0, 12, 14],
+                    "texture": "#0"
+                  },
+                  "west": {
+                    "uv": [12, 0, 16, 14],
+                    "texture": "#0"
+                  },
+                  "up": {
+                    "uv": [0, 12, 4, 16],
+                    "texture": "#0"
+                  },
+                  "down": {
+                    "uv": [4, 12, 8, 16],
+                    "texture": "#0"
+                  }
+                }
+              },
+              {
+                "from": [2, 0, 7],
+                "to": [5, 8, 10],
+                "rotation": {
+                  "x": 0,
+                  "y": 30,
+                  "z": 25,
+                  "origin": [4, 0, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 3, 8],
+                    "texture": "#0"
+                  },
+                  "east": {
+                    "uv": [3, 0, 6, 8],
+                    "texture": "#0"
+                  },
+                  "south": {
+                    "uv": [6, 0, 9, 8],
+                    "texture": "#0"
+                  },
+                  "west": {
+                    "uv": [9, 0, 12, 8],
+                    "texture": "#0"
+                  },
+                  "up": {
+                    "uv": [12, 0, 15, 3],
+                    "texture": "#0"
+                  }
+                }
+              },
+              {
+                "from": [11, 0, 6],
+                "to": [14, 10, 9],
+                "rotation": {
+                  "angle": -22.5,
+                  "axis": "z",
+                  "origin": [12, 0, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 3, 10],
+                    "texture": "#0"
+                  },
+                  "east": {
+                    "uv": [3, 0, 6, 10],
+                    "texture": "#0"
+                  },
+                  "south": {
+                    "uv": [6, 0, 9, 10],
+                    "texture": "#0"
+                  },
+                  "west": {
+                    "uv": [9, 0, 12, 10],
+                    "texture": "#0"
+                  },
+                  "up": {
+                    "uv": [12, 0, 15, 3],
+                    "texture": "#0"
+                  }
+                }
+              }
+            ],
+            "display": {
+              "thirdperson_righthand": {
+                "rotation": [0, 45, 0],
+                "translation": [0, 2, 0],
+                "scale": [0.5, 0.5, 0.5]
+              },
+              "firstperson_righthand": {
+                "rotation": [0, 45, 0],
+                "scale": [0.5, 0.5, 0.5]
+              },
+              "gui": {
+                "rotation": [30, 225, 0],
+                "translation": [0, -1, 0],
+                "scale": [0.8, 0.8, 0.8]
+              },
+              "fixed": {
+                "scale": [0.6, 0.6, 0.6]
+              }
+            }
+          },
+          "textures": {
+            "0": "block/ruby_ore.png",
+            "particle": "block/ruby_ore.png"
+          }
+        },
+        "crystal_lit.json": {
+          "json": {
+            "credit": "The ruby crystal, glowing: its shards a little taller, drawn at full light",
+            "textures": {
+              "0": "block/ruby_ore",
+              "particle": "block/ruby_ore"
+            },
+            "elements": [
+              {
+                "from": [6, 0, 6],
+                "to": [10, 16, 10],
+                "rotation": {
+                  "angle": 0,
+                  "axis": "y",
+                  "origin": [8, 0, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 4, 14],
+                    "texture": "#0"
+                  },
+                  "east": {
+                    "uv": [4, 0, 8, 14],
+                    "texture": "#0"
+                  },
+                  "south": {
+                    "uv": [8, 0, 12, 14],
+                    "texture": "#0"
+                  },
+                  "west": {
+                    "uv": [12, 0, 16, 14],
+                    "texture": "#0"
+                  },
+                  "up": {
+                    "uv": [0, 12, 4, 16],
+                    "texture": "#0"
+                  },
+                  "down": {
+                    "uv": [4, 12, 8, 16],
+                    "texture": "#0"
+                  }
+                },
+                "light_emission": 15
+              },
+              {
+                "from": [2, 0, 7],
+                "to": [5, 10, 10],
+                "rotation": {
+                  "x": 0,
+                  "y": 30,
+                  "z": 25,
+                  "origin": [4, 0, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 3, 8],
+                    "texture": "#0"
+                  },
+                  "east": {
+                    "uv": [3, 0, 6, 8],
+                    "texture": "#0"
+                  },
+                  "south": {
+                    "uv": [6, 0, 9, 8],
+                    "texture": "#0"
+                  },
+                  "west": {
+                    "uv": [9, 0, 12, 8],
+                    "texture": "#0"
+                  },
+                  "up": {
+                    "uv": [12, 0, 15, 3],
+                    "texture": "#0"
+                  }
+                },
+                "light_emission": 15
+              },
+              {
+                "from": [11, 0, 6],
+                "to": [14, 12, 9],
+                "rotation": {
+                  "angle": -22.5,
+                  "axis": "z",
+                  "origin": [12, 0, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 3, 10],
+                    "texture": "#0"
+                  },
+                  "east": {
+                    "uv": [3, 0, 6, 10],
+                    "texture": "#0"
+                  },
+                  "south": {
+                    "uv": [6, 0, 9, 10],
+                    "texture": "#0"
+                  },
+                  "west": {
+                    "uv": [9, 0, 12, 10],
+                    "texture": "#0"
+                  },
+                  "up": {
+                    "uv": [12, 0, 15, 3],
+                    "texture": "#0"
+                  }
+                },
+                "light_emission": 15
+              }
+            ],
+            "display": {
+              "thirdperson_righthand": {
+                "rotation": [0, 45, 0],
+                "translation": [0, 2, 0],
+                "scale": [0.5, 0.5, 0.5]
+              },
+              "firstperson_righthand": {
+                "rotation": [0, 45, 0],
+                "scale": [0.5, 0.5, 0.5]
+              },
+              "gui": {
+                "rotation": [30, 225, 0],
+                "translation": [0, -1, 0],
+                "scale": [0.8, 0.8, 0.8]
+              },
+              "fixed": {
+                "scale": [0.6, 0.6, 0.6]
+              }
+            }
+          },
+          "textures": {
+            "0": "block/ruby_ore.png",
+            "particle": "block/ruby_ore.png"
+          }
+        },
+        "dart.json": {
+          "json": {
+            "credit": "A throwing dart, pointing along +Z: steel point, birch shaft, gold band, red flights",
+            "textures": {
+              "shaft": "dart/shaft",
+              "steel": "dart/steel",
+              "flight": "dart/flight",
+              "band": "dart/band",
+              "particle": "dart/steel"
+            },
+            "elements": [
+              {
+                "from": [7.5, 7.5, 1],
+                "to": [8.5, 8.5, 11],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 1, 1],
+                    "texture": "#shaft"
+                  },
+                  "south": {
+                    "uv": [0, 0, 1, 1],
+                    "texture": "#shaft"
+                  },
+                  "east": {
+                    "uv": [0, 0, 10, 1],
+                    "texture": "#shaft"
+                  },
+                  "west": {
+                    "uv": [0, 0, 10, 1],
+                    "texture": "#shaft"
+                  },
+                  "up": {
+                    "uv": [0, 0, 1, 10],
+                    "texture": "#shaft"
+                  },
+                  "down": {
+                    "uv": [0, 0, 1, 10],
+                    "texture": "#shaft"
+                  }
+                }
+              },
+              {
+                "from": [7.2, 7.2, 4],
+                "to": [8.8, 8.8, 5],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 2, 2],
+                    "texture": "#band"
+                  },
+                  "south": {
+                    "uv": [0, 0, 2, 2],
+                    "texture": "#band"
+                  },
+                  "east": {
+                    "uv": [0, 0, 1, 2],
+                    "texture": "#band"
+                  },
+                  "west": {
+                    "uv": [0, 0, 1, 2],
+                    "texture": "#band"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#band"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#band"
+                  }
+                }
+              },
+              {
+                "from": [7.1, 7.1, 11],
+                "to": [8.9, 8.9, 13],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 2, 2],
+                    "texture": "#steel"
+                  },
+                  "south": {
+                    "uv": [0, 0, 2, 2],
+                    "texture": "#steel"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2, 2],
+                    "texture": "#steel"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2, 2],
+                    "texture": "#steel"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2, 2],
+                    "texture": "#steel"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2, 2],
+                    "texture": "#steel"
+                  }
+                }
+              },
+              {
+                "from": [7.4, 7.4, 13],
+                "to": [8.6, 8.6, 14.5],
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 1, 1],
+                    "texture": "#steel"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#steel"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#steel"
+                  },
+                  "up": {
+                    "uv": [0, 0, 1, 2],
+                    "texture": "#steel"
+                  },
+                  "down": {
+                    "uv": [0, 0, 1, 2],
+                    "texture": "#steel"
+                  }
+                }
+              },
+              {
+                "from": [7.75, 7.75, 14.5],
+                "to": [8.25, 8.25, 16],
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 1, 1],
+                    "texture": "#steel"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#steel"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#steel"
+                  },
+                  "up": {
+                    "uv": [0, 0, 1, 2],
+                    "texture": "#steel"
+                  },
+                  "down": {
+                    "uv": [0, 0, 1, 2],
+                    "texture": "#steel"
+                  }
+                }
+              },
+              {
+                "from": [7.9, 5, 0],
+                "to": [8.1, 11, 4],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 1, 6],
+                    "texture": "#flight"
+                  },
+                  "south": {
+                    "uv": [0, 0, 1, 6],
+                    "texture": "#flight"
+                  },
+                  "east": {
+                    "uv": [0, 0, 4, 6],
+                    "texture": "#flight"
+                  },
+                  "west": {
+                    "uv": [0, 0, 4, 6],
+                    "texture": "#flight"
+                  },
+                  "up": {
+                    "uv": [0, 0, 1, 4],
+                    "texture": "#flight"
+                  },
+                  "down": {
+                    "uv": [0, 0, 1, 4],
+                    "texture": "#flight"
+                  }
+                }
+              },
+              {
+                "from": [5, 7.9, 0],
+                "to": [11, 8.1, 4],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 6, 1],
+                    "texture": "#flight"
+                  },
+                  "south": {
+                    "uv": [0, 0, 6, 1],
+                    "texture": "#flight"
+                  },
+                  "east": {
+                    "uv": [0, 0, 4, 1],
+                    "texture": "#flight"
+                  },
+                  "west": {
+                    "uv": [0, 0, 4, 1],
+                    "texture": "#flight"
+                  },
+                  "up": {
+                    "uv": [0, 0, 6, 4],
+                    "texture": "#flight"
+                  },
+                  "down": {
+                    "uv": [0, 0, 6, 4],
+                    "texture": "#flight"
+                  }
+                }
+              }
+            ],
+            "display": {
+              "gui": {
+                "rotation": [0, 90, -45],
+                "scale": [1.2, 1.2, 1.2]
+              },
+              "ground": {
+                "scale": [0.5, 0.5, 0.5]
+              },
+              "fixed": {
+                "rotation": [0, 90, -45]
+              }
+            }
+          },
+          "textures": {
+            "band": "dart/band.png",
+            "flight": "dart/flight.png",
+            "particle": "dart/steel.png",
+            "shaft": "dart/shaft.png",
+            "steel": "dart/steel.png"
+          }
+        },
+        "owl_body.json": {
+          "json": {
+            "credit": "The owl's body: a feathered barrel with a cream front, a tail and two feet",
+            "textures": {
+              "feathers": "owl/feathers",
+              "belly": "owl/belly",
+              "wing": "owl/wing",
+              "beak": "owl/beak",
+              "particle": "owl/feathers"
+            },
+            "elements": [
+              {
+                "from": [3, 0, 4],
+                "to": [13, 13, 12],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 10, 13],
+                    "texture": "#feathers"
+                  },
+                  "south": {
+                    "uv": [0, 0, 10, 13],
+                    "texture": "#belly"
+                  },
+                  "east": {
+                    "uv": [0, 0, 8, 13],
+                    "texture": "#feathers"
+                  },
+                  "west": {
+                    "uv": [0, 0, 8, 13],
+                    "texture": "#feathers"
+                  },
+                  "up": {
+                    "uv": [0, 0, 10, 8],
+                    "texture": "#feathers"
+                  },
+                  "down": {
+                    "uv": [0, 0, 10, 8],
+                    "texture": "#feathers"
+                  }
+                }
+              },
+              {
+                "from": [5, 0.5, 1.5],
+                "to": [11, 2, 4],
+                "rotation": {
+                  "angle": 22.5,
+                  "axis": "x",
+                  "origin": [8, 1, 4]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 6, 1.5],
+                    "texture": "#wing"
+                  },
+                  "south": {
+                    "uv": [0, 0, 6, 1.5],
+                    "texture": "#wing"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2.5, 1.5],
+                    "texture": "#wing"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2.5, 1.5],
+                    "texture": "#wing"
+                  },
+                  "up": {
+                    "uv": [0, 0, 6, 2.5],
+                    "texture": "#wing"
+                  },
+                  "down": {
+                    "uv": [0, 0, 6, 2.5],
+                    "texture": "#wing"
+                  }
+                }
+              },
+              {
+                "from": [4.5, 0, 12],
+                "to": [7, 1, 14],
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 2.5, 1],
+                    "texture": "#beak"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#beak"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#beak"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2.5, 2],
+                    "texture": "#beak"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2.5, 2],
+                    "texture": "#beak"
+                  }
+                }
+              },
+              {
+                "from": [9, 0, 12],
+                "to": [11.5, 1, 14],
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 2.5, 1],
+                    "texture": "#beak"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#beak"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2, 1],
+                    "texture": "#beak"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2.5, 2],
+                    "texture": "#beak"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2.5, 2],
+                    "texture": "#beak"
+                  }
+                }
+              }
+            ]
+          },
+          "textures": {
+            "beak": "owl/beak.png",
+            "belly": "owl/belly.png",
+            "feathers": "owl/feathers.png",
+            "particle": "owl/feathers.png",
+            "wing": "owl/wing.png"
+          }
+        },
+        "owl_head.json": {
+          "json": {
+            "credit": "The owl's head, eyes open (they glow): it turns about the neck at the model's middle",
+            "textures": {
+              "feathers": "owl/feathers",
+              "face": "owl/face",
+              "eye": "owl/eye",
+              "beak": "owl/beak",
+              "particle": "owl/feathers"
+            },
+            "elements": [
+              {
+                "from": [2.5, 8, 3],
+                "to": [13.5, 17.5, 13],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 11, 9.5],
+                    "texture": "#feathers"
+                  },
+                  "south": {
+                    "uv": [0, 0, 11, 9.5],
+                    "texture": "#face"
+                  },
+                  "east": {
+                    "uv": [0, 0, 10, 9.5],
+                    "texture": "#feathers"
+                  },
+                  "west": {
+                    "uv": [0, 0, 10, 9.5],
+                    "texture": "#feathers"
+                  },
+                  "up": {
+                    "uv": [0, 0, 11, 10],
+                    "texture": "#feathers"
+                  },
+                  "down": {
+                    "uv": [0, 0, 11, 10],
+                    "texture": "#feathers"
+                  }
+                }
+              },
+              {
+                "from": [3, 17.5, 7],
+                "to": [5.5, 20.5, 9.5],
+                "rotation": {
+                  "angle": 22.5,
+                  "axis": "z",
+                  "origin": [4, 17.5, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "south": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2.5, 2.5],
+                    "texture": "#feathers"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2.5, 2.5],
+                    "texture": "#feathers"
+                  }
+                }
+              },
+              {
+                "from": [10.5, 17.5, 7],
+                "to": [13, 20.5, 9.5],
+                "rotation": {
+                  "angle": -22.5,
+                  "axis": "z",
+                  "origin": [12, 17.5, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "south": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2.5, 2.5],
+                    "texture": "#feathers"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2.5, 2.5],
+                    "texture": "#feathers"
+                  }
+                }
+              },
+              {
+                "from": [3.5, 11.5, 13],
+                "to": [7, 15, 13.5],
+                "light_emission": 15,
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 3.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "east": {
+                    "uv": [0, 0, 0.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "west": {
+                    "uv": [0, 0, 0.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "up": {
+                    "uv": [0, 0, 3.5, 0.5],
+                    "texture": "#eye"
+                  },
+                  "down": {
+                    "uv": [0, 0, 3.5, 0.5],
+                    "texture": "#eye"
+                  }
+                }
+              },
+              {
+                "from": [9, 11.5, 13],
+                "to": [12.5, 15, 13.5],
+                "light_emission": 15,
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 3.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "east": {
+                    "uv": [0, 0, 0.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "west": {
+                    "uv": [0, 0, 0.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "up": {
+                    "uv": [0, 0, 3.5, 0.5],
+                    "texture": "#eye"
+                  },
+                  "down": {
+                    "uv": [0, 0, 3.5, 0.5],
+                    "texture": "#eye"
+                  }
+                }
+              },
+              {
+                "from": [7, 9.5, 13],
+                "to": [9, 12.5, 14.5],
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 2, 3],
+                    "texture": "#beak"
+                  },
+                  "east": {
+                    "uv": [0, 0, 1.5, 3],
+                    "texture": "#beak"
+                  },
+                  "west": {
+                    "uv": [0, 0, 1.5, 3],
+                    "texture": "#beak"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2, 1.5],
+                    "texture": "#beak"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2, 1.5],
+                    "texture": "#beak"
+                  }
+                }
+              }
+            ]
+          },
+          "textures": {
+            "beak": "owl/beak.png",
+            "eye": "owl/eye.png",
+            "face": "owl/face.png",
+            "feathers": "owl/feathers.png",
+            "particle": "owl/feathers.png"
+          }
+        },
+        "owl_head_blink.json": {
+          "json": {
+            "credit": "The owl's head with its eyes shut, for blinking",
+            "textures": {
+              "feathers": "owl/feathers",
+              "face": "owl/face",
+              "eye": "owl/lid",
+              "beak": "owl/beak",
+              "particle": "owl/feathers"
+            },
+            "elements": [
+              {
+                "from": [2.5, 8, 3],
+                "to": [13.5, 17.5, 13],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 11, 9.5],
+                    "texture": "#feathers"
+                  },
+                  "south": {
+                    "uv": [0, 0, 11, 9.5],
+                    "texture": "#face"
+                  },
+                  "east": {
+                    "uv": [0, 0, 10, 9.5],
+                    "texture": "#feathers"
+                  },
+                  "west": {
+                    "uv": [0, 0, 10, 9.5],
+                    "texture": "#feathers"
+                  },
+                  "up": {
+                    "uv": [0, 0, 11, 10],
+                    "texture": "#feathers"
+                  },
+                  "down": {
+                    "uv": [0, 0, 11, 10],
+                    "texture": "#feathers"
+                  }
+                }
+              },
+              {
+                "from": [3, 17.5, 7],
+                "to": [5.5, 20.5, 9.5],
+                "rotation": {
+                  "angle": 22.5,
+                  "axis": "z",
+                  "origin": [4, 17.5, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "south": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2.5, 2.5],
+                    "texture": "#feathers"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2.5, 2.5],
+                    "texture": "#feathers"
+                  }
+                }
+              },
+              {
+                "from": [10.5, 17.5, 7],
+                "to": [13, 20.5, 9.5],
+                "rotation": {
+                  "angle": -22.5,
+                  "axis": "z",
+                  "origin": [12, 17.5, 8]
+                },
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "south": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "east": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "west": {
+                    "uv": [0, 0, 2.5, 3],
+                    "texture": "#feathers"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2.5, 2.5],
+                    "texture": "#feathers"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2.5, 2.5],
+                    "texture": "#feathers"
+                  }
+                }
+              },
+              {
+                "from": [3.5, 11.5, 13],
+                "to": [7, 15, 13.5],
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 3.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "east": {
+                    "uv": [0, 0, 0.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "west": {
+                    "uv": [0, 0, 0.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "up": {
+                    "uv": [0, 0, 3.5, 0.5],
+                    "texture": "#eye"
+                  },
+                  "down": {
+                    "uv": [0, 0, 3.5, 0.5],
+                    "texture": "#eye"
+                  }
+                }
+              },
+              {
+                "from": [9, 11.5, 13],
+                "to": [12.5, 15, 13.5],
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 3.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "east": {
+                    "uv": [0, 0, 0.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "west": {
+                    "uv": [0, 0, 0.5, 3.5],
+                    "texture": "#eye"
+                  },
+                  "up": {
+                    "uv": [0, 0, 3.5, 0.5],
+                    "texture": "#eye"
+                  },
+                  "down": {
+                    "uv": [0, 0, 3.5, 0.5],
+                    "texture": "#eye"
+                  }
+                }
+              },
+              {
+                "from": [7, 9.5, 13],
+                "to": [9, 12.5, 14.5],
+                "faces": {
+                  "south": {
+                    "uv": [0, 0, 2, 3],
+                    "texture": "#beak"
+                  },
+                  "east": {
+                    "uv": [0, 0, 1.5, 3],
+                    "texture": "#beak"
+                  },
+                  "west": {
+                    "uv": [0, 0, 1.5, 3],
+                    "texture": "#beak"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2, 1.5],
+                    "texture": "#beak"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2, 1.5],
+                    "texture": "#beak"
+                  }
+                }
+              }
+            ]
+          },
+          "textures": {
+            "beak": "owl/beak.png",
+            "eye": "owl/lid.png",
+            "face": "owl/face.png",
+            "feathers": "owl/feathers.png",
+            "particle": "owl/feathers.png"
+          }
+        },
+        "owl_wing.json": {
+          "json": {
+            "credit": "One wing, hanging from the shoulder at the model's middle",
+            "textures": {
+              "wing": "owl/wing",
+              "particle": "owl/wing"
+            },
+            "elements": [
+              {
+                "from": [7, -1, 3.5],
+                "to": [9, 8, 12.5],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 2, 9],
+                    "texture": "#wing"
+                  },
+                  "south": {
+                    "uv": [0, 0, 2, 9],
+                    "texture": "#wing"
+                  },
+                  "east": {
+                    "uv": [0, 0, 9, 9],
+                    "texture": "#wing"
+                  },
+                  "west": {
+                    "uv": [0, 0, 9, 9],
+                    "texture": "#wing"
+                  },
+                  "up": {
+                    "uv": [0, 0, 2, 9],
+                    "texture": "#wing"
+                  },
+                  "down": {
+                    "uv": [0, 0, 2, 9],
+                    "texture": "#wing"
+                  }
+                }
+              },
+              {
+                "from": [7.25, -3, 6],
+                "to": [8.75, -1, 12],
+                "faces": {
+                  "north": {
+                    "uv": [0, 0, 1.5, 2],
+                    "texture": "#wing"
+                  },
+                  "south": {
+                    "uv": [0, 0, 1.5, 2],
+                    "texture": "#wing"
+                  },
+                  "east": {
+                    "uv": [0, 0, 6, 2],
+                    "texture": "#wing"
+                  },
+                  "west": {
+                    "uv": [0, 0, 6, 2],
+                    "texture": "#wing"
+                  },
+                  "down": {
+                    "uv": [0, 0, 1.5, 6],
+                    "texture": "#wing"
+                  }
+                }
+              }
+            ]
+          },
+          "textures": {
+            "particle": "owl/wing.png",
+            "wing": "owl/wing.png"
+          }
+        }
+      },
+      "hud": {
+        "font": "showcase:ui/hud",
+        "hide": [],
+        "bars": {
+          "treasure": {
+            "def": {
+              "full": "hud/treasure_full.png",
+              "empty": "hud/treasure_empty.png",
+              "segments": 3,
+              "x": -91,
+              "y": 52,
+              "gap": 1
+            },
+            "full": {
+              "char": "",
+              "texture": "hud/treasure_full.png",
+              "height": 9,
+              "ascent": -4,
+              "cells": ""
+            },
+            "empty": {
+              "char": "",
+              "texture": "hud/treasure_empty.png",
+              "height": 9,
+              "ascent": -4,
+              "cells": ""
+            }
+          }
+        },
+        "icons": {},
+        "texts": {
+          "treasure_label": {
+            "x": -91
+          }
+        }
+      },
+      "spriteReplacements": {},
+      "textureReplacements": {},
+      "soundReplacements": {
+        "minecraft:block.deepslate_bricks.break": {
+          "key": "minecraft:block.deepslate_bricks.break",
+          "files": ["crystal_break.ogg"],
+          "pitch": 0.7,
+          "subtitle": "subtitles.block.generic.break",
+          "stream": false
+        }
+      },
+      "modelReplacements": {},
+      "onDemand": false
+    }
+  }
+}

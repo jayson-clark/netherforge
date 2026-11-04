@@ -22,6 +22,7 @@ pub mod problem;
 pub mod project;
 pub mod read;
 pub mod reference;
+pub mod resolve;
 pub mod rules;
 pub mod schema;
 pub mod script;

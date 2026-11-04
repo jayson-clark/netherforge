@@ -3,8 +3,10 @@
 //! physics, with animations, a body, health and natural spawning. Format's
 //! `CentityFile`, `CentityKind` and `CentityValidator`: its names, numbers and
 //! colours are its fields' rules; its node tree, what a display, hitbox or
-//! animation depends on, and the game's ids are checked here. (Its compiler
-//! comes with the runtime's centities.)
+//! animation depends on, and the game's ids are checked here. What it
+//! compiles to is `compiled`.
+
+pub mod compiled;
 
 use std::collections::HashSet;
 
@@ -426,38 +428,44 @@ pub enum HitboxShape {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PhysicsDef {
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = 32))]
     pub gravity: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(extend("exclusiveMinimum" = 0, "x-problem" = "centity.physics-mass"))]
     pub mass: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 0, max = 1), extend("x-problem" = "centity.physics-range"))]
+    #[schemars(range(min = 0, max = 1), extend("default" = 0, "x-problem" = "centity.physics-range"))]
     pub bounciness: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 0), extend("x-problem" = "centity.physics-range"))]
+    #[schemars(range(min = 0), extend("default" = 0.6, "x-problem" = "centity.physics-range"))]
     pub friction: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 0, max = 1), extend("x-problem" = "centity.physics-range"))]
+    #[schemars(range(min = 0, max = 1), extend("default" = 0.02, "x-problem" = "centity.physics-range"))]
     pub drag: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 0, max = 1), extend("x-problem" = "centity.physics-range"))]
+    #[schemars(range(min = 0, max = 1), extend("default" = 0.05, "x-problem" = "centity.physics-range"))]
     pub angular_drag: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(extend("exclusiveMinimum" = 0, "x-problem" = "centity.physics-stuck"))]
+    #[schemars(extend("default" = 60, "exclusiveMinimum" = 0, "x-problem" = "centity.physics-stuck"))]
     pub max_speed: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0), extend("default" = 3600, "x-problem" = "centity.physics-range"))]
     pub max_spin: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub collider: Option<BoundingBox>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shape: Option<PhysicsShape>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = true))]
     pub rotates: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = true))]
     pub sleeps: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = true))]
     pub blocks: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = true))]
     pub entities: Option<bool>,
 }
 
@@ -473,43 +481,46 @@ pub enum PhysicsShape {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BodyDef {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(max = 16), extend("exclusiveMinimum" = 0, "x-problem" = "centity.body-size"))]
+    #[schemars(range(max = 16), extend("default" = 0.6, "exclusiveMinimum" = 0, "x-problem" = "centity.body-size"))]
     pub width: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(max = 32), extend("exclusiveMinimum" = 0, "x-problem" = "centity.body-size"))]
+    #[schemars(range(max = 32), extend("default" = 1.8, "exclusiveMinimum" = 0, "x-problem" = "centity.body-size"))]
     pub height: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = 32))]
     pub gravity: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 0), extend("x-problem" = "centity.body-range"))]
+    #[schemars(range(min = 0), extend("default" = 78.4, "x-problem" = "centity.body-range"))]
     pub max_fall_speed: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 0, max = 1), extend("x-problem" = "centity.body-range"))]
+    #[schemars(range(min = 0, max = 1), extend("default" = 0.33, "x-problem" = "centity.body-range"))]
     pub drag: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 0, max = 1), extend("x-problem" = "centity.body-range"))]
+    #[schemars(range(min = 0, max = 1), extend("default" = 0.98, "x-problem" = "centity.body-range"))]
     pub liquid_drag: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 0), extend("x-problem" = "centity.body-range"))]
+    #[schemars(range(min = 0), extend("default" = 0.25, "x-problem" = "centity.body-range"))]
     pub liquid_gravity: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 0), extend("x-problem" = "centity.body-range"))]
+    #[schemars(range(min = 0), extend("default" = 20, "x-problem" = "centity.body-range"))]
     pub acceleration: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 0), extend("x-problem" = "centity.body-range"))]
+    #[schemars(range(min = 0), extend("default" = 5, "x-problem" = "centity.body-range"))]
     pub air_acceleration: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 0), extend("x-problem" = "centity.body-range"))]
+    #[schemars(range(min = 0), extend("default" = 24, "x-problem" = "centity.body-range"))]
     pub friction: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 0), extend("x-problem" = "centity.body-range"))]
+    #[schemars(range(min = 0), extend("default" = 0.6, "x-problem" = "centity.body-range"))]
     pub step_height: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 0, max = 1), extend("x-problem" = "centity.body-range"))]
+    #[schemars(range(min = 0, max = 1), extend("default" = 0, "x-problem" = "centity.body-range"))]
     pub bounce: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = false))]
     pub fly: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = true))]
     pub blocks: Option<bool>,
 }
 
@@ -519,6 +530,7 @@ pub struct HealthDef {
     #[schemars(extend("exclusiveMinimum" = 0, "x-problem" = "centity.health"))]
     pub max: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = true))]
     pub remove_on_death: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bar: Option<HealthBarDef>,
@@ -528,21 +540,22 @@ pub struct HealthDef {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct HealthBarDef {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 1, max = 40), extend("x-problem" = "centity.health"))]
+    #[schemars(range(min = 1, max = 40), extend("default" = 10, "x-problem" = "centity.health"))]
     pub segments: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 0), extend("x-problem" = "centity.health"))]
+    #[schemars(range(min = 0), extend("default" = 100, "x-problem" = "centity.health"))]
     pub show_ticks: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = 0.35))]
     pub offset: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(length(min = 1), extend("x-problem" = "centity.health"))]
+    #[schemars(length(min = 1), extend("default" = "▮", "x-problem" = "centity.health"))]
     pub glyph: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(extend("x-minimessage" = true))]
+    #[schemars(extend("default" = "<red>", "x-minimessage" = true))]
     pub filled: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(extend("x-minimessage" = true))]
+    #[schemars(extend("default" = "<dark_gray>", "x-minimessage" = true))]
     pub empty: Option<String>,
 }
 
@@ -1046,6 +1059,10 @@ impl Document for CentityFile {
             }
         }
         out
+    }
+
+    fn compile(&self, id: &str, _cx: &Context) -> Option<Box<dyn crate::document::Compiled>> {
+        crate::document::compiled(compiled::compile(id, self))
     }
 
     fn validate(&self, cx: &Context, sink: &mut ProblemSink) {

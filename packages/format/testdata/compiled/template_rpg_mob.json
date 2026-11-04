@@ -1,0 +1,97 @@
+{
+  "centity": {
+    "goblin": {
+      "id": "goblin",
+      "name": "Goblin",
+      "nodes": [
+        {
+          "name": "root",
+          "parentIndex": -1,
+          "transform": {}
+        },
+        {
+          "name": "body",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.3, 0, -0.3],
+            "scale": [0.6, 0.7, 0.6]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:green_concrete"
+          },
+          "hitbox": {}
+        },
+        {
+          "name": "head",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [-0.25, 0.7, -0.25],
+            "scale": [0.5, 0.5, 0.5]
+          },
+          "display": {
+            "type": "block",
+            "block": "minecraft:lime_concrete"
+          }
+        },
+        {
+          "name": "label",
+          "parentIndex": 0,
+          "transform": {
+            "translation": [0, 1.4, 0]
+          },
+          "display": {
+            "type": "text",
+            "text": "<green>Goblin"
+          }
+        }
+      ],
+      "animations": [
+        {
+          "name": "hurt",
+          "length": 0.3,
+          "loop": "once",
+          "autoplay": false,
+          "tracks": [
+            {
+              "nodeIndex": 2,
+              "channel": "translation",
+              "keys": [
+                {
+                  "time": 0,
+                  "value": [-0.25, 0.7, -0.25]
+                },
+                {
+                  "time": 0.1,
+                  "value": [-0.25, 0.8, -0.25]
+                },
+                {
+                  "time": 0.3,
+                  "value": [-0.25, 0.7, -0.25]
+                }
+              ]
+            }
+          ],
+          "blend": "replace"
+        }
+      ],
+      "script": {
+        "file": "script.lua"
+      },
+      "spawning": {
+        "biomes": ["#minecraft:is_forest", "minecraft:plains"],
+        "height": {
+          "min": 40
+        },
+        "weight": 10,
+        "group": {
+          "min": 1,
+          "max": 2
+        },
+        "cap": 3,
+        "despawnDistance": 64
+      }
+    }
+  },
+  "resourcePacks": {}
+}

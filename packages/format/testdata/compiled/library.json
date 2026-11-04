@@ -1,0 +1,41 @@
+{
+  "resource_pack": {
+    "gems": {
+      "file": {
+        "$schema": "../../.netherforge/schema/resource_pack.schema.json",
+        "name": "Library gems",
+        "items": {
+          "gem": {
+            "texture": "item/gem.png"
+          }
+        }
+      },
+      "models": {}
+    }
+  },
+  "resourcePacks": {
+    "gems": {
+      "namespace": "library",
+      "id": "gems",
+      "name": "Library gems",
+      "skins": {},
+      "glyphs": {},
+      "items": {
+        "gem": {
+          "texture": "item/gem.png"
+        }
+      },
+      "tooltips": {},
+      "equipment": {},
+      "blocks": {},
+      "sounds": {},
+      "key": "gems",
+      "models": {},
+      "spriteReplacements": {},
+      "textureReplacements": {},
+      "soundReplacements": {},
+      "modelReplacements": {},
+      "onDemand": false
+    }
+  }
+}

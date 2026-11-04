@@ -212,6 +212,11 @@ pub trait Model: std::any::Any {
     fn as_any(&self) -> &dyn std::any::Any;
     fn cross_check(&self, cx: &crate::project::Across, sink: &mut crate::ProblemSink);
     fn datapack_entries(&self, id: &str) -> Vec<(&'static str, String)>;
+    fn compile(
+        &self,
+        id: &str,
+        cx: &crate::document::Context,
+    ) -> Option<Box<dyn crate::document::Compiled>>;
 }
 
 impl<T: crate::document::Document> Model for T {
@@ -225,6 +230,14 @@ impl<T: crate::document::Document> Model for T {
 
     fn datapack_entries(&self, id: &str) -> Vec<(&'static str, String)> {
         crate::document::Document::datapack_entries(self, id)
+    }
+
+    fn compile(
+        &self,
+        id: &str,
+        cx: &crate::document::Context,
+    ) -> Option<Box<dyn crate::document::Compiled>> {
+        crate::document::Document::compile(self, id, cx)
     }
 }
 
