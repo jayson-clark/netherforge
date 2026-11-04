@@ -417,5 +417,12 @@ unchanged.
   (`build/generated-contract/constants.ts`) whenever format's build is there, which `pnpm test`
   makes first.
 
-Next in format: the
-registry of kinds and the snapshot, then each kind with its golden tests.
+- **The scan** (`snapshot::scan`): `Projects.load`'s first part, which needs no resource models:
+  every path classified, group folders checked (`project.group`), an id read from its first
+  place in path order (`project.duplicate-id` for the others), and each resource checked for a
+  usable id and its main or companion file (`project.id`, `project.missing-file`,
+  `project.stray-file`). The goldens agree on every one of those codes in every case.
+
+Next in format: reading each resource with its kind's model and checks (kind by kind, each
+with its goldens, until the harness compares whole cases), then the checks across resources
+(references), then the snapshot as the runtime takes it.

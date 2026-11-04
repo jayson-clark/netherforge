@@ -56,6 +56,14 @@ impl ProblemCode {
     }
 }
 
+impl Problem {
+    /// The same problem, about these other places too.
+    pub fn with_related(mut self, related: Vec<Location>) -> Problem {
+        self.related = related;
+        self
+    }
+}
+
 /// One thing wrong with a project. `file` is project-relative with `/`
 /// separators; `path` a JSON path into it (`$.nodes.top.display`) when it's
 /// about a value; `line` and `column` are 1-based and known for a parse error.

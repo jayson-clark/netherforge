@@ -10,5 +10,6 @@ pub mod names;
 pub mod problem;
 pub mod read;
 pub mod settings;
+pub mod snapshot;
 
 pub use problem::{Location, Problem, ProblemCode, ProblemSink, Severity, codes};

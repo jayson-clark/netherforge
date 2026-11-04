@@ -39,6 +39,56 @@ fn manifests_own(code: &str) -> bool {
             ))
 }
 
+/// The codes of a project's layout: what the scan reports, in any file.
+fn layouts(code: &str) -> bool {
+    matches!(
+        code,
+        "project.id"
+            | "project.missing-file"
+            | "project.stray-file"
+            | "project.group"
+            | "project.duplicate-id"
+    )
+}
+
+#[test]
+fn the_layouts_problems_are_formats() {
+    let mut failures = Vec::new();
+    let mut checked = 0;
+    for entry in std::fs::read_dir(invalid()).unwrap() {
+        let dir = entry.unwrap().path();
+        let expected: Vec<Value> =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("expected.json")).unwrap())
+                .unwrap();
+        let expected: Vec<String> = expected
+            .into_iter()
+            .filter(|p| layouts(p["code"].as_str().unwrap_or("")))
+            .map(|p| p.to_string())
+            .collect();
+        let mut files = BTreeSet::new();
+        files_in(&dir, &dir, &mut files);
+        files.remove("expected.json");
+        let mut problems = netherforge_format::snapshot::scan(&files).problems;
+        // The loader's order: by file, then line (none here), keeping the scan's order otherwise.
+        problems.sort_by(|a, b| a.file.cmp(&b.file));
+        let actual: Vec<String> = problems.iter().map(|p| p.to_json().to_string()).collect();
+        checked += expected.len();
+        if actual != expected {
+            failures.push(format!(
+                "{}:\n  actual:   {actual:#?}\n  expected: {expected:#?}",
+                dir.file_name().unwrap().to_string_lossy()
+            ));
+        }
+    }
+    assert!(checked > 5, "{checked} problems");
+    assert!(
+        failures.is_empty(),
+        "{} cases differ:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}
+
 #[test]
 fn the_manifests_problems_are_formats() {
     let mut failures = Vec::new();
