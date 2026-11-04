@@ -67,6 +67,7 @@ class PaperPlatform(private val plugin: JavaPlugin, private val version: PaperVe
     override val sounds = PaperSounds()
 
     override val entities = PaperEntities(plugin)
+    override val clientEntities = PaperClientEntities(plugin, version.clientEntities())
     override val screens = PaperScreens(entities, version)
     override val worldEntities = PaperWorldEntities(plugin, entities)
     override val mannequins = PaperMannequins(worldEntities)
@@ -176,6 +177,7 @@ class PaperPlatform(private val plugin: JavaPlugin, private val version: PaperVe
         PaperItems.namespace = namespace
         plugin.server.pluginManager.registerEvents(recipes, plugin)
         plugin.server.pluginManager.registerEvents(tickEnds, plugin)
+        plugin.server.pluginManager.registerEvents(clientEntities, plugin)
         itemViews.events = events
         plugin.server.pluginManager.registerEvents(itemViews, plugin)
         itemViews.start()
@@ -208,7 +210,7 @@ class PaperPlatform(private val plugin: JavaPlugin, private val version: PaperVe
     }
 
     /** Made by the version: no API makes a player without a client, so they reach into the server itself. */
-    override val bots: BotOps = version.bots(plugin)
+    override val bots: BotOps = version.bots(plugin, clientEntities)
 
     override val resourcePacks = object : ResourcePackOps {
         private val miniMessage = PaperText.mini

@@ -156,3 +156,26 @@ interface EntityOps {
     /** Every loaded [StructureMarker], in the order the server lists its entities: what's still waiting for its centity. */
     fun structureMarkers(): List<StructureMarker>
 }
+
+/**
+ * Entities only some players' clients know of: the server keeps none of them in a world, so it neither ticks nor
+ * tracks them, and one costs nothing but what its viewers are sent. What a private centity is made of (a page of
+ * one player's own, which as real entities hidden from everyone else would cost every other player's tracking:
+ * each tick, every entity is checked against every player near it).
+ *
+ * Everything is [EntityOps]'s, with these differences:
+ *  - a new one is shown to nobody until [setViewers] names who sees it;
+ *  - [setHidden] takes a player off its viewers ([hidden]) or puts them on;
+ *  - it's never saved, so [setPersistent] does nothing, and [loadedTagged] and [structureMarkers] list none;
+ *  - it doesn't unload with its chunk: [isLoaded] is true until it's removed;
+ *  - only another of these can carry it ([mount] onto anything else is false);
+ *  - a click on one of its hitboxes comes as a click on any of ours does, with its id.
+ *
+ * A viewer's client is sent it whenever it should know it, and only then: once the chunk it stands in has been
+ * sent to them (so after joining, coming near, respawning or changing worlds, all of which make the client
+ * forget it), and it's told to forget it when they stop being a viewer or it's removed.
+ */
+interface ClientEntityOps : EntityOps {
+    /** Who sees [id] from now on: their clients are sent it (or told to forget it) as they need. Nothing for one that's gone. */
+    fun setViewers(id: UUID, viewers: Set<UUID>)
+}

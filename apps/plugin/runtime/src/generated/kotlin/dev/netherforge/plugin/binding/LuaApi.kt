@@ -1836,7 +1836,8 @@ interface CentityApi {
     /**
      * Makes a natural or temporary centity a normal one: it is saved from now on (it comes back after a
      * restart), is never removed for being far from players or because a script unloaded or a lifetime ran
-     * out, and no longer counts against a cap. Nothing happens to one that is already normal.
+     * out, and no longer counts against a cap. Nothing happens to one that is already normal, or to a
+     * private one (spawned with `viewers`), which stays temporary.
      */
     fun keep(self: LuaHandle.Centity): Boolean
 
@@ -2268,15 +2269,28 @@ interface CentityApi {
      * Hides the whole centity from one player: they don't see its nodes and can't click its hitboxes.
      * Everyone else still does. It stays hidden from them when they leave and come back, and when its
      * chunk unloads and loads again, until `show_to`, a server restart or the centity's removal. Hiding it
-     * from someone offline counts for when they join.
+     * from someone offline counts for when they join. A private centity (spawned with `viewers`) stops
+     * being shown to them: they're no longer among its viewers.
      */
     fun hideFrom(self: LuaHandle.Centity, player: LuaHandle.Player): Boolean
 
-    /** Shows it to a player it was hidden from. */
+    /**
+     * Shows it to a player it was hidden from. A private centity (spawned with `viewers`) is shown to them
+     * from now on: they become one of its viewers.
+     */
     fun showTo(self: LuaHandle.Centity, player: LuaHandle.Player): Boolean
 
-    /** Whether `hide_from` hid it from a player. */
+    /**
+     * Whether `hide_from` hid it from a player; for a private centity, whether they aren't one of its
+     * viewers.
+     */
     fun isHiddenFrom(self: LuaHandle.Centity, player: LuaHandle.Player): Boolean
+
+    /**
+     * The only players a private centity is shown to (`nf.centities.spawn`'s `viewers`, then `show_to` and
+     * `hide_from`), online or not; `nil` for one everyone can see, and once it's removed.
+     */
+    fun viewers(self: LuaHandle.Centity): List<LuaHandle.Player>?
 
     /**
      * How far away its displays are drawn, in blocks: 64 unless `set_view_range` changed it. `nil` once

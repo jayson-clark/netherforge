@@ -5876,12 +5876,12 @@
         },
         {
           "name": "keep",
-          "doc": "Makes a natural or temporary centity a normal one: it is saved from now on (it comes back after a restart), is never removed for being far from players or because a script unloaded or a lifetime ran out, and no longer counts against a cap. Nothing happens to one that is already normal.",
+          "doc": "Makes a natural or temporary centity a normal one: it is saved from now on (it comes back after a restart), is never removed for being far from players or because a script unloaded or a lifetime ran out, and no longer counts against a cap. Nothing happens to one that is already normal, or to a private one (spawned with `viewers`), which stays temporary.",
           "params": [],
           "returns": [
             {
               "type": "boolean",
-              "doc": "Whether it was natural or temporary: `false` for one that was already normal, and once it is removed."
+              "doc": "Whether it was natural or temporary: `false` for one that was already normal, for a private one, and once it is removed."
             }
           ],
           "example": "this:on(\"click\", function(event)\n  if this:keep() then\n    event.player:send_message(\"<green>It follows you now\")\n  end\nend)"
@@ -6898,7 +6898,7 @@
         },
         {
           "name": "hide_from",
-          "doc": "Hides the whole centity from one player: they don't see its nodes and can't click its hitboxes. Everyone else still does. It stays hidden from them when they leave and come back, and when its chunk unloads and loads again, until `show_to`, a server restart or the centity's removal. Hiding it from someone offline counts for when they join.",
+          "doc": "Hides the whole centity from one player: they don't see its nodes and can't click its hitboxes. Everyone else still does. It stays hidden from them when they leave and come back, and when its chunk unloads and loads again, until `show_to`, a server restart or the centity's removal. Hiding it from someone offline counts for when they join. A private centity (spawned with `viewers`) stops being shown to them: they're no longer among its viewers.",
           "params": [
             {
               "name": "player",
@@ -6916,7 +6916,7 @@
         },
         {
           "name": "show_to",
-          "doc": "Shows it to a player it was hidden from.",
+          "doc": "Shows it to a player it was hidden from. A private centity (spawned with `viewers`) is shown to them from now on: they become one of its viewers.",
           "params": [
             {
               "name": "player",
@@ -6933,7 +6933,7 @@
         },
         {
           "name": "is_hidden_from",
-          "doc": "Whether `hide_from` hid it from a player.",
+          "doc": "Whether `hide_from` hid it from a player; for a private centity, whether they aren't one of its viewers.",
           "params": [
             {
               "name": "player",
@@ -6944,6 +6944,16 @@
           "returns": [
             {
               "type": "boolean"
+            }
+          ]
+        },
+        {
+          "name": "viewers",
+          "doc": "The only players a private centity is shown to (`nf.centities.spawn`'s `viewers`, then `show_to` and `hide_from`), online or not; `nil` for one everyone can see, and once it's removed.",
+          "params": [],
+          "returns": [
+            {
+              "type": "Player[]?"
             }
           ]
         },
@@ -23596,6 +23606,11 @@
           "name": "lifetime",
           "type": "integer?",
           "doc": "Removed this many ticks after it's spawned (its `remove` handlers hear it), loaded or not: at least 1. A centity with a lifetime is temporary too. Default: none."
+        },
+        {
+          "name": "viewers",
+          "type": "Player[]?",
+          "doc": "Only these players ever see it: it's **private**. Its nodes are sent to their clients alone and the server keeps no entities for it, so a private centity costs nothing for anyone else, however many there are: a page, a menu or a marker of one player's own. Everything else works as for any centity (its script, clicks on its hitboxes, `world:raycast`). `show_to` and `hide_from` add and take away viewers. Only a temporary centity can be private (`temporary` or a `lifetime`), and `keep` leaves it temporary. Default: everyone sees it."
         }
       ]
     },

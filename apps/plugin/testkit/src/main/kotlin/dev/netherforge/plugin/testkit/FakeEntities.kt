@@ -5,6 +5,7 @@ import dev.netherforge.format.centity.DisplayDef
 import dev.netherforge.format.centity.ItemDisplay
 import dev.netherforge.format.game.RegistryKey
 import dev.netherforge.format.game.has
+import dev.netherforge.plugin.platform.ClientEntityOps
 import dev.netherforge.plugin.platform.DisplayLook
 import dev.netherforge.plugin.platform.DisplayPose
 import dev.netherforge.plugin.platform.EntityOps
@@ -32,9 +33,12 @@ class FakeEntity(val id: UUID, val role: EntityRole, var display: DisplayDef?, v
 
     /** Players it's hidden from right now (the server forgets on quit and unload; see [FakeEntities.forget]). */
     val hiddenFrom = mutableSetOf<UUID>()
+
+    /** A client entity's viewers ([FakeClientEntities]): the only players whose clients have it. */
+    var viewers: Set<UUID> = emptySet()
 }
 
-class FakeEntities(private val platform: FakePlatform) : EntityOps {
+open class FakeEntities(protected val platform: FakePlatform) : EntityOps {
     val all = LinkedHashMap<UUID, FakeEntity>()
     var spawned = 0
 
@@ -98,7 +102,7 @@ class FakeEntities(private val platform: FakePlatform) : EntityOps {
         return true
     }
 
-    private fun locationOf(id: UUID) = all[id]?.location ?: platform.players.byId[id]?.location
+    protected fun locationOf(id: UUID) = all[id]?.location ?: platform.players.byId[id]?.location
 
     override fun dismount(passenger: UUID) {
         all[passenger]?.takeIf { isLoaded(passenger) }?.vehicle = null
@@ -195,5 +199,44 @@ class FakeEntities(private val platform: FakePlatform) : EntityOps {
     /** What the server forgets: who each entity is hidden from, for [player] (leaving) or everyone (an unload). */
     fun forget(player: UUID? = null) {
         for (entity in all.values) if (player == null) entity.hiddenFrom.clear() else entity.hiddenFrom -= player
+    }
+}
+
+/**
+ * [ClientEntityOps] on the fake: entities only their viewers' clients have. The world never lists them, they don't
+ * unload with their chunk, nothing saves them, and only another of them carries one. [seenBy] is what a player's
+ * client has of them: the fake sends nothing, so a viewer in the entity's world has it.
+ */
+class FakeClientEntities(platform: FakePlatform) :
+    FakeEntities(platform),
+    ClientEntityOps {
+    override fun isLoaded(id: UUID) = id in all
+
+    /** Onto another of these only, and never round in a circle (onto something it carries). */
+    override fun mount(vehicle: UUID, passenger: UUID): Boolean {
+        if (vehicle !in all || vehicle == passenger) return false
+        if (generateSequence(all[vehicle]?.vehicle) { all[it]?.vehicle }.any { it == passenger }) return false
+        return super.mount(vehicle, passenger)
+    }
+
+    override fun setPersistent(id: UUID, persistent: Boolean) {}
+
+    override fun structureMarkers() = emptyList<StructureMarker>()
+
+    override fun loadedTagged() = emptyMap<UUID, EntityTag>()
+
+    override fun setHidden(player: UUID, entity: UUID, hidden: Boolean) {
+        val it = all[entity] ?: return
+        it.viewers = if (hidden) it.viewers - player else it.viewers + player
+    }
+
+    override fun setViewers(id: UUID, viewers: Set<UUID>) {
+        all[id]?.viewers = viewers.toSet()
+    }
+
+    /** What [player]'s client has of these: every one they're a viewer of, in the world they're in. */
+    fun seenBy(player: UUID): List<FakeEntity> {
+        val world = platform.players.byId[player]?.location?.world ?: return emptyList()
+        return all.values.filter { player in it.viewers && (location(it.id)?.world ?: it.location.world) == world }
     }
 }

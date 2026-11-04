@@ -2929,28 +2929,32 @@ data class CentityPathEndEvent(val centity: LuaHandle.Centity, val reached: Bool
 }
 
 /** How `nf.centities.spawn` spawns one. A key that isn't one of these is an error. */
-data class CentitySpawnOptions(val temporary: Boolean? = null, val lifetime: Long? = null) : LuaShape {
+data class CentitySpawnOptions(val temporary: Boolean? = null, val lifetime: Long? = null, val viewers: List<LuaHandle.Player>? = null) : LuaShape {
     override fun push(call: LuaCall) = Codec.push(call, this)
 
     object Codec : ShapeCodec<CentitySpawnOptions>("CentitySpawnOptions") {
         val temporaryCodec = LuaOptional(LuaCodecs.BOOLEAN)
         val lifetimeCodec = LuaOptional(LuaCodecs.INTEGER)
+        val viewersCodec = LuaOptional(LuaList(LuaHandle.Player.Codec))
 
         override val pinned = false
 
         override val fields: Map<String, LuaCodec<*>> = mapOf(
             "temporary" to temporaryCodec,
-            "lifetime" to lifetimeCodec
+            "lifetime" to lifetimeCodec,
+            "viewers" to viewersCodec
         )
 
         override fun read(fields: ShapeReader) = CentitySpawnOptions(
             temporary = fields.field("temporary", temporaryCodec),
-            lifetime = fields.field("lifetime", lifetimeCodec)
+            lifetime = fields.field("lifetime", lifetimeCodec),
+            viewers = fields.field("viewers", viewersCodec)
         )
 
         override fun write(fields: ShapeWriter, value: CentitySpawnOptions) {
             fields.field("temporary", value.temporary, temporaryCodec)
             fields.field("lifetime", value.lifetime, lifetimeCodec)
+            fields.field("viewers", value.viewers, viewersCodec)
         }
     }
 }

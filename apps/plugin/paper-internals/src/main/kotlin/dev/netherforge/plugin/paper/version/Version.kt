@@ -1,6 +1,8 @@
 package dev.netherforge.plugin.paper.version
 
 import com.destroystokyo.paper.entity.ai.Goal
+import dev.netherforge.plugin.paper.ClientEntityLookup
+import dev.netherforge.plugin.paper.ClientEntityPackets
 import dev.netherforge.plugin.paper.ItemViewHooks
 import dev.netherforge.plugin.paper.PaperVersion
 import dev.netherforge.plugin.paper.ServerRegistries
@@ -107,7 +109,9 @@ class Version : PaperVersion {
         (player as CraftPlayer).handle.connection.send(packet)
     }
 
-    override fun bots(plugin: JavaPlugin): BotOps = PaperBots(plugin)
+    override fun bots(plugin: JavaPlugin, clientEntities: ClientEntityLookup): BotOps = PaperBots(plugin, clientEntities)
+
+    override fun clientEntities(): ClientEntityPackets = ClientEntityWire
 
     override fun itemViews(viewer: StackViewer): ItemViewHooks = ItemViews(viewer)
 

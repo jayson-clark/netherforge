@@ -11,6 +11,14 @@ release is cut.
 
 ### Added
 
+- **Private centities.** `nf.centities.spawn(kind, place, { temporary = true,
+viewers = { player } })` spawns one only those players see, and
+  `centity:viewers()` says who they are; `show_to` and `hide_from` add and take
+  away viewers. Its nodes are sent to its viewers' clients alone and the server
+  keeps no entities for it, so it costs nothing for anyone else. A page each
+  for many players standing together, hidden from each other with `hide_from`,
+  cost the server every page's entities checked against every player each
+  tick: on a hub with 100 players, ticks of over half a second.
 - **Resource packs scripts write.** `packs/<name>/` in a package's own
   `nf.files` folder, with a `pack.json` and its pictures and sounds, is that
   package's resource pack `<name>`: built with the rest as the server starts and

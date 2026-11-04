@@ -102,6 +102,10 @@ class FakeEntityOpsTest : EntityOpsContract() {
     override fun connect() = FakeContractServer()
 }
 
+class FakeClientEntityOpsTest : ClientEntityOpsContract() {
+    override fun connect() = FakeContractServer()
+}
+
 class FakePlayerOpsTest : PlayerOpsContract() {
     override fun connect() = FakeContractServer()
 }

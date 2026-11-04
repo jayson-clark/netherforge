@@ -787,6 +787,14 @@ do
     return prim["Centity.is_hidden_from"](self_key, player)
   end
 
+  function Centity.viewers(self)
+    local self_key = ids[self]
+    if self_key == nil or not Centity_is[class_of(self)] then
+      self_key = self_of(self, "Centity")
+    end
+    return prim["Centity.viewers"](self_key)
+  end
+
   function Centity.view_range(self)
     local self_key = ids[self]
     if self_key == nil or not Centity_is[class_of(self)] then

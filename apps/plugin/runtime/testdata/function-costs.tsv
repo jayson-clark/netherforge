@@ -143,6 +143,7 @@ Centity:to_local	57
 Centity:to_world	57
 Centity:velocity	18
 Centity:view_range	15
+Centity:viewers	15
 Centity:walk_velocity	18
 Centity:wall	18
 Centity:world	15
@@ -832,7 +833,7 @@ nf.bots.join	63
 nf.centities.all	38
 nf.centities.get	8
 nf.centities.properties	8
-nf.centities.spawn	263
+nf.centities.spawn	267
 nf.commands.register	12
 nf.config	7
 nf.crypto.hash	12

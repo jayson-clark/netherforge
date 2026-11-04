@@ -7,6 +7,7 @@ import dev.netherforge.plugin.contract.BorderOpsContract
 import dev.netherforge.plugin.contract.BossBarOpsContract
 import dev.netherforge.plugin.contract.BotActionsContract
 import dev.netherforge.plugin.contract.BotOpsContract
+import dev.netherforge.plugin.contract.ClientEntityOpsContract
 import dev.netherforge.plugin.contract.CommandOpsContract
 import dev.netherforge.plugin.contract.DatapackOpsContract
 import dev.netherforge.plugin.contract.DialogOpsContract
@@ -79,6 +80,10 @@ class PaperSoundOpsTest : SoundOpsContract() {
 }
 
 class PaperEntityOpsTest : EntityOpsContract() {
+    override fun connect() = PaperContractServer.current
+}
+
+class PaperClientEntityOpsTest : ClientEntityOpsContract() {
     override fun connect() = PaperContractServer.current
 }
 
@@ -214,6 +219,7 @@ object PaperContracts {
         PaperParticleOpsTest::class.java,
         PaperSoundOpsTest::class.java,
         PaperEntityOpsTest::class.java,
+        PaperClientEntityOpsTest::class.java,
         PaperPlayerOpsTest::class.java,
         PaperWorldEntityOpsTest::class.java,
         PaperMannequinOpsTest::class.java,

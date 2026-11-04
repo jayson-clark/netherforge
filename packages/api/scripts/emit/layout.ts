@@ -254,7 +254,7 @@ export const FUNCTION_GROUPS: Record<string, Group[]> = {
     ),
     group(
       'Glow and visibility',
-      'is_glowing set_glowing glow_color set_glow_color hide_from show_to is_hidden_from view_range set_view_range',
+      'is_glowing set_glowing glow_color set_glow_color hide_from show_to is_hidden_from viewers view_range set_view_range',
     ),
   ],
   Node: [

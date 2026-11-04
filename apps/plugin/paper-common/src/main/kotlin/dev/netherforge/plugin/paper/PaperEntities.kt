@@ -48,8 +48,12 @@ import org.bukkit.entity.TextDisplay as BukkitTextDisplay
  * Every entity is stamped with its [EntityTag] in persistent data, which
  * survives restarts and is how a click or a chunk load finds its way back to
  * the instance and node that own the entity.
+ *
+ * Open for [PaperClientEntities], whose entities are made the same way but
+ * never put in a world: [make] makes one, [entity] finds one, and [changed]
+ * hears that something about one changed.
  */
-class PaperEntities(private val plugin: Plugin) : EntityOps {
+open class PaperEntities(protected val plugin: Plugin) : EntityOps {
     private val instanceKey = NamespacedKey(plugin, "instance")
     private val nodeKey = NamespacedKey(plugin, "node")
     private val roleKey = NamespacedKey(plugin, "role")
@@ -70,25 +74,33 @@ class PaperEntities(private val plugin: Plugin) : EntityOps {
         data.set(roleKey, PersistentDataType.STRING, tag.role.name)
     }
 
-    private fun bukkit(location: Location): BukkitLocation? = Bukkit.getWorld(location.world)?.let {
+    protected fun bukkit(location: Location): BukkitLocation? = Bukkit.getWorld(location.world)?.let {
         BukkitLocation(it, location.x, location.y, location.z, location.yaw.toFloat(), location.pitch.toFloat())
     }
 
+    /** Makes an entity of [type] at [at], set up by [setup] before anything sees it: here, spawned into its world. */
+    protected open fun <T : Entity> make(at: BukkitLocation, type: Class<T>, setup: (T) -> Unit): T = at.world.spawn(at, type) { setup(it) }
+
+    /** One of ours by id, or null when it can't be reached. */
+    protected open fun entity(id: UUID): Entity? = Bukkit.getEntity(id)
+
+    /** Something about [entity] changed (content, pose, look, size): the server sends it itself. */
+    protected open fun changed(entity: Entity) {}
+
     override fun spawnDisplay(at: Location, display: DisplayDef, pose: DisplayPose, tag: EntityTag): UUID? {
         val location = bukkit(at) ?: return null
-        val world = location.world
         val entity: Display = when (display) {
             // Stamped as it's made, so the spawn event already sees it's ours (and scripts never hear of it).
             is BlockDisplay -> {
                 val data = runCatching { Bukkit.createBlockData(display.block) }.getOrNull() ?: return null
-                world.spawn(location, BukkitBlockDisplay::class.java) {
+                make(location, BukkitBlockDisplay::class.java) {
                     stamp(it, tag)
                     it.block = data
                 }
             }
             is ItemDisplay -> {
                 val stack = itemStack(display.item) ?: return null
-                world.spawn(location, BukkitItemDisplay::class.java) {
+                make(location, BukkitItemDisplay::class.java) {
                     stamp(it, tag)
                     it.setItemStack(stack)
                     it.itemDisplayTransform = itemTransform(display.itemTransform)
@@ -96,13 +108,13 @@ class PaperEntities(private val plugin: Plugin) : EntityOps {
             }
             is ModelDisplay -> {
                 val stack = modelStack(display) ?: return null
-                world.spawn(location, BukkitItemDisplay::class.java) {
+                make(location, BukkitItemDisplay::class.java) {
                     stamp(it, tag)
                     it.setItemStack(stack)
                     it.itemDisplayTransform = itemTransform(display.itemTransform ?: ItemTransform.NONE)
                 }
             }
-            is TextDisplay -> world.spawn(location, BukkitTextDisplay::class.java) {
+            is TextDisplay -> make(location, BukkitTextDisplay::class.java) {
                 stamp(it, tag)
                 apply(it, display)
             }
@@ -115,7 +127,7 @@ class PaperEntities(private val plugin: Plugin) : EntityOps {
 
     override fun spawnHitbox(at: Location, width: Double, height: Double, tag: EntityTag): UUID? {
         val location = bukkit(at) ?: return null
-        val entity = location.world.spawn(location, Interaction::class.java) {
+        val entity = make(location, Interaction::class.java) {
             stamp(it, tag)
             it.interactionWidth = width.toFloat()
             it.interactionHeight = height.toFloat()
@@ -127,7 +139,7 @@ class PaperEntities(private val plugin: Plugin) : EntityOps {
     override fun spawnAnchor(at: Location, tag: EntityTag): UUID? {
         val location = bukkit(at) ?: return null
         // A text display with no text and no background draws nothing, but the client knows it, so riders sit on it there too.
-        val entity = location.world.spawn(location, BukkitTextDisplay::class.java) {
+        val entity = make(location, BukkitTextDisplay::class.java) {
             stamp(it, tag)
             it.text(Component.empty())
             it.isDefaultBackground = false
@@ -151,7 +163,7 @@ class PaperEntities(private val plugin: Plugin) : EntityOps {
     override fun isLoaded(id: UUID): Boolean = Bukkit.getEntity(id) != null
 
     override fun updateDisplay(id: UUID, display: DisplayDef): Boolean {
-        val entity = Bukkit.getEntity(id) ?: return true
+        val entity = entity(id) ?: return true
         when (display) {
             is BlockDisplay -> {
                 if (entity !is BukkitBlockDisplay) return false
@@ -175,6 +187,7 @@ class PaperEntities(private val plugin: Plugin) : EntityOps {
             // The runtime draws these as text displays (DisplayDrawing) before they get here.
             is RectDisplay, is ImageDisplay -> return false
         }
+        changed(entity)
         return true
     }
 
@@ -228,7 +241,10 @@ class PaperEntities(private val plugin: Plugin) : EntityOps {
     }
 
     override fun setPose(id: UUID, pose: DisplayPose) {
-        (Bukkit.getEntity(id) as? Display)?.let { applyPose(it, pose) }
+        (entity(id) as? Display)?.let {
+            applyPose(it, pose)
+            changed(it)
+        }
     }
 
     private fun applyPose(display: Display, pose: DisplayPose) {
@@ -277,9 +293,10 @@ class PaperEntities(private val plugin: Plugin) : EntityOps {
     }
 
     override fun resizeHitbox(id: UUID, width: Double, height: Double) {
-        val interaction = Bukkit.getEntity(id) as? Interaction ?: return
+        val interaction = entity(id) as? Interaction ?: return
         interaction.interactionWidth = width.toFloat()
         interaction.interactionHeight = height.toFloat()
+        changed(interaction)
     }
 
     override fun remove(id: UUID): Boolean {
@@ -293,7 +310,7 @@ class PaperEntities(private val plugin: Plugin) : EntityOps {
     }
 
     override fun setLook(id: UUID, look: DisplayLook) {
-        val display = Bukkit.getEntity(id) as? Display ?: return
+        val display = entity(id) as? Display ?: return
         display.isGlowing = look.glowing
         // Glow colours show on block and item displays only.
         if (display !is BukkitTextDisplay) display.glowColorOverride = look.glowColor?.let(Color::fromRGB)
@@ -306,6 +323,7 @@ class PaperEntities(private val plugin: Plugin) : EntityOps {
             display.textOpacity = (look.textOpacity ?: 255).toByte()
         }
         if (display is BukkitItemDisplay) look.item?.let(PaperItems::toStack)?.let { display.setItemStack(it) }
+        changed(display)
     }
 
     override fun setHidden(player: UUID, entity: UUID, hidden: Boolean) {

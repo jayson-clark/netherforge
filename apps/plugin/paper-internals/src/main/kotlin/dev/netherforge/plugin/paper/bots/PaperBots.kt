@@ -9,6 +9,7 @@ import dev.netherforge.format.bridge.BotAction
 import dev.netherforge.format.bridge.BotEvents
 import dev.netherforge.format.bridge.BotInfo
 import dev.netherforge.format.bridge.BotState
+import dev.netherforge.plugin.paper.ClientEntityLookup
 import dev.netherforge.plugin.platform.BotAim
 import dev.netherforge.plugin.platform.BotJoin
 import dev.netherforge.plugin.platform.BotOps
@@ -39,7 +40,7 @@ import java.util.logging.Level
  * as one when the server places it ([placed]), before any other plugin hears
  * it join.
  */
-class PaperBots(private val plugin: JavaPlugin) : BotOps {
+class PaperBots(private val plugin: JavaPlugin, private val clientEntities: ClientEntityLookup) : BotOps {
     private val bots = LinkedHashMap<String, Bot>()
     private var ticker: BukkitTask? = null
 
@@ -77,7 +78,7 @@ class PaperBots(private val plugin: JavaPlugin) : BotOps {
             }
             scripted += profile.id()
         }
-        val bot = Bot(profile, MinecraftServer.getServer(), plugin, join.pack, location) { joined ->
+        val bot = Bot(profile, MinecraftServer.getServer(), plugin, join.pack, location, clientEntities) { joined ->
             if (joined.isFailure) scripted -= profile.id()
             done(joined)
         }

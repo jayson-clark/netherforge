@@ -103,8 +103,14 @@ interface PaperVersion {
         states: MutableList<BlockData>
     ): Boolean = false
 
-    /** The bots ([BotOps]): fake players made in the server, driven as their clients would. */
-    fun bots(plugin: JavaPlugin): BotOps
+    /**
+     * The bots ([BotOps]): fake players made in the server, driven as their clients would. [clientEntities] are the
+     * entities their clients may have though no world does, for them to click.
+     */
+    fun bots(plugin: JavaPlugin, clientEntities: ClientEntityLookup): BotOps
+
+    /** The packets client entities are sent as ([PaperClientEntities]). */
+    fun clientEntities(): ClientEntityPackets
 
     /**
      * Every goal's priority on [mob], keyed by the very [Goal] objects Paper's
