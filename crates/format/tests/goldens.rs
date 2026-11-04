@@ -159,9 +159,6 @@ const NOT_YET: &[&str] = &[
     "project.world-height",
     "project.dependency",
     "project.export",
-    "datapack.namespace",
-    "datapack.conflict",
-    "datapack.reference",
 ];
 
 /// Every resource of a ported kind in the examples (valid projects) has no

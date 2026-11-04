@@ -314,6 +314,10 @@ fn against_game(
 }
 
 impl Document for PackMeta {
+    fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        self.across(cx, sink);
+    }
+
     const SCHEMA: &'static str = "../../.netherforge/schema/datapack.schema.json";
 
     fn set_schema(&mut self, schema: Option<String>) {
@@ -405,6 +409,160 @@ impl Document for PackMeta {
             };
             let game = cx.game.filter(|_| read.contains(file));
             against_game(&path, &json, game, &at, &mut sink.problems);
+        }
+    }
+}
+
+impl PackMeta {
+    /// Its files against the project: namespaces, collisions, and references to the project's own.
+    fn across(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        let home = cx.home();
+        let own = cx.datapack_entries();
+        let datapacks: Vec<(&str, Vec<DatapackPath>)> = cx
+            .read("datapack")
+            .filter_map(|r| {
+                let meta = r.model::<PackMeta>()?;
+                Some((r.found.id.as_str(), layout::entries(meta, &r.found.inside)))
+            })
+            .collect();
+        let defined: BTreeSet<(String, String, bool)> = datapacks
+            .iter()
+            .flat_map(|(_, paths)| paths.iter())
+            .filter(|p| p.namespace == home)
+            .map(|p| (p.registry.clone(), p.path.clone(), p.tag))
+            .chain(own.keys().map(|(r, p)| (r.to_string(), p.clone(), false)))
+            .collect();
+        // Every file another datapack writes, by where it goes: the first (by id) to write one keeps it.
+        let mut earlier: std::collections::BTreeMap<String, (&str, &DatapackPath)> =
+            Default::default();
+        for (id, paths) in datapacks.iter().filter(|(id, _)| *id < cx.id()) {
+            for path in paths {
+                earlier.entry(path.target()).or_insert((id, path));
+            }
+        }
+        let location = cx.location_of("datapack", cx.id());
+        let mine = datapacks
+            .iter()
+            .find(|(id, _)| *id == cx.id())
+            .map(|(_, p)| p);
+        for path in mine.into_iter().flatten() {
+            let at = format!("{location}/{}", path.file);
+            if path.namespace == home {
+                if !crate::reference::is_resource_path(&path.path) {
+                    sink.problems.push(codes::DATAPACK_FILE.at(
+                        &at,
+                        format!("\"{}\" isn't an id the project's references can name: lowercase letters, digits and _, in folders", path.path),
+                        None,
+                    ));
+                    continue;
+                }
+            } else if path.namespace != game::NAMESPACE {
+                sink.problems.push(codes::DATAPACK_NAMESPACE.at(
+                    &at,
+                    format!(
+                        "A datapack here writes only the project's namespace, \"{home}\", or \"{}\", not \"{}\"",
+                        game::NAMESPACE,
+                        path.namespace
+                    ),
+                    None,
+                ));
+                continue;
+            }
+            if path.namespace == home
+                && !path.tag
+                && let Some((kind, id)) = own
+                    .iter()
+                    .find(|((r, p), _)| *r == path.registry && *p == path.path)
+                    .map(|(_, v)| *v)
+            {
+                sink.problems.push(
+                    codes::DATAPACK_CONFLICT
+                        .at(
+                            &at,
+                            format!(
+                                "The {} \"{id}\" is \"{}\" in {} too: rename one of them",
+                                kind.replace('_', " "),
+                                path.key(),
+                                path.registry
+                            ),
+                            None,
+                        )
+                        .with_related(vec![crate::Location {
+                            file: cx.path_of(kind, id),
+                            path: None,
+                        }]),
+                );
+            }
+            if let Some((owner, other)) = earlier.get(&path.target()) {
+                sink.problems.push(
+                    codes::DATAPACK_CONFLICT
+                        .at(
+                            &at,
+                            format!(
+                                "Datapack \"{owner}\" writes {} too: keep it in one of them",
+                                path.target()
+                            ),
+                            None,
+                        )
+                        .with_related(vec![crate::Location {
+                            file: format!("{}/{}", cx.location_of("datapack", owner), other.file),
+                            path: None,
+                        }]),
+                );
+            }
+            let Some(json) = cx
+                .read_file(&at)
+                .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+            else {
+                continue;
+            };
+            let Some(found) = references_in(path, &json) else {
+                continue;
+            };
+            for reference in found {
+                let Some((tag, key)) = key_of(&reference.text) else {
+                    continue;
+                };
+                let (namespace, key_path) = key.split_once(':').expect("a normalized key");
+                if namespace == game::NAMESPACE {
+                    continue;
+                }
+                if namespace == home {
+                    if reference
+                        .targets
+                        .iter()
+                        .all(|t| !defined.contains(&(t.to_string(), key_path.to_owned(), tag)))
+                    {
+                        // Said in the target version's words when its game data says which name the registry has there.
+                        let registry = reference
+                            .targets
+                            .iter()
+                            .find(|t| {
+                                cx.game()
+                                    .is_some_and(|g| g.registry(&registry_key(t)).is_some())
+                            })
+                            .or(reference.targets.first())
+                            .expect("a reference has a registry");
+                        sink.problems.push(codes::DATAPACK_REFERENCE.at(
+                            &at,
+                            format!(
+                                "The project has no {}: a datapack's {} would be it",
+                                named(registry, &key, tag),
+                                layout::entry_file(namespace, key_path, registry, tag)
+                            ),
+                            Some(reference.path.clone()),
+                        ));
+                    }
+                } else if !cx.references().packages().any(|p| p == namespace) {
+                    sink.problems.push(codes::DATAPACK_REFERENCE.at(
+                        &at,
+                        format!(
+                            "\"{namespace}\" is neither this project's namespace (\"{home}\"), the game's, nor a package's it depends on"
+                        ),
+                        Some(reference.path.clone()),
+                    ));
+                }
+            }
         }
     }
 }

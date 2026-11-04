@@ -129,6 +129,10 @@ impl DimensionTypeFile {
 }
 
 impl Document for DimensionTypeFile {
+    fn datapack_entries(&self, id: &str) -> Vec<(&'static str, String)> {
+        vec![("dimension_type", id.to_owned())]
+    }
+
     const SCHEMA: &'static str = "../.netherforge/schema/dimension_type.schema.json";
 
     fn set_schema(&mut self, schema: Option<String>) {

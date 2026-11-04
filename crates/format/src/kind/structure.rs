@@ -188,6 +188,20 @@ fn check_biomes(biomes: &[String], sink: &mut ProblemSink, game: Option<&dyn Gam
 }
 
 impl Document for StructureGeneration {
+    /// Its structure, its set and its pools.
+    fn datapack_entries(&self, id: &str) -> Vec<(&'static str, String)> {
+        let pools = std::iter::once(START_POOL)
+            .chain(self.pools.iter().map(|(name, _)| name.0.as_str()))
+            .map(|pool| ("worldgen/template_pool", format!("{id}/{pool}")));
+        [
+            ("worldgen/structure", id.to_owned()),
+            ("worldgen/structure_set", id.to_owned()),
+        ]
+        .into_iter()
+        .chain(pools)
+        .collect()
+    }
+
     fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
         self.across(cx, sink);
     }

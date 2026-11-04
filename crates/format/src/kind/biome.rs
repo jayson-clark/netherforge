@@ -215,7 +215,14 @@ fn known(
     }
 }
 
+/// The registry a biome is in, as a datapack's folder.
+pub const FOLDER: &str = "worldgen/biome";
+
 impl Document for BiomeFile {
+    fn datapack_entries(&self, id: &str) -> Vec<(&'static str, String)> {
+        vec![(FOLDER, id.to_owned())]
+    }
+
     fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
         self.across(cx, sink);
     }

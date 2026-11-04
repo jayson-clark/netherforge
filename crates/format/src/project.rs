@@ -314,6 +314,28 @@ impl<'a> Across<'a> {
         &self.found.inside
     }
 
+    /// A project file's text.
+    pub fn read_file(&self, path: &str) -> Option<String> {
+        self.project.source.read(path)
+    }
+
+    /// What the project's own resources put in the start-up datapack, by
+    /// registry and path: which resource (kind and id) does, the first in
+    /// format's order.
+    pub fn datapack_entries(&self) -> BTreeMap<(&'static str, String), (&'static str, &'a str)> {
+        let mut out = BTreeMap::new();
+        for r in &self.project.resources {
+            let Some(document) = &r.document else {
+                continue;
+            };
+            for entry in document.model.datapack_entries(&r.found.id) {
+                out.entry(entry)
+                    .or_insert((r.found.kind.id, r.found.id.as_str()));
+            }
+        }
+        out
+    }
+
     /// `fonts/default.json`, when it's there and reads.
     pub fn default_font(&self) -> Option<&'a crate::font::DefaultFontFile> {
         self.project.default_font.as_ref()
@@ -345,17 +367,28 @@ impl<'a> Across<'a> {
         self.models::<T>().find(|(i, _)| *i == id).map(|(_, m)| m)
     }
 
+    /// The group folders the resource `id` of `kind` is in (none when it isn't there).
+    fn group_of(&self, kind: &str, id: &str) -> &'a str {
+        self.project
+            .resources
+            .iter()
+            .find(|r| r.found.kind.id == kind && r.found.id == id)
+            .map_or("", |r| r.found.group.as_str())
+    }
+
     /// The file the resource `id` of `kind` is read from, in its group folders
     /// (or where it would be if it isn't there).
     pub fn path_of(&self, kind: &str, id: &str) -> String {
-        let kind = crate::kinds::by_id(kind).expect("a kind");
-        let group = self
-            .project
-            .resources
-            .iter()
-            .find(|r| r.found.kind.id == kind.id && r.found.id == id)
-            .map_or("", |r| r.found.group.as_str());
-        kind.path_of(id, group)
+        crate::kinds::by_id(kind)
+            .expect("a kind")
+            .path_of(id, self.group_of(kind, id))
+    }
+
+    /// Where the resource `id` of `kind` is: its folder, or its one file.
+    pub fn location_of(&self, kind: &str, id: &str) -> String {
+        crate::kinds::by_id(kind)
+            .expect("a kind")
+            .location_of(id, self.group_of(kind, id))
     }
 }
 

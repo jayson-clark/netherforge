@@ -196,6 +196,7 @@ pub struct Doc {
 pub trait Model: std::any::Any {
     fn as_any(&self) -> &dyn std::any::Any;
     fn cross_check(&self, cx: &crate::project::Across, sink: &mut crate::ProblemSink);
+    fn datapack_entries(&self, id: &str) -> Vec<(&'static str, String)>;
 }
 
 impl<T: crate::document::Document> Model for T {
@@ -205,6 +206,10 @@ impl<T: crate::document::Document> Model for T {
 
     fn cross_check(&self, cx: &crate::project::Across, sink: &mut crate::ProblemSink) {
         crate::document::Document::cross_check(self, cx, sink);
+    }
+
+    fn datapack_entries(&self, id: &str) -> Vec<(&'static str, String)> {
+        crate::document::Document::datapack_entries(self, id)
     }
 }
 

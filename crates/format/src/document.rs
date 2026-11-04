@@ -42,6 +42,14 @@ pub trait Document: Serialize + DeserializeOwned + Clone + schemars::JsonSchema 
     /// references existing, which the loader checks itself. Problems in its
     /// other files go into the sink's problems with their own file.
     fn cross_check(&self, _cx: &crate::project::Across, _sink: &mut ProblemSink) {}
+
+    /// The entries of the game's registries the resource `id` puts in the
+    /// start-up datapack, by registry folder (`worldgen/biome`) and path, in the
+    /// namespace it runs in: what a datapack passed through mustn't write too,
+    /// and what its files may name in the project's namespace.
+    fn datapack_entries(&self, _id: &str) -> Vec<(&'static str, String)> {
+        Vec::new()
+    }
 }
 
 /// Reads a file by its path, if it's there.
