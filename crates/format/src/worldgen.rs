@@ -30,7 +30,7 @@ impl GenerationStep {
 }
 
 /// How many: a group of spawns, a range of ticks.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SpawnRange {
     #[serde(skip_serializing_if = "Option::is_none")]

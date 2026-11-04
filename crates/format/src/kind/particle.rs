@@ -10,13 +10,14 @@ use std::collections::HashSet;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::animation::{Easing, Vec3, by_time};
+use crate::animation::{Easing, by_time};
 use crate::block_state::{self, BlockStateCodes};
 use crate::canonical::Map;
 use crate::document::{Context, Document};
 use crate::game::{self, GameData, ParticleData};
 use crate::item::{self, ItemDef};
 use crate::json::{child_path, format_number};
+use crate::math::Vec3;
 use crate::problem::{ProblemSink, codes};
 
 pub const FILE_NAME: &str = "effect.json";

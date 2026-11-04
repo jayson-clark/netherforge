@@ -12,6 +12,7 @@ pub mod json;
 pub mod kind;
 pub mod kinds;
 pub mod manifest;
+pub mod math;
 pub mod names;
 pub mod problem;
 pub mod read;

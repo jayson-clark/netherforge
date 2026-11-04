@@ -1,18 +1,10 @@
 //! What a track of keys is made of, shared by centity animations and
-//! cutscenes: format's `Vec3`, `Keyframe` and `Easing`.
+//! cutscenes: format's `Keyframe` and `Easing`.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-/// Three numbers, written `[x, y, z]`.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct Vec3(pub f64, pub f64, pub f64);
-
-impl Vec3 {
-    pub fn coordinates(self) -> [f64; 3] {
-        [self.0, self.1, self.2]
-    }
-}
+use crate::math::Vec3;
 
 /// One pose on a track; `easing` shapes the segment leaving this key.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
