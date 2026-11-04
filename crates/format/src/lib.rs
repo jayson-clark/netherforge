@@ -13,6 +13,7 @@ pub mod item;
 pub mod json;
 pub mod kind;
 pub mod kinds;
+pub mod lua;
 pub mod manifest;
 pub mod math;
 pub mod names;

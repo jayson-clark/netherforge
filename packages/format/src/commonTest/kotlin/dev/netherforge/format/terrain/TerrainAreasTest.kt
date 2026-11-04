@@ -6,6 +6,11 @@ import dev.netherforge.format.block.BlockKind
 import dev.netherforge.format.json.CanonicalJson
 import dev.netherforge.format.project.MapProjectSource
 import dev.netherforge.format.project.Projects
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,18 +37,21 @@ class TerrainAreasTest {
 
     private fun label(w: CompiledTerrain, index: Int) = w.palette[index].label
 
-    /** A tree: a trunk of four logs with a 3x3 crown of leaves round its top two, and air round the trunk below. */
-    private val tree = StructureTemplate(
-        3,
-        5,
-        3,
-        listOf("minecraft:oak_log[axis=y]", "minecraft:oak_leaves[distance=1,persistent=false,waterlogged=false]", "minecraft:air"),
-        buildList {
-            for (y in 0..3) addAll(listOf(1, y, 1, 0))
-            for (y in 3..4) for (x in 0..2) for (z in 0..2) if (!(x == 1 && z == 1 && y == 3)) addAll(listOf(x, y, z, 1))
-            for (y in 0..2) addAll(listOf(0, y, 0, 2))
-        }.toIntArray()
-    )
+    /**
+     * A tree: a trunk of four logs with a 3x3 crown of leaves round its top two, and air round the trunk below:
+     * `testdata/terrain/tree.json`, which the Rust port's generator reads too.
+     */
+    private val tree: StructureTemplate = run {
+        val json = Json.parseToJsonElement(TestFiles.read("packages/format/testdata/terrain/tree.json")!!).jsonObject
+        fun int(key: String) = json.getValue(key).jsonPrimitive.int
+        StructureTemplate(
+            int("sizeX"),
+            int("sizeY"),
+            int("sizeZ"),
+            json.getValue("palette").jsonArray.map { it.jsonPrimitive.content },
+            json.getValue("blocks").jsonArray.map { it.jsonPrimitive.int }.toIntArray()
+        )
+    }
 
     /** Two areas: low plains and high, rough hills, split by temperature. */
     private val twoAreas = """{
@@ -459,26 +467,8 @@ class TerrainAreasTest {
 
     // ---- the same on every platform ----------------------------------------------------------------------
 
-    private val everything = """{
-        "terrain": { "base": 64, "seaLevel": 60, "blend": 24, "noises": { "hills": { "noise": { "frequency": 0.008, "octaves": 3 }, "amplitude": 14 } } },
-        "layers": [{ "block": "minecraft:grass_block" }, { "customBlock": "loam", "thickness": 2 }],
-        "underwater": [{ "block": "minecraft:sand", "thickness": 2 }],
-        "stone": { "block": "minecraft:deepslate" },
-        "floor": { "customBlock": "core", "thickness": 2 },
-        "caves": { "caverns": { "threshold": 0.3, "biomes": ["peaks"] } },
-        "ores": { "gold": { "block": "minecraft:gold_ore", "veins": 14, "replace": ["minecraft:deepslate"], "biomes": ["meadow"] } },
-        "decorations": {
-            "trees": { "structure": "tree", "count": 3, "biomes": ["meadow"] },
-            "flowers": { "block": "minecraft:poppy", "count": 10, "noise": { "frequency": 0.04 }, "threshold": -0.2, "on": ["minecraft:grass_block"] },
-            "drips": { "block": "minecraft:pointed_dripstone", "placement": "caveCeiling", "count": 30 }
-        },
-        "climate": { "temperature": { "frequency": 0.006 }, "jitter": { "amplitude": 24 } },
-        "biomes": {
-            "meadow": { "biome": "minecraft:meadow", "temperature": { "max": 0.1 }, "terrain": { "base": 66, "scale": 0.6 } },
-            "peaks": { "biome": "minecraft:jagged_peaks", "temperature": { "min": 0.1 },
-                "terrain": { "base": 100, "scale": 1.5, "noises": { "crags": { "noise": { "frequency": 0.03, "fractal": "ridged", "octaves": 2 }, "amplitude": 12 } } } }
-        }
-    }"""
+    /** Every part at once: `testdata/terrain/areas.json`, which the Rust port's generator reads too. */
+    private val everything = TestFiles.read("packages/format/testdata/terrain/areas.json")!!
 
     private fun summary(): List<String> {
         val w = compile(everything).withStructures(mapOf("tree" to tree))

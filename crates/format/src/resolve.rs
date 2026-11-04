@@ -46,6 +46,13 @@ pub fn resolved<T: Serialize + JsonSchema + 'static, R: DeserializeOwned>(value:
     })
 }
 
+/// `value` with every field it leaves out that has a default given it, and
+/// every number held in its range: for a model whose compiled form reads it
+/// field by field (each such field is then `Some`).
+pub fn filled<T: Serialize + DeserializeOwned + JsonSchema + 'static>(value: &T) -> T {
+    resolved(value)
+}
+
 /// `n` inside `field`'s range, a whole number staying one.
 fn held(n: &Number, field: &Value) -> Number {
     let bound = |keys: [&str; 2]| {

@@ -5,7 +5,11 @@
 //! every height a world can have, `LIMITS`); what depends on several fields,
 //! the file's own areas and climate noises, and the game's blocks and biomes
 //! are checked here. That a custom block is a plain cube is a check across
-//! resources. (Its generator comes with the runtime's worlds.)
+//! resources. It compiles to a `CompiledTerrain` (`compiled`).
+
+pub mod compiled;
+pub mod density;
+pub mod generate;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -203,6 +207,7 @@ pub struct Islands {
     #[schemars(range(min = 2, max = 256), extend("default" = 32, "x-problem" = "terrain.density"))]
     pub thickness: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = {"frequency": 0.012, "octaves": 2}))]
     pub noise: Option<NoiseDef>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = -1), extend("exclusiveMaximum" = 1, "default" = 0.4, "x-problem" = "terrain.density"))]
@@ -281,8 +286,10 @@ pub enum CaveType {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Cave {
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "cheese"))]
     pub kind: Option<CaveType>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = {"frequency": 0.03, "octaves": 2}))]
     pub noise: Option<NoiseDef>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub threshold: Option<f64>,
@@ -335,6 +342,7 @@ pub struct Ore {
     #[schemars(range(min = LIMITS.min_y, max = LIMITS.max_y - 1), extend("x-world-y" = true, "default" = 64, "x-problem" = "terrain.ore"))]
     pub max_y: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "uniform"))]
     pub distribution: Option<OreDistribution>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub biomes: Vec<String>,
@@ -375,6 +383,7 @@ pub struct Decoration {
     #[schemars(extend("x-ref" = "structure"))]
     pub structure: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "surface"))]
     pub placement: Option<DecorationPlacement>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 0, max = 256), extend("default" = 1, "x-problem" = "terrain.decoration"))]
@@ -403,6 +412,7 @@ pub struct Decoration {
     #[schemars(extend("x-ref" = "block"))]
     pub on_custom_blocks: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = true))]
     pub rotate: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(extend("x-ref" = "loot_table"))]
@@ -413,8 +423,10 @@ pub struct Decoration {
 #[serde(deny_unknown_fields)]
 pub struct Climate {
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = {"frequency": 0.002, "octaves": 2}))]
     pub temperature: Option<NoiseDef>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = {"frequency": 0.002, "octaves": 2}))]
     pub humidity: Option<NoiseDef>,
     #[serde(default, skip_serializing_if = "Entries::is_empty")]
     #[schemars(extend("maxProperties" = 8, "x-problem" = "terrain.limit"))]
@@ -427,6 +439,7 @@ pub struct Climate {
 #[serde(deny_unknown_fields)]
 pub struct Jitter {
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = {"frequency": 0.02, "octaves": 2}))]
     pub noise: Option<NoiseDef>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 0, max = 4096), extend("default" = 16, "x-problem" = "terrain.border"))]
@@ -526,6 +539,7 @@ pub struct TerrainScript {
 pub struct StructureRules {
     /// Whether the game's own structures generate too. Default false.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = false))]
     pub vanilla: Option<bool>,
 }
 
@@ -969,6 +983,15 @@ impl Document for TerrainFile {
 
     fn set_schema(&mut self, schema: Option<String>) {
         self.schema = schema;
+    }
+
+    /// Its script, when it has one, is `terrain/<id>.lua` beside it, in its own project or package.
+    fn compile(&self, _id: &str, cx: &Context) -> Option<Box<dyn crate::document::Compiled>> {
+        let script = cx
+            .location
+            .strip_suffix(".json")
+            .map(|stem| format!("{stem}{SCRIPT_EXTENSION}"));
+        crate::document::compiled(compiled::compile(self, script.as_deref()))
     }
 
     fn validate(&self, cx: &Context, sink: &mut ProblemSink) {
