@@ -116,10 +116,10 @@ fn is_default<T: Default + PartialEq>(value: &T) -> bool {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Terrain {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = -2032, max = 2031), extend("default" = 64, "x-problem" = "terrain.height"))]
+    #[schemars(range(min = LIMITS.min_y, max = LIMITS.max_y - 1), extend("x-world-y" = true, "default" = 64, "x-problem" = "terrain.height"))]
     pub base: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = -2032, max = 2031), extend("default" = 62, "x-problem" = "terrain.height"))]
+    #[schemars(range(min = LIMITS.min_y, max = LIMITS.max_y - 1), extend("x-world-y" = true, "default" = 62, "x-problem" = "terrain.height"))]
     pub sea_level: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fluid: Option<String>,
@@ -147,7 +147,7 @@ pub struct TerrainNoise {
 #[serde(deny_unknown_fields)]
 pub struct AreaTerrain {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = -2032, max = 2031), extend("x-problem" = "terrain.height"))]
+    #[schemars(range(min = LIMITS.min_y, max = LIMITS.max_y - 1), extend("x-world-y" = true, "x-problem" = "terrain.height"))]
     pub base: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 0, max = 16), extend("default" = 1, "x-problem" = "terrain.height"))]
@@ -197,7 +197,7 @@ pub struct AreaDensity {
 #[serde(deny_unknown_fields)]
 pub struct Islands {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = -2032, max = 2031), extend("default" = 160, "x-problem" = "terrain.density"))]
+    #[schemars(range(min = LIMITS.min_y, max = LIMITS.max_y - 1), extend("x-world-y" = true, "default" = 160, "x-problem" = "terrain.density"))]
     pub y: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 2, max = 256), extend("default" = 32, "x-problem" = "terrain.density"))]
@@ -287,10 +287,10 @@ pub struct Cave {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub threshold: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = -2032, max = 2031), extend("default" = -56, "x-problem" = "terrain.cave"))]
+    #[schemars(range(min = LIMITS.min_y, max = LIMITS.max_y - 1), extend("x-world-y" = true, "default" = -56, "x-problem" = "terrain.cave"))]
     pub min_y: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = -2032, max = 2031), extend("default" = 56, "x-problem" = "terrain.cave"))]
+    #[schemars(range(min = LIMITS.min_y, max = LIMITS.max_y - 1), extend("x-world-y" = true, "default" = 56, "x-problem" = "terrain.cave"))]
     pub max_y: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 0, max = 256), extend("default" = 4, "x-problem" = "terrain.cave"))]
@@ -329,10 +329,10 @@ pub struct Ore {
     #[schemars(range(min = 0, max = 256), extend("default" = 8, "x-problem" = "terrain.ore"))]
     pub veins: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = -2032, max = 2031), extend("default" = -64, "x-problem" = "terrain.ore"))]
+    #[schemars(range(min = LIMITS.min_y, max = LIMITS.max_y - 1), extend("x-world-y" = true, "default" = -64, "x-problem" = "terrain.ore"))]
     pub min_y: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = -2032, max = 2031), extend("default" = 64, "x-problem" = "terrain.ore"))]
+    #[schemars(range(min = LIMITS.min_y, max = LIMITS.max_y - 1), extend("x-world-y" = true, "default" = 64, "x-problem" = "terrain.ore"))]
     pub max_y: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub distribution: Option<OreDistribution>,
@@ -390,10 +390,10 @@ pub struct Decoration {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub biomes: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = -2032, max = 2031), extend("x-problem" = "terrain.decoration"))]
+    #[schemars(range(min = LIMITS.min_y, max = LIMITS.max_y - 1), extend("x-world-y" = true, "x-problem" = "terrain.decoration"))]
     pub min_y: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = -2032, max = 2031), extend("x-problem" = "terrain.decoration"))]
+    #[schemars(range(min = LIMITS.min_y, max = LIMITS.max_y - 1), extend("x-world-y" = true, "x-problem" = "terrain.decoration"))]
     pub max_y: Option<i32>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[schemars(length(max = 32), extend("x-problem" = "terrain.limit"))]
@@ -532,6 +532,8 @@ pub struct StructureRules {
 /// What a file's checks need of the whole file (`TerrainValidator.Check`).
 struct Check<'a> {
     sink: &'a mut ProblemSink,
+    /// The heights it's held to: `LIMITS` for the file alone, a world's in that world.
+    height: WorldHeight,
     game: Option<&'a dyn GameData>,
     areas: Vec<&'a str>,
     climate_noises: Vec<&'a str>,
@@ -728,7 +730,7 @@ impl Check<'_> {
                 format!("{at}.threshold"),
             );
         }
-        let (lowest, highest) = (LIMITS.min_y, LIMITS.max_y - 1);
+        let (lowest, highest) = (self.height.min_y, self.height.max_y - 1);
         self.heights(
             decoration.min_y.unwrap_or(lowest),
             decoration.max_y.unwrap_or(highest),
@@ -756,8 +758,8 @@ impl Check<'_> {
     /// A volume's range: inside the world (a depth needn't be), and not empty.
     fn block_range(&mut self, range: Option<&BlockRange>, at: &str, in_world: bool) {
         let Some(range) = range else { return };
-        let (lowest, highest) = (LIMITS.min_y, LIMITS.max_y - 1);
-        let limit = LIMITS.max_y - LIMITS.min_y;
+        let (lowest, highest) = (self.height.min_y, self.height.max_y - 1);
+        let limit = self.height.max_y - self.height.min_y;
         for (key, value) in [("min", range.min), ("max", range.max)] {
             let Some(value) = value else { continue };
             let ok = if in_world {
@@ -970,6 +972,15 @@ impl Document for TerrainFile {
     }
 
     fn validate(&self, cx: &Context, sink: &mut ProblemSink) {
+        self.checked(cx.game, LIMITS, sink);
+        // Its script beside it: the file's `script` and the `.lua` say the same.
+        self.beside(cx, sink);
+    }
+}
+
+impl TerrainFile {
+    /// Its checks of its fields together, its heights held to `height`.
+    fn checked(&self, game: Option<&dyn GameData>, height: WorldHeight, sink: &mut ProblemSink) {
         fn names(m: &Named<BiomeArea>, keep: fn(&BiomeArea) -> bool) -> Vec<&str> {
             m.iter()
                 .filter(|(_, a)| keep(a))
@@ -978,7 +989,8 @@ impl Document for TerrainFile {
         }
         let mut check = Check {
             sink,
-            game: cx.game,
+            height,
+            game,
             areas: names(&self.biomes, |_| true),
             climate_noises: self
                 .climate
@@ -989,7 +1001,46 @@ impl Document for TerrainFile {
             volumes: names(&self.biomes, BiomeArea::is_volume),
         };
         self.check(&mut check);
-        // Its script beside it: the file's `script` and the `.lua` say the same.
+    }
+
+    /// What a world of `height` adds to its problems: each `x-world-y` field
+    /// (a height in the world) and each check of heights together, held to the
+    /// world's instead of every world's. A problem it has anywhere isn't one of them.
+    pub fn in_world(&self, json: &serde_json::Value, height: WorldHeight) -> Vec<crate::Problem> {
+        let at = |height: WorldHeight| {
+            let mut sink = ProblemSink::new("");
+            let (lowest, highest) = (height.min_y, height.max_y - 1);
+            crate::schema::of::<TerrainFile>().walk(json, (), &mut |visit, path, _| {
+                if let crate::schema::Visit::Schema(schema, serde_json::Value::Number(n)) = visit
+                    && schema.get("x-world-y") == Some(&serde_json::Value::Bool(true))
+                    && let Some(code) = schema
+                        .get("x-problem")
+                        .and_then(serde_json::Value::as_str)
+                        .and_then(ProblemCode::of)
+                    && n.as_f64()
+                        .is_some_and(|y| y < f64::from(lowest) || y > f64::from(highest))
+                {
+                    let field = path.strip_prefix("$.").unwrap_or(path);
+                    sink.report(
+                        code,
+                        format!("{field} must be from {lowest} to {highest}, not {n}"),
+                        Some(path.to_owned()),
+                    );
+                }
+            });
+            self.checked(None, height, &mut sink);
+            sink.problems
+        };
+        let anywhere: Vec<(Option<String>, Option<String>)> =
+            at(LIMITS).into_iter().map(|p| (p.code, p.path)).collect();
+        at(height)
+            .into_iter()
+            .filter(|p| !anywhere.contains(&(p.code.clone(), p.path.clone())))
+            .collect()
+    }
+
+    /// Its script beside it: the file's `script` and the `.lua` say the same.
+    fn beside(&self, cx: &Context, sink: &mut ProblemSink) {
         let Some(files) = cx.files else { return };
         let script = format!("{}{SCRIPT_EXTENSION}", cx.id);
         let script_path = format!(

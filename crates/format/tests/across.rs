@@ -220,3 +220,27 @@ fn a_bitmap_fonts_picture_cuts_into_its_grid() {
         ]
     );
 }
+
+#[test]
+fn a_package_exports_kinds_it_has() {
+    let manifest = r#"{ "formatVersion": 1, "name": "Lib", "namespace": "lib", "version": "1.0.0", "minecraft": "26.3",
+        "exports": { "items": ["gem", "ghost"], "migrations": ["001_init"], "things": ["x"] } }"#;
+    let found: Vec<String> = problems(
+        &[
+            ("netherforge.json", manifest),
+            ("items/gem/item.json", "{}"),
+        ],
+        None,
+    )
+    .into_iter()
+    .filter(|p| p.starts_with("package."))
+    .collect();
+    assert_eq!(
+        found,
+        [
+            "package.export-missing netherforge.json $.exports.items[1]: There's no item \"ghost\" (items/ghost) to export",
+            "package.export-kind netherforge.json $.exports.migrations: \"migrations\" isn't a kind of resource: export from resource_packs, particles, cutscenes, screen_fonts, videos, wasm, modules, structures, builds, maps, items, recipes, loot, buffs, blocks, game_blocks, datapacks, biomes, skies, dimension_types, terrain, advancements, menus, dialogs, screens, centities",
+            "package.export-kind netherforge.json $.exports.things: \"things\" isn't a kind of resource: export from resource_packs, particles, cutscenes, screen_fonts, videos, wasm, modules, structures, builds, maps, items, recipes, loot, buffs, blocks, game_blocks, datapacks, biomes, skies, dimension_types, terrain, advancements, menus, dialogs, screens, centities",
+        ]
+    );
+}

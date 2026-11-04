@@ -153,14 +153,6 @@ fn what_and_where(p: &Value) -> String {
     Value::Object(o).to_string()
 }
 
-/// The codes whose checks across the project aren't ported yet, set aside on
-/// both sides until they are. Done when it's empty.
-const NOT_YET: &[&str] = &[
-    "project.world-height",
-    "project.dependency",
-    "project.export",
-];
-
 /// Every resource of a ported kind in the examples (valid projects) has no
 /// problems, and a document writes back to the same bytes.
 #[test]
@@ -219,7 +211,6 @@ fn the_ported_kinds_examples_write_back() {
 /// its wording).
 #[test]
 fn whole_cases_are_formats() {
-    let not_yet = |p: &Value| NOT_YET.contains(&p["code"].as_str().unwrap_or(""));
     let mut failures = Vec::new();
     let mut cases = 0;
     for entry in std::fs::read_dir(invalid()).unwrap() {
@@ -239,15 +230,9 @@ fn whole_cases_are_formats() {
         let mut actual: Vec<String> = loaded
             .problems
             .iter()
-            .map(|p| p.to_json())
-            .filter(|p| !not_yet(p))
-            .map(|p| what_and_where(&p))
+            .map(|p| what_and_where(&p.to_json()))
             .collect();
-        let mut wanted: Vec<String> = expected
-            .iter()
-            .filter(|p| !not_yet(p))
-            .map(what_and_where)
-            .collect();
+        let mut wanted: Vec<String> = expected.iter().map(what_and_where).collect();
         actual.sort();
         wanted.sort();
         cases += 1;

@@ -206,7 +206,9 @@ pub fn load<'a>(source: &'a dyn ProjectSource, game: Option<&'a dyn GameData>) -
     };
 
     let mut sink = ProblemSink::new(manifest::FILE_NAME);
+    exports(&project, &mut sink);
     report_references(&project.references, &mut sink);
+    world_heights(&project, &mut sink);
     problems.extend(sink.problems);
     for resource in &project.resources {
         problems.extend(resource.problems.iter().cloned());
@@ -495,5 +497,109 @@ fn pack_entries(
                 .collect()
         }
         _ => unreachable!("{kind:?} isn't a pack's entry"),
+    }
+}
+
+/// `exports` names kinds by their folders, and resources the project has.
+fn exports(project: &Project, sink: &mut ProblemSink) {
+    let Some(exports) = project.manifest.as_ref().and_then(|m| m.exports.as_ref()) else {
+        return;
+    };
+    for (folder, ids) in exports.iter() {
+        let at = crate::json::child_path("$.exports", folder);
+        let Some(kind) = crate::kinds::in_folder(folder).filter(|k| k.exportable) else {
+            let kinds: Vec<&str> = crate::kinds::ALL
+                .iter()
+                .filter(|k| k.exportable)
+                .map(|k| k.folder)
+                .collect();
+            sink.report(
+                crate::codes::PACKAGE_EXPORT_KIND,
+                format!(
+                    "\"{folder}\" isn't a kind of resource: export from {}",
+                    kinds.join(", ")
+                ),
+                Some(at),
+            );
+            continue;
+        };
+        for (i, id) in ids.iter().enumerate() {
+            let there = project
+                .resources
+                .iter()
+                .any(|r| r.read && r.found.kind.id == kind.id && r.found.id == *id);
+            if !there {
+                sink.report(
+                    crate::codes::PACKAGE_EXPORT_MISSING,
+                    format!(
+                        "There's no {} \"{id}\" ({}) to export",
+                        kind.id,
+                        kind.location_of(id, "")
+                    ),
+                    Some(format!("{at}[{i}]")),
+                );
+            }
+        }
+    }
+}
+
+/// Each world that names both a terrain and a dimension type: the terrain held
+/// to that dimension's build limits. On its own a terrain is held only to what
+/// any world can be, so this finds what's out of range in this world alone. A
+/// reference that names nothing is the reference check's.
+fn world_heights(project: &Project, sink: &mut ProblemSink) {
+    use crate::kind::dimension_type::DimensionTypeFile;
+    use crate::kind::terrain::{TerrainFile, WorldHeight};
+    let Some(worlds) = project.manifest.as_ref().and_then(|m| m.worlds.as_ref()) else {
+        return;
+    };
+    let own = |kind: &str, reference: RefKind, text: &str| {
+        let id = project.references.own(reference, text)?;
+        project
+            .resources
+            .iter()
+            .find(|r| r.found.kind.id == kind && r.found.id == id)
+    };
+    for (name, world) in worlds.iter() {
+        let (Some(terrain_ref), Some(dimension_ref)) = (&world.terrain, &world.dimension_type)
+        else {
+            continue;
+        };
+        let Some(terrain) = own("terrain", RefKind::Terrain, terrain_ref) else {
+            continue;
+        };
+        let (Some(model), Some(document)) = (terrain.model::<TerrainFile>(), &terrain.document)
+        else {
+            continue;
+        };
+        let Some(dimension) = own("dimension_type", RefKind::DimensionType, dimension_ref)
+            .and_then(|r| r.model::<DimensionTypeFile>())
+        else {
+            continue;
+        };
+        let (min_y, max_y) = dimension.world_height();
+        let at = crate::json::child_path(&crate::json::child_path("$.worlds", name), "terrain");
+        for problem in model.in_world(&document.json, WorldHeight { min_y, max_y }) {
+            let field = problem
+                .path
+                .as_deref()
+                .map_or("the file", |p| p.strip_prefix("$.").unwrap_or(p));
+            sink.problems.push(
+                crate::codes::PROJECT_WORLD_HEIGHT
+                    .at(
+                        &sink.file,
+                        format!(
+                            "World \"{name}\" is from y {min_y} to {} (dimension type \"{dimension_ref}\"), but in terrain \"{terrain_ref}\", {field}: {}",
+                            max_y - 1,
+                            problem.message
+                        ),
+                        Some(at.clone()),
+                    )
+                    .with_related(vec![crate::Location {
+                        file: document.path.clone(),
+                        path: problem.path.clone(),
+                    }]),
+            );
+        }
     }
 }
