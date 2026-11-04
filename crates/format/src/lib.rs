@@ -14,6 +14,7 @@ pub mod names;
 pub mod problem;
 pub mod read;
 pub mod rules;
+pub mod script;
 pub mod settings;
 pub mod snapshot;
 

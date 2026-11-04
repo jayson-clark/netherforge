@@ -2,6 +2,7 @@
 //! resource of one.
 
 pub mod buff;
+pub mod menu;
 pub mod module;
 
 use std::collections::BTreeSet;
@@ -10,7 +11,7 @@ use crate::problem::Problem;
 use crate::snapshot::Found;
 
 /// The kinds whose resources this crate reads so far.
-pub const PORTED: &[&str] = &["buff", "module"];
+pub const PORTED: &[&str] = &["buff", "menu", "module"];
 
 /// What a resource is read from: the project's files, a way to read one, and
 /// what's worked out across them once (the modules scripts require).
@@ -18,6 +19,7 @@ pub struct Source<'a> {
     pub files: &'a BTreeSet<String>,
     pub read: &'a dyn Fn(&str) -> Option<String>,
     pub required_modules: BTreeSet<String>,
+    pub game: Option<&'a dyn crate::game::GameData>,
 }
 
 impl<'a> Source<'a> {
@@ -30,6 +32,7 @@ impl<'a> Source<'a> {
             files,
             read,
             required_modules,
+            game: None,
         }
     }
 }
@@ -39,8 +42,13 @@ impl<'a> Source<'a> {
 pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
     let path = found.kind.path_of(&found.id, &found.group);
     let text = || (source.read)(&path).unwrap_or_default();
+    let cx = crate::document::Context {
+        files: Some(&found.inside),
+        game: source.game,
+    };
     Some(match found.kind.id {
-        "buff" => crate::document::load::<buff::BuffFile>(&text(), &path).1,
+        "buff" => crate::document::load::<buff::BuffFile>(&text(), &path, &cx).1,
+        "menu" => crate::document::load::<menu::MenuFile>(&text(), &path, &cx).1,
         "module" => module::check(found, source),
         _ => return None,
     })
@@ -55,6 +63,7 @@ pub fn write_back(found: &Found, text: &str) -> Option<Result<String, Box<Proble
     }
     Some(match found.kind.id {
         "buff" => again::<buff::BuffFile>(text, &path),
+        "menu" => again::<menu::MenuFile>(text, &path),
         _ => return None,
     })
 }

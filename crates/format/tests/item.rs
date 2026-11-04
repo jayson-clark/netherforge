@@ -60,7 +60,7 @@ fn an_items_field_rules() {
             // In the file's order.
             "item.count $.count: count must be from 1 to 99",
             "item.color $.color: color must be #RRGGBB",
-            "item.enchantment $.enchantments: \"Sharp!\" must be an enchantment id",
+            "item.enchantment $.enchantments[\"Sharp!\"]: \"Sharp!\" must be an enchantment id",
             "item.enchantment-level $.enchantments[\"minecraft:sharpness\"]: enchantments[\"minecraft:sharpness\"] must be from 1 to 255",
             "item.food $.food.nutrition: food.nutrition must be at least 0",
             "item.food $.food.eatSeconds: food.eatSeconds must be more than 0",

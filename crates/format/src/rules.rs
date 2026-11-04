@@ -95,7 +95,12 @@ fn walk(
                     && let Some(code) = code_of(names)
                     && let Some(message) = broken(&Value::String(key.clone()), names)
                 {
-                    sink.report(code, format!("\"{key}\" {message}"), Some(path.to_owned()));
+                    // At the key itself, as a map's entries are named.
+                    sink.report(
+                        code,
+                        format!("\"{key}\" {message}"),
+                        Some(child_path(path, key)),
+                    );
                 }
                 let child_schema = properties
                     .and_then(|p| p.get(key))

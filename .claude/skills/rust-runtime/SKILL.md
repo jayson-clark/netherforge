@@ -438,7 +438,9 @@ unchanged.
 - **Shared pieces**: `item.rs` is `ItemDef` (a stack, in menus, loot, recipes and items) with
   its rules on its fields (`Rules.item`'s ranges and patterns, about half of it) and `check`,
   the rest (ids the game must have, a durable item that can't stack, modifiers sharing an id,
-  near-miss names). `game.rs` is the `GameData` the checks ask (registries, tags, durability):
+  near-miss names). A rule on a map's keys is reported at the key itself (`$.stats["Bad Name"]`),
+  which Kotlin now does too (its buff check said `$.stats`). `script.rs` is `ScriptDef` (its
+  path and budget are field rules; `check` asks that the file is there). `game.rs` is the `GameData` the checks ask (registries, tags, durability):
   a project loads without it, and those checks say nothing then. `canonical::Free` is
   free-form JSON (an item's `data`), written sorted however deep as kotlinx does.
 - **Kinds, one by one** (`kind/<kind>.rs`, listed in `kind::PORTED`): each document kind is a
@@ -449,10 +451,10 @@ unchanged.
 - **What the goldens hold a kind to**: `tests/goldens.rs` compares a ported kind's problems with
   the goldens' by what's wrong and where (severity, file, path, code, position, related), not
   their wording, since the field rules word themselves; each kind's own tests hold its wording.
-  `reference.*` (checks across resources) is left out until it's ported. The examples are
+  Checks across resources (`reference.*`, `font.*`, `item.kind-mismatch`) are left out until they're ported. The examples are
   valid projects, so a ported kind must report no errors in them, and must write them back to
   the same bytes. When the Rust side takes over, the goldens are written from it. Ported:
-  `buff` (all its rules are fields'), `module` (with `ModuleRequires`, worked out once per
+  `buff` (all its rules are fields'), `menu` (its type and size, slot keys, items' and scripts' checks), `module` (with `ModuleRequires`, worked out once per
   project in `Source`).
 
 Next in format: reading each resource with its kind's model and checks (kind by kind, each

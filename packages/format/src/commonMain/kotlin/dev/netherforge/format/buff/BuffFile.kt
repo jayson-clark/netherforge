@@ -2,6 +2,7 @@ package dev.netherforge.format.buff
 
 import dev.netherforge.format.ProblemCodes
 import dev.netherforge.format.ProblemSink
+import dev.netherforge.format.json.CanonicalJson
 import dev.netherforge.format.ref.Ref
 import dev.netherforge.format.ref.RefKind
 import dev.netherforge.format.ref.ResourceRef
@@ -51,7 +52,11 @@ data class BuffFile(
             file.color?.let { if (!COLOR.matches(it)) sink.report(ProblemCodes.BUFF_COLOR, "color must be #rrggbb", "$.color") }
             for ((stat, value) in file.stats.orEmpty()) {
                 if (!STAT_NAME.matches(stat)) {
-                    sink.report(ProblemCodes.BUFF_STAT, "\"$stat\" isn't a stat name: lowercase letters, digits and _", "$.stats")
+                    sink.report(
+                        ProblemCodes.BUFF_STAT,
+                        "\"$stat\" isn't a stat name: lowercase letters, digits and _",
+                        CanonicalJson.childPath("$.stats", stat)
+                    )
                 } else if (!value.isFinite()) {
                     sink.report(ProblemCodes.BUFF_STAT, "$stat must be a number", "$.stats.$stat")
                 }

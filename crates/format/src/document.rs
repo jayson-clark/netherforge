@@ -5,6 +5,9 @@
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+use std::collections::BTreeSet;
+
+use crate::game::GameData;
 use crate::kinds::split_package;
 use crate::problem::{Problem, ProblemSink};
 
@@ -23,7 +26,15 @@ pub trait Document: Serialize + DeserializeOwned + Clone + schemars::JsonSchema 
 
     /// Its checks on itself alone that its fields' rules can't say (see
     /// `rules`): those run first, from its schema.
-    fn validate(&self, _sink: &mut ProblemSink) {}
+    fn validate(&self, _cx: &Context, _sink: &mut ProblemSink) {}
+}
+
+/// What a resource's checks may look at besides itself: the files in its
+/// folder (its paths there; `None` when they aren't known), and the game.
+#[derive(Clone, Copy, Default)]
+pub struct Context<'a> {
+    pub files: Option<&'a BTreeSet<String>>,
+    pub game: Option<&'a dyn GameData>,
 }
 
 /// The schema a file at `path` names: `SCHEMA` with a `../` for each folder
@@ -46,7 +57,7 @@ pub fn write<T: Document>(value: &T, path: &str) -> String {
 
 /// A document read from the file at `path` and checked on its own: the value
 /// when it parsed, and its problems.
-pub fn load<T: Document>(text: &str, path: &str) -> (Option<T>, Vec<Problem>) {
+pub fn load<T: Document>(text: &str, path: &str, cx: &Context) -> (Option<T>, Vec<Problem>) {
     match crate::read::parse::<T>(text, path) {
         Err(problem) => (None, vec![*problem]),
         Ok(value) => {
@@ -55,7 +66,7 @@ pub fn load<T: Document>(text: &str, path: &str) -> (Option<T>, Vec<Problem>) {
             let json: serde_json::Value =
                 serde_json::from_str(text).expect("it parsed as the model");
             crate::rules::check::<T>(&json, &mut sink);
-            value.validate(&mut sink);
+            value.validate(cx, &mut sink);
             (Some(value), sink.problems)
         }
     }

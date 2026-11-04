@@ -4,7 +4,7 @@ use netherforge_format::document::load;
 use netherforge_format::kind::buff::BuffFile;
 
 fn problems(text: &str) -> Vec<String> {
-    load::<BuffFile>(text, "buffs/x.json")
+    load::<BuffFile>(text, "buffs/x.json", &Default::default())
         .1
         .iter()
         .map(|p| {
@@ -25,7 +25,7 @@ fn a_buffs_rules_are_its_fields() {
         [
             "buff.color $.color: color must be #rrggbb",
             "buff.ticks $.maxTicks: maxTicks must be at least 1",
-            "buff.stat $.stats: \"Defense\" must be a stat name: lowercase letters, digits and _",
+            "buff.stat $.stats.Defense: \"Defense\" must be a stat name: lowercase letters, digits and _",
         ]
     );
     assert!(problems(r##"{"color":"#aabbcc","maxTicks":20,"stats":{"defense":8}}"##).is_empty());

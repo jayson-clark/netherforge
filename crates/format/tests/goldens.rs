@@ -149,7 +149,10 @@ fn what_and_where(p: &Value) -> String {
 
 /// Problems about one resource alone; a reference's (`reference.*`) is a check across resources.
 fn own(code: &str) -> bool {
-    !code.starts_with("reference.") && !layouts(code)
+    // A project item's own kind, the project's default font: checks across resources too.
+    let across =
+        code.starts_with("reference.") || code.starts_with("font.") || code == "item.kind-mismatch";
+    !across && !layouts(code)
 }
 
 #[test]
