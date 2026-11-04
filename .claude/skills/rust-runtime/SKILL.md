@@ -472,9 +472,13 @@ unchanged.
   `by_time`), `noise` (`NoiseDef`), `worldgen` (`GenerationStep`, `SpawnRange`), `block_state`.
 - **A field rule and a hand check may both report a doubly wrong value** where Kotlin reported once
   (a cue's duration with no text, `every` without `burst`): only doubly wrong files differ.
-- **Not yet**: a kind's checks that depend on the target Minecraft version (`requireFeature`:
-  `project.feature`, against format's feature table), and what a kind writes into the start-up
-  datapack (a sky's biome twins); both come with the feature table and the datapack.
+- **The feature table is format's** (`features.rs`): `docs/format/features.md`, which Kotlin's
+  `FeatureTable.CURRENT` writes through its golden test (`FeatureCatalogue`), read by `build.rs`
+  into `features::ALL`, as the problem catalogue is. A check asks its context
+  (`cx.require_feature("sky-night", sink, "$.darkens")`, `project.feature`); a test loads with a
+  table of its own (`project::load_with`). When the Kotlin side goes, the table moves into this
+  crate and the page is written from it. Not yet: what a kind writes into the start-up datapack (a
+  sky's biome twins), which comes with the datapack.
 - **Patterns are compiled once**: names' and ids' checks are `names::is_*` and `game::is_id` (a
   `LazyLock` each), and `rules` caches a schema's patterns, so no check compiles a regex.
 - **Shared pieces**: `item.rs` is `ItemDef` (a stack, in menus, loot, recipes and items) with
@@ -557,8 +561,7 @@ a dependency's namespace says the project doesn't depend on it, and `tests/refer
 exactly those aside in the showcase), a WASM module's checks (with the WASM reader), and the game's
 blocks checked across packages.
 
-Next in format: the feature table (`requireFeature`), then the snapshot as the runtime takes it
-(with packages). The compilers (a centity's, a terrain's generator, a pack's build, the start-up
+Next in format: the snapshot as the runtime takes it (with packages). The compilers (a centity's, a terrain's generator, a pack's build, the start-up
 datapack) come with the runtime pieces that use them.
 
 ## One source for each thing
