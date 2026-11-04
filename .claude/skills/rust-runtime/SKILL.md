@@ -262,4 +262,43 @@ never runs off the room's thread. Tasks waiting on a value come with the prelude
   `BY_CLASS`, each class's events with inheritance resolved (`events::of("Mob", "death")` is
   `Living`'s). Kotlin's `Events.kt`, as data.
 
-Still to come: the runtime that implements `:on`, timers and tasks.
+## Scripts (`crates/runtime`)
+
+A `Room` is a host and its `Scripts`, with the API installed (`Api`: the classes ported so far,
+every other unported). `Scripts` is the prelude's `events`, `tasks` and `scopes` modules and the
+Kotlin `Scripts`, in Rust, implementing `nf.on`/`once`/`emit`, `nf.after`/`every`, `nf.task`/
+`wait`/`wait_until`/`wait_for`, `nf.instructions_left`, `Subscription` and `Task`.
+
+- **Scopes**: `open(name, memory_key, budget)` gives a scope its own `nf`; `run_body` runs a body,
+  and a failing body disables its scope (its subscriptions, timers and tasks go until it
+  reloads). `close` ends a scope and drops its environment.
+- **Subscriptions** are filed under their target (a handle's userdata, which they keep alive,
+  or `nf`) and their scope. Handlers run in registration order, each in its own scope's
+  guarded call. One that fails is reported (`take_reports`) and the rest still run; after
+  `MAX_ERRORS` (20) failures in a row it's cancelled (`gave_up`). A `tick` handler's `every`
+  is phased by its target, or its id on `nf`. `listening(target, event)` tells the server
+  whether to bother.
+- **Events** are the prelude's design: an empty table whose `__index` is its view (`name`,
+  `current`, `cancelled`, `stopped`, the methods), whose `__index` is the payload's fields, so
+  a read runs nothing; `__newindex` allows only the event's writable fields (any field of a
+  custom event). The view keeps the event's own state under a private key. `raise` returns
+  `Delivered` (cancelled, and the fields as handlers left them). A custom event's payload is
+  the caller's very table, so the caller reads what handlers set.
+- **Timers** run at the start of a tick, in order of when they're due. A repeating one that
+  fails 20 times in a row is cancelled.
+- **Tasks** are Luau threads, started at once, resumed through `coroutine.resume` inside the
+  host's guarded call (so the budget, time limit and memory category apply). A wait registers
+  its wake-up (a timer, a predicate checked every tick, or a subscription) and returns
+  `Waiting`, and the binding's shim yields. Only the task's own code may wait: the running
+  thread must be the task's, at the depth its resume opened (so a handler the task sets off
+  can't), and the shim checks `coroutine.isyieldable()` (so `table.sort`'s comparator can't;
+  Rust can't tell, since mlua's raw calls run protected). A task that yields by itself fails
+  with "coroutine.yield can't pause a task". Errors are the prelude's, word for word.
+- **Weak host.** `Scripts` holds the host weakly: the host's state holds the installed API,
+  which holds `Scripts`, so a strong one would be a cycle. The `Room` owns the host.
+
+Not ported yet (the Kotlin runtime does them): `:on` on handles other than `nf` (it needs each
+service's liveness), `nf.wait_for` on a handle, checking a writable field's value as it's
+assigned (`events.check`), the same error within five seconds only counted, the per-scope time
+per tick (`maxTickMillis`, which holds back timers and tick handlers), time per scope and the
+profiler, an async function's waiting form (no callback, in a task), and `require`.

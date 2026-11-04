@@ -1,0 +1,16 @@
+[package]
+name = "netherforge-runtime"
+description = "NetherForge's runtime in Rust: scripts, scopes, events, timers and tasks"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+mlua.workspace = true
+netherforge-luau = { path = "../luau" }
+netherforge-api = { path = "../api" }
+
+[lints]
+workspace = true

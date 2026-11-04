@@ -54,12 +54,20 @@ pub fn waiting(lua: &Lua) -> mlua::Result<Value> {
 /// machinery, which would drive tasks itself): so a waiting binding returns,
 /// and this shim yields its task's coroutine, which the scheduler resumes
 /// with the call's value.
+///
+/// It also checks the task can yield here: a function called back from
+/// outside Luau (`table.sort`'s comparator) can't, and Rust can't tell.
 const SHIM: &str = r#"
-local waiting, yield = ...
-return function(binding)
+local waiting, yield, isyieldable, error = ...
+return function(binding, called)
+  local stuck = called
+    .. " can't wait inside a function called back from outside Lua (like table.sort's comparator or string.gsub's replacement): wait in the task's own code"
   return function(...)
     local result = binding(...)
     if result == waiting then
+      if not isyieldable() then
+        error(stuck, 2)
+      end
       return yield()
     end
     return result
@@ -75,7 +83,8 @@ fn shimmed(lua: &Lua, binding: &Binding, f: Function) -> mlua::Result<Function> 
         .app_data_ref::<Installed>()
         .map(|i| i.shim.clone())
         .ok_or_else(|| mlua::Error::runtime("the API isn't installed"))?;
-    shim.call(f)
+    let separator = if binding.method { ":" } else { "." };
+    shim.call((f, format!("{}{separator}{}", binding.class, binding.name)))
 }
 
 /// Puts the bindings into `host`'s state, implemented by `api`. Each handle
@@ -89,7 +98,12 @@ pub fn install(host: &Host, api: Rc<dyn LuaApi>) -> mlua::Result<()> {
         .load(SHIM)
         .set_name("=nf/waits")
         .set_compiler(mlua::chunk::Compiler::new().set_debug_level(0))
-        .call((waiting.clone(), coroutine.get::<Function>("yield")?))?;
+        .call((
+            waiting.clone(),
+            coroutine.get::<Function>("yield")?,
+            coroutine.get::<Function>("isyieldable")?,
+            lua.globals().get::<Function>("error")?,
+        ))?;
     lua.set_app_data(Installed {
         api: api.clone(),
         waiting,

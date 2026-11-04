@@ -385,6 +385,26 @@ impl Host {
         frame.stop.clone()
     }
 
+    /// Steps the running call may still take before it's stopped: the least
+    /// of its own budget's and each caller's, since what it runs is charged to
+    /// its callers when it returns. 0 outside a call.
+    pub fn steps_left(&self) -> u64 {
+        let guard = self.0.guard.borrow();
+        let mut used_inside = 0u64;
+        let mut least = u64::MAX;
+        for frame in guard.frames.iter().rev() {
+            let used = frame.used.saturating_add(used_inside);
+            least = least.min(frame.budget.saturating_sub(used));
+            used_inside = used;
+        }
+        if guard.frames.is_empty() { 0 } else { least }
+    }
+
+    /// How many calls in are running, one inside another: 0 outside any.
+    pub fn depth(&self) -> usize {
+        self.0.guard.borrow().frames.len()
+    }
+
     /// The scope whose call is running, if any.
     pub fn running_scope(&self) -> Option<ScopeId> {
         self.0.guard.borrow().frames.last().map(|f| f.scope)
@@ -539,7 +559,7 @@ const CAPS: &str = include_str!("../../../packages/format/src/commonMain/lua/cap
 /// one interrupt stands for: a loop iteration or a call.
 const STEPS_PER_INTERRUPT: f64 = 5.0;
 
-fn failure_of(error: &mlua::Error) -> Failure {
+pub(crate) fn failure_of(error: &mlua::Error) -> Failure {
     match error {
         mlua::Error::MemoryError(_) => Failure::Memory,
         mlua::Error::CallbackError { cause, .. } => failure_of(cause),
@@ -554,7 +574,7 @@ fn failure_of(error: &mlua::Error) -> Failure {
 /// Luau's message, split from the traceback mlua appends to it. A message
 /// that doesn't say where it's from (the library's, raised inside the caps,
 /// which have no lines) is located at the traceback's first script frame.
-fn error_with_traceback(text: &str) -> Failure {
+pub(crate) fn error_with_traceback(text: &str) -> Failure {
     let (message, traceback) = match text.split_once("\nstack traceback:\n") {
         Some((message, traceback)) => (message, Some(traceback)),
         None => (text, None),

@@ -72,3 +72,16 @@ impl fmt::Display for Failure {
 }
 
 impl std::error::Error for Failure {}
+
+impl Failure {
+    /// What an mlua error means for a script: located at its line, its
+    /// traceback apart (an error a coroutine ended with, say).
+    pub fn of(error: &mlua::Error) -> Failure {
+        crate::host::failure_of(error)
+    }
+
+    /// The same for an error's text (a string a script raised).
+    pub fn of_message(text: &str) -> Failure {
+        crate::host::error_with_traceback(text)
+    }
+}
