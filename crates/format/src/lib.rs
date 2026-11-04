@@ -6,6 +6,7 @@ pub mod animation;
 pub mod block_state;
 pub mod canonical;
 pub mod document;
+pub mod font;
 pub mod game;
 pub mod item;
 pub mod json;

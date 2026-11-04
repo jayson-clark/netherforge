@@ -69,6 +69,14 @@ impl MenuType {
         crate::canonical::name_of(&self)
     }
 
+    /// Whether its window centres its title (a dispenser's, a dropper's, a crafter's).
+    pub fn centres_title(self) -> bool {
+        matches!(
+            self,
+            MenuType::Dispenser | MenuType::Dropper | MenuType::Crafter
+        )
+    }
+
     /// How many slots a type always has (a chest's depend on its rows).
     pub fn fixed_slots(self) -> i32 {
         match self {
@@ -89,6 +97,26 @@ impl MenuType {
 }
 
 impl Document for MenuFile {
+    /// A centred title moves the skin by the words' width, which the server measures with the default font.
+    fn cross_check(&self, cx: &crate::project::Across, sink: &mut ProblemSink) {
+        let kind = self.kind.unwrap_or(MenuType::Chest);
+        if kind.centres_title()
+            && self.skin.is_some()
+            && self.title.as_deref().is_some_and(|t| !t.trim().is_empty())
+        {
+            crate::font::require_current(
+                cx.default_font(),
+                cx.minecraft(),
+                sink,
+                Some("$.skin".into()),
+                &format!(
+                    "A {} centres its title, so its skin is placed from the title's width",
+                    kind.id()
+                ),
+            );
+        }
+    }
+
     const SCHEMA: &'static str = "../../.netherforge/schema/menu.schema.json";
 
     fn set_schema(&mut self, schema: Option<String>) {

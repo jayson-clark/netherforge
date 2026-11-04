@@ -156,11 +156,6 @@ fn what_and_where(p: &Value) -> String {
 /// The codes whose checks across the project aren't ported yet, set aside on
 /// both sides until they are. Done when it's empty.
 const NOT_YET: &[&str] = &[
-    "font.advance",
-    "font.code-point",
-    "font.minecraft",
-    "font.needed",
-    "font.stale",
     "project.world-height",
     "project.dependency",
     "project.export",
@@ -196,6 +191,16 @@ fn the_ported_kinds_examples_write_back() {
         files_in(&dir, &dir, &mut files);
         let read = |p: &str| std::fs::read_to_string(dir.join(p)).ok();
         let source = kind::Source::new(&files, &read);
+        // The project's own documents besides its resources.
+        use netherforge_format::font::{self, DefaultFontFile};
+        if let Some(text) = read(font::FILE) {
+            let file: DefaultFontFile = netherforge_format::read::parse(&text, font::FILE).unwrap();
+            let again = netherforge_format::document::write(&file, font::FILE);
+            written += 1;
+            if again != text {
+                different.push(format!("{}/{}:\n{again}", dir.display(), font::FILE));
+            }
+        }
         for found in netherforge_format::snapshot::scan(&files).resources {
             let Some(problems) = kind::read(&found, &source).map(|r| r.problems) else {
                 continue;

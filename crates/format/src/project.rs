@@ -43,6 +43,8 @@ pub struct Project<'g> {
     pub manifest: Option<Manifest>,
     /// `client/vanilla.json`, when it's there and reads.
     pub vanilla: Option<crate::vanilla::VanillaFile>,
+    /// `fonts/default.json`, when it's there and reads: the default font's advances, for measuring text.
+    pub default_font: Option<crate::font::DefaultFontFile>,
     /// Every resource of a ported kind, in format's order (kind by kind, by id).
     pub resources: Vec<Resource>,
     /// What its references can name, and every reference its files make.
@@ -70,6 +72,14 @@ pub fn load<'g>(
     problems.extend(manifest_problems);
     problems.extend(manifest::listing_files(manifest.as_ref(), &files));
     let minecraft = manifest.as_ref().map(|m| m.minecraft.as_str());
+    let default_font = match files.contains(crate::font::FILE) {
+        true => read(crate::font::FILE).and_then(|text| {
+            let (file, found) = crate::font::load(&text, minecraft);
+            problems.extend(found);
+            file
+        }),
+        false => None,
+    };
     let vanilla = match files.contains(crate::vanilla::FILE) {
         true => read(crate::vanilla::FILE).and_then(|text| {
             let (file, found) = crate::vanilla::load(&text, minecraft);
@@ -130,6 +140,7 @@ pub fn load<'g>(
     let mut project = Project {
         manifest,
         vanilla,
+        default_font,
         resources,
         references,
         game,
@@ -218,6 +229,11 @@ impl<'a> Across<'a> {
     /// `client/vanilla.json`, when it's there and reads.
     pub fn vanilla(&self) -> Option<&'a crate::vanilla::VanillaFile> {
         self.project.vanilla.as_ref()
+    }
+
+    /// `fonts/default.json`, when it's there and reads.
+    pub fn default_font(&self) -> Option<&'a crate::font::DefaultFontFile> {
+        self.project.default_font.as_ref()
     }
 
     /// Every resource of a kind (by its id) that read, by id.
