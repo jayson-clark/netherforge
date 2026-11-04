@@ -1,0 +1,15 @@
+[package]
+name = "netherforge-api"
+description = "NetherForge's Lua API for the Rust runtime: generated from packages/api, and what it needs"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+mlua.workspace = true
+netherforge-luau = { path = "../luau" }
+
+[lints]
+workspace = true

@@ -107,6 +107,7 @@ becomes.
 | -------------- | -------------------------------------------------------------------------------------------- |
 | `Cargo.toml`   | The runtime's workspace (`crates/*`). The editor's backend is still its own workspace.       |
 | `crates/luau/` | `netherforge-luau`: the Luau host. One state per room, scopes, the guards, memory per scope. |
+| `crates/api/`  | `netherforge-api`: the Lua API for the Rust runtime, generated from `packages/api`.          |
 
 `pnpm test` runs `cargo test --workspace`, and `pnpm lint` runs rustfmt and clippy on it.
 
@@ -175,3 +176,30 @@ What replaces `LuaHost`, the prelude's `guard` and `sandbox` modules, and the me
 
 Still to come in the host: the prelude's event core, tasks and `require`, and generated
 bindings.
+
+## The API crate (`crates/api`)
+
+`pnpm generate` writes `crates/api/src/generated/` from the same binding model as the Kotlin
+runtime's (`packages/api/scripts/emit/bindings.ts`), through `emit/rust.ts`, so the two
+runtimes can't disagree about what crosses. `pnpm lint`'s generated-files check covers it.
+
+- `handles.rs`: a struct per handle class holding its root's key (`Entity { uuid }`),
+  `From` conversions up its chain (a `Mob` into the `Living` and the `Entity` it is), and
+  `Handle`, any of them.
+- `shapes.rs` and `unions.rs`: a struct per shape that crosses, an enum per union (a variant
+  per member). A shape that holds itself through other shapes is boxed there.
+- `api.rs`: a trait per class with functions (`CentityApi`, `NfServerApi`), and `LuaApi`, all
+  of them. A handle method gets `this: &handles::<Class>`, a namespace function
+  `caller: &Caller`, and every function returns `ApiResult<T>`. An `async` function returns a
+  `Pending<T>`, a future whose value reaches the room at a tick boundary. A function the
+  runtime doesn't implement is a compile error, as the roadmap asks.
+- Types: `integer` is `i64` (checked to be whole and safe where it's read), a literal union is
+  a `String` checked against its choices, a map is a `BTreeMap` (keys are strings or
+  integers; anything else is an error at generate), `any` and `table` are mlua's `Value`.
+  The runtime's own types (`Vec3`, `Location`, `Item`, `ItemMatch`, `Text`) are
+  `crates/api/src/values.rs`, filled in as their areas are ported.
+- The generated modules are `#[rustfmt::skip]` and allow clippy's lints, so the emitter doesn't
+  have to write rustfmt's layout.
+
+Still to come: the glue that reads a call's arguments from Luau, calls the trait and pushes
+the results (`LuaPrimitives.kt`'s half), handles as userdata, and the events registry.

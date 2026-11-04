@@ -140,6 +140,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "netherforge-api"
+version = "0.0.0"
+dependencies = [
+ "mlua",
+ "netherforge-luau",
+]
+
+[[package]]
 name = "netherforge-luau"
 version = "0.0.0"
 dependencies = [

@@ -21,6 +21,8 @@ const generated = [
   'packages/api/generated',
   'docs/reference',
   'apps/plugin/runtime/src/generated',
+  // The Rust runtime's bindings.
+  'crates/api/src/generated',
   // tauri-specta's output: the UI's command bindings and the commands permission.
   'apps/editor/src/core/backend/generated',
   'apps/editor/src-tauri/permissions/generated',

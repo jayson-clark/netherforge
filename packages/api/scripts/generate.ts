@@ -39,6 +39,7 @@ import {
   unionsKotlin,
 } from './emit/kotlin.ts'
 import { bindingsLua, schemaLua } from './emit/lua.ts'
+import { apiRust, handlesRust, shapesRust, unionsRust } from './emit/rust.ts'
 import { raisableKotlin } from './emit/raisable.ts'
 import { dispatchKotlin, platformKotlin, raisedEvents } from './emit/raised.ts'
 import { luals, lualsGates, lualsSurfaces } from './emit/luals.ts'
@@ -108,4 +109,16 @@ writeDir(
     ['CommandArguments.kt', argumentTypesKotlin(bound)],
   ]),
   '.kt',
+)
+
+// The Rust runtime's half (see the rust-runtime skill): the same bindings, as Rust.
+writeDir(
+  'crates/api/src/generated',
+  new Map([
+    ['handles.rs', handlesRust(classes)],
+    ['shapes.rs', shapesRust(bound)],
+    ['unions.rs', unionsRust(bound)],
+    ['api.rs', apiRust(classes)],
+  ]),
+  '.rs',
 )
