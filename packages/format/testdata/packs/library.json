@@ -1,0 +1,19 @@
+{
+  "joined": {
+    "assets/library/items/gems/gem.json": "{\n  \"model\": {\n    \"type\": \"minecraft:model\",\n    \"model\": \"library:item/gems/gem\"\n  }\n}\n",
+    "assets/library/models/item/gems/gem.json": "{\n  \"parent\": \"minecraft:item/generated\",\n  \"textures\": {\n    \"layer0\": \"library:gems/item/gem\"\n  }\n}\n",
+    "assets/library/textures/gems/item/gem.png": "copy of resource_packs/gems/textures/item/gem.png",
+    "assets/minecraft/atlases/items.json": "{\n  \"sources\": [\n    {\n      \"type\": \"minecraft:single\",\n      \"resource\": \"library:gems/item/gem\"\n    }\n  ]\n}\n",
+    "assets/minecraft/font/default.json": "{\n  \"providers\": [\n    {\n      \"type\": \"bitmap\",\n      \"file\": \"netherforge:font/pixel_1.png\",\n      \"height\": 10,\n      \"ascent\": 7,\n      \"chars\": [\"\"]\n    },\n    {\n      \"type\": \"bitmap\",\n      \"file\": \"netherforge:font/pixel_2.png\",\n      \"height\": 10,\n      \"ascent\": 7,\n      \"chars\": [\"\"]\n    },\n    {\n      \"type\": \"bitmap\",\n      \"file\": \"netherforge:font/pixel_4.png\",\n      \"height\": 10,\n      \"ascent\": 7,\n      \"chars\": [\"\"]\n    },\n    {\n      \"type\": \"bitmap\",\n      \"file\": \"netherforge:font/pixel_8.png\",\n      \"height\": 10,\n      \"ascent\": 7,\n      \"chars\": [\"\"]\n    },\n    {\n      \"type\": \"bitmap\",\n      \"file\": \"netherforge:font/pixel_16.png\",\n      \"height\": 10,\n      \"ascent\": 7,\n      \"chars\": [\"\"]\n    },\n    {\n      \"type\": \"bitmap\",\n      \"file\": \"netherforge:font/pixel_32.png\",\n      \"height\": 10,\n      \"ascent\": 7,\n      \"chars\": [\"\"]\n    },\n    {\n      \"type\": \"bitmap\",\n      \"file\": \"netherforge:font/pixel_64.png\",\n      \"height\": 10,\n      \"ascent\": 7,\n      \"chars\": [\"\"]\n    },\n    {\n      \"type\": \"bitmap\",\n      \"file\": \"netherforge:font/pixel_128.png\",\n      \"height\": 10,\n      \"ascent\": 7,\n      \"chars\": [\"\"]\n    },\n    {\n      \"type\": \"space\",\n      \"advances\": {\n        \"\": -1,\n        \"\": 1,\n        \"\": -2,\n        \"\": 2,\n        \"\": -4,\n        \"\": 4,\n        \"\": -8,\n        \"\": 8,\n        \"\": -16,\n        \"\": 16,\n        \"\": -32,\n        \"\": 32,\n        \"\": -64,\n        \"\": 64,\n        \"\": -128,\n        \"\": 128,\n        \"\": -256,\n        \"\": 256,\n        \"\": -512,\n        \"\": 512,\n        \"\": -1024,\n        \"\": 1024\n      }\n    }\n  ]\n}\n",
+    "assets/netherforge/items/invisible.json": "{\n  \"model\": {\n    \"type\": \"minecraft:empty\"\n  }\n}\n",
+    "assets/netherforge/textures/font/pixel_1.png": "bytes 2c548f5732811e85be9b872ac7a4ea2c0a6c5d419ef00a1ecfcd6d9f22ad501c",
+    "assets/netherforge/textures/font/pixel_128.png": "bytes a6893c5d14c043f3821b57066ea9f565e6f8f70b1a51d8339783f3069dad22e6",
+    "assets/netherforge/textures/font/pixel_16.png": "bytes 38d1de1224cc6a96111a5b63171bdaddf3e687fa4d7db5547407426ba88bae29",
+    "assets/netherforge/textures/font/pixel_2.png": "bytes d9c7592da63ea9e39cb2f0c98ee5e27c259e703c4f6478b78c11224c0ce0bfc0",
+    "assets/netherforge/textures/font/pixel_32.png": "bytes a88ede47bf879b04c07ee363f2c5c0086f682b93eb0ad81a43dcd07dc7d0b0cd",
+    "assets/netherforge/textures/font/pixel_4.png": "bytes 9756d78d193b6a8f3add0c026f91ca1660805c904d580f3aae7c6f06aaff85fe",
+    "assets/netherforge/textures/font/pixel_64.png": "bytes dba7e23b8c6eb02e9d08c6778ff6112d7301c8766da4a41403e7238cab7ae980",
+    "assets/netherforge/textures/font/pixel_8.png": "bytes 933aaeb03714bdd65ed11d8ae9ab6fe4cbea93ee1b24aa063bf7358334a454bb",
+    "pack.mcmeta": "{\n  \"pack\": {\n    \"description\": \"Library example\",\n    \"min_format\": [75, 0],\n    \"max_format\": [75, 0]\n  }\n}\n"
+  }
+}

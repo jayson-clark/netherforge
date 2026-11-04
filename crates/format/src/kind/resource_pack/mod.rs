@@ -10,6 +10,7 @@
 
 mod across;
 pub use across::texture_path;
+pub mod build;
 pub mod compiled;
 pub mod fonts;
 pub mod hud;

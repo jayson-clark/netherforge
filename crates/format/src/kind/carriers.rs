@@ -38,6 +38,7 @@ impl State {
 
 /// The states one carrier holds blocks in: each of the game's blocks it takes
 /// states of (with every state), and the states blocks take, rarest first.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Pool {
     pub carrier: BlockCarrier,
     pub blocks: Vec<(String, Vec<State>)>,
@@ -214,5 +215,183 @@ pub fn capacity(game: Option<&dyn GameData>, carrier: BlockCarrier) -> usize {
 pub fn blocks_of(game: Option<&dyn GameData>, carrier: BlockCarrier) -> Vec<String> {
     pool(game, carrier).map_or_else(Vec::new, |p| {
         p.blocks.into_iter().map(|(id, _)| id).collect()
+    })
+}
+
+impl State {
+    /// `id[key=value,…]`, as a block state is written.
+    pub fn text(&self) -> String {
+        let properties: Vec<(String, String)> = self
+            .properties
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        crate::block_state::BlockState {
+            id: self.id.clone(),
+            properties,
+        }
+        .to_string()
+    }
+}
+
+impl Pool {
+    /// Whether `state` is one a custom block could be in.
+    pub fn is_carrier(&self, state: &State) -> bool {
+        self.carriers.contains(state)
+    }
+
+    /// The model the game draws every state of `block` with, when it's one model for all of them (a note block's,
+    /// a leaves block's); none when its states differ (tripwire's), which only the client's file says.
+    pub fn vanilla_model(&self, block: &str) -> Option<String> {
+        match self.carrier {
+            BlockCarrier::NoteBlock => Some(VANILLA_MODEL.to_owned()),
+            BlockCarrier::Tripwire => None,
+            BlockCarrier::Leaves => {
+                let (namespace, path) = block
+                    .split_once(':')
+                    .unwrap_or((crate::game::NAMESPACE, block));
+                Some(format!("{namespace}:block/{path}"))
+            }
+        }
+    }
+}
+
+/// What the pack draws every note block state no custom block uses as: the game's own look.
+pub const VANILLA_MODEL: &str = "minecraft:block/note_block";
+
+/// One block's use of a carrier: `name` is the block as the project names it, `pack` the pack its model is in
+/// (`ui`, or `library:ui` for a package's) and `entry` its key there, both none for a block with no model yet.
+/// `hidden` is a block drawn by a centity, which shows no cube of its own.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Use {
+    pub name: String,
+    pub state: State,
+    pub pack: Option<String>,
+    pub entry: Option<String>,
+    pub hidden: bool,
+    /// The way the block faces in this state, for a block that turns.
+    pub facing: Option<super::block::BlockFacing>,
+}
+
+/// Which state each block takes (format's `BlockCarriers.Plan`). `overflow` is the blocks there was no state left
+/// for in their carrier, and `unheld` those whose carrier the game doesn't have.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Plan {
+    pub pools: BTreeMap<BlockCarrier, Pool>,
+    pub home: String,
+    pub uses: Vec<Use>,
+    pub overflow: Vec<String>,
+    pub unheld: Vec<String>,
+}
+
+impl Plan {
+    /// The state `name` is held as facing `facing`: its one state for a block that doesn't turn.
+    pub fn state_of(
+        &self,
+        name: &str,
+        facing: Option<super::block::BlockFacing>,
+    ) -> Option<&State> {
+        let held: Vec<&Use> = self.uses.iter().filter(|u| u.name == name).collect();
+        let first = held.first()?;
+        if first.facing.is_none() {
+            return Some(&first.state);
+        }
+        let wanted = facing.unwrap_or(super::block::BlockFacing::North);
+        held.iter()
+            .find(|u| u.facing == Some(wanted))
+            .map(|u| &u.state)
+    }
+
+    /// The block `state` (canonical text) is the carrier of.
+    pub fn name_of(&self, state: &str) -> Option<&str> {
+        self.uses
+            .iter()
+            .find(|u| u.state.text() == state)
+            .map(|u| u.name.as_str())
+    }
+}
+
+/// Gives every block in `blocks` (by the name the project knows it by, a package's `ns:id`) a state of its
+/// carrier's pool, in name order. A block that doesn't run (`None`) keeps its place so the others' states don't
+/// move while it's being fixed, in the carrier `carriers` says its file names. A running block's references are
+/// written in full, so its model resolves in `home`. None without game data.
+pub fn plan(
+    blocks: &BTreeMap<String, Option<&super::block::BlockFile>>,
+    home: &str,
+    game: Option<&dyn GameData>,
+    carriers: &BTreeMap<String, BlockCarrier>,
+    rotations: &BTreeMap<String, super::block::BlockRotation>,
+) -> Option<Plan> {
+    game?;
+    let mut pools: BTreeMap<BlockCarrier, Option<Pool>> = BTreeMap::new();
+    let mut next: BTreeMap<BlockCarrier, usize> = BTreeMap::new();
+    let (mut uses, mut overflow, mut unheld) = (Vec::new(), Vec::new(), Vec::new());
+    for (name, block) in blocks {
+        let carrier = block
+            .and_then(|b| b.carrier)
+            .or_else(|| carriers.get(name).copied())
+            .unwrap_or_default();
+        let Some(pool) = pools
+            .entry(carrier)
+            .or_insert_with(|| pool(game, carrier))
+            .as_ref()
+        else {
+            unheld.push(name.clone());
+            continue;
+        };
+        let model = block.and_then(|b| b.model.as_deref());
+        let resolved = model.and_then(|m| crate::reference::resolve_any(home, m));
+        if model.is_some() && resolved.is_none() {
+            continue;
+        }
+        // A block that turns takes a state per way it faces, all or none of them.
+        let rotation = block
+            .and_then(|b| b.rotation)
+            .or_else(|| rotations.get(name).copied())
+            .unwrap_or(super::block::BlockRotation::None);
+        let facings = rotation.facings();
+        let at = next.get(&carrier).copied().unwrap_or(0);
+        let needed = facings.len().max(1);
+        if at + needed > pool.carriers.len() {
+            overflow.push(name.clone());
+            continue;
+        }
+        next.insert(carrier, at + needed);
+        let pack = resolved.as_ref().map(|k| match k.namespace == home {
+            true => k.pack().to_owned(),
+            false => format!("{}:{}", k.namespace, k.pack()),
+        });
+        let entry = resolved.as_ref().map(|k| k.key().to_owned());
+        let hidden = block.is_some_and(|b| b.centity.is_some());
+        let use_of = |state: &State, facing| Use {
+            name: name.clone(),
+            state: state.clone(),
+            pack: pack.clone(),
+            entry: entry.clone(),
+            hidden,
+            facing,
+        };
+        if facings.is_empty() {
+            uses.push(use_of(&pool.carriers[at], None));
+        } else {
+            for (i, facing) in facings.iter().enumerate() {
+                uses.push(use_of(&pool.carriers[at + i], Some(*facing)));
+            }
+        }
+    }
+    // Nothing to hold any of them in (a game without the carriers' blocks): as no plan.
+    let known: BTreeMap<BlockCarrier, Pool> = pools
+        .into_iter()
+        .filter_map(|(c, p)| Some((c, p?)))
+        .collect();
+    if known.is_empty() && !blocks.is_empty() {
+        return None;
+    }
+    Some(Plan {
+        pools: known,
+        home: home.to_owned(),
+        uses,
+        overflow,
+        unheld,
     })
 }

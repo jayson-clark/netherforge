@@ -19,6 +19,7 @@ pub mod math;
 pub mod names;
 pub mod noise;
 pub mod package;
+pub mod png;
 pub mod problem;
 pub mod project;
 pub mod random;
