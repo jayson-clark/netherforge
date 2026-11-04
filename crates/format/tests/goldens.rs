@@ -171,6 +171,8 @@ fn own(code: &str) -> bool {
         "loot.cycle",
         "advancement.cycle",
         "build.id-taken",
+        "screen.place",
+        "screen_font.grid",
     ];
     let across =
         code.starts_with("reference.") || code.starts_with("font.") || ACROSS.contains(&code);

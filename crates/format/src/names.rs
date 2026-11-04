@@ -44,11 +44,13 @@ macro_rules! id_body {
 const ID_BODY: &str = id_body!();
 /// An id's pattern, for a field's rule (with [`ID_RULE`] its words).
 pub const ID_PATTERN: &str = concat!("^", id_body!(), "$");
+/// A world name's pattern, for a field's rule (with [`WORLD_NAME_RULE`] its words).
+pub const WORLD_NAME_PATTERN: &str = "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$";
 const HOST_LABEL: &str = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
 
 pattern!(ID, ID_PATTERN);
 pattern!(NODE_NAME, "^[A-Za-z0-9_-]{1,64}$");
-pattern!(WORLD_NAME, "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$");
+pattern!(WORLD_NAME, WORLD_NAME_PATTERN);
 pattern!(PERMISSION_NODE, "^[a-z0-9_-]+(\\.[a-z0-9_-]+)*$");
 pattern!(HOST_NAME, &format!("^{HOST_LABEL}(?:\\.{HOST_LABEL})*$"));
 pattern!(

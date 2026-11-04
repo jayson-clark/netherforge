@@ -14,7 +14,10 @@ pub mod loot;
 pub mod menu;
 pub mod module;
 pub mod recipe;
+pub mod screen;
+pub mod screen_font;
 pub mod sky;
+pub mod video;
 
 use std::collections::BTreeSet;
 
@@ -52,6 +55,7 @@ pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
     let path = found.kind.path_of(&found.id, &found.group);
     let text = || (source.read)(&path).unwrap_or_default();
     let cx = crate::document::Context {
+        id: &found.id,
         files: Some(&found.inside),
         game: source.game,
     };
@@ -66,6 +70,11 @@ pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
         "biome" => crate::document::load::<biome::BiomeFile>(&text(), &path, &cx).1,
         "game_block" => crate::document::load::<game_block::GameBlockFile>(&text(), &path, &cx).1,
         "cutscene" => crate::document::load::<cutscene::CutsceneFile>(&text(), &path, &cx).1,
+        "screen" => crate::document::load::<screen::ScreenFile>(&text(), &path, &cx).1,
+        "video" => crate::document::load::<video::VideoFile>(&text(), &path, &cx).1,
+        "screen_font" => {
+            crate::document::load::<screen_font::ScreenFontFile>(&text(), &path, &cx).1
+        }
         "dimension_type" => {
             crate::document::load::<dimension_type::DimensionTypeFile>(&text(), &path, &cx).1
         }
@@ -99,6 +108,9 @@ pub fn write_back(found: &Found, text: &str) -> Option<Result<String, Box<Proble
         "biome" => again::<biome::BiomeFile>(text, &path),
         "game_block" => again::<game_block::GameBlockFile>(text, &path),
         "cutscene" => again::<cutscene::CutsceneFile>(text, &path),
+        "screen" => again::<screen::ScreenFile>(text, &path),
+        "video" => again::<video::VideoFile>(text, &path),
+        "screen_font" => again::<screen_font::ScreenFontFile>(text, &path),
         "dimension_type" => again::<dimension_type::DimensionTypeFile>(text, &path),
         "advancement" => again::<advancement::AdvancementFile>(text, &path),
         _ => return None,

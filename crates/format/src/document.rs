@@ -38,10 +38,11 @@ pub trait Document: Serialize + DeserializeOwned + Clone + schemars::JsonSchema 
     fn validate(&self, _cx: &Context, _sink: &mut ProblemSink) {}
 }
 
-/// What a resource's checks may look at besides itself: the files in its
-/// folder (its paths there; `None` when they aren't known), and the game.
+/// What a resource's checks may look at besides itself: its id, the files in
+/// its folder (its paths there; `None` when they aren't known), and the game.
 #[derive(Clone, Copy, Default)]
 pub struct Context<'a> {
+    pub id: &'a str,
     pub files: Option<&'a BTreeSet<String>>,
     pub game: Option<&'a dyn GameData>,
 }
