@@ -8,6 +8,32 @@ use mlua::{Function, Value};
 use crate::{handles, shapes, unions, values};
 
 #[derive(Clone, Debug)]
+pub enum CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable {
+    Centity(handles::Centity),
+    Node(handles::Node),
+    Entity(handles::Entity),
+    World(handles::World),
+    ProjectBlock(handles::ProjectBlock),
+    Menu(handles::Menu),
+    Slot(handles::Slot),
+    MenuTemplate(handles::MenuTemplate),
+    Dialog(handles::Dialog),
+    Button(handles::Button),
+    ProjectItem(handles::ProjectItem),
+    Effect(handles::Effect),
+    HttpStream(handles::HttpStream),
+    WebSocket(handles::WebSocket),
+    OAuthFlow(handles::OAuthFlow),
+    WasmProcess(handles::WasmProcess),
+    NetworkChannel(handles::NetworkChannel),
+    NetworkMap(handles::NetworkMap),
+    Cutscene(handles::Cutscene),
+    Screen(handles::Screen),
+    Playback(handles::Playback),
+    Table(Value),
+}
+
+#[derive(Clone, Debug)]
 pub enum CommandDefinitionOrFunction {
     CommandDefinition(shapes::CommandDefinition),
     Function(Function),

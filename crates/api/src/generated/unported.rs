@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 use mlua::{Function, Value};
 use crate::api::*;
-use crate::{ApiError, ApiResult, Caller, Pending, handles, shapes, unions, values};
+use crate::{ApiError, ApiResult, Caller, Pending, Waiting, handles, shapes, unions, values};
 
 /// The API as far as the Rust runtime hasn't ported it.
 pub struct Unported;
@@ -17,11 +17,31 @@ fn unported<T>(called: &str) -> ApiResult<T> {
 
 impl NfApi for Unported {
     #[allow(unused_variables)]
+    fn on(&self, caller: &Caller, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("nf.on") }
+    #[allow(unused_variables)]
+    fn once(&self, caller: &Caller, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("nf.once") }
+    #[allow(unused_variables)]
+    fn emit(&self, caller: &Caller, event: String, payload: Value) -> ApiResult<bool> { unported("nf.emit") }
+    #[allow(unused_variables)]
+    fn after(&self, caller: &Caller, ticks: i64, callback: Function) -> ApiResult<handles::Task> { unported("nf.after") }
+    #[allow(unused_variables)]
+    fn every(&self, caller: &Caller, ticks: i64, callback: Function) -> ApiResult<handles::Task> { unported("nf.every") }
+    #[allow(unused_variables)]
+    fn task(&self, caller: &Caller, callback: Function, rest: Vec<Value>) -> ApiResult<handles::Task> { unported("nf.task") }
+    #[allow(unused_variables)]
+    fn wait(&self, caller: &Caller, ticks: i64) -> ApiResult<Waiting> { unported("nf.wait") }
+    #[allow(unused_variables)]
+    fn wait_until(&self, caller: &Caller, predicate: Function, timeout: Option<i64>) -> ApiResult<Waiting> { unported("nf.wait_until") }
+    #[allow(unused_variables)]
+    fn wait_for(&self, caller: &Caller, handle: unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable, event: String, filter: Option<Function>) -> ApiResult<Waiting> { unported("nf.wait_for") }
+    #[allow(unused_variables)]
     fn data(&self, caller: &Caller, name: String) -> ApiResult<Value> { unported("nf.data") }
     #[allow(unused_variables)]
     fn db(&self, caller: &Caller, name: Option<String>) -> ApiResult<handles::Database> { unported("nf.db") }
     #[allow(unused_variables)]
     fn config(&self, caller: &Caller, name: String) -> ApiResult<Value> { unported("nf.config") }
+    #[allow(unused_variables)]
+    fn instructions_left(&self, caller: &Caller) -> ApiResult<i64> { unported("nf.instructions_left") }
 }
 
 impl NfServerApi for Unported {
@@ -415,11 +435,24 @@ impl NfTimeApi for Unported {
 
 impl NfRandomApi for Unported {
     #[allow(unused_variables)]
+    fn new(&self, caller: &Caller, seed: Option<i64>) -> ApiResult<handles::Random> { unported("nf.random.new") }
+    #[allow(unused_variables)]
     fn noise2(&self, caller: &Caller, x: f64, z: f64, options: Option<shapes::NoiseOptions>) -> ApiResult<f64> { unported("nf.random.noise2") }
     #[allow(unused_variables)]
     fn noise3(&self, caller: &Caller, x: f64, y: f64, z: f64, options: Option<shapes::NoiseOptions>) -> ApiResult<f64> { unported("nf.random.noise3") }
     #[allow(unused_variables)]
     fn uuid(&self, caller: &Caller) -> ApiResult<String> { unported("nf.random.uuid") }
+}
+
+impl NfMathApi for Unported {
+    #[allow(unused_variables)]
+    fn lerp(&self, caller: &Caller, from: f64, to: f64, fraction: f64) -> ApiResult<f64> { unported("nf.math.lerp") }
+    #[allow(unused_variables)]
+    fn clamp(&self, caller: &Caller, value: f64, min: f64, max: f64) -> ApiResult<f64> { unported("nf.math.clamp") }
+    #[allow(unused_variables)]
+    fn remap(&self, caller: &Caller, value: f64, from_min: f64, from_max: f64, to_min: f64, to_max: f64) -> ApiResult<f64> { unported("nf.math.remap") }
+    #[allow(unused_variables)]
+    fn ease(&self, caller: &Caller, easing: String, fraction: f64) -> ApiResult<f64> { unported("nf.math.ease") }
 }
 
 impl NfTestApi for Unported {
@@ -431,6 +464,8 @@ impl NfTestApi for Unported {
     fn player(&self, caller: &Caller, name: String) -> ApiResult<handles::Player> { unported("nf.test.player") }
     #[allow(unused_variables)]
     fn raise(&self, caller: &Caller, event: String, payload: Value) -> ApiResult<shapes::RaisedEvent> { unported("nf.test.raise") }
+    #[allow(unused_variables)]
+    fn terrain(&self, caller: &Caller, options: Value) -> ApiResult<Value> { unported("nf.test.terrain") }
     #[allow(unused_variables)]
     fn click(&self, caller: &Caller, player: handles::Player, button: String, options: Option<shapes::TestClickOptions>) -> ApiResult<bool> { unported("nf.test.click") }
     #[allow(unused_variables)]
@@ -652,6 +687,12 @@ impl CentityApi for Unported {
     fn view_range(&self, this: &handles::Centity) -> ApiResult<Option<f64>> { unported("Centity:view_range") }
     #[allow(unused_variables)]
     fn set_view_range(&self, this: &handles::Centity, blocks: f64) -> ApiResult<bool> { unported("Centity:set_view_range") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::Centity, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("Centity:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::Centity, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("Centity:once") }
+    #[allow(unused_variables)]
+    fn emit(&self, this: &handles::Centity, event: String, payload: Value) -> ApiResult<bool> { unported("Centity:emit") }
 }
 
 impl NodeApi for Unported {
@@ -809,6 +850,10 @@ impl NodeApi for Unported {
     fn is_physics_enabled(&self, this: &handles::Node) -> ApiResult<bool> { unported("Node:is_physics_enabled") }
     #[allow(unused_variables)]
     fn set_physics_enabled(&self, this: &handles::Node, enabled: bool) -> ApiResult<bool> { unported("Node:set_physics_enabled") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::Node, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("Node:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::Node, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("Node:once") }
 }
 
 impl ImageApi for Unported {
@@ -833,6 +878,12 @@ impl EntityApi for Unported {
     fn kind(&self, this: &handles::Entity) -> ApiResult<Option<String>> { unported("Entity:kind") }
     #[allow(unused_variables)]
     fn exists(&self, this: &handles::Entity) -> ApiResult<bool> { unported("Entity:exists") }
+    #[allow(unused_variables)]
+    fn is_player(&self, this: &handles::Entity) -> ApiResult<bool> { unported("Entity:is_player") }
+    #[allow(unused_variables)]
+    fn is_living(&self, this: &handles::Entity) -> ApiResult<bool> { unported("Entity:is_living") }
+    #[allow(unused_variables)]
+    fn is_mob(&self, this: &handles::Entity) -> ApiResult<bool> { unported("Entity:is_mob") }
     #[allow(unused_variables)]
     fn location(&self, this: &handles::Entity) -> ApiResult<Option<values::Location>> { unported("Entity:location") }
     #[allow(unused_variables)]
@@ -929,6 +980,10 @@ impl EntityApi for Unported {
     fn target_entity(&self, this: &handles::Entity, max_distance: Option<f64>) -> ApiResult<Option<handles::Entity>> { unported("Entity:target_entity") }
     #[allow(unused_variables)]
     fn target_centity(&self, this: &handles::Entity, max_distance: Option<f64>) -> ApiResult<Option<handles::Centity>> { unported("Entity:target_centity") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::Entity, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("Entity:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::Entity, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("Entity:once") }
 }
 
 impl LivingApi for Unported {
@@ -966,6 +1021,10 @@ impl LivingApi for Unported {
     fn equipment(&self, this: &handles::Living, slot: String) -> ApiResult<Option<values::Item>> { unported("Living:equipment") }
     #[allow(unused_variables)]
     fn set_equipment(&self, this: &handles::Living, slot: String, item: Option<values::Item>) -> ApiResult<bool> { unported("Living:set_equipment") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::Living, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("Living:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::Living, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("Living:once") }
 }
 
 impl MobApi for Unported {
@@ -991,6 +1050,12 @@ impl MobApi for Unported {
     fn remove_goal(&self, this: &handles::Mob, key: String) -> ApiResult<bool> { unported("Mob:remove_goal") }
     #[allow(unused_variables)]
     fn clear_goals(&self, this: &handles::Mob, options: Option<shapes::GoalClearOptions>) -> ApiResult<bool> { unported("Mob:clear_goals") }
+    #[allow(unused_variables)]
+    fn add_goal(&self, this: &handles::Mob, id: String, definition: shapes::GoalDefinition) -> ApiResult<bool> { unported("Mob:add_goal") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::Mob, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("Mob:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::Mob, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("Mob:once") }
 }
 
 impl DroppedItemApi for Unported {
@@ -1272,6 +1337,10 @@ impl PlayerApi for Unported {
     fn data(&self, this: &handles::Player) -> ApiResult<Value> { unported("Player:data") }
     #[allow(unused_variables)]
     fn session(&self, this: &handles::Player) -> ApiResult<Value> { unported("Player:session") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::Player, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("Player:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::Player, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("Player:once") }
 }
 
 impl BotApi for Unported {
@@ -1335,6 +1404,8 @@ impl WorldApi for Unported {
     fn exists(&self, this: &handles::World) -> ApiResult<bool> { unported("World:exists") }
     #[allow(unused_variables)]
     fn environment(&self, this: &handles::World) -> ApiResult<Option<String>> { unported("World:environment") }
+    #[allow(unused_variables)]
+    fn location(&self, this: &handles::World, position: values::Vec3, yaw: Option<f64>, pitch: Option<f64>) -> ApiResult<values::Location> { unported("World:location") }
     #[allow(unused_variables)]
     fn time_of_day(&self, this: &handles::World) -> ApiResult<Option<i64>> { unported("World:time_of_day") }
     #[allow(unused_variables)]
@@ -1439,6 +1510,10 @@ impl WorldApi for Unported {
     fn place_structure(&self, this: &handles::World, id: String, position: values::Vec3, options: Option<shapes::StructurePlaceOptions>) -> ApiResult<bool> { unported("World:place_structure") }
     #[allow(unused_variables)]
     fn place_gradually(&self, this: &handles::World, id: String, position: values::Vec3, options: Option<shapes::GradualPlaceOptions>) -> ApiResult<Pending<i64>> { unported("World:place_gradually") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::World, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("World:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::World, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("World:once") }
 }
 
 impl WorldBorderApi for Unported {
@@ -1525,6 +1600,10 @@ impl ProjectBlockApi for Unported {
     fn exists(&self, this: &handles::ProjectBlock) -> ApiResult<bool> { unported("ProjectBlock:exists") }
     #[allow(unused_variables)]
     fn place(&self, this: &handles::ProjectBlock, location: values::Location, options: Option<shapes::BlockPlaceOptions>) -> ApiResult<Option<handles::CustomBlock>> { unported("ProjectBlock:place") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::ProjectBlock, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("ProjectBlock:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::ProjectBlock, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("ProjectBlock:once") }
 }
 
 impl InventoryApi for Unported {
@@ -1733,6 +1812,10 @@ impl MenuApi for Unported {
     fn close_for(&self, this: &handles::Menu, player: handles::Player) -> ApiResult<bool> { unported("Menu:close_for") }
     #[allow(unused_variables)]
     fn close_all(&self, this: &handles::Menu) -> ApiResult<bool> { unported("Menu:close_all") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::Menu, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("Menu:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::Menu, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("Menu:once") }
 }
 
 impl SlotApi for Unported {
@@ -1758,6 +1841,10 @@ impl SlotApi for Unported {
     fn unbind(&self, this: &handles::Slot) -> ApiResult<bool> { unported("Slot:unbind") }
     #[allow(unused_variables)]
     fn binding(&self, this: &handles::Slot) -> ApiResult<Option<shapes::SlotBinding>> { unported("Slot:binding") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::Slot, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("Slot:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::Slot, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("Slot:once") }
 }
 
 impl MenuTemplateApi for Unported {
@@ -1781,6 +1868,10 @@ impl MenuTemplateApi for Unported {
     fn windows(&self, this: &handles::MenuTemplate) -> ApiResult<Vec<handles::Menu>> { unported("MenuTemplate:windows") }
     #[allow(unused_variables)]
     fn remove(&self, this: &handles::MenuTemplate) -> ApiResult<bool> { unported("MenuTemplate:remove") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::MenuTemplate, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("MenuTemplate:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::MenuTemplate, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("MenuTemplate:once") }
 }
 
 impl DialogApi for Unported {
@@ -1798,6 +1889,12 @@ impl DialogApi for Unported {
     fn button(&self, this: &handles::Dialog, key: String) -> ApiResult<handles::Button> { unported("Dialog:button") }
     #[allow(unused_variables)]
     fn open_for(&self, this: &handles::Dialog, player: handles::Player, options: Option<shapes::DialogOpenOptions>) -> ApiResult<bool> { unported("Dialog:open_for") }
+    #[allow(unused_variables)]
+    fn ask(&self, this: &handles::Dialog, player: handles::Player, options: Option<shapes::DialogOpenOptions>) -> ApiResult<Waiting> { unported("Dialog:ask") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::Dialog, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("Dialog:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::Dialog, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("Dialog:once") }
 }
 
 impl ButtonApi for Unported {
@@ -1807,6 +1904,10 @@ impl ButtonApi for Unported {
     fn dialog(&self, this: &handles::Button) -> ApiResult<handles::Dialog> { unported("Button:dialog") }
     #[allow(unused_variables)]
     fn label(&self, this: &handles::Button) -> ApiResult<Option<values::Text>> { unported("Button:label") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::Button, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("Button:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::Button, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("Button:once") }
 }
 
 impl ProjectItemApi for Unported {
@@ -1818,6 +1919,10 @@ impl ProjectItemApi for Unported {
     fn create(&self, this: &handles::ProjectItem, overrides: Value) -> ApiResult<Option<values::Item>> { unported("ProjectItem:create") }
     #[allow(unused_variables)]
     fn properties(&self, this: &handles::ProjectItem) -> ApiResult<Value> { unported("ProjectItem:properties") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::ProjectItem, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("ProjectItem:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::ProjectItem, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("ProjectItem:once") }
 }
 
 impl EffectApi for Unported {
@@ -1833,6 +1938,10 @@ impl EffectApi for Unported {
     fn teleport(&self, this: &handles::Effect, location_or_position: unions::LocationOrVec3) -> ApiResult<bool> { unported("Effect:teleport") }
     #[allow(unused_variables)]
     fn follow(&self, this: &handles::Effect, target: handles::Handle, offset: Option<values::Vec3>) -> ApiResult<bool> { unported("Effect:follow") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::Effect, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("Effect:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::Effect, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("Effect:once") }
 }
 
 impl HttpStreamApi for Unported {
@@ -1844,6 +1953,10 @@ impl HttpStreamApi for Unported {
     fn status(&self, this: &handles::HttpStream) -> ApiResult<Option<i64>> { unported("HttpStream:status") }
     #[allow(unused_variables)]
     fn close(&self, this: &handles::HttpStream) -> ApiResult<bool> { unported("HttpStream:close") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::HttpStream, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("HttpStream:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::HttpStream, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("HttpStream:once") }
 }
 
 impl WebSocketApi for Unported {
@@ -1857,6 +1970,10 @@ impl WebSocketApi for Unported {
     fn send(&self, this: &handles::WebSocket, text: String) -> ApiResult<bool> { unported("WebSocket:send") }
     #[allow(unused_variables)]
     fn close(&self, this: &handles::WebSocket, code: Option<i64>, reason: Option<String>) -> ApiResult<bool> { unported("WebSocket:close") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::WebSocket, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("WebSocket:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::WebSocket, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("WebSocket:once") }
 }
 
 impl RouteApi for Unported {
@@ -1882,6 +1999,10 @@ impl OAuthFlowApi for Unported {
     fn begin(&self, this: &handles::OAuthFlow, player: handles::Player) -> ApiResult<Option<String>> { unported("OAuthFlow:begin") }
     #[allow(unused_variables)]
     fn remove(&self, this: &handles::OAuthFlow) -> ApiResult<bool> { unported("OAuthFlow:remove") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::OAuthFlow, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("OAuthFlow:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::OAuthFlow, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("OAuthFlow:once") }
 }
 
 impl WasmInstanceApi for Unported {
@@ -1906,6 +2027,10 @@ impl WasmProcessApi for Unported {
     fn close_input(&self, this: &handles::WasmProcess) -> ApiResult<bool> { unported("WasmProcess:close_input") }
     #[allow(unused_variables)]
     fn stop(&self, this: &handles::WasmProcess) -> ApiResult<bool> { unported("WasmProcess:stop") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::WasmProcess, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("WasmProcess:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::WasmProcess, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("WasmProcess:once") }
 }
 
 impl NetworkChannelApi for Unported {
@@ -1915,6 +2040,10 @@ impl NetworkChannelApi for Unported {
     fn publish(&self, this: &handles::NetworkChannel, value: Value, options: Option<shapes::NetworkPublishOptions>) -> ApiResult<bool> { unported("NetworkChannel:publish") }
     #[allow(unused_variables)]
     fn request(&self, this: &handles::NetworkChannel, target: unions::StringOrNetworkTarget, data: Value) -> ApiResult<Pending<Value>> { unported("NetworkChannel:request") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::NetworkChannel, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("NetworkChannel:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::NetworkChannel, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("NetworkChannel:once") }
 }
 
 impl NetworkHoldApi for Unported {
@@ -1941,6 +2070,10 @@ impl NetworkMapApi for Unported {
     fn add(&self, this: &handles::NetworkMap, key: String, amount: f64, options: Option<shapes::NetworkMapWriteOptions>) -> ApiResult<Pending<f64>> { unported("NetworkMap:add") }
     #[allow(unused_variables)]
     fn insert(&self, this: &handles::NetworkMap, key: String, data: Value, options: Option<shapes::NetworkMapWriteOptions>) -> ApiResult<Pending<bool>> { unported("NetworkMap:insert") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::NetworkMap, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("NetworkMap:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::NetworkMap, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("NetworkMap:once") }
 }
 
 impl CutsceneApi for Unported {
@@ -1956,6 +2089,10 @@ impl CutsceneApi for Unported {
     fn time(&self, this: &handles::Cutscene) -> ApiResult<Option<f64>> { unported("Cutscene:time") }
     #[allow(unused_variables)]
     fn stop(&self, this: &handles::Cutscene) -> ApiResult<bool> { unported("Cutscene:stop") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::Cutscene, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("Cutscene:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::Cutscene, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("Cutscene:once") }
 }
 
 impl ScreenApi for Unported {
@@ -2025,6 +2162,10 @@ impl ScreenApi for Unported {
     fn playback(&self, this: &handles::Screen) -> ApiResult<Option<handles::Playback>> { unported("Screen:playback") }
     #[allow(unused_variables)]
     fn remove(&self, this: &handles::Screen) -> ApiResult<bool> { unported("Screen:remove") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::Screen, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("Screen:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::Screen, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("Screen:once") }
 }
 
 impl PlaybackApi for Unported {
@@ -2060,6 +2201,10 @@ impl PlaybackApi for Unported {
     fn is_looping(&self, this: &handles::Playback) -> ApiResult<bool> { unported("Playback:is_looping") }
     #[allow(unused_variables)]
     fn set_looping(&self, this: &handles::Playback, looping: bool) -> ApiResult<bool> { unported("Playback:set_looping") }
+    #[allow(unused_variables)]
+    fn on(&self, this: &handles::Playback, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription> { unported("Playback:on") }
+    #[allow(unused_variables)]
+    fn once(&self, this: &handles::Playback, event: String, handler: Function) -> ApiResult<handles::Subscription> { unported("Playback:once") }
 }
 
 impl FileApi for Unported {
@@ -2096,6 +2241,8 @@ impl FileApi for Unported {
     #[allow(unused_variables)]
     fn modified_time(&self, this: &handles::File) -> ApiResult<Option<i64>> { unported("File:modified_time") }
     #[allow(unused_variables)]
+    fn lines(&self, this: &handles::File) -> ApiResult<Function> { unported("File:lines") }
+    #[allow(unused_variables)]
     fn rename(&self, this: &handles::File, path: String) -> ApiResult<Option<handles::File>> { unported("File:rename") }
     #[allow(unused_variables)]
     fn copy_to(&self, this: &handles::File, path: String) -> ApiResult<Option<handles::File>> { unported("File:copy_to") }
@@ -2105,6 +2252,20 @@ impl FileApi for Unported {
     fn delete(&self, this: &handles::File) -> ApiResult<bool> { unported("File:delete") }
 }
 
+impl SubscriptionApi for Unported {
+    #[allow(unused_variables)]
+    fn cancel(&self, this: &handles::Subscription) -> ApiResult<()> { unported("Subscription:cancel") }
+    #[allow(unused_variables)]
+    fn is_active(&self, this: &handles::Subscription) -> ApiResult<bool> { unported("Subscription:is_active") }
+}
+
+impl TaskApi for Unported {
+    #[allow(unused_variables)]
+    fn cancel(&self, this: &handles::Task) -> ApiResult<()> { unported("Task:cancel") }
+    #[allow(unused_variables)]
+    fn is_active(&self, this: &handles::Task) -> ApiResult<bool> { unported("Task:is_active") }
+}
+
 impl ScheduleApi for Unported {
     #[allow(unused_variables)]
     fn cancel(&self, this: &handles::Schedule) -> ApiResult<()> { unported("Schedule:cancel") }
@@ -2112,6 +2273,19 @@ impl ScheduleApi for Unported {
     fn is_active(&self, this: &handles::Schedule) -> ApiResult<bool> { unported("Schedule:is_active") }
     #[allow(unused_variables)]
     fn next_run(&self, this: &handles::Schedule) -> ApiResult<Option<i64>> { unported("Schedule:next_run") }
+}
+
+impl RandomApi for Unported {
+    #[allow(unused_variables)]
+    fn integer(&self, this: &handles::Random, min: i64, max: i64) -> ApiResult<i64> { unported("Random:integer") }
+    #[allow(unused_variables)]
+    fn number(&self, this: &handles::Random, min: Option<f64>, max: Option<f64>) -> ApiResult<f64> { unported("Random:number") }
+    #[allow(unused_variables)]
+    fn pick(&self, this: &handles::Random, list: Value) -> ApiResult<Value> { unported("Random:pick") }
+    #[allow(unused_variables)]
+    fn shuffle(&self, this: &handles::Random, list: Value) -> ApiResult<()> { unported("Random:shuffle") }
+    #[allow(unused_variables)]
+    fn weighted(&self, this: &handles::Random, weights: Value) -> ApiResult<Value> { unported("Random:weighted") }
 }
 
 impl HudApi for Unported {

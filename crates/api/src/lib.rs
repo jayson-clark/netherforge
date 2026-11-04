@@ -52,6 +52,12 @@ pub mod values;
 pub use bind::{install, nf_for};
 pub use netherforge_luau::json::MAX_SAFE_INTEGER;
 
+/// What a function that waits (`nf.wait`, `dialog:ask`) returns: its task's
+/// wake-up is registered. The binding then yields the task's coroutine, and
+/// what the scheduler resumes it with is what the script's call returns.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Waiting;
+
 /// What the runtime does around every binding, whatever its class.
 pub trait Runtime {
     /// Whether the package `scope` belongs to declared `requirement`

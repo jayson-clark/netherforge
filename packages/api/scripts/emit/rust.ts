@@ -353,10 +353,23 @@ const traitName = (binding: ClassBinding) =>
     .map((part) => pascal(part))
     .join('')}Api`
 
+/** A parameter's Rust name: `...` (the rest of the arguments) is `rest`. */
+const paramName = (name: string) => (name === '...' ? 'rest' : ident(name))
+
+/** A parameter's Rust type: the rest of the arguments are a list of values. */
+const paramType = (p: { name: string; codec: Codec }) =>
+  p.name === '...' ? 'Vec<Value>' : rustType(p.codec)
+
+/**
+ * What a function returns in Rust: a function that waits (`nf.wait`, `dialog:ask`) returns
+ * `Waiting`, its task's wake-up registered, and its value is what the task is resumed with.
+ */
+const rustReturn = (fn: FnBinding) => (fn.fn.waits ? 'Waiting' : returnType(fn.returns))
+
 function signature(binding: ClassBinding, fn: FnBinding): string {
   const first = fn.method ? `this: &handles::${binding.cls.name}` : 'caller: &Caller'
-  const params = fn.params.map((p) => `${ident(p.name)}: ${rustType(p.codec)}`)
-  return `fn ${ident(fn.fn.name)}(&self, ${[first, ...params].join(', ')}) -> ApiResult<${returnType(fn.returns)}>;`
+  const params = fn.params.map((p) => `${paramName(p.name)}: ${paramType(p)}`)
+  return `fn ${ident(fn.fn.name)}(&self, ${[first, ...params].join(', ')}) -> ApiResult<${rustReturn(fn)}>;`
 }
 
 export function apiRust(classes: ClassBinding[]): string {
@@ -371,7 +384,7 @@ export function apiRust(classes: ClassBinding[]): string {
       [
         'std::collections::BTreeMap',
         'mlua::{Function, Value}',
-        'crate::{ApiResult, Caller, Pending, handles, shapes, unions, values}',
+        'crate::{ApiResult, Caller, Pending, Waiting, handles, shapes, unions, values}',
       ],
     ),
     "/// Every class's implementation.",
@@ -411,12 +424,12 @@ function codecExpr(codec: Codec, boxed: Set<string> = new Set()): string {
     case 'function':
       return 'Func'
     case 'any':
-      return `Any { table: ${codec.table} }`
+      return codec.table ? 'TABLE' : 'ANY'
     case 'choice':
       return `Choice(&[${codec.choices.map((it) => JSON.stringify(it)).join(', ')}])`
     case 'optional':
       // `any` is any value already, nil included.
-      if (codec.inner.kind === 'any') return 'Any { table: false }'
+      if (codec.inner.kind === 'any') return 'ANY'
       if (codec.inner.kind === 'optional') return codecExpr(codec.inner, boxed)
       return `Opt(${codecExpr(codec.inner, boxed)})`
     case 'list':
@@ -558,6 +571,14 @@ function glue(binding: ClassBinding, fn: FnBinding): string[] {
       `api.requires(${scope}, ${JSON.stringify(fn.fn.requires)}, ${JSON.stringify(called(binding, fn))}).map_err(|e| mlua::Error::runtime(e.0))?;`,
     )
   for (const param of fn.params) {
+    if (param.name === '...') {
+      lines.push(
+        `let a_rest: Vec<Value> = args.get(${index}..).map(<[Value]>::to_vec).unwrap_or_default();`,
+      )
+      args.push('a_rest')
+      index += 1
+      continue
+    }
     const name = `a_${param.name}`
     lines.push(
       `let ${name} = arg(lua, args, ${index}, ${JSON.stringify(param.name)}, ${codecExpr(param.codec)})?;`,
@@ -568,6 +589,15 @@ function glue(binding: ClassBinding, fn: FnBinding): string[] {
   const trait = snake(binding.cls.name).toLowerCase()
   const invoke = `api.${trait}().${ident(fn.fn.name)}(${args.join(', ')})`
   const returns = fn.returns
+  if (fn.fn.waits) {
+    // Its task's wake-up is registered: the binding's shim yields, and the task is resumed with
+    // the value.
+    lines.push(
+      `let crate::Waiting = ${invoke}.map_err(|e| mlua::Error::runtime(e.0))?;`,
+      'Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?]))',
+    )
+    return wrap(binding, fn, lines)
+  }
   switch (returns.kind) {
     case 'none':
       lines.push(`${invoke}.map_err(|e| mlua::Error::runtime(e.0))?;`, 'Ok(MultiValue::new())')
@@ -596,6 +626,10 @@ function glue(binding: ClassBinding, fn: FnBinding): string[] {
       )
       break
   }
+  return wrap(binding, fn, lines)
+}
+
+function wrap(binding: ClassBinding, fn: FnBinding, lines: string[]): string[] {
   return [
     `fn ${glueName(binding, fn)}(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {`,
     ...(fn.method ? ['    let _ = scope;'] : []),
@@ -628,7 +662,7 @@ export function bindRust(classes: ClassBinding[]): string {
     for (const fn of binding.functions) {
       lines.push(...glue(binding, fn))
       entries.push(
-        `    Binding { class: ${JSON.stringify(binding.cls.name)}, name: ${JSON.stringify(fn.fn.name)}, method: ${fn.method}, call: ${glueName(binding, fn)} },`,
+        `    Binding { class: ${JSON.stringify(binding.cls.name)}, name: ${JSON.stringify(fn.fn.name)}, method: ${fn.method}, waits: ${!!fn.fn.waits}, call: ${glueName(binding, fn)} },`,
       )
     }
   lines.push(
@@ -652,7 +686,7 @@ export function unportedRust(classes: ClassBinding[]): string {
         'std::collections::BTreeMap',
         'mlua::{Function, Value}',
         'crate::api::*',
-        'crate::{ApiError, ApiResult, Caller, Pending, handles, shapes, unions, values}',
+        'crate::{ApiError, ApiResult, Caller, Pending, Waiting, handles, shapes, unions, values}',
       ],
     ),
     "/// The API as far as the Rust runtime hasn't ported it.",

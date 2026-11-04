@@ -9,6 +9,54 @@ use crate::codec::*;
 use crate::{codecs, handles, shapes, unions};
 
 #[derive(Clone, Copy, Default)]
+pub struct Event;
+impl Codec for Event {
+    type T = shapes::Event;
+    fn expected(&self) -> String { "Event".into() }
+    fn accepts(&self, value: &Value) -> bool { matches!(value, Value::Table(t) if t.metatable().is_none()) }
+    fn read(&self, lua: &Lua, value: Value, at: &str) -> crate::ApiResult<shapes::Event> {
+        let t = shape_table(&value, at, "Event", &["name", "current", "cancelled", "stopped", "from"])?;
+        let _ = (&lua, &t);
+        Ok(shapes::Event {
+            name: field(lua, t, at, "name", Str)?,
+            current: field(lua, t, at, "current", ANY)?,
+            cancelled: field(lua, t, at, "cancelled", Bool)?,
+            stopped: field(lua, t, at, "stopped", Bool)?,
+            from: field(lua, t, at, "from", Opt(Str))?,
+        })
+    }
+    fn push(&self, lua: &Lua, value: shapes::Event) -> mlua::Result<Value> {
+        let t: Table = lua.create_table_with_capacity(0, 5)?;
+        set_field(lua, &t, "name", Str, value.name)?;
+        set_field(lua, &t, "current", ANY, value.current)?;
+        set_field(lua, &t, "cancelled", Bool, value.cancelled)?;
+        set_field(lua, &t, "stopped", Bool, value.stopped)?;
+        set_field(lua, &t, "from", Opt(Str), value.from)?;
+        Ok(Value::Table(t))
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct EventOptions;
+impl Codec for EventOptions {
+    type T = shapes::EventOptions;
+    fn expected(&self) -> String { "EventOptions".into() }
+    fn accepts(&self, value: &Value) -> bool { matches!(value, Value::Table(t) if t.metatable().is_none()) }
+    fn read(&self, lua: &Lua, value: Value, at: &str) -> crate::ApiResult<shapes::EventOptions> {
+        let t = shape_table(&value, at, "EventOptions", &["every"])?;
+        let _ = (&lua, &t);
+        Ok(shapes::EventOptions {
+            every: field(lua, t, at, "every", Opt(Int))?,
+        })
+    }
+    fn push(&self, lua: &Lua, value: shapes::EventOptions) -> mlua::Result<Value> {
+        let t: Table = lua.create_table_with_capacity(0, 1)?;
+        set_field(lua, &t, "every", Opt(Int), value.every)?;
+        Ok(Value::Table(t))
+    }
+}
+
+#[derive(Clone, Copy, Default)]
 pub struct SettingChangedEvent;
 impl Codec for SettingChangedEvent {
     type T = shapes::SettingChangedEvent;
@@ -19,15 +67,15 @@ impl Codec for SettingChangedEvent {
         let _ = (&lua, &t);
         Ok(shapes::SettingChangedEvent {
             setting: field(lua, t, at, "setting", Str)?,
-            value: field(lua, t, at, "value", Any { table: false })?,
-            previous: field(lua, t, at, "previous", Any { table: false })?,
+            value: field(lua, t, at, "value", ANY)?,
+            previous: field(lua, t, at, "previous", ANY)?,
         })
     }
     fn push(&self, lua: &Lua, value: shapes::SettingChangedEvent) -> mlua::Result<Value> {
         let t: Table = lua.create_table_with_capacity(0, 3)?;
         set_field(lua, &t, "setting", Str, value.setting)?;
-        set_field(lua, &t, "value", Any { table: false }, value.value)?;
-        set_field(lua, &t, "previous", Any { table: false }, value.previous)?;
+        set_field(lua, &t, "value", ANY, value.value)?;
+        set_field(lua, &t, "previous", ANY, value.previous)?;
         Ok(Value::Table(t))
     }
 }
@@ -2986,7 +3034,7 @@ impl Codec for EntitySpawnOptions {
         Ok(shapes::EntitySpawnOptions {
             custom_name: field(lua, t, at, "custom_name", Opt(TextCodec))?,
             tags: field(lua, t, at, "tags", Opt(List(Str)))?,
-            data: field(lua, t, at, "data", Any { table: false })?,
+            data: field(lua, t, at, "data", ANY)?,
             velocity: field(lua, t, at, "velocity", Opt(Vec3Codec))?,
         })
     }
@@ -2994,7 +3042,7 @@ impl Codec for EntitySpawnOptions {
         let t: Table = lua.create_table_with_capacity(0, 4)?;
         set_field(lua, &t, "custom_name", Opt(TextCodec), value.custom_name)?;
         set_field(lua, &t, "tags", Opt(List(Str)), value.tags)?;
-        set_field(lua, &t, "data", Any { table: false }, value.data)?;
+        set_field(lua, &t, "data", ANY, value.data)?;
         set_field(lua, &t, "velocity", Opt(Vec3Codec), value.velocity)?;
         Ok(Value::Table(t))
     }
@@ -3098,6 +3146,38 @@ impl Codec for MobGoal {
         set_field(lua, &t, "priority", Int, value.priority)?;
         set_field(lua, &t, "controls", List(Choice(&["move", "look", "jump", "target"])), value.controls)?;
         set_field(lua, &t, "running", Bool, value.running)?;
+        Ok(Value::Table(t))
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct GoalDefinition;
+impl Codec for GoalDefinition {
+    type T = shapes::GoalDefinition;
+    fn expected(&self) -> String { "GoalDefinition".into() }
+    fn accepts(&self, value: &Value) -> bool { matches!(value, Value::Table(t) if t.metatable().is_none()) }
+    fn read(&self, lua: &Lua, value: Value, at: &str) -> crate::ApiResult<shapes::GoalDefinition> {
+        let t = shape_table(&value, at, "GoalDefinition", &["priority", "controls", "should_start", "should_continue", "start", "tick", "stop"])?;
+        let _ = (&lua, &t);
+        Ok(shapes::GoalDefinition {
+            priority: field(lua, t, at, "priority", Int)?,
+            controls: field(lua, t, at, "controls", Opt(List(Choice(&["move", "look", "jump", "target"]))))?,
+            should_start: field(lua, t, at, "should_start", Opt(Func))?,
+            should_continue: field(lua, t, at, "should_continue", Opt(Func))?,
+            start: field(lua, t, at, "start", Opt(Func))?,
+            tick: field(lua, t, at, "tick", Opt(Func))?,
+            stop: field(lua, t, at, "stop", Opt(Func))?,
+        })
+    }
+    fn push(&self, lua: &Lua, value: shapes::GoalDefinition) -> mlua::Result<Value> {
+        let t: Table = lua.create_table_with_capacity(0, 7)?;
+        set_field(lua, &t, "priority", Int, value.priority)?;
+        set_field(lua, &t, "controls", Opt(List(Choice(&["move", "look", "jump", "target"]))), value.controls)?;
+        set_field(lua, &t, "should_start", Opt(Func), value.should_start)?;
+        set_field(lua, &t, "should_continue", Opt(Func), value.should_continue)?;
+        set_field(lua, &t, "start", Opt(Func), value.start)?;
+        set_field(lua, &t, "tick", Opt(Func), value.tick)?;
+        set_field(lua, &t, "stop", Opt(Func), value.stop)?;
         Ok(Value::Table(t))
     }
 }
@@ -3488,12 +3568,12 @@ impl Codec for MenuOpenOptions {
         let t = shape_table(&value, at, "MenuOpenOptions", &["context"])?;
         let _ = (&lua, &t);
         Ok(shapes::MenuOpenOptions {
-            context: field(lua, t, at, "context", Any { table: false })?,
+            context: field(lua, t, at, "context", ANY)?,
         })
     }
     fn push(&self, lua: &Lua, value: shapes::MenuOpenOptions) -> mlua::Result<Value> {
         let t: Table = lua.create_table_with_capacity(0, 1)?;
-        set_field(lua, &t, "context", Any { table: false }, value.context)?;
+        set_field(lua, &t, "context", ANY, value.context)?;
         Ok(Value::Table(t))
     }
 }
@@ -3508,7 +3588,7 @@ impl Codec for DialogOpenOptions {
         let t = shape_table(&value, at, "DialogOpenOptions", &["context", "values", "title", "body"])?;
         let _ = (&lua, &t);
         Ok(shapes::DialogOpenOptions {
-            context: field(lua, t, at, "context", Any { table: false })?,
+            context: field(lua, t, at, "context", ANY)?,
             values: field(lua, t, at, "values", Opt(Map(Str, codecs::StringOrNumberOrBoolean)))?,
             title: field(lua, t, at, "title", Opt(TextCodec))?,
             body: field(lua, t, at, "body", Opt(Map(Str, TextCodec)))?,
@@ -3516,7 +3596,7 @@ impl Codec for DialogOpenOptions {
     }
     fn push(&self, lua: &Lua, value: shapes::DialogOpenOptions) -> mlua::Result<Value> {
         let t: Table = lua.create_table_with_capacity(0, 4)?;
-        set_field(lua, &t, "context", Any { table: false }, value.context)?;
+        set_field(lua, &t, "context", ANY, value.context)?;
         set_field(lua, &t, "values", Opt(Map(Str, codecs::StringOrNumberOrBoolean)), value.values)?;
         set_field(lua, &t, "title", Opt(TextCodec), value.title)?;
         set_field(lua, &t, "body", Opt(Map(Str, TextCodec)), value.body)?;
@@ -3536,14 +3616,14 @@ impl Codec for MenuEvent {
         Ok(shapes::MenuEvent {
             player: field(lua, t, at, "player", HandleOf::<handles::Player>::default())?,
             menu: field(lua, t, at, "menu", HandleOf::<handles::Menu>::default())?,
-            context: field(lua, t, at, "context", Any { table: false })?,
+            context: field(lua, t, at, "context", ANY)?,
         })
     }
     fn push(&self, lua: &Lua, value: shapes::MenuEvent) -> mlua::Result<Value> {
         let t: Table = lua.create_table_with_capacity(0, 3)?;
         set_field(lua, &t, "player", HandleOf::<handles::Player>::default(), value.player)?;
         set_field(lua, &t, "menu", HandleOf::<handles::Menu>::default(), value.menu)?;
-        set_field(lua, &t, "context", Any { table: false }, value.context)?;
+        set_field(lua, &t, "context", ANY, value.context)?;
         Ok(Value::Table(t))
     }
 }
@@ -3567,7 +3647,7 @@ impl Codec for MenuClickEvent {
             hotbar_index: field(lua, t, at, "hotbar_index", Opt(Int))?,
             item: field(lua, t, at, "item", Opt(ItemCodec))?,
             cursor_item: field(lua, t, at, "cursor_item", Opt(ItemCodec))?,
-            context: field(lua, t, at, "context", Any { table: false })?,
+            context: field(lua, t, at, "context", ANY)?,
         })
     }
     fn push(&self, lua: &Lua, value: shapes::MenuClickEvent) -> mlua::Result<Value> {
@@ -3581,7 +3661,7 @@ impl Codec for MenuClickEvent {
         set_field(lua, &t, "hotbar_index", Opt(Int), value.hotbar_index)?;
         set_field(lua, &t, "item", Opt(ItemCodec), value.item)?;
         set_field(lua, &t, "cursor_item", Opt(ItemCodec), value.cursor_item)?;
-        set_field(lua, &t, "context", Any { table: false }, value.context)?;
+        set_field(lua, &t, "context", ANY, value.context)?;
         Ok(Value::Table(t))
     }
 }
@@ -3602,7 +3682,7 @@ impl Codec for MenuDragEvent {
             own_indices: field(lua, t, at, "own_indices", List(Int))?,
             click: field(lua, t, at, "click", Choice(&["left", "right"]))?,
             cursor_item: field(lua, t, at, "cursor_item", Opt(ItemCodec))?,
-            context: field(lua, t, at, "context", Any { table: false })?,
+            context: field(lua, t, at, "context", ANY)?,
         })
     }
     fn push(&self, lua: &Lua, value: shapes::MenuDragEvent) -> mlua::Result<Value> {
@@ -3613,7 +3693,7 @@ impl Codec for MenuDragEvent {
         set_field(lua, &t, "own_indices", List(Int), value.own_indices)?;
         set_field(lua, &t, "click", Choice(&["left", "right"]), value.click)?;
         set_field(lua, &t, "cursor_item", Opt(ItemCodec), value.cursor_item)?;
-        set_field(lua, &t, "context", Any { table: false }, value.context)?;
+        set_field(lua, &t, "context", ANY, value.context)?;
         Ok(Value::Table(t))
     }
 }
@@ -3633,7 +3713,7 @@ impl Codec for DialogPressEvent {
             target: field(lua, t, at, "target", HandleOf::<handles::Button>::default())?,
             key: field(lua, t, at, "key", Str)?,
             values: field(lua, t, at, "values", Map(Str, codecs::StringOrNumber))?,
-            context: field(lua, t, at, "context", Any { table: false })?,
+            context: field(lua, t, at, "context", ANY)?,
         })
     }
     fn push(&self, lua: &Lua, value: shapes::DialogPressEvent) -> mlua::Result<Value> {
@@ -3643,7 +3723,7 @@ impl Codec for DialogPressEvent {
         set_field(lua, &t, "target", HandleOf::<handles::Button>::default(), value.target)?;
         set_field(lua, &t, "key", Str, value.key)?;
         set_field(lua, &t, "values", Map(Str, codecs::StringOrNumber), value.values)?;
-        set_field(lua, &t, "context", Any { table: false }, value.context)?;
+        set_field(lua, &t, "context", ANY, value.context)?;
         Ok(Value::Table(t))
     }
 }
@@ -3660,14 +3740,14 @@ impl Codec for DialogEvent {
         Ok(shapes::DialogEvent {
             player: field(lua, t, at, "player", HandleOf::<handles::Player>::default())?,
             dialog: field(lua, t, at, "dialog", HandleOf::<handles::Dialog>::default())?,
-            context: field(lua, t, at, "context", Any { table: false })?,
+            context: field(lua, t, at, "context", ANY)?,
         })
     }
     fn push(&self, lua: &Lua, value: shapes::DialogEvent) -> mlua::Result<Value> {
         let t: Table = lua.create_table_with_capacity(0, 3)?;
         set_field(lua, &t, "player", HandleOf::<handles::Player>::default(), value.player)?;
         set_field(lua, &t, "dialog", HandleOf::<handles::Dialog>::default(), value.dialog)?;
-        set_field(lua, &t, "context", Any { table: false }, value.context)?;
+        set_field(lua, &t, "context", ANY, value.context)?;
         Ok(Value::Table(t))
     }
 }
@@ -3744,7 +3824,7 @@ impl Codec for CommandArgument {
         Ok(shapes::CommandArgument {
             name: field(lua, t, at, "name", Str)?,
             r#type: field(lua, t, at, "type", Choice(&["word", "text", "integer", "number", "boolean", "choice", "player", "players", "entity", "entities", "world", "position", "location", "block_state", "item", "centity", "centity_kind", "menu", "dialog"]))?,
-            default: field(lua, t, at, "default", Any { table: false })?,
+            default: field(lua, t, at, "default", ANY)?,
             min: field(lua, t, at, "min", Opt(Num))?,
             max: field(lua, t, at, "max", Opt(Num))?,
             choices: field(lua, t, at, "choices", Opt(List(Str)))?,
@@ -3755,7 +3835,7 @@ impl Codec for CommandArgument {
         let t: Table = lua.create_table_with_capacity(0, 7)?;
         set_field(lua, &t, "name", Str, value.name)?;
         set_field(lua, &t, "type", Choice(&["word", "text", "integer", "number", "boolean", "choice", "player", "players", "entity", "entities", "world", "position", "location", "block_state", "item", "centity", "centity_kind", "menu", "dialog"]), value.r#type)?;
-        set_field(lua, &t, "default", Any { table: false }, value.default)?;
+        set_field(lua, &t, "default", ANY, value.default)?;
         set_field(lua, &t, "min", Opt(Num), value.min)?;
         set_field(lua, &t, "max", Opt(Num), value.max)?;
         set_field(lua, &t, "choices", Opt(List(Str)), value.choices)?;
@@ -4745,13 +4825,13 @@ impl Codec for DatabaseStatement {
         let _ = (&lua, &t);
         Ok(shapes::DatabaseStatement {
             sql: field(lua, t, at, "sql", Str)?,
-            params: field(lua, t, at, "params", Any { table: false })?,
+            params: field(lua, t, at, "params", ANY)?,
         })
     }
     fn push(&self, lua: &Lua, value: shapes::DatabaseStatement) -> mlua::Result<Value> {
         let t: Table = lua.create_table_with_capacity(0, 2)?;
         set_field(lua, &t, "sql", Str, value.sql)?;
-        set_field(lua, &t, "params", Any { table: false }, value.params)?;
+        set_field(lua, &t, "params", ANY, value.params)?;
         Ok(Value::Table(t))
     }
 }
@@ -5413,7 +5493,7 @@ impl Codec for NetworkSendOptions {
             server: field(lua, t, at, "server", Opt(Str))?,
             group: field(lua, t, at, "group", Opt(Str))?,
             balance: field(lua, t, at, "balance", Opt(Choice(&["least", "fill"])))?,
-            data: field(lua, t, at, "data", Any { table: false })?,
+            data: field(lua, t, at, "data", ANY)?,
             wait: field(lua, t, at, "wait", Opt(Num))?,
             on_wait: field(lua, t, at, "on_wait", Opt(Func))?,
         })
@@ -5423,7 +5503,7 @@ impl Codec for NetworkSendOptions {
         set_field(lua, &t, "server", Opt(Str), value.server)?;
         set_field(lua, &t, "group", Opt(Str), value.group)?;
         set_field(lua, &t, "balance", Opt(Choice(&["least", "fill"])), value.balance)?;
-        set_field(lua, &t, "data", Any { table: false }, value.data)?;
+        set_field(lua, &t, "data", ANY, value.data)?;
         set_field(lua, &t, "wait", Opt(Num), value.wait)?;
         set_field(lua, &t, "on_wait", Opt(Func), value.on_wait)?;
         Ok(Value::Table(t))
@@ -5583,14 +5663,14 @@ impl Codec for NetworkMessageEvent {
         let _ = (&lua, &t);
         Ok(shapes::NetworkMessageEvent {
             channel: field(lua, t, at, "channel", HandleOf::<handles::NetworkChannel>::default())?,
-            value: field(lua, t, at, "value", Any { table: false })?,
+            value: field(lua, t, at, "value", ANY)?,
             server: field(lua, t, at, "server", Str)?,
         })
     }
     fn push(&self, lua: &Lua, value: shapes::NetworkMessageEvent) -> mlua::Result<Value> {
         let t: Table = lua.create_table_with_capacity(0, 3)?;
         set_field(lua, &t, "channel", HandleOf::<handles::NetworkChannel>::default(), value.channel)?;
-        set_field(lua, &t, "value", Any { table: false }, value.value)?;
+        set_field(lua, &t, "value", ANY, value.value)?;
         set_field(lua, &t, "server", Str, value.server)?;
         Ok(Value::Table(t))
     }
@@ -5607,17 +5687,17 @@ impl Codec for NetworkRequestEvent {
         let _ = (&lua, &t);
         Ok(shapes::NetworkRequestEvent {
             channel: field(lua, t, at, "channel", HandleOf::<handles::NetworkChannel>::default())?,
-            value: field(lua, t, at, "value", Any { table: false })?,
+            value: field(lua, t, at, "value", ANY)?,
             server: field(lua, t, at, "server", Str)?,
-            reply: field(lua, t, at, "reply", Any { table: false })?,
+            reply: field(lua, t, at, "reply", ANY)?,
         })
     }
     fn push(&self, lua: &Lua, value: shapes::NetworkRequestEvent) -> mlua::Result<Value> {
         let t: Table = lua.create_table_with_capacity(0, 4)?;
         set_field(lua, &t, "channel", HandleOf::<handles::NetworkChannel>::default(), value.channel)?;
-        set_field(lua, &t, "value", Any { table: false }, value.value)?;
+        set_field(lua, &t, "value", ANY, value.value)?;
         set_field(lua, &t, "server", Str, value.server)?;
-        set_field(lua, &t, "reply", Any { table: false }, value.reply)?;
+        set_field(lua, &t, "reply", ANY, value.reply)?;
         Ok(Value::Table(t))
     }
 }
@@ -5634,8 +5714,8 @@ impl Codec for NetworkMapChangeEvent {
         Ok(shapes::NetworkMapChangeEvent {
             map: field(lua, t, at, "map", HandleOf::<handles::NetworkMap>::default())?,
             key: field(lua, t, at, "key", Str)?,
-            value: field(lua, t, at, "value", Any { table: false })?,
-            previous: field(lua, t, at, "previous", Any { table: false })?,
+            value: field(lua, t, at, "value", ANY)?,
+            previous: field(lua, t, at, "previous", ANY)?,
             server: field(lua, t, at, "server", Opt(Str))?,
             cause: field(lua, t, at, "cause", Choice(&["set", "delete", "expired"]))?,
         })
@@ -5644,8 +5724,8 @@ impl Codec for NetworkMapChangeEvent {
         let t: Table = lua.create_table_with_capacity(0, 6)?;
         set_field(lua, &t, "map", HandleOf::<handles::NetworkMap>::default(), value.map)?;
         set_field(lua, &t, "key", Str, value.key)?;
-        set_field(lua, &t, "value", Any { table: false }, value.value)?;
-        set_field(lua, &t, "previous", Any { table: false }, value.previous)?;
+        set_field(lua, &t, "value", ANY, value.value)?;
+        set_field(lua, &t, "previous", ANY, value.previous)?;
         set_field(lua, &t, "server", Opt(Str), value.server)?;
         set_field(lua, &t, "cause", Choice(&["set", "delete", "expired"]), value.cause)?;
         Ok(Value::Table(t))
@@ -5808,14 +5888,14 @@ impl Codec for PlayerArriveEvent {
         Ok(shapes::PlayerArriveEvent {
             player: field(lua, t, at, "player", HandleOf::<handles::Player>::default())?,
             from: field(lua, t, at, "from", Str)?,
-            data: field(lua, t, at, "data", Any { table: false })?,
+            data: field(lua, t, at, "data", ANY)?,
         })
     }
     fn push(&self, lua: &Lua, value: shapes::PlayerArriveEvent) -> mlua::Result<Value> {
         let t: Table = lua.create_table_with_capacity(0, 3)?;
         set_field(lua, &t, "player", HandleOf::<handles::Player>::default(), value.player)?;
         set_field(lua, &t, "from", Str, value.from)?;
-        set_field(lua, &t, "data", Any { table: false }, value.data)?;
+        set_field(lua, &t, "data", ANY, value.data)?;
         Ok(Value::Table(t))
     }
 }
@@ -6500,7 +6580,7 @@ impl Codec for TestNetworkReport {
         Ok(shapes::TestNetworkReport {
             player: field(lua, t, at, "player", Str)?,
             reason: field(lua, t, at, "reason", Str)?,
-            details: field(lua, t, at, "details", Any { table: false })?,
+            details: field(lua, t, at, "details", ANY)?,
             by: field(lua, t, at, "by", Opt(Str))?,
         })
     }
@@ -6508,7 +6588,7 @@ impl Codec for TestNetworkReport {
         let t: Table = lua.create_table_with_capacity(0, 4)?;
         set_field(lua, &t, "player", Str, value.player)?;
         set_field(lua, &t, "reason", Str, value.reason)?;
-        set_field(lua, &t, "details", Any { table: false }, value.details)?;
+        set_field(lua, &t, "details", ANY, value.details)?;
         set_field(lua, &t, "by", Opt(Str), value.by)?;
         Ok(Value::Table(t))
     }
@@ -6525,14 +6605,14 @@ impl Codec for TestNetworkMessage {
         let _ = (&lua, &t);
         Ok(shapes::TestNetworkMessage {
             channel: field(lua, t, at, "channel", Str)?,
-            value: field(lua, t, at, "value", Any { table: false })?,
+            value: field(lua, t, at, "value", ANY)?,
             server: field(lua, t, at, "server", Str)?,
         })
     }
     fn push(&self, lua: &Lua, value: shapes::TestNetworkMessage) -> mlua::Result<Value> {
         let t: Table = lua.create_table_with_capacity(0, 3)?;
         set_field(lua, &t, "channel", Str, value.channel)?;
-        set_field(lua, &t, "value", Any { table: false }, value.value)?;
+        set_field(lua, &t, "value", ANY, value.value)?;
         set_field(lua, &t, "server", Str, value.server)?;
         Ok(Value::Table(t))
     }
@@ -6771,14 +6851,77 @@ impl Codec for RaisedEvent {
         let _ = (&lua, &t);
         Ok(shapes::RaisedEvent {
             cancelled: field(lua, t, at, "cancelled", Bool)?,
-            event: field(lua, t, at, "event", Any { table: false })?,
+            event: field(lua, t, at, "event", ANY)?,
         })
     }
     fn push(&self, lua: &Lua, value: shapes::RaisedEvent) -> mlua::Result<Value> {
         let t: Table = lua.create_table_with_capacity(0, 2)?;
         set_field(lua, &t, "cancelled", Bool, value.cancelled)?;
-        set_field(lua, &t, "event", Any { table: false }, value.event)?;
+        set_field(lua, &t, "event", ANY, value.event)?;
         Ok(Value::Table(t))
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable;
+impl Codec for CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable {
+    type T = unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable;
+    fn expected(&self) -> String {
+        or_list(vec![HandleOf::<handles::Centity>::default().expected(), HandleOf::<handles::Node>::default().expected(), HandleOf::<handles::Entity>::default().expected(), HandleOf::<handles::World>::default().expected(), HandleOf::<handles::ProjectBlock>::default().expected(), HandleOf::<handles::Menu>::default().expected(), HandleOf::<handles::Slot>::default().expected(), HandleOf::<handles::MenuTemplate>::default().expected(), HandleOf::<handles::Dialog>::default().expected(), HandleOf::<handles::Button>::default().expected(), HandleOf::<handles::ProjectItem>::default().expected(), HandleOf::<handles::Effect>::default().expected(), HandleOf::<handles::HttpStream>::default().expected(), HandleOf::<handles::WebSocket>::default().expected(), HandleOf::<handles::OAuthFlow>::default().expected(), HandleOf::<handles::WasmProcess>::default().expected(), HandleOf::<handles::NetworkChannel>::default().expected(), HandleOf::<handles::NetworkMap>::default().expected(), HandleOf::<handles::Cutscene>::default().expected(), HandleOf::<handles::Screen>::default().expected(), HandleOf::<handles::Playback>::default().expected(), TABLE.expected()])
+    }
+    fn accepts(&self, value: &Value) -> bool {
+        HandleOf::<handles::Centity>::default().accepts(value) || HandleOf::<handles::Node>::default().accepts(value) || HandleOf::<handles::Entity>::default().accepts(value) || HandleOf::<handles::World>::default().accepts(value) || HandleOf::<handles::ProjectBlock>::default().accepts(value) || HandleOf::<handles::Menu>::default().accepts(value) || HandleOf::<handles::Slot>::default().accepts(value) || HandleOf::<handles::MenuTemplate>::default().accepts(value) || HandleOf::<handles::Dialog>::default().accepts(value) || HandleOf::<handles::Button>::default().accepts(value) || HandleOf::<handles::ProjectItem>::default().accepts(value) || HandleOf::<handles::Effect>::default().accepts(value) || HandleOf::<handles::HttpStream>::default().accepts(value) || HandleOf::<handles::WebSocket>::default().accepts(value) || HandleOf::<handles::OAuthFlow>::default().accepts(value) || HandleOf::<handles::WasmProcess>::default().accepts(value) || HandleOf::<handles::NetworkChannel>::default().accepts(value) || HandleOf::<handles::NetworkMap>::default().accepts(value) || HandleOf::<handles::Cutscene>::default().accepts(value) || HandleOf::<handles::Screen>::default().accepts(value) || HandleOf::<handles::Playback>::default().accepts(value) || TABLE.accepts(value)
+    }
+    fn read(&self, lua: &Lua, value: Value, at: &str) -> crate::ApiResult<unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable> {
+        if HandleOf::<handles::Centity>::default().accepts(&value) { return HandleOf::<handles::Centity>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Centity); }
+        if HandleOf::<handles::Node>::default().accepts(&value) { return HandleOf::<handles::Node>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Node); }
+        if HandleOf::<handles::Entity>::default().accepts(&value) { return HandleOf::<handles::Entity>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Entity); }
+        if HandleOf::<handles::World>::default().accepts(&value) { return HandleOf::<handles::World>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::World); }
+        if HandleOf::<handles::ProjectBlock>::default().accepts(&value) { return HandleOf::<handles::ProjectBlock>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::ProjectBlock); }
+        if HandleOf::<handles::Menu>::default().accepts(&value) { return HandleOf::<handles::Menu>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Menu); }
+        if HandleOf::<handles::Slot>::default().accepts(&value) { return HandleOf::<handles::Slot>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Slot); }
+        if HandleOf::<handles::MenuTemplate>::default().accepts(&value) { return HandleOf::<handles::MenuTemplate>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::MenuTemplate); }
+        if HandleOf::<handles::Dialog>::default().accepts(&value) { return HandleOf::<handles::Dialog>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Dialog); }
+        if HandleOf::<handles::Button>::default().accepts(&value) { return HandleOf::<handles::Button>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Button); }
+        if HandleOf::<handles::ProjectItem>::default().accepts(&value) { return HandleOf::<handles::ProjectItem>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::ProjectItem); }
+        if HandleOf::<handles::Effect>::default().accepts(&value) { return HandleOf::<handles::Effect>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Effect); }
+        if HandleOf::<handles::HttpStream>::default().accepts(&value) { return HandleOf::<handles::HttpStream>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::HttpStream); }
+        if HandleOf::<handles::WebSocket>::default().accepts(&value) { return HandleOf::<handles::WebSocket>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::WebSocket); }
+        if HandleOf::<handles::OAuthFlow>::default().accepts(&value) { return HandleOf::<handles::OAuthFlow>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::OAuthFlow); }
+        if HandleOf::<handles::WasmProcess>::default().accepts(&value) { return HandleOf::<handles::WasmProcess>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::WasmProcess); }
+        if HandleOf::<handles::NetworkChannel>::default().accepts(&value) { return HandleOf::<handles::NetworkChannel>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::NetworkChannel); }
+        if HandleOf::<handles::NetworkMap>::default().accepts(&value) { return HandleOf::<handles::NetworkMap>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::NetworkMap); }
+        if HandleOf::<handles::Cutscene>::default().accepts(&value) { return HandleOf::<handles::Cutscene>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Cutscene); }
+        if HandleOf::<handles::Screen>::default().accepts(&value) { return HandleOf::<handles::Screen>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Screen); }
+        if HandleOf::<handles::Playback>::default().accepts(&value) { return HandleOf::<handles::Playback>::default().read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Playback); }
+        if TABLE.accepts(&value) { return TABLE.read(lua, value, at).map(unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Table); }
+        Err(mismatch(at, &self.expected(), &value))
+    }
+    fn push(&self, lua: &Lua, value: unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable) -> mlua::Result<Value> {
+        match value {
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Centity(v) => HandleOf::<handles::Centity>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Node(v) => HandleOf::<handles::Node>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Entity(v) => HandleOf::<handles::Entity>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::World(v) => HandleOf::<handles::World>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::ProjectBlock(v) => HandleOf::<handles::ProjectBlock>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Menu(v) => HandleOf::<handles::Menu>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Slot(v) => HandleOf::<handles::Slot>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::MenuTemplate(v) => HandleOf::<handles::MenuTemplate>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Dialog(v) => HandleOf::<handles::Dialog>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Button(v) => HandleOf::<handles::Button>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::ProjectItem(v) => HandleOf::<handles::ProjectItem>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Effect(v) => HandleOf::<handles::Effect>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::HttpStream(v) => HandleOf::<handles::HttpStream>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::WebSocket(v) => HandleOf::<handles::WebSocket>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::OAuthFlow(v) => HandleOf::<handles::OAuthFlow>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::WasmProcess(v) => HandleOf::<handles::WasmProcess>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::NetworkChannel(v) => HandleOf::<handles::NetworkChannel>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::NetworkMap(v) => HandleOf::<handles::NetworkMap>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Cutscene(v) => HandleOf::<handles::Cutscene>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Screen(v) => HandleOf::<handles::Screen>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Playback(v) => HandleOf::<handles::Playback>::default().push(lua, v),
+            unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable::Table(v) => TABLE.push(lua, v),
+        }
     }
 }
 

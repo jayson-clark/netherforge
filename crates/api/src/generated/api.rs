@@ -6,7 +6,7 @@
 
 use std::collections::BTreeMap;
 use mlua::{Function, Value};
-use crate::{ApiResult, Caller, Pending, handles, shapes, unions, values};
+use crate::{ApiResult, Caller, Pending, Waiting, handles, shapes, unions, values};
 
 /// Every class's implementation.
 pub trait LuaApi: crate::Runtime {
@@ -47,6 +47,7 @@ pub trait LuaApi: crate::Runtime {
     fn nf_network(&self) -> &dyn NfNetworkApi { &crate::unported::Unported }
     fn nf_time(&self) -> &dyn NfTimeApi { &crate::unported::Unported }
     fn nf_random(&self) -> &dyn NfRandomApi { &crate::unported::Unported }
+    fn nf_math(&self) -> &dyn NfMathApi { &crate::unported::Unported }
     fn nf_test(&self) -> &dyn NfTestApi { &crate::unported::Unported }
     fn centity(&self) -> &dyn CentityApi { &crate::unported::Unported }
     fn node(&self) -> &dyn NodeApi { &crate::unported::Unported }
@@ -90,12 +91,42 @@ pub trait LuaApi: crate::Runtime {
     fn screen(&self) -> &dyn ScreenApi { &crate::unported::Unported }
     fn playback(&self) -> &dyn PlaybackApi { &crate::unported::Unported }
     fn file(&self) -> &dyn FileApi { &crate::unported::Unported }
+    fn subscription(&self) -> &dyn SubscriptionApi { &crate::unported::Unported }
+    fn task(&self) -> &dyn TaskApi { &crate::unported::Unported }
     fn schedule(&self) -> &dyn ScheduleApi { &crate::unported::Unported }
+    fn random(&self) -> &dyn RandomApi { &crate::unported::Unported }
     fn hud(&self) -> &dyn HudApi { &crate::unported::Unported }
 }
 
 /// Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.images`, `nf.files`, `nf.text`, `nf.looks`, `nf.packs`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
 pub trait NfApi {
+    /// Calls `handler` every time `event` happens, until the subscription is cancelled or its script unloads. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this table doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, caller: &Caller, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `nf.on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, caller: &Caller, event: String, handler: Function) -> ApiResult<handles::Subscription>;
+
+    /// Raises a custom event for every script: every `nf.on(event)` handler hears it now, in the order they were registered, before this returns. The payload is handed to them as it is, not copied, so a field a handler assigns is there for the caller to read afterwards. A name without a `:` is an error: built-in events are the server's to raise.
+    fn emit(&self, caller: &Caller, event: String, payload: Value) -> ApiResult<bool>;
+
+    /// Calls `callback` once, `ticks` server ticks from now (20 ticks are a second). Timers stop when the script unloads. One that errors is logged. To do several things with pauses in between, start a task (`nf.task`) and `nf.wait` in it.
+    fn after(&self, caller: &Caller, ticks: i64, callback: Function) -> ApiResult<handles::Task>;
+
+    /// Calls `callback` every `ticks` server ticks, starting `ticks` from now, until cancelled or the script unloads. One that errors is logged, and stops after 20 errors in a row.
+    fn every(&self, caller: &Caller, ticks: i64, callback: Function) -> ApiResult<handles::Task>;
+
+    /// Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.worlds.import`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.ban`, `nf.network.unban`, `nf.network.mute`, `nf.network.unmute`, `nf.network.send_player`, `nf.network.send_players`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.
+    fn task(&self, caller: &Caller, callback: Function, rest: Vec<Value>) -> ApiResult<handles::Task>;
+
+    /// Pauses the task for `ticks` server ticks (20 are a second). It can't wait inside a function the server or Lua itself calls back (a `complete` function, `table.sort`'s comparator), nor inside a coroutine of your own; inside `pcall` is fine.
+    fn wait(&self, caller: &Caller, ticks: i64) -> ApiResult<Waiting>;
+
+    /// Pauses the task until `predicate()` returns something other than `false` or `nil`. It's called once straight away and then once every tick, as the task's code.
+    fn wait_until(&self, caller: &Caller, predicate: Function, timeout: Option<i64>) -> ApiResult<Waiting>;
+
+    /// Pauses the task until `event` next happens on `handle` (or, for `nf`, anywhere on the server) and returns that event. The task carries on straight away, while the event is still being delivered, so until its next wait it can still `cancel()` or `stop()` the event or set its writable fields. If the handle goes first (a removed centity, a closed window, a dialog taken away by a reload), the task ends. An event the handle doesn't have is an error.
+    fn wait_for(&self, caller: &Caller, handle: unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable, event: String, filter: Option<Function>) -> ApiResult<Waiting>;
+
     /// A saved table for the whole project, by name: `nf.data("shop")` is the same table in every script, so a module keeps its own under its own name and two modules never collide. Each name is its own file in the data directory, kept across restarts. It may hold strings, numbers, booleans, tables of them (keyed by strings, or a list numbered from 1), and the API's own values: `Vec3`s, `Location`s, `Item` tables, and `Player`, `Entity`, `Centity` and `World` handles, which come back as the same types (a handle to something gone answers `nil` or `false`, as handles do). Anything else (a function, a `Menu` window, a `Subscription`) is skipped when it's saved, with a line in the log naming where it was (`data.inventory[3]: a function can't be saved`). The table is live: change it and the change is saved, at the next autosave (every five minutes), when the project reloads and when the server stops. It stays in memory across hot reloads rather than being read again, so a script that reloads finds it as it left it. A table that would take more than 1 MiB isn't saved (the last save stands), and the log says so. A name that isn't lowercase letters, digits and `_` (starting with a letter or digit, at most 64 characters) is an error.
     fn data(&self, caller: &Caller, name: String) -> ApiResult<Value>;
 
@@ -104,6 +135,9 @@ pub trait NfApi {
 
     /// One of this package's settings: what whoever runs the server set it to, or its default when they haven't. Settings are declared in `netherforge.json`'s `settings` (each with a type, a default and a description) and changed by the server's owner, never by scripts; a package reads only its own. The value is a `boolean`, an `integer`, a `number` or a `string`, by the setting's type. A script that reads a setting and doesn't listen for `setting_changed` is restarted when that setting changes; one that listens hears the change instead. A name the package doesn't declare is an error.
     fn config(&self, caller: &Caller, name: String) -> ApiResult<Value>;
+
+    /// Lua instructions this call may still run before it's stopped. A loop over a lot of work can check it and leave the rest for the next tick. In a call nested in another (a task started by a handler, a centity spawned by one) it's the least of its own budget and what its caller has left, since what it runs is charged to the caller when it returns. Coarse: it's updated every thousand instructions.
+    fn instructions_left(&self, caller: &Caller) -> ApiResult<i64>;
 }
 
 /// The server itself: its clock, its performance, its version, its settings (players, message of the day, whitelist), and saying or running things as the console.
@@ -639,6 +673,9 @@ pub trait NfTimeApi {
 
 /// Randomness `math.random` doesn't give: generators of your own that repeat for a seed, smooth noise, and random ids.
 pub trait NfRandomApi {
+    /// A random generator of its own, apart from `math.random` and every other generator. Two made with the same seed give the same numbers in the same order, on every server, so a seed can stand for a whole dungeon layout or loot roll. One the script lets go of is collected like any table.
+    fn new(&self, caller: &Caller, seed: Option<i64>) -> ApiResult<handles::Random>;
+
     /// Smooth 2D noise (simplex): a number from -1 to 1 that changes gradually as `x` and `z` do, the same every time for the same arguments. For terrain heights, patches of blocks, wobble over time.
     fn noise2(&self, caller: &Caller, x: f64, z: f64, options: Option<shapes::NoiseOptions>) -> ApiResult<f64>;
 
@@ -647,6 +684,21 @@ pub trait NfRandomApi {
 
     /// A new random UUID, like `"3f2b8c1e-7a4d-4e0b-9c55-0e8a6f1d2b7c"`: an id no one else will make.
     fn uuid(&self, caller: &Caller) -> ApiResult<String>;
+}
+
+/// Small arithmetic `math` doesn't have, for animating by hand: blending, clamping, rescaling and easing.
+pub trait NfMathApi {
+    /// The number `fraction` of the way from `from` to `to`: 0 is `from`, 1 is `to`, and outside that it carries on past either end. (`Vec3` has its own `lerp`.)
+    fn lerp(&self, caller: &Caller, from: f64, to: f64, fraction: f64) -> ApiResult<f64>;
+
+    /// `value`, kept from `min` to `max`. `min` greater than `max` is an error.
+    fn clamp(&self, caller: &Caller, value: f64, min: f64, max: f64) -> ApiResult<f64>;
+
+    /// Moves `value` from one range to another: `from_min` becomes `to_min`, `from_max` becomes `to_max`, and everything else in proportion (beyond the ends too; clamp it if it mustn't). A range from a number to itself is an error.
+    fn remap(&self, caller: &Caller, value: f64, from_min: f64, from_max: f64, to_min: f64, to_max: f64) -> ApiResult<f64>;
+
+    /// Reshapes a fraction from 0 to 1 by one of the curves animation keyframes use: `"linear"` as it is, `"step"` 0 until 1, `"ease_in"` starting slow, `"ease_out"` ending slow, `"ease_in_out"` both. Every curve takes 0 to 0 and 1 to 1; a fraction outside 0 to 1 is clamped first.
+    fn ease(&self, caller: &Caller, easing: String, fraction: f64) -> ApiResult<f64>;
 }
 
 /// What a test file runs on. A project's tests are the `*_test.lua` files anywhere in it (`tests/shop_test.lua`), run by `netherforge test` (or the editor's Run tests) on a fake server: no Minecraft, no network, a world that holds only what the test puts in it. A test file runs like a module (it can `require` the project's modules, and files beside it) and registers its tests with `nf.test.case`; each test runs alone, on a fresh server with the project loaded and its scripts started, so one can never leave something behind for the next. The file's own code runs once for every test, before it, so it's where to `require` and build what the tests share. Nothing here exists on a real server: `nf.test` is `nil` there.
@@ -662,6 +714,9 @@ pub trait NfTestApi {
 
     /// Raises a server-wide event as the server would, to the scripts: whoever listens to `event` with `nf.on` hears it, and, for an event the server raises about a player, an entity or a world, the handlers on that handle (`player:on("chat")`) hear it first, in the order the server uses. Each can `stop()` or `cancel()` it or set its writable fields. The few events the runtime stages itself (a death, damage, a click on a centity) reach `nf.on` handlers only. `payload` is what the event carries, the same table its handlers read (`event.player`, `event.message`): a field the event does not have is an error naming the fields. What the server would then do with a cancelled event is not simulated: read the result.
     fn raise(&self, caller: &Caller, event: String, payload: Value) -> ApiResult<shapes::RaisedEvent>;
+
+    /// A stand-in for a terrain script's `terrain` (what its `...` is), to test worldgen modules on their own: `noise(name):at(...)`, `height`, `area`, `biome`, `seed`, `min_y`, `max_y`, `sea_level` and `plan` as a terrain script has them, each answering what `options` says. `noises` maps a noise's name to its value everywhere, or to a function of the place (`x, y, z`, or `x, z` for a column) giving it; a noise it doesn't name is 0. `height`, `area` and `biome` are a value or a function of the place, `seed`, `min_y`, `max_y` and `sea_level` numbers (defaults 64, `"default"`, `minecraft:plains`, 0, -64, 319 and 63). A plan makes each cell once, with `math.random` seeded for that cell. Chunks, structures and scatters aren't stood in for: `netherforge preview` draws the real thing.
+    fn terrain(&self, caller: &Caller, options: Value) -> ApiResult<Value>;
 
     /// Clicks for a player as their client would, with what they hold filled in, and raises what the server would for it: `player_interact` (the held project item's `interact` first, and a click on one of the project's blocks reaches it), then, for a right click with an item that nothing cancelled, `player_use_item` (the project item's `use` first). A left click is the attack button at a block or the air: it doesn't break the block (`world:break_block` does that). A click on an entity is `nf.test.raise("player_interact_entity", ...)`. Nothing the game would then do (an item thrown, a door opened) is simulated: read what the handlers did.
     fn click(&self, caller: &Caller, player: handles::Player, button: String, options: Option<shapes::TestClickOptions>) -> ApiResult<bool>;
@@ -992,6 +1047,15 @@ pub trait CentityApi {
 
     /// How far away its displays are drawn, in blocks. Each player's own entity distance setting scales it further, so it's the distance at 100%. Not saved, like everything a script sets on a node.
     fn set_view_range(&self, this: &handles::Centity, blocks: f64) -> ApiResult<bool>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::Centity, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `centity:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::Centity, event: String, handler: Function) -> ApiResult<handles::Subscription>;
+
+    /// Raises a custom event on this centity: every `centity:on(event)` handler hears it now, in the order they were registered, before this returns. The payload is handed to them as it is, not copied, so a field a handler assigns is there for the caller to read afterwards. A name without a `:` is an error: built-in events are the server's to raise.
+    fn emit(&self, this: &handles::Centity, event: String, payload: Value) -> ApiResult<bool>;
 }
 
 /// One node of one centity instance. Its transform (`translation`, `rotation`, `scale`) is in its parent's space, in the same units as `centity.json`: blocks, degrees (X then Y then Z) and scale factors. A root node's parent space is the centity's own: origin at the centity's position, turned by its yaw. `world_position`, `to_world`, `to_local` and `world_direction` convert to and from the world; physics (velocities, impulses and the point an impulse lands at) is always in world space. What a script sets is the node's rest pose; an animation driving the same channel overrides it while it plays. Nothing a script sets is saved: the script's body, which runs every time it starts, is where to set it up. A node with `physics` is moved by it: each tick physics writes its translation and rotation, after animations and before scripts, so a script's write has the last word (setting the rotation re-seeds the body's orientation).
@@ -1226,6 +1290,12 @@ pub trait NodeApi {
 
     /// Freezes a physics body in place, or lets it go again. A frozen body doesn't move at all (scripts can still set its pose), and its centity's other bodies collide with it as with a wall. It keeps its velocity, so it carries on where it left off when it's let go. Not saved.
     fn set_physics_enabled(&self, this: &handles::Node, enabled: bool) -> ApiResult<bool>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::Node, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `node:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::Node, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A picture made at runtime by `nf.images`, for image displays (`node:set_image`). It never changes: `resized` and `cropped` make new ones. Ephemeral: it can't be saved in a `data()` table (keep `image:encode()` instead). An image is at most 2048 pixels each way, and the images the server holds for scripts at once are at most 32 million pixels in all; one past that is an error, so let go of images you no longer need (an image Lua no longer holds is let go of for you).
@@ -1259,6 +1329,15 @@ pub trait EntityApi {
 
     /// Whether it's in the world now: alive, and in a loaded chunk. For a player, whether they're online.
     fn exists(&self, this: &handles::Entity) -> ApiResult<bool>;
+
+    /// Whether it's a player: then it's a `Player` handle.
+    fn is_player(&self, this: &handles::Entity) -> ApiResult<bool>;
+
+    /// Whether it's a living entity (a mob, an animal, an armour stand, a player): then it's a `Living` handle, with health, effects and equipment. `false` while it isn't in the world, unless its handle was handed out as a `Living` already.
+    fn is_living(&self, this: &handles::Entity) -> ApiResult<bool>;
+
+    /// Whether it's a mob, something with AI (a zombie, a cow, a bat): then it's a `Mob` handle, with a target, walking and goals. `false` while it isn't in the world, unless its handle was handed out as a `Mob` already.
+    fn is_mob(&self, this: &handles::Entity) -> ApiResult<bool>;
 
     /// Where it is, in which world, and which way it faces, or `nil` once it has gone (or while its chunk is unloaded).
     fn location(&self, this: &handles::Entity) -> ApiResult<Option<values::Location>>;
@@ -1403,6 +1482,12 @@ pub trait EntityApi {
 
     /// The centity it's looking at: a ray from its eyes along its direction, the first centity hitbox it hits (tested with the same shapes clicks are), unless a block is in the way. `nil` when there's none within reach, or once it has gone.
     fn target_centity(&self, this: &handles::Entity, max_distance: Option<f64>) -> ApiResult<Option<handles::Centity>>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::Entity, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `entity:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::Entity, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A living entity: a mob, an animal, an armour stand, a player. An `Entity` with health, attributes, status effects and equipment.
@@ -1457,6 +1542,12 @@ pub trait LivingApi {
 
     /// Puts an item in one of its slots, or empties it. An item table with a misspelled field, or an item the server doesn't have, is an error.
     fn set_equipment(&self, this: &handles::Living, slot: String, item: Option<values::Item>) -> ApiResult<bool>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::Living, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `living:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::Living, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A mob: a `Living` with AI, like a zombie, a cow or a bat. It has a target, walks where it's sent (`move_to`), and its AI runs goals, the game's and any written in Lua.
@@ -1493,6 +1584,15 @@ pub trait MobApi {
 
     /// Takes every goal off it, its targeting goals too, but those `options.keep` names. A mob with no goals stands where it is but for what moves it (`move_to`, being pushed); goals added afterwards run as usual. Goals aren't saved, so a mob that unloads and loads again has the game's goals back.
     fn clear_goals(&self, this: &handles::Mob, options: Option<shapes::GoalClearOptions>) -> ApiResult<bool>;
+
+    /// Gives it a goal written in Lua, which its AI runs with the goals it has. Every tick or two the AI asks `should_start` of each goal that isn't running and whose controls are free, or held by goals of a lower priority (a bigger number), which it then stops; `start` runs when it starts, `tick` while it runs, and `stop` once `should_continue` says no or a more important goal takes one of its controls. A goal that claims `"target"` is a targeting goal: it runs with the mob's targeting goals (`hurt_by_target`, `nearest_attackable_target`) rather than its regular goals, so it claims nothing else. The id is in the project's namespace: `"guard_post"` is `"<namespace>:guard_post"`, and a goal with an id the mob already has replaces it. Goals aren't saved: they go when the mob unloads, and when the script that added them stops (a reload), so set them up again when it spawns or in the script's body. A callback that errors is reported, with its line, and its goal is taken off the mob. Goals added or removed from inside a goal's own callbacks change before the mob's next tick.
+    fn add_goal(&self, this: &handles::Mob, id: String, definition: shapes::GoalDefinition) -> ApiResult<bool>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::Mob, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `mob:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::Mob, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// An item lying on the ground, which players pick up by walking over it: an `Entity` holding one stack.
@@ -1910,6 +2010,12 @@ pub trait PlayerApi {
 
     /// Their table for this time online: one per player, the same table every time, shared by every script, and never saved. It's made empty the first time a script asks after they join, kept while they stay (through a module's reload too: it's the player's, not the script's), and dropped once they've left, after their `player_quit` handlers, so the next time they join it's empty again. A whole-project reload (`netherforge.json` changing, or `/nf reload` with no files) empties it, as it does every script's state. Anything a script holds goes in it (handles, functions, a `Task`), so a module needn't keep a map keyed by player and clear it in `player_quit`. By convention each module keeps its own part of it under its name, as with `data()`. `nil` for a player who isn't online.
     fn session(&self, this: &handles::Player) -> ApiResult<Value>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::Player, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `player:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::Player, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A fake player a script drives (see `nf.bots`): a `Player` with everything players have, and the controls a player's client has. Every action is done as the client would do it, so what it causes is heard like anyone's (`player_move`, `player_interact`, `entity_damage`, …) and a handler that cancels it stops it. Actions that take ticks (`walk_to`, `break_block`) are asynchronous; a new one ends the one before it with an error, as `stop()` does. Every bot online is a `Bot`, those the editor's agents and tests drive included. Once it has left, every action answers `false` (and an asynchronous one `nil, err`).
@@ -2000,6 +2106,9 @@ pub trait WorldApi {
 
     /// What kind of world it is, or `nil` once it has gone. A world of a custom dimension type says `"normal"`.
     fn environment(&self, this: &handles::World) -> ApiResult<Option<String>>;
+
+    /// A `Location` in this world, for the functions that take one (`player:teleport`, `nf.centities.spawn`). Give both `yaw` and `pitch`, or neither for a location with no facing; a `yaw` alone faces level.
+    fn location(&self, this: &handles::World, position: values::Vec3, yaw: Option<f64>, pitch: Option<f64>) -> ApiResult<values::Location>;
 
     /// The time of day in ticks, 0 to 23999: 0 is sunrise, 6000 noon, 12000 sunset, 18000 midnight. `nil` once the world has gone. It's the game's clock, not the wall clock (`nf.server.unix_time()`).
     fn time_of_day(&self, this: &handles::World) -> ApiResult<Option<i64>>;
@@ -2156,6 +2265,12 @@ pub trait WorldApi {
 
     /// Places a structure or a build (`builds/<id>/`, a structure too big for one file) like `place_structure`, its smallest corner at `position` before it's turned, but over as many ticks as it takes. It goes a few thousand blocks a tick, shared with every other gradual placement and fill on the server (the owner's `structures.blocks-per-tick` in `config.yml`), so even a big one never stalls the server; each package may have a few going at once (`structures.max-jobs-per-package`), past which one fails at once. Its blocks go in from the bottom up (a build's a part at a time), loading the chunks it covers as it reaches them, then its entities, once every block is in. Blocks go in as they were saved, with no updates to their neighbours, as `/place` puts them. A structure or build there's none of, a `rotation` that isn't a multiple of 90, an `integrity` outside 0 to 1 or a `per_tick` below 1 is an error at once. A part that can't be read, the world going, or this script stopping stops it part way, and what was placed stays. It takes as many ticks as the placing does, so its placed arrives later: give `callback`, which is called with `placed, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `placed, err`. Without a callback outside a task, it's an error. When it fails, `placed` is `nil` and `err` says why.
     fn place_gradually(&self, this: &handles::World, id: String, position: values::Vec3, options: Option<shapes::GradualPlaceOptions>) -> ApiResult<Pending<i64>>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::World, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `world:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::World, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A border: the wall at the edge of a square area, which players can't walk through and which hurts them outside it. Either a world's (`world:border()`), which everyone in the world sees, or one player's own (`player:border()`), which only they see and which the server draws for them but doesn't enforce: it doesn't hurt them, and doesn't stop what isn't them. Sizes and positions are blocks; times are ticks (20 a second). Its methods answer `nil` or `false` once its world has gone, or for a player's own, once they've left or gone back to their world's (`player:reset_border()`).
@@ -2279,6 +2394,12 @@ pub trait ProjectBlockApi {
 
     /// Places one at the block position a location is in, as `world:set_block` would: whatever is there is replaced, and nothing drops. Its `place` handlers are not asked (a script placing a block isn't a player placing one), and it isn't a `block_place` either. If the block has a centity, it's spawned over the block. `nil` when the chunk isn't loaded, or when the game has no state of its carrier left to hold the block in (the project has more blocks of that carrier than that).
     fn place(&self, this: &handles::ProjectBlock, location: values::Location, options: Option<shapes::BlockPlaceOptions>) -> ApiResult<Option<handles::CustomBlock>>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::ProjectBlock, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `block:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::ProjectBlock, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A real inventory: a player's (`player:inventory()`), their ender chest, a storage of the project's that they keep (`player:storage(name, size)`), a container block's (`block:inventory()`: a chest, a barrel, a hopper, a furnace) or an entity's (a chest boat, a donkey, a villager). Its item methods work like `Menu`'s. The handle is where the inventory is, so it reads live; once that's gone (a chest broken, a player offline, a chunk unloaded) its methods answer `nil`, `false` or nothing. Slots are numbered from 0. A player's: the hotbar 0 to 8, the rest of the main inventory 9 to 35, armour 36 (feet), 37 (legs), 38 (chest) and 39 (head), the offhand 40, then body armour 41 and a saddle 42 (what the game keeps there for any entity). A double chest's inventory is both halves, 0 to 53.
@@ -2582,6 +2703,12 @@ pub trait MenuApi {
 
     /// Closes it for everyone looking at it.
     fn close_all(&self, this: &handles::Menu) -> ApiResult<bool>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::Menu, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `menu:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::Menu, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// One slot of one menu window, from `menu:slot(index)` (`this:slot(index)` in the menu's script). After the window goes, its methods return `nil` or `false` rather than erroring, and its handlers are gone.
@@ -2618,6 +2745,12 @@ pub trait SlotApi {
 
     /// Which storage slot this slot shows, or `nil` when it shows none.
     fn binding(&self, this: &handles::Slot) -> ApiResult<Option<shapes::SlotBinding>>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::Slot, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `slot:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::Slot, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A menu made by a script with `nf.menus.create` rather than read from `menus/<id>/`: what a window opened from it starts as. Open a window of it with `player:open_menu(template)`, as many as you like, each a `Menu` of its own; handlers on the template hear every one of its windows (after the window's own handlers). It lives as long as the script that created it: when that script unloads, or `remove()` is called, its windows close and its handlers go, and its methods answer `nil` or `false` rather than erroring.
@@ -2651,6 +2784,12 @@ pub trait MenuTemplateApi {
 
     /// Takes it away before its script unloads: its windows close, and its handlers go.
     fn remove(&self, this: &handles::MenuTemplate) -> ApiResult<bool>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::MenuTemplate, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `template:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::MenuTemplate, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A dialog from `dialogs/<id>/`: `this` in the dialog's script, and what `nf.dialogs.get` returns. A dialog holds nothing, so there is one of each for the whole server and showing it is all there is to do with it. Every button runs Lua with the answers to the inputs in hand; none of them is a command. Handlers on it last while the project has the dialog, across reloads of it. One made by `nf.dialogs.create` works the same way, and lasts as long as the script that made it.
@@ -2675,6 +2814,15 @@ pub trait DialogApi {
 
     /// Puts it on someone's screen. It's built fresh each time, so what they see is the dialog as it is now, with whatever `options` change for this opening. A project dialog already on their screen is closed (its `close` handlers hear it).
     fn open_for(&self, this: &handles::Dialog, player: handles::Player, options: Option<shapes::DialogOpenOptions>) -> ApiResult<bool>;
+
+    /// Opens it for `player` and pauses the task until they answer: returns their press, or `nil` if they close it (see the `close` event: escape through NetherForge's exit button, or a script closing it or opening another dialog over it), leave the server, or it couldn't be opened (they're offline, or the dialog is gone). The press still goes to the dialog's handlers and `nf.on("dialog_press")` as usual; `ask` hears it at the dialog, so a button handler that calls `event:stop()` hides it from `ask` too.
+    fn ask(&self, this: &handles::Dialog, player: handles::Player, options: Option<shapes::DialogOpenOptions>) -> ApiResult<Waiting>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::Dialog, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `dialog:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::Dialog, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// One button of a dialog, from `dialog:button(key)` (`this:button(key)` in the dialog's script). If a reload takes the button away, its methods return `nil` rather than erroring, and its handlers are gone.
@@ -2687,6 +2835,12 @@ pub trait ButtonApi {
 
     /// What it says, as MiniMessage, or `nil` once the dialog no longer has it.
     fn label(&self, this: &handles::Button) -> ApiResult<Option<values::Text>>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::Button, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `button:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::Button, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A project item from `items/<id>/item.json`: `this` in the item's script, and what `nf.items.get` hands out. It's the item itself, not one stack of it: its handlers hear what players do with any stack of it, wherever the stack came from. A stack of it is an `Item` table whose `item` is this id. If the item is deleted, its methods answer `nil` or `false` and its handlers go.
@@ -2702,6 +2856,12 @@ pub trait ProjectItemApi {
 
     /// Its `properties` from its `item.json`: the project's own facts about it, any JSON (`{ damage = 12, class = "melee" }`), as a table. A new table each call, so keep it rather than ask in a loop. An empty table when the file has none, `nil` once the item is gone.
     fn properties(&self, this: &handles::ProjectItem) -> ApiResult<Value>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::ProjectItem, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `item:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::ProjectItem, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// One playing particle effect, from `nf.particles.play`. Once it has ended (it finished, was stopped, lost what it followed, its file was deleted, or the script that played it unloaded) its methods answer `nil` or `false` rather than erroring, except `kind()`. An effect is ephemeral: it has no `id()` and can't be saved in a `data()` table.
@@ -2723,6 +2883,12 @@ pub trait EffectApi {
 
     /// Makes it follow something, from the next tick on. Each tick, before it spawns anything, the effect moves to the target: its position (a node's `world_position()`), facing the target's yaw (a node's centity's), pitch 0. When the target stops existing (a removed centity, a player who left, an entity that died or was removed, a centity or entity whose chunk unloaded) the effect ends with reason `"target_gone"`. Calling it again switches targets; `teleport` stops following.
     fn follow(&self, this: &handles::Effect, target: handles::Handle, offset: Option<values::Vec3>) -> ApiResult<bool>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::Effect, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `effect:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::Effect, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A streamed HTTP response, from `nf.http.stream`: its `open`, each `message` and its one `end` are events on it. It belongs to the script that opened it and ends with reason `"unloaded"` when that script unloads (a reload, the server stopping). Once it has ended its methods answer as an ended stream does rather than erroring. Ephemeral: it can't be saved in a `data()` table.
@@ -2738,6 +2904,12 @@ pub trait HttpStreamApi {
 
     /// Ends it now, with reason `"closed"`: the connection is dropped and messages that arrived but weren't handed over yet are thrown away.
     fn close(&self, this: &handles::HttpStream) -> ApiResult<bool>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::HttpStream, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `stream:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::HttpStream, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A WebSocket, from `nf.http.websocket`: `send` text on it, and hear its `open`, each `message` and its one `end` as events. It belongs to the script that opened it and ends with reason `"unloaded"` when that script unloads (a reload, the server stopping). Once it has ended its methods answer as an ended socket does rather than erroring. Ephemeral: it can't be saved in a `data()` table.
@@ -2756,6 +2928,12 @@ pub trait WebSocketApi {
 
     /// Ends it now, with reason `"closed"`: the other side is told with `code` and `reason`, and messages that arrived but weren't handed over yet are thrown away.
     fn close(&self, this: &handles::WebSocket, code: Option<i64>, reason: Option<String>) -> ApiResult<bool>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::WebSocket, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `socket:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::WebSocket, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A route a script answers, from `nf.web.route`. It goes when its script unloads or `remove` is called.
@@ -2789,6 +2967,12 @@ pub trait OAuthFlowApi {
 
     /// Ends the flow: its callback route goes and logins under way are forgotten.
     fn remove(&self, this: &handles::OAuthFlow) -> ApiResult<bool>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::OAuthFlow, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `flow:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::OAuthFlow, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// An instance of a WebAssembly module, from `nf.wasm.instantiate`: its own memory, kept from call to call, so a function can build state another reads. Its calls run off the main thread one at a time, in the order they were made. It belongs to the script that made it and is closed when that script unloads. Ephemeral: it can't be saved in a `data()` table.
@@ -2822,6 +3006,12 @@ pub trait WasmProcessApi {
 
     /// Ends it now, with reason `"stopped"`: lines it printed that weren't handed over yet are thrown away.
     fn stop(&self, this: &handles::WasmProcess) -> ApiResult<bool>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::WasmProcess, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `engine:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::WasmProcess, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A channel of the network, from `nf.network.channel`: publish on it with `publish`, ask one server with `request`, and hear messages and requests as its `message` and `request` events. A server listens to a channel while any of its scripts has a handler on it; handlers go with their scripts, as any handler does.
@@ -2834,6 +3024,12 @@ pub trait NetworkChannelApi {
 
     /// Asks a server on this channel, or one instance of a group: its `request` handlers answer, and the answer comes back here. It fails (`nil, err`) when this server isn't connected, that server isn't (or no instance of the group is), nothing there handles requests on the channel, a handler there errored, or no answer came within `network.request-timeout-seconds`. A handler that answers `nil` gives `nil` with no `err`. Anything a `data()` table can hold, sent as JSON with the same codec: tables, strings, numbers, booleans, `Vec3`, `Location` (its world by name) and handles to entities and worlds (by UUID and name, which another server may not have). At most `max-value-bytes` as JSON (the proxy's `hub.properties`, 64 KiB unless its owner says otherwise); a value over it, or one that can't be written as JSON, is an error at the script's line. It works off the main thread, so its reply arrives later: give `callback`, which is called with `reply, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `reply, err`. Without a callback outside a task, it's an error. When it fails, `reply` is `nil` and `err` says why.
     fn request(&self, this: &handles::NetworkChannel, target: unions::StringOrNetworkTarget, data: Value) -> ApiResult<Pending<Value>>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::NetworkChannel, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `channel:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::NetworkChannel, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A hold on this server being ready, from `nf.network.hold_ready`: while any is held, the server stays `starting`. It goes with the script that took it.
@@ -2870,6 +3066,12 @@ pub trait NetworkMapApi {
 
     /// Sets a key to `data` only if it has no value, made by the hub in one step: of two servers inserting one key at once, exactly one gets `true`. A claim, a lock or a reservation: give it `options.expires` so a server that stops holding it can't keep it forever. It works off the main thread, so its inserted arrives later: give `callback`, which is called with `inserted, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `inserted, err`. Without a callback outside a task, it's an error. When it fails, `inserted` is `nil` and `err` says why.
     fn insert(&self, this: &handles::NetworkMap, key: String, data: Value, options: Option<shapes::NetworkMapWriteOptions>) -> ApiResult<Pending<bool>>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::NetworkMap, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `map:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::NetworkMap, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// One cutscene playing for one player, from `nf.cutscenes.play`. Once it has ended (it finished, was stopped or skipped, was replaced by another, its player left, or the script that played it unloaded) its methods answer `nil` or `false` rather than erroring, except `kind()` and `length()`. A cutscene is ephemeral: it has no `id()` and can't be saved in a `data()` table.
@@ -2891,6 +3093,12 @@ pub trait CutsceneApi {
 
     /// Ends it now, with reason `"stopped"`, and puts the player back.
     fn stop(&self, this: &handles::Cutscene) -> ApiResult<bool>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::Cutscene, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `cutscene:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::Cutscene, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A screen: maps (each 128 by 128 pixels) side by side, which scripts draw on and play videos on, shown in item frames (`place`, or the file's `place`) or as map items in players' hands (`item`). Pixel `0, 0` is its top left. What it shows is the server's to send and isn't saved: draw it whenever its script starts. Once a screen is gone (a script's screen whose script unloaded, a project screen whose file was deleted) its drawing does nothing and its getters answer `nil` or `false`.
@@ -2995,6 +3203,12 @@ pub trait ScreenApi {
 
     /// Takes a script's screen away for good: its frames come down, and its video ends. A screen made with a `key` gives up its maps' numbers too: one made again with that key gets new ones, and an item or frame of the old ones shows nothing. A project screen can't be removed (its file says it's there): that's an error.
     fn remove(&self, this: &handles::Screen) -> ApiResult<bool>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::Screen, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `screen:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::Screen, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A video playing on a screen, from `screen:play`. Once it has ended its methods answer `nil` or `false`, except `video()` and `length()`; `exists()` says whether it has.
@@ -3046,6 +3260,12 @@ pub trait PlaybackApi {
 
     /// Whether it starts again when it reaches its end.
     fn set_looping(&self, this: &handles::Playback, looping: bool) -> ApiResult<bool>;
+
+    /// Calls `handler` every time `event` happens to this, until the subscription is cancelled or its script unloads, or this goes away. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this class doesn't have is an error, so a typo is caught where it was made.
+    fn on(&self, this: &handles::Playback, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
+
+    /// Like `playback:on`, but the handler runs only the next time the event happens, then stops listening.
+    fn once(&self, this: &handles::Playback, event: String, handler: Function) -> ApiResult<handles::Subscription>;
 }
 
 /// A path in the scripts' data directory (`plugins/NetherForge/data/`, on the editor's dev server too). The only state a script has that survives a restart. Files are capped at 1 MiB; writes past it are refused, not truncated.
@@ -3098,6 +3318,9 @@ pub trait FileApi {
     /// When it last changed, as Unix time in milliseconds (like `nf.server.unix_time()`), or `nil` when there's nothing there.
     fn modified_time(&self, this: &handles::File) -> ApiResult<Option<i64>>;
 
+    /// An iterator over its lines, for a `for` loop: each without its line ending (`\n` or `\r\n`). Nothing for a file that isn't there.
+    fn lines(&self, this: &handles::File) -> ApiResult<Function>;
+
     /// Moves it (a file, or a folder and everything in it) to another path in the data directory, creating folders above it as needed. Nothing already there is overwritten.
     fn rename(&self, this: &handles::File, path: String) -> ApiResult<Option<handles::File>>;
 
@@ -3111,6 +3334,24 @@ pub trait FileApi {
     fn delete(&self, this: &handles::File) -> ApiResult<bool>;
 }
 
+/// What `:on` and `:once` return: one handler listening for one event on one handle (or on `nf`). A handler lives as long as **both** the script that registered it and the handle it's on: a module's handler on a centity's node goes when the module unloads or the centity is removed, whichever comes first; one on a menu window goes with the window. A handler that errors 20 times in a row is cancelled.
+pub trait SubscriptionApi {
+    /// Stops the handler being called. Cancelling one already cancelled does nothing.
+    fn cancel(&self, this: &handles::Subscription) -> ApiResult<()>;
+
+    /// Whether the handler is still listening: `false` once it's cancelled (by `cancel()`, after a `once` handler ran, or after 20 errors in a row), its script has unloaded, or the handle it's on has gone.
+    fn is_active(&self, this: &handles::Subscription) -> ApiResult<bool>;
+}
+
+/// What `nf.task`, `nf.after` and `nf.every` return: a task that may be waiting, or a callback waiting to run.
+pub trait TaskApi {
+    /// Ends it: a task stops where it's waiting and never carries on; a callback doesn't run (again). A task that cancels itself stops at its next wait. Cancelling one that has ended does nothing.
+    fn cancel(&self, this: &handles::Task) -> ApiResult<()>;
+
+    /// Whether it will still run: `false` once it's cancelled, once a task has finished, errored or lost the handle it was waiting on, once an `nf.after` callback has run, after an `nf.every` callback's 20th error in a row, or once its script has unloaded.
+    fn is_active(&self, this: &handles::Task) -> ApiResult<bool>;
+}
+
 /// What `nf.schedule.daily`, `weekly` and `cron` return: a schedule that will run at its next time, until it is cancelled or its script unloads.
 pub trait ScheduleApi {
     /// Ends it: it doesn't run again. What it last ran is kept, so a schedule made again with the same `id` doesn't catch up a run it already made. Cancelling one that has ended does nothing.
@@ -3121,6 +3362,24 @@ pub trait ScheduleApi {
 
     /// When it runs next, as Unix time in milliseconds (like `nf.server.unix_time()`; `nf.time.format` writes it as a date). `nil` once it has ended.
     fn next_run(&self, this: &handles::Schedule) -> ApiResult<Option<i64>>;
+}
+
+/// A random generator from `nf.random.new`: numbers that repeat for its seed, apart from `math.random` and every other generator.
+pub trait RandomApi {
+    /// A whole number from `min` to `max`, both included, each as likely as the others. `min` greater than `max` is an error.
+    fn integer(&self, this: &handles::Random, min: i64, max: i64) -> ApiResult<i64>;
+
+    /// A number from 0 up to (not including) 1, or from `min` up to `max`.
+    fn number(&self, this: &handles::Random, min: Option<f64>, max: Option<f64>) -> ApiResult<f64>;
+
+    /// One item of a list, each as likely as the others. `nil` for an empty list.
+    fn pick(&self, this: &handles::Random, list: Value) -> ApiResult<Value>;
+
+    /// Puts a list in a random order, in place.
+    fn shuffle(&self, this: &handles::Random, list: Value) -> ApiResult<()>;
+
+    /// One key of a table, picked with odds in proportion to its number: in `{ common = 3, rare = 1 }`, `"common"` comes up three times in four. Keys with weight 0 never come up; `nil` when there are none with more. A weight that is negative or not a number is an error. The same seed picks the same keys when the keys are strings, numbers or booleans.
+    fn weighted(&self, this: &handles::Random, weights: Value) -> ApiResult<Value>;
 }
 
 /// One player's HUD: the elements of the project's resource packs (`hud` in `pack.json`: bars, rows of icons, lines of text, each at its place on the screen), shown with what a script sets here. An element nobody set isn't drawn. It's drawn in their action bar, sent again whenever something changes and every second, so `player:send_actionbar` shows its line alongside it while the HUD is up (on its own for a moment, when the server can't measure it). What it shows is the server's to remember, not saved: set it again when they join. A name that isn't one of the packs' elements, or is another kind of element, is an error.

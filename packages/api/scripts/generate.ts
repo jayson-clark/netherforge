@@ -119,17 +119,19 @@ writeDir(
   '.kt',
 )
 
-// The Rust runtime's half (see the rust-runtime skill): the same bindings, as Rust.
+// The Rust runtime's half (see the rust-runtime skill): the same bindings, as Rust, with the
+// functions the Kotlin runtime writes in the prelude (`impl: "lua"`) bound like every other.
+const boundRust = bindings(api, { handwritten: true })
 writeDir(
   'crates/api/src/generated',
   new Map([
-    ['handles.rs', handlesRust(classes)],
-    ['shapes.rs', shapesRust(bound)],
-    ['unions.rs', unionsRust(bound)],
-    ['api.rs', apiRust(classes)],
-    ['codecs.rs', codecsRust(bound)],
-    ['bindings.rs', bindRust(classes)],
-    ['unported.rs', unportedRust(classes)],
+    ['handles.rs', handlesRust(boundRust.classes)],
+    ['shapes.rs', shapesRust(boundRust)],
+    ['unions.rs', unionsRust(boundRust)],
+    ['api.rs', apiRust(boundRust.classes)],
+    ['codecs.rs', codecsRust(boundRust)],
+    ['bindings.rs', bindRust(boundRust.classes)],
+    ['unported.rs', unportedRust(boundRust.classes)],
   ]),
   '.rs',
 )

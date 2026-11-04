@@ -7,6 +7,28 @@ use std::collections::BTreeMap;
 use mlua::{Function, Value};
 use crate::{handles, shapes, unions, values};
 
+/// What every event handler receives: a table with the event's own fields (its payload, named `<Something>Event` in this reference) and these. What a handler returns means nothing; it changes what happens through `stop`, `cancel` and the event's writable fields. A field the event doesn't list as writable can't be assigned.
+#[derive(Clone, Debug)]
+pub struct Event {
+    /// The event's name where the handler is listening: `"click"` on a node, `"centity_click"` on `nf`.
+    pub name: String,
+    /// The handle whose handler is running (the node, centity, slot, menu, button or dialog), or `nil` in an `nf.on` handler. As an event bubbles it changes; `target` stays what was hit.
+    pub current: Value,
+    /// Whether what caused it will be cancelled, as things stand. Read-only: use `cancel()` and `uncancel()`.
+    pub cancelled: bool,
+    /// Whether a handler called `stop()`. Read-only.
+    pub stopped: bool,
+    /// On a custom event (`nf.emit`, `centity:emit`), the namespace of the package whose code emitted it; `nil` on the server's own events. Any package may emit any custom event, so a handler that grants something checks `event.from` is a package it trusts (its own namespace, as its `netherforge.json` says). Read-only.
+    pub from: Option<String>,
+}
+
+/// How `:on` listens. Every key is optional, and each applies only to the events that say so: a key that isn't one of these, or one the event doesn't take, is an error.
+#[derive(Clone, Debug)]
+pub struct EventOptions {
+    /// For `tick`: run every this many ticks instead of every tick (at least 1). `every = 20` is once a second. Which of those ticks is fixed by the server's tick count and the thing it's on (a centity's handlers all agree, and different centities fall on different ticks; each `nf.on` handler has its own), not by when the handler was added, so the first call can come sooner than `every` ticks.
+    pub every: Option<i64>,
+}
+
 /// One of the package's settings changed.
 #[derive(Clone, Debug)]
 pub struct SettingChangedEvent {
@@ -1533,6 +1555,25 @@ pub struct MobGoal {
     pub controls: Vec<String>,
     /// Whether it runs now.
     pub running: bool,
+}
+
+/// A goal written in Lua, for `mob:add_goal`. Each callback gets the mob. A key that isn't one of these is an error.
+#[derive(Clone, Debug)]
+pub struct GoalDefinition {
+    /// How important it is: smaller goes first. A goal takes its controls from running goals with a bigger number, and waits for those with a smaller one or the same. The game's goals use about 0 (swimming up in water) to 8 (looking about).
+    pub priority: i64,
+    /// What it claims while it runs, so no less important goal claiming the same runs with it: `"move"` (it walks the mob), `"look"`, `"jump"`, or `"target"` alone (it picks what the mob fights). Default none: it runs alongside the goals that claim something, and one at a time with the others that claim nothing.
+    pub controls: Option<Vec<String>>,
+    /// Whether to start now, asked every tick or two while it isn't running. Default: always.
+    pub should_start: Option<Function>,
+    /// Whether to keep running, asked every tick or two while it runs. Default: what `should_start` says.
+    pub should_continue: Option<Function>,
+    /// It starts running.
+    pub start: Option<Function>,
+    /// While it runs: every tick or two, as the game updates its goals.
+    pub tick: Option<Function>,
+    /// It stopped: `should_continue` said no, a more important goal took one of its controls, or it was removed while running.
+    pub stop: Option<Function>,
 }
 
 /// Which goals `mob:clear_goals` leaves. A key that isn't one of these is an error.

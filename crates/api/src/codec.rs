@@ -195,6 +195,11 @@ impl Codec for Any {
     }
 }
 
+/// `any`.
+pub const ANY: Any = Any { table: false };
+/// `table`.
+pub const TABLE: Any = Any { table: true };
+
 /// A union of string literals: a string that must be one of them.
 #[derive(Clone, Copy)]
 pub struct Choice(pub &'static [&'static str]);

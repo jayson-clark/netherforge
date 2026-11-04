@@ -11,10 +11,77 @@ use crate::bind::{Binding, host_scope};
 use crate::codec::*;
 use crate::{codecs, handles};
 
+fn nf_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.on needs a calling script"))? };
+    let a_event = arg(lua, args, 0, "event", Str)?;
+    let a_handler = arg(lua, args, 1, "handler", Func)?;
+    let a_options = arg(lua, args, 2, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.nf().on(&caller, a_event, a_handler, a_options))?]))
+}
+
+fn nf_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.once needs a calling script"))? };
+    let a_event = arg(lua, args, 0, "event", Str)?;
+    let a_handler = arg(lua, args, 1, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.nf().once(&caller, a_event, a_handler))?]))
+}
+
+fn nf_emit(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.emit needs a calling script"))? };
+    let a_event = arg(lua, args, 0, "event", Str)?;
+    let a_payload = arg(lua, args, 1, "payload", ANY)?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.nf().emit(&caller, a_event, a_payload))?]))
+}
+
+fn nf_after(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.after needs a calling script"))? };
+    let a_ticks = arg(lua, args, 0, "ticks", Int)?;
+    let a_callback = arg(lua, args, 1, "callback", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Task>::default(), api.nf().after(&caller, a_ticks, a_callback))?]))
+}
+
+fn nf_every(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.every needs a calling script"))? };
+    let a_ticks = arg(lua, args, 0, "ticks", Int)?;
+    let a_callback = arg(lua, args, 1, "callback", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Task>::default(), api.nf().every(&caller, a_ticks, a_callback))?]))
+}
+
+fn nf_task(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.task needs a calling script"))? };
+    let a_callback = arg(lua, args, 0, "callback", Func)?;
+    let a_rest: Vec<Value> = args.get(1..).map(<[Value]>::to_vec).unwrap_or_default();
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Task>::default(), api.nf().task(&caller, a_callback, a_rest))?]))
+}
+
+fn nf_wait(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.wait needs a calling script"))? };
+    let a_ticks = arg(lua, args, 0, "ticks", Int)?;
+    let crate::Waiting = api.nf().wait(&caller, a_ticks).map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?]))
+}
+
+fn nf_wait_until(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.wait_until needs a calling script"))? };
+    let a_predicate = arg(lua, args, 0, "predicate", Func)?;
+    let a_timeout = arg(lua, args, 1, "timeout", Opt(Int))?;
+    let crate::Waiting = api.nf().wait_until(&caller, a_predicate, a_timeout).map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?]))
+}
+
+fn nf_wait_for(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.wait_for needs a calling script"))? };
+    let a_handle = arg(lua, args, 0, "handle", codecs::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable)?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_filter = arg(lua, args, 2, "filter", Opt(Func))?;
+    let crate::Waiting = api.nf().wait_for(&caller, a_handle, a_event, a_filter).map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?]))
+}
+
 fn nf_data(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.data needs a calling script"))? };
     let a_name = arg(lua, args, 0, "name", Str)?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: true }, api.nf().data(&caller, a_name))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, TABLE, api.nf().data(&caller, a_name))?]))
 }
 
 fn nf_db(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -27,7 +94,12 @@ fn nf_db(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) ->
 fn nf_config(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.config needs a calling script"))? };
     let a_name = arg(lua, args, 0, "name", Str)?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: false }, api.nf().config(&caller, a_name))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, ANY, api.nf().config(&caller, a_name))?]))
+}
+
+fn nf_instructions_left(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.instructions_left needs a calling script"))? };
+    Ok(MultiValue::from_vec(vec![result(lua, Int, api.nf().instructions_left(&caller))?]))
 }
 
 fn nf_server_tick(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -225,7 +297,7 @@ fn nf_structures_size(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args:
 fn nf_centities_properties(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.centities.properties needs a calling script"))? };
     let a_kind = arg(lua, args, 0, "kind", Str)?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: true }, api.nf_centities().properties(&caller, a_kind))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, TABLE, api.nf_centities().properties(&caller, a_kind))?]))
 }
 
 fn nf_centities_spawn(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -264,7 +336,7 @@ fn nf_menus_shared(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[
 
 fn nf_menus_create(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.menus.create needs a calling script"))? };
-    let a_definition = arg(lua, args, 0, "definition", Any { table: true })?;
+    let a_definition = arg(lua, args, 0, "definition", TABLE)?;
     Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::MenuTemplate>::default(), api.nf_menus().create(&caller, a_definition))?]))
 }
 
@@ -276,14 +348,14 @@ fn nf_dialogs_get(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[V
 
 fn nf_dialogs_create(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.dialogs.create needs a calling script"))? };
-    let a_definition = arg(lua, args, 0, "definition", Any { table: true })?;
+    let a_definition = arg(lua, args, 0, "definition", TABLE)?;
     Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Dialog>::default(), api.nf_dialogs().create(&caller, a_definition))?]))
 }
 
 fn nf_items_create(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.items.create needs a calling script"))? };
     let a_item = arg(lua, args, 0, "item", Str)?;
-    let a_overrides = arg(lua, args, 1, "overrides", Any { table: false })?;
+    let a_overrides = arg(lua, args, 1, "overrides", ANY)?;
     Ok(MultiValue::from_vec(vec![result(lua, ItemCodec, api.nf_items().create(&caller, a_item, a_overrides))?]))
 }
 
@@ -318,7 +390,7 @@ fn nf_blocks_all(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Va
 fn nf_recipes_register(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.recipes.register needs a calling script"))? };
     let a_id = arg(lua, args, 0, "id", Str)?;
-    let a_definition = arg(lua, args, 1, "definition", Any { table: true })?;
+    let a_definition = arg(lua, args, 1, "definition", TABLE)?;
     api.nf_recipes().register(&caller, a_id, a_definition).map_err(|e| mlua::Error::runtime(e.0))?;
     Ok(MultiValue::new())
 }
@@ -623,14 +695,14 @@ fn nf_packs_on_demand(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args:
 
 fn nf_json_encode(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.json.encode needs a calling script"))? };
-    let a_value = arg(lua, args, 0, "value", Any { table: false })?;
+    let a_value = arg(lua, args, 0, "value", ANY)?;
     Ok(MultiValue::from_vec(vec![result(lua, Str, api.nf_json().encode(&caller, a_value))?]))
 }
 
 fn nf_json_decode(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.json.decode needs a calling script"))? };
     let a_text = arg(lua, args, 0, "text", Str)?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: false }, api.nf_json().decode(&caller, a_text))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, ANY, api.nf_json().decode(&caller, a_text))?]))
 }
 
 fn nf_encoding_url_encode(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -647,7 +719,7 @@ fn nf_encoding_url_decode(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, a
 
 fn nf_encoding_form_encode(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.encoding.form_encode needs a calling script"))? };
-    let a_fields = arg(lua, args, 0, "fields", Any { table: true })?;
+    let a_fields = arg(lua, args, 0, "fields", TABLE)?;
     Ok(MultiValue::from_vec(vec![result(lua, Str, api.nf_encoding().form_encode(&caller, a_fields))?]))
 }
 
@@ -953,7 +1025,7 @@ fn nf_network_report(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: 
     api.requires(Some(caller.scope), "network", "nf.network.report").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_player = arg(lua, args, 0, "player", codecs::PlayerOrString)?;
     let a_reason = arg(lua, args, 1, "reason", Str)?;
-    let a_details = arg(lua, args, 2, "details", Any { table: false })?;
+    let a_details = arg(lua, args, 2, "details", ANY)?;
     let a_by = arg(lua, args, 3, "by", Opt(HandleOf::<handles::Player>::default()))?;
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.nf_network().report(&caller, a_player, a_reason, a_details, a_by))?]))
 }
@@ -963,7 +1035,7 @@ fn nf_network_send_player(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, a
     api.requires(Some(caller.scope), "network", "nf.network.send_player").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_player = arg(lua, args, 0, "player", codecs::PlayerOrString)?;
     let a_target = arg(lua, args, 1, "target", codecs::StringOrNetworkSendOptions)?;
-    let a_data = arg(lua, args, 2, "data", Any { table: false })?;
+    let a_data = arg(lua, args, 2, "data", ANY)?;
     let pending = api.nf_network().send_player(&caller, a_player, a_target, a_data).map_err(|e| mlua::Error::runtime(e.0))?;
     let callback = args.get(3).cloned();
     let id = crate::pending::defer(lua, Some(caller.scope), pending, Str, callback, "nf.network.send_player")?;
@@ -975,7 +1047,7 @@ fn nf_network_send_players(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, 
     api.requires(Some(caller.scope), "network", "nf.network.send_players").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_players = arg(lua, args, 0, "players", List(codecs::PlayerOrString))?;
     let a_target = arg(lua, args, 1, "target", codecs::StringOrNetworkSendOptions)?;
-    let a_data = arg(lua, args, 2, "data", Any { table: false })?;
+    let a_data = arg(lua, args, 2, "data", ANY)?;
     let pending = api.nf_network().send_players(&caller, a_players, a_target, a_data).map_err(|e| mlua::Error::runtime(e.0))?;
     let callback = args.get(3).cloned();
     let id = crate::pending::defer(lua, Some(caller.scope), pending, Str, callback, "nf.network.send_players")?;
@@ -1010,6 +1082,12 @@ fn nf_time_parse_duration(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, a
     Ok(MultiValue::from_vec(vec![result(lua, Opt(Int), api.nf_time().parse_duration(&caller, a_text))?]))
 }
 
+fn nf_random_new(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.random.new needs a calling script"))? };
+    let a_seed = arg(lua, args, 0, "seed", Opt(Int))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Random>::default(), api.nf_random().new(&caller, a_seed))?]))
+}
+
 fn nf_random_noise2(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.random.noise2 needs a calling script"))? };
     let a_x = arg(lua, args, 0, "x", Num)?;
@@ -1030,6 +1108,39 @@ fn nf_random_noise3(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &
 fn nf_random_uuid(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.random.uuid needs a calling script"))? };
     Ok(MultiValue::from_vec(vec![result(lua, Str, api.nf_random().uuid(&caller))?]))
+}
+
+fn nf_math_lerp(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.math.lerp needs a calling script"))? };
+    let a_from = arg(lua, args, 0, "from", Num)?;
+    let a_to = arg(lua, args, 1, "to", Num)?;
+    let a_fraction = arg(lua, args, 2, "fraction", Num)?;
+    Ok(MultiValue::from_vec(vec![result(lua, Num, api.nf_math().lerp(&caller, a_from, a_to, a_fraction))?]))
+}
+
+fn nf_math_clamp(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.math.clamp needs a calling script"))? };
+    let a_value = arg(lua, args, 0, "value", Num)?;
+    let a_min = arg(lua, args, 1, "min", Num)?;
+    let a_max = arg(lua, args, 2, "max", Num)?;
+    Ok(MultiValue::from_vec(vec![result(lua, Num, api.nf_math().clamp(&caller, a_value, a_min, a_max))?]))
+}
+
+fn nf_math_remap(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.math.remap needs a calling script"))? };
+    let a_value = arg(lua, args, 0, "value", Num)?;
+    let a_from_min = arg(lua, args, 1, "from_min", Num)?;
+    let a_from_max = arg(lua, args, 2, "from_max", Num)?;
+    let a_to_min = arg(lua, args, 3, "to_min", Num)?;
+    let a_to_max = arg(lua, args, 4, "to_max", Num)?;
+    Ok(MultiValue::from_vec(vec![result(lua, Num, api.nf_math().remap(&caller, a_value, a_from_min, a_from_max, a_to_min, a_to_max))?]))
+}
+
+fn nf_math_ease(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.math.ease needs a calling script"))? };
+    let a_easing = arg(lua, args, 0, "easing", Choice(&["linear", "step", "ease_in", "ease_out", "ease_in_out"]))?;
+    let a_fraction = arg(lua, args, 1, "fraction", Num)?;
+    Ok(MultiValue::from_vec(vec![result(lua, Num, api.nf_math().ease(&caller, a_easing, a_fraction))?]))
 }
 
 fn nf_test_case(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -1056,8 +1167,14 @@ fn nf_test_player(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[V
 fn nf_test_raise(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.test.raise needs a calling script"))? };
     let a_event = arg(lua, args, 0, "event", Choice(&["tick", "player_join", "player_resource_pack_status", "player_quit", "player_chat", "player_interact", "player_interact_entity", "player_move", "player_teleport", "player_change_world", "player_death", "player_respawn", "player_drop_item", "player_pickup_item", "player_use_item", "player_consume_item", "player_swap_hands", "player_sneak", "player_command", "block_break", "block_place", "entity_damage", "entity_death", "entity_spawn", "world_dusk", "world_dawn", "player_input", "player_change_slot", "player_swing", "player_sprint", "player_fly", "player_jump", "player_change_game_mode", "player_change_food", "player_gain_experience", "player_change_level", "player_kick", "player_complete_advancement", "player_stop_using_item", "player_break_item", "entity_heal", "projectile_launch", "projectile_hit", "entity_shoot_bow", "entity_target", "entity_explode", "block_explode", "entity_combust", "entity_change_effect", "block_ignite", "block_burn", "block_spread", "block_flow", "block_grow", "block_fade", "block_form", "leaves_decay", "piston_extend", "piston_retract", "block_redstone", "sign_change", "block_start_break", "block_drop_item", "weather_change", "thunder_change", "lightning_strike", "chunk_load", "chunk_generated", "chunk_unload", "world_load", "world_unload", "entity_mount", "entity_dismount", "vehicle_move", "vehicle_damage", "vehicle_destroy", "player_open_inventory", "player_close_inventory", "player_click_inventory", "player_drag_inventory", "player_craft", "player_prepare_craft", "player_prepare_anvil", "player_prepare_smithing", "player_prepare_grindstone", "player_enchant_item", "furnace_smelt", "server_list_ping", "centity_click", "recipe_craft", "item_view", "centity_natural_spawn", "menu_open", "menu_close", "menu_click", "dialog_press", "setting_changed", "network_connect", "network_disconnect", "network_state", "network_server_connect", "network_server_disconnect", "network_player_join", "network_player_switch", "network_player_quit", "player_arrive"]))?;
-    let a_payload = arg(lua, args, 1, "payload", Any { table: false })?;
+    let a_payload = arg(lua, args, 1, "payload", ANY)?;
     Ok(MultiValue::from_vec(vec![result(lua, codecs::RaisedEvent, api.nf_test().raise(&caller, a_event, a_payload))?]))
+}
+
+fn nf_test_terrain(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.test.terrain needs a calling script"))? };
+    let a_options = arg(lua, args, 0, "options", ANY)?;
+    Ok(MultiValue::from_vec(vec![result(lua, TABLE, api.nf_test().terrain(&caller, a_options))?]))
 }
 
 fn nf_test_click(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -1131,7 +1248,7 @@ fn nf_test_request(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[
 fn nf_test_oauth_token(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.test.oauth_token needs a calling script"))? };
     let a_flow = arg(lua, args, 0, "flow", HandleOf::<handles::OAuthFlow>::default())?;
-    let a_response = arg(lua, args, 1, "response", Any { table: true })?;
+    let a_response = arg(lua, args, 1, "response", TABLE)?;
     api.nf_test().oauth_token(&caller, a_flow, a_response).map_err(|e| mlua::Error::runtime(e.0))?;
     Ok(MultiValue::new())
 }
@@ -1178,7 +1295,7 @@ fn nf_test_network_publish(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, 
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.test.network_publish needs a calling script"))? };
     let a_server = arg(lua, args, 0, "server", Str)?;
     let a_channel = arg(lua, args, 1, "channel", Str)?;
-    let a_value = arg(lua, args, 2, "value", Any { table: false })?;
+    let a_value = arg(lua, args, 2, "value", ANY)?;
     api.nf_test().network_publish(&caller, a_server, a_channel, a_value).map_err(|e| mlua::Error::runtime(e.0))?;
     Ok(MultiValue::new())
 }
@@ -1203,8 +1320,8 @@ fn nf_test_network_request(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, 
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.test.network_request needs a calling script"))? };
     let a_server = arg(lua, args, 0, "server", Str)?;
     let a_channel = arg(lua, args, 1, "channel", Str)?;
-    let a_value = arg(lua, args, 2, "value", Any { table: false })?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: false }, api.nf_test().network_request(&caller, a_server, a_channel, a_value))?]))
+    let a_value = arg(lua, args, 2, "value", ANY)?;
+    Ok(MultiValue::from_vec(vec![result(lua, ANY, api.nf_test().network_request(&caller, a_server, a_channel, a_value))?]))
 }
 
 fn nf_test_network_write(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -1212,7 +1329,7 @@ fn nf_test_network_write(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, ar
     let a_server = arg(lua, args, 0, "server", Str)?;
     let a_map = arg(lua, args, 1, "map", Str)?;
     let a_key = arg(lua, args, 2, "key", Str)?;
-    let a_value = arg(lua, args, 3, "value", Any { table: false })?;
+    let a_value = arg(lua, args, 3, "value", ANY)?;
     api.nf_test().network_write(&caller, a_server, a_map, a_key, a_value).map_err(|e| mlua::Error::runtime(e.0))?;
     Ok(MultiValue::new())
 }
@@ -1255,7 +1372,7 @@ fn nf_test_network_send(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, arg
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.test.network_send needs a calling script"))? };
     let a_server = arg(lua, args, 0, "server", Str)?;
     let a_name = arg(lua, args, 1, "name", Str)?;
-    let a_data = arg(lua, args, 2, "data", Any { table: false })?;
+    let a_data = arg(lua, args, 2, "data", ANY)?;
     Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Player>::default(), api.nf_test().network_send(&caller, a_server, a_name, a_data))?]))
 }
 
@@ -1367,7 +1484,7 @@ fn centity_add_node(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &
     };
     let this = HandleOf::<handles::Centity>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_name = arg(lua, args, 1, "name", Str)?;
-    let a_definition = arg(lua, args, 2, "definition", Any { table: false })?;
+    let a_definition = arg(lua, args, 2, "definition", ANY)?;
     Ok(MultiValue::from_vec(vec![result(lua, Opt(HandleOf::<handles::Node>::default()), api.centity().add_node(&this, a_name, a_definition))?]))
 }
 
@@ -1377,7 +1494,7 @@ fn centity_properties(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args:
         return Err(mlua::Error::runtime("call Centity methods with ':' (Centity:properties)"));
     };
     let this = HandleOf::<handles::Centity>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: false }, api.centity().properties(&this))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, ANY, api.centity().properties(&this))?]))
 }
 
 fn centity_bounds(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -1838,7 +1955,7 @@ fn centity_data(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Val
         return Err(mlua::Error::runtime("call Centity methods with ':' (Centity:data)"));
     };
     let this = HandleOf::<handles::Centity>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: false }, api.centity().data(&this))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, ANY, api.centity().data(&this))?]))
 }
 
 fn centity_remove(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -2059,6 +2176,40 @@ fn centity_set_view_range(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, a
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.centity().set_view_range(&this, a_blocks))?]))
 }
 
+fn centity_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Centity>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Centity methods with ':' (Centity:on)"));
+    };
+    let this = HandleOf::<handles::Centity>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.centity().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn centity_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Centity>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Centity methods with ':' (Centity:once)"));
+    };
+    let this = HandleOf::<handles::Centity>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.centity().once(&this, a_event, a_handler))?]))
+}
+
+fn centity_emit(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Centity>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Centity methods with ':' (Centity:emit)"));
+    };
+    let this = HandleOf::<handles::Centity>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_payload = arg(lua, args, 2, "payload", ANY)?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.centity().emit(&this, a_event, a_payload))?]))
+}
+
 fn node_name(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::Node>::default().accepts(v)).cloned() else {
@@ -2102,7 +2253,7 @@ fn node_add_child(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[V
     };
     let this = HandleOf::<handles::Node>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_name = arg(lua, args, 1, "name", Str)?;
-    let a_definition = arg(lua, args, 2, "definition", Any { table: false })?;
+    let a_definition = arg(lua, args, 2, "definition", ANY)?;
     Ok(MultiValue::from_vec(vec![result(lua, Opt(HandleOf::<handles::Node>::default()), api.node().add_child(&this, a_name, a_definition))?]))
 }
 
@@ -2806,6 +2957,29 @@ fn node_set_physics_enabled(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>,
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.node().set_physics_enabled(&this, a_enabled))?]))
 }
 
+fn node_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Node>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Node methods with ':' (Node:on)"));
+    };
+    let this = HandleOf::<handles::Node>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.node().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn node_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Node>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Node methods with ':' (Node:once)"));
+    };
+    let this = HandleOf::<handles::Node>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.node().once(&this, a_event, a_handler))?]))
+}
+
 fn image_width(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::Image>::default().accepts(v)).cloned() else {
@@ -2893,6 +3067,33 @@ fn entity_exists(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Va
     };
     let this = HandleOf::<handles::Entity>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.entity().exists(&this))?]))
+}
+
+fn entity_is_player(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Entity>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Entity methods with ':' (Entity:is_player)"));
+    };
+    let this = HandleOf::<handles::Entity>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.entity().is_player(&this))?]))
+}
+
+fn entity_is_living(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Entity>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Entity methods with ':' (Entity:is_living)"));
+    };
+    let this = HandleOf::<handles::Entity>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.entity().is_living(&this))?]))
+}
+
+fn entity_is_mob(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Entity>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Entity methods with ':' (Entity:is_mob)"));
+    };
+    let this = HandleOf::<handles::Entity>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.entity().is_mob(&this))?]))
 }
 
 fn entity_location(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -3137,7 +3338,7 @@ fn entity_data(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Valu
         return Err(mlua::Error::runtime("call Entity methods with ':' (Entity:data)"));
     };
     let this = HandleOf::<handles::Entity>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: false }, api.entity().data(&this))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, ANY, api.entity().data(&this))?]))
 }
 
 fn entity_is_glowing(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -3351,6 +3552,29 @@ fn entity_target_centity(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, ar
     Ok(MultiValue::from_vec(vec![result(lua, Opt(HandleOf::<handles::Centity>::default()), api.entity().target_centity(&this, a_max_distance))?]))
 }
 
+fn entity_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Entity>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Entity methods with ':' (Entity:on)"));
+    };
+    let this = HandleOf::<handles::Entity>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.entity().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn entity_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Entity>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Entity methods with ':' (Entity:once)"));
+    };
+    let this = HandleOf::<handles::Entity>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.entity().once(&this, a_event, a_handler))?]))
+}
+
 fn living_health(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::Living>::default().accepts(v)).cloned() else {
@@ -3528,6 +3752,29 @@ fn living_set_equipment(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, arg
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.living().set_equipment(&this, a_slot, a_item))?]))
 }
 
+fn living_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Living>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Living methods with ':' (Living:on)"));
+    };
+    let this = HandleOf::<handles::Living>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.living().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn living_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Living>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Living methods with ':' (Living:once)"));
+    };
+    let this = HandleOf::<handles::Living>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.living().once(&this, a_event, a_handler))?]))
+}
+
 fn mob_target(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::Mob>::default().accepts(v)).cloned() else {
@@ -3631,6 +3878,40 @@ fn mob_clear_goals(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[
     let this = HandleOf::<handles::Mob>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_options = arg(lua, args, 1, "options", Opt(codecs::GoalClearOptions))?;
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.mob().clear_goals(&this, a_options))?]))
+}
+
+fn mob_add_goal(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Mob>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Mob methods with ':' (Mob:add_goal)"));
+    };
+    let this = HandleOf::<handles::Mob>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_id = arg(lua, args, 1, "id", Str)?;
+    let a_definition = arg(lua, args, 2, "definition", codecs::GoalDefinition)?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.mob().add_goal(&this, a_id, a_definition))?]))
+}
+
+fn mob_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Mob>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Mob methods with ':' (Mob:on)"));
+    };
+    let this = HandleOf::<handles::Mob>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.mob().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn mob_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Mob>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Mob methods with ':' (Mob:once)"));
+    };
+    let this = HandleOf::<handles::Mob>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.mob().once(&this, a_event, a_handler))?]))
 }
 
 fn droppeditem_item(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -4949,7 +5230,7 @@ fn player_data(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Valu
         return Err(mlua::Error::runtime("call Player methods with ':' (Player:data)"));
     };
     let this = HandleOf::<handles::Player>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: true }, api.player().data(&this))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, TABLE, api.player().data(&this))?]))
 }
 
 fn player_session(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -4958,7 +5239,30 @@ fn player_session(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[V
         return Err(mlua::Error::runtime("call Player methods with ':' (Player:session)"));
     };
     let this = HandleOf::<handles::Player>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: false }, api.player().session(&this))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, ANY, api.player().session(&this))?]))
+}
+
+fn player_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Player>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Player methods with ':' (Player:on)"));
+    };
+    let this = HandleOf::<handles::Player>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.player().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn player_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Player>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Player methods with ':' (Player:once)"));
+    };
+    let this = HandleOf::<handles::Player>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.player().once(&this, a_event, a_handler))?]))
 }
 
 fn bot_leave(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -5246,6 +5550,18 @@ fn world_environment(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: 
     };
     let this = HandleOf::<handles::World>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     Ok(MultiValue::from_vec(vec![result(lua, Opt(Choice(&["normal", "nether", "end"])), api.world().environment(&this))?]))
+}
+
+fn world_location(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::World>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call World methods with ':' (World:location)"));
+    };
+    let this = HandleOf::<handles::World>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_position = arg(lua, args, 1, "position", Vec3Codec)?;
+    let a_yaw = arg(lua, args, 2, "yaw", Opt(Num))?;
+    let a_pitch = arg(lua, args, 3, "pitch", Opt(Num))?;
+    Ok(MultiValue::from_vec(vec![result(lua, LocationCodec, api.world().location(&this, a_position, a_yaw, a_pitch))?]))
 }
 
 fn world_time_of_day(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -5690,7 +6006,7 @@ fn world_game_rule(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[
     };
     let this = HandleOf::<handles::World>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_rule = arg(lua, args, 1, "rule", Str)?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: false }, api.world().game_rule(&this, a_rule))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, ANY, api.world().game_rule(&this, a_rule))?]))
 }
 
 fn world_set_game_rule(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -5700,7 +6016,7 @@ fn world_set_game_rule(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args
     };
     let this = HandleOf::<handles::World>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_rule = arg(lua, args, 1, "rule", Str)?;
-    let a_value = arg(lua, args, 2, "value", Any { table: false })?;
+    let a_value = arg(lua, args, 2, "value", ANY)?;
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.world().set_game_rule(&this, a_rule, a_value))?]))
 }
 
@@ -5812,6 +6128,29 @@ fn world_place_gradually(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, ar
     let callback = args.get(4).cloned();
     let id = crate::pending::defer(lua, host_scope(lua), pending, Int, callback, "World:place_gradually")?;
     Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+}
+
+fn world_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::World>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call World methods with ':' (World:on)"));
+    };
+    let this = HandleOf::<handles::World>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.world().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn world_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::World>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call World methods with ':' (World:once)"));
+    };
+    let this = HandleOf::<handles::World>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.world().once(&this, a_event, a_handler))?]))
 }
 
 fn worldborder_center(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -6085,7 +6424,7 @@ fn block_data(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value
         return Err(mlua::Error::runtime("call Block methods with ':' (Block:data)"));
     };
     let this = HandleOf::<handles::Block>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: false }, api.block().data(&this))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, ANY, api.block().data(&this))?]))
 }
 
 fn customblock_id(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -6140,7 +6479,7 @@ fn projectblock_properties(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, 
         return Err(mlua::Error::runtime("call ProjectBlock methods with ':' (ProjectBlock:properties)"));
     };
     let this = HandleOf::<handles::ProjectBlock>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: false }, api.projectblock().properties(&this))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, ANY, api.projectblock().properties(&this))?]))
 }
 
 fn projectblock_exists(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -6161,6 +6500,29 @@ fn projectblock_place(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args:
     let a_location = arg(lua, args, 1, "location", LocationCodec)?;
     let a_options = arg(lua, args, 2, "options", Opt(codecs::BlockPlaceOptions))?;
     Ok(MultiValue::from_vec(vec![result(lua, Opt(HandleOf::<handles::CustomBlock>::default()), api.projectblock().place(&this, a_location, a_options))?]))
+}
+
+fn projectblock_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::ProjectBlock>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call ProjectBlock methods with ':' (ProjectBlock:on)"));
+    };
+    let this = HandleOf::<handles::ProjectBlock>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.projectblock().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn projectblock_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::ProjectBlock>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call ProjectBlock methods with ':' (ProjectBlock:once)"));
+    };
+    let this = HandleOf::<handles::ProjectBlock>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.projectblock().once(&this, a_event, a_handler))?]))
 }
 
 fn inventory_exists(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -6762,10 +7124,10 @@ fn database_query(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[V
     };
     let this = HandleOf::<handles::Database>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_sql = arg(lua, args, 1, "sql", Str)?;
-    let a_params = arg(lua, args, 2, "params", Any { table: false })?;
+    let a_params = arg(lua, args, 2, "params", ANY)?;
     let pending = api.database().query(&this, a_sql, a_params).map_err(|e| mlua::Error::runtime(e.0))?;
     let callback = args.get(3).cloned();
-    let id = crate::pending::defer(lua, host_scope(lua), pending, List(Map(Str, Any { table: false })), callback, "Database:query")?;
+    let id = crate::pending::defer(lua, host_scope(lua), pending, List(Map(Str, ANY)), callback, "Database:query")?;
     Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
 }
 
@@ -6776,7 +7138,7 @@ fn database_execute(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &
     };
     let this = HandleOf::<handles::Database>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_sql = arg(lua, args, 1, "sql", Str)?;
-    let a_params = arg(lua, args, 2, "params", Any { table: false })?;
+    let a_params = arg(lua, args, 2, "params", ANY)?;
     let pending = api.database().execute(&this, a_sql, a_params).map_err(|e| mlua::Error::runtime(e.0))?;
     let callback = args.get(3).cloned();
     let id = crate::pending::defer(lua, host_scope(lua), pending, codecs::DatabaseResult, callback, "Database:execute")?;
@@ -6847,7 +7209,7 @@ fn menu_context(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Val
         return Err(mlua::Error::runtime("call Menu methods with ':' (Menu:context)"));
     };
     let this = HandleOf::<handles::Menu>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: false }, api.menu().context(&this))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, ANY, api.menu().context(&this))?]))
 }
 
 fn menu_size(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -7086,6 +7448,29 @@ fn menu_close_all(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[V
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.menu().close_all(&this))?]))
 }
 
+fn menu_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Menu>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Menu methods with ':' (Menu:on)"));
+    };
+    let this = HandleOf::<handles::Menu>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.menu().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn menu_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Menu>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Menu methods with ':' (Menu:once)"));
+    };
+    let this = HandleOf::<handles::Menu>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.menu().once(&this, a_event, a_handler))?]))
+}
+
 fn slot_index(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::Slot>::default().accepts(v)).cloned() else {
@@ -7192,6 +7577,29 @@ fn slot_binding(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Val
     Ok(MultiValue::from_vec(vec![result(lua, Opt(codecs::SlotBinding), api.slot().binding(&this))?]))
 }
 
+fn slot_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Slot>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Slot methods with ':' (Slot:on)"));
+    };
+    let this = HandleOf::<handles::Slot>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.slot().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn slot_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Slot>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Slot methods with ':' (Slot:once)"));
+    };
+    let this = HandleOf::<handles::Slot>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.slot().once(&this, a_event, a_handler))?]))
+}
+
 fn menutemplate_id(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::MenuTemplate>::default().accepts(v)).cloned() else {
@@ -7283,6 +7691,29 @@ fn menutemplate_remove(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.menutemplate().remove(&this))?]))
 }
 
+fn menutemplate_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::MenuTemplate>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call MenuTemplate methods with ':' (MenuTemplate:on)"));
+    };
+    let this = HandleOf::<handles::MenuTemplate>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.menutemplate().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn menutemplate_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::MenuTemplate>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call MenuTemplate methods with ':' (MenuTemplate:once)"));
+    };
+    let this = HandleOf::<handles::MenuTemplate>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.menutemplate().once(&this, a_event, a_handler))?]))
+}
+
 fn dialog_id(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::Dialog>::default().accepts(v)).cloned() else {
@@ -7349,6 +7780,41 @@ fn dialog_open_for(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.dialog().open_for(&this, a_player, a_options))?]))
 }
 
+fn dialog_ask(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Dialog>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Dialog methods with ':' (Dialog:ask)"));
+    };
+    let this = HandleOf::<handles::Dialog>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_player = arg(lua, args, 1, "player", HandleOf::<handles::Player>::default())?;
+    let a_options = arg(lua, args, 2, "options", Opt(codecs::DialogOpenOptions))?;
+    let crate::Waiting = api.dialog().ask(&this, a_player, a_options).map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?]))
+}
+
+fn dialog_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Dialog>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Dialog methods with ':' (Dialog:on)"));
+    };
+    let this = HandleOf::<handles::Dialog>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.dialog().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn dialog_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Dialog>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Dialog methods with ':' (Dialog:once)"));
+    };
+    let this = HandleOf::<handles::Dialog>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.dialog().once(&this, a_event, a_handler))?]))
+}
+
 fn button_key(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::Button>::default().accepts(v)).cloned() else {
@@ -7376,6 +7842,29 @@ fn button_label(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Val
     Ok(MultiValue::from_vec(vec![result(lua, Opt(TextCodec), api.button().label(&this))?]))
 }
 
+fn button_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Button>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Button methods with ':' (Button:on)"));
+    };
+    let this = HandleOf::<handles::Button>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.button().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn button_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Button>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Button methods with ':' (Button:once)"));
+    };
+    let this = HandleOf::<handles::Button>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.button().once(&this, a_event, a_handler))?]))
+}
+
 fn projectitem_id(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::ProjectItem>::default().accepts(v)).cloned() else {
@@ -7400,7 +7889,7 @@ fn projectitem_create(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args:
         return Err(mlua::Error::runtime("call ProjectItem methods with ':' (ProjectItem:create)"));
     };
     let this = HandleOf::<handles::ProjectItem>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
-    let a_overrides = arg(lua, args, 1, "overrides", Any { table: false })?;
+    let a_overrides = arg(lua, args, 1, "overrides", ANY)?;
     Ok(MultiValue::from_vec(vec![result(lua, Opt(ItemCodec), api.projectitem().create(&this, a_overrides))?]))
 }
 
@@ -7410,7 +7899,30 @@ fn projectitem_properties(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, a
         return Err(mlua::Error::runtime("call ProjectItem methods with ':' (ProjectItem:properties)"));
     };
     let this = HandleOf::<handles::ProjectItem>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: false }, api.projectitem().properties(&this))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, ANY, api.projectitem().properties(&this))?]))
+}
+
+fn projectitem_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::ProjectItem>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call ProjectItem methods with ':' (ProjectItem:on)"));
+    };
+    let this = HandleOf::<handles::ProjectItem>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.projectitem().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn projectitem_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::ProjectItem>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call ProjectItem methods with ':' (ProjectItem:once)"));
+    };
+    let this = HandleOf::<handles::ProjectItem>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.projectitem().once(&this, a_event, a_handler))?]))
 }
 
 fn effect_kind(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -7470,6 +7982,29 @@ fn effect_follow(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Va
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.effect().follow(&this, a_target, a_offset))?]))
 }
 
+fn effect_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Effect>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Effect methods with ':' (Effect:on)"));
+    };
+    let this = HandleOf::<handles::Effect>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.effect().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn effect_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Effect>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Effect methods with ':' (Effect:once)"));
+    };
+    let this = HandleOf::<handles::Effect>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.effect().once(&this, a_event, a_handler))?]))
+}
+
 fn httpstream_url(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::HttpStream>::default().accepts(v)).cloned() else {
@@ -7504,6 +8039,29 @@ fn httpstream_close(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &
     };
     let this = HandleOf::<handles::HttpStream>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.httpstream().close(&this))?]))
+}
+
+fn httpstream_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::HttpStream>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call HttpStream methods with ':' (HttpStream:on)"));
+    };
+    let this = HandleOf::<handles::HttpStream>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.httpstream().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn httpstream_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::HttpStream>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call HttpStream methods with ':' (HttpStream:once)"));
+    };
+    let this = HandleOf::<handles::HttpStream>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.httpstream().once(&this, a_event, a_handler))?]))
 }
 
 fn websocket_url(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -7554,6 +8112,29 @@ fn websocket_close(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.websocket().close(&this, a_code, a_reason))?]))
 }
 
+fn websocket_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::WebSocket>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call WebSocket methods with ':' (WebSocket:on)"));
+    };
+    let this = HandleOf::<handles::WebSocket>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.websocket().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn websocket_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::WebSocket>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call WebSocket methods with ':' (WebSocket:once)"));
+    };
+    let this = HandleOf::<handles::WebSocket>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.websocket().once(&this, a_event, a_handler))?]))
+}
+
 fn route_remove(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::Route>::default().accepts(v)).cloned() else {
@@ -7591,7 +8172,7 @@ fn webresponse_json(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &
     };
     let this = HandleOf::<handles::WebResponse>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_status = arg(lua, args, 1, "status", Int)?;
-    let a_value = arg(lua, args, 2, "value", Any { table: false })?;
+    let a_value = arg(lua, args, 2, "value", ANY)?;
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.webresponse().json(&this, a_status, a_value))?]))
 }
 
@@ -7634,6 +8215,29 @@ fn oauthflow_remove(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.oauthflow().remove(&this))?]))
 }
 
+fn oauthflow_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::OAuthFlow>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call OAuthFlow methods with ':' (OAuthFlow:on)"));
+    };
+    let this = HandleOf::<handles::OAuthFlow>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.oauthflow().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn oauthflow_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::OAuthFlow>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call OAuthFlow methods with ':' (OAuthFlow:once)"));
+    };
+    let this = HandleOf::<handles::OAuthFlow>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.oauthflow().once(&this, a_event, a_handler))?]))
+}
+
 fn wasminstance_module(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::WasmInstance>::default().accepts(v)).cloned() else {
@@ -7650,10 +8254,10 @@ fn wasminstance_call(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: 
     };
     let this = HandleOf::<handles::WasmInstance>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_name = arg(lua, args, 1, "name", Str)?;
-    let a_arguments = arg(lua, args, 2, "arguments", Any { table: false })?;
+    let a_arguments = arg(lua, args, 2, "arguments", ANY)?;
     let pending = api.wasminstance().call(&this, a_name, a_arguments).map_err(|e| mlua::Error::runtime(e.0))?;
     let callback = args.get(3).cloned();
-    let id = crate::pending::defer(lua, host_scope(lua), pending, List(Any { table: false }), callback, "WasmInstance:call")?;
+    let id = crate::pending::defer(lua, host_scope(lua), pending, List(ANY), callback, "WasmInstance:call")?;
     Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
 }
 
@@ -7664,7 +8268,7 @@ fn wasminstance_call_text(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, a
     };
     let this = HandleOf::<handles::WasmInstance>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_name = arg(lua, args, 1, "name", Str)?;
-    let a_arguments = arg(lua, args, 2, "arguments", Any { table: false })?;
+    let a_arguments = arg(lua, args, 2, "arguments", ANY)?;
     let pending = api.wasminstance().call_text(&this, a_name, a_arguments).map_err(|e| mlua::Error::runtime(e.0))?;
     let callback = args.get(3).cloned();
     let id = crate::pending::defer(lua, host_scope(lua), pending, Str, callback, "WasmInstance:call_text")?;
@@ -7726,6 +8330,29 @@ fn wasmprocess_stop(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.wasmprocess().stop(&this))?]))
 }
 
+fn wasmprocess_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::WasmProcess>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call WasmProcess methods with ':' (WasmProcess:on)"));
+    };
+    let this = HandleOf::<handles::WasmProcess>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.wasmprocess().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn wasmprocess_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::WasmProcess>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call WasmProcess methods with ':' (WasmProcess:once)"));
+    };
+    let this = HandleOf::<handles::WasmProcess>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.wasmprocess().once(&this, a_event, a_handler))?]))
+}
+
 fn networkchannel_name(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::NetworkChannel>::default().accepts(v)).cloned() else {
@@ -7741,7 +8368,7 @@ fn networkchannel_publish(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, a
         return Err(mlua::Error::runtime("call NetworkChannel methods with ':' (NetworkChannel:publish)"));
     };
     let this = HandleOf::<handles::NetworkChannel>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
-    let a_value = arg(lua, args, 1, "value", Any { table: false })?;
+    let a_value = arg(lua, args, 1, "value", ANY)?;
     let a_options = arg(lua, args, 2, "options", Opt(codecs::NetworkPublishOptions))?;
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.networkchannel().publish(&this, a_value, a_options))?]))
 }
@@ -7753,11 +8380,34 @@ fn networkchannel_request(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, a
     };
     let this = HandleOf::<handles::NetworkChannel>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_target = arg(lua, args, 1, "target", codecs::StringOrNetworkTarget)?;
-    let a_data = arg(lua, args, 2, "data", Any { table: false })?;
+    let a_data = arg(lua, args, 2, "data", ANY)?;
     let pending = api.networkchannel().request(&this, a_target, a_data).map_err(|e| mlua::Error::runtime(e.0))?;
     let callback = args.get(3).cloned();
-    let id = crate::pending::defer(lua, host_scope(lua), pending, Any { table: false }, callback, "NetworkChannel:request")?;
+    let id = crate::pending::defer(lua, host_scope(lua), pending, ANY, callback, "NetworkChannel:request")?;
     Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+}
+
+fn networkchannel_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::NetworkChannel>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call NetworkChannel methods with ':' (NetworkChannel:on)"));
+    };
+    let this = HandleOf::<handles::NetworkChannel>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.networkchannel().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn networkchannel_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::NetworkChannel>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call NetworkChannel methods with ':' (NetworkChannel:once)"));
+    };
+    let this = HandleOf::<handles::NetworkChannel>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.networkchannel().once(&this, a_event, a_handler))?]))
 }
 
 fn networkhold_release(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -7804,7 +8454,7 @@ fn networkmap_get(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[V
     };
     let this = HandleOf::<handles::NetworkMap>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_key = arg(lua, args, 1, "key", Str)?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: false }, api.networkmap().get(&this, a_key))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, ANY, api.networkmap().get(&this, a_key))?]))
 }
 
 fn networkmap_all(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -7813,7 +8463,7 @@ fn networkmap_all(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[V
         return Err(mlua::Error::runtime("call NetworkMap methods with ':' (NetworkMap:all)"));
     };
     let this = HandleOf::<handles::NetworkMap>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
-    Ok(MultiValue::from_vec(vec![result(lua, Map(Str, Any { table: false }), api.networkmap().all(&this))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, Map(Str, ANY), api.networkmap().all(&this))?]))
 }
 
 fn networkmap_set(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -7823,7 +8473,7 @@ fn networkmap_set(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[V
     };
     let this = HandleOf::<handles::NetworkMap>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_key = arg(lua, args, 1, "key", Str)?;
-    let a_value = arg(lua, args, 2, "value", Any { table: false })?;
+    let a_value = arg(lua, args, 2, "value", ANY)?;
     let a_options = arg(lua, args, 3, "options", Opt(codecs::NetworkMapWriteOptions))?;
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.networkmap().set(&this, a_key, a_value, a_options))?]))
 }
@@ -7860,12 +8510,35 @@ fn networkmap_insert(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: 
     };
     let this = HandleOf::<handles::NetworkMap>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_key = arg(lua, args, 1, "key", Str)?;
-    let a_data = arg(lua, args, 2, "data", Any { table: false })?;
+    let a_data = arg(lua, args, 2, "data", ANY)?;
     let a_options = arg(lua, args, 3, "options", Opt(codecs::NetworkMapWriteOptions))?;
     let pending = api.networkmap().insert(&this, a_key, a_data, a_options).map_err(|e| mlua::Error::runtime(e.0))?;
     let callback = args.get(4).cloned();
     let id = crate::pending::defer(lua, host_scope(lua), pending, Bool, callback, "NetworkMap:insert")?;
     Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+}
+
+fn networkmap_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::NetworkMap>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call NetworkMap methods with ':' (NetworkMap:on)"));
+    };
+    let this = HandleOf::<handles::NetworkMap>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.networkmap().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn networkmap_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::NetworkMap>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call NetworkMap methods with ':' (NetworkMap:once)"));
+    };
+    let this = HandleOf::<handles::NetworkMap>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.networkmap().once(&this, a_event, a_handler))?]))
 }
 
 fn cutscene_kind(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -7920,6 +8593,29 @@ fn cutscene_stop(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Va
     };
     let this = HandleOf::<handles::Cutscene>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.cutscene().stop(&this))?]))
+}
+
+fn cutscene_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Cutscene>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Cutscene methods with ':' (Cutscene:on)"));
+    };
+    let this = HandleOf::<handles::Cutscene>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.cutscene().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn cutscene_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Cutscene>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Cutscene methods with ':' (Cutscene:once)"));
+    };
+    let this = HandleOf::<handles::Cutscene>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.cutscene().once(&this, a_event, a_handler))?]))
 }
 
 fn screen_name(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -8294,6 +8990,29 @@ fn screen_remove(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Va
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.screen().remove(&this))?]))
 }
 
+fn screen_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Screen>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Screen methods with ':' (Screen:on)"));
+    };
+    let this = HandleOf::<handles::Screen>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.screen().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn screen_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Screen>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Screen methods with ':' (Screen:once)"));
+    };
+    let this = HandleOf::<handles::Screen>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.screen().once(&this, a_event, a_handler))?]))
+}
+
 fn playback_video(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::Playback>::default().accepts(v)).cloned() else {
@@ -8442,6 +9161,29 @@ fn playback_set_looping(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, arg
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.playback().set_looping(&this, a_looping))?]))
 }
 
+fn playback_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Playback>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Playback methods with ':' (Playback:on)"));
+    };
+    let this = HandleOf::<handles::Playback>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    let a_options = arg(lua, args, 3, "options", Opt(codecs::EventOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.playback().on(&this, a_event, a_handler, a_options))?]))
+}
+
+fn playback_once(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Playback>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Playback methods with ':' (Playback:once)"));
+    };
+    let this = HandleOf::<handles::Playback>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_event = arg(lua, args, 1, "event", Str)?;
+    let a_handler = arg(lua, args, 2, "handler", Func)?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Subscription>::default(), api.playback().once(&this, a_event, a_handler))?]))
+}
+
 fn file_path(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::File>::default().accepts(v)).cloned() else {
@@ -8569,7 +9311,7 @@ fn file_read_json(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[V
         return Err(mlua::Error::runtime("call File methods with ':' (File:read_json)"));
     };
     let this = HandleOf::<handles::File>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
-    Ok(MultiValue::from_vec(vec![result(lua, Any { table: false }, api.file().read_json(&this))?]))
+    Ok(MultiValue::from_vec(vec![result(lua, ANY, api.file().read_json(&this))?]))
 }
 
 fn file_write_json(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -8578,7 +9320,7 @@ fn file_write_json(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[
         return Err(mlua::Error::runtime("call File methods with ':' (File:write_json)"));
     };
     let this = HandleOf::<handles::File>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
-    let a_value = arg(lua, args, 1, "value", Any { table: false })?;
+    let a_value = arg(lua, args, 1, "value", ANY)?;
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.file().write_json(&this, a_value))?]))
 }
 
@@ -8589,6 +9331,15 @@ fn file_modified_time(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args:
     };
     let this = HandleOf::<handles::File>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     Ok(MultiValue::from_vec(vec![result(lua, Opt(Int), api.file().modified_time(&this))?]))
+}
+
+fn file_lines(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::File>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call File methods with ':' (File:lines)"));
+    };
+    let this = HandleOf::<handles::File>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![result(lua, Func, api.file().lines(&this))?]))
 }
 
 fn file_rename(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -8629,6 +9380,44 @@ fn file_delete(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Valu
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.file().delete(&this))?]))
 }
 
+fn subscription_cancel(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Subscription>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Subscription methods with ':' (Subscription:cancel)"));
+    };
+    let this = HandleOf::<handles::Subscription>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    api.subscription().cancel(&this).map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::new())
+}
+
+fn subscription_is_active(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Subscription>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Subscription methods with ':' (Subscription:is_active)"));
+    };
+    let this = HandleOf::<handles::Subscription>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.subscription().is_active(&this))?]))
+}
+
+fn task_cancel(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Task>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Task methods with ':' (Task:cancel)"));
+    };
+    let this = HandleOf::<handles::Task>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    api.task().cancel(&this).map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::new())
+}
+
+fn task_is_active(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Task>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Task methods with ':' (Task:is_active)"));
+    };
+    let this = HandleOf::<handles::Task>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.task().is_active(&this))?]))
+}
+
 fn schedule_cancel(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::Schedule>::default().accepts(v)).cloned() else {
@@ -8655,6 +9444,59 @@ fn schedule_next_run(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: 
     };
     let this = HandleOf::<handles::Schedule>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     Ok(MultiValue::from_vec(vec![result(lua, Opt(Int), api.schedule().next_run(&this))?]))
+}
+
+fn random_integer(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Random>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Random methods with ':' (Random:integer)"));
+    };
+    let this = HandleOf::<handles::Random>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_min = arg(lua, args, 1, "min", Int)?;
+    let a_max = arg(lua, args, 2, "max", Int)?;
+    Ok(MultiValue::from_vec(vec![result(lua, Int, api.random().integer(&this, a_min, a_max))?]))
+}
+
+fn random_number(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Random>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Random methods with ':' (Random:number)"));
+    };
+    let this = HandleOf::<handles::Random>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_min = arg(lua, args, 1, "min", Opt(Num))?;
+    let a_max = arg(lua, args, 2, "max", Opt(Num))?;
+    Ok(MultiValue::from_vec(vec![result(lua, Num, api.random().number(&this, a_min, a_max))?]))
+}
+
+fn random_pick(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Random>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Random methods with ':' (Random:pick)"));
+    };
+    let this = HandleOf::<handles::Random>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_list = arg(lua, args, 1, "list", TABLE)?;
+    Ok(MultiValue::from_vec(vec![result(lua, ANY, api.random().pick(&this, a_list))?]))
+}
+
+fn random_shuffle(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Random>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Random methods with ':' (Random:shuffle)"));
+    };
+    let this = HandleOf::<handles::Random>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_list = arg(lua, args, 1, "list", TABLE)?;
+    api.random().shuffle(&this, a_list).map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::new())
+}
+
+fn random_weighted(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Random>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Random methods with ':' (Random:weighted)"));
+    };
+    let this = HandleOf::<handles::Random>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_weights = arg(lua, args, 1, "weights", TABLE)?;
+    Ok(MultiValue::from_vec(vec![result(lua, ANY, api.random().weighted(&this, a_weights))?]))
 }
 
 fn hud_player(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -8766,942 +9608,1023 @@ fn hud_clear(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]
 
 /// Every binding, by class.
 pub const BINDINGS: &[Binding] = &[
-    Binding { class: "nf", name: "data", method: false, call: nf_data },
-    Binding { class: "nf", name: "db", method: false, call: nf_db },
-    Binding { class: "nf", name: "config", method: false, call: nf_config },
-    Binding { class: "nf.server", name: "tick", method: false, call: nf_server_tick },
-    Binding { class: "nf.server", name: "unix_time", method: false, call: nf_server_unix_time },
-    Binding { class: "nf.server", name: "ticks_per_second", method: false, call: nf_server_ticks_per_second },
-    Binding { class: "nf.server", name: "tick_milliseconds", method: false, call: nf_server_tick_milliseconds },
-    Binding { class: "nf.server", name: "minecraft_version", method: false, call: nf_server_minecraft_version },
-    Binding { class: "nf.server", name: "broadcast", method: false, call: nf_server_broadcast },
-    Binding { class: "nf.server", name: "run", method: false, call: nf_server_run },
-    Binding { class: "nf.server", name: "max_players", method: false, call: nf_server_max_players },
-    Binding { class: "nf.server", name: "set_max_players", method: false, call: nf_server_set_max_players },
-    Binding { class: "nf.server", name: "motd", method: false, call: nf_server_motd },
-    Binding { class: "nf.server", name: "set_motd", method: false, call: nf_server_set_motd },
-    Binding { class: "nf.server", name: "is_whitelist_enabled", method: false, call: nf_server_is_whitelist_enabled },
-    Binding { class: "nf.server", name: "set_whitelist_enabled", method: false, call: nf_server_set_whitelist_enabled },
-    Binding { class: "nf.commands", name: "register", method: false, call: nf_commands_register },
-    Binding { class: "nf.players", name: "online", method: false, call: nf_players_online },
-    Binding { class: "nf.players", name: "get", method: false, call: nf_players_get },
-    Binding { class: "nf.players", name: "known", method: false, call: nf_players_known },
-    Binding { class: "nf.players", name: "banned", method: false, call: nf_players_banned },
-    Binding { class: "nf.players", name: "whitelisted", method: false, call: nf_players_whitelisted },
-    Binding { class: "nf.bots", name: "join", method: false, call: nf_bots_join },
-    Binding { class: "nf.bots", name: "all", method: false, call: nf_bots_all },
-    Binding { class: "nf.worlds", name: "all", method: false, call: nf_worlds_all },
-    Binding { class: "nf.worlds", name: "get", method: false, call: nf_worlds_get },
-    Binding { class: "nf.worlds", name: "create", method: false, call: nf_worlds_create },
-    Binding { class: "nf.worlds", name: "load", method: false, call: nf_worlds_load },
-    Binding { class: "nf.worlds", name: "copy", method: false, call: nf_worlds_copy },
-    Binding { class: "nf.worlds", name: "import", method: false, call: nf_worlds_import },
-    Binding { class: "nf.worlds", name: "default", method: false, call: nf_worlds_default },
-    Binding { class: "nf.structures", name: "exists", method: false, call: nf_structures_exists },
-    Binding { class: "nf.structures", name: "size", method: false, call: nf_structures_size },
-    Binding { class: "nf.centities", name: "properties", method: false, call: nf_centities_properties },
-    Binding { class: "nf.centities", name: "spawn", method: false, call: nf_centities_spawn },
-    Binding { class: "nf.centities", name: "get", method: false, call: nf_centities_get },
-    Binding { class: "nf.centities", name: "all", method: false, call: nf_centities_all },
-    Binding { class: "nf.spawning", name: "condition", method: false, call: nf_spawning_condition },
-    Binding { class: "nf.menus", name: "shared", method: false, call: nf_menus_shared },
-    Binding { class: "nf.menus", name: "create", method: false, call: nf_menus_create },
-    Binding { class: "nf.dialogs", name: "get", method: false, call: nf_dialogs_get },
-    Binding { class: "nf.dialogs", name: "create", method: false, call: nf_dialogs_create },
-    Binding { class: "nf.items", name: "create", method: false, call: nf_items_create },
-    Binding { class: "nf.items", name: "id", method: false, call: nf_items_id },
-    Binding { class: "nf.items", name: "get", method: false, call: nf_items_get },
-    Binding { class: "nf.items", name: "all", method: false, call: nf_items_all },
-    Binding { class: "nf.blocks", name: "get", method: false, call: nf_blocks_get },
-    Binding { class: "nf.blocks", name: "all", method: false, call: nf_blocks_all },
-    Binding { class: "nf.recipes", name: "register", method: false, call: nf_recipes_register },
-    Binding { class: "nf.recipes", name: "remove", method: false, call: nf_recipes_remove },
-    Binding { class: "nf.recipes", name: "get", method: false, call: nf_recipes_get },
-    Binding { class: "nf.recipes", name: "available", method: false, call: nf_recipes_available },
-    Binding { class: "nf.recipes", name: "craft", method: false, call: nf_recipes_craft },
-    Binding { class: "nf.recipes", name: "all", method: false, call: nf_recipes_all },
-    Binding { class: "nf.loot", name: "roll", method: false, call: nf_loot_roll },
-    Binding { class: "nf.loot", name: "fill", method: false, call: nf_loot_fill },
-    Binding { class: "nf.bossbars", name: "create", method: false, call: nf_bossbars_create },
-    Binding { class: "nf.teams", name: "create", method: false, call: nf_teams_create },
-    Binding { class: "nf.teams", name: "get", method: false, call: nf_teams_get },
-    Binding { class: "nf.teams", name: "all", method: false, call: nf_teams_all },
-    Binding { class: "nf.schedule", name: "daily", method: false, call: nf_schedule_daily },
-    Binding { class: "nf.schedule", name: "weekly", method: false, call: nf_schedule_weekly },
-    Binding { class: "nf.schedule", name: "cron", method: false, call: nf_schedule_cron },
-    Binding { class: "nf.economy", name: "balance", method: false, call: nf_economy_balance },
-    Binding { class: "nf.economy", name: "deposit", method: false, call: nf_economy_deposit },
-    Binding { class: "nf.economy", name: "withdraw", method: false, call: nf_economy_withdraw },
-    Binding { class: "nf.placeholders", name: "parse", method: false, call: nf_placeholders_parse },
-    Binding { class: "nf.placeholders", name: "register", method: false, call: nf_placeholders_register },
-    Binding { class: "nf.particles", name: "play", method: false, call: nf_particles_play },
-    Binding { class: "nf.cutscenes", name: "play", method: false, call: nf_cutscenes_play },
-    Binding { class: "nf.cutscenes", name: "stop", method: false, call: nf_cutscenes_stop },
-    Binding { class: "nf.cutscenes", name: "current", method: false, call: nf_cutscenes_current },
-    Binding { class: "nf.screens", name: "get", method: false, call: nf_screens_get },
-    Binding { class: "nf.screens", name: "all", method: false, call: nf_screens_all },
-    Binding { class: "nf.screens", name: "create", method: false, call: nf_screens_create },
-    Binding { class: "nf.screens", name: "fonts", method: false, call: nf_screens_fonts },
-    Binding { class: "nf.screens", name: "measure_text", method: false, call: nf_screens_measure_text },
-    Binding { class: "nf.screens", name: "map_color", method: false, call: nf_screens_map_color },
-    Binding { class: "nf.screens", name: "looking_at", method: false, call: nf_screens_looking_at },
-    Binding { class: "nf.images", name: "create", method: false, call: nf_images_create },
-    Binding { class: "nf.images", name: "fill", method: false, call: nf_images_fill },
-    Binding { class: "nf.images", name: "decode", method: false, call: nf_images_decode },
-    Binding { class: "nf.images", name: "download", method: false, call: nf_images_download },
-    Binding { class: "nf.files", name: "get", method: false, call: nf_files_get },
-    Binding { class: "nf.text", name: "escape", method: false, call: nf_text_escape },
-    Binding { class: "nf.text", name: "strip", method: false, call: nf_text_strip },
-    Binding { class: "nf.text", name: "glyph", method: false, call: nf_text_glyph },
-    Binding { class: "nf.text", name: "space", method: false, call: nf_text_space },
-    Binding { class: "nf.text", name: "width", method: false, call: nf_text_width },
-    Binding { class: "nf.text", name: "measure", method: false, call: nf_text_measure },
-    Binding { class: "nf.looks", name: "qualify", method: false, call: nf_looks_qualify },
-    Binding { class: "nf.packs", name: "rebuild", method: false, call: nf_packs_rebuild },
-    Binding { class: "nf.packs", name: "on_demand", method: false, call: nf_packs_on_demand },
-    Binding { class: "nf.json", name: "encode", method: false, call: nf_json_encode },
-    Binding { class: "nf.json", name: "decode", method: false, call: nf_json_decode },
-    Binding { class: "nf.encoding", name: "url_encode", method: false, call: nf_encoding_url_encode },
-    Binding { class: "nf.encoding", name: "url_decode", method: false, call: nf_encoding_url_decode },
-    Binding { class: "nf.encoding", name: "form_encode", method: false, call: nf_encoding_form_encode },
-    Binding { class: "nf.encoding", name: "form_decode", method: false, call: nf_encoding_form_decode },
-    Binding { class: "nf.encoding", name: "base64_encode", method: false, call: nf_encoding_base64_encode },
-    Binding { class: "nf.encoding", name: "base64_decode", method: false, call: nf_encoding_base64_decode },
-    Binding { class: "nf.encoding", name: "hex_encode", method: false, call: nf_encoding_hex_encode },
-    Binding { class: "nf.encoding", name: "hex_decode", method: false, call: nf_encoding_hex_decode },
-    Binding { class: "nf.crypto", name: "hash", method: false, call: nf_crypto_hash },
-    Binding { class: "nf.crypto", name: "sign", method: false, call: nf_crypto_sign },
-    Binding { class: "nf.http", name: "request", method: false, call: nf_http_request },
-    Binding { class: "nf.http", name: "stream", method: false, call: nf_http_stream },
-    Binding { class: "nf.http", name: "websocket", method: false, call: nf_http_websocket },
-    Binding { class: "nf.web", name: "route", method: false, call: nf_web_route },
-    Binding { class: "nf.web", name: "url", method: false, call: nf_web_url },
-    Binding { class: "nf.web", name: "verify_signature", method: false, call: nf_web_verify_signature },
-    Binding { class: "nf.web", name: "oauth", method: false, call: nf_web_oauth },
-    Binding { class: "nf.wasm", name: "functions", method: false, call: nf_wasm_functions },
-    Binding { class: "nf.wasm", name: "instantiate", method: false, call: nf_wasm_instantiate },
-    Binding { class: "nf.wasm", name: "run", method: false, call: nf_wasm_run },
-    Binding { class: "nf.wasm", name: "start", method: false, call: nf_wasm_start },
-    Binding { class: "nf.network", name: "server_name", method: false, call: nf_network_server_name },
-    Binding { class: "nf.network", name: "server_role", method: false, call: nf_network_server_role },
-    Binding { class: "nf.network", name: "group", method: false, call: nf_network_group },
-    Binding { class: "nf.network", name: "set_accepting", method: false, call: nf_network_set_accepting },
-    Binding { class: "nf.network", name: "state", method: false, call: nf_network_state },
-    Binding { class: "nf.network", name: "hold_ready", method: false, call: nf_network_hold_ready },
-    Binding { class: "nf.network", name: "set_draining", method: false, call: nf_network_set_draining },
-    Binding { class: "nf.network", name: "is_draining", method: false, call: nf_network_is_draining },
-    Binding { class: "nf.network", name: "is_accepting", method: false, call: nf_network_is_accepting },
-    Binding { class: "nf.network", name: "is_connected", method: false, call: nf_network_is_connected },
-    Binding { class: "nf.network", name: "servers", method: false, call: nf_network_servers },
-    Binding { class: "nf.network", name: "groups", method: false, call: nf_network_groups },
-    Binding { class: "nf.network", name: "players", method: false, call: nf_network_players },
-    Binding { class: "nf.network", name: "find_player", method: false, call: nf_network_find_player },
-    Binding { class: "nf.network", name: "channel", method: false, call: nf_network_channel },
-    Binding { class: "nf.network", name: "map", method: false, call: nf_network_map },
-    Binding { class: "nf.network", name: "ban", method: false, call: nf_network_ban },
-    Binding { class: "nf.network", name: "unban", method: false, call: nf_network_unban },
-    Binding { class: "nf.network", name: "mute", method: false, call: nf_network_mute },
-    Binding { class: "nf.network", name: "unmute", method: false, call: nf_network_unmute },
-    Binding { class: "nf.network", name: "is_banned", method: false, call: nf_network_is_banned },
-    Binding { class: "nf.network", name: "is_muted", method: false, call: nf_network_is_muted },
-    Binding { class: "nf.network", name: "report", method: false, call: nf_network_report },
-    Binding { class: "nf.network", name: "send_player", method: false, call: nf_network_send_player },
-    Binding { class: "nf.network", name: "send_players", method: false, call: nf_network_send_players },
-    Binding { class: "nf.time", name: "format", method: false, call: nf_time_format },
-    Binding { class: "nf.time", name: "parse", method: false, call: nf_time_parse },
-    Binding { class: "nf.time", name: "duration", method: false, call: nf_time_duration },
-    Binding { class: "nf.time", name: "parse_duration", method: false, call: nf_time_parse_duration },
-    Binding { class: "nf.random", name: "noise2", method: false, call: nf_random_noise2 },
-    Binding { class: "nf.random", name: "noise3", method: false, call: nf_random_noise3 },
-    Binding { class: "nf.random", name: "uuid", method: false, call: nf_random_uuid },
-    Binding { class: "nf.test", name: "case", method: false, call: nf_test_case },
-    Binding { class: "nf.test", name: "advance", method: false, call: nf_test_advance },
-    Binding { class: "nf.test", name: "player", method: false, call: nf_test_player },
-    Binding { class: "nf.test", name: "raise", method: false, call: nf_test_raise },
-    Binding { class: "nf.test", name: "click", method: false, call: nf_test_click },
-    Binding { class: "nf.test", name: "release", method: false, call: nf_test_release },
-    Binding { class: "nf.test", name: "input", method: false, call: nf_test_input },
-    Binding { class: "nf.test", name: "shown", method: false, call: nf_test_shown },
-    Binding { class: "nf.test", name: "connections", method: false, call: nf_test_connections },
-    Binding { class: "nf.test", name: "accept", method: false, call: nf_test_accept },
-    Binding { class: "nf.test", name: "receive", method: false, call: nf_test_receive },
-    Binding { class: "nf.test", name: "sent", method: false, call: nf_test_sent },
-    Binding { class: "nf.test", name: "request", method: false, call: nf_test_request },
-    Binding { class: "nf.test", name: "oauth_token", method: false, call: nf_test_oauth_token },
-    Binding { class: "nf.test", name: "http", method: false, call: nf_test_http },
-    Binding { class: "nf.test", name: "allow_private", method: false, call: nf_test_allow_private },
-    Binding { class: "nf.test", name: "disconnect", method: false, call: nf_test_disconnect },
-    Binding { class: "nf.test", name: "stub_wasm", method: false, call: nf_test_stub_wasm },
-    Binding { class: "nf.test", name: "network_server", method: false, call: nf_test_network_server },
-    Binding { class: "nf.test", name: "network_publish", method: false, call: nf_test_network_publish },
-    Binding { class: "nf.test", name: "network_received", method: false, call: nf_test_network_received },
-    Binding { class: "nf.test", name: "network_answer", method: false, call: nf_test_network_answer },
-    Binding { class: "nf.test", name: "network_request", method: false, call: nf_test_network_request },
-    Binding { class: "nf.test", name: "network_write", method: false, call: nf_test_network_write },
-    Binding { class: "nf.test", name: "network_join", method: false, call: nf_test_network_join },
-    Binding { class: "nf.test", name: "network_quit", method: false, call: nf_test_network_quit },
-    Binding { class: "nf.test", name: "network_status", method: false, call: nf_test_network_status },
-    Binding { class: "nf.test", name: "network_role", method: false, call: nf_test_network_role },
-    Binding { class: "nf.test", name: "network_reports", method: false, call: nf_test_network_reports },
-    Binding { class: "nf.test", name: "network_send", method: false, call: nf_test_network_send },
-    Binding { class: "Centity", name: "id", method: true, call: centity_id },
-    Binding { class: "Centity", name: "kind", method: true, call: centity_kind },
-    Binding { class: "Centity", name: "exists", method: true, call: centity_exists },
-    Binding { class: "Centity", name: "is_natural", method: true, call: centity_is_natural },
-    Binding { class: "Centity", name: "is_temporary", method: true, call: centity_is_temporary },
-    Binding { class: "Centity", name: "lifetime", method: true, call: centity_lifetime },
-    Binding { class: "Centity", name: "set_lifetime", method: true, call: centity_set_lifetime },
-    Binding { class: "Centity", name: "keep", method: true, call: centity_keep },
-    Binding { class: "Centity", name: "node", method: true, call: centity_node },
-    Binding { class: "Centity", name: "nodes", method: true, call: centity_nodes },
-    Binding { class: "Centity", name: "roots", method: true, call: centity_roots },
-    Binding { class: "Centity", name: "add_node", method: true, call: centity_add_node },
-    Binding { class: "Centity", name: "properties", method: true, call: centity_properties },
-    Binding { class: "Centity", name: "bounds", method: true, call: centity_bounds },
-    Binding { class: "Centity", name: "location", method: true, call: centity_location },
-    Binding { class: "Centity", name: "position", method: true, call: centity_position },
-    Binding { class: "Centity", name: "world", method: true, call: centity_world },
-    Binding { class: "Centity", name: "yaw", method: true, call: centity_yaw },
-    Binding { class: "Centity", name: "set_yaw", method: true, call: centity_set_yaw },
-    Binding { class: "Centity", name: "look_at", method: true, call: centity_look_at },
-    Binding { class: "Centity", name: "to_local", method: true, call: centity_to_local },
-    Binding { class: "Centity", name: "to_world", method: true, call: centity_to_world },
-    Binding { class: "Centity", name: "teleport", method: true, call: centity_teleport },
-    Binding { class: "Centity", name: "follow", method: true, call: centity_follow },
-    Binding { class: "Centity", name: "stop_following", method: true, call: centity_stop_following },
-    Binding { class: "Centity", name: "stat", method: true, call: centity_stat },
-    Binding { class: "Centity", name: "stats", method: true, call: centity_stats },
-    Binding { class: "Centity", name: "modifiers", method: true, call: centity_modifiers },
-    Binding { class: "Centity", name: "set_modifiers", method: true, call: centity_set_modifiers },
-    Binding { class: "Centity", name: "add_buff", method: true, call: centity_add_buff },
-    Binding { class: "Centity", name: "remove_buff", method: true, call: centity_remove_buff },
-    Binding { class: "Centity", name: "has_buff", method: true, call: centity_has_buff },
-    Binding { class: "Centity", name: "buff_ticks", method: true, call: centity_buff_ticks },
-    Binding { class: "Centity", name: "buffs", method: true, call: centity_buffs },
-    Binding { class: "Centity", name: "health", method: true, call: centity_health },
-    Binding { class: "Centity", name: "max_health", method: true, call: centity_max_health },
-    Binding { class: "Centity", name: "set_health", method: true, call: centity_set_health },
-    Binding { class: "Centity", name: "set_max_health", method: true, call: centity_set_max_health },
-    Binding { class: "Centity", name: "damage", method: true, call: centity_damage },
-    Binding { class: "Centity", name: "heal", method: true, call: centity_heal },
-    Binding { class: "Centity", name: "is_dead", method: true, call: centity_is_dead },
-    Binding { class: "Centity", name: "has_body", method: true, call: centity_has_body },
-    Binding { class: "Centity", name: "body", method: true, call: centity_body },
-    Binding { class: "Centity", name: "set_body", method: true, call: centity_set_body },
-    Binding { class: "Centity", name: "velocity", method: true, call: centity_velocity },
-    Binding { class: "Centity", name: "set_velocity", method: true, call: centity_set_velocity },
-    Binding { class: "Centity", name: "add_velocity", method: true, call: centity_add_velocity },
-    Binding { class: "Centity", name: "walk_velocity", method: true, call: centity_walk_velocity },
-    Binding { class: "Centity", name: "set_walk_velocity", method: true, call: centity_set_walk_velocity },
-    Binding { class: "Centity", name: "jump", method: true, call: centity_jump },
-    Binding { class: "Centity", name: "is_on_ground", method: true, call: centity_is_on_ground },
-    Binding { class: "Centity", name: "is_in_liquid", method: true, call: centity_is_in_liquid },
-    Binding { class: "Centity", name: "wall", method: true, call: centity_wall },
-    Binding { class: "Centity", name: "launch", method: true, call: centity_launch },
-    Binding { class: "Centity", name: "is_launched", method: true, call: centity_is_launched },
-    Binding { class: "Centity", name: "stop_flight", method: true, call: centity_stop_flight },
-    Binding { class: "Centity", name: "move_to", method: true, call: centity_move_to },
-    Binding { class: "Centity", name: "stop_pathing", method: true, call: centity_stop_pathing },
-    Binding { class: "Centity", name: "has_path", method: true, call: centity_has_path },
-    Binding { class: "Centity", name: "path_target", method: true, call: centity_path_target },
-    Binding { class: "Centity", name: "data", method: true, call: centity_data },
-    Binding { class: "Centity", name: "remove", method: true, call: centity_remove },
-    Binding { class: "Centity", name: "play_animation", method: true, call: centity_play_animation },
-    Binding { class: "Centity", name: "stop_animation", method: true, call: centity_stop_animation },
-    Binding { class: "Centity", name: "pause_animation", method: true, call: centity_pause_animation },
-    Binding { class: "Centity", name: "resume_animation", method: true, call: centity_resume_animation },
-    Binding { class: "Centity", name: "is_animation_playing", method: true, call: centity_is_animation_playing },
-    Binding { class: "Centity", name: "playing_animations", method: true, call: centity_playing_animations },
-    Binding { class: "Centity", name: "animations", method: true, call: centity_animations },
-    Binding { class: "Centity", name: "animation_tick", method: true, call: centity_animation_tick },
-    Binding { class: "Centity", name: "seek_animation", method: true, call: centity_seek_animation },
-    Binding { class: "Centity", name: "animation_speed", method: true, call: centity_animation_speed },
-    Binding { class: "Centity", name: "set_animation_speed", method: true, call: centity_set_animation_speed },
-    Binding { class: "Centity", name: "is_glowing", method: true, call: centity_is_glowing },
-    Binding { class: "Centity", name: "set_glowing", method: true, call: centity_set_glowing },
-    Binding { class: "Centity", name: "glow_color", method: true, call: centity_glow_color },
-    Binding { class: "Centity", name: "set_glow_color", method: true, call: centity_set_glow_color },
-    Binding { class: "Centity", name: "hide_from", method: true, call: centity_hide_from },
-    Binding { class: "Centity", name: "show_to", method: true, call: centity_show_to },
-    Binding { class: "Centity", name: "is_hidden_from", method: true, call: centity_is_hidden_from },
-    Binding { class: "Centity", name: "viewers", method: true, call: centity_viewers },
-    Binding { class: "Centity", name: "view_range", method: true, call: centity_view_range },
-    Binding { class: "Centity", name: "set_view_range", method: true, call: centity_set_view_range },
-    Binding { class: "Node", name: "name", method: true, call: node_name },
-    Binding { class: "Node", name: "centity", method: true, call: node_centity },
-    Binding { class: "Node", name: "parent", method: true, call: node_parent },
-    Binding { class: "Node", name: "children", method: true, call: node_children },
-    Binding { class: "Node", name: "add_child", method: true, call: node_add_child },
-    Binding { class: "Node", name: "remove", method: true, call: node_remove },
-    Binding { class: "Node", name: "translation", method: true, call: node_translation },
-    Binding { class: "Node", name: "rotation", method: true, call: node_rotation },
-    Binding { class: "Node", name: "scale", method: true, call: node_scale },
-    Binding { class: "Node", name: "set_translation", method: true, call: node_set_translation },
-    Binding { class: "Node", name: "set_rotation", method: true, call: node_set_rotation },
-    Binding { class: "Node", name: "set_scale", method: true, call: node_set_scale },
-    Binding { class: "Node", name: "stretch_between", method: true, call: node_stretch_between },
-    Binding { class: "Node", name: "is_rope", method: true, call: node_is_rope },
-    Binding { class: "Node", name: "rope_between", method: true, call: node_rope_between },
-    Binding { class: "Node", name: "release_rope", method: true, call: node_release_rope },
-    Binding { class: "Node", name: "tween", method: true, call: node_tween },
-    Binding { class: "Node", name: "is_tweening", method: true, call: node_is_tweening },
-    Binding { class: "Node", name: "stop_tween", method: true, call: node_stop_tween },
-    Binding { class: "Node", name: "world_position", method: true, call: node_world_position },
-    Binding { class: "Node", name: "world_rotation", method: true, call: node_world_rotation },
-    Binding { class: "Node", name: "to_local", method: true, call: node_to_local },
-    Binding { class: "Node", name: "to_world", method: true, call: node_to_world },
-    Binding { class: "Node", name: "world_direction", method: true, call: node_world_direction },
-    Binding { class: "Node", name: "look_at", method: true, call: node_look_at },
-    Binding { class: "Node", name: "rotate", method: true, call: node_rotate },
-    Binding { class: "Node", name: "is_visible", method: true, call: node_is_visible },
-    Binding { class: "Node", name: "set_visible", method: true, call: node_set_visible },
-    Binding { class: "Node", name: "is_clickable", method: true, call: node_is_clickable },
-    Binding { class: "Node", name: "set_clickable", method: true, call: node_set_clickable },
-    Binding { class: "Node", name: "display_kind", method: true, call: node_display_kind },
-    Binding { class: "Node", name: "image", method: true, call: node_image },
-    Binding { class: "Node", name: "set_image", method: true, call: node_set_image },
-    Binding { class: "Node", name: "display_color", method: true, call: node_display_color },
-    Binding { class: "Node", name: "set_display_color", method: true, call: node_set_display_color },
-    Binding { class: "Node", name: "display_size", method: true, call: node_display_size },
-    Binding { class: "Node", name: "set_display_size", method: true, call: node_set_display_size },
-    Binding { class: "Node", name: "display_anchor", method: true, call: node_display_anchor },
-    Binding { class: "Node", name: "set_display_anchor", method: true, call: node_set_display_anchor },
-    Binding { class: "Node", name: "display_block", method: true, call: node_display_block },
-    Binding { class: "Node", name: "set_display_block", method: true, call: node_set_display_block },
-    Binding { class: "Node", name: "display_text", method: true, call: node_display_text },
-    Binding { class: "Node", name: "set_display_text", method: true, call: node_set_display_text },
-    Binding { class: "Node", name: "display_item", method: true, call: node_display_item },
-    Binding { class: "Node", name: "set_display_item", method: true, call: node_set_display_item },
-    Binding { class: "Node", name: "model", method: true, call: node_model },
-    Binding { class: "Node", name: "set_model", method: true, call: node_set_model },
-    Binding { class: "Node", name: "display_text_style", method: true, call: node_display_text_style },
-    Binding { class: "Node", name: "set_display_text_style", method: true, call: node_set_display_text_style },
-    Binding { class: "Node", name: "is_glowing", method: true, call: node_is_glowing },
-    Binding { class: "Node", name: "set_glowing", method: true, call: node_set_glowing },
-    Binding { class: "Node", name: "glow_color", method: true, call: node_glow_color },
-    Binding { class: "Node", name: "set_glow_color", method: true, call: node_set_glow_color },
-    Binding { class: "Node", name: "brightness", method: true, call: node_brightness },
-    Binding { class: "Node", name: "set_brightness", method: true, call: node_set_brightness },
-    Binding { class: "Node", name: "billboard", method: true, call: node_billboard },
-    Binding { class: "Node", name: "set_billboard", method: true, call: node_set_billboard },
-    Binding { class: "Node", name: "interpolation_ticks", method: true, call: node_interpolation_ticks },
-    Binding { class: "Node", name: "set_interpolation_ticks", method: true, call: node_set_interpolation_ticks },
-    Binding { class: "Node", name: "velocity", method: true, call: node_velocity },
-    Binding { class: "Node", name: "set_velocity", method: true, call: node_set_velocity },
-    Binding { class: "Node", name: "add_velocity", method: true, call: node_add_velocity },
-    Binding { class: "Node", name: "angular_velocity", method: true, call: node_angular_velocity },
-    Binding { class: "Node", name: "set_angular_velocity", method: true, call: node_set_angular_velocity },
-    Binding { class: "Node", name: "mass", method: true, call: node_mass },
-    Binding { class: "Node", name: "apply_impulse", method: true, call: node_apply_impulse },
-    Binding { class: "Node", name: "apply_impulse_at", method: true, call: node_apply_impulse_at },
-    Binding { class: "Node", name: "is_on_ground", method: true, call: node_is_on_ground },
-    Binding { class: "Node", name: "is_asleep", method: true, call: node_is_asleep },
-    Binding { class: "Node", name: "wake", method: true, call: node_wake },
-    Binding { class: "Node", name: "apply_force", method: true, call: node_apply_force },
-    Binding { class: "Node", name: "has_gravity", method: true, call: node_has_gravity },
-    Binding { class: "Node", name: "set_gravity", method: true, call: node_set_gravity },
-    Binding { class: "Node", name: "is_kinematic", method: true, call: node_is_kinematic },
-    Binding { class: "Node", name: "set_kinematic", method: true, call: node_set_kinematic },
-    Binding { class: "Node", name: "is_physics_enabled", method: true, call: node_is_physics_enabled },
-    Binding { class: "Node", name: "set_physics_enabled", method: true, call: node_set_physics_enabled },
-    Binding { class: "Image", name: "width", method: true, call: image_width },
-    Binding { class: "Image", name: "height", method: true, call: image_height },
-    Binding { class: "Image", name: "pixel", method: true, call: image_pixel },
-    Binding { class: "Image", name: "resized", method: true, call: image_resized },
-    Binding { class: "Image", name: "cropped", method: true, call: image_cropped },
-    Binding { class: "Image", name: "encode", method: true, call: image_encode },
-    Binding { class: "Entity", name: "id", method: true, call: entity_id },
-    Binding { class: "Entity", name: "kind", method: true, call: entity_kind },
-    Binding { class: "Entity", name: "exists", method: true, call: entity_exists },
-    Binding { class: "Entity", name: "location", method: true, call: entity_location },
-    Binding { class: "Entity", name: "position", method: true, call: entity_position },
-    Binding { class: "Entity", name: "world", method: true, call: entity_world },
-    Binding { class: "Entity", name: "eye_position", method: true, call: entity_eye_position },
-    Binding { class: "Entity", name: "yaw", method: true, call: entity_yaw },
-    Binding { class: "Entity", name: "pitch", method: true, call: entity_pitch },
-    Binding { class: "Entity", name: "direction", method: true, call: entity_direction },
-    Binding { class: "Entity", name: "set_yaw", method: true, call: entity_set_yaw },
-    Binding { class: "Entity", name: "set_pitch", method: true, call: entity_set_pitch },
-    Binding { class: "Entity", name: "look_at", method: true, call: entity_look_at },
-    Binding { class: "Entity", name: "teleport", method: true, call: entity_teleport },
-    Binding { class: "Entity", name: "velocity", method: true, call: entity_velocity },
-    Binding { class: "Entity", name: "set_velocity", method: true, call: entity_set_velocity },
-    Binding { class: "Entity", name: "add_velocity", method: true, call: entity_add_velocity },
-    Binding { class: "Entity", name: "is_on_ground", method: true, call: entity_is_on_ground },
-    Binding { class: "Entity", name: "remove", method: true, call: entity_remove },
-    Binding { class: "Entity", name: "name", method: true, call: entity_name },
-    Binding { class: "Entity", name: "custom_name", method: true, call: entity_custom_name },
-    Binding { class: "Entity", name: "set_custom_name", method: true, call: entity_set_custom_name },
-    Binding { class: "Entity", name: "is_custom_name_visible", method: true, call: entity_is_custom_name_visible },
-    Binding { class: "Entity", name: "set_custom_name_visible", method: true, call: entity_set_custom_name_visible },
-    Binding { class: "Entity", name: "tags", method: true, call: entity_tags },
-    Binding { class: "Entity", name: "has_tag", method: true, call: entity_has_tag },
-    Binding { class: "Entity", name: "add_tag", method: true, call: entity_add_tag },
-    Binding { class: "Entity", name: "remove_tag", method: true, call: entity_remove_tag },
-    Binding { class: "Entity", name: "data", method: true, call: entity_data },
-    Binding { class: "Entity", name: "is_glowing", method: true, call: entity_is_glowing },
-    Binding { class: "Entity", name: "set_glowing", method: true, call: entity_set_glowing },
-    Binding { class: "Entity", name: "is_visible", method: true, call: entity_is_visible },
-    Binding { class: "Entity", name: "set_visible", method: true, call: entity_set_visible },
-    Binding { class: "Entity", name: "hide_from", method: true, call: entity_hide_from },
-    Binding { class: "Entity", name: "show_to", method: true, call: entity_show_to },
-    Binding { class: "Entity", name: "is_hidden_from", method: true, call: entity_is_hidden_from },
-    Binding { class: "Entity", name: "team", method: true, call: entity_team },
-    Binding { class: "Entity", name: "is_silent", method: true, call: entity_is_silent },
-    Binding { class: "Entity", name: "set_silent", method: true, call: entity_set_silent },
-    Binding { class: "Entity", name: "has_gravity", method: true, call: entity_has_gravity },
-    Binding { class: "Entity", name: "set_gravity", method: true, call: entity_set_gravity },
-    Binding { class: "Entity", name: "is_invulnerable", method: true, call: entity_is_invulnerable },
-    Binding { class: "Entity", name: "set_invulnerable", method: true, call: entity_set_invulnerable },
-    Binding { class: "Entity", name: "passengers", method: true, call: entity_passengers },
-    Binding { class: "Entity", name: "add_passenger", method: true, call: entity_add_passenger },
-    Binding { class: "Entity", name: "remove_passenger", method: true, call: entity_remove_passenger },
-    Binding { class: "Entity", name: "vehicle", method: true, call: entity_vehicle },
-    Binding { class: "Entity", name: "inventory", method: true, call: entity_inventory },
-    Binding { class: "Entity", name: "target_block", method: true, call: entity_target_block },
-    Binding { class: "Entity", name: "target_entity", method: true, call: entity_target_entity },
-    Binding { class: "Entity", name: "target_centity", method: true, call: entity_target_centity },
-    Binding { class: "Living", name: "health", method: true, call: living_health },
-    Binding { class: "Living", name: "set_health", method: true, call: living_set_health },
-    Binding { class: "Living", name: "max_health", method: true, call: living_max_health },
-    Binding { class: "Living", name: "damage", method: true, call: living_damage },
-    Binding { class: "Living", name: "heal", method: true, call: living_heal },
-    Binding { class: "Living", name: "attribute", method: true, call: living_attribute },
-    Binding { class: "Living", name: "attribute_base", method: true, call: living_attribute_base },
-    Binding { class: "Living", name: "set_attribute_base", method: true, call: living_set_attribute_base },
-    Binding { class: "Living", name: "attribute_modifiers", method: true, call: living_attribute_modifiers },
-    Binding { class: "Living", name: "add_attribute_modifier", method: true, call: living_add_attribute_modifier },
-    Binding { class: "Living", name: "remove_attribute_modifier", method: true, call: living_remove_attribute_modifier },
-    Binding { class: "Living", name: "effects", method: true, call: living_effects },
-    Binding { class: "Living", name: "has_effect", method: true, call: living_has_effect },
-    Binding { class: "Living", name: "add_effect", method: true, call: living_add_effect },
-    Binding { class: "Living", name: "remove_effect", method: true, call: living_remove_effect },
-    Binding { class: "Living", name: "equipment", method: true, call: living_equipment },
-    Binding { class: "Living", name: "set_equipment", method: true, call: living_set_equipment },
-    Binding { class: "Mob", name: "target", method: true, call: mob_target },
-    Binding { class: "Mob", name: "set_target", method: true, call: mob_set_target },
-    Binding { class: "Mob", name: "has_ai", method: true, call: mob_has_ai },
-    Binding { class: "Mob", name: "set_ai", method: true, call: mob_set_ai },
-    Binding { class: "Mob", name: "move_to", method: true, call: mob_move_to },
-    Binding { class: "Mob", name: "stop_pathing", method: true, call: mob_stop_pathing },
-    Binding { class: "Mob", name: "has_path", method: true, call: mob_has_path },
-    Binding { class: "Mob", name: "path_target", method: true, call: mob_path_target },
-    Binding { class: "Mob", name: "goals", method: true, call: mob_goals },
-    Binding { class: "Mob", name: "remove_goal", method: true, call: mob_remove_goal },
-    Binding { class: "Mob", name: "clear_goals", method: true, call: mob_clear_goals },
-    Binding { class: "DroppedItem", name: "item", method: true, call: droppeditem_item },
-    Binding { class: "DroppedItem", name: "set_item", method: true, call: droppeditem_set_item },
-    Binding { class: "DroppedItem", name: "pickup_delay", method: true, call: droppeditem_pickup_delay },
-    Binding { class: "DroppedItem", name: "set_pickup_delay", method: true, call: droppeditem_set_pickup_delay },
-    Binding { class: "Mannequin", name: "skin", method: true, call: mannequin_skin },
-    Binding { class: "Mannequin", name: "set_skin", method: true, call: mannequin_set_skin },
-    Binding { class: "Mannequin", name: "description", method: true, call: mannequin_description },
-    Binding { class: "Mannequin", name: "set_description", method: true, call: mannequin_set_description },
-    Binding { class: "Mannequin", name: "is_immovable", method: true, call: mannequin_is_immovable },
-    Binding { class: "Mannequin", name: "set_immovable", method: true, call: mannequin_set_immovable },
-    Binding { class: "Mannequin", name: "main_hand", method: true, call: mannequin_main_hand },
-    Binding { class: "Mannequin", name: "set_main_hand", method: true, call: mannequin_set_main_hand },
-    Binding { class: "Mannequin", name: "pose", method: true, call: mannequin_pose },
-    Binding { class: "Mannequin", name: "set_pose", method: true, call: mannequin_set_pose },
-    Binding { class: "Mannequin", name: "skin_parts", method: true, call: mannequin_skin_parts },
-    Binding { class: "Mannequin", name: "set_skin_parts", method: true, call: mannequin_set_skin_parts },
-    Binding { class: "Player", name: "stat", method: true, call: player_stat },
-    Binding { class: "Player", name: "stats", method: true, call: player_stats },
-    Binding { class: "Player", name: "modifiers", method: true, call: player_modifiers },
-    Binding { class: "Player", name: "set_modifiers", method: true, call: player_set_modifiers },
-    Binding { class: "Player", name: "add_buff", method: true, call: player_add_buff },
-    Binding { class: "Player", name: "remove_buff", method: true, call: player_remove_buff },
-    Binding { class: "Player", name: "has_buff", method: true, call: player_has_buff },
-    Binding { class: "Player", name: "buff_ticks", method: true, call: player_buff_ticks },
-    Binding { class: "Player", name: "buffs", method: true, call: player_buffs },
-    Binding { class: "Player", name: "name", method: true, call: player_name },
-    Binding { class: "Player", name: "display_name", method: true, call: player_display_name },
-    Binding { class: "Player", name: "set_display_name", method: true, call: player_set_display_name },
-    Binding { class: "Player", name: "send_message", method: true, call: player_send_message },
-    Binding { class: "Player", name: "send_actionbar", method: true, call: player_send_actionbar },
-    Binding { class: "Player", name: "send_title", method: true, call: player_send_title },
-    Binding { class: "Player", name: "clear_title", method: true, call: player_clear_title },
-    Binding { class: "Player", name: "play_sound", method: true, call: player_play_sound },
-    Binding { class: "Player", name: "stop_sound", method: true, call: player_stop_sound },
-    Binding { class: "Player", name: "spawn_particle", method: true, call: player_spawn_particle },
-    Binding { class: "Player", name: "run", method: true, call: player_run },
-    Binding { class: "Player", name: "has_permission", method: true, call: player_has_permission },
-    Binding { class: "Player", name: "set_permission", method: true, call: player_set_permission },
-    Binding { class: "Player", name: "unset_permission", method: true, call: player_unset_permission },
-    Binding { class: "Player", name: "permissions", method: true, call: player_permissions },
-    Binding { class: "Player", name: "is_operator", method: true, call: player_is_operator },
-    Binding { class: "Player", name: "game_mode", method: true, call: player_game_mode },
-    Binding { class: "Player", name: "set_game_mode", method: true, call: player_set_game_mode },
-    Binding { class: "Player", name: "food", method: true, call: player_food },
-    Binding { class: "Player", name: "set_food", method: true, call: player_set_food },
-    Binding { class: "Player", name: "saturation", method: true, call: player_saturation },
-    Binding { class: "Player", name: "set_saturation", method: true, call: player_set_saturation },
-    Binding { class: "Player", name: "level", method: true, call: player_level },
-    Binding { class: "Player", name: "set_level", method: true, call: player_set_level },
-    Binding { class: "Player", name: "experience_progress", method: true, call: player_experience_progress },
-    Binding { class: "Player", name: "set_experience_progress", method: true, call: player_set_experience_progress },
-    Binding { class: "Player", name: "give_experience", method: true, call: player_give_experience },
-    Binding { class: "Player", name: "is_flying", method: true, call: player_is_flying },
-    Binding { class: "Player", name: "set_flying", method: true, call: player_set_flying },
-    Binding { class: "Player", name: "can_fly", method: true, call: player_can_fly },
-    Binding { class: "Player", name: "set_can_fly", method: true, call: player_set_can_fly },
-    Binding { class: "Player", name: "walk_speed", method: true, call: player_walk_speed },
-    Binding { class: "Player", name: "set_walk_speed", method: true, call: player_set_walk_speed },
-    Binding { class: "Player", name: "fly_speed", method: true, call: player_fly_speed },
-    Binding { class: "Player", name: "set_fly_speed", method: true, call: player_set_fly_speed },
-    Binding { class: "Player", name: "is_sneaking", method: true, call: player_is_sneaking },
-    Binding { class: "Player", name: "is_sprinting", method: true, call: player_is_sprinting },
-    Binding { class: "Player", name: "locale", method: true, call: player_locale },
-    Binding { class: "Player", name: "ping", method: true, call: player_ping },
-    Binding { class: "Player", name: "kick", method: true, call: player_kick },
-    Binding { class: "Player", name: "first_played", method: true, call: player_first_played },
-    Binding { class: "Player", name: "last_seen", method: true, call: player_last_seen },
-    Binding { class: "Player", name: "is_banned", method: true, call: player_is_banned },
-    Binding { class: "Player", name: "ban", method: true, call: player_ban },
-    Binding { class: "Player", name: "unban", method: true, call: player_unban },
-    Binding { class: "Player", name: "is_whitelisted", method: true, call: player_is_whitelisted },
-    Binding { class: "Player", name: "set_whitelisted", method: true, call: player_set_whitelisted },
-    Binding { class: "Player", name: "ender_chest", method: true, call: player_ender_chest },
-    Binding { class: "Player", name: "sky", method: true, call: player_sky },
-    Binding { class: "Player", name: "set_sky", method: true, call: player_set_sky },
-    Binding { class: "Player", name: "clear_sky", method: true, call: player_clear_sky },
-    Binding { class: "Player", name: "storage", method: true, call: player_storage },
-    Binding { class: "Player", name: "hud", method: true, call: player_hud },
-    Binding { class: "Player", name: "held_item", method: true, call: player_held_item },
-    Binding { class: "Player", name: "set_held_item", method: true, call: player_set_held_item },
-    Binding { class: "Player", name: "off_hand_item", method: true, call: player_off_hand_item },
-    Binding { class: "Player", name: "set_off_hand_item", method: true, call: player_set_off_hand_item },
-    Binding { class: "Player", name: "cursor_item", method: true, call: player_cursor_item },
-    Binding { class: "Player", name: "set_cursor_item", method: true, call: player_set_cursor_item },
-    Binding { class: "Player", name: "held_slot", method: true, call: player_held_slot },
-    Binding { class: "Player", name: "set_held_slot", method: true, call: player_set_held_slot },
-    Binding { class: "Player", name: "give_item", method: true, call: player_give_item },
-    Binding { class: "Player", name: "discover_recipe", method: true, call: player_discover_recipe },
-    Binding { class: "Player", name: "undiscover_recipe", method: true, call: player_undiscover_recipe },
-    Binding { class: "Player", name: "has_discovered_recipe", method: true, call: player_has_discovered_recipe },
-    Binding { class: "Player", name: "grant_advancement", method: true, call: player_grant_advancement },
-    Binding { class: "Player", name: "revoke_advancement", method: true, call: player_revoke_advancement },
-    Binding { class: "Player", name: "has_advancement", method: true, call: player_has_advancement },
-    Binding { class: "Player", name: "advancement_progress", method: true, call: player_advancement_progress },
-    Binding { class: "Player", name: "item_cooldown", method: true, call: player_item_cooldown },
-    Binding { class: "Player", name: "set_item_cooldown", method: true, call: player_set_item_cooldown },
-    Binding { class: "Player", name: "open_menu", method: true, call: player_open_menu },
-    Binding { class: "Player", name: "menu", method: true, call: player_menu },
-    Binding { class: "Player", name: "refresh_items", method: true, call: player_refresh_items },
-    Binding { class: "Player", name: "close_menu", method: true, call: player_close_menu },
-    Binding { class: "Player", name: "open_inventory", method: true, call: player_open_inventory },
-    Binding { class: "Player", name: "close_inventory", method: true, call: player_close_inventory },
-    Binding { class: "Player", name: "open_dialog", method: true, call: player_open_dialog },
-    Binding { class: "Player", name: "close_dialog", method: true, call: player_close_dialog },
-    Binding { class: "Player", name: "sidebar", method: true, call: player_sidebar },
-    Binding { class: "Player", name: "border", method: true, call: player_border },
-    Binding { class: "Player", name: "has_own_border", method: true, call: player_has_own_border },
-    Binding { class: "Player", name: "reset_border", method: true, call: player_reset_border },
-    Binding { class: "Player", name: "tab_header", method: true, call: player_tab_header },
-    Binding { class: "Player", name: "set_tab_header", method: true, call: player_set_tab_header },
-    Binding { class: "Player", name: "tab_footer", method: true, call: player_tab_footer },
-    Binding { class: "Player", name: "set_tab_footer", method: true, call: player_set_tab_footer },
-    Binding { class: "Player", name: "tab_name", method: true, call: player_tab_name },
-    Binding { class: "Player", name: "set_tab_name", method: true, call: player_set_tab_name },
-    Binding { class: "Player", name: "tab_order", method: true, call: player_tab_order },
-    Binding { class: "Player", name: "set_tab_order", method: true, call: player_set_tab_order },
-    Binding { class: "Player", name: "is_listed_for", method: true, call: player_is_listed_for },
-    Binding { class: "Player", name: "set_listed_for", method: true, call: player_set_listed_for },
-    Binding { class: "Player", name: "below_name", method: true, call: player_below_name },
-    Binding { class: "Player", name: "set_below_name", method: true, call: player_set_below_name },
-    Binding { class: "Player", name: "bossbars", method: true, call: player_bossbars },
-    Binding { class: "Player", name: "resource_pack_status", method: true, call: player_resource_pack_status },
-    Binding { class: "Player", name: "push_resource_pack", method: true, call: player_push_resource_pack },
-    Binding { class: "Player", name: "pop_resource_pack", method: true, call: player_pop_resource_pack },
-    Binding { class: "Player", name: "send_block_change", method: true, call: player_send_block_change },
-    Binding { class: "Player", name: "reset_block", method: true, call: player_reset_block },
-    Binding { class: "Player", name: "send_equipment_change", method: true, call: player_send_equipment_change },
-    Binding { class: "Player", name: "camera", method: true, call: player_camera },
-    Binding { class: "Player", name: "set_camera", method: true, call: player_set_camera },
-    Binding { class: "Player", name: "compass_target", method: true, call: player_compass_target },
-    Binding { class: "Player", name: "set_compass_target", method: true, call: player_set_compass_target },
-    Binding { class: "Player", name: "open_book", method: true, call: player_open_book },
-    Binding { class: "Player", name: "view_distance", method: true, call: player_view_distance },
-    Binding { class: "Player", name: "set_view_distance", method: true, call: player_set_view_distance },
-    Binding { class: "Player", name: "data", method: true, call: player_data },
-    Binding { class: "Player", name: "session", method: true, call: player_session },
-    Binding { class: "Bot", name: "leave", method: true, call: bot_leave },
-    Binding { class: "Bot", name: "walk_to", method: true, call: bot_walk_to },
-    Binding { class: "Bot", name: "stop", method: true, call: bot_stop },
-    Binding { class: "Bot", name: "look_at", method: true, call: bot_look_at },
-    Binding { class: "Bot", name: "jump", method: true, call: bot_jump },
-    Binding { class: "Bot", name: "set_sneaking", method: true, call: bot_set_sneaking },
-    Binding { class: "Bot", name: "set_sprinting", method: true, call: bot_set_sprinting },
-    Binding { class: "Bot", name: "chat", method: true, call: bot_chat },
-    Binding { class: "Bot", name: "attack", method: true, call: bot_attack },
-    Binding { class: "Bot", name: "interact", method: true, call: bot_interact },
-    Binding { class: "Bot", name: "use_item", method: true, call: bot_use_item },
-    Binding { class: "Bot", name: "release_item", method: true, call: bot_release_item },
-    Binding { class: "Bot", name: "swing", method: true, call: bot_swing },
-    Binding { class: "Bot", name: "use_block", method: true, call: bot_use_block },
-    Binding { class: "Bot", name: "break_block", method: true, call: bot_break_block },
-    Binding { class: "Bot", name: "swap_hands", method: true, call: bot_swap_hands },
-    Binding { class: "Bot", name: "drop_item", method: true, call: bot_drop_item },
-    Binding { class: "Bot", name: "click_slot", method: true, call: bot_click_slot },
-    Binding { class: "Bot", name: "respawn", method: true, call: bot_respawn },
-    Binding { class: "Sender", name: "name", method: true, call: sender_name },
-    Binding { class: "Sender", name: "send_message", method: true, call: sender_send_message },
-    Binding { class: "Sender", name: "has_permission", method: true, call: sender_has_permission },
-    Binding { class: "Sender", name: "is_player", method: true, call: sender_is_player },
-    Binding { class: "Sender", name: "is_console", method: true, call: sender_is_console },
-    Binding { class: "World", name: "name", method: true, call: world_name },
-    Binding { class: "World", name: "exists", method: true, call: world_exists },
-    Binding { class: "World", name: "environment", method: true, call: world_environment },
-    Binding { class: "World", name: "time_of_day", method: true, call: world_time_of_day },
-    Binding { class: "World", name: "set_time_of_day", method: true, call: world_set_time_of_day },
-    Binding { class: "World", name: "is_night", method: true, call: world_is_night },
-    Binding { class: "World", name: "is_day", method: true, call: world_is_day },
-    Binding { class: "World", name: "day_count", method: true, call: world_day_count },
-    Binding { class: "World", name: "moon_phase", method: true, call: world_moon_phase },
-    Binding { class: "World", name: "weather", method: true, call: world_weather },
-    Binding { class: "World", name: "set_weather", method: true, call: world_set_weather },
-    Binding { class: "World", name: "sky", method: true, call: world_sky },
-    Binding { class: "World", name: "set_sky", method: true, call: world_set_sky },
-    Binding { class: "World", name: "clear_sky", method: true, call: world_clear_sky },
-    Binding { class: "World", name: "spawn_location", method: true, call: world_spawn_location },
-    Binding { class: "World", name: "set_spawn_location", method: true, call: world_set_spawn_location },
-    Binding { class: "World", name: "min_height", method: true, call: world_min_height },
-    Binding { class: "World", name: "max_height", method: true, call: world_max_height },
-    Binding { class: "World", name: "block", method: true, call: world_block },
-    Binding { class: "World", name: "blocks", method: true, call: world_blocks },
-    Binding { class: "World", name: "flood", method: true, call: world_flood },
-    Binding { class: "World", name: "set_block", method: true, call: world_set_block },
-    Binding { class: "World", name: "fill_blocks", method: true, call: world_fill_blocks },
-    Binding { class: "World", name: "fill_gradually", method: true, call: world_fill_gradually },
-    Binding { class: "World", name: "highest_block", method: true, call: world_highest_block },
-    Binding { class: "World", name: "is_chunk_loaded", method: true, call: world_is_chunk_loaded },
-    Binding { class: "World", name: "load_chunk", method: true, call: world_load_chunk },
-    Binding { class: "World", name: "locate_biome", method: true, call: world_locate_biome },
-    Binding { class: "World", name: "players", method: true, call: world_players },
-    Binding { class: "World", name: "centities", method: true, call: world_centities },
-    Binding { class: "World", name: "entities", method: true, call: world_entities },
-    Binding { class: "World", name: "spawn_entity", method: true, call: world_spawn_entity },
-    Binding { class: "World", name: "spawn_item", method: true, call: world_spawn_item },
-    Binding { class: "World", name: "spawn_particle", method: true, call: world_spawn_particle },
-    Binding { class: "World", name: "play_sound", method: true, call: world_play_sound },
-    Binding { class: "World", name: "explode", method: true, call: world_explode },
-    Binding { class: "World", name: "strike_lightning", method: true, call: world_strike_lightning },
-    Binding { class: "World", name: "raycast", method: true, call: world_raycast },
-    Binding { class: "World", name: "overlap_box", method: true, call: world_overlap_box },
-    Binding { class: "World", name: "overlap_sphere", method: true, call: world_overlap_sphere },
-    Binding { class: "World", name: "overlap_cone", method: true, call: world_overlap_cone },
-    Binding { class: "World", name: "sweep", method: true, call: world_sweep },
-    Binding { class: "World", name: "nearest", method: true, call: world_nearest },
-    Binding { class: "World", name: "game_rule", method: true, call: world_game_rule },
-    Binding { class: "World", name: "set_game_rule", method: true, call: world_set_game_rule },
-    Binding { class: "World", name: "spawn_limit", method: true, call: world_spawn_limit },
-    Binding { class: "World", name: "set_spawn_limit", method: true, call: world_set_spawn_limit },
-    Binding { class: "World", name: "spawn_interval", method: true, call: world_spawn_interval },
-    Binding { class: "World", name: "set_spawn_interval", method: true, call: world_set_spawn_interval },
-    Binding { class: "World", name: "is_managed", method: true, call: world_is_managed },
-    Binding { class: "World", name: "unload", method: true, call: world_unload },
-    Binding { class: "World", name: "border", method: true, call: world_border },
-    Binding { class: "World", name: "save_structure", method: true, call: world_save_structure },
-    Binding { class: "World", name: "place_structure", method: true, call: world_place_structure },
-    Binding { class: "World", name: "place_gradually", method: true, call: world_place_gradually },
-    Binding { class: "WorldBorder", name: "center", method: true, call: worldborder_center },
-    Binding { class: "WorldBorder", name: "set_center", method: true, call: worldborder_set_center },
-    Binding { class: "WorldBorder", name: "size", method: true, call: worldborder_size },
-    Binding { class: "WorldBorder", name: "set_size", method: true, call: worldborder_set_size },
-    Binding { class: "WorldBorder", name: "damage", method: true, call: worldborder_damage },
-    Binding { class: "WorldBorder", name: "set_damage", method: true, call: worldborder_set_damage },
-    Binding { class: "WorldBorder", name: "warning", method: true, call: worldborder_warning },
-    Binding { class: "WorldBorder", name: "set_warning", method: true, call: worldborder_set_warning },
-    Binding { class: "WorldBorder", name: "contains", method: true, call: worldborder_contains },
-    Binding { class: "Block", name: "world", method: true, call: block_world },
-    Binding { class: "Block", name: "position", method: true, call: block_position },
-    Binding { class: "Block", name: "location", method: true, call: block_location },
-    Binding { class: "Block", name: "kind", method: true, call: block_kind },
-    Binding { class: "Block", name: "state", method: true, call: block_state },
-    Binding { class: "Block", name: "property", method: true, call: block_property },
-    Binding { class: "Block", name: "properties", method: true, call: block_properties },
-    Binding { class: "Block", name: "is_air", method: true, call: block_is_air },
-    Binding { class: "Block", name: "is_solid", method: true, call: block_is_solid },
-    Binding { class: "Block", name: "is_liquid", method: true, call: block_is_liquid },
-    Binding { class: "Block", name: "set_state", method: true, call: block_set_state },
-    Binding { class: "Block", name: "set_property", method: true, call: block_set_property },
-    Binding { class: "Block", name: "break_naturally", method: true, call: block_break_naturally },
-    Binding { class: "Block", name: "relative", method: true, call: block_relative },
-    Binding { class: "Block", name: "inventory", method: true, call: block_inventory },
-    Binding { class: "Block", name: "custom", method: true, call: block_custom },
-    Binding { class: "Block", name: "light_level", method: true, call: block_light_level },
-    Binding { class: "Block", name: "sky_light_level", method: true, call: block_sky_light_level },
-    Binding { class: "Block", name: "biome", method: true, call: block_biome },
-    Binding { class: "Block", name: "data", method: true, call: block_data },
-    Binding { class: "CustomBlock", name: "id", method: true, call: customblock_id },
-    Binding { class: "CustomBlock", name: "project", method: true, call: customblock_project },
-    Binding { class: "CustomBlock", name: "facing", method: true, call: customblock_facing },
-    Binding { class: "CustomBlock", name: "set_facing", method: true, call: customblock_set_facing },
-    Binding { class: "ProjectBlock", name: "id", method: true, call: projectblock_id },
-    Binding { class: "ProjectBlock", name: "properties", method: true, call: projectblock_properties },
-    Binding { class: "ProjectBlock", name: "exists", method: true, call: projectblock_exists },
-    Binding { class: "ProjectBlock", name: "place", method: true, call: projectblock_place },
-    Binding { class: "Inventory", name: "exists", method: true, call: inventory_exists },
-    Binding { class: "Inventory", name: "kind", method: true, call: inventory_kind },
-    Binding { class: "Inventory", name: "size", method: true, call: inventory_size },
-    Binding { class: "Inventory", name: "holder", method: true, call: inventory_holder },
-    Binding { class: "Inventory", name: "item", method: true, call: inventory_item },
-    Binding { class: "Inventory", name: "set_item", method: true, call: inventory_set_item },
-    Binding { class: "Inventory", name: "items", method: true, call: inventory_items },
-    Binding { class: "Inventory", name: "add_item", method: true, call: inventory_add_item },
-    Binding { class: "Inventory", name: "remove_item", method: true, call: inventory_remove_item },
-    Binding { class: "Inventory", name: "count_item", method: true, call: inventory_count_item },
-    Binding { class: "Inventory", name: "has_item", method: true, call: inventory_has_item },
-    Binding { class: "Inventory", name: "first_slot", method: true, call: inventory_first_slot },
-    Binding { class: "Inventory", name: "clear", method: true, call: inventory_clear },
-    Binding { class: "Inventory", name: "viewers", method: true, call: inventory_viewers },
-    Binding { class: "BossBar", name: "exists", method: true, call: bossbar_exists },
-    Binding { class: "BossBar", name: "show_to", method: true, call: bossbar_show_to },
-    Binding { class: "BossBar", name: "hide_from", method: true, call: bossbar_hide_from },
-    Binding { class: "BossBar", name: "viewers", method: true, call: bossbar_viewers },
-    Binding { class: "BossBar", name: "text", method: true, call: bossbar_text },
-    Binding { class: "BossBar", name: "set_text", method: true, call: bossbar_set_text },
-    Binding { class: "BossBar", name: "icon", method: true, call: bossbar_icon },
-    Binding { class: "BossBar", name: "set_icon", method: true, call: bossbar_set_icon },
-    Binding { class: "BossBar", name: "progress", method: true, call: bossbar_progress },
-    Binding { class: "BossBar", name: "set_progress", method: true, call: bossbar_set_progress },
-    Binding { class: "BossBar", name: "color", method: true, call: bossbar_color },
-    Binding { class: "BossBar", name: "set_color", method: true, call: bossbar_set_color },
-    Binding { class: "BossBar", name: "style", method: true, call: bossbar_style },
-    Binding { class: "BossBar", name: "set_style", method: true, call: bossbar_set_style },
-    Binding { class: "BossBar", name: "attach", method: true, call: bossbar_attach },
-    Binding { class: "BossBar", name: "detach", method: true, call: bossbar_detach },
-    Binding { class: "BossBar", name: "attached", method: true, call: bossbar_attached },
-    Binding { class: "BossBar", name: "remove", method: true, call: bossbar_remove },
-    Binding { class: "Sidebar", name: "title", method: true, call: sidebar_title },
-    Binding { class: "Sidebar", name: "set_title", method: true, call: sidebar_set_title },
-    Binding { class: "Sidebar", name: "lines", method: true, call: sidebar_lines },
-    Binding { class: "Sidebar", name: "set_lines", method: true, call: sidebar_set_lines },
-    Binding { class: "Sidebar", name: "is_visible", method: true, call: sidebar_is_visible },
-    Binding { class: "Sidebar", name: "set_visible", method: true, call: sidebar_set_visible },
-    Binding { class: "Sidebar", name: "clear", method: true, call: sidebar_clear },
-    Binding { class: "Team", name: "name", method: true, call: team_name },
-    Binding { class: "Team", name: "exists", method: true, call: team_exists },
-    Binding { class: "Team", name: "add_member", method: true, call: team_add_member },
-    Binding { class: "Team", name: "remove_member", method: true, call: team_remove_member },
-    Binding { class: "Team", name: "has_member", method: true, call: team_has_member },
-    Binding { class: "Team", name: "members", method: true, call: team_members },
-    Binding { class: "Team", name: "display_name", method: true, call: team_display_name },
-    Binding { class: "Team", name: "set_display_name", method: true, call: team_set_display_name },
-    Binding { class: "Team", name: "prefix", method: true, call: team_prefix },
-    Binding { class: "Team", name: "set_prefix", method: true, call: team_set_prefix },
-    Binding { class: "Team", name: "suffix", method: true, call: team_suffix },
-    Binding { class: "Team", name: "set_suffix", method: true, call: team_set_suffix },
-    Binding { class: "Team", name: "color", method: true, call: team_color },
-    Binding { class: "Team", name: "set_color", method: true, call: team_set_color },
-    Binding { class: "Team", name: "has_friendly_fire", method: true, call: team_has_friendly_fire },
-    Binding { class: "Team", name: "set_friendly_fire", method: true, call: team_set_friendly_fire },
-    Binding { class: "Team", name: "can_see_invisible_teammates", method: true, call: team_can_see_invisible_teammates },
-    Binding { class: "Team", name: "set_can_see_invisible_teammates", method: true, call: team_set_can_see_invisible_teammates },
-    Binding { class: "Team", name: "nametags", method: true, call: team_nametags },
-    Binding { class: "Team", name: "set_nametags", method: true, call: team_set_nametags },
-    Binding { class: "Team", name: "collision", method: true, call: team_collision },
-    Binding { class: "Team", name: "set_collision", method: true, call: team_set_collision },
-    Binding { class: "Team", name: "remove", method: true, call: team_remove },
-    Binding { class: "Database", name: "query", method: true, call: database_query },
-    Binding { class: "Database", name: "execute", method: true, call: database_execute },
-    Binding { class: "Database", name: "transaction", method: true, call: database_transaction },
-    Binding { class: "Menu", name: "id", method: true, call: menu_id },
-    Binding { class: "Menu", name: "kind", method: true, call: menu_kind },
-    Binding { class: "Menu", name: "template", method: true, call: menu_template },
-    Binding { class: "Menu", name: "exists", method: true, call: menu_exists },
-    Binding { class: "Menu", name: "is_shared", method: true, call: menu_is_shared },
-    Binding { class: "Menu", name: "context", method: true, call: menu_context },
-    Binding { class: "Menu", name: "size", method: true, call: menu_size },
-    Binding { class: "Menu", name: "rows", method: true, call: menu_rows },
-    Binding { class: "Menu", name: "title", method: true, call: menu_title },
-    Binding { class: "Menu", name: "set_title", method: true, call: menu_set_title },
-    Binding { class: "Menu", name: "skin", method: true, call: menu_skin },
-    Binding { class: "Menu", name: "set_skin", method: true, call: menu_set_skin },
-    Binding { class: "Menu", name: "is_locked", method: true, call: menu_is_locked },
-    Binding { class: "Menu", name: "set_locked", method: true, call: menu_set_locked },
-    Binding { class: "Menu", name: "shift_into", method: true, call: menu_shift_into },
-    Binding { class: "Menu", name: "slot", method: true, call: menu_slot },
-    Binding { class: "Menu", name: "item", method: true, call: menu_item },
-    Binding { class: "Menu", name: "set_item", method: true, call: menu_set_item },
-    Binding { class: "Menu", name: "add_item", method: true, call: menu_add_item },
-    Binding { class: "Menu", name: "items", method: true, call: menu_items },
-    Binding { class: "Menu", name: "set_items", method: true, call: menu_set_items },
-    Binding { class: "Menu", name: "fill", method: true, call: menu_fill },
-    Binding { class: "Menu", name: "clear", method: true, call: menu_clear },
-    Binding { class: "Menu", name: "viewers", method: true, call: menu_viewers },
-    Binding { class: "Menu", name: "cursor_item", method: true, call: menu_cursor_item },
-    Binding { class: "Menu", name: "set_cursor_item", method: true, call: menu_set_cursor_item },
-    Binding { class: "Menu", name: "refresh", method: true, call: menu_refresh },
-    Binding { class: "Menu", name: "open_for", method: true, call: menu_open_for },
-    Binding { class: "Menu", name: "close_for", method: true, call: menu_close_for },
-    Binding { class: "Menu", name: "close_all", method: true, call: menu_close_all },
-    Binding { class: "Slot", name: "index", method: true, call: slot_index },
-    Binding { class: "Slot", name: "menu", method: true, call: slot_menu },
-    Binding { class: "Slot", name: "item", method: true, call: slot_item },
-    Binding { class: "Slot", name: "set_item", method: true, call: slot_set_item },
-    Binding { class: "Slot", name: "bind", method: true, call: slot_bind },
-    Binding { class: "Slot", name: "bind_equipment", method: true, call: slot_bind_equipment },
-    Binding { class: "Slot", name: "set_rule", method: true, call: slot_set_rule },
-    Binding { class: "Slot", name: "rule", method: true, call: slot_rule },
-    Binding { class: "Slot", name: "accepts", method: true, call: slot_accepts },
-    Binding { class: "Slot", name: "unbind", method: true, call: slot_unbind },
-    Binding { class: "Slot", name: "binding", method: true, call: slot_binding },
-    Binding { class: "MenuTemplate", name: "id", method: true, call: menutemplate_id },
-    Binding { class: "MenuTemplate", name: "exists", method: true, call: menutemplate_exists },
-    Binding { class: "MenuTemplate", name: "size", method: true, call: menutemplate_size },
-    Binding { class: "MenuTemplate", name: "rows", method: true, call: menutemplate_rows },
-    Binding { class: "MenuTemplate", name: "title", method: true, call: menutemplate_title },
-    Binding { class: "MenuTemplate", name: "skin", method: true, call: menutemplate_skin },
-    Binding { class: "MenuTemplate", name: "is_locked", method: true, call: menutemplate_is_locked },
-    Binding { class: "MenuTemplate", name: "item", method: true, call: menutemplate_item },
-    Binding { class: "MenuTemplate", name: "windows", method: true, call: menutemplate_windows },
-    Binding { class: "MenuTemplate", name: "remove", method: true, call: menutemplate_remove },
-    Binding { class: "Dialog", name: "id", method: true, call: dialog_id },
-    Binding { class: "Dialog", name: "exists", method: true, call: dialog_exists },
-    Binding { class: "Dialog", name: "title", method: true, call: dialog_title },
-    Binding { class: "Dialog", name: "buttons", method: true, call: dialog_buttons },
-    Binding { class: "Dialog", name: "inputs", method: true, call: dialog_inputs },
-    Binding { class: "Dialog", name: "button", method: true, call: dialog_button },
-    Binding { class: "Dialog", name: "open_for", method: true, call: dialog_open_for },
-    Binding { class: "Button", name: "key", method: true, call: button_key },
-    Binding { class: "Button", name: "dialog", method: true, call: button_dialog },
-    Binding { class: "Button", name: "label", method: true, call: button_label },
-    Binding { class: "ProjectItem", name: "id", method: true, call: projectitem_id },
-    Binding { class: "ProjectItem", name: "exists", method: true, call: projectitem_exists },
-    Binding { class: "ProjectItem", name: "create", method: true, call: projectitem_create },
-    Binding { class: "ProjectItem", name: "properties", method: true, call: projectitem_properties },
-    Binding { class: "Effect", name: "kind", method: true, call: effect_kind },
-    Binding { class: "Effect", name: "is_active", method: true, call: effect_is_active },
-    Binding { class: "Effect", name: "stop", method: true, call: effect_stop },
-    Binding { class: "Effect", name: "location", method: true, call: effect_location },
-    Binding { class: "Effect", name: "teleport", method: true, call: effect_teleport },
-    Binding { class: "Effect", name: "follow", method: true, call: effect_follow },
-    Binding { class: "HttpStream", name: "url", method: true, call: httpstream_url },
-    Binding { class: "HttpStream", name: "state", method: true, call: httpstream_state },
-    Binding { class: "HttpStream", name: "status", method: true, call: httpstream_status },
-    Binding { class: "HttpStream", name: "close", method: true, call: httpstream_close },
-    Binding { class: "WebSocket", name: "url", method: true, call: websocket_url },
-    Binding { class: "WebSocket", name: "state", method: true, call: websocket_state },
-    Binding { class: "WebSocket", name: "protocol", method: true, call: websocket_protocol },
-    Binding { class: "WebSocket", name: "send", method: true, call: websocket_send },
-    Binding { class: "WebSocket", name: "close", method: true, call: websocket_close },
-    Binding { class: "Route", name: "remove", method: true, call: route_remove },
-    Binding { class: "Route", name: "exists", method: true, call: route_exists },
-    Binding { class: "WebResponse", name: "send", method: true, call: webresponse_send },
-    Binding { class: "WebResponse", name: "json", method: true, call: webresponse_json },
-    Binding { class: "WebResponse", name: "redirect", method: true, call: webresponse_redirect },
-    Binding { class: "WebResponse", name: "is_pending", method: true, call: webresponse_is_pending },
-    Binding { class: "OAuthFlow", name: "begin", method: true, call: oauthflow_begin },
-    Binding { class: "OAuthFlow", name: "remove", method: true, call: oauthflow_remove },
-    Binding { class: "WasmInstance", name: "module", method: true, call: wasminstance_module },
-    Binding { class: "WasmInstance", name: "call", method: true, call: wasminstance_call },
-    Binding { class: "WasmInstance", name: "call_text", method: true, call: wasminstance_call_text },
-    Binding { class: "WasmInstance", name: "close", method: true, call: wasminstance_close },
-    Binding { class: "WasmProcess", name: "module", method: true, call: wasmprocess_module },
-    Binding { class: "WasmProcess", name: "state", method: true, call: wasmprocess_state },
-    Binding { class: "WasmProcess", name: "send", method: true, call: wasmprocess_send },
-    Binding { class: "WasmProcess", name: "close_input", method: true, call: wasmprocess_close_input },
-    Binding { class: "WasmProcess", name: "stop", method: true, call: wasmprocess_stop },
-    Binding { class: "NetworkChannel", name: "name", method: true, call: networkchannel_name },
-    Binding { class: "NetworkChannel", name: "publish", method: true, call: networkchannel_publish },
-    Binding { class: "NetworkChannel", name: "request", method: true, call: networkchannel_request },
-    Binding { class: "NetworkHold", name: "release", method: true, call: networkhold_release },
-    Binding { class: "NetworkHold", name: "is_released", method: true, call: networkhold_is_released },
-    Binding { class: "NetworkMap", name: "name", method: true, call: networkmap_name },
-    Binding { class: "NetworkMap", name: "is_ready", method: true, call: networkmap_is_ready },
-    Binding { class: "NetworkMap", name: "get", method: true, call: networkmap_get },
-    Binding { class: "NetworkMap", name: "all", method: true, call: networkmap_all },
-    Binding { class: "NetworkMap", name: "set", method: true, call: networkmap_set },
-    Binding { class: "NetworkMap", name: "delete", method: true, call: networkmap_delete },
-    Binding { class: "NetworkMap", name: "add", method: true, call: networkmap_add },
-    Binding { class: "NetworkMap", name: "insert", method: true, call: networkmap_insert },
-    Binding { class: "Cutscene", name: "kind", method: true, call: cutscene_kind },
-    Binding { class: "Cutscene", name: "length", method: true, call: cutscene_length },
-    Binding { class: "Cutscene", name: "player", method: true, call: cutscene_player },
-    Binding { class: "Cutscene", name: "is_active", method: true, call: cutscene_is_active },
-    Binding { class: "Cutscene", name: "time", method: true, call: cutscene_time },
-    Binding { class: "Cutscene", name: "stop", method: true, call: cutscene_stop },
-    Binding { class: "Screen", name: "name", method: true, call: screen_name },
-    Binding { class: "Screen", name: "exists", method: true, call: screen_exists },
-    Binding { class: "Screen", name: "width", method: true, call: screen_width },
-    Binding { class: "Screen", name: "height", method: true, call: screen_height },
-    Binding { class: "Screen", name: "clear", method: true, call: screen_clear },
-    Binding { class: "Screen", name: "pixel", method: true, call: screen_pixel },
-    Binding { class: "Screen", name: "set_pixel", method: true, call: screen_set_pixel },
-    Binding { class: "Screen", name: "pixels", method: true, call: screen_pixels },
-    Binding { class: "Screen", name: "set_pixels", method: true, call: screen_set_pixels },
-    Binding { class: "Screen", name: "fill", method: true, call: screen_fill },
-    Binding { class: "Screen", name: "rectangle", method: true, call: screen_rectangle },
-    Binding { class: "Screen", name: "line", method: true, call: screen_line },
-    Binding { class: "Screen", name: "circle", method: true, call: screen_circle },
-    Binding { class: "Screen", name: "ellipse", method: true, call: screen_ellipse },
-    Binding { class: "Screen", name: "polygon", method: true, call: screen_polygon },
-    Binding { class: "Screen", name: "text", method: true, call: screen_text },
-    Binding { class: "Screen", name: "image", method: true, call: screen_image },
-    Binding { class: "Screen", name: "copy", method: true, call: screen_copy },
-    Binding { class: "Screen", name: "place", method: true, call: screen_place },
-    Binding { class: "Screen", name: "take_down", method: true, call: screen_take_down },
-    Binding { class: "Screen", name: "location", method: true, call: screen_location },
-    Binding { class: "Screen", name: "facing", method: true, call: screen_facing },
-    Binding { class: "Screen", name: "item", method: true, call: screen_item },
-    Binding { class: "Screen", name: "show_to", method: true, call: screen_show_to },
-    Binding { class: "Screen", name: "hide_from", method: true, call: screen_hide_from },
-    Binding { class: "Screen", name: "is_shown_to", method: true, call: screen_is_shown_to },
-    Binding { class: "Screen", name: "viewers", method: true, call: screen_viewers },
-    Binding { class: "Screen", name: "for_player", method: true, call: screen_for_player },
-    Binding { class: "Screen", name: "player", method: true, call: screen_player },
-    Binding { class: "Screen", name: "release", method: true, call: screen_release },
-    Binding { class: "Screen", name: "play", method: true, call: screen_play },
-    Binding { class: "Screen", name: "playback", method: true, call: screen_playback },
-    Binding { class: "Screen", name: "remove", method: true, call: screen_remove },
-    Binding { class: "Playback", name: "video", method: true, call: playback_video },
-    Binding { class: "Playback", name: "screen", method: true, call: playback_screen },
-    Binding { class: "Playback", name: "length", method: true, call: playback_length },
-    Binding { class: "Playback", name: "exists", method: true, call: playback_exists },
-    Binding { class: "Playback", name: "is_paused", method: true, call: playback_is_paused },
-    Binding { class: "Playback", name: "pause", method: true, call: playback_pause },
-    Binding { class: "Playback", name: "resume", method: true, call: playback_resume },
-    Binding { class: "Playback", name: "stop", method: true, call: playback_stop },
-    Binding { class: "Playback", name: "time", method: true, call: playback_time },
-    Binding { class: "Playback", name: "seek", method: true, call: playback_seek },
-    Binding { class: "Playback", name: "speed", method: true, call: playback_speed },
-    Binding { class: "Playback", name: "set_speed", method: true, call: playback_set_speed },
-    Binding { class: "Playback", name: "volume", method: true, call: playback_volume },
-    Binding { class: "Playback", name: "set_volume", method: true, call: playback_set_volume },
-    Binding { class: "Playback", name: "is_looping", method: true, call: playback_is_looping },
-    Binding { class: "Playback", name: "set_looping", method: true, call: playback_set_looping },
-    Binding { class: "File", name: "path", method: true, call: file_path },
-    Binding { class: "File", name: "name", method: true, call: file_name },
-    Binding { class: "File", name: "parent", method: true, call: file_parent },
-    Binding { class: "File", name: "child", method: true, call: file_child },
-    Binding { class: "File", name: "exists", method: true, call: file_exists },
-    Binding { class: "File", name: "is_folder", method: true, call: file_is_folder },
-    Binding { class: "File", name: "size", method: true, call: file_size },
-    Binding { class: "File", name: "children", method: true, call: file_children },
-    Binding { class: "File", name: "read", method: true, call: file_read },
-    Binding { class: "File", name: "write", method: true, call: file_write },
-    Binding { class: "File", name: "append", method: true, call: file_append },
-    Binding { class: "File", name: "read_base64", method: true, call: file_read_base64 },
-    Binding { class: "File", name: "write_base64", method: true, call: file_write_base64 },
-    Binding { class: "File", name: "read_json", method: true, call: file_read_json },
-    Binding { class: "File", name: "write_json", method: true, call: file_write_json },
-    Binding { class: "File", name: "modified_time", method: true, call: file_modified_time },
-    Binding { class: "File", name: "rename", method: true, call: file_rename },
-    Binding { class: "File", name: "copy_to", method: true, call: file_copy_to },
-    Binding { class: "File", name: "create_folder", method: true, call: file_create_folder },
-    Binding { class: "File", name: "delete", method: true, call: file_delete },
-    Binding { class: "Schedule", name: "cancel", method: true, call: schedule_cancel },
-    Binding { class: "Schedule", name: "is_active", method: true, call: schedule_is_active },
-    Binding { class: "Schedule", name: "next_run", method: true, call: schedule_next_run },
-    Binding { class: "Hud", name: "player", method: true, call: hud_player },
-    Binding { class: "Hud", name: "fill_bar", method: true, call: hud_fill_bar },
-    Binding { class: "Hud", name: "fill_bars", method: true, call: hud_fill_bars },
-    Binding { class: "Hud", name: "bar", method: true, call: hud_bar },
-    Binding { class: "Hud", name: "set_icons", method: true, call: hud_set_icons },
-    Binding { class: "Hud", name: "icons", method: true, call: hud_icons },
-    Binding { class: "Hud", name: "set_text", method: true, call: hud_set_text },
-    Binding { class: "Hud", name: "text", method: true, call: hud_text },
-    Binding { class: "Hud", name: "remove", method: true, call: hud_remove },
-    Binding { class: "Hud", name: "clear", method: true, call: hud_clear },
+    Binding { class: "nf", name: "on", method: false, waits: false, call: nf_on },
+    Binding { class: "nf", name: "once", method: false, waits: false, call: nf_once },
+    Binding { class: "nf", name: "emit", method: false, waits: false, call: nf_emit },
+    Binding { class: "nf", name: "after", method: false, waits: false, call: nf_after },
+    Binding { class: "nf", name: "every", method: false, waits: false, call: nf_every },
+    Binding { class: "nf", name: "task", method: false, waits: false, call: nf_task },
+    Binding { class: "nf", name: "wait", method: false, waits: true, call: nf_wait },
+    Binding { class: "nf", name: "wait_until", method: false, waits: true, call: nf_wait_until },
+    Binding { class: "nf", name: "wait_for", method: false, waits: true, call: nf_wait_for },
+    Binding { class: "nf", name: "data", method: false, waits: false, call: nf_data },
+    Binding { class: "nf", name: "db", method: false, waits: false, call: nf_db },
+    Binding { class: "nf", name: "config", method: false, waits: false, call: nf_config },
+    Binding { class: "nf", name: "instructions_left", method: false, waits: false, call: nf_instructions_left },
+    Binding { class: "nf.server", name: "tick", method: false, waits: false, call: nf_server_tick },
+    Binding { class: "nf.server", name: "unix_time", method: false, waits: false, call: nf_server_unix_time },
+    Binding { class: "nf.server", name: "ticks_per_second", method: false, waits: false, call: nf_server_ticks_per_second },
+    Binding { class: "nf.server", name: "tick_milliseconds", method: false, waits: false, call: nf_server_tick_milliseconds },
+    Binding { class: "nf.server", name: "minecraft_version", method: false, waits: false, call: nf_server_minecraft_version },
+    Binding { class: "nf.server", name: "broadcast", method: false, waits: false, call: nf_server_broadcast },
+    Binding { class: "nf.server", name: "run", method: false, waits: false, call: nf_server_run },
+    Binding { class: "nf.server", name: "max_players", method: false, waits: false, call: nf_server_max_players },
+    Binding { class: "nf.server", name: "set_max_players", method: false, waits: false, call: nf_server_set_max_players },
+    Binding { class: "nf.server", name: "motd", method: false, waits: false, call: nf_server_motd },
+    Binding { class: "nf.server", name: "set_motd", method: false, waits: false, call: nf_server_set_motd },
+    Binding { class: "nf.server", name: "is_whitelist_enabled", method: false, waits: false, call: nf_server_is_whitelist_enabled },
+    Binding { class: "nf.server", name: "set_whitelist_enabled", method: false, waits: false, call: nf_server_set_whitelist_enabled },
+    Binding { class: "nf.commands", name: "register", method: false, waits: false, call: nf_commands_register },
+    Binding { class: "nf.players", name: "online", method: false, waits: false, call: nf_players_online },
+    Binding { class: "nf.players", name: "get", method: false, waits: false, call: nf_players_get },
+    Binding { class: "nf.players", name: "known", method: false, waits: false, call: nf_players_known },
+    Binding { class: "nf.players", name: "banned", method: false, waits: false, call: nf_players_banned },
+    Binding { class: "nf.players", name: "whitelisted", method: false, waits: false, call: nf_players_whitelisted },
+    Binding { class: "nf.bots", name: "join", method: false, waits: false, call: nf_bots_join },
+    Binding { class: "nf.bots", name: "all", method: false, waits: false, call: nf_bots_all },
+    Binding { class: "nf.worlds", name: "all", method: false, waits: false, call: nf_worlds_all },
+    Binding { class: "nf.worlds", name: "get", method: false, waits: false, call: nf_worlds_get },
+    Binding { class: "nf.worlds", name: "create", method: false, waits: false, call: nf_worlds_create },
+    Binding { class: "nf.worlds", name: "load", method: false, waits: false, call: nf_worlds_load },
+    Binding { class: "nf.worlds", name: "copy", method: false, waits: false, call: nf_worlds_copy },
+    Binding { class: "nf.worlds", name: "import", method: false, waits: false, call: nf_worlds_import },
+    Binding { class: "nf.worlds", name: "default", method: false, waits: false, call: nf_worlds_default },
+    Binding { class: "nf.structures", name: "exists", method: false, waits: false, call: nf_structures_exists },
+    Binding { class: "nf.structures", name: "size", method: false, waits: false, call: nf_structures_size },
+    Binding { class: "nf.centities", name: "properties", method: false, waits: false, call: nf_centities_properties },
+    Binding { class: "nf.centities", name: "spawn", method: false, waits: false, call: nf_centities_spawn },
+    Binding { class: "nf.centities", name: "get", method: false, waits: false, call: nf_centities_get },
+    Binding { class: "nf.centities", name: "all", method: false, waits: false, call: nf_centities_all },
+    Binding { class: "nf.spawning", name: "condition", method: false, waits: false, call: nf_spawning_condition },
+    Binding { class: "nf.menus", name: "shared", method: false, waits: false, call: nf_menus_shared },
+    Binding { class: "nf.menus", name: "create", method: false, waits: false, call: nf_menus_create },
+    Binding { class: "nf.dialogs", name: "get", method: false, waits: false, call: nf_dialogs_get },
+    Binding { class: "nf.dialogs", name: "create", method: false, waits: false, call: nf_dialogs_create },
+    Binding { class: "nf.items", name: "create", method: false, waits: false, call: nf_items_create },
+    Binding { class: "nf.items", name: "id", method: false, waits: false, call: nf_items_id },
+    Binding { class: "nf.items", name: "get", method: false, waits: false, call: nf_items_get },
+    Binding { class: "nf.items", name: "all", method: false, waits: false, call: nf_items_all },
+    Binding { class: "nf.blocks", name: "get", method: false, waits: false, call: nf_blocks_get },
+    Binding { class: "nf.blocks", name: "all", method: false, waits: false, call: nf_blocks_all },
+    Binding { class: "nf.recipes", name: "register", method: false, waits: false, call: nf_recipes_register },
+    Binding { class: "nf.recipes", name: "remove", method: false, waits: false, call: nf_recipes_remove },
+    Binding { class: "nf.recipes", name: "get", method: false, waits: false, call: nf_recipes_get },
+    Binding { class: "nf.recipes", name: "available", method: false, waits: false, call: nf_recipes_available },
+    Binding { class: "nf.recipes", name: "craft", method: false, waits: false, call: nf_recipes_craft },
+    Binding { class: "nf.recipes", name: "all", method: false, waits: false, call: nf_recipes_all },
+    Binding { class: "nf.loot", name: "roll", method: false, waits: false, call: nf_loot_roll },
+    Binding { class: "nf.loot", name: "fill", method: false, waits: false, call: nf_loot_fill },
+    Binding { class: "nf.bossbars", name: "create", method: false, waits: false, call: nf_bossbars_create },
+    Binding { class: "nf.teams", name: "create", method: false, waits: false, call: nf_teams_create },
+    Binding { class: "nf.teams", name: "get", method: false, waits: false, call: nf_teams_get },
+    Binding { class: "nf.teams", name: "all", method: false, waits: false, call: nf_teams_all },
+    Binding { class: "nf.schedule", name: "daily", method: false, waits: false, call: nf_schedule_daily },
+    Binding { class: "nf.schedule", name: "weekly", method: false, waits: false, call: nf_schedule_weekly },
+    Binding { class: "nf.schedule", name: "cron", method: false, waits: false, call: nf_schedule_cron },
+    Binding { class: "nf.economy", name: "balance", method: false, waits: false, call: nf_economy_balance },
+    Binding { class: "nf.economy", name: "deposit", method: false, waits: false, call: nf_economy_deposit },
+    Binding { class: "nf.economy", name: "withdraw", method: false, waits: false, call: nf_economy_withdraw },
+    Binding { class: "nf.placeholders", name: "parse", method: false, waits: false, call: nf_placeholders_parse },
+    Binding { class: "nf.placeholders", name: "register", method: false, waits: false, call: nf_placeholders_register },
+    Binding { class: "nf.particles", name: "play", method: false, waits: false, call: nf_particles_play },
+    Binding { class: "nf.cutscenes", name: "play", method: false, waits: false, call: nf_cutscenes_play },
+    Binding { class: "nf.cutscenes", name: "stop", method: false, waits: false, call: nf_cutscenes_stop },
+    Binding { class: "nf.cutscenes", name: "current", method: false, waits: false, call: nf_cutscenes_current },
+    Binding { class: "nf.screens", name: "get", method: false, waits: false, call: nf_screens_get },
+    Binding { class: "nf.screens", name: "all", method: false, waits: false, call: nf_screens_all },
+    Binding { class: "nf.screens", name: "create", method: false, waits: false, call: nf_screens_create },
+    Binding { class: "nf.screens", name: "fonts", method: false, waits: false, call: nf_screens_fonts },
+    Binding { class: "nf.screens", name: "measure_text", method: false, waits: false, call: nf_screens_measure_text },
+    Binding { class: "nf.screens", name: "map_color", method: false, waits: false, call: nf_screens_map_color },
+    Binding { class: "nf.screens", name: "looking_at", method: false, waits: false, call: nf_screens_looking_at },
+    Binding { class: "nf.images", name: "create", method: false, waits: false, call: nf_images_create },
+    Binding { class: "nf.images", name: "fill", method: false, waits: false, call: nf_images_fill },
+    Binding { class: "nf.images", name: "decode", method: false, waits: false, call: nf_images_decode },
+    Binding { class: "nf.images", name: "download", method: false, waits: false, call: nf_images_download },
+    Binding { class: "nf.files", name: "get", method: false, waits: false, call: nf_files_get },
+    Binding { class: "nf.text", name: "escape", method: false, waits: false, call: nf_text_escape },
+    Binding { class: "nf.text", name: "strip", method: false, waits: false, call: nf_text_strip },
+    Binding { class: "nf.text", name: "glyph", method: false, waits: false, call: nf_text_glyph },
+    Binding { class: "nf.text", name: "space", method: false, waits: false, call: nf_text_space },
+    Binding { class: "nf.text", name: "width", method: false, waits: false, call: nf_text_width },
+    Binding { class: "nf.text", name: "measure", method: false, waits: false, call: nf_text_measure },
+    Binding { class: "nf.looks", name: "qualify", method: false, waits: false, call: nf_looks_qualify },
+    Binding { class: "nf.packs", name: "rebuild", method: false, waits: false, call: nf_packs_rebuild },
+    Binding { class: "nf.packs", name: "on_demand", method: false, waits: false, call: nf_packs_on_demand },
+    Binding { class: "nf.json", name: "encode", method: false, waits: false, call: nf_json_encode },
+    Binding { class: "nf.json", name: "decode", method: false, waits: false, call: nf_json_decode },
+    Binding { class: "nf.encoding", name: "url_encode", method: false, waits: false, call: nf_encoding_url_encode },
+    Binding { class: "nf.encoding", name: "url_decode", method: false, waits: false, call: nf_encoding_url_decode },
+    Binding { class: "nf.encoding", name: "form_encode", method: false, waits: false, call: nf_encoding_form_encode },
+    Binding { class: "nf.encoding", name: "form_decode", method: false, waits: false, call: nf_encoding_form_decode },
+    Binding { class: "nf.encoding", name: "base64_encode", method: false, waits: false, call: nf_encoding_base64_encode },
+    Binding { class: "nf.encoding", name: "base64_decode", method: false, waits: false, call: nf_encoding_base64_decode },
+    Binding { class: "nf.encoding", name: "hex_encode", method: false, waits: false, call: nf_encoding_hex_encode },
+    Binding { class: "nf.encoding", name: "hex_decode", method: false, waits: false, call: nf_encoding_hex_decode },
+    Binding { class: "nf.crypto", name: "hash", method: false, waits: false, call: nf_crypto_hash },
+    Binding { class: "nf.crypto", name: "sign", method: false, waits: false, call: nf_crypto_sign },
+    Binding { class: "nf.http", name: "request", method: false, waits: false, call: nf_http_request },
+    Binding { class: "nf.http", name: "stream", method: false, waits: false, call: nf_http_stream },
+    Binding { class: "nf.http", name: "websocket", method: false, waits: false, call: nf_http_websocket },
+    Binding { class: "nf.web", name: "route", method: false, waits: false, call: nf_web_route },
+    Binding { class: "nf.web", name: "url", method: false, waits: false, call: nf_web_url },
+    Binding { class: "nf.web", name: "verify_signature", method: false, waits: false, call: nf_web_verify_signature },
+    Binding { class: "nf.web", name: "oauth", method: false, waits: false, call: nf_web_oauth },
+    Binding { class: "nf.wasm", name: "functions", method: false, waits: false, call: nf_wasm_functions },
+    Binding { class: "nf.wasm", name: "instantiate", method: false, waits: false, call: nf_wasm_instantiate },
+    Binding { class: "nf.wasm", name: "run", method: false, waits: false, call: nf_wasm_run },
+    Binding { class: "nf.wasm", name: "start", method: false, waits: false, call: nf_wasm_start },
+    Binding { class: "nf.network", name: "server_name", method: false, waits: false, call: nf_network_server_name },
+    Binding { class: "nf.network", name: "server_role", method: false, waits: false, call: nf_network_server_role },
+    Binding { class: "nf.network", name: "group", method: false, waits: false, call: nf_network_group },
+    Binding { class: "nf.network", name: "set_accepting", method: false, waits: false, call: nf_network_set_accepting },
+    Binding { class: "nf.network", name: "state", method: false, waits: false, call: nf_network_state },
+    Binding { class: "nf.network", name: "hold_ready", method: false, waits: false, call: nf_network_hold_ready },
+    Binding { class: "nf.network", name: "set_draining", method: false, waits: false, call: nf_network_set_draining },
+    Binding { class: "nf.network", name: "is_draining", method: false, waits: false, call: nf_network_is_draining },
+    Binding { class: "nf.network", name: "is_accepting", method: false, waits: false, call: nf_network_is_accepting },
+    Binding { class: "nf.network", name: "is_connected", method: false, waits: false, call: nf_network_is_connected },
+    Binding { class: "nf.network", name: "servers", method: false, waits: false, call: nf_network_servers },
+    Binding { class: "nf.network", name: "groups", method: false, waits: false, call: nf_network_groups },
+    Binding { class: "nf.network", name: "players", method: false, waits: false, call: nf_network_players },
+    Binding { class: "nf.network", name: "find_player", method: false, waits: false, call: nf_network_find_player },
+    Binding { class: "nf.network", name: "channel", method: false, waits: false, call: nf_network_channel },
+    Binding { class: "nf.network", name: "map", method: false, waits: false, call: nf_network_map },
+    Binding { class: "nf.network", name: "ban", method: false, waits: false, call: nf_network_ban },
+    Binding { class: "nf.network", name: "unban", method: false, waits: false, call: nf_network_unban },
+    Binding { class: "nf.network", name: "mute", method: false, waits: false, call: nf_network_mute },
+    Binding { class: "nf.network", name: "unmute", method: false, waits: false, call: nf_network_unmute },
+    Binding { class: "nf.network", name: "is_banned", method: false, waits: false, call: nf_network_is_banned },
+    Binding { class: "nf.network", name: "is_muted", method: false, waits: false, call: nf_network_is_muted },
+    Binding { class: "nf.network", name: "report", method: false, waits: false, call: nf_network_report },
+    Binding { class: "nf.network", name: "send_player", method: false, waits: false, call: nf_network_send_player },
+    Binding { class: "nf.network", name: "send_players", method: false, waits: false, call: nf_network_send_players },
+    Binding { class: "nf.time", name: "format", method: false, waits: false, call: nf_time_format },
+    Binding { class: "nf.time", name: "parse", method: false, waits: false, call: nf_time_parse },
+    Binding { class: "nf.time", name: "duration", method: false, waits: false, call: nf_time_duration },
+    Binding { class: "nf.time", name: "parse_duration", method: false, waits: false, call: nf_time_parse_duration },
+    Binding { class: "nf.random", name: "new", method: false, waits: false, call: nf_random_new },
+    Binding { class: "nf.random", name: "noise2", method: false, waits: false, call: nf_random_noise2 },
+    Binding { class: "nf.random", name: "noise3", method: false, waits: false, call: nf_random_noise3 },
+    Binding { class: "nf.random", name: "uuid", method: false, waits: false, call: nf_random_uuid },
+    Binding { class: "nf.math", name: "lerp", method: false, waits: false, call: nf_math_lerp },
+    Binding { class: "nf.math", name: "clamp", method: false, waits: false, call: nf_math_clamp },
+    Binding { class: "nf.math", name: "remap", method: false, waits: false, call: nf_math_remap },
+    Binding { class: "nf.math", name: "ease", method: false, waits: false, call: nf_math_ease },
+    Binding { class: "nf.test", name: "case", method: false, waits: false, call: nf_test_case },
+    Binding { class: "nf.test", name: "advance", method: false, waits: false, call: nf_test_advance },
+    Binding { class: "nf.test", name: "player", method: false, waits: false, call: nf_test_player },
+    Binding { class: "nf.test", name: "raise", method: false, waits: false, call: nf_test_raise },
+    Binding { class: "nf.test", name: "terrain", method: false, waits: false, call: nf_test_terrain },
+    Binding { class: "nf.test", name: "click", method: false, waits: false, call: nf_test_click },
+    Binding { class: "nf.test", name: "release", method: false, waits: false, call: nf_test_release },
+    Binding { class: "nf.test", name: "input", method: false, waits: false, call: nf_test_input },
+    Binding { class: "nf.test", name: "shown", method: false, waits: false, call: nf_test_shown },
+    Binding { class: "nf.test", name: "connections", method: false, waits: false, call: nf_test_connections },
+    Binding { class: "nf.test", name: "accept", method: false, waits: false, call: nf_test_accept },
+    Binding { class: "nf.test", name: "receive", method: false, waits: false, call: nf_test_receive },
+    Binding { class: "nf.test", name: "sent", method: false, waits: false, call: nf_test_sent },
+    Binding { class: "nf.test", name: "request", method: false, waits: false, call: nf_test_request },
+    Binding { class: "nf.test", name: "oauth_token", method: false, waits: false, call: nf_test_oauth_token },
+    Binding { class: "nf.test", name: "http", method: false, waits: false, call: nf_test_http },
+    Binding { class: "nf.test", name: "allow_private", method: false, waits: false, call: nf_test_allow_private },
+    Binding { class: "nf.test", name: "disconnect", method: false, waits: false, call: nf_test_disconnect },
+    Binding { class: "nf.test", name: "stub_wasm", method: false, waits: false, call: nf_test_stub_wasm },
+    Binding { class: "nf.test", name: "network_server", method: false, waits: false, call: nf_test_network_server },
+    Binding { class: "nf.test", name: "network_publish", method: false, waits: false, call: nf_test_network_publish },
+    Binding { class: "nf.test", name: "network_received", method: false, waits: false, call: nf_test_network_received },
+    Binding { class: "nf.test", name: "network_answer", method: false, waits: false, call: nf_test_network_answer },
+    Binding { class: "nf.test", name: "network_request", method: false, waits: false, call: nf_test_network_request },
+    Binding { class: "nf.test", name: "network_write", method: false, waits: false, call: nf_test_network_write },
+    Binding { class: "nf.test", name: "network_join", method: false, waits: false, call: nf_test_network_join },
+    Binding { class: "nf.test", name: "network_quit", method: false, waits: false, call: nf_test_network_quit },
+    Binding { class: "nf.test", name: "network_status", method: false, waits: false, call: nf_test_network_status },
+    Binding { class: "nf.test", name: "network_role", method: false, waits: false, call: nf_test_network_role },
+    Binding { class: "nf.test", name: "network_reports", method: false, waits: false, call: nf_test_network_reports },
+    Binding { class: "nf.test", name: "network_send", method: false, waits: false, call: nf_test_network_send },
+    Binding { class: "Centity", name: "id", method: true, waits: false, call: centity_id },
+    Binding { class: "Centity", name: "kind", method: true, waits: false, call: centity_kind },
+    Binding { class: "Centity", name: "exists", method: true, waits: false, call: centity_exists },
+    Binding { class: "Centity", name: "is_natural", method: true, waits: false, call: centity_is_natural },
+    Binding { class: "Centity", name: "is_temporary", method: true, waits: false, call: centity_is_temporary },
+    Binding { class: "Centity", name: "lifetime", method: true, waits: false, call: centity_lifetime },
+    Binding { class: "Centity", name: "set_lifetime", method: true, waits: false, call: centity_set_lifetime },
+    Binding { class: "Centity", name: "keep", method: true, waits: false, call: centity_keep },
+    Binding { class: "Centity", name: "node", method: true, waits: false, call: centity_node },
+    Binding { class: "Centity", name: "nodes", method: true, waits: false, call: centity_nodes },
+    Binding { class: "Centity", name: "roots", method: true, waits: false, call: centity_roots },
+    Binding { class: "Centity", name: "add_node", method: true, waits: false, call: centity_add_node },
+    Binding { class: "Centity", name: "properties", method: true, waits: false, call: centity_properties },
+    Binding { class: "Centity", name: "bounds", method: true, waits: false, call: centity_bounds },
+    Binding { class: "Centity", name: "location", method: true, waits: false, call: centity_location },
+    Binding { class: "Centity", name: "position", method: true, waits: false, call: centity_position },
+    Binding { class: "Centity", name: "world", method: true, waits: false, call: centity_world },
+    Binding { class: "Centity", name: "yaw", method: true, waits: false, call: centity_yaw },
+    Binding { class: "Centity", name: "set_yaw", method: true, waits: false, call: centity_set_yaw },
+    Binding { class: "Centity", name: "look_at", method: true, waits: false, call: centity_look_at },
+    Binding { class: "Centity", name: "to_local", method: true, waits: false, call: centity_to_local },
+    Binding { class: "Centity", name: "to_world", method: true, waits: false, call: centity_to_world },
+    Binding { class: "Centity", name: "teleport", method: true, waits: false, call: centity_teleport },
+    Binding { class: "Centity", name: "follow", method: true, waits: false, call: centity_follow },
+    Binding { class: "Centity", name: "stop_following", method: true, waits: false, call: centity_stop_following },
+    Binding { class: "Centity", name: "stat", method: true, waits: false, call: centity_stat },
+    Binding { class: "Centity", name: "stats", method: true, waits: false, call: centity_stats },
+    Binding { class: "Centity", name: "modifiers", method: true, waits: false, call: centity_modifiers },
+    Binding { class: "Centity", name: "set_modifiers", method: true, waits: false, call: centity_set_modifiers },
+    Binding { class: "Centity", name: "add_buff", method: true, waits: false, call: centity_add_buff },
+    Binding { class: "Centity", name: "remove_buff", method: true, waits: false, call: centity_remove_buff },
+    Binding { class: "Centity", name: "has_buff", method: true, waits: false, call: centity_has_buff },
+    Binding { class: "Centity", name: "buff_ticks", method: true, waits: false, call: centity_buff_ticks },
+    Binding { class: "Centity", name: "buffs", method: true, waits: false, call: centity_buffs },
+    Binding { class: "Centity", name: "health", method: true, waits: false, call: centity_health },
+    Binding { class: "Centity", name: "max_health", method: true, waits: false, call: centity_max_health },
+    Binding { class: "Centity", name: "set_health", method: true, waits: false, call: centity_set_health },
+    Binding { class: "Centity", name: "set_max_health", method: true, waits: false, call: centity_set_max_health },
+    Binding { class: "Centity", name: "damage", method: true, waits: false, call: centity_damage },
+    Binding { class: "Centity", name: "heal", method: true, waits: false, call: centity_heal },
+    Binding { class: "Centity", name: "is_dead", method: true, waits: false, call: centity_is_dead },
+    Binding { class: "Centity", name: "has_body", method: true, waits: false, call: centity_has_body },
+    Binding { class: "Centity", name: "body", method: true, waits: false, call: centity_body },
+    Binding { class: "Centity", name: "set_body", method: true, waits: false, call: centity_set_body },
+    Binding { class: "Centity", name: "velocity", method: true, waits: false, call: centity_velocity },
+    Binding { class: "Centity", name: "set_velocity", method: true, waits: false, call: centity_set_velocity },
+    Binding { class: "Centity", name: "add_velocity", method: true, waits: false, call: centity_add_velocity },
+    Binding { class: "Centity", name: "walk_velocity", method: true, waits: false, call: centity_walk_velocity },
+    Binding { class: "Centity", name: "set_walk_velocity", method: true, waits: false, call: centity_set_walk_velocity },
+    Binding { class: "Centity", name: "jump", method: true, waits: false, call: centity_jump },
+    Binding { class: "Centity", name: "is_on_ground", method: true, waits: false, call: centity_is_on_ground },
+    Binding { class: "Centity", name: "is_in_liquid", method: true, waits: false, call: centity_is_in_liquid },
+    Binding { class: "Centity", name: "wall", method: true, waits: false, call: centity_wall },
+    Binding { class: "Centity", name: "launch", method: true, waits: false, call: centity_launch },
+    Binding { class: "Centity", name: "is_launched", method: true, waits: false, call: centity_is_launched },
+    Binding { class: "Centity", name: "stop_flight", method: true, waits: false, call: centity_stop_flight },
+    Binding { class: "Centity", name: "move_to", method: true, waits: false, call: centity_move_to },
+    Binding { class: "Centity", name: "stop_pathing", method: true, waits: false, call: centity_stop_pathing },
+    Binding { class: "Centity", name: "has_path", method: true, waits: false, call: centity_has_path },
+    Binding { class: "Centity", name: "path_target", method: true, waits: false, call: centity_path_target },
+    Binding { class: "Centity", name: "data", method: true, waits: false, call: centity_data },
+    Binding { class: "Centity", name: "remove", method: true, waits: false, call: centity_remove },
+    Binding { class: "Centity", name: "play_animation", method: true, waits: false, call: centity_play_animation },
+    Binding { class: "Centity", name: "stop_animation", method: true, waits: false, call: centity_stop_animation },
+    Binding { class: "Centity", name: "pause_animation", method: true, waits: false, call: centity_pause_animation },
+    Binding { class: "Centity", name: "resume_animation", method: true, waits: false, call: centity_resume_animation },
+    Binding { class: "Centity", name: "is_animation_playing", method: true, waits: false, call: centity_is_animation_playing },
+    Binding { class: "Centity", name: "playing_animations", method: true, waits: false, call: centity_playing_animations },
+    Binding { class: "Centity", name: "animations", method: true, waits: false, call: centity_animations },
+    Binding { class: "Centity", name: "animation_tick", method: true, waits: false, call: centity_animation_tick },
+    Binding { class: "Centity", name: "seek_animation", method: true, waits: false, call: centity_seek_animation },
+    Binding { class: "Centity", name: "animation_speed", method: true, waits: false, call: centity_animation_speed },
+    Binding { class: "Centity", name: "set_animation_speed", method: true, waits: false, call: centity_set_animation_speed },
+    Binding { class: "Centity", name: "is_glowing", method: true, waits: false, call: centity_is_glowing },
+    Binding { class: "Centity", name: "set_glowing", method: true, waits: false, call: centity_set_glowing },
+    Binding { class: "Centity", name: "glow_color", method: true, waits: false, call: centity_glow_color },
+    Binding { class: "Centity", name: "set_glow_color", method: true, waits: false, call: centity_set_glow_color },
+    Binding { class: "Centity", name: "hide_from", method: true, waits: false, call: centity_hide_from },
+    Binding { class: "Centity", name: "show_to", method: true, waits: false, call: centity_show_to },
+    Binding { class: "Centity", name: "is_hidden_from", method: true, waits: false, call: centity_is_hidden_from },
+    Binding { class: "Centity", name: "viewers", method: true, waits: false, call: centity_viewers },
+    Binding { class: "Centity", name: "view_range", method: true, waits: false, call: centity_view_range },
+    Binding { class: "Centity", name: "set_view_range", method: true, waits: false, call: centity_set_view_range },
+    Binding { class: "Centity", name: "on", method: true, waits: false, call: centity_on },
+    Binding { class: "Centity", name: "once", method: true, waits: false, call: centity_once },
+    Binding { class: "Centity", name: "emit", method: true, waits: false, call: centity_emit },
+    Binding { class: "Node", name: "name", method: true, waits: false, call: node_name },
+    Binding { class: "Node", name: "centity", method: true, waits: false, call: node_centity },
+    Binding { class: "Node", name: "parent", method: true, waits: false, call: node_parent },
+    Binding { class: "Node", name: "children", method: true, waits: false, call: node_children },
+    Binding { class: "Node", name: "add_child", method: true, waits: false, call: node_add_child },
+    Binding { class: "Node", name: "remove", method: true, waits: false, call: node_remove },
+    Binding { class: "Node", name: "translation", method: true, waits: false, call: node_translation },
+    Binding { class: "Node", name: "rotation", method: true, waits: false, call: node_rotation },
+    Binding { class: "Node", name: "scale", method: true, waits: false, call: node_scale },
+    Binding { class: "Node", name: "set_translation", method: true, waits: false, call: node_set_translation },
+    Binding { class: "Node", name: "set_rotation", method: true, waits: false, call: node_set_rotation },
+    Binding { class: "Node", name: "set_scale", method: true, waits: false, call: node_set_scale },
+    Binding { class: "Node", name: "stretch_between", method: true, waits: false, call: node_stretch_between },
+    Binding { class: "Node", name: "is_rope", method: true, waits: false, call: node_is_rope },
+    Binding { class: "Node", name: "rope_between", method: true, waits: false, call: node_rope_between },
+    Binding { class: "Node", name: "release_rope", method: true, waits: false, call: node_release_rope },
+    Binding { class: "Node", name: "tween", method: true, waits: false, call: node_tween },
+    Binding { class: "Node", name: "is_tweening", method: true, waits: false, call: node_is_tweening },
+    Binding { class: "Node", name: "stop_tween", method: true, waits: false, call: node_stop_tween },
+    Binding { class: "Node", name: "world_position", method: true, waits: false, call: node_world_position },
+    Binding { class: "Node", name: "world_rotation", method: true, waits: false, call: node_world_rotation },
+    Binding { class: "Node", name: "to_local", method: true, waits: false, call: node_to_local },
+    Binding { class: "Node", name: "to_world", method: true, waits: false, call: node_to_world },
+    Binding { class: "Node", name: "world_direction", method: true, waits: false, call: node_world_direction },
+    Binding { class: "Node", name: "look_at", method: true, waits: false, call: node_look_at },
+    Binding { class: "Node", name: "rotate", method: true, waits: false, call: node_rotate },
+    Binding { class: "Node", name: "is_visible", method: true, waits: false, call: node_is_visible },
+    Binding { class: "Node", name: "set_visible", method: true, waits: false, call: node_set_visible },
+    Binding { class: "Node", name: "is_clickable", method: true, waits: false, call: node_is_clickable },
+    Binding { class: "Node", name: "set_clickable", method: true, waits: false, call: node_set_clickable },
+    Binding { class: "Node", name: "display_kind", method: true, waits: false, call: node_display_kind },
+    Binding { class: "Node", name: "image", method: true, waits: false, call: node_image },
+    Binding { class: "Node", name: "set_image", method: true, waits: false, call: node_set_image },
+    Binding { class: "Node", name: "display_color", method: true, waits: false, call: node_display_color },
+    Binding { class: "Node", name: "set_display_color", method: true, waits: false, call: node_set_display_color },
+    Binding { class: "Node", name: "display_size", method: true, waits: false, call: node_display_size },
+    Binding { class: "Node", name: "set_display_size", method: true, waits: false, call: node_set_display_size },
+    Binding { class: "Node", name: "display_anchor", method: true, waits: false, call: node_display_anchor },
+    Binding { class: "Node", name: "set_display_anchor", method: true, waits: false, call: node_set_display_anchor },
+    Binding { class: "Node", name: "display_block", method: true, waits: false, call: node_display_block },
+    Binding { class: "Node", name: "set_display_block", method: true, waits: false, call: node_set_display_block },
+    Binding { class: "Node", name: "display_text", method: true, waits: false, call: node_display_text },
+    Binding { class: "Node", name: "set_display_text", method: true, waits: false, call: node_set_display_text },
+    Binding { class: "Node", name: "display_item", method: true, waits: false, call: node_display_item },
+    Binding { class: "Node", name: "set_display_item", method: true, waits: false, call: node_set_display_item },
+    Binding { class: "Node", name: "model", method: true, waits: false, call: node_model },
+    Binding { class: "Node", name: "set_model", method: true, waits: false, call: node_set_model },
+    Binding { class: "Node", name: "display_text_style", method: true, waits: false, call: node_display_text_style },
+    Binding { class: "Node", name: "set_display_text_style", method: true, waits: false, call: node_set_display_text_style },
+    Binding { class: "Node", name: "is_glowing", method: true, waits: false, call: node_is_glowing },
+    Binding { class: "Node", name: "set_glowing", method: true, waits: false, call: node_set_glowing },
+    Binding { class: "Node", name: "glow_color", method: true, waits: false, call: node_glow_color },
+    Binding { class: "Node", name: "set_glow_color", method: true, waits: false, call: node_set_glow_color },
+    Binding { class: "Node", name: "brightness", method: true, waits: false, call: node_brightness },
+    Binding { class: "Node", name: "set_brightness", method: true, waits: false, call: node_set_brightness },
+    Binding { class: "Node", name: "billboard", method: true, waits: false, call: node_billboard },
+    Binding { class: "Node", name: "set_billboard", method: true, waits: false, call: node_set_billboard },
+    Binding { class: "Node", name: "interpolation_ticks", method: true, waits: false, call: node_interpolation_ticks },
+    Binding { class: "Node", name: "set_interpolation_ticks", method: true, waits: false, call: node_set_interpolation_ticks },
+    Binding { class: "Node", name: "velocity", method: true, waits: false, call: node_velocity },
+    Binding { class: "Node", name: "set_velocity", method: true, waits: false, call: node_set_velocity },
+    Binding { class: "Node", name: "add_velocity", method: true, waits: false, call: node_add_velocity },
+    Binding { class: "Node", name: "angular_velocity", method: true, waits: false, call: node_angular_velocity },
+    Binding { class: "Node", name: "set_angular_velocity", method: true, waits: false, call: node_set_angular_velocity },
+    Binding { class: "Node", name: "mass", method: true, waits: false, call: node_mass },
+    Binding { class: "Node", name: "apply_impulse", method: true, waits: false, call: node_apply_impulse },
+    Binding { class: "Node", name: "apply_impulse_at", method: true, waits: false, call: node_apply_impulse_at },
+    Binding { class: "Node", name: "is_on_ground", method: true, waits: false, call: node_is_on_ground },
+    Binding { class: "Node", name: "is_asleep", method: true, waits: false, call: node_is_asleep },
+    Binding { class: "Node", name: "wake", method: true, waits: false, call: node_wake },
+    Binding { class: "Node", name: "apply_force", method: true, waits: false, call: node_apply_force },
+    Binding { class: "Node", name: "has_gravity", method: true, waits: false, call: node_has_gravity },
+    Binding { class: "Node", name: "set_gravity", method: true, waits: false, call: node_set_gravity },
+    Binding { class: "Node", name: "is_kinematic", method: true, waits: false, call: node_is_kinematic },
+    Binding { class: "Node", name: "set_kinematic", method: true, waits: false, call: node_set_kinematic },
+    Binding { class: "Node", name: "is_physics_enabled", method: true, waits: false, call: node_is_physics_enabled },
+    Binding { class: "Node", name: "set_physics_enabled", method: true, waits: false, call: node_set_physics_enabled },
+    Binding { class: "Node", name: "on", method: true, waits: false, call: node_on },
+    Binding { class: "Node", name: "once", method: true, waits: false, call: node_once },
+    Binding { class: "Image", name: "width", method: true, waits: false, call: image_width },
+    Binding { class: "Image", name: "height", method: true, waits: false, call: image_height },
+    Binding { class: "Image", name: "pixel", method: true, waits: false, call: image_pixel },
+    Binding { class: "Image", name: "resized", method: true, waits: false, call: image_resized },
+    Binding { class: "Image", name: "cropped", method: true, waits: false, call: image_cropped },
+    Binding { class: "Image", name: "encode", method: true, waits: false, call: image_encode },
+    Binding { class: "Entity", name: "id", method: true, waits: false, call: entity_id },
+    Binding { class: "Entity", name: "kind", method: true, waits: false, call: entity_kind },
+    Binding { class: "Entity", name: "exists", method: true, waits: false, call: entity_exists },
+    Binding { class: "Entity", name: "is_player", method: true, waits: false, call: entity_is_player },
+    Binding { class: "Entity", name: "is_living", method: true, waits: false, call: entity_is_living },
+    Binding { class: "Entity", name: "is_mob", method: true, waits: false, call: entity_is_mob },
+    Binding { class: "Entity", name: "location", method: true, waits: false, call: entity_location },
+    Binding { class: "Entity", name: "position", method: true, waits: false, call: entity_position },
+    Binding { class: "Entity", name: "world", method: true, waits: false, call: entity_world },
+    Binding { class: "Entity", name: "eye_position", method: true, waits: false, call: entity_eye_position },
+    Binding { class: "Entity", name: "yaw", method: true, waits: false, call: entity_yaw },
+    Binding { class: "Entity", name: "pitch", method: true, waits: false, call: entity_pitch },
+    Binding { class: "Entity", name: "direction", method: true, waits: false, call: entity_direction },
+    Binding { class: "Entity", name: "set_yaw", method: true, waits: false, call: entity_set_yaw },
+    Binding { class: "Entity", name: "set_pitch", method: true, waits: false, call: entity_set_pitch },
+    Binding { class: "Entity", name: "look_at", method: true, waits: false, call: entity_look_at },
+    Binding { class: "Entity", name: "teleport", method: true, waits: false, call: entity_teleport },
+    Binding { class: "Entity", name: "velocity", method: true, waits: false, call: entity_velocity },
+    Binding { class: "Entity", name: "set_velocity", method: true, waits: false, call: entity_set_velocity },
+    Binding { class: "Entity", name: "add_velocity", method: true, waits: false, call: entity_add_velocity },
+    Binding { class: "Entity", name: "is_on_ground", method: true, waits: false, call: entity_is_on_ground },
+    Binding { class: "Entity", name: "remove", method: true, waits: false, call: entity_remove },
+    Binding { class: "Entity", name: "name", method: true, waits: false, call: entity_name },
+    Binding { class: "Entity", name: "custom_name", method: true, waits: false, call: entity_custom_name },
+    Binding { class: "Entity", name: "set_custom_name", method: true, waits: false, call: entity_set_custom_name },
+    Binding { class: "Entity", name: "is_custom_name_visible", method: true, waits: false, call: entity_is_custom_name_visible },
+    Binding { class: "Entity", name: "set_custom_name_visible", method: true, waits: false, call: entity_set_custom_name_visible },
+    Binding { class: "Entity", name: "tags", method: true, waits: false, call: entity_tags },
+    Binding { class: "Entity", name: "has_tag", method: true, waits: false, call: entity_has_tag },
+    Binding { class: "Entity", name: "add_tag", method: true, waits: false, call: entity_add_tag },
+    Binding { class: "Entity", name: "remove_tag", method: true, waits: false, call: entity_remove_tag },
+    Binding { class: "Entity", name: "data", method: true, waits: false, call: entity_data },
+    Binding { class: "Entity", name: "is_glowing", method: true, waits: false, call: entity_is_glowing },
+    Binding { class: "Entity", name: "set_glowing", method: true, waits: false, call: entity_set_glowing },
+    Binding { class: "Entity", name: "is_visible", method: true, waits: false, call: entity_is_visible },
+    Binding { class: "Entity", name: "set_visible", method: true, waits: false, call: entity_set_visible },
+    Binding { class: "Entity", name: "hide_from", method: true, waits: false, call: entity_hide_from },
+    Binding { class: "Entity", name: "show_to", method: true, waits: false, call: entity_show_to },
+    Binding { class: "Entity", name: "is_hidden_from", method: true, waits: false, call: entity_is_hidden_from },
+    Binding { class: "Entity", name: "team", method: true, waits: false, call: entity_team },
+    Binding { class: "Entity", name: "is_silent", method: true, waits: false, call: entity_is_silent },
+    Binding { class: "Entity", name: "set_silent", method: true, waits: false, call: entity_set_silent },
+    Binding { class: "Entity", name: "has_gravity", method: true, waits: false, call: entity_has_gravity },
+    Binding { class: "Entity", name: "set_gravity", method: true, waits: false, call: entity_set_gravity },
+    Binding { class: "Entity", name: "is_invulnerable", method: true, waits: false, call: entity_is_invulnerable },
+    Binding { class: "Entity", name: "set_invulnerable", method: true, waits: false, call: entity_set_invulnerable },
+    Binding { class: "Entity", name: "passengers", method: true, waits: false, call: entity_passengers },
+    Binding { class: "Entity", name: "add_passenger", method: true, waits: false, call: entity_add_passenger },
+    Binding { class: "Entity", name: "remove_passenger", method: true, waits: false, call: entity_remove_passenger },
+    Binding { class: "Entity", name: "vehicle", method: true, waits: false, call: entity_vehicle },
+    Binding { class: "Entity", name: "inventory", method: true, waits: false, call: entity_inventory },
+    Binding { class: "Entity", name: "target_block", method: true, waits: false, call: entity_target_block },
+    Binding { class: "Entity", name: "target_entity", method: true, waits: false, call: entity_target_entity },
+    Binding { class: "Entity", name: "target_centity", method: true, waits: false, call: entity_target_centity },
+    Binding { class: "Entity", name: "on", method: true, waits: false, call: entity_on },
+    Binding { class: "Entity", name: "once", method: true, waits: false, call: entity_once },
+    Binding { class: "Living", name: "health", method: true, waits: false, call: living_health },
+    Binding { class: "Living", name: "set_health", method: true, waits: false, call: living_set_health },
+    Binding { class: "Living", name: "max_health", method: true, waits: false, call: living_max_health },
+    Binding { class: "Living", name: "damage", method: true, waits: false, call: living_damage },
+    Binding { class: "Living", name: "heal", method: true, waits: false, call: living_heal },
+    Binding { class: "Living", name: "attribute", method: true, waits: false, call: living_attribute },
+    Binding { class: "Living", name: "attribute_base", method: true, waits: false, call: living_attribute_base },
+    Binding { class: "Living", name: "set_attribute_base", method: true, waits: false, call: living_set_attribute_base },
+    Binding { class: "Living", name: "attribute_modifiers", method: true, waits: false, call: living_attribute_modifiers },
+    Binding { class: "Living", name: "add_attribute_modifier", method: true, waits: false, call: living_add_attribute_modifier },
+    Binding { class: "Living", name: "remove_attribute_modifier", method: true, waits: false, call: living_remove_attribute_modifier },
+    Binding { class: "Living", name: "effects", method: true, waits: false, call: living_effects },
+    Binding { class: "Living", name: "has_effect", method: true, waits: false, call: living_has_effect },
+    Binding { class: "Living", name: "add_effect", method: true, waits: false, call: living_add_effect },
+    Binding { class: "Living", name: "remove_effect", method: true, waits: false, call: living_remove_effect },
+    Binding { class: "Living", name: "equipment", method: true, waits: false, call: living_equipment },
+    Binding { class: "Living", name: "set_equipment", method: true, waits: false, call: living_set_equipment },
+    Binding { class: "Living", name: "on", method: true, waits: false, call: living_on },
+    Binding { class: "Living", name: "once", method: true, waits: false, call: living_once },
+    Binding { class: "Mob", name: "target", method: true, waits: false, call: mob_target },
+    Binding { class: "Mob", name: "set_target", method: true, waits: false, call: mob_set_target },
+    Binding { class: "Mob", name: "has_ai", method: true, waits: false, call: mob_has_ai },
+    Binding { class: "Mob", name: "set_ai", method: true, waits: false, call: mob_set_ai },
+    Binding { class: "Mob", name: "move_to", method: true, waits: false, call: mob_move_to },
+    Binding { class: "Mob", name: "stop_pathing", method: true, waits: false, call: mob_stop_pathing },
+    Binding { class: "Mob", name: "has_path", method: true, waits: false, call: mob_has_path },
+    Binding { class: "Mob", name: "path_target", method: true, waits: false, call: mob_path_target },
+    Binding { class: "Mob", name: "goals", method: true, waits: false, call: mob_goals },
+    Binding { class: "Mob", name: "remove_goal", method: true, waits: false, call: mob_remove_goal },
+    Binding { class: "Mob", name: "clear_goals", method: true, waits: false, call: mob_clear_goals },
+    Binding { class: "Mob", name: "add_goal", method: true, waits: false, call: mob_add_goal },
+    Binding { class: "Mob", name: "on", method: true, waits: false, call: mob_on },
+    Binding { class: "Mob", name: "once", method: true, waits: false, call: mob_once },
+    Binding { class: "DroppedItem", name: "item", method: true, waits: false, call: droppeditem_item },
+    Binding { class: "DroppedItem", name: "set_item", method: true, waits: false, call: droppeditem_set_item },
+    Binding { class: "DroppedItem", name: "pickup_delay", method: true, waits: false, call: droppeditem_pickup_delay },
+    Binding { class: "DroppedItem", name: "set_pickup_delay", method: true, waits: false, call: droppeditem_set_pickup_delay },
+    Binding { class: "Mannequin", name: "skin", method: true, waits: false, call: mannequin_skin },
+    Binding { class: "Mannequin", name: "set_skin", method: true, waits: false, call: mannequin_set_skin },
+    Binding { class: "Mannequin", name: "description", method: true, waits: false, call: mannequin_description },
+    Binding { class: "Mannequin", name: "set_description", method: true, waits: false, call: mannequin_set_description },
+    Binding { class: "Mannequin", name: "is_immovable", method: true, waits: false, call: mannequin_is_immovable },
+    Binding { class: "Mannequin", name: "set_immovable", method: true, waits: false, call: mannequin_set_immovable },
+    Binding { class: "Mannequin", name: "main_hand", method: true, waits: false, call: mannequin_main_hand },
+    Binding { class: "Mannequin", name: "set_main_hand", method: true, waits: false, call: mannequin_set_main_hand },
+    Binding { class: "Mannequin", name: "pose", method: true, waits: false, call: mannequin_pose },
+    Binding { class: "Mannequin", name: "set_pose", method: true, waits: false, call: mannequin_set_pose },
+    Binding { class: "Mannequin", name: "skin_parts", method: true, waits: false, call: mannequin_skin_parts },
+    Binding { class: "Mannequin", name: "set_skin_parts", method: true, waits: false, call: mannequin_set_skin_parts },
+    Binding { class: "Player", name: "stat", method: true, waits: false, call: player_stat },
+    Binding { class: "Player", name: "stats", method: true, waits: false, call: player_stats },
+    Binding { class: "Player", name: "modifiers", method: true, waits: false, call: player_modifiers },
+    Binding { class: "Player", name: "set_modifiers", method: true, waits: false, call: player_set_modifiers },
+    Binding { class: "Player", name: "add_buff", method: true, waits: false, call: player_add_buff },
+    Binding { class: "Player", name: "remove_buff", method: true, waits: false, call: player_remove_buff },
+    Binding { class: "Player", name: "has_buff", method: true, waits: false, call: player_has_buff },
+    Binding { class: "Player", name: "buff_ticks", method: true, waits: false, call: player_buff_ticks },
+    Binding { class: "Player", name: "buffs", method: true, waits: false, call: player_buffs },
+    Binding { class: "Player", name: "name", method: true, waits: false, call: player_name },
+    Binding { class: "Player", name: "display_name", method: true, waits: false, call: player_display_name },
+    Binding { class: "Player", name: "set_display_name", method: true, waits: false, call: player_set_display_name },
+    Binding { class: "Player", name: "send_message", method: true, waits: false, call: player_send_message },
+    Binding { class: "Player", name: "send_actionbar", method: true, waits: false, call: player_send_actionbar },
+    Binding { class: "Player", name: "send_title", method: true, waits: false, call: player_send_title },
+    Binding { class: "Player", name: "clear_title", method: true, waits: false, call: player_clear_title },
+    Binding { class: "Player", name: "play_sound", method: true, waits: false, call: player_play_sound },
+    Binding { class: "Player", name: "stop_sound", method: true, waits: false, call: player_stop_sound },
+    Binding { class: "Player", name: "spawn_particle", method: true, waits: false, call: player_spawn_particle },
+    Binding { class: "Player", name: "run", method: true, waits: false, call: player_run },
+    Binding { class: "Player", name: "has_permission", method: true, waits: false, call: player_has_permission },
+    Binding { class: "Player", name: "set_permission", method: true, waits: false, call: player_set_permission },
+    Binding { class: "Player", name: "unset_permission", method: true, waits: false, call: player_unset_permission },
+    Binding { class: "Player", name: "permissions", method: true, waits: false, call: player_permissions },
+    Binding { class: "Player", name: "is_operator", method: true, waits: false, call: player_is_operator },
+    Binding { class: "Player", name: "game_mode", method: true, waits: false, call: player_game_mode },
+    Binding { class: "Player", name: "set_game_mode", method: true, waits: false, call: player_set_game_mode },
+    Binding { class: "Player", name: "food", method: true, waits: false, call: player_food },
+    Binding { class: "Player", name: "set_food", method: true, waits: false, call: player_set_food },
+    Binding { class: "Player", name: "saturation", method: true, waits: false, call: player_saturation },
+    Binding { class: "Player", name: "set_saturation", method: true, waits: false, call: player_set_saturation },
+    Binding { class: "Player", name: "level", method: true, waits: false, call: player_level },
+    Binding { class: "Player", name: "set_level", method: true, waits: false, call: player_set_level },
+    Binding { class: "Player", name: "experience_progress", method: true, waits: false, call: player_experience_progress },
+    Binding { class: "Player", name: "set_experience_progress", method: true, waits: false, call: player_set_experience_progress },
+    Binding { class: "Player", name: "give_experience", method: true, waits: false, call: player_give_experience },
+    Binding { class: "Player", name: "is_flying", method: true, waits: false, call: player_is_flying },
+    Binding { class: "Player", name: "set_flying", method: true, waits: false, call: player_set_flying },
+    Binding { class: "Player", name: "can_fly", method: true, waits: false, call: player_can_fly },
+    Binding { class: "Player", name: "set_can_fly", method: true, waits: false, call: player_set_can_fly },
+    Binding { class: "Player", name: "walk_speed", method: true, waits: false, call: player_walk_speed },
+    Binding { class: "Player", name: "set_walk_speed", method: true, waits: false, call: player_set_walk_speed },
+    Binding { class: "Player", name: "fly_speed", method: true, waits: false, call: player_fly_speed },
+    Binding { class: "Player", name: "set_fly_speed", method: true, waits: false, call: player_set_fly_speed },
+    Binding { class: "Player", name: "is_sneaking", method: true, waits: false, call: player_is_sneaking },
+    Binding { class: "Player", name: "is_sprinting", method: true, waits: false, call: player_is_sprinting },
+    Binding { class: "Player", name: "locale", method: true, waits: false, call: player_locale },
+    Binding { class: "Player", name: "ping", method: true, waits: false, call: player_ping },
+    Binding { class: "Player", name: "kick", method: true, waits: false, call: player_kick },
+    Binding { class: "Player", name: "first_played", method: true, waits: false, call: player_first_played },
+    Binding { class: "Player", name: "last_seen", method: true, waits: false, call: player_last_seen },
+    Binding { class: "Player", name: "is_banned", method: true, waits: false, call: player_is_banned },
+    Binding { class: "Player", name: "ban", method: true, waits: false, call: player_ban },
+    Binding { class: "Player", name: "unban", method: true, waits: false, call: player_unban },
+    Binding { class: "Player", name: "is_whitelisted", method: true, waits: false, call: player_is_whitelisted },
+    Binding { class: "Player", name: "set_whitelisted", method: true, waits: false, call: player_set_whitelisted },
+    Binding { class: "Player", name: "ender_chest", method: true, waits: false, call: player_ender_chest },
+    Binding { class: "Player", name: "sky", method: true, waits: false, call: player_sky },
+    Binding { class: "Player", name: "set_sky", method: true, waits: false, call: player_set_sky },
+    Binding { class: "Player", name: "clear_sky", method: true, waits: false, call: player_clear_sky },
+    Binding { class: "Player", name: "storage", method: true, waits: false, call: player_storage },
+    Binding { class: "Player", name: "hud", method: true, waits: false, call: player_hud },
+    Binding { class: "Player", name: "held_item", method: true, waits: false, call: player_held_item },
+    Binding { class: "Player", name: "set_held_item", method: true, waits: false, call: player_set_held_item },
+    Binding { class: "Player", name: "off_hand_item", method: true, waits: false, call: player_off_hand_item },
+    Binding { class: "Player", name: "set_off_hand_item", method: true, waits: false, call: player_set_off_hand_item },
+    Binding { class: "Player", name: "cursor_item", method: true, waits: false, call: player_cursor_item },
+    Binding { class: "Player", name: "set_cursor_item", method: true, waits: false, call: player_set_cursor_item },
+    Binding { class: "Player", name: "held_slot", method: true, waits: false, call: player_held_slot },
+    Binding { class: "Player", name: "set_held_slot", method: true, waits: false, call: player_set_held_slot },
+    Binding { class: "Player", name: "give_item", method: true, waits: false, call: player_give_item },
+    Binding { class: "Player", name: "discover_recipe", method: true, waits: false, call: player_discover_recipe },
+    Binding { class: "Player", name: "undiscover_recipe", method: true, waits: false, call: player_undiscover_recipe },
+    Binding { class: "Player", name: "has_discovered_recipe", method: true, waits: false, call: player_has_discovered_recipe },
+    Binding { class: "Player", name: "grant_advancement", method: true, waits: false, call: player_grant_advancement },
+    Binding { class: "Player", name: "revoke_advancement", method: true, waits: false, call: player_revoke_advancement },
+    Binding { class: "Player", name: "has_advancement", method: true, waits: false, call: player_has_advancement },
+    Binding { class: "Player", name: "advancement_progress", method: true, waits: false, call: player_advancement_progress },
+    Binding { class: "Player", name: "item_cooldown", method: true, waits: false, call: player_item_cooldown },
+    Binding { class: "Player", name: "set_item_cooldown", method: true, waits: false, call: player_set_item_cooldown },
+    Binding { class: "Player", name: "open_menu", method: true, waits: false, call: player_open_menu },
+    Binding { class: "Player", name: "menu", method: true, waits: false, call: player_menu },
+    Binding { class: "Player", name: "refresh_items", method: true, waits: false, call: player_refresh_items },
+    Binding { class: "Player", name: "close_menu", method: true, waits: false, call: player_close_menu },
+    Binding { class: "Player", name: "open_inventory", method: true, waits: false, call: player_open_inventory },
+    Binding { class: "Player", name: "close_inventory", method: true, waits: false, call: player_close_inventory },
+    Binding { class: "Player", name: "open_dialog", method: true, waits: false, call: player_open_dialog },
+    Binding { class: "Player", name: "close_dialog", method: true, waits: false, call: player_close_dialog },
+    Binding { class: "Player", name: "sidebar", method: true, waits: false, call: player_sidebar },
+    Binding { class: "Player", name: "border", method: true, waits: false, call: player_border },
+    Binding { class: "Player", name: "has_own_border", method: true, waits: false, call: player_has_own_border },
+    Binding { class: "Player", name: "reset_border", method: true, waits: false, call: player_reset_border },
+    Binding { class: "Player", name: "tab_header", method: true, waits: false, call: player_tab_header },
+    Binding { class: "Player", name: "set_tab_header", method: true, waits: false, call: player_set_tab_header },
+    Binding { class: "Player", name: "tab_footer", method: true, waits: false, call: player_tab_footer },
+    Binding { class: "Player", name: "set_tab_footer", method: true, waits: false, call: player_set_tab_footer },
+    Binding { class: "Player", name: "tab_name", method: true, waits: false, call: player_tab_name },
+    Binding { class: "Player", name: "set_tab_name", method: true, waits: false, call: player_set_tab_name },
+    Binding { class: "Player", name: "tab_order", method: true, waits: false, call: player_tab_order },
+    Binding { class: "Player", name: "set_tab_order", method: true, waits: false, call: player_set_tab_order },
+    Binding { class: "Player", name: "is_listed_for", method: true, waits: false, call: player_is_listed_for },
+    Binding { class: "Player", name: "set_listed_for", method: true, waits: false, call: player_set_listed_for },
+    Binding { class: "Player", name: "below_name", method: true, waits: false, call: player_below_name },
+    Binding { class: "Player", name: "set_below_name", method: true, waits: false, call: player_set_below_name },
+    Binding { class: "Player", name: "bossbars", method: true, waits: false, call: player_bossbars },
+    Binding { class: "Player", name: "resource_pack_status", method: true, waits: false, call: player_resource_pack_status },
+    Binding { class: "Player", name: "push_resource_pack", method: true, waits: false, call: player_push_resource_pack },
+    Binding { class: "Player", name: "pop_resource_pack", method: true, waits: false, call: player_pop_resource_pack },
+    Binding { class: "Player", name: "send_block_change", method: true, waits: false, call: player_send_block_change },
+    Binding { class: "Player", name: "reset_block", method: true, waits: false, call: player_reset_block },
+    Binding { class: "Player", name: "send_equipment_change", method: true, waits: false, call: player_send_equipment_change },
+    Binding { class: "Player", name: "camera", method: true, waits: false, call: player_camera },
+    Binding { class: "Player", name: "set_camera", method: true, waits: false, call: player_set_camera },
+    Binding { class: "Player", name: "compass_target", method: true, waits: false, call: player_compass_target },
+    Binding { class: "Player", name: "set_compass_target", method: true, waits: false, call: player_set_compass_target },
+    Binding { class: "Player", name: "open_book", method: true, waits: false, call: player_open_book },
+    Binding { class: "Player", name: "view_distance", method: true, waits: false, call: player_view_distance },
+    Binding { class: "Player", name: "set_view_distance", method: true, waits: false, call: player_set_view_distance },
+    Binding { class: "Player", name: "data", method: true, waits: false, call: player_data },
+    Binding { class: "Player", name: "session", method: true, waits: false, call: player_session },
+    Binding { class: "Player", name: "on", method: true, waits: false, call: player_on },
+    Binding { class: "Player", name: "once", method: true, waits: false, call: player_once },
+    Binding { class: "Bot", name: "leave", method: true, waits: false, call: bot_leave },
+    Binding { class: "Bot", name: "walk_to", method: true, waits: false, call: bot_walk_to },
+    Binding { class: "Bot", name: "stop", method: true, waits: false, call: bot_stop },
+    Binding { class: "Bot", name: "look_at", method: true, waits: false, call: bot_look_at },
+    Binding { class: "Bot", name: "jump", method: true, waits: false, call: bot_jump },
+    Binding { class: "Bot", name: "set_sneaking", method: true, waits: false, call: bot_set_sneaking },
+    Binding { class: "Bot", name: "set_sprinting", method: true, waits: false, call: bot_set_sprinting },
+    Binding { class: "Bot", name: "chat", method: true, waits: false, call: bot_chat },
+    Binding { class: "Bot", name: "attack", method: true, waits: false, call: bot_attack },
+    Binding { class: "Bot", name: "interact", method: true, waits: false, call: bot_interact },
+    Binding { class: "Bot", name: "use_item", method: true, waits: false, call: bot_use_item },
+    Binding { class: "Bot", name: "release_item", method: true, waits: false, call: bot_release_item },
+    Binding { class: "Bot", name: "swing", method: true, waits: false, call: bot_swing },
+    Binding { class: "Bot", name: "use_block", method: true, waits: false, call: bot_use_block },
+    Binding { class: "Bot", name: "break_block", method: true, waits: false, call: bot_break_block },
+    Binding { class: "Bot", name: "swap_hands", method: true, waits: false, call: bot_swap_hands },
+    Binding { class: "Bot", name: "drop_item", method: true, waits: false, call: bot_drop_item },
+    Binding { class: "Bot", name: "click_slot", method: true, waits: false, call: bot_click_slot },
+    Binding { class: "Bot", name: "respawn", method: true, waits: false, call: bot_respawn },
+    Binding { class: "Sender", name: "name", method: true, waits: false, call: sender_name },
+    Binding { class: "Sender", name: "send_message", method: true, waits: false, call: sender_send_message },
+    Binding { class: "Sender", name: "has_permission", method: true, waits: false, call: sender_has_permission },
+    Binding { class: "Sender", name: "is_player", method: true, waits: false, call: sender_is_player },
+    Binding { class: "Sender", name: "is_console", method: true, waits: false, call: sender_is_console },
+    Binding { class: "World", name: "name", method: true, waits: false, call: world_name },
+    Binding { class: "World", name: "exists", method: true, waits: false, call: world_exists },
+    Binding { class: "World", name: "environment", method: true, waits: false, call: world_environment },
+    Binding { class: "World", name: "location", method: true, waits: false, call: world_location },
+    Binding { class: "World", name: "time_of_day", method: true, waits: false, call: world_time_of_day },
+    Binding { class: "World", name: "set_time_of_day", method: true, waits: false, call: world_set_time_of_day },
+    Binding { class: "World", name: "is_night", method: true, waits: false, call: world_is_night },
+    Binding { class: "World", name: "is_day", method: true, waits: false, call: world_is_day },
+    Binding { class: "World", name: "day_count", method: true, waits: false, call: world_day_count },
+    Binding { class: "World", name: "moon_phase", method: true, waits: false, call: world_moon_phase },
+    Binding { class: "World", name: "weather", method: true, waits: false, call: world_weather },
+    Binding { class: "World", name: "set_weather", method: true, waits: false, call: world_set_weather },
+    Binding { class: "World", name: "sky", method: true, waits: false, call: world_sky },
+    Binding { class: "World", name: "set_sky", method: true, waits: false, call: world_set_sky },
+    Binding { class: "World", name: "clear_sky", method: true, waits: false, call: world_clear_sky },
+    Binding { class: "World", name: "spawn_location", method: true, waits: false, call: world_spawn_location },
+    Binding { class: "World", name: "set_spawn_location", method: true, waits: false, call: world_set_spawn_location },
+    Binding { class: "World", name: "min_height", method: true, waits: false, call: world_min_height },
+    Binding { class: "World", name: "max_height", method: true, waits: false, call: world_max_height },
+    Binding { class: "World", name: "block", method: true, waits: false, call: world_block },
+    Binding { class: "World", name: "blocks", method: true, waits: false, call: world_blocks },
+    Binding { class: "World", name: "flood", method: true, waits: false, call: world_flood },
+    Binding { class: "World", name: "set_block", method: true, waits: false, call: world_set_block },
+    Binding { class: "World", name: "fill_blocks", method: true, waits: false, call: world_fill_blocks },
+    Binding { class: "World", name: "fill_gradually", method: true, waits: false, call: world_fill_gradually },
+    Binding { class: "World", name: "highest_block", method: true, waits: false, call: world_highest_block },
+    Binding { class: "World", name: "is_chunk_loaded", method: true, waits: false, call: world_is_chunk_loaded },
+    Binding { class: "World", name: "load_chunk", method: true, waits: false, call: world_load_chunk },
+    Binding { class: "World", name: "locate_biome", method: true, waits: false, call: world_locate_biome },
+    Binding { class: "World", name: "players", method: true, waits: false, call: world_players },
+    Binding { class: "World", name: "centities", method: true, waits: false, call: world_centities },
+    Binding { class: "World", name: "entities", method: true, waits: false, call: world_entities },
+    Binding { class: "World", name: "spawn_entity", method: true, waits: false, call: world_spawn_entity },
+    Binding { class: "World", name: "spawn_item", method: true, waits: false, call: world_spawn_item },
+    Binding { class: "World", name: "spawn_particle", method: true, waits: false, call: world_spawn_particle },
+    Binding { class: "World", name: "play_sound", method: true, waits: false, call: world_play_sound },
+    Binding { class: "World", name: "explode", method: true, waits: false, call: world_explode },
+    Binding { class: "World", name: "strike_lightning", method: true, waits: false, call: world_strike_lightning },
+    Binding { class: "World", name: "raycast", method: true, waits: false, call: world_raycast },
+    Binding { class: "World", name: "overlap_box", method: true, waits: false, call: world_overlap_box },
+    Binding { class: "World", name: "overlap_sphere", method: true, waits: false, call: world_overlap_sphere },
+    Binding { class: "World", name: "overlap_cone", method: true, waits: false, call: world_overlap_cone },
+    Binding { class: "World", name: "sweep", method: true, waits: false, call: world_sweep },
+    Binding { class: "World", name: "nearest", method: true, waits: false, call: world_nearest },
+    Binding { class: "World", name: "game_rule", method: true, waits: false, call: world_game_rule },
+    Binding { class: "World", name: "set_game_rule", method: true, waits: false, call: world_set_game_rule },
+    Binding { class: "World", name: "spawn_limit", method: true, waits: false, call: world_spawn_limit },
+    Binding { class: "World", name: "set_spawn_limit", method: true, waits: false, call: world_set_spawn_limit },
+    Binding { class: "World", name: "spawn_interval", method: true, waits: false, call: world_spawn_interval },
+    Binding { class: "World", name: "set_spawn_interval", method: true, waits: false, call: world_set_spawn_interval },
+    Binding { class: "World", name: "is_managed", method: true, waits: false, call: world_is_managed },
+    Binding { class: "World", name: "unload", method: true, waits: false, call: world_unload },
+    Binding { class: "World", name: "border", method: true, waits: false, call: world_border },
+    Binding { class: "World", name: "save_structure", method: true, waits: false, call: world_save_structure },
+    Binding { class: "World", name: "place_structure", method: true, waits: false, call: world_place_structure },
+    Binding { class: "World", name: "place_gradually", method: true, waits: false, call: world_place_gradually },
+    Binding { class: "World", name: "on", method: true, waits: false, call: world_on },
+    Binding { class: "World", name: "once", method: true, waits: false, call: world_once },
+    Binding { class: "WorldBorder", name: "center", method: true, waits: false, call: worldborder_center },
+    Binding { class: "WorldBorder", name: "set_center", method: true, waits: false, call: worldborder_set_center },
+    Binding { class: "WorldBorder", name: "size", method: true, waits: false, call: worldborder_size },
+    Binding { class: "WorldBorder", name: "set_size", method: true, waits: false, call: worldborder_set_size },
+    Binding { class: "WorldBorder", name: "damage", method: true, waits: false, call: worldborder_damage },
+    Binding { class: "WorldBorder", name: "set_damage", method: true, waits: false, call: worldborder_set_damage },
+    Binding { class: "WorldBorder", name: "warning", method: true, waits: false, call: worldborder_warning },
+    Binding { class: "WorldBorder", name: "set_warning", method: true, waits: false, call: worldborder_set_warning },
+    Binding { class: "WorldBorder", name: "contains", method: true, waits: false, call: worldborder_contains },
+    Binding { class: "Block", name: "world", method: true, waits: false, call: block_world },
+    Binding { class: "Block", name: "position", method: true, waits: false, call: block_position },
+    Binding { class: "Block", name: "location", method: true, waits: false, call: block_location },
+    Binding { class: "Block", name: "kind", method: true, waits: false, call: block_kind },
+    Binding { class: "Block", name: "state", method: true, waits: false, call: block_state },
+    Binding { class: "Block", name: "property", method: true, waits: false, call: block_property },
+    Binding { class: "Block", name: "properties", method: true, waits: false, call: block_properties },
+    Binding { class: "Block", name: "is_air", method: true, waits: false, call: block_is_air },
+    Binding { class: "Block", name: "is_solid", method: true, waits: false, call: block_is_solid },
+    Binding { class: "Block", name: "is_liquid", method: true, waits: false, call: block_is_liquid },
+    Binding { class: "Block", name: "set_state", method: true, waits: false, call: block_set_state },
+    Binding { class: "Block", name: "set_property", method: true, waits: false, call: block_set_property },
+    Binding { class: "Block", name: "break_naturally", method: true, waits: false, call: block_break_naturally },
+    Binding { class: "Block", name: "relative", method: true, waits: false, call: block_relative },
+    Binding { class: "Block", name: "inventory", method: true, waits: false, call: block_inventory },
+    Binding { class: "Block", name: "custom", method: true, waits: false, call: block_custom },
+    Binding { class: "Block", name: "light_level", method: true, waits: false, call: block_light_level },
+    Binding { class: "Block", name: "sky_light_level", method: true, waits: false, call: block_sky_light_level },
+    Binding { class: "Block", name: "biome", method: true, waits: false, call: block_biome },
+    Binding { class: "Block", name: "data", method: true, waits: false, call: block_data },
+    Binding { class: "CustomBlock", name: "id", method: true, waits: false, call: customblock_id },
+    Binding { class: "CustomBlock", name: "project", method: true, waits: false, call: customblock_project },
+    Binding { class: "CustomBlock", name: "facing", method: true, waits: false, call: customblock_facing },
+    Binding { class: "CustomBlock", name: "set_facing", method: true, waits: false, call: customblock_set_facing },
+    Binding { class: "ProjectBlock", name: "id", method: true, waits: false, call: projectblock_id },
+    Binding { class: "ProjectBlock", name: "properties", method: true, waits: false, call: projectblock_properties },
+    Binding { class: "ProjectBlock", name: "exists", method: true, waits: false, call: projectblock_exists },
+    Binding { class: "ProjectBlock", name: "place", method: true, waits: false, call: projectblock_place },
+    Binding { class: "ProjectBlock", name: "on", method: true, waits: false, call: projectblock_on },
+    Binding { class: "ProjectBlock", name: "once", method: true, waits: false, call: projectblock_once },
+    Binding { class: "Inventory", name: "exists", method: true, waits: false, call: inventory_exists },
+    Binding { class: "Inventory", name: "kind", method: true, waits: false, call: inventory_kind },
+    Binding { class: "Inventory", name: "size", method: true, waits: false, call: inventory_size },
+    Binding { class: "Inventory", name: "holder", method: true, waits: false, call: inventory_holder },
+    Binding { class: "Inventory", name: "item", method: true, waits: false, call: inventory_item },
+    Binding { class: "Inventory", name: "set_item", method: true, waits: false, call: inventory_set_item },
+    Binding { class: "Inventory", name: "items", method: true, waits: false, call: inventory_items },
+    Binding { class: "Inventory", name: "add_item", method: true, waits: false, call: inventory_add_item },
+    Binding { class: "Inventory", name: "remove_item", method: true, waits: false, call: inventory_remove_item },
+    Binding { class: "Inventory", name: "count_item", method: true, waits: false, call: inventory_count_item },
+    Binding { class: "Inventory", name: "has_item", method: true, waits: false, call: inventory_has_item },
+    Binding { class: "Inventory", name: "first_slot", method: true, waits: false, call: inventory_first_slot },
+    Binding { class: "Inventory", name: "clear", method: true, waits: false, call: inventory_clear },
+    Binding { class: "Inventory", name: "viewers", method: true, waits: false, call: inventory_viewers },
+    Binding { class: "BossBar", name: "exists", method: true, waits: false, call: bossbar_exists },
+    Binding { class: "BossBar", name: "show_to", method: true, waits: false, call: bossbar_show_to },
+    Binding { class: "BossBar", name: "hide_from", method: true, waits: false, call: bossbar_hide_from },
+    Binding { class: "BossBar", name: "viewers", method: true, waits: false, call: bossbar_viewers },
+    Binding { class: "BossBar", name: "text", method: true, waits: false, call: bossbar_text },
+    Binding { class: "BossBar", name: "set_text", method: true, waits: false, call: bossbar_set_text },
+    Binding { class: "BossBar", name: "icon", method: true, waits: false, call: bossbar_icon },
+    Binding { class: "BossBar", name: "set_icon", method: true, waits: false, call: bossbar_set_icon },
+    Binding { class: "BossBar", name: "progress", method: true, waits: false, call: bossbar_progress },
+    Binding { class: "BossBar", name: "set_progress", method: true, waits: false, call: bossbar_set_progress },
+    Binding { class: "BossBar", name: "color", method: true, waits: false, call: bossbar_color },
+    Binding { class: "BossBar", name: "set_color", method: true, waits: false, call: bossbar_set_color },
+    Binding { class: "BossBar", name: "style", method: true, waits: false, call: bossbar_style },
+    Binding { class: "BossBar", name: "set_style", method: true, waits: false, call: bossbar_set_style },
+    Binding { class: "BossBar", name: "attach", method: true, waits: false, call: bossbar_attach },
+    Binding { class: "BossBar", name: "detach", method: true, waits: false, call: bossbar_detach },
+    Binding { class: "BossBar", name: "attached", method: true, waits: false, call: bossbar_attached },
+    Binding { class: "BossBar", name: "remove", method: true, waits: false, call: bossbar_remove },
+    Binding { class: "Sidebar", name: "title", method: true, waits: false, call: sidebar_title },
+    Binding { class: "Sidebar", name: "set_title", method: true, waits: false, call: sidebar_set_title },
+    Binding { class: "Sidebar", name: "lines", method: true, waits: false, call: sidebar_lines },
+    Binding { class: "Sidebar", name: "set_lines", method: true, waits: false, call: sidebar_set_lines },
+    Binding { class: "Sidebar", name: "is_visible", method: true, waits: false, call: sidebar_is_visible },
+    Binding { class: "Sidebar", name: "set_visible", method: true, waits: false, call: sidebar_set_visible },
+    Binding { class: "Sidebar", name: "clear", method: true, waits: false, call: sidebar_clear },
+    Binding { class: "Team", name: "name", method: true, waits: false, call: team_name },
+    Binding { class: "Team", name: "exists", method: true, waits: false, call: team_exists },
+    Binding { class: "Team", name: "add_member", method: true, waits: false, call: team_add_member },
+    Binding { class: "Team", name: "remove_member", method: true, waits: false, call: team_remove_member },
+    Binding { class: "Team", name: "has_member", method: true, waits: false, call: team_has_member },
+    Binding { class: "Team", name: "members", method: true, waits: false, call: team_members },
+    Binding { class: "Team", name: "display_name", method: true, waits: false, call: team_display_name },
+    Binding { class: "Team", name: "set_display_name", method: true, waits: false, call: team_set_display_name },
+    Binding { class: "Team", name: "prefix", method: true, waits: false, call: team_prefix },
+    Binding { class: "Team", name: "set_prefix", method: true, waits: false, call: team_set_prefix },
+    Binding { class: "Team", name: "suffix", method: true, waits: false, call: team_suffix },
+    Binding { class: "Team", name: "set_suffix", method: true, waits: false, call: team_set_suffix },
+    Binding { class: "Team", name: "color", method: true, waits: false, call: team_color },
+    Binding { class: "Team", name: "set_color", method: true, waits: false, call: team_set_color },
+    Binding { class: "Team", name: "has_friendly_fire", method: true, waits: false, call: team_has_friendly_fire },
+    Binding { class: "Team", name: "set_friendly_fire", method: true, waits: false, call: team_set_friendly_fire },
+    Binding { class: "Team", name: "can_see_invisible_teammates", method: true, waits: false, call: team_can_see_invisible_teammates },
+    Binding { class: "Team", name: "set_can_see_invisible_teammates", method: true, waits: false, call: team_set_can_see_invisible_teammates },
+    Binding { class: "Team", name: "nametags", method: true, waits: false, call: team_nametags },
+    Binding { class: "Team", name: "set_nametags", method: true, waits: false, call: team_set_nametags },
+    Binding { class: "Team", name: "collision", method: true, waits: false, call: team_collision },
+    Binding { class: "Team", name: "set_collision", method: true, waits: false, call: team_set_collision },
+    Binding { class: "Team", name: "remove", method: true, waits: false, call: team_remove },
+    Binding { class: "Database", name: "query", method: true, waits: false, call: database_query },
+    Binding { class: "Database", name: "execute", method: true, waits: false, call: database_execute },
+    Binding { class: "Database", name: "transaction", method: true, waits: false, call: database_transaction },
+    Binding { class: "Menu", name: "id", method: true, waits: false, call: menu_id },
+    Binding { class: "Menu", name: "kind", method: true, waits: false, call: menu_kind },
+    Binding { class: "Menu", name: "template", method: true, waits: false, call: menu_template },
+    Binding { class: "Menu", name: "exists", method: true, waits: false, call: menu_exists },
+    Binding { class: "Menu", name: "is_shared", method: true, waits: false, call: menu_is_shared },
+    Binding { class: "Menu", name: "context", method: true, waits: false, call: menu_context },
+    Binding { class: "Menu", name: "size", method: true, waits: false, call: menu_size },
+    Binding { class: "Menu", name: "rows", method: true, waits: false, call: menu_rows },
+    Binding { class: "Menu", name: "title", method: true, waits: false, call: menu_title },
+    Binding { class: "Menu", name: "set_title", method: true, waits: false, call: menu_set_title },
+    Binding { class: "Menu", name: "skin", method: true, waits: false, call: menu_skin },
+    Binding { class: "Menu", name: "set_skin", method: true, waits: false, call: menu_set_skin },
+    Binding { class: "Menu", name: "is_locked", method: true, waits: false, call: menu_is_locked },
+    Binding { class: "Menu", name: "set_locked", method: true, waits: false, call: menu_set_locked },
+    Binding { class: "Menu", name: "shift_into", method: true, waits: false, call: menu_shift_into },
+    Binding { class: "Menu", name: "slot", method: true, waits: false, call: menu_slot },
+    Binding { class: "Menu", name: "item", method: true, waits: false, call: menu_item },
+    Binding { class: "Menu", name: "set_item", method: true, waits: false, call: menu_set_item },
+    Binding { class: "Menu", name: "add_item", method: true, waits: false, call: menu_add_item },
+    Binding { class: "Menu", name: "items", method: true, waits: false, call: menu_items },
+    Binding { class: "Menu", name: "set_items", method: true, waits: false, call: menu_set_items },
+    Binding { class: "Menu", name: "fill", method: true, waits: false, call: menu_fill },
+    Binding { class: "Menu", name: "clear", method: true, waits: false, call: menu_clear },
+    Binding { class: "Menu", name: "viewers", method: true, waits: false, call: menu_viewers },
+    Binding { class: "Menu", name: "cursor_item", method: true, waits: false, call: menu_cursor_item },
+    Binding { class: "Menu", name: "set_cursor_item", method: true, waits: false, call: menu_set_cursor_item },
+    Binding { class: "Menu", name: "refresh", method: true, waits: false, call: menu_refresh },
+    Binding { class: "Menu", name: "open_for", method: true, waits: false, call: menu_open_for },
+    Binding { class: "Menu", name: "close_for", method: true, waits: false, call: menu_close_for },
+    Binding { class: "Menu", name: "close_all", method: true, waits: false, call: menu_close_all },
+    Binding { class: "Menu", name: "on", method: true, waits: false, call: menu_on },
+    Binding { class: "Menu", name: "once", method: true, waits: false, call: menu_once },
+    Binding { class: "Slot", name: "index", method: true, waits: false, call: slot_index },
+    Binding { class: "Slot", name: "menu", method: true, waits: false, call: slot_menu },
+    Binding { class: "Slot", name: "item", method: true, waits: false, call: slot_item },
+    Binding { class: "Slot", name: "set_item", method: true, waits: false, call: slot_set_item },
+    Binding { class: "Slot", name: "bind", method: true, waits: false, call: slot_bind },
+    Binding { class: "Slot", name: "bind_equipment", method: true, waits: false, call: slot_bind_equipment },
+    Binding { class: "Slot", name: "set_rule", method: true, waits: false, call: slot_set_rule },
+    Binding { class: "Slot", name: "rule", method: true, waits: false, call: slot_rule },
+    Binding { class: "Slot", name: "accepts", method: true, waits: false, call: slot_accepts },
+    Binding { class: "Slot", name: "unbind", method: true, waits: false, call: slot_unbind },
+    Binding { class: "Slot", name: "binding", method: true, waits: false, call: slot_binding },
+    Binding { class: "Slot", name: "on", method: true, waits: false, call: slot_on },
+    Binding { class: "Slot", name: "once", method: true, waits: false, call: slot_once },
+    Binding { class: "MenuTemplate", name: "id", method: true, waits: false, call: menutemplate_id },
+    Binding { class: "MenuTemplate", name: "exists", method: true, waits: false, call: menutemplate_exists },
+    Binding { class: "MenuTemplate", name: "size", method: true, waits: false, call: menutemplate_size },
+    Binding { class: "MenuTemplate", name: "rows", method: true, waits: false, call: menutemplate_rows },
+    Binding { class: "MenuTemplate", name: "title", method: true, waits: false, call: menutemplate_title },
+    Binding { class: "MenuTemplate", name: "skin", method: true, waits: false, call: menutemplate_skin },
+    Binding { class: "MenuTemplate", name: "is_locked", method: true, waits: false, call: menutemplate_is_locked },
+    Binding { class: "MenuTemplate", name: "item", method: true, waits: false, call: menutemplate_item },
+    Binding { class: "MenuTemplate", name: "windows", method: true, waits: false, call: menutemplate_windows },
+    Binding { class: "MenuTemplate", name: "remove", method: true, waits: false, call: menutemplate_remove },
+    Binding { class: "MenuTemplate", name: "on", method: true, waits: false, call: menutemplate_on },
+    Binding { class: "MenuTemplate", name: "once", method: true, waits: false, call: menutemplate_once },
+    Binding { class: "Dialog", name: "id", method: true, waits: false, call: dialog_id },
+    Binding { class: "Dialog", name: "exists", method: true, waits: false, call: dialog_exists },
+    Binding { class: "Dialog", name: "title", method: true, waits: false, call: dialog_title },
+    Binding { class: "Dialog", name: "buttons", method: true, waits: false, call: dialog_buttons },
+    Binding { class: "Dialog", name: "inputs", method: true, waits: false, call: dialog_inputs },
+    Binding { class: "Dialog", name: "button", method: true, waits: false, call: dialog_button },
+    Binding { class: "Dialog", name: "open_for", method: true, waits: false, call: dialog_open_for },
+    Binding { class: "Dialog", name: "ask", method: true, waits: true, call: dialog_ask },
+    Binding { class: "Dialog", name: "on", method: true, waits: false, call: dialog_on },
+    Binding { class: "Dialog", name: "once", method: true, waits: false, call: dialog_once },
+    Binding { class: "Button", name: "key", method: true, waits: false, call: button_key },
+    Binding { class: "Button", name: "dialog", method: true, waits: false, call: button_dialog },
+    Binding { class: "Button", name: "label", method: true, waits: false, call: button_label },
+    Binding { class: "Button", name: "on", method: true, waits: false, call: button_on },
+    Binding { class: "Button", name: "once", method: true, waits: false, call: button_once },
+    Binding { class: "ProjectItem", name: "id", method: true, waits: false, call: projectitem_id },
+    Binding { class: "ProjectItem", name: "exists", method: true, waits: false, call: projectitem_exists },
+    Binding { class: "ProjectItem", name: "create", method: true, waits: false, call: projectitem_create },
+    Binding { class: "ProjectItem", name: "properties", method: true, waits: false, call: projectitem_properties },
+    Binding { class: "ProjectItem", name: "on", method: true, waits: false, call: projectitem_on },
+    Binding { class: "ProjectItem", name: "once", method: true, waits: false, call: projectitem_once },
+    Binding { class: "Effect", name: "kind", method: true, waits: false, call: effect_kind },
+    Binding { class: "Effect", name: "is_active", method: true, waits: false, call: effect_is_active },
+    Binding { class: "Effect", name: "stop", method: true, waits: false, call: effect_stop },
+    Binding { class: "Effect", name: "location", method: true, waits: false, call: effect_location },
+    Binding { class: "Effect", name: "teleport", method: true, waits: false, call: effect_teleport },
+    Binding { class: "Effect", name: "follow", method: true, waits: false, call: effect_follow },
+    Binding { class: "Effect", name: "on", method: true, waits: false, call: effect_on },
+    Binding { class: "Effect", name: "once", method: true, waits: false, call: effect_once },
+    Binding { class: "HttpStream", name: "url", method: true, waits: false, call: httpstream_url },
+    Binding { class: "HttpStream", name: "state", method: true, waits: false, call: httpstream_state },
+    Binding { class: "HttpStream", name: "status", method: true, waits: false, call: httpstream_status },
+    Binding { class: "HttpStream", name: "close", method: true, waits: false, call: httpstream_close },
+    Binding { class: "HttpStream", name: "on", method: true, waits: false, call: httpstream_on },
+    Binding { class: "HttpStream", name: "once", method: true, waits: false, call: httpstream_once },
+    Binding { class: "WebSocket", name: "url", method: true, waits: false, call: websocket_url },
+    Binding { class: "WebSocket", name: "state", method: true, waits: false, call: websocket_state },
+    Binding { class: "WebSocket", name: "protocol", method: true, waits: false, call: websocket_protocol },
+    Binding { class: "WebSocket", name: "send", method: true, waits: false, call: websocket_send },
+    Binding { class: "WebSocket", name: "close", method: true, waits: false, call: websocket_close },
+    Binding { class: "WebSocket", name: "on", method: true, waits: false, call: websocket_on },
+    Binding { class: "WebSocket", name: "once", method: true, waits: false, call: websocket_once },
+    Binding { class: "Route", name: "remove", method: true, waits: false, call: route_remove },
+    Binding { class: "Route", name: "exists", method: true, waits: false, call: route_exists },
+    Binding { class: "WebResponse", name: "send", method: true, waits: false, call: webresponse_send },
+    Binding { class: "WebResponse", name: "json", method: true, waits: false, call: webresponse_json },
+    Binding { class: "WebResponse", name: "redirect", method: true, waits: false, call: webresponse_redirect },
+    Binding { class: "WebResponse", name: "is_pending", method: true, waits: false, call: webresponse_is_pending },
+    Binding { class: "OAuthFlow", name: "begin", method: true, waits: false, call: oauthflow_begin },
+    Binding { class: "OAuthFlow", name: "remove", method: true, waits: false, call: oauthflow_remove },
+    Binding { class: "OAuthFlow", name: "on", method: true, waits: false, call: oauthflow_on },
+    Binding { class: "OAuthFlow", name: "once", method: true, waits: false, call: oauthflow_once },
+    Binding { class: "WasmInstance", name: "module", method: true, waits: false, call: wasminstance_module },
+    Binding { class: "WasmInstance", name: "call", method: true, waits: false, call: wasminstance_call },
+    Binding { class: "WasmInstance", name: "call_text", method: true, waits: false, call: wasminstance_call_text },
+    Binding { class: "WasmInstance", name: "close", method: true, waits: false, call: wasminstance_close },
+    Binding { class: "WasmProcess", name: "module", method: true, waits: false, call: wasmprocess_module },
+    Binding { class: "WasmProcess", name: "state", method: true, waits: false, call: wasmprocess_state },
+    Binding { class: "WasmProcess", name: "send", method: true, waits: false, call: wasmprocess_send },
+    Binding { class: "WasmProcess", name: "close_input", method: true, waits: false, call: wasmprocess_close_input },
+    Binding { class: "WasmProcess", name: "stop", method: true, waits: false, call: wasmprocess_stop },
+    Binding { class: "WasmProcess", name: "on", method: true, waits: false, call: wasmprocess_on },
+    Binding { class: "WasmProcess", name: "once", method: true, waits: false, call: wasmprocess_once },
+    Binding { class: "NetworkChannel", name: "name", method: true, waits: false, call: networkchannel_name },
+    Binding { class: "NetworkChannel", name: "publish", method: true, waits: false, call: networkchannel_publish },
+    Binding { class: "NetworkChannel", name: "request", method: true, waits: false, call: networkchannel_request },
+    Binding { class: "NetworkChannel", name: "on", method: true, waits: false, call: networkchannel_on },
+    Binding { class: "NetworkChannel", name: "once", method: true, waits: false, call: networkchannel_once },
+    Binding { class: "NetworkHold", name: "release", method: true, waits: false, call: networkhold_release },
+    Binding { class: "NetworkHold", name: "is_released", method: true, waits: false, call: networkhold_is_released },
+    Binding { class: "NetworkMap", name: "name", method: true, waits: false, call: networkmap_name },
+    Binding { class: "NetworkMap", name: "is_ready", method: true, waits: false, call: networkmap_is_ready },
+    Binding { class: "NetworkMap", name: "get", method: true, waits: false, call: networkmap_get },
+    Binding { class: "NetworkMap", name: "all", method: true, waits: false, call: networkmap_all },
+    Binding { class: "NetworkMap", name: "set", method: true, waits: false, call: networkmap_set },
+    Binding { class: "NetworkMap", name: "delete", method: true, waits: false, call: networkmap_delete },
+    Binding { class: "NetworkMap", name: "add", method: true, waits: false, call: networkmap_add },
+    Binding { class: "NetworkMap", name: "insert", method: true, waits: false, call: networkmap_insert },
+    Binding { class: "NetworkMap", name: "on", method: true, waits: false, call: networkmap_on },
+    Binding { class: "NetworkMap", name: "once", method: true, waits: false, call: networkmap_once },
+    Binding { class: "Cutscene", name: "kind", method: true, waits: false, call: cutscene_kind },
+    Binding { class: "Cutscene", name: "length", method: true, waits: false, call: cutscene_length },
+    Binding { class: "Cutscene", name: "player", method: true, waits: false, call: cutscene_player },
+    Binding { class: "Cutscene", name: "is_active", method: true, waits: false, call: cutscene_is_active },
+    Binding { class: "Cutscene", name: "time", method: true, waits: false, call: cutscene_time },
+    Binding { class: "Cutscene", name: "stop", method: true, waits: false, call: cutscene_stop },
+    Binding { class: "Cutscene", name: "on", method: true, waits: false, call: cutscene_on },
+    Binding { class: "Cutscene", name: "once", method: true, waits: false, call: cutscene_once },
+    Binding { class: "Screen", name: "name", method: true, waits: false, call: screen_name },
+    Binding { class: "Screen", name: "exists", method: true, waits: false, call: screen_exists },
+    Binding { class: "Screen", name: "width", method: true, waits: false, call: screen_width },
+    Binding { class: "Screen", name: "height", method: true, waits: false, call: screen_height },
+    Binding { class: "Screen", name: "clear", method: true, waits: false, call: screen_clear },
+    Binding { class: "Screen", name: "pixel", method: true, waits: false, call: screen_pixel },
+    Binding { class: "Screen", name: "set_pixel", method: true, waits: false, call: screen_set_pixel },
+    Binding { class: "Screen", name: "pixels", method: true, waits: false, call: screen_pixels },
+    Binding { class: "Screen", name: "set_pixels", method: true, waits: false, call: screen_set_pixels },
+    Binding { class: "Screen", name: "fill", method: true, waits: false, call: screen_fill },
+    Binding { class: "Screen", name: "rectangle", method: true, waits: false, call: screen_rectangle },
+    Binding { class: "Screen", name: "line", method: true, waits: false, call: screen_line },
+    Binding { class: "Screen", name: "circle", method: true, waits: false, call: screen_circle },
+    Binding { class: "Screen", name: "ellipse", method: true, waits: false, call: screen_ellipse },
+    Binding { class: "Screen", name: "polygon", method: true, waits: false, call: screen_polygon },
+    Binding { class: "Screen", name: "text", method: true, waits: false, call: screen_text },
+    Binding { class: "Screen", name: "image", method: true, waits: false, call: screen_image },
+    Binding { class: "Screen", name: "copy", method: true, waits: false, call: screen_copy },
+    Binding { class: "Screen", name: "place", method: true, waits: false, call: screen_place },
+    Binding { class: "Screen", name: "take_down", method: true, waits: false, call: screen_take_down },
+    Binding { class: "Screen", name: "location", method: true, waits: false, call: screen_location },
+    Binding { class: "Screen", name: "facing", method: true, waits: false, call: screen_facing },
+    Binding { class: "Screen", name: "item", method: true, waits: false, call: screen_item },
+    Binding { class: "Screen", name: "show_to", method: true, waits: false, call: screen_show_to },
+    Binding { class: "Screen", name: "hide_from", method: true, waits: false, call: screen_hide_from },
+    Binding { class: "Screen", name: "is_shown_to", method: true, waits: false, call: screen_is_shown_to },
+    Binding { class: "Screen", name: "viewers", method: true, waits: false, call: screen_viewers },
+    Binding { class: "Screen", name: "for_player", method: true, waits: false, call: screen_for_player },
+    Binding { class: "Screen", name: "player", method: true, waits: false, call: screen_player },
+    Binding { class: "Screen", name: "release", method: true, waits: false, call: screen_release },
+    Binding { class: "Screen", name: "play", method: true, waits: false, call: screen_play },
+    Binding { class: "Screen", name: "playback", method: true, waits: false, call: screen_playback },
+    Binding { class: "Screen", name: "remove", method: true, waits: false, call: screen_remove },
+    Binding { class: "Screen", name: "on", method: true, waits: false, call: screen_on },
+    Binding { class: "Screen", name: "once", method: true, waits: false, call: screen_once },
+    Binding { class: "Playback", name: "video", method: true, waits: false, call: playback_video },
+    Binding { class: "Playback", name: "screen", method: true, waits: false, call: playback_screen },
+    Binding { class: "Playback", name: "length", method: true, waits: false, call: playback_length },
+    Binding { class: "Playback", name: "exists", method: true, waits: false, call: playback_exists },
+    Binding { class: "Playback", name: "is_paused", method: true, waits: false, call: playback_is_paused },
+    Binding { class: "Playback", name: "pause", method: true, waits: false, call: playback_pause },
+    Binding { class: "Playback", name: "resume", method: true, waits: false, call: playback_resume },
+    Binding { class: "Playback", name: "stop", method: true, waits: false, call: playback_stop },
+    Binding { class: "Playback", name: "time", method: true, waits: false, call: playback_time },
+    Binding { class: "Playback", name: "seek", method: true, waits: false, call: playback_seek },
+    Binding { class: "Playback", name: "speed", method: true, waits: false, call: playback_speed },
+    Binding { class: "Playback", name: "set_speed", method: true, waits: false, call: playback_set_speed },
+    Binding { class: "Playback", name: "volume", method: true, waits: false, call: playback_volume },
+    Binding { class: "Playback", name: "set_volume", method: true, waits: false, call: playback_set_volume },
+    Binding { class: "Playback", name: "is_looping", method: true, waits: false, call: playback_is_looping },
+    Binding { class: "Playback", name: "set_looping", method: true, waits: false, call: playback_set_looping },
+    Binding { class: "Playback", name: "on", method: true, waits: false, call: playback_on },
+    Binding { class: "Playback", name: "once", method: true, waits: false, call: playback_once },
+    Binding { class: "File", name: "path", method: true, waits: false, call: file_path },
+    Binding { class: "File", name: "name", method: true, waits: false, call: file_name },
+    Binding { class: "File", name: "parent", method: true, waits: false, call: file_parent },
+    Binding { class: "File", name: "child", method: true, waits: false, call: file_child },
+    Binding { class: "File", name: "exists", method: true, waits: false, call: file_exists },
+    Binding { class: "File", name: "is_folder", method: true, waits: false, call: file_is_folder },
+    Binding { class: "File", name: "size", method: true, waits: false, call: file_size },
+    Binding { class: "File", name: "children", method: true, waits: false, call: file_children },
+    Binding { class: "File", name: "read", method: true, waits: false, call: file_read },
+    Binding { class: "File", name: "write", method: true, waits: false, call: file_write },
+    Binding { class: "File", name: "append", method: true, waits: false, call: file_append },
+    Binding { class: "File", name: "read_base64", method: true, waits: false, call: file_read_base64 },
+    Binding { class: "File", name: "write_base64", method: true, waits: false, call: file_write_base64 },
+    Binding { class: "File", name: "read_json", method: true, waits: false, call: file_read_json },
+    Binding { class: "File", name: "write_json", method: true, waits: false, call: file_write_json },
+    Binding { class: "File", name: "modified_time", method: true, waits: false, call: file_modified_time },
+    Binding { class: "File", name: "lines", method: true, waits: false, call: file_lines },
+    Binding { class: "File", name: "rename", method: true, waits: false, call: file_rename },
+    Binding { class: "File", name: "copy_to", method: true, waits: false, call: file_copy_to },
+    Binding { class: "File", name: "create_folder", method: true, waits: false, call: file_create_folder },
+    Binding { class: "File", name: "delete", method: true, waits: false, call: file_delete },
+    Binding { class: "Subscription", name: "cancel", method: true, waits: false, call: subscription_cancel },
+    Binding { class: "Subscription", name: "is_active", method: true, waits: false, call: subscription_is_active },
+    Binding { class: "Task", name: "cancel", method: true, waits: false, call: task_cancel },
+    Binding { class: "Task", name: "is_active", method: true, waits: false, call: task_is_active },
+    Binding { class: "Schedule", name: "cancel", method: true, waits: false, call: schedule_cancel },
+    Binding { class: "Schedule", name: "is_active", method: true, waits: false, call: schedule_is_active },
+    Binding { class: "Schedule", name: "next_run", method: true, waits: false, call: schedule_next_run },
+    Binding { class: "Random", name: "integer", method: true, waits: false, call: random_integer },
+    Binding { class: "Random", name: "number", method: true, waits: false, call: random_number },
+    Binding { class: "Random", name: "pick", method: true, waits: false, call: random_pick },
+    Binding { class: "Random", name: "shuffle", method: true, waits: false, call: random_shuffle },
+    Binding { class: "Random", name: "weighted", method: true, waits: false, call: random_weighted },
+    Binding { class: "Hud", name: "player", method: true, waits: false, call: hud_player },
+    Binding { class: "Hud", name: "fill_bar", method: true, waits: false, call: hud_fill_bar },
+    Binding { class: "Hud", name: "fill_bars", method: true, waits: false, call: hud_fill_bars },
+    Binding { class: "Hud", name: "bar", method: true, waits: false, call: hud_bar },
+    Binding { class: "Hud", name: "set_icons", method: true, waits: false, call: hud_set_icons },
+    Binding { class: "Hud", name: "icons", method: true, waits: false, call: hud_icons },
+    Binding { class: "Hud", name: "set_text", method: true, waits: false, call: hud_set_text },
+    Binding { class: "Hud", name: "text", method: true, waits: false, call: hud_text },
+    Binding { class: "Hud", name: "remove", method: true, waits: false, call: hud_remove },
+    Binding { class: "Hud", name: "clear", method: true, waits: false, call: hud_clear },
 ];

@@ -213,6 +213,17 @@ runtimes can't disagree about what crosses. `pnpm lint`'s generated-files check 
   a class at a time. A class's own trait has no defaults: once a class is implemented, it
   must match the spec. **The end of the port removes the defaults**, so a class left out
   stops building.
+- **The prelude's functions are bound like the rest.** The Kotlin runtime writes the spec's
+  `impl: "lua"` functions (`:on`, `nf.after`, `nf.task`, `Random`, `Task`...) in the prelude;
+  the Rust target plans them too (`bindings(spec, { handwritten: true })`), so they're trait
+  methods the Rust runtime implements in Rust, with typed arguments. For them only, `nf` in a
+  union (`nf.wait_for(nf, ...)`) and a table keyed by anything (`Random:weighted`) cross as a
+  `table` (`Value`). The rest of the arguments (`...`) is `rest: Vec<Value>`.
+- **Waiting.** A function that waits (`waits` in the spec: `nf.wait`, `wait_for`, `dialog:ask`)
+  returns `Waiting` once its task's wake-up is registered. mlua's Rust functions can't yield
+  without its async machinery, which would want to drive tasks itself, so the binding is
+  wrapped in a three-line Luau shim (`bind.rs`'s `SHIM`): it yields when the binding returns
+  the `waiting` sentinel, and what the scheduler resumes the task with is the call's value.
 - `crate::Runtime` is what every binding asks around its call: `requires` (the one
   capability check, before anything is read).
 
@@ -246,4 +257,4 @@ polls every wait once at the room's tick boundary and calls back the ready ones 
 host's guarded call) with `value, err`. Nothing is delivered inside the call, and game logic
 never runs off the room's thread. Tasks waiting on a value come with the prelude's tasks.
 
-Still to come: the events registry and `:on`, and the prelude's `impl: "lua"` functions.
+Still to come: the events registry, and the runtime that implements `:on`, timers and tasks.
