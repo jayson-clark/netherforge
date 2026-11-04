@@ -1251,7 +1251,7 @@ function nf.looks.qualify(look) end
 ---@class nf.packs
 nf.packs = {}
 
---- Reads the project's resource packs from disk again and builds them, at the end of this tick: for art that changes without a deploy (a job that writes this week's banners into `resource_packs/featured/`). A pack whose files changed is sent again to every player who has it (the project's to everyone online, an `onDemand` one to whoever it was pushed to); one that didn't change sends nothing. A pack with errors keeps its last good build, as a save in the editor does.
+--- Reads the project's resource packs from disk again and builds them, at the end of this tick: for art that changes without a deploy. That's the project's and its packages' `resource_packs/` (on a server you can write to), and the resource packs packages' scripts wrote into their own `nf.files` folder: `packs/<name>/`, with a `pack.json` and its pictures and sounds as in `resource_packs/<name>/`, is the package's resource pack `<name>` (its glyphs are `<glyph:<name>/<key>>` to its scripts, and an `onDemand` one is pushed by name), which works on a deployed project too and survives restarts. A pack whose files changed is sent again to every player who has it (the project's to everyone online, an `onDemand` one to whoever it was pushed to); one that didn't change sends nothing. A pack in `resource_packs/` with errors keeps its last good build, as a save in the editor does; one the scripts wrote with errors is built from its last good copy, or left out, so the rest still builds, and the server's log says why (`runtime.written-pack`). A written pack can't take a name the package has in `resource_packs/`.
 function nf.packs.rebuild() end
 
 --- The `onDemand` packs there are now, by name as the calling script's package names them: what `player:push_resource_pack` takes. Empty while the packs have errors and nothing is built.
@@ -6300,6 +6300,15 @@ function File:write(text) end
 ---@param text string
 ---@return boolean
 function File:append(text) end
+
+--- The contents as base64, byte for byte: for a file that isn't text (a picture, a sound). `nil` when there's no file.
+---@return string?
+function File:read_base64() end
+
+--- Replaces the contents with bytes given as base64, creating folders above it as needed: for a file that isn't text, such as a picture a resource pack draws (`image:encode()` is a PNG's). `write` writes text as UTF-8, so it can't write these. Both base64 alphabets are read (`+/` and the URL-safe `-_`), with or without padding.
+---@param data string The bytes, base64.
+---@return boolean # `false` for data that isn't base64, a folder, past the size cap, or on a disk error.
+function File:write_base64(data) end
 
 --- The contents parsed as JSON, as `nf.json.decode` does, or `nil` when there's no file or it isn't JSON.
 ---@return any

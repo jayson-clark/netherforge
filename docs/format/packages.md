@@ -259,8 +259,12 @@ A project marks such a dependency `provided`, and usually gives it a
 - `netherforge build` leaves it out of the bundle and lists it in the
   manifest's `provided`, so the bundle's hashes are of what it carries.
   `netherforge build --exclude <namespace>` leaves out a dependency that isn't
-  marked. A bundle that leaves a package out has no built `resourcePack`: the
-  server builds the pack with its own copy's resources.
+  marked. The bundle still has a built `resourcePack` when no package it
+  leaves out (as it resolved for the build) adds to the pack: no resource
+  packs, blocks or videos of its own, like a bridge that is only scripts. A
+  package that does add to it leaves the pack for the server to build with its
+  own copy. A server whose copy adds to the pack where the build's didn't
+  builds its own instead of sending the bundle's.
 - The server loads its copy in place of any copy the project or bundle points
   at, when its version is in every range that depends on it (otherwise
   `package.version`, naming both versions, and the project is refused as for a

@@ -1730,6 +1730,10 @@ Error. A package declares a plugin in `requires.plugins` that isn't enabled on t
 
 Warning. The server doesn't say which resource pack format it uses, so no resource pack was built. See [the dev loop](../guide/dev-loop.md).
 
+### `runtime.written-pack` {#runtime-written-pack}
+
+Warning. A resource pack a package's scripts wrote (`packs/<name>/` in its `nf.files` folder) isn't used: it has errors (its last good copy runs, if it had one), or the package has a resource pack of that name already. See [resource packs](resource-pack.md).
+
 ### `runtime.blocks` {#runtime-blocks}
 
 Error. The server can't hold the project's blocks: it has no states of their carrier for them, or won't stop working them out itself. See [blocks](block.md).

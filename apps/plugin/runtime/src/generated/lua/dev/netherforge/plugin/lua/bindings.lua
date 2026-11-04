@@ -7730,6 +7730,22 @@ do
     return prim["File.append"](self_key, text)
   end
 
+  function File.read_base64(self)
+    local self_key = ids[self]
+    if self_key == nil or not File_is[class_of(self)] then
+      self_key = self_of(self, "File")
+    end
+    return prim["File.read_base64"](self_key)
+  end
+
+  function File.write_base64(self, data)
+    local self_key = ids[self]
+    if self_key == nil or not File_is[class_of(self)] then
+      self_key = self_of(self, "File")
+    end
+    return prim["File.write_base64"](self_key, data)
+  end
+
   function File.read_json(self)
     local self_key = ids[self]
     if self_key == nil or not File_is[class_of(self)] then

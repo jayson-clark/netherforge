@@ -6,6 +6,7 @@ import dev.netherforge.plugin.data.parseJson
 import dev.netherforge.plugin.lua.LuaApiException
 import dev.netherforge.plugin.lua.LuaValue
 import dev.netherforge.plugin.session.ProjectSession
+import java.util.Base64
 
 internal class FileImpl(private val session: ProjectSession) : FileApi {
     private val files get() = session.files
@@ -59,6 +60,24 @@ internal class FileImpl(private val session: ProjectSession) : FileApi {
 
     override fun append(self: LuaHandle.File, text: String): Boolean =
         relative(self) != "" && files.write(checked(self), text, append = true)
+
+    override fun readBase64(self: LuaHandle.File): String? = files.readBytes(checked(self))?.let(Base64.getEncoder()::encodeToString)
+
+    override fun writeBase64(self: LuaHandle.File, data: String): Boolean {
+        if (relative(self) == "") return false
+        val bytes = decode(data) ?: return false
+        return files.write(checked(self), bytes, append = false)
+    }
+
+    /** Base64 in either alphabet, padded or not, spaces and line breaks ignored; null for anything else. */
+    private fun decode(data: String): ByteArray? {
+        val compact = data.filterNot { it.isWhitespace() }.trimEnd('=').replace('-', '+').replace('_', '/')
+        return try {
+            Base64.getDecoder().decode(compact + "=".repeat((4 - compact.length % 4) % 4))
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+    }
 
     override fun readJson(self: LuaHandle.File): Any? {
         val text = files.read(checked(self)) ?: return null

@@ -10,7 +10,7 @@ A handle: call its methods with a colon, `file:method()`.
 | | Methods |
 | --- | --- |
 | [Paths](#paths) | [`path`](#path) [`name`](#name) [`parent`](#parent) [`child`](#child) [`exists`](#exists) [`is_folder`](#is_folder) |
-| [Reading and writing](#reading-and-writing) | [`read`](#read) [`write`](#write) [`append`](#append) [`lines`](#lines) [`read_json`](#read_json) [`write_json`](#write_json) |
+| [Reading and writing](#reading-and-writing) | [`read`](#read) [`write`](#write) [`append`](#append) [`lines`](#lines) [`read_json`](#read_json) [`write_json`](#write_json) [`read_base64`](#read_base64) [`write_base64`](#write_base64) |
 | [Files and folders](#files-and-folders) | [`size`](#size) [`modified_time`](#modified_time) [`children`](#children) [`rename`](#rename) [`copy_to`](#copy_to) [`create_folder`](#create_folder) [`delete`](#delete) |
 
 ## Paths {#paths}
@@ -110,6 +110,27 @@ Writes a value as JSON, as `nf.json.encode` does.
 | `value` | `any` |  |
 
 **Returns** `boolean`: `false` for something JSON can't hold (a function, a table inside itself) or a failed write.
+
+### `file:read_base64()` {#read_base64}
+
+The contents as base64, byte for byte: for a file that isn't text (a picture, a sound). `nil` when there's no file.
+
+**Returns** `string?`
+
+### `file:write_base64(data)` {#write_base64}
+
+Replaces the contents with bytes given as base64, creating folders above it as needed: for a file that isn't text, such as a picture a resource pack draws (`image:encode()` is a PNG's). `write` writes text as UTF-8, so it can't write these. Both base64 alphabets are read (`+/` and the URL-safe `-_`), with or without padding.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `data` | `string` | The bytes, base64. |
+
+**Returns** `boolean`: `false` for data that isn't base64, a folder, past the size cap, or on a disk error.
+
+```lua
+local image = nf.images.fill(16, 16, "#FFD700")
+assert(nf.files.get("packs/featured/textures/coin.png")):write_base64(image:encode())
+```
 
 ## Files and folders {#files-and-folders}
 

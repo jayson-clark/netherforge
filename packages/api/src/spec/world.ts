@@ -76,6 +76,25 @@ export const fileClass: LuaClass = {
       returns: [{ type: 'boolean' }],
     },
     {
+      name: 'read_base64',
+      doc: "The contents as base64, byte for byte: for a file that isn't text (a picture, a sound). `nil` when there's no file.",
+      params: [],
+      returns: [{ type: 'string?' }],
+    },
+    {
+      name: 'write_base64',
+      doc: "Replaces the contents with bytes given as base64, creating folders above it as needed: for a file that isn't text, such as a picture a resource pack draws (`image:encode()` is a PNG's). `write` writes text as UTF-8, so it can't write these. Both base64 alphabets are read (`+/` and the URL-safe `-_`), with or without padding.",
+      params: [{ name: 'data', type: 'string', doc: 'The bytes, base64.' }],
+      returns: [
+        {
+          type: 'boolean',
+          doc: "`false` for data that isn't base64, a folder, past the size cap, or on a disk error.",
+        },
+      ],
+      example:
+        'local image = nf.images.fill(16, 16, "#FFD700")\nassert(nf.files.get("packs/featured/textures/coin.png")):write_base64(image:encode())',
+    },
+    {
       name: 'read_json',
       doc: "The contents parsed as JSON, as `nf.json.decode` does, or `nil` when there's no file or it isn't JSON.",
       params: [],

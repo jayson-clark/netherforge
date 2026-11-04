@@ -85,7 +85,15 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
     val files = ScriptFiles(config.dataDirectory, config.files)
 
     /** The project's files and its packages', wherever they are (a dev server's folders, a bundle). */
-    val source = ProjectFiles(config.project, config.resolvesPackages, config.packageCache, config.bundles, config.providedPackages)
+    val source = ProjectFiles(
+        config.project,
+        config.resolvesPackages,
+        config.packageCache,
+        config.bundles,
+        config.providedPackages,
+        writtenPacks = config.dataDirectory,
+        keptPacks = config.stateDirectory.resolve("written-packs")
+    )
 
     /** The resource pack: the last good build, the server that serves it, and what each player was sent. */
     val packs = Packs(
@@ -96,7 +104,8 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
         source::readBytes,
         onMain = { mainThread.execute(it) },
         loadedElsewhere = { player -> network.takeIf { it.connected && it.keepsPacks }?.players?.get(player.toString())?.pack },
-        prebuilt = { source.bundledPack }
+        prebuilt = { source.bundledPack },
+        prebuiltIgnored = { source.bundledPackIgnored }
     ).also { packs ->
         packs.onLoaded = { player, sha1 -> network.send(dev.netherforge.network.ServerFrame.PackLoaded(player.toString(), sha1)) }
     }
@@ -452,7 +461,16 @@ class NetherForgeRuntime(val platform: Platform, val config: RuntimeConfig) {
         // A script asked for the resource packs read again (`nf.packs.rebuild`): after the tick, out of every script's way.
         if (session.packsWanted) {
             session.packsWanted = false
-            if (session.running) reload(session.snapshot.everywhere(ResourcePackKind).keys.map { packFile(it) })
+            // The packs there were, and those the packages' scripts have written now (`nf.files`' packs/), new ones included.
+            if (session.running) {
+                reload(
+                    (
+                        session.snapshot.everywhere(ResourcePackKind).keys.map {
+                            packFile(it)
+                        } + source.writtenPackFiles()
+                        ).distinct()
+                )
+            }
         }
         store.commit()
         // The network's policy for this server came, or changed, or the hub a project waits for is here: a new session.

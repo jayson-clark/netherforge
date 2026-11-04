@@ -159,11 +159,22 @@ class ScriptFiles(private val root: Path, private val limits: FilesConfig = File
 
     fun read(path: String): String? = resolve(path)?.takeIf { it.isRegularFile() }?.readText()
 
+    /** The file's bytes, or null when there's no file. */
+    fun readBytes(path: String): ByteArray? = resolve(path)?.takeIf { it.isRegularFile() }?.let {
+        try {
+            Files.readAllBytes(it)
+        } catch (_: IOException) {
+            null
+        }
+    }
+
     /** Replaces or appends. False for a directory, for text past [MAX_BYTES], or on an I/O failure. */
-    fun write(path: String, text: String, append: Boolean): Boolean {
+    fun write(path: String, text: String, append: Boolean): Boolean = write(path, text.encodeToByteArray(), append)
+
+    /** Replaces or appends [bytes], as [write] does text. */
+    fun write(path: String, bytes: ByteArray, append: Boolean): Boolean {
         val target = resolve(path) ?: return false
         if (normalize(path) == "" || target.isDirectory()) return false
-        val bytes = text.encodeToByteArray()
         val before = if (target.isRegularFile()) target.fileSize() else null
         val existing = if (append) before ?: 0L else 0L
         if (existing + bytes.size > MAX_BYTES) return false

@@ -8266,6 +8266,23 @@ fun luaPrimitives(api: LuaApi, marshal: Marshal): Map<String, Primitive> = build
         1
     }
 
+    fn("File.read_base64") { call ->
+        val lua = call.lua
+        val self = call.self(1) as LuaHandle.File
+        val result = api.file.readBase64(self)
+        call.push(result, CODEC_1)
+        1
+    }
+
+    fn("File.write_base64") { call ->
+        val lua = call.lua
+        val self = call.self(1) as LuaHandle.File
+        val data = call.arg(2, "data", LuaCodecs.STRING)
+        val result = api.file.writeBase64(self, data)
+        call.push(result, LuaCodecs.BOOLEAN)
+        1
+    }
+
     fn("File.read_json") { call ->
         val lua = call.lua
         val self = call.self(1) as LuaHandle.File

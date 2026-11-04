@@ -61,7 +61,9 @@ class Packs(
      */
     private val loadedElsewhere: (UUID) -> String? = { null },
     /** The pack a bundle was built with, and its file (`netherforge build`): sent as it is when it's for this server's format. */
-    private val prebuilt: () -> Pair<BundledResourcePack, Path>? = { null }
+    private val prebuilt: () -> Pair<BundledResourcePack, Path>? = { null },
+    /** Why a bundle's pack isn't [prebuilt] though it has one (the server's copy of a package adds to the pack), or null. */
+    private val prebuiltIgnored: () -> String? = { null }
 ) {
     /** A pack's game said it loaded: the network hears it, for the next server they go to. */
     var onLoaded: ((player: UUID, sha1: String) -> Unit)? = null
@@ -119,7 +121,7 @@ class Packs(
         // Blocks need a pack too, even a project with no pictures of its own: the note block states they're held as are drawn by it.
         // So do videos' sounds, which the pack carries as sound events.
         val videos = VideoSound.of(snapshot)
-        if (snapshot.everywhere(ResourcePackKind).isEmpty() && snapshot.everywhere(BlockKind).isEmpty() && videos.isEmpty()) {
+        if (!PackLayout.needed(snapshot)) {
             compiled = emptyMap()
             built = null
             onDemand = emptyMap()
@@ -159,7 +161,9 @@ class Packs(
      * one here. A bundle's files are checked against its manifest, and this one against its SHA-1, so it's what was built.
      */
     private fun bundled(format: List<Int>): ByteArray? {
-        val (pack, file) = prebuilt() ?: return null
+        val (pack, file) = prebuilt() ?: return null.also {
+            prebuiltIgnored()?.let { why -> log.info("Building the resource pack here rather than sending the bundle's: $why") }
+        }
         if (pack.format != format) {
             log.info("The bundle's resource pack is for pack format ${pack.format.joinToString(".")}, not this server's: building one")
             return null

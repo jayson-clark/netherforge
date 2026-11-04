@@ -46,7 +46,8 @@ class ProblemCoverageTest {
         "script.error" to "script/EventTest",
         "script.slow" to "script/ScriptCostsTest",
         "particles.budget" to "particle/ParticleEffectTest",
-        "runtime.pack-format" to "pack/PackTest"
+        "runtime.pack-format" to "pack/PackTest",
+        "runtime.written-pack" to "pack/WrittenPacksTest"
     )
 
     @Test

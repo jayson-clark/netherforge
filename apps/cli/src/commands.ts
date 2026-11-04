@@ -382,7 +382,8 @@ export function lock(
  *
  * A package the server provides is left out (a dependency marked `provided` anywhere in the tree, or one
  * [options.exclude] names) and listed in the manifest's `provided`, so the bundle's hashes are of what it carries and
- * the server loads its own copy. The resource pack isn't built then: the server's copy may bring other resources.
+ * the server loads its own copy. The resource pack is built still when none of them (as it resolved here) adds to it,
+ * since it's the same without them; a server whose copy does add to it builds its own.
  */
 export function build(
   root: string,
@@ -462,11 +463,9 @@ export function build(
     JSON.stringify(readPackages(root, packageCache(env), input)),
     game.json,
     JSON.stringify(pngSizes(root, Object.keys(input))),
+    JSON.stringify([...provided]),
   )
-  const pack: ReturnType<typeof buildPack> =
-    provided.size > 0
-      ? { reason: 'the server provides some of its packages, and builds the pack with its copies' }
-      : buildPack(out, namespace, layout)
+  const pack = buildPack(out, namespace, layout)
   let resourcePack: { sha1: string; format: number[] } | undefined
   let packLine: string
   if ('zip' in pack) {
