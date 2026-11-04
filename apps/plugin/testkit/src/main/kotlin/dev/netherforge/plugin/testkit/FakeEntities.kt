@@ -210,7 +210,13 @@ open class FakeEntities(protected val platform: FakePlatform) : EntityOps {
 class FakeClientEntities(platform: FakePlatform) :
     FakeEntities(platform),
     ClientEntityOps {
-    override fun isLoaded(id: UUID) = id in all
+    /** How many times [isLoaded] was asked: nothing about these unloads, so the runtime needn't. */
+    var loadedAsked = 0
+
+    override fun isLoaded(id: UUID): Boolean {
+        loadedAsked++
+        return id in all
+    }
 
     /** Onto another of these only, and never round in a circle (onto something it carries). */
     override fun mount(vehicle: UUID, passenger: UUID): Boolean {

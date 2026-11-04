@@ -1124,6 +1124,9 @@ class Centities(
      * it was last put, which may be the next chunk over.)
      */
     private fun dropGone(instance: Instance) {
+        // A private one's client entities go only when we remove them, and asking for each of every page's every tick
+        // was ~9% of a hub's tick at 250 players.
+        if (instance.viewers != null) return
         val entities = ops(instance)
         fun gone(entity: UUID, at: Location) = !entities.isLoaded(entity) && platform.worlds.entitiesLoaded(at)
         val anchor = instance.anchor

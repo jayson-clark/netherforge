@@ -147,6 +147,9 @@ class PrivateCentityTest {
             server.tick()
             assertEquals(40, server.live().size)
             assertTrue(server.platform.entities.all.isEmpty())
+            server.platform.clientEntities.loadedAsked = 0
+            server.tick(5)
+            assertEquals(0, server.platform.clientEntities.loadedAsked, "nothing of a private one goes missing, so a tick never asks")
             for (player in players) {
                 val seen = server.platform.clientEntities.seenBy(player.ref.uuid)
                 assertEquals(1, seen.map { it.tag.instance }.toSet().size, "${player.ref.name} has their own page only")
