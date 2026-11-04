@@ -24,6 +24,15 @@ pub trait Document: Serialize + DeserializeOwned + Clone + schemars::JsonSchema 
         self.clone()
     }
 
+    /// Its resources run a script: the `.lua` files beside it are the
+    /// script's to `require`, so they're named as a module's are.
+    const SCRIPTED: bool = false;
+
+    /// Its script, when it has one.
+    fn script(&self) -> Option<&crate::script::ScriptDef> {
+        None
+    }
+
     /// Its checks on itself alone that its fields' rules can't say (see
     /// `rules`): those run first, from its schema.
     fn validate(&self, _cx: &Context, _sink: &mut ProblemSink) {}
@@ -67,7 +76,32 @@ pub fn load<T: Document>(text: &str, path: &str, cx: &Context) -> (Option<T>, Ve
                 serde_json::from_str(text).expect("it parsed as the model");
             crate::rules::check::<T>(&json, &mut sink);
             value.validate(cx, &mut sink);
-            (Some(value), sink.problems)
+            let mut problems = sink.problems;
+            if T::SCRIPTED {
+                problems.extend(script_files(value.script(), path, cx));
+            }
+            (Some(value), problems)
         }
     }
+}
+
+/// Lua beside a resource's script that `require` can't reach.
+fn script_files(
+    script: Option<&crate::script::ScriptDef>,
+    path: &str,
+    cx: &Context,
+) -> Vec<Problem> {
+    let folder = path.rsplit_once('/').map_or("", |(f, _)| f);
+    cx.files
+        .into_iter()
+        .flatten()
+        .filter(|f| f.ends_with(".lua") && Some(f.as_str()) != script.map(|s| s.file.as_str()) && !crate::names::is_lua_file(f))
+        .map(|f| {
+            crate::codes::SCRIPT_FILE_NAME.at(
+                &format!("{folder}/{f}"),
+                "Lua files beside a script must be named with letters, digits and _ so require() can reach them",
+                None,
+            )
+        })
+        .collect()
 }

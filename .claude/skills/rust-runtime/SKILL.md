@@ -435,6 +435,15 @@ unchanged.
 1`, `color must be #rrggbb`), and the editor reads the same constraints in the schema.
   `rules::uncoded::<T>()` lists a constraint with no code, which each kind's tests assert is
   none. A kind's `validate` keeps only what a schema can't say (a slot inside its menu's size).
+- **A stack and a project item share their look's fields, declared once**: `item_with_look!`
+  lays the look (kind, name, lore, enchantments... `useEffects`, with their rules) where a struct
+  says `..look,`, and writes its `look()`. `ItemDef` is the look and then a stack's own fields
+  (`item`, `count`, `damage`, `map`, `data`); `ItemFile` is `$schema`, the look, then its own.
+  Format's Kotlin wrote the look twice (`ItemDef`, `ItemFile`) and copied it in `look()`; for one
+  definition to serve both, a stack's own fields moved after its look in Kotlin too (a format
+  change: the examples rewritten by Kotlin's writer, the reference goldens regenerated).
+  `look()`'s copy is held to every look field by a test. A project item's missing `kind` is
+  now the `item.kind` problem (Kotlin made it a parse error).
 - **Shared pieces**: `item.rs` is `ItemDef` (a stack, in menus, loot, recipes and items) with
   its rules on its fields (`Rules.item`'s ranges and patterns, about half of it) and `check`,
   the rest (ids the game must have, a durable item that can't stack, modifiers sharing an id,
@@ -447,14 +456,16 @@ unchanged.
   `Document` (`document.rs`): its `SCHEMA` from a file one folder deep, which `schema_at`
   adjusts for the folders the file is really in (group folders add `../`, as `schemaAt` does),
   its `canonical()`, and its `validate`. `kind::read` dispatches a scanned resource to its kind.
-  A files kind (`module`) has no model, only its checks.
+  A files kind (`module`) has no model, only its checks. A scripted kind says so
+  (`Document::SCRIPTED`, `script()`), and `load` checks the Lua files beside its script are named
+  so `require` can reach them (`script.file-name`), for every such kind at once.
 - **What the goldens hold a kind to**: `tests/goldens.rs` compares a ported kind's problems with
   the goldens' by what's wrong and where (severity, file, path, code, position, related), not
   their wording, since the field rules word themselves; each kind's own tests hold its wording.
   Checks across resources (`reference.*`, `font.*`, `item.kind-mismatch`) are left out until they're ported. The examples are
   valid projects, so a ported kind must report no errors in them, and must write them back to
   the same bytes. When the Rust side takes over, the goldens are written from it. Ported:
-  `buff` (all its rules are fields'), `menu` (its type and size, slot keys, items' and scripts' checks), `module` (with `ModuleRequires`, worked out once per
+  `buff` (all its rules are fields'), `item`, `menu` (its type and size, slot keys, items' and scripts' checks), `module` (with `ModuleRequires`, worked out once per
   project in `Source`).
 
 Next in format: reading each resource with its kind's model and checks (kind by kind, each

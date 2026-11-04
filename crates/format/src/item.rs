@@ -16,79 +16,135 @@ use crate::problem::{ProblemSink, codes};
 #[schemars(extend("minimum" = 1, "maximum" = 255, "x-problem" = "item.enchantment-level"))]
 pub struct EnchantmentLevel(pub i32);
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ItemDef {
-    /// The game's item it is (`minecraft:bread`), or empty for a project item's, which `item` names.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub kind: String,
-    /// A project item: its stack is that item's.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub item: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 1, max = 99), extend("x-problem" = "item.count"))]
-    pub count: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub lore: Option<Vec<String>>,
-    /// Enchantments by id, each with its level.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(extend("propertyNames" = {
-        "pattern": game::ID_PATTERN,
-        "x-problem": "item.enchantment",
-        "x-rule": "an enchantment id"
-    }))]
-    pub enchantments: Option<Map<EnchantmentLevel>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub glint: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hide_tooltip: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub unbreakable: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 0), extend("x-problem" = "item.damage"))]
-    pub damage: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub item_model: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub invisible: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tooltip_style: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub equipment: Option<EquipmentDef>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(regex(pattern = r"^#[0-9a-fA-F]{6}$"), extend("x-problem" = "item.color", "x-rule" = "#RRGGBB"))]
-    pub color: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub profile: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 1, max = 99), extend("x-problem" = "item.max-stack-size"))]
-    pub max_stack_size: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub rarity: Option<ItemRarity>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub attribute_modifiers: Option<Vec<AttributeModifierDef>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub can_break: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub can_place_on: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hidden_tooltip_components: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub food: Option<FoodDef>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cooldown: Option<CooldownDef>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hold: Option<Hold>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub use_effects: Option<UseEffectsDef>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 0), extend("x-problem" = "item.map"))]
-    pub map: Option<i32>,
-    /// What scripts keep on the stack.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Map<Free>>,
+/// How an item looks and behaves, the fields a stack and a project item's
+/// file share, declared once: `item_with_look!` lays them, with their rules,
+/// where a struct says `..look,` among its own fields (a stack's count, a
+/// project item's `$schema` and script).
+macro_rules! item_with_look {
+    ($(#[$attr:meta])* pub struct $name:ident {
+        $($(#[$before_attr:meta])* pub $before:ident: $before_ty:ty,)*
+        ..look,
+        $($(#[$field_attr:meta])* pub $field:ident: $ty:ty,)*
+    }) => {
+        $(#[$attr])*
+        #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+        #[serde(rename_all = "camelCase", deny_unknown_fields)]
+        pub struct $name {
+            $($(#[$before_attr])* pub $before: $before_ty,)*
+            /// The game's item it is (`minecraft:bread`).
+            #[serde(default, skip_serializing_if = "String::is_empty")]
+            pub kind: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub name: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub lore: Option<Vec<String>>,
+            /// Enchantments by id, each with its level.
+            #[serde(skip_serializing_if = "Option::is_none")]
+            #[schemars(extend("propertyNames" = {
+                "pattern": game::ID_PATTERN,
+                "x-problem": "item.enchantment",
+                "x-rule": "an enchantment id"
+            }))]
+            pub enchantments: Option<Map<EnchantmentLevel>>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub glint: Option<bool>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub hide_tooltip: Option<bool>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub unbreakable: Option<bool>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub item_model: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub tooltip_style: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub equipment: Option<EquipmentDef>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            #[schemars(regex(pattern = r"^#[0-9a-fA-F]{6}$"), extend("x-problem" = "item.color", "x-rule" = "#RRGGBB"))]
+            pub color: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub profile: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            #[schemars(range(min = 1, max = 99), extend("x-problem" = "item.max-stack-size"))]
+            pub max_stack_size: Option<i32>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub rarity: Option<ItemRarity>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub attribute_modifiers: Option<Vec<AttributeModifierDef>>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub can_break: Option<Vec<String>>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub can_place_on: Option<Vec<String>>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub invisible: Option<bool>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub hidden_tooltip_components: Option<Vec<String>>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub food: Option<FoodDef>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub cooldown: Option<CooldownDef>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub hold: Option<Hold>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub use_effects: Option<UseEffectsDef>,
+            $($(#[$field_attr])* pub $field: $ty,)*
+        }
+
+        impl $name {
+            /// Its look, as a stack has it (a project item's file is the look of its stacks).
+            pub fn look(&self) -> ItemDef {
+                ItemDef {
+                    kind: self.kind.clone(),
+                    name: self.name.clone(),
+                    lore: self.lore.clone(),
+                    enchantments: self.enchantments.clone(),
+                    glint: self.glint,
+                    hide_tooltip: self.hide_tooltip,
+                    unbreakable: self.unbreakable,
+                    item_model: self.item_model.clone(),
+                    tooltip_style: self.tooltip_style.clone(),
+                    equipment: self.equipment.clone(),
+                    color: self.color.clone(),
+                    profile: self.profile.clone(),
+                    max_stack_size: self.max_stack_size,
+                    rarity: self.rarity,
+                    attribute_modifiers: self.attribute_modifiers.clone(),
+                    can_break: self.can_break.clone(),
+                    can_place_on: self.can_place_on.clone(),
+                    invisible: self.invisible,
+                    hidden_tooltip_components: self.hidden_tooltip_components.clone(),
+                    food: self.food.clone(),
+                    cooldown: self.cooldown.clone(),
+                    hold: self.hold.clone(),
+                    use_effects: self.use_effects.clone(),
+                    ..ItemDef::default()
+                }
+            }
+        }
+    };
+}
+
+pub(crate) use item_with_look;
+
+item_with_look! {
+    /// An item stack: its look, and what's the stack's own.
+    pub struct ItemDef {
+        ..look,
+        /// A project item: its stack is that item's.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub item: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(range(min = 1, max = 99), extend("x-problem" = "item.count"))]
+        pub count: Option<i32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(range(min = 0), extend("x-problem" = "item.damage"))]
+        pub damage: Option<i32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(range(min = 0), extend("x-problem" = "item.map"))]
+        pub map: Option<i32>,
+        /// What scripts keep on the stack.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub data: Option<Map<Free>>,
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]

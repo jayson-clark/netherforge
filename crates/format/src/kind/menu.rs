@@ -101,6 +101,12 @@ impl Document for MenuFile {
         self.schema = schema;
     }
 
+    const SCRIPTED: bool = true;
+
+    fn script(&self) -> Option<&ScriptDef> {
+        self.script.as_ref()
+    }
+
     /// What depends on the menu's type and size, a slot's key, its item's
     /// semantic checks, and the script's file (`MenuValidator.validate`).
     fn validate(&self, cx: &Context, sink: &mut ProblemSink) {

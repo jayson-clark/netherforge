@@ -116,3 +116,36 @@ fn an_items_data_is_written_sorted_however_deep() {
         r#"{"kind":"minecraft:bread","data":{"a":{"b":[{"c":2,"d":1}],"y":true},"z":1}}"#
     );
 }
+
+#[test]
+fn a_project_items_look_is_every_field_it_shares_with_a_stack() {
+    use netherforge_format::kind::item::ItemFile;
+    // Every look field set, plus the file's own: `look()` carries exactly the look.
+    let look = serde_json::json!({
+        "kind": "minecraft:bread", "name": "n", "lore": ["l"], "enchantments": {"minecraft:sharpness": 2},
+        "glint": true, "hideTooltip": true, "unbreakable": true, "itemModel": "ui/m", "tooltipStyle": "ui/t",
+        "equipment": {"asset": "ui/e", "slot": "head"}, "color": "#aabbcc", "profile": "p", "maxStackSize": 1,
+        "rarity": "rare", "attributeModifiers": [{"attribute": "minecraft:speed", "amount": 1.5, "operation": "add_value"}],
+        "canBreak": ["minecraft:stone"], "canPlaceOn": ["minecraft:dirt"], "invisible": true,
+        "hiddenTooltipComponents": ["lore"], "food": {"nutrition": 1, "saturation": 0.5},
+        "cooldown": {"seconds": 2.5}, "hold": true, "useEffects": {"canSprint": true}
+    });
+    let mut file_json = look.clone();
+    file_json["drawWithoutAmmo"] = true.into();
+    file_json["script"] = serde_json::json!({"file": "item.lua"});
+    let file: ItemFile = serde_json::from_value(file_json).unwrap();
+    let schema = serde_json::to_value(schemars::schema_for!(ItemDef)).unwrap();
+    let stack_only = ["item", "count", "damage", "map", "data"];
+    let look_fields: Vec<&String> = schema["properties"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .filter(|k| !stack_only.contains(&k.as_str()))
+        .collect();
+    assert_eq!(
+        look_fields.len(),
+        look.as_object().unwrap().len(),
+        "the test sets every look field"
+    );
+    assert_eq!(serde_json::to_value(file.look()).unwrap(), look);
+}
