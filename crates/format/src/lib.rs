@@ -4,6 +4,8 @@
 
 pub mod canonical;
 pub mod document;
+pub mod game;
+pub mod item;
 pub mod json;
 pub mod kind;
 pub mod kinds;

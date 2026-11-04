@@ -435,6 +435,12 @@ unchanged.
 1`, `color must be #rrggbb`), and the editor reads the same constraints in the schema.
   `rules::uncoded::<T>()` lists a constraint with no code, which each kind's tests assert is
   none. A kind's `validate` keeps only what a schema can't say (a slot inside its menu's size).
+- **Shared pieces**: `item.rs` is `ItemDef` (a stack, in menus, loot, recipes and items) with
+  its rules on its fields (`Rules.item`'s ranges and patterns, about half of it) and `check`,
+  the rest (ids the game must have, a durable item that can't stack, modifiers sharing an id,
+  near-miss names). `game.rs` is the `GameData` the checks ask (registries, tags, durability):
+  a project loads without it, and those checks say nothing then. `canonical::Free` is
+  free-form JSON (an item's `data`), written sorted however deep as kotlinx does.
 - **Kinds, one by one** (`kind/<kind>.rs`, listed in `kind::PORTED`): each document kind is a
   `Document` (`document.rs`): its `SCHEMA` from a file one folder deep, which `schema_at`
   adjusts for the folders the file is really in (group folders add `../`, as `schemaAt` does),

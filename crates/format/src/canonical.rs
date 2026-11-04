@@ -190,3 +190,33 @@ impl<K: schemars::JsonSchema, V: schemars::JsonSchema> schemars::JsonSchema for 
         })
     }
 }
+
+/// Free-form JSON a file keeps for a script (an item's `data`): any value,
+/// written with every object's keys sorted however deep (kotlinx's
+/// `sortedJson`), so the same data is always the same text.
+#[derive(Clone, Debug, PartialEq, Deserialize, schemars::JsonSchema)]
+#[serde(transparent)]
+pub struct Free(pub serde_json::Value);
+
+impl Serialize for Free {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        fn sorted(v: &serde_json::Value) -> serde_json::Value {
+            match v {
+                serde_json::Value::Object(m) => {
+                    let mut keys: Vec<&String> = m.keys().collect();
+                    keys.sort();
+                    serde_json::Value::Object(
+                        keys.into_iter()
+                            .map(|k| (k.clone(), sorted(&m[k])))
+                            .collect(),
+                    )
+                }
+                serde_json::Value::Array(items) => {
+                    serde_json::Value::Array(items.iter().map(sorted).collect())
+                }
+                other => other.clone(),
+            }
+        }
+        sorted(&self.0).serialize(s)
+    }
+}
