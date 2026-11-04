@@ -4,6 +4,7 @@
 pub mod advancement;
 pub mod buff;
 pub mod dialog;
+pub mod dimension_type;
 pub mod files;
 pub mod item;
 pub mod loot;
@@ -59,6 +60,9 @@ pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
         "recipe" => crate::document::load::<recipe::RecipeFile>(&text(), &path, &cx).1,
         "loot_table" => crate::document::load::<loot::LootTableFile>(&text(), &path, &cx).1,
         "sky" => crate::document::load::<sky::SkyFile>(&text(), &path, &cx).1,
+        "dimension_type" => {
+            crate::document::load::<dimension_type::DimensionTypeFile>(&text(), &path, &cx).1
+        }
         "advancement" => {
             crate::document::load::<advancement::AdvancementFile>(&text(), &path, &cx).1
         }
@@ -86,6 +90,7 @@ pub fn write_back(found: &Found, text: &str) -> Option<Result<String, Box<Proble
         "recipe" => again::<recipe::RecipeFile>(text, &path),
         "loot_table" => again::<loot::LootTableFile>(text, &path),
         "sky" => again::<sky::SkyFile>(text, &path),
+        "dimension_type" => again::<dimension_type::DimensionTypeFile>(text, &path),
         "advancement" => again::<advancement::AdvancementFile>(text, &path),
         _ => return None,
     })

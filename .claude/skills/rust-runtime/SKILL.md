@@ -444,6 +444,9 @@ unchanged.
   change: the examples rewritten by Kotlin's writer, the reference goldens regenerated).
   `look()`'s copy is held to every look field by a test. A project item's missing `kind` is
   now the `item.kind` problem (Kotlin made it a parse error).
+- **Defaults are declared once, in the field's schema** (`extend("default" = ...)`), where the
+  editor's fields will read them, instead of Kotlin's constant plus `…OrDefault` getter for each
+  (the dimension type had 20). The checker also takes `multipleOf` (a height in steps of 16).
 - **One definition of a pattern**: a colour is `rules::RGB` (or `ARGB`), named by every field that
   takes one (Kotlin defined `#rrggbb` five times).
 - **Not yet**: a kind's checks that depend on the target Minecraft version (`requireFeature`:
@@ -475,7 +478,7 @@ unchanged.
   Checks across resources (`reference.*`, `font.*`, and the kinds' `crossCheck`s: `ACROSS` in the harness) are left out until they're ported. The examples are
   valid projects, so a ported kind must report no errors in them, and must write them back to
   the same bytes. When the Rust side takes over, the goldens are written from it. Ported:
-  `buff` (all its rules are fields'), `dialog`, `item`, `menu` (its type and size, slot keys, items' and scripts' checks), `recipe` (mostly its own checks: which fields a recipe has depends on its type), `loot_table`, `sky`, `module`, and the files kinds `build`, `map`, `migration` and `wasm` (`kind/files.rs`; a WASM module's checks read its binary, a check across files ported with the WASM reader) (with `ModuleRequires`, worked out once per
+  `buff` (all its rules are fields'), `dialog`, `item`, `menu` (its type and size, slot keys, items' and scripts' checks), `recipe` (mostly its own checks: which fields a recipe has depends on its type), `loot_table`, `sky`, `dimension_type`, `advancement`, `module`, and the files kinds `build`, `map`, `migration` and `wasm` (`kind/files.rs`; a WASM module's checks read its binary, a check across files ported with the WASM reader) (with `ModuleRequires`, worked out once per
   project in `Source`).
 
 Next in format: reading each resource with its kind's model and checks (kind by kind, each

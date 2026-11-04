@@ -170,6 +170,11 @@ fn broken(value: &Value, schema: &Value) -> Option<String> {
                     (None, None) => unreachable!(),
                 });
             }
+            if let Some(step) = number(schema, "multipleOf")
+                && (n / step).fract() != 0.0
+            {
+                return Some(format!("must be a multiple of {}", format_number(step)));
+            }
             if let Some(over) = number(schema, "exclusiveMinimum")
                 && n <= over
             {
@@ -226,6 +231,7 @@ fn broken(value: &Value, schema: &Value) -> Option<String> {
 }
 
 const CONSTRAINTS: &[&str] = &[
+    "multipleOf",
     "minimum",
     "maximum",
     "exclusiveMinimum",
