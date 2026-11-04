@@ -134,9 +134,15 @@ fn the_manifests_problems_are_formats() {
 /// What a problem says is wrong and where, not its wording: the Rust port words
 /// its field rules from their schema (`rules`), so only these must agree.
 fn what_and_where(p: &Value) -> String {
-    let keep = [
-        "severity", "file", "path", "line", "column", "code", "related",
-    ];
+    // A parse problem's position is the reader's to say (`tests/read.rs` holds it): kotlinx
+    // gives none for a custom type's error, where serde does.
+    let keep: &[&str] = if p["code"] == "parse" {
+        &["severity", "file", "code"]
+    } else {
+        &[
+            "severity", "file", "path", "line", "column", "code", "related",
+        ]
+    };
     let o: serde_json::Map<String, Value> = p
         .as_object()
         .unwrap()

@@ -461,11 +461,11 @@ unchanged.
   so `require` can reach them (`script.file-name`), for every such kind at once.
 - **What the goldens hold a kind to**: `tests/goldens.rs` compares a ported kind's problems with
   the goldens' by what's wrong and where (severity, file, path, code, position, related), not
-  their wording, since the field rules word themselves; each kind's own tests hold its wording.
+  their wording, since the field rules word themselves; each kind's own tests hold its wording. A parse problem is compared by file and code only: kotlinx gives no path or position for a custom type's error (an ingredient's), where the reader gives both.
   Checks across resources (`reference.*`, `font.*`, `item.kind-mismatch`) are left out until they're ported. The examples are
   valid projects, so a ported kind must report no errors in them, and must write them back to
   the same bytes. When the Rust side takes over, the goldens are written from it. Ported:
-  `buff` (all its rules are fields'), `dialog`, `item`, `menu` (its type and size, slot keys, items' and scripts' checks), `module` (with `ModuleRequires`, worked out once per
+  `buff` (all its rules are fields'), `dialog`, `item`, `menu` (its type and size, slot keys, items' and scripts' checks), `recipe` (mostly its own checks: which fields a recipe has depends on its type), `module` (with `ModuleRequires`, worked out once per
   project in `Source`).
 
 Next in format: reading each resource with its kind's model and checks (kind by kind, each

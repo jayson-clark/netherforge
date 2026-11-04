@@ -6,6 +6,7 @@ pub mod dialog;
 pub mod item;
 pub mod menu;
 pub mod module;
+pub mod recipe;
 
 use std::collections::BTreeSet;
 
@@ -13,7 +14,7 @@ use crate::problem::Problem;
 use crate::snapshot::Found;
 
 /// The kinds whose resources this crate reads so far.
-pub const PORTED: &[&str] = &["buff", "dialog", "item", "menu", "module"];
+pub const PORTED: &[&str] = &["buff", "dialog", "item", "menu", "module", "recipe"];
 
 /// What a resource is read from: the project's files, a way to read one, and
 /// what's worked out across them once (the modules scripts require).
@@ -53,6 +54,7 @@ pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
         "menu" => crate::document::load::<menu::MenuFile>(&text(), &path, &cx).1,
         "item" => crate::document::load::<item::ItemFile>(&text(), &path, &cx).1,
         "dialog" => crate::document::load::<dialog::DialogFile>(&text(), &path, &cx).1,
+        "recipe" => crate::document::load::<recipe::RecipeFile>(&text(), &path, &cx).1,
         "module" => module::check(found, source),
         _ => return None,
     })
@@ -70,6 +72,7 @@ pub fn write_back(found: &Found, text: &str) -> Option<Result<String, Box<Proble
         "menu" => again::<menu::MenuFile>(text, &path),
         "item" => again::<item::ItemFile>(text, &path),
         "dialog" => again::<dialog::DialogFile>(text, &path),
+        "recipe" => again::<recipe::RecipeFile>(text, &path),
         _ => return None,
     })
 }
