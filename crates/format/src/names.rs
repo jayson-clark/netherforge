@@ -36,10 +36,17 @@ macro_rules! pattern {
     };
 }
 
-const ID_BODY: &str = "[a-z0-9][a-z0-9_]{0,63}";
+macro_rules! id_body {
+    () => {
+        "[a-z0-9][a-z0-9_]{0,63}"
+    };
+}
+const ID_BODY: &str = id_body!();
+/// An id's pattern, for a field's rule (with [`ID_RULE`] its words).
+pub const ID_PATTERN: &str = concat!("^", id_body!(), "$");
 const HOST_LABEL: &str = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
 
-pattern!(ID, &format!("^{ID_BODY}$"));
+pattern!(ID, ID_PATTERN);
 pattern!(NODE_NAME, "^[A-Za-z0-9_-]{1,64}$");
 pattern!(WORLD_NAME, "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$");
 pattern!(PERMISSION_NODE, "^[a-z0-9_-]+(\\.[a-z0-9_-]+)*$");

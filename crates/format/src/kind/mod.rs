@@ -4,6 +4,7 @@
 pub mod advancement;
 pub mod biome;
 pub mod buff;
+pub mod cutscene;
 pub mod dialog;
 pub mod dimension_type;
 pub mod files;
@@ -64,6 +65,7 @@ pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
         "sky" => crate::document::load::<sky::SkyFile>(&text(), &path, &cx).1,
         "biome" => crate::document::load::<biome::BiomeFile>(&text(), &path, &cx).1,
         "game_block" => crate::document::load::<game_block::GameBlockFile>(&text(), &path, &cx).1,
+        "cutscene" => crate::document::load::<cutscene::CutsceneFile>(&text(), &path, &cx).1,
         "dimension_type" => {
             crate::document::load::<dimension_type::DimensionTypeFile>(&text(), &path, &cx).1
         }
@@ -96,6 +98,7 @@ pub fn write_back(found: &Found, text: &str) -> Option<Result<String, Box<Proble
         "sky" => again::<sky::SkyFile>(text, &path),
         "biome" => again::<biome::BiomeFile>(text, &path),
         "game_block" => again::<game_block::GameBlockFile>(text, &path),
+        "cutscene" => again::<cutscene::CutsceneFile>(text, &path),
         "dimension_type" => again::<dimension_type::DimensionTypeFile>(text, &path),
         "advancement" => again::<advancement::AdvancementFile>(text, &path),
         _ => return None,

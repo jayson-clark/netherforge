@@ -251,7 +251,12 @@ pub fn uncoded<T: JsonSchema>() -> Vec<String> {
     fn visit(value: &Value, at: &str, out: &mut Vec<String>) {
         match value {
             Value::Object(map) => {
-                if CONSTRAINTS.iter().any(|c| map.contains_key(*c)) && code_of(value).is_none() {
+                // A tuple's length (`[x, y, z]`) is its shape, which reading it holds it to.
+                let tuple = map.contains_key("prefixItems");
+                if !tuple
+                    && CONSTRAINTS.iter().any(|c| map.contains_key(*c))
+                    && code_of(value).is_none()
+                {
                     out.push(at.to_owned());
                 }
                 for (k, v) in map {

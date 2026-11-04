@@ -2,6 +2,7 @@
 //! (see the rust-runtime skill, "Format"). One format: the same bytes on
 //! every side, so a file nobody changed is never a diff.
 
+pub mod animation;
 pub mod canonical;
 pub mod document;
 pub mod game;
