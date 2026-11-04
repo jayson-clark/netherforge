@@ -26,6 +26,7 @@ item_with_look! {
         pub draw_without_ammo: Option<bool>,
         /// A project block it places.
         #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(extend("x-ref" = "block"))]
         pub block: Option<String>,
         /// Values its script reads.
         #[serde(skip_serializing_if = "Option::is_none")]

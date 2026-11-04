@@ -80,6 +80,7 @@ pub struct Cue {
     pub event: Option<String>,
     /// MiniMessage shown as the subtitle while the cue lasts.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-minimessage" = true))]
     pub text: Option<String>,
     /// Seconds the text stays. Default 3.
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -36,6 +36,7 @@ pub struct GameBlockFile {
     pub requires_tool: Option<bool>,
     /// `<id>`: the loot table rolled when it's broken, instead of the game's.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "loot_table"))]
     pub drops: Option<String>,
 }
 

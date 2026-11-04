@@ -26,17 +26,19 @@ macro_rules! item_with_look {
         ..look,
         $($(#[$field_attr:meta])* pub $field:ident: $ty:ty,)*
     }) => {
-        $(#[$attr])*
         #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
         #[serde(rename_all = "camelCase", deny_unknown_fields)]
+        $(#[$attr])*
         pub struct $name {
             $($(#[$before_attr])* pub $before: $before_ty,)*
             /// The game's item it is (`minecraft:bread`).
             #[serde(default, skip_serializing_if = "String::is_empty")]
             pub kind: String,
             #[serde(skip_serializing_if = "Option::is_none")]
+            #[schemars(extend("x-minimessage" = true))]
             pub name: Option<String>,
             #[serde(skip_serializing_if = "Option::is_none")]
+            #[schemars(extend("x-minimessage" = true))]
             pub lore: Option<Vec<String>>,
             /// Enchantments by id, each with its level.
             #[serde(skip_serializing_if = "Option::is_none")]
@@ -53,8 +55,10 @@ macro_rules! item_with_look {
             #[serde(skip_serializing_if = "Option::is_none")]
             pub unbreakable: Option<bool>,
             #[serde(skip_serializing_if = "Option::is_none")]
+            #[schemars(extend("x-ref" = "item_model"))]
             pub item_model: Option<String>,
             #[serde(skip_serializing_if = "Option::is_none")]
+            #[schemars(extend("x-ref" = "tooltip"))]
             pub tooltip_style: Option<String>,
             #[serde(skip_serializing_if = "Option::is_none")]
             pub equipment: Option<EquipmentDef>,
@@ -71,8 +75,10 @@ macro_rules! item_with_look {
             #[serde(skip_serializing_if = "Option::is_none")]
             pub attribute_modifiers: Option<Vec<AttributeModifierDef>>,
             #[serde(skip_serializing_if = "Option::is_none")]
+            #[schemars(extend("x-ref" = "adventure_block"))]
             pub can_break: Option<Vec<String>>,
             #[serde(skip_serializing_if = "Option::is_none")]
+            #[schemars(extend("x-ref" = "adventure_block"))]
             pub can_place_on: Option<Vec<String>>,
             #[serde(skip_serializing_if = "Option::is_none")]
             pub invisible: Option<bool>,
@@ -126,11 +132,15 @@ macro_rules! item_with_look {
 pub(crate) use item_with_look;
 
 item_with_look! {
-    /// An item stack: its look, and what's the stack's own.
+    /// An item stack: its look, and what's the stack's own. Marked `x-stack`,
+    /// so the checks across the project find every stack in a document by its
+    /// schema (`check_stacks`), wherever a kind holds one.
+    #[schemars(extend("x-stack" = true))]
     pub struct ItemDef {
         ..look,
         /// A project item: its stack is that item's.
         #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(extend("x-ref" = "item"))]
         pub item: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         #[schemars(range(min = 1, max = 99), extend("x-problem" = "item.count"))]
@@ -150,6 +160,7 @@ item_with_look! {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EquipmentDef {
+    #[schemars(extend("x-ref" = "equipment"))]
     pub asset: String,
     pub slot: EquipSlot,
 }
@@ -566,6 +577,65 @@ fn adventure_block(block: &str, path: &str, sink: &mut ProblemSink, game: Option
             codes::ITEM_UNKNOWN_BLOCK,
             format!("Minecraft {} has no block {what}", game.minecraft_version()),
             Some(path.to_owned()),
+        );
+    }
+}
+
+/// Every stack in `document` (a value of a type marked `x-stack`) checked
+/// against the project (`ItemKind.checkStack`): a stack of one of the project's
+/// items that says its kind says the item's.
+pub fn check_stacks(
+    document: &crate::kind::Doc,
+    cx: &crate::project::Across,
+    sink: &mut ProblemSink,
+) {
+    use crate::schema::Visit;
+    let mut stacks = Vec::new();
+    document
+        .schema
+        .walk(&document.json, (), &mut |visit, path, _| {
+            if let Visit::Schema(schema, value) = visit
+                && schema.get("x-stack") == Some(&serde_json::Value::Bool(true))
+                && let Ok(stack) = serde_json::from_value::<ItemDef>(value.clone())
+            {
+                stacks.push((path.to_owned(), stack));
+            }
+        });
+    for (at, stack) in stacks {
+        check_kind(&stack, &at, cx, sink);
+    }
+}
+
+fn check_kind(stack: &ItemDef, at: &str, cx: &crate::project::Across, sink: &mut ProblemSink) {
+    let Some(reference) = &stack.item else { return };
+    if stack.kind.is_empty() || !game::is_id(&stack.kind) {
+        return;
+    }
+    let Some(id) = cx
+        .references()
+        .own(crate::reference::RefKind::Item, reference)
+    else {
+        return;
+    };
+    let Some(item) = cx
+        .model::<crate::kind::item::ItemFile>(&id)
+        .filter(|i| game::is_id(&i.kind))
+    else {
+        return;
+    };
+    let (kind, items) = (game::normalize(&stack.kind), game::normalize(&item.kind));
+    if kind != items {
+        sink.problems.push(
+            codes::ITEM_KIND_MISMATCH
+                .at(
+                    &sink.file,
+                    format!("Item \"{reference}\" is a {items}, not a {kind}: leave kind out"),
+                    Some(format!("{at}.kind")),
+                )
+                .with_related(vec![crate::problem::Location {
+                    file: cx.path_of("item", &id),
+                    path: Some("$.kind".into()),
+                }]),
         );
     }
 }

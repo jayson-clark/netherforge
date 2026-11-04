@@ -32,7 +32,8 @@ crate::ruled_string!(
     SoundPath,
     FILE_PATTERN,
     "resource_pack.sound-path",
-    FILE_RULE
+    FILE_RULE,
+    "x-ref" = "sound_file"
 );
 
 pub fn is_key(key: &str) -> bool {

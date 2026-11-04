@@ -239,6 +239,7 @@ pub struct Layer {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub block: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "block"))]
     pub custom_block: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 1, max = 256), extend("default" = 1, "x-problem" = "terrain.layer"))]
@@ -251,6 +252,7 @@ pub struct Stone {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub block: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "block"))]
     pub custom_block: Option<String>,
 }
 
@@ -260,6 +262,7 @@ pub struct Floor {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub block: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "block"))]
     pub custom_block: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 1, max = 256), extend("default" = 5, "x-problem" = "terrain.layer"))]
@@ -312,10 +315,12 @@ pub struct Ore {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub block: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "block"))]
     pub custom_block: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub replace: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schemars(extend("x-ref" = "block"))]
     pub replace_custom_blocks: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 1, max = 64), extend("default" = 8, "x-problem" = "terrain.ore"))]
@@ -364,8 +369,10 @@ pub struct Decoration {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub block: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "block"))]
     pub custom_block: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "structure"))]
     pub structure: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement: Option<DecorationPlacement>,
@@ -393,10 +400,12 @@ pub struct Decoration {
     pub on: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[schemars(length(max = 32), extend("x-problem" = "terrain.limit"))]
+    #[schemars(extend("x-ref" = "block"))]
     pub on_custom_blocks: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rotate: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "loot_table"))]
     pub loot: Option<String>,
 }
 
@@ -459,6 +468,7 @@ pub struct BlockRange {
 #[serde(deny_unknown_fields)]
 pub struct BiomeArea {
     /// One biome: the game's or the project's.
+    #[schemars(extend("x-ref" = "biome"))]
     pub biome: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<ClimateRange>,
@@ -503,9 +513,11 @@ pub struct TerrainScript {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub blocks: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schemars(extend("x-ref" = "block"))]
     pub custom_blocks: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[schemars(length(max = 64), extend("x-problem" = "terrain.script"))]
+    #[schemars(extend("x-ref" = "loot_table"))]
     pub loot: Vec<String>,
 }
 

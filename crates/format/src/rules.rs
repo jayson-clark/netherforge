@@ -9,18 +9,20 @@
 //! its choices) stays a hand-written check, in the kind's `validate`.
 
 use schemars::{JsonSchema, schema_for};
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use crate::json::{child_path, format_number};
 use crate::problem::{ProblemCode, ProblemSink};
+use crate::schema::Visit;
 
 /// A string with a rule of its own, wherever a model has one: a newtype whose
 /// schema is the pattern, the problem it is when broken, and the rule in
 /// words, so every field (and map key) of it shares the one definition.
-/// Ordered as a map key is (`canonical::key_order`).
+/// Ordered as a map key is (`canonical::key_order`). More of its schema
+/// follows as `"key" = value` (a path's `"x-ref" = "texture"`).
 #[macro_export]
 macro_rules! ruled_string {
-    ($(#[$m:meta])* $name:ident, $pattern:expr, $problem:literal, $rule:expr) => {
+    ($(#[$m:meta])* $name:ident, $pattern:expr, $problem:literal, $rule:expr $(, $key:literal = $value:expr)* $(,)?) => {
         $(#[$m])*
         #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
         #[serde(transparent)]
@@ -56,38 +58,18 @@ macro_rules! ruled_string {
                 stringify!($name).into()
             }
             fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
-                schemars::json_schema!({
+                #[allow(unused_mut)]
+                let mut schema = schemars::json_schema!({
                     "type": "string",
                     "pattern": $pattern,
                     "x-problem": $problem,
                     "x-rule": $rule,
-                })
+                });
+                $(schema.insert($key.into(), serde_json::json!($value));)*
+                schema
             }
         }
     };
-}
-
-/// Checks `value` (a document as its file has it) against `T`'s rules.
-pub fn check<T: JsonSchema>(value: &Value, sink: &mut ProblemSink) {
-    let schema = schema_for!(T);
-    let root = schema.as_value();
-    let defs = root
-        .get("$defs")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    walk(value, root, &defs, "$", sink);
-}
-
-fn resolve<'a>(schema: &'a Value, defs: &'a Map<String, Value>) -> &'a Value {
-    match schema
-        .get("$ref")
-        .and_then(Value::as_str)
-        .and_then(|r| r.strip_prefix("#/$defs/"))
-    {
-        Some(name) => defs.get(name).map_or(schema, |s| resolve(s, defs)),
-        None => schema,
-    }
 }
 
 fn number(schema: &Value, key: &str) -> Option<f64> {
@@ -106,99 +88,34 @@ fn code_of(schema: &Value) -> Option<ProblemCode> {
         .and_then(ProblemCode::of)
 }
 
-fn walk(
-    value: &Value,
-    schema: &Value,
-    defs: &Map<String, Value>,
-    path: &str,
-    sink: &mut ProblemSink,
-) {
-    let schema = resolve(schema, defs);
-    // `Option<T>` and tagged enums: the branch the value is.
-    for key in ["anyOf", "oneOf"] {
-        if let Some(branches) = schema.get(key).and_then(Value::as_array)
-            && let Some(branch) = branches
-                .iter()
-                .map(|b| resolve(b, defs))
-                .find(|b| fits(value, b))
-        {
-            walk(value, branch, defs, path, sink);
-        }
-    }
-    if let Some(all) = schema.get("allOf").and_then(Value::as_array) {
-        for branch in all {
-            walk(value, branch, defs, path, sink);
-        }
-    }
-    if let Some(code) = code_of(schema)
-        && let Some(message) = broken(value, schema)
-    {
-        sink.report(
-            code,
-            format!("{} {message}", field(path)),
-            Some(path.to_owned()),
-        );
-    }
-    match value {
-        Value::Object(entries) => {
-            let properties = schema.get("properties").and_then(Value::as_object);
-            let names = schema.get("propertyNames").map(|s| resolve(s, defs));
-            for (key, child) in entries {
-                if let Some(names) = names
-                    && let Some(code) = code_of(names)
-                    && let Some(message) = broken(&Value::String(key.clone()), names)
-                {
-                    // At the key itself, as a map's entries are named.
-                    sink.report(
-                        code,
-                        format!("\"{key}\" {message}"),
-                        Some(child_path(path, key)),
-                    );
-                }
-                let child_schema = properties
-                    .and_then(|p| p.get(key))
-                    .or_else(|| schema.get("additionalProperties").filter(|s| s.is_object()));
-                if let Some(child_schema) = child_schema {
-                    walk(child, child_schema, defs, &child_path(path, key), sink);
-                }
+/// Checks `value` (a document as its file has it) against `T`'s rules.
+pub fn check<T: JsonSchema + 'static>(value: &Value, sink: &mut ProblemSink) {
+    crate::schema::of::<T>().walk(value, (), &mut |visit, path, _| match visit {
+        Visit::Schema(schema, value) => {
+            if let Some(code) = code_of(schema)
+                && let Some(message) = broken(value, schema)
+            {
+                sink.report(
+                    code,
+                    format!("{} {message}", field(path)),
+                    Some(path.to_owned()),
+                );
             }
         }
-        Value::Array(items) => {
-            if let Some(item_schema) = schema.get("items") {
-                for (k, item) in items.iter().enumerate() {
-                    walk(item, item_schema, defs, &format!("{path}[{k}]"), sink);
-                }
+        // At the key itself, as a map's entries are named.
+        Visit::Key(key, names) => {
+            if let Some(code) = code_of(names)
+                && let Some(message) = broken(&Value::String(key.to_owned()), names)
+            {
+                sink.report(
+                    code,
+                    format!("\"{key}\" {message}"),
+                    Some(child_path(path, key)),
+                );
             }
         }
-        _ => {}
-    }
-}
-
-/// Whether `value` could be what `schema` describes: its type, and a tagged
-/// enum's `type` constant.
-fn fits(value: &Value, schema: &Value) -> bool {
-    let kind = match value {
-        Value::Null => "null",
-        Value::Bool(_) => "boolean",
-        Value::Number(n) if n.is_i64() || n.is_u64() => "integer",
-        Value::Number(_) => "number",
-        Value::String(_) => "string",
-        Value::Array(_) => "array",
-        Value::Object(_) => "object",
-    };
-    let typed = match schema.get("type") {
-        Some(Value::String(t)) => t == kind || (t == "number" && kind == "integer"),
-        Some(Value::Array(ts)) => ts
-            .iter()
-            .any(|t| t == kind || (t == "number" && kind == "integer")),
-        _ => true,
-    };
-    let tagged = schema
-        .get("properties")
-        .and_then(|p| p.get("type"))
-        .and_then(|t| t.get("const"))
-        .is_none_or(|tag| value.get("type") == Some(tag));
-    typed && tagged
+        Visit::Value(_) => {}
+    });
 }
 
 /// What's wrong with `value` by `schema`'s constraints, as the rest of a

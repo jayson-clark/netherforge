@@ -16,7 +16,7 @@ fn problems(paths: &[(&str, &str)]) -> Vec<String> {
         .resources
         .iter()
         .filter(|f| f.kind.id == "module")
-        .flat_map(|f| kind::read(f, &source).unwrap())
+        .flat_map(|f| kind::read(f, &source).unwrap().problems)
         .map(|p| format!("{} {}: {}", p.code.unwrap(), p.file, p.message))
         .collect()
 }

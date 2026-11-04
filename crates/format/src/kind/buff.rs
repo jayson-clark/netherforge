@@ -17,9 +17,11 @@ pub struct BuffFile {
     pub schema: Option<String>,
     /// What players read it as.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-minimessage" = true))]
     pub name: Option<String>,
     /// `<pack>/<key>`: a glyph of the project's resource packs to draw it by.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "glyph"))]
     pub icon: Option<String>,
     /// Its colour, `#rrggbb`, for a HUD or a bar.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -38,9 +40,11 @@ pub struct BuffFile {
     pub stats: Option<Map<f64>>,
     /// Buffs it takes away as it comes.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "buff"))]
     pub cures: Option<Vec<String>>,
     /// Buffs that keep it from taking hold while they last.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "buff"))]
     pub blocked_by: Option<Vec<String>>,
     /// What another of it does to one that's still going. Default `longest`.
     #[serde(skip_serializing_if = "Option::is_none")]

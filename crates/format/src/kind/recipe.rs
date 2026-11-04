@@ -145,12 +145,31 @@ pub struct Material {
 
 /// An item id (`"minecraft:stick"`), a tag (`"#minecraft:planks"`), or a
 /// project item (`{ "item": "ruby" }`).
-#[derive(Clone, Debug, PartialEq, JsonSchema)]
-#[schemars(with = "serde_json::Value")]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Ingredient {
     Kind(String),
     Tag(String),
     Item(String),
+}
+
+impl JsonSchema for Ingredient {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Ingredient".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "anyOf": [
+                { "type": "string" },
+                {
+                    "type": "object",
+                    "properties": { "item": { "type": "string", "x-ref": "item" } },
+                    "required": ["item"],
+                    "additionalProperties": false,
+                },
+            ]
+        })
+    }
 }
 
 const INGREDIENT: &str = "An ingredient is an item id (\"minecraft:stick\"), a tag (\"#minecraft:planks\") or a project item ({ \"item\": \"ruby\" })";

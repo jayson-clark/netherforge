@@ -11,7 +11,7 @@ pub const SCHEMA: &str = ".netherforge/schema/netherforge.schema.json";
 /// The format version this reads and writes.
 pub const FORMAT_VERSION: i64 = 1;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Manifest {
     #[serde(rename = "$schema", skip_serializing_if = "Option::is_none")]
@@ -101,7 +101,7 @@ pub enum SpawnCategory {
     Axolotl,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorldConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -111,10 +111,12 @@ pub struct WorldConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub game_rules: Option<Map<Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "terrain"))]
     pub terrain: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seed: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "dimension_type"))]
     pub dimension_type: Option<String>,
 }
 
@@ -130,7 +132,7 @@ impl WorldConfig {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Dependency {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -145,7 +147,7 @@ pub struct Dependency {
     pub provided: Option<bool>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Requires {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -168,7 +170,7 @@ pub struct Requires {
     pub plugins: Option<Vec<String>>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Allow {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -185,7 +187,7 @@ impl Allow {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Listing {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -202,7 +204,7 @@ pub struct Listing {
     pub players: Option<ListingPlayers>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ListingPlayers {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -213,7 +215,7 @@ pub struct ListingPlayers {
 
 /// A setting the server's owner may change (`settings` in the manifest), by
 /// its `type`. Reading and checking its values comes with settings.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum SettingDef {
     Boolean {

@@ -11,7 +11,7 @@ use crate::game::GameData;
 use crate::kinds::split_package;
 use crate::problem::{Problem, ProblemSink};
 
-pub trait Document: Serialize + DeserializeOwned + Clone + schemars::JsonSchema {
+pub trait Document: Serialize + DeserializeOwned + Clone + schemars::JsonSchema + 'static {
     /// The schema the kind's files name, from a file one folder deep
     /// (`../.netherforge/schema/buff.schema.json`).
     const SCHEMA: &'static str;
@@ -36,6 +36,12 @@ pub trait Document: Serialize + DeserializeOwned + Clone + schemars::JsonSchema 
     /// Its checks on itself alone that its fields' rules can't say (see
     /// `rules`): those run first, from its schema.
     fn validate(&self, _cx: &Context, _sink: &mut ProblemSink) {}
+
+    /// Its checks against the rest of the project (`crossCheck`), once every
+    /// resource has read and been checked on its own: what it means beyond its
+    /// references existing, which the loader checks itself. Problems in its
+    /// other files go into the sink's problems with their own file.
+    fn cross_check(&self, _cx: &crate::project::Across, _sink: &mut ProblemSink) {}
 }
 
 /// Reads a file by its path, if it's there.
@@ -72,9 +78,16 @@ pub fn write<T: Document>(value: &T, path: &str) -> String {
     crate::canonical::write(&canonical)
 }
 
-/// A document read from the file at `path` and checked on its own: the value
-/// when it parsed, and its problems.
-pub fn load<T: Document>(text: &str, path: &str, cx: &Context) -> (Option<T>, Vec<Problem>) {
+/// A document read and checked on its own: the model and its file's JSON
+/// (its maps in the file's order), when it parsed, and its problems.
+pub struct Read<T> {
+    pub value: Option<T>,
+    pub json: Option<serde_json::Value>,
+    pub problems: Vec<Problem>,
+}
+
+/// A document read from the file at `path` and checked on its own.
+pub fn load<T: Document>(text: &str, path: &str, cx: &Context) -> Read<T> {
     // Every rule a kind declares names its problem: checked on every kind any test loads, so
     // no list of kinds can leave one out.
     debug_assert_eq!(
@@ -83,7 +96,11 @@ pub fn load<T: Document>(text: &str, path: &str, cx: &Context) -> (Option<T>, Ve
         "{path}: a rule with no x-problem"
     );
     match crate::read::parse::<T>(text, path) {
-        Err(problem) => (None, vec![*problem]),
+        Err(problem) => Read {
+            value: None,
+            json: None,
+            problems: vec![*problem],
+        },
         Ok(value) => {
             let mut sink = ProblemSink::new(path);
             // The file as it's written (its maps in their order), against the model's rules.
@@ -95,7 +112,11 @@ pub fn load<T: Document>(text: &str, path: &str, cx: &Context) -> (Option<T>, Ve
             if T::SCRIPTED {
                 problems.extend(script_files(value.script(), path, cx));
             }
-            (Some(value), problems)
+            Read {
+                value: Some(value),
+                json: Some(json),
+                problems,
+            }
         }
     }
 }

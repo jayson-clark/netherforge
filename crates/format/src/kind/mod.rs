@@ -67,12 +67,78 @@ pub fn document_path(found: &Found) -> String {
     }
 }
 
-/// A scanned resource read and checked on its own, if its kind is ported:
-/// its problems. `None` is a kind not ported yet: this match is the one list
-/// of the kinds that are.
-pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
+/// The model of each document kind ported: the one list of them, which
+/// reading, writing back and the checks across the project all go by.
+pub fn document_kind(id: &str) -> Option<&'static dyn DocumentKind> {
+    fn of<T: crate::document::Document>() -> &'static dyn DocumentKind {
+        &Of::<T>(std::marker::PhantomData)
+    }
+    Some(match id {
+        "advancement" => of::<advancement::AdvancementFile>(),
+        "biome" => of::<biome::BiomeFile>(),
+        "block" => of::<block::BlockFile>(),
+        "buff" => of::<buff::BuffFile>(),
+        "centity" => of::<centity::CentityFile>(),
+        "cutscene" => of::<cutscene::CutsceneFile>(),
+        "datapack" => of::<datapack::PackMeta>(),
+        "dialog" => of::<dialog::DialogFile>(),
+        "dimension_type" => of::<dimension_type::DimensionTypeFile>(),
+        "game_block" => of::<game_block::GameBlockFile>(),
+        "item" => of::<item::ItemFile>(),
+        "loot_table" => of::<loot::LootTableFile>(),
+        "menu" => of::<menu::MenuFile>(),
+        "particle_effect" => of::<particle::ParticleEffectFile>(),
+        "recipe" => of::<recipe::RecipeFile>(),
+        "resource_pack" => of::<resource_pack::ResourcePackFile>(),
+        "screen" => of::<screen::ScreenFile>(),
+        "screen_font" => of::<screen_font::ScreenFontFile>(),
+        "sky" => of::<sky::SkyFile>(),
+        // A structure's document is its companion: how it generates by itself.
+        "structure" => of::<structure::StructureGeneration>(),
+        "terrain" => of::<terrain::TerrainFile>(),
+        "video" => of::<video::VideoFile>(),
+        _ => return None,
+    })
+}
+
+/// A document kind's model, behind one face.
+pub trait DocumentKind: Sync {
+    /// The document at `path` read from `text` and checked on its own.
+    fn read(&self, text: &str, path: &str, cx: &crate::document::Context) -> Read;
+    /// The document read from `text` and written again, canonically.
+    fn write_back(&self, text: &str, path: &str) -> Result<String, Box<Problem>>;
+    fn schema(&self) -> &'static crate::schema::Schema;
+}
+
+struct Of<T>(std::marker::PhantomData<fn() -> T>);
+
+impl<T: crate::document::Document> DocumentKind for Of<T> {
+    fn read(&self, text: &str, path: &str, cx: &crate::document::Context) -> Read {
+        let read = crate::document::load::<T>(text, path, cx);
+        Read {
+            problems: read.problems,
+            document: read.value.zip(read.json).map(|(value, json)| Doc {
+                path: path.to_owned(),
+                model: Box::new(value),
+                json,
+                schema: self.schema(),
+            }),
+        }
+    }
+
+    fn write_back(&self, text: &str, path: &str) -> Result<String, Box<Problem>> {
+        crate::read::parse::<T>(text, path).map(|v| crate::document::write(&v, path))
+    }
+
+    fn schema(&self) -> &'static crate::schema::Schema {
+        crate::schema::of::<T>()
+    }
+}
+
+/// A scanned resource read and checked on its own, if its kind is ported
+/// (`None` for one that isn't yet).
+pub fn read(found: &Found, source: &Source) -> Option<Read> {
     let path = document_path(found);
-    let text = || (source.read)(&path).unwrap_or_default();
     let location = found.kind.location_of(&found.id, &found.group);
     let inside = |file: &str| (source.read)(&format!("{location}/{file}"));
     let cx = crate::document::Context {
@@ -82,82 +148,67 @@ pub fn read(found: &Found, source: &Source) -> Option<Vec<Problem>> {
         files: Some(&found.inside),
         game: source.game,
     };
-    Some(match found.kind.id {
-        "buff" => crate::document::load::<buff::BuffFile>(&text(), &path, &cx).1,
-        "menu" => crate::document::load::<menu::MenuFile>(&text(), &path, &cx).1,
-        "item" => crate::document::load::<item::ItemFile>(&text(), &path, &cx).1,
-        "dialog" => crate::document::load::<dialog::DialogFile>(&text(), &path, &cx).1,
-        "recipe" => crate::document::load::<recipe::RecipeFile>(&text(), &path, &cx).1,
-        "loot_table" => crate::document::load::<loot::LootTableFile>(&text(), &path, &cx).1,
-        "sky" => crate::document::load::<sky::SkyFile>(&text(), &path, &cx).1,
-        "biome" => crate::document::load::<biome::BiomeFile>(&text(), &path, &cx).1,
-        "game_block" => crate::document::load::<game_block::GameBlockFile>(&text(), &path, &cx).1,
-        "cutscene" => crate::document::load::<cutscene::CutsceneFile>(&text(), &path, &cx).1,
-        "block" => crate::document::load::<block::BlockFile>(&text(), &path, &cx).1,
-        "terrain" => crate::document::load::<terrain::TerrainFile>(&text(), &path, &cx).1,
-        "centity" => crate::document::load::<centity::CentityFile>(&text(), &path, &cx).1,
-        "datapack" => crate::document::load::<datapack::PackMeta>(&text(), &path, &cx).1,
-        "resource_pack" => {
-            crate::document::load::<resource_pack::ResourcePackFile>(&text(), &path, &cx).1
-        }
-        // A structure generates by itself only with its document beside it.
-        "structure" if !source.files.contains(&path) => Vec::new(),
-        "structure" => {
-            crate::document::load::<structure::StructureGeneration>(&text(), &path, &cx).1
-        }
-        "particle_effect" => {
-            crate::document::load::<particle::ParticleEffectFile>(&text(), &path, &cx).1
-        }
-        "screen" => crate::document::load::<screen::ScreenFile>(&text(), &path, &cx).1,
-        "video" => crate::document::load::<video::VideoFile>(&text(), &path, &cx).1,
-        "screen_font" => {
-            crate::document::load::<screen_font::ScreenFontFile>(&text(), &path, &cx).1
-        }
-        "dimension_type" => {
-            crate::document::load::<dimension_type::DimensionTypeFile>(&text(), &path, &cx).1
-        }
-        "advancement" => {
-            crate::document::load::<advancement::AdvancementFile>(&text(), &path, &cx).1
-        }
+    // A file with a companion document is only its file without it (a structure that doesn't generate).
+    let companion_missing =
+        found.kind.companion_document.is_some() && !source.files.contains(&path);
+    if let Some(kind) = document_kind(found.kind.id).filter(|_| !companion_missing) {
+        return Some(kind.read(&(source.read)(&path).unwrap_or_default(), &path, &cx));
+    }
+    Some(Read::files(match found.kind.id {
+        "structure" => Vec::new(),
         "module" => module::check(found, source),
         "build" => files::build(found),
         "migration" => files::migration(found),
         // A map is its world's files; a WASM module's checks read its binary.
         "map" | "wasm" => Vec::new(),
         _ => return None,
-    })
+    }))
+}
+
+/// A resource read and checked on its own: its problems, and its document
+/// when it has one that parsed.
+pub struct Read {
+    pub problems: Vec<Problem>,
+    pub document: Option<Doc>,
+}
+
+impl Read {
+    /// A resource format doesn't read as a document: its files are what it is.
+    fn files(problems: Vec<Problem>) -> Read {
+        Read {
+            problems,
+            document: None,
+        }
+    }
+}
+
+/// A document that parsed: its model, its file's JSON and its schema, which
+/// the checks across the project read it by.
+pub struct Doc {
+    pub path: String,
+    pub model: Box<dyn Model>,
+    pub json: serde_json::Value,
+    pub schema: &'static crate::schema::Schema,
+}
+
+/// A kind's model, whichever it is: what the project holds of a resource.
+pub trait Model: std::any::Any {
+    fn as_any(&self) -> &dyn std::any::Any;
+    fn cross_check(&self, cx: &crate::project::Across, sink: &mut crate::ProblemSink);
+}
+
+impl<T: crate::document::Document> Model for T {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn cross_check(&self, cx: &crate::project::Across, sink: &mut crate::ProblemSink) {
+        crate::document::Document::cross_check(self, cx, sink);
+    }
 }
 
 /// A scanned resource read and written again, canonically, if it's a document
 /// of a ported kind: the text, or the problem it didn't parse with.
 pub fn write_back(found: &Found, text: &str) -> Option<Result<String, Box<Problem>>> {
-    let path = document_path(found);
-    fn again<T: crate::document::Document>(text: &str, path: &str) -> Result<String, Box<Problem>> {
-        crate::read::parse::<T>(text, path).map(|v| crate::document::write(&v, path))
-    }
-    Some(match found.kind.id {
-        "buff" => again::<buff::BuffFile>(text, &path),
-        "menu" => again::<menu::MenuFile>(text, &path),
-        "item" => again::<item::ItemFile>(text, &path),
-        "dialog" => again::<dialog::DialogFile>(text, &path),
-        "recipe" => again::<recipe::RecipeFile>(text, &path),
-        "loot_table" => again::<loot::LootTableFile>(text, &path),
-        "sky" => again::<sky::SkyFile>(text, &path),
-        "biome" => again::<biome::BiomeFile>(text, &path),
-        "game_block" => again::<game_block::GameBlockFile>(text, &path),
-        "cutscene" => again::<cutscene::CutsceneFile>(text, &path),
-        "block" => again::<block::BlockFile>(text, &path),
-        "terrain" => again::<terrain::TerrainFile>(text, &path),
-        "centity" => again::<centity::CentityFile>(text, &path),
-        "datapack" => again::<datapack::PackMeta>(text, &path),
-        "resource_pack" => again::<resource_pack::ResourcePackFile>(text, &path),
-        "structure" => again::<structure::StructureGeneration>(text, &path),
-        "particle_effect" => again::<particle::ParticleEffectFile>(text, &path),
-        "screen" => again::<screen::ScreenFile>(text, &path),
-        "video" => again::<video::VideoFile>(text, &path),
-        "screen_font" => again::<screen_font::ScreenFontFile>(text, &path),
-        "dimension_type" => again::<dimension_type::DimensionTypeFile>(text, &path),
-        "advancement" => again::<advancement::AdvancementFile>(text, &path),
-        _ => return None,
-    })
+    document_kind(found.kind.id).map(|kind| kind.write_back(text, &document_path(found)))
 }

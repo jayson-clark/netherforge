@@ -32,6 +32,7 @@ pub struct StructureGeneration {
     #[serde(rename = "$schema", skip_serializing_if = "Option::is_none")]
     pub schema: Option<String>,
     /// Where it generates: biomes, the game's or the project's, or one of the game's tags.
+    #[schemars(extend("x-ref" = "biome"))]
     pub biomes: Vec<String>,
     /// The side, in chunks, of the squares each of which may hold one.
     #[serde(skip_serializing_if = "Option::is_none")]

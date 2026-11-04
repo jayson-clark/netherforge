@@ -28,6 +28,7 @@ pub struct BlockFile {
     pub schema: Option<String>,
     /// `<pack>/<key>`: its look, an entry of a resource pack's `blocks`.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "block_model"))]
     pub model: Option<String>,
     /// What it's held as, which decides how it behaves physically. Default a note block.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -43,6 +44,7 @@ pub struct BlockFile {
     pub requires_tool: Option<bool>,
     /// `<id>`: the loot table rolled when it's broken.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "loot_table"))]
     pub drops: Option<String>,
     /// The game's kind of block it sounds like (`stone`, `wood`): `block.<sound>.place` and `.break`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -56,6 +58,7 @@ pub struct BlockFile {
     pub properties: Option<Map<serde_json::Value>>,
     /// `<id>`: a centity drawn over the block, for a shape that isn't a cube.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "centity"))]
     pub centity: Option<String>,
     /// Whether it falls like sand. Default false.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -151,9 +154,11 @@ impl BlockRotation {
 pub struct BlockSounds {
     /// `<pack>/<key>`: played where it's placed.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "sound"))]
     pub place: Option<String>,
     /// `<pack>/<key>`: played where it's broken.
     #[serde(rename = "break", skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "sound"))]
     pub destroy: Option<String>,
 }
 

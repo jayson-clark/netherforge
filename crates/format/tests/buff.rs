@@ -5,7 +5,7 @@ use netherforge_format::kind::buff::BuffFile;
 
 fn problems(text: &str) -> Vec<String> {
     load::<BuffFile>(text, "buffs/x.json", &Default::default())
-        .1
+        .problems
         .iter()
         .map(|p| {
             format!(

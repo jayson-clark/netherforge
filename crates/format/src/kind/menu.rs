@@ -28,9 +28,11 @@ pub struct MenuFile {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rows: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-minimessage" = true))]
     pub title: Option<String>,
     /// `<pack>/<key>`: a picture drawn as the window's background.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "skin"))]
     pub skin: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shared: Option<bool>,

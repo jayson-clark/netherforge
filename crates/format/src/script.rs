@@ -20,6 +20,7 @@ pub struct ScriptDef {
         regex(pattern = r"^([A-Za-z0-9_][A-Za-z0-9_.-]*/)*[A-Za-z0-9_][A-Za-z0-9_.-]*\.lua$"),
         extend("x-problem" = "script.path", "x-rule" = "a .lua file inside this resource's folder")
     )]
+    #[schemars(extend("x-ref" = "script"))]
     pub file: String,
     /// Steps (calls and loop iterations) one call into it may take.
     #[serde(skip_serializing_if = "Option::is_none")]

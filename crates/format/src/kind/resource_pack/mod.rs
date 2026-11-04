@@ -52,7 +52,8 @@ crate::ruled_string!(
     TexturePath,
     TEXTURE_PATH_PATTERN,
     "resource_pack.texture-path",
-    TEXTURE_PATH_RULE
+    TEXTURE_PATH_RULE,
+    "x-ref" = "texture"
 );
 
 pub fn is_texture_path(path: &str) -> bool {
@@ -157,6 +158,7 @@ pub struct ItemModelDef {
     pub texture: Option<TexturePath>,
     /// A pack's block look (`ui/ruby_ore`) it's drawn as.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "block_model"))]
     pub block: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<ModelPath>,

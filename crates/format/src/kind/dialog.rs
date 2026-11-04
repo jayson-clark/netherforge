@@ -29,8 +29,10 @@ pub struct DialogFile {
     pub name: Option<String>,
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     pub kind: Option<DialogType>,
+    #[schemars(extend("x-minimessage" = true))]
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-minimessage" = true))]
     pub external_title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub can_close_with_escape: Option<bool>,
@@ -46,6 +48,7 @@ pub struct DialogFile {
     pub buttons: Vec<DialogButton>,
     /// The dialogs a `dialog_list` lists.
     #[serde(default, skip_serializing_if = "empty")]
+    #[schemars(extend("x-ref" = "dialog"))]
     pub dialogs: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub script: Option<ScriptDef>,
@@ -91,6 +94,7 @@ pub enum AfterAction {
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DialogBody {
     Message {
+        #[schemars(extend("x-minimessage" = true))]
         text: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         width: Option<i32>,
@@ -102,6 +106,7 @@ pub enum DialogBody {
     Item {
         item: Box<ItemDef>,
         #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(extend("x-minimessage" = true))]
         description: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         show_tooltip: Option<bool>,
@@ -131,6 +136,7 @@ pub enum DialogInput {
         #[schemars(regex(pattern = r"^[A-Za-z0-9_-]{1,64}$"), extend("x-problem" = "dialog.input-key", "x-rule" = "letters, digits, _ and -, at most 64 characters"))]
         key: String,
         #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(extend("x-minimessage" = true))]
         label: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         width: Option<i32>,
@@ -150,6 +156,7 @@ pub enum DialogInput {
         #[schemars(regex(pattern = r"^[A-Za-z0-9_-]{1,64}$"), extend("x-problem" = "dialog.input-key", "x-rule" = "letters, digits, _ and -, at most 64 characters"))]
         key: String,
         #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(extend("x-minimessage" = true))]
         label: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         initial: Option<bool>,
@@ -162,6 +169,7 @@ pub enum DialogInput {
         #[schemars(regex(pattern = r"^[A-Za-z0-9_-]{1,64}$"), extend("x-problem" = "dialog.input-key", "x-rule" = "letters, digits, _ and -, at most 64 characters"))]
         key: String,
         #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(extend("x-minimessage" = true))]
         label: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         width: Option<i32>,
@@ -172,6 +180,7 @@ pub enum DialogInput {
         #[schemars(regex(pattern = r"^[A-Za-z0-9_-]{1,64}$"), extend("x-problem" = "dialog.input-key", "x-rule" = "letters, digits, _ and -, at most 64 characters"))]
         key: String,
         #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(extend("x-minimessage" = true))]
         label: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         width: Option<i32>,
@@ -201,6 +210,7 @@ impl DialogInput {
 pub struct DialogOption {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-minimessage" = true))]
     pub label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initial: Option<bool>,
@@ -212,8 +222,10 @@ pub struct DialogButton {
     #[schemars(regex(pattern = r"^[A-Za-z0-9_-]{1,64}$"), extend("x-problem" = "dialog.button-key", "x-rule" = "letters, digits, _ and -, at most 64 characters"))]
     pub key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-minimessage" = true))]
     pub label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-minimessage" = true))]
     pub tooltip: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub width: Option<i32>,

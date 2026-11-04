@@ -37,7 +37,8 @@ crate::ruled_string!(
     ModelPath,
     MODEL_PATH_PATTERN,
     "resource_pack.model-file",
-    MODEL_PATH_RULE
+    MODEL_PATH_RULE,
+    "x-ref" = "model"
 );
 
 pub fn is_model_path(path: &str) -> bool {

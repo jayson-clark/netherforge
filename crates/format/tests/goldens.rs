@@ -163,33 +163,34 @@ fn own_problem(p: &Value) -> bool {
     !elsewhere && own(p["code"].as_str().unwrap_or(""))
 }
 
+const ACROSS_CODES: &[&str] = &[
+    "loot.cycle",
+    "advancement.cycle",
+    "build.id-taken",
+    "screen.place",
+    "structure.pool-element",
+    "block.carrier",
+    "block.carriers",
+    "block.vanilla-looks",
+    "screen_font.grid",
+    "resource_pack.vanilla-missing",
+    "resource_pack.hud-hide",
+    "resource_pack.sound-event",
+    "resource_pack.image",
+    "resource_pack.picture-size",
+    "resource_pack.too-many-glyphs",
+    "resource_pack.replace-size",
+    "resource_pack.replace-shape",
+    "datapack.namespace",
+    "datapack.conflict",
+];
+
 fn own(code: &str) -> bool {
     // A project item's own kind, the project's default font: checks across resources too.
     // Each kind's `crossCheck` in format: they come with the checks across resources.
-    const ACROSS: &[&str] = &[
-        "item.kind-mismatch",
-        "loot.cycle",
-        "advancement.cycle",
-        "build.id-taken",
-        "screen.place",
-        "structure.pool-element",
-        "block.carrier",
-        "block.carriers",
-        "block.vanilla-looks",
-        "screen_font.grid",
-        "resource_pack.vanilla-missing",
-        "resource_pack.hud-hide",
-        "resource_pack.sound-event",
-        "resource_pack.image",
-        "resource_pack.picture-size",
-        "resource_pack.too-many-glyphs",
-        "resource_pack.replace-size",
-        "resource_pack.replace-shape",
-        "datapack.namespace",
-        "datapack.conflict",
-    ];
+
     let across =
-        code.starts_with("reference.") || code.starts_with("font.") || ACROSS.contains(&code);
+        code.starts_with("reference.") || code.starts_with("font.") || ACROSS_CODES.contains(&code);
     !across && !layouts(code)
 }
 
@@ -222,7 +223,7 @@ fn the_ported_kinds_problems_are_formats() {
         let source = kind::Source::new(&files, &read);
         for found in netherforge_format::snapshot::scan(&files).resources {
             // A kind not ported yet answers `None`.
-            let Some(problems) = kind::read(&found, &source) else {
+            let Some(problems) = kind::read(&found, &source).map(|r| r.problems) else {
                 continue;
             };
             let path = kind::document_path(&found);
@@ -286,7 +287,7 @@ fn the_ported_kinds_examples_write_back() {
         let read = |p: &str| std::fs::read_to_string(dir.join(p)).ok();
         let source = kind::Source::new(&files, &read);
         for found in netherforge_format::snapshot::scan(&files).resources {
-            let Some(problems) = kind::read(&found, &source) else {
+            let Some(problems) = kind::read(&found, &source).map(|r| r.problems) else {
                 continue;
             };
             for p in problems
@@ -309,4 +310,70 @@ fn the_ported_kinds_examples_write_back() {
     }
     assert!(written > 0, "no examples of ported kinds");
     assert!(different.is_empty(), "{different:#?}");
+}
+
+/// Each case whole: every problem `project::load` reports against every one
+/// `expected.json` lists, by what's wrong and where. Codes whose checks aren't
+/// ported yet are set aside on both sides.
+#[test]
+fn whole_cases_are_formats() {
+    const NOT_YET: &[&str] = &[
+        "game_block.twice",
+        "biome.feature-order",
+        "terrain.custom-block",
+    ];
+    let not_yet = |p: &Value| {
+        let code = p["code"].as_str().unwrap_or("");
+        code.starts_with("font.")
+            || NOT_YET.contains(&code)
+            || ACROSS_CODES.contains(&code)
+            || MIXED.contains(&code)
+            || matches!(
+                code,
+                "project.world-height" | "project.dependency" | "project.export"
+            )
+    };
+    let mut failures = Vec::new();
+    let mut cases = 0;
+    for entry in std::fs::read_dir(invalid()).unwrap() {
+        let dir = entry.unwrap().path();
+        let expected: Vec<Value> =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("expected.json")).unwrap())
+                .unwrap();
+        let mut files = BTreeSet::new();
+        files_in(&dir, &dir, &mut files);
+        files.remove("expected.json");
+        let read = |p: &str| std::fs::read_to_string(dir.join(p)).ok();
+        let loaded = netherforge_format::project::load(&files, &read, None);
+        let mut actual: Vec<String> = loaded
+            .problems
+            .iter()
+            .map(|p| p.to_json())
+            .filter(|p| !not_yet(p))
+            .map(|p| what_and_where(&p))
+            .collect();
+        let mut wanted: Vec<String> = expected
+            .iter()
+            .filter(|p| !not_yet(p))
+            .map(what_and_where)
+            .collect();
+        actual.sort();
+        wanted.sort();
+        cases += 1;
+        if actual != wanted {
+            let missing: Vec<&String> = wanted.iter().filter(|w| !actual.contains(w)).collect();
+            let extra: Vec<&String> = actual.iter().filter(|a| !wanted.contains(a)).collect();
+            failures.push(format!(
+                "{}:\n  missing: {missing:#?}\n  extra: {extra:#?}",
+                dir.file_name().unwrap().to_string_lossy()
+            ));
+        }
+    }
+    assert!(cases > 40, "{cases} cases");
+    assert!(
+        failures.is_empty(),
+        "{} of {cases} cases differ:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
 }

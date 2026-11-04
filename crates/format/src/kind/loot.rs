@@ -109,6 +109,7 @@ pub enum LootEntry {
         conditions: Option<Vec<LootCondition>>,
     },
     Table {
+        #[schemars(extend("x-ref" = "loot_table"))]
         table: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         #[schemars(range(min = 1), extend("x-problem" = "loot.weight"))]

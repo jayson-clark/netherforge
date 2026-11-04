@@ -110,6 +110,7 @@ pub enum ScreenViewers {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ScreenVideo {
+    #[schemars(extend("x-ref" = "video"))]
     pub video: String,
     /// Plays it again when it ends. Default true.
     #[serde(rename = "loop", skip_serializing_if = "Option::is_none")]

@@ -94,6 +94,7 @@ pub struct SpawningDef {
     pub worlds: Option<Vec<WorldName>>,
     /// Biomes, the game's or the project's, or `#tags` of the game's.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "biome"))]
     pub biomes: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub light: Option<SpawnRange>,
@@ -281,11 +282,13 @@ pub enum DisplayDef {
     },
     /// An item look of a resource pack, drawn on paper.
     Model {
+        #[schemars(extend("x-ref" = "item_model"))]
         model: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         item_transform: Option<ItemTransform>,
     },
     Text {
+        #[schemars(extend("x-minimessage" = true))]
         text: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         billboard: Option<Billboard>,
@@ -536,8 +539,10 @@ pub struct HealthBarDef {
     #[schemars(length(min = 1), extend("x-problem" = "centity.health"))]
     pub glyph: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-minimessage" = true))]
     pub filled: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-minimessage" = true))]
     pub empty: Option<String>,
 }
 

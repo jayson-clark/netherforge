@@ -45,6 +45,7 @@ pub struct BiomeFile {
     pub spawn_costs: Map<SpawnCost>,
     /// The placed features in each step: the game's (`minecraft:…`) or the project's.
     #[serde(default, skip_serializing_if = "Entries::is_empty")]
+    #[schemars(extend("x-ref" = "placed_feature"))]
     pub features: Entries<GenerationStep, Vec<String>>,
 }
 

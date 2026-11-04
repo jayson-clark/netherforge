@@ -20,6 +20,7 @@ pub struct AdvancementFile {
     #[serde(rename = "$schema", skip_serializing_if = "Option::is_none")]
     pub schema: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "advancement"))]
     pub parent: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display: Option<AdvancementDisplay>,
@@ -48,8 +49,10 @@ pub struct RequirementGroup(pub Vec<String>);
 #[serde(deny_unknown_fields)]
 pub struct AdvancementDisplay {
     pub icon: AdvancementIcon,
+    #[schemars(extend("x-minimessage" = true))]
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-minimessage" = true))]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub frame: Option<AdvancementFrame>,
@@ -69,8 +72,10 @@ pub struct AdvancementIcon {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "item"))]
     pub item: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-ref" = "item_model"))]
     pub item_model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub glint: Option<bool>,

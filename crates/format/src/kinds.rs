@@ -228,6 +228,11 @@ pub struct Classified {
     pub group: Option<String>,
 }
 
+/// `path` in package `namespace` (`PackagePaths.of`): `acme:menus/bank`.
+pub fn package_path(namespace: &str, path: &str) -> String {
+    format!("{namespace}:{path}")
+}
+
 /// A path's package (`None` for the project's own) and its path inside it.
 pub fn split_package(path: &str) -> (Option<&str>, &str) {
     match path.split_once(':') {
