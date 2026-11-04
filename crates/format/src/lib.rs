@@ -4,6 +4,7 @@
 
 pub mod canonical;
 pub mod json;
+pub mod kinds;
 pub mod manifest;
 pub mod names;
 pub mod problem;

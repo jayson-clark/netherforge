@@ -410,5 +410,12 @@ unchanged.
   across files (`project.world-height`, dependencies, exports) until those are ported. The
   harness grows with each kind until it compares whole cases.
 
+- **The registry of kinds** (`kinds.rs`): `kinds::ALL` (format's 27 kinds in its order, with
+  layout, contents and flags) and `classify`, `Kinds.classify` with its groups, packages,
+  companions and variants. `tests/kinds.rs` has `KindsTest`'s and `GroupsTest`'s cases, and holds
+  the table to the `KINDS` format generates for the editor
+  (`build/generated-contract/constants.ts`) whenever format's build is there, which `pnpm test`
+  makes first.
+
 Next in format: the
 registry of kinds and the snapshot, then each kind with its golden tests.
