@@ -431,6 +431,21 @@ pub fn arguments(text: &str) -> Vec<String> {
 
 /// Every glyph tag in MiniMessage `text`, in order. A tag escaped with `\<` isn't one.
 pub fn glyphs(text: &str) -> Vec<Glyph> {
+    glyph_tags(text)
+        .into_iter()
+        .map(|(reference, open, close)| {
+            let start = utf16_len(&text[..open]);
+            Glyph {
+                reference,
+                start,
+                end: start + utf16_len(&text[open..close]),
+            }
+        })
+        .collect()
+}
+
+/// Each glyph tag's reference and where it is in `text`, in bytes (`<` to past `>`).
+fn glyph_tags(text: &str) -> Vec<(String, usize, usize)> {
     let mut out = Vec::new();
     let mut cursor = 0;
     while let Some(open) = text[cursor..].find('<').map(|i| cursor + i) {
@@ -442,16 +457,85 @@ pub fn glyphs(text: &str) -> Vec<Glyph> {
             break;
         };
         if let Some(reference) = glyph_reference(&text[open + 1..close]) {
-            let start = utf16_len(&text[..open]);
-            out.push(Glyph {
-                reference,
-                start,
-                end: start + utf16_len(&text[open..=close]),
-            });
+            out.push((reference, open, close + 1));
         }
         cursor = close + 1;
     }
     out
+}
+
+/// `text` with each glyph tag rewritten as `replace` answers for its reference:
+/// new text (the tag becomes `<glyph:new>`), `""` to drop it, `None` to leave
+/// it. `None` when nothing changed (`GlyphTags.rewrite`).
+pub fn rewrite_glyphs(
+    text: &str,
+    replace: &mut dyn FnMut(&str) -> Option<String>,
+) -> Option<String> {
+    let mut out = String::new();
+    let mut cursor = 0;
+    let mut changed = false;
+    for (reference, open, close) in glyph_tags(text) {
+        let Some(next) = replace(&reference) else {
+            continue;
+        };
+        out.push_str(&text[cursor..open]);
+        if !next.is_empty() {
+            out.push_str(&format!("<{GLYPH_TAG}:{next}>"));
+        }
+        cursor = close;
+        changed = true;
+    }
+    changed.then(|| out + &text[cursor..])
+}
+
+/// `json`, a document of `schema`, with every reference `replace` answers new
+/// text for rewritten to it (a glyph tag inside its text), and the rest as it
+/// was (`RefWalker.rewrite`).
+pub fn rewrite(
+    schema: &crate::schema::Schema,
+    json: &Value,
+    replace: &mut dyn FnMut(RefKind, &str) -> Option<String>,
+) -> Value {
+    let mut out = json.clone();
+    // Each string that holds references once: a reference, or text with glyph tags.
+    let mut strings: Vec<(String, RefKind, bool)> = Vec::new();
+    for found in find_in(schema, json) {
+        if strings
+            .last()
+            .is_none_or(|(path, _, _)| *path != found.path)
+        {
+            strings.push((found.path, found.kind, found.span.is_some()));
+        }
+    }
+    for (path, kind, text) in strings {
+        let Some(Value::String(string)) = crate::json::at_path_mut(&mut out, &path) else {
+            continue;
+        };
+        let next = if text {
+            rewrite_glyphs(string, &mut |r| replace(RefKind::Glyph, r))
+        } else {
+            replace(kind, string)
+        };
+        if let Some(next) = next {
+            *string = next;
+        }
+    }
+    out
+}
+
+/// `json` (a document of `schema` written in namespace `home`) with every
+/// reference to a resource or a pack's entry written in full (`ruby` is
+/// `shop:ruby`), so it names the same read from anywhere: how a package's
+/// resources run beside the project's. Files inside a resource are left be.
+pub fn qualify(schema: &crate::schema::Schema, json: &Value, home: &str) -> Value {
+    rewrite(schema, json, &mut |kind, text| {
+        if kind.spec().scope == RefScope::File {
+            return None;
+        }
+        resolve(home, kind, text)
+            .map(|k| k.to_string())
+            .filter(|full| full != text)
+    })
 }
 
 fn utf16_len(text: &str) -> usize {

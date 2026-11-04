@@ -155,3 +155,60 @@ fn every_package_case_is_formats() {
         failures.join("\n")
     );
 }
+
+/// What the runtime takes: every resource by the name a server knows it by, a
+/// package's with its references written in full, and what a namespace may name.
+#[test]
+fn a_projects_packages_run_beside_it_named_in_full() {
+    use netherforge_format::kind::loot::LootTableFile;
+    use netherforge_format::reference::ResourceKey;
+    let base = cases().join("loot");
+    let packages = TestPackages {
+        base: base.clone(),
+        root: "app".into(),
+        repos: BTreeMap::new(),
+    };
+    let app = Folder::open(base.join("app")).unwrap();
+    let loaded = project::load(
+        &app,
+        project::Options {
+            packages: &packages,
+            ..Default::default()
+        },
+    );
+    let running = loaded.running::<LootTableFile>();
+    let names: Vec<&str> = running.iter().map(|(n, _)| n.as_str()).collect();
+    // The package's tables that loop have errors, and so has the app's (it names what lib doesn't export): none runs.
+    assert_eq!(names, ["lib:drops"]);
+    let drops = serde_json::to_string(running[0].1).unwrap();
+    assert!(
+        drops.contains(r#""item":"lib:secret""#) && drops.contains(r#""table":"lib:hidden""#),
+        "{drops}"
+    );
+    assert_eq!(
+        loaded.place_of("loot_table", "lib:drops"),
+        "lib:loot/drops.json"
+    );
+    let key = |n: &str, p: &str| ResourceKey {
+        namespace: n.into(),
+        path: p.into(),
+    };
+    let home = loaded.namespace().to_owned();
+    assert!(
+        loaded
+            .nameable(&home, "item", &key("lib", "coin"))
+            .is_none()
+    );
+    assert_eq!(
+        loaded
+            .nameable(&home, "item", &key("lib", "secret"))
+            .map(|b| b.code.code),
+        Some("reference.not-exported")
+    );
+    assert_eq!(
+        loaded
+            .nameable(&home, "item", &key("elsewhere", "x"))
+            .map(|b| b.code.code),
+        Some("reference.namespace")
+    );
+}

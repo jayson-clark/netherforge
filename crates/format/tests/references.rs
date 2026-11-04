@@ -102,3 +102,23 @@ fn glyph_tags_are_found_as_minimessage_splits_them() {
         [("acme:ui/coin".into(), 2, 22), ("a:b/c".into(), 35, 50)]
     );
 }
+
+#[test]
+fn qualifying_writes_every_reference_in_full() {
+    use netherforge_format::kind::menu::MenuFile;
+    let menu: serde_json::Value = serde_json::from_str(
+        r#"{ "title": "<glyph:ui/coin> and <glyph:other:ui/x>", "skin": "ui/back",
+            "slots": { "0": { "item": { "item": "ruby", "lore": ["<glyph:ui/coin>"] } } } }"#,
+    )
+    .unwrap();
+    let qualified = netherforge_format::reference::qualify(
+        netherforge_format::schema::of::<MenuFile>(),
+        &menu,
+        "lib",
+    );
+    assert_eq!(
+        qualified,
+        serde_json::json!({ "title": "<glyph:lib:ui/coin> and <glyph:other:ui/x>", "skin": "lib:ui/back",
+            "slots": { "0": { "item": { "item": "lib:ruby", "lore": ["<glyph:lib:ui/coin>"] } } } })
+    );
+}

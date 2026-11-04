@@ -114,6 +114,8 @@ pub trait DocumentKind: Sync {
     /// The document read from `text` and written again, canonically.
     fn write_back(&self, text: &str, path: &str) -> Result<String, Box<Problem>>;
     fn schema(&self) -> &'static crate::schema::Schema;
+    /// The model `json` (a document of the kind) reads as, if it does.
+    fn model(&self, json: &serde_json::Value) -> Option<Box<dyn Model>>;
 }
 
 struct Of<T>(std::marker::PhantomData<fn() -> T>);
@@ -138,6 +140,12 @@ impl<T: crate::document::Document> DocumentKind for Of<T> {
 
     fn schema(&self) -> &'static crate::schema::Schema {
         crate::schema::of::<T>()
+    }
+
+    fn model(&self, json: &serde_json::Value) -> Option<Box<dyn Model>> {
+        serde_json::from_value::<T>(json.clone())
+            .ok()
+            .map(|m| Box::new(m) as Box<dyn Model>)
     }
 }
 

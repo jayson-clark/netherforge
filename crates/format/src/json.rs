@@ -175,3 +175,30 @@ pub fn child_path(parent: &str, key: &str) -> String {
         format!("{parent}[{}]", quote(key))
     }
 }
+
+/// The value at `path` (as `child_path` and `[i]` write them: `$.a["b c"][0]`) in `root`.
+pub fn at_path_mut<'a>(root: &'a mut Value, path: &str) -> Option<&'a mut Value> {
+    let mut rest = path.strip_prefix('$')?;
+    let mut here = root;
+    while !rest.is_empty() {
+        if let Some(after) = rest.strip_prefix('.') {
+            let end = after.find(['.', '[']).unwrap_or(after.len());
+            here = here.get_mut(&after[..end])?;
+            rest = &after[end..];
+        } else if let Some(after) = rest.strip_prefix("[\"") {
+            // A quoted key: JSON's string rules, up to the quote that closes it.
+            let mut stream = serde_json::Deserializer::from_str(&rest[1..]).into_iter::<String>();
+            let key = stream.next()?.ok()?;
+            let used = stream.byte_offset();
+            let after = &after[used - 1..];
+            here = here.get_mut(&key)?;
+            rest = after.strip_prefix(']')?;
+        } else {
+            let after = rest.strip_prefix('[')?;
+            let end = after.find(']')?;
+            here = here.get_mut(after[..end].parse::<usize>().ok()?)?;
+            rest = &after[end + 1..];
+        }
+    }
+    Some(here)
+}

@@ -28,6 +28,10 @@ pub struct Resource {
     pub document: Option<Doc>,
     /// Whether it read: a document kind's parsed, and a files kind's always does.
     pub read: bool,
+    /// Whether any of its problems (its own, and against the project) is an error: then nothing should run it.
+    pub errors: bool,
+    /// What the server runs of a package's resource: its model with every reference written in full.
+    pub qualified: Option<Box<dyn kind::Model>>,
 }
 
 impl Resource {
@@ -323,6 +327,8 @@ fn read(source: &dyn ProjectSource, home: Option<&str>, options: &Options) -> Re
                 found,
                 problems: read.problems,
                 document: read.document,
+                errors: false,
+                qualified: None,
             })
         })
         .collect();
@@ -426,10 +432,32 @@ fn check<'a>(
     exports(&project, &mut sink);
     report_references(&project.references, &mut sink);
     world_heights(&project, &mut sink);
+    // The game's blocks are the whole server's: the packages' rules are checked against each other here.
+    crate::kind::game_block::across_packages(&project, &mut sink);
     problems.extend(sink.problems);
+    let mut errors = Vec::new();
     for resource in &project.resources {
-        problems.extend(resource.problems.iter().cloned());
-        problems.extend(across(&project, source, resource));
+        let found: Vec<Problem> = resource
+            .problems
+            .iter()
+            .cloned()
+            .chain(across(&project, source, resource))
+            .collect();
+        errors.push(crate::problem::has_errors(&found));
+        problems.extend(found);
+    }
+    let home = project.references.home.clone();
+    for (resource, errors) in project.resources.iter_mut().zip(errors) {
+        resource.errors = errors;
+        // A package's resources run beside the project's, so they name everything in full.
+        if in_package
+            && !errors
+            && let Some(document) = &resource.document
+            && let Some(kind) = kind::document_kind(resource.found.kind.id)
+        {
+            let json = reference::qualify(document.schema, &document.json, &home);
+            resource.qualified = kind.model(&json);
+        }
     }
     // The loader's order: by file, then line, keeping the order they were found in otherwise.
     problems.sort_by(|a, b| {
@@ -459,6 +487,143 @@ fn defined_with_exports(reading: &Reading) -> Defined {
             &exported,
         ))),
         ..defined(&reading.home, &reading.resources, &|_, _| true)
+    }
+}
+
+impl<'a> Project<'a> {
+    /// The game's facts it was read with.
+    pub fn game(&self) -> Option<&'a dyn GameData> {
+        self.game
+    }
+
+    /// The project's namespace: what its references resolve in when they name none.
+    pub fn namespace(&self) -> &str {
+        &self.references.home
+    }
+
+    /// Every resource of `kind` in the project and every package, as a server
+    /// running them names them: the project's own by id (`ruby`), a package's
+    /// as `ns:id` (`acme:coin`), which is how the project refers to it too.
+    pub fn everywhere(&self, kind: &str) -> Vec<(String, &Resource)> {
+        let own = self
+            .resources
+            .iter()
+            .filter(|r| r.read && r.found.kind.id == kind)
+            .map(|r| (r.found.id.clone(), r));
+        let theirs = self.packages.iter().flat_map(|(namespace, package)| {
+            package
+                .project
+                .resources
+                .iter()
+                .filter(|r| r.read && r.found.kind.id == kind)
+                .map(move |r| (crate::kinds::package_path(namespace, &r.found.id), r))
+        });
+        own.chain(theirs).collect()
+    }
+
+    /// What the server runs of model `T`, the packages' included: each resource
+    /// with no errors, a package's with every reference written in full, by the name
+    /// `everywhere` gives it.
+    pub fn running<T: 'static>(&self) -> Vec<(String, &T)> {
+        let own = self
+            .resources
+            .iter()
+            .filter(|r| !r.errors)
+            .filter_map(|r| Some((r.found.id.clone(), r.model::<T>()?)));
+        let theirs = self.packages.iter().flat_map(|(namespace, package)| {
+            package
+                .project
+                .resources
+                .iter()
+                .filter(|r| !r.errors)
+                .filter_map(move |r| {
+                    let model = r.qualified.as_ref()?.as_any().downcast_ref::<T>()?;
+                    Some((crate::kinds::package_path(namespace, &r.found.id), model))
+                })
+        });
+        own.chain(theirs).collect()
+    }
+
+    /// The manifest of `namespace`: the project's own, or a package's.
+    pub fn manifest_of(&self, namespace: &str) -> Option<&Manifest> {
+        if namespace == self.namespace() {
+            self.manifest.as_ref()
+        } else {
+            self.packages.get(namespace)?.resolved.manifest.as_ref()
+        }
+    }
+
+    /// What code or files in `namespace` (the project's own, or a package's) can name.
+    pub fn references_of(&self, namespace: &str) -> Option<&ReferenceIndex> {
+        if namespace == self.namespace() {
+            Some(&self.references)
+        } else {
+            Some(&self.packages.get(namespace)?.project.references)
+        }
+    }
+
+    /// The file the resource `id` of `kind` is read from: the project's own by
+    /// id, a package's as `ns:id` (at its package path), in its group folders.
+    /// One that isn't there is where a new one would go.
+    pub fn place_of(&self, kind: &str, id: &str) -> String {
+        let spec = crate::kinds::by_id(kind).expect("a kind");
+        let (package, bare) = crate::kinds::split_package(id);
+        let resources = match package {
+            None => Some(&self.resources),
+            Some(p) => self.packages.get(p).map(|p| &p.project.resources),
+        };
+        let group = resources
+            .into_iter()
+            .flatten()
+            .find(|r| r.found.kind.id == kind && r.found.id == bare)
+            .map_or("", |r| r.found.group.as_str());
+        let path = spec.path_of(bare, group);
+        match package {
+            Some(p) => crate::kinds::package_path(p, &path),
+            None => path,
+        }
+    }
+
+    /// Why something in `from` (the project's namespace, or a package's) can't
+    /// name `key`, a resource of `kind`: its namespace is neither `from` nor a
+    /// package `from` depends on, or it's that package's and it doesn't export
+    /// it. `None` when it may (whether it exists is the caller's to say).
+    pub fn nameable(
+        &self,
+        from: &str,
+        kind: &str,
+        key: &reference::ResourceKey,
+    ) -> Option<reference::BrokenRef> {
+        if key.namespace == from {
+            return None;
+        }
+        let depends = self
+            .manifest_of(from)
+            .and_then(|m| m.dependencies.as_ref())
+            .is_some_and(|d| d.get_str(&key.namespace).is_some());
+        if !depends {
+            return Some(reference::index::unknown_namespace(&key.namespace, from));
+        }
+        let target = self.packages.get(&key.namespace)?;
+        let spec = crate::kinds::by_id(kind).expect("a kind");
+        let exists = target
+            .project
+            .resources
+            .iter()
+            .any(|r| r.read && r.found.kind.id == kind && r.found.id == key.path);
+        let exported = target
+            .resolved
+            .manifest
+            .as_ref()
+            .and_then(|m| m.exports.as_ref())
+            .and_then(|e| e.get_str(spec.folder))
+            .is_some_and(|ids| ids.contains(&key.path));
+        (exists && !exported).then(|| {
+            reference::index::not_exported(
+                &key.namespace,
+                &format!("{} \"{}\"", spec.words(), key.path),
+            )
+        })
     }
 }
 
@@ -581,6 +746,16 @@ impl<'a> Across<'a> {
     /// `fonts/default.json`, when it's there and reads.
     pub fn default_font(&self) -> Option<&'a crate::font::DefaultFontFile> {
         self.project.default_font.as_ref()
+    }
+
+    /// The packages the project depends on, by namespace (none while a package is checked on its own).
+    pub fn packages(&self) -> &'a BTreeMap<String, LoadedPackage<'a>> {
+        &self.project.packages
+    }
+
+    /// Where a resource the server names `name` (the project's by id, a package's as `ns:id`) is read from.
+    pub fn place_of_everywhere(&self, kind: &str, name: &str) -> String {
+        self.project.place_of(kind, name)
     }
 
     /// Whether the resource is a package's, checked on its own in its own namespace.
