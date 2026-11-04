@@ -114,8 +114,18 @@ impl ProjectSource for Files<'_> {
     }
 }
 
-/// Reads and checks the project in `source`.
+/// Reads and checks the project in `source`, held to the real feature table.
 pub fn load<'a>(source: &'a dyn ProjectSource, game: Option<&'a dyn GameData>) -> Project<'a> {
+    load_with(source, game, crate::features::CURRENT)
+}
+
+/// Reads and checks the project in `source`, its target held to `features`
+/// (a test's own table, since the real one may hold nothing a test could rely on).
+pub fn load_with<'a>(
+    source: &'a dyn ProjectSource,
+    game: Option<&'a dyn GameData>,
+    features: crate::features::FeatureTable<'a>,
+) -> Project<'a> {
     let read = |path: &str| source.read(path);
     let files: BTreeSet<String> = source
         .files()
@@ -150,6 +160,8 @@ pub fn load<'a>(source: &'a dyn ProjectSource, game: Option<&'a dyn GameData>) -
     problems.extend(scan.problems);
     let mut reader = Source::new(&files, &read);
     reader.game = game;
+    reader.minecraft = minecraft;
+    reader.features = Some(features);
     let resources: Vec<Resource> = scan
         .resources
         .into_iter()

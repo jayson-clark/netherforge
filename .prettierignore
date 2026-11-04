@@ -3,6 +3,7 @@
 pnpm-lock.yaml
 packages/api/generated/
 docs/reference/
+docs/format/features.md
 apps/editor/src/core/backend/generated/
 apps/editor/src-tauri/permissions/generated/
 examples/**/*.json

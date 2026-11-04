@@ -39,6 +39,9 @@ pub struct Source<'a> {
     pub read: crate::document::ReadFile<'a>,
     pub required_modules: BTreeSet<String>,
     pub game: Option<&'a dyn crate::game::GameData>,
+    /// The project's target Minecraft version, and the feature table it's held to.
+    pub minecraft: Option<&'a str>,
+    pub features: Option<crate::features::FeatureTable<'a>>,
 }
 
 impl<'a> Source<'a> {
@@ -52,6 +55,8 @@ impl<'a> Source<'a> {
             read,
             required_modules,
             game: None,
+            minecraft: None,
+            features: None,
         }
     }
 }
@@ -148,6 +153,8 @@ pub fn read(found: &Found, source: &Source) -> Option<Read> {
         read: Some(&inside),
         files: Some(&found.inside),
         game: source.game,
+        minecraft: source.minecraft,
+        features: source.features,
     };
     // A file with a companion document is only its file without it (a structure that doesn't generate).
     let companion_missing =

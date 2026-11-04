@@ -66,6 +66,22 @@ pub struct Context<'a> {
     pub read: Option<ReadFile<'a>>,
     pub files: Option<&'a BTreeSet<String>>,
     pub game: Option<&'a dyn GameData>,
+    /// The project's target Minecraft version, when its manifest reads.
+    pub minecraft: Option<&'a str>,
+    /// The feature table targets are held to: the real one, unless a test hands its own.
+    pub features: Option<crate::features::FeatureTable<'a>>,
+}
+
+impl Context<'_> {
+    /// Reports using feature `id` at `path` when the project's target lacks it.
+    pub fn require_feature(&self, id: &str, sink: &mut ProblemSink, path: &str) {
+        self.features.unwrap_or(crate::features::CURRENT).require(
+            self.minecraft,
+            id,
+            sink,
+            Some(path.to_owned()),
+        );
+    }
 }
 
 /// The schema a file at `path` names: `SCHEMA` with a `../` for each folder

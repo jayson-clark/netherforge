@@ -244,3 +244,57 @@ fn a_package_exports_kinds_it_has() {
         ]
     );
 }
+
+#[test]
+fn a_feature_needs_its_minecraft() {
+    use netherforge_format::features::{self, Feature, FeatureTable};
+    let manifest = |minecraft: &str| {
+        format!(
+            r#"{{ "formatVersion": 1, "name": "Sky", "namespace": "sky", "version": "1.0.0", "minecraft": "{minecraft}" }}"#
+        )
+    };
+    let sky = r##"{ "darkens": false, "sky": "#ff0000" }"##;
+    let table = [Feature {
+        id: "sky-night",
+        since: "27.1",
+        what: "A sky that doesn't darken at night",
+    }];
+    let found = |minecraft: &str| -> Vec<String> {
+        let text = manifest(minecraft);
+        let files: BTreeSet<String> = ["netherforge.json", "skies/red.json"]
+            .map(String::from)
+            .into();
+        let read = |p: &str| {
+            Some(if p == "netherforge.json" {
+                text.clone()
+            } else {
+                sky.to_owned()
+            })
+        };
+        let source = project::Files {
+            files: &files,
+            read: &read,
+        };
+        project::load_with(&source, None, FeatureTable(&table))
+            .problems
+            .iter()
+            .map(|p| {
+                format!(
+                    "{} {}: {}",
+                    p.code.as_deref().unwrap(),
+                    p.path.as_deref().unwrap_or(""),
+                    p.message
+                )
+            })
+            .collect()
+    };
+    assert_eq!(
+        found("26.3"),
+        [
+            "project.feature $.darkens: A sky that doesn't darken at night needs Minecraft 27.1; this project targets 26.3"
+        ]
+    );
+    assert!(found("27.1").is_empty());
+    // The real table has every feature the checks name.
+    features::CURRENT.get(netherforge_format::kind::sky::NIGHT_FEATURE);
+}

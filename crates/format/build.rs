@@ -1,11 +1,44 @@
 //! The problem catalogue as Rust constants, read from `docs/format/problems.md`,
 //! which format's Kotlin `ProblemCodes` writes (its golden test). One catalogue:
-//! a code that isn't in it doesn't compile.
+//! a code that isn't in it doesn't compile. The feature table the same way, from
+//! `docs/format/features.md` (Kotlin's `FeatureTable`).
 
 use std::fmt::Write;
 use std::path::Path;
 
 fn main() {
+    problems();
+    features();
+}
+
+/// `docs/format/features.md`'s table, a row per feature: `| \`id\` | since | what |`.
+fn features() {
+    let page = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/format/features.md");
+    println!("cargo:rerun-if-changed={}", page.display());
+    let text = std::fs::read_to_string(&page).expect("docs/format/features.md");
+    let mut out = String::from(
+        "// Read from docs/format/features.md by build.rs: every gated feature.\n\n/// Every feature NetherForge uses that the oldest supported version lacks, by id.\npub const ALL: &[Feature] = &[\n",
+    );
+    for line in text.lines() {
+        let cells: Vec<&str> = line.split('|').map(str::trim).collect();
+        let [_, id, since, what, _] = cells[..] else {
+            continue;
+        };
+        let Some(id) = id.strip_prefix('`').and_then(|i| i.strip_suffix('`')) else {
+            continue;
+        };
+        writeln!(
+            out,
+            "    Feature {{ id: {id:?}, since: {since:?}, what: {what:?} }},"
+        )
+        .unwrap();
+    }
+    out.push_str("];\n");
+    let dest = Path::new(&std::env::var("OUT_DIR").unwrap()).join("features.rs");
+    std::fs::write(dest, out).unwrap();
+}
+
+fn problems() {
     let page = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/format/problems.md");
     println!("cargo:rerun-if-changed={}", page.display());
     let text = std::fs::read_to_string(&page).expect("docs/format/problems.md");

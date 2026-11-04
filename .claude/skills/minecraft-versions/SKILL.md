@@ -135,7 +135,9 @@ tools/gradle/build-logic/     the convention plugins: netherforge.kotlin-jvm, ne
 
 1. Add it to `FeatureTable.CURRENT`: an id, the version it arrived in, and
    what it is in a problem's words. `FeaturesTest` checks nothing in it
-   predates `OLDEST_SUPPORTED`.
+   predates `OLDEST_SUPPORTED`. `UPDATE_GOLDEN=1 pnpm test` writes it into
+   `docs/format/features.md` (`FeatureCatalogue`), which is the table the Rust
+   port reads (`crates/format/build.rs`, `features::ALL`): one table.
 2. Validators report using it against a target that lacks it:
    `ctx.requireFeature("<id>", "$.path")` in a kind's `validate`
    (`project.feature`, an error). Tests hand `Projects.load` a table of their
