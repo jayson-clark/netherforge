@@ -555,14 +555,28 @@ unchanged.
   `LIMITS` (it was the same two numbers ten times), and its checks of heights together take the
   height. `TerrainFile::in_world` is what a world's dimension type adds (`project.world-height`).
 
-Not yet in the project load: **packages** (a manifest's dependencies resolved and loaded each in its
-own namespace, what they export, the lock, `testdata/packages`' goldens; until then a reference to
-a dependency's namespace says the project doesn't depend on it, and `tests/references.rs` sets
-exactly those aside in the showcase), a WASM module's checks (with the WASM reader), and the game's
-blocks checked across packages.
+- **Packages** (`package.rs`, Kotlin's `Packages`, `VersionRange`, the lock's models): one package
+  per namespace across the tree, from a host's `PackageSources` (folders beside the project, git
+  commits it opens; `package::Folders` for a host that only has folders), version ranges, the
+  lock's pins and staleness, cycles and conflicts. `project::load(source, Options { game,
+  features, packages })` reads each package in its own namespace, checks it on its own (what it
+  can name is what its dependencies export: `Defined::exported`), and then the project. A loaded
+  `Project` borrows nothing of its source, so a package's sits beside its source in
+  `LoadedPackage`. A host computes a package's hash from format's listing (`package::hash`); the
+  library needs no SHA-256. `tests/packages.rs` holds every `testdata/packages` case (43 problems),
+  with Kotlin's `TestPackages` ported.
+- **What the runtime takes** (Kotlin's `ProjectSnapshot`): `Project::everywhere(kind)` and
+  `running::<T>()` give every resource the server runs by the name it knows it by (the project's
+  by id, a package's as `ns:id`), `running` only those without errors and a package's from a
+  copy with every reference written in full (`reference::qualify`: the references rewritten by the
+  same schema walk, glyph tags in text included, which rename and move will use too).
+  `place_of`, `manifest_of`, `references_of` and `nameable` answer for any namespace of the tree.
+  `project::Folder` is a project on disk.
 
-Next in format: the snapshot as the runtime takes it (with packages). The compilers (a centity's, a terrain's generator, a pack's build, the start-up
-datapack) come with the runtime pieces that use them.
+Not yet in the project load: a WASM module's checks (with the WASM reader), and `ProjectCache`
+(reading again only the files that changed, for hot reload).
+
+Next in format: the compilers, with the runtime pieces that use them. The compilers are a centity's, a terrain's generator, a pack's build, and the start-up datapack.
 
 ## One source for each thing
 
