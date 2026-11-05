@@ -432,6 +432,42 @@ impl Store {
     }
 }
 
+impl Store {
+    /// When each of `namespace`'s schedules last ran (Unix milliseconds), by id.
+    pub fn schedule_runs(&self, namespace: &str) -> BTreeMap<String, i64> {
+        self.commit();
+        let Ok(mut statement) = self
+            .connection
+            .prepare("SELECT id, last_run FROM schedule_runs WHERE namespace = ?1")
+        else {
+            return BTreeMap::new();
+        };
+        statement
+            .query_map(params![namespace], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+            })
+            .into_iter()
+            .flatten()
+            .flatten()
+            .collect()
+    }
+
+    /// `namespace`'s schedule `id` last ran at `time` (Unix milliseconds).
+    pub fn schedule_ran(&self, namespace: &str, id: &str, time: i64) {
+        let (namespace, id) = (namespace.to_owned(), id.to_owned());
+        self.stage(
+            format!("schedule_runs {namespace} {id}"),
+            Box::new(move |c| {
+                c.execute(
+                    "INSERT INTO schedule_runs (namespace, id, last_run) VALUES (?1, ?2, ?3) ON CONFLICT (namespace, id) DO UPDATE SET last_run = excluded.last_run",
+                    params![namespace, id, time],
+                )?;
+                Ok(())
+            }),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

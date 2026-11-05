@@ -437,7 +437,8 @@ impl Scripts {
         std::mem::take(&mut self.0.state.borrow_mut().logs)
     }
 
-    fn live(&self, scope: ScopeId) -> bool {
+    /// Whether `scope` still runs (open and not disabled).
+    pub fn live(&self, scope: ScopeId) -> bool {
         self.0
             .state
             .borrow()

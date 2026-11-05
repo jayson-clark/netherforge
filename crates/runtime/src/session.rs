@@ -84,6 +84,15 @@ pub trait Service {
     fn block_changed(&self, _block: &BlockRef) {}
 }
 
+/// What the server's config says a session runs with (Kotlin's `RuntimeConfig`, as far as it's ported).
+#[derive(Clone, Debug, Default)]
+pub struct Config {
+    /// `schedules.time-zone`: the zone `nf.schedule`'s times are in; the server's own when none.
+    pub time_zone: Option<String>,
+    /// The wall clock schedules read, in Unix milliseconds, fixed: for tests. The system's when none.
+    pub wall_clock: Option<i64>,
+}
+
 /// Why a project can't run: what the log says, and the problem to report if format didn't.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Refusal {
@@ -166,8 +175,28 @@ impl<'a> Session<'a> {
         packages: &'a dyn PackageSources,
         store: Rc<crate::store::Store>,
     ) -> Session<'a> {
+        Session::start_configured(platform, source, packages, store, Config::default())
+    }
+
+    /// `start_with`, as the server's config says.
+    pub fn start_configured(
+        platform: Rc<dyn Platform>,
+        source: &'a dyn ProjectSource,
+        packages: &'a dyn PackageSources,
+        store: Rc<crate::store::Store>,
+        config: Config,
+    ) -> Session<'a> {
         let project = load(source, packages);
         let shared = Shared::new(platform.clone(), store);
+        shared.schedules.borrow_mut().now = config.wall_clock;
+        if let Some(zone) = &config.time_zone {
+            match crate::schedule::Zone::parse(zone) {
+                Some(zone) => shared.schedules.borrow_mut().zone = zone,
+                None => platform.log().warn(format!(
+                    "config.yml's schedules.time-zone \"{zone}\" isn't a time zone (try \"Europe/London\", \"UTC\" or \"+02:00\"): schedules use the server's own"
+                )),
+            }
+        }
         let mut session = Session {
             refusal: refusal(&*platform, &project),
             platform,
@@ -357,6 +386,11 @@ impl<'a> Session<'a> {
         for service in &self.services {
             hook(&**service);
         }
+    }
+
+    /// The wall clock schedules read, in Unix milliseconds: a test's, or the system's when none.
+    pub fn set_wall_clock(&self, millis: Option<i64>) {
+        self.shared.schedules.borrow_mut().now = millis;
     }
 
     /// The server it runs on.
@@ -570,6 +604,9 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         Box::new(crate::entity::EntitiesService {
             shared: shared.clone(),
             host: Default::default(),
+        }),
+        Box::new(crate::schedule::SchedulesService {
+            shared: shared.clone(),
         }),
         Box::new(ModulesService {
             shared: shared.clone(),

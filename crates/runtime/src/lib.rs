@@ -27,6 +27,7 @@ pub mod living;
 pub mod modules;
 pub mod permissions;
 pub mod player;
+pub mod schedule;
 pub mod scripts;
 pub mod server;
 pub mod session;
@@ -184,6 +185,8 @@ struct Api {
     images: Option<images::ImagesApi>,
     /// `World` and `nf.worlds`, with them.
     worlds: Option<world::GameContext>,
+    /// `nf.schedule` and `Schedule`.
+    schedules: Option<schedule::ScheduleContext>,
 }
 
 impl Runtime for Api {
@@ -326,6 +329,18 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_schedule(&self) -> &dyn netherforge_api::api::NfScheduleApi {
+        match &self.schedules {
+            Some(s) => s,
+            None => &Unported,
+        }
+    }
+    fn schedule(&self) -> &dyn netherforge_api::api::ScheduleApi {
+        match &self.schedules {
+            Some(s) => s,
+            None => &Unported,
+        }
+    }
     fn nf_worlds(&self) -> &dyn netherforge_api::api::NfWorldsApi {
         match &self.worlds {
             Some(w) => w,
@@ -355,6 +370,10 @@ impl Room {
         let worlds = shared
             .as_ref()
             .map(|shared| world::GameContext::new(shared.clone(), scripts.clone()));
+        let schedules = shared.as_ref().map(|shared| schedule::ScheduleContext {
+            shared: shared.clone(),
+            scripts: scripts.clone(),
+        });
         let centities = shared.map(|shared| {
             centity::api::CentityContext::install_liveness(&shared, &scripts);
             centity::api::CentityContext::new(shared, scripts.clone())
@@ -370,6 +389,7 @@ impl Room {
             grants,
             centities,
             images,
+            schedules,
             worlds,
         };
         netherforge_api::install(&host, Rc::new(api))?;

@@ -561,6 +561,19 @@ what's kept **and** what some package's `allow.permissions` allows now. The serv
 needs the calling package to allow it (`check_permission`, Kotlin's words); code no scope runs needs every
 package to.
 
+## Schedules (`crates/runtime/src/schedule.rs`)
+
+Kotlin's `Schedules`, `Recurrence` and `ScheduleImpls`: `nf.schedule.daily`/`weekly`/`cron` in a zone
+(`schedule::Zone`: the server's own, an IANA name through chrono-tz, or a fixed offset), checked each tick
+against the wall clock, a due one run once however late. **Daylight saving is java.time's**: a time in a gap
+is shifted by the gap (`Zone::instant` reads it with the offset before), one that happens twice is the first.
+Cron is Unix's five fields through `croner` (seconds disallowed; day-of-month and day-of-week either matching,
+as Unix's). A schedule with an id keeps its last run per package in the store's `schedule_runs`; `catch_up`
+runs a missed one as its script starts, and one seen for the first time counts as run when it's made. A
+session's `Config` (`session::Config`, the start of Kotlin's `RuntimeConfig`) gives the zone and, for tests,
+a fixed wall clock (`Session::set_wall_clock`). Not yet: the zone read from `config.yml`, the test servers'
+scaled clock.
+
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 
 The roadmap's "describe `Platform` and `PlatformEvents` in a language-neutral spec, and generate

@@ -2188,3 +2188,60 @@ print(alex:permissions()["shop.vip"], alex:unset_permission("nope"))
         Some(&true)
     );
 }
+
+#[test]
+fn schedules_run_at_their_times_and_catch_up_what_they_missed() {
+    // 2026-03-28 23:00 UTC is 23:00 in London, the night before the clocks go forward at 01:00.
+    let start = 1_774_738_800_000i64;
+    let platform = std::rc::Rc::new(Fake::default());
+    let store = std::rc::Rc::new(netherforge_runtime::store::Store::in_memory());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/clock/init.lua",
+            r#"
+local nightly = nf.schedule.daily("1:30", function() print("nightly") end, { id = "nightly", catch_up = true })
+print(nightly:is_active(), nightly:next_run())
+print(pcall(nf.schedule.daily, "25:00", function() end))
+print(pcall(nf.schedule.weekly, "someday", "10:00", function() end))
+print(pcall(nf.schedule.cron, "* * *", function() end) == false)
+print(pcall(nf.schedule.daily, "1:00", function() end, { catch_up = true }))
+local cron = nf.schedule.cron("0 */6 * * *", function() print("cron") end)
+print(cron:next_run())
+"#,
+        ),
+    ]);
+    let config = netherforge_runtime::session::Config {
+        time_zone: Some("Europe/London".into()),
+        wall_clock: Some(start),
+    };
+    let mut session =
+        Session::start_configured(platform.clone(), &files, &NoPackages, store.clone(), config);
+    let lines = printed(&platform.take());
+    // 01:30 is in the gap the clocks skip that night: it's 02:30 BST, 01:30 UTC.
+    let half_past_one_utc = start + 2 * 3_600_000 + 1_800_000;
+    assert_eq!(
+        lines,
+        [
+            format!("true\t{half_past_one_utc}"),
+            "false\tmodules/clock/init.lua:4: bad argument 'time' (\"25:00\" isn't a time of day: \"HH:mm\" on a 24-hour clock, like \"18:00\")".to_owned(),
+            "false\tmodules/clock/init.lua:5: bad argument 'day' (\"someday\" isn't a weekday: \"mon\", \"tue\", \"wed\", \"thu\", \"fri\", \"sat\" or \"sun\")".to_owned(),
+            "true".to_owned(),
+            "false\tmodules/clock/init.lua:7: options.catch_up needs an options.id: that's what the schedule's last run is kept under".to_owned(),
+            // The next six-hourly time in London is 00:00 GMT, an hour on.
+            format!("{}", start + 3_600_000),
+        ]
+    );
+    // Its time comes: it runs once, however late the tick.
+    session.set_wall_clock(Some(half_past_one_utc + 60_000));
+    session.tick();
+    let ran = printed(&platform.take());
+    assert!(ran.contains(&"nightly".to_owned()), "{ran:?}");
+    // The server is off over the next night's run: with catch_up it runs as its script starts.
+    session.stop();
+    session.set_wall_clock(Some(half_past_one_utc + 26 * 3_600_000));
+    session.reload(&["netherforge.json".to_owned()]);
+    platform.take();
+    session.tick();
+    assert!(printed(&platform.take()).contains(&"nightly".to_owned()));
+}
