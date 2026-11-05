@@ -556,6 +556,26 @@ impl Scripts {
         self.host().invoke::<()>(scope, budget, f, args)
     }
 
+    /// Calls `f`, a function a service keeps for `scope` (a spawn condition), as that scope's code: what it
+    /// answered, or how it failed. Nothing runs for a scope that's stopped.
+    pub fn call_kept<A: mlua::IntoLuaMulti>(
+        &self,
+        scope: ScopeId,
+        f: &Function,
+        args: A,
+    ) -> Result<Value, Failure> {
+        if !self.live(scope) {
+            return Ok(Value::Nil);
+        }
+        let budget = self.budget(scope);
+        self.host().invoke::<Value>(scope, budget, f, args)
+    }
+
+    /// A function a service called for `scope` failed: reported as a handler's failure is.
+    pub fn handler_failed(&self, scope: ScopeId, what: &str, failure: Failure) {
+        self.report(scope, what, failure, false);
+    }
+
     fn timer(&self, scope: ScopeId, ticks: u64, kind: TimerKind) -> u64 {
         let mut state = self.0.state.borrow_mut();
         let id = state.id();

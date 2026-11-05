@@ -44,6 +44,8 @@ struct Fake {
     game: NoFacts,
     /// Whether every chunk's entities are loaded.
     unloaded: std::cell::Cell<bool>,
+    /// The one player online, and where they are.
+    player: RefCell<Option<Location>>,
     calls: RefCell<Vec<String>>,
     next: RefCell<u128>,
     poses: RefCell<BTreeMap<u128, DisplayPose>>,
@@ -54,6 +56,7 @@ impl Default for Fake {
         Fake {
             game: NoFacts,
             unloaded: std::cell::Cell::new(false),
+            player: RefCell::new(None),
             calls: RefCell::default(),
             next: RefCell::default(),
             poses: RefCell::default(),
@@ -207,11 +210,42 @@ impl netherforge_platform::FakeBlockOps for Fake {
     fn get(
         &self,
         _: String,
-        _: i32,
-        _: i32,
+        x: i32,
+        y: i32,
         _: i32,
     ) -> Option<netherforge_platform::BlockSnapshot> {
-        None
+        let solid = y < 64 || x == 10;
+        Some(netherforge_platform::BlockSnapshot {
+            state: if solid {
+                "minecraft:stone"
+            } else {
+                "minecraft:air"
+            }
+            .into(),
+            air: !solid,
+            solid,
+            liquid: false,
+            light: if solid { 0 } else { 15 },
+            sky_light: 15,
+            water: false,
+        })
+    }
+}
+
+impl netherforge_platform::FakePlayerOps for Fake {
+    fn online(&self) -> Vec<PlayerRef> {
+        match &*self.player.borrow() {
+            Some(_) => vec![PlayerRef {
+                uuid: Uuid(77),
+                name: "Alex".into(),
+            }],
+            None => Vec::new(),
+        }
+    }
+    fn location(&self, uuid: Uuid) -> Option<Location> {
+        (uuid == Uuid(77))
+            .then(|| self.player.borrow().clone())
+            .flatten()
     }
 }
 
@@ -227,6 +261,21 @@ impl FakeWorldOps for Fake {
     }
     fn is_chunk_loaded(&self, _: String, _: i32, _: i32) -> bool {
         true
+    }
+    fn full_time(&self, _: String) -> Option<i64> {
+        Some(6000)
+    }
+    fn moon_phase(&self, _: String) -> Option<i32> {
+        Some(0)
+    }
+    fn weather(&self, _: String) -> Option<String> {
+        Some("clear".into())
+    }
+    fn heights(&self, _: String) -> Option<(i32, i32)> {
+        Some((-64, 320))
+    }
+    fn biome(&self, _: String, _: i32, _: i32, _: i32) -> Option<String> {
+        Some("minecraft:plains".into())
     }
     /// The first solid block along a ray, by small steps.
     fn raycast_blocks(
@@ -321,6 +370,9 @@ impl FakePlatform for Fake {
         self
     }
     fn world_entities(&self) -> &dyn netherforge_platform::WorldEntityOps {
+        self
+    }
+    fn players(&self) -> &dyn netherforge_platform::PlayerOps {
         self
     }
 }
@@ -1450,4 +1502,63 @@ nf.every(1, function() if ticks == 5 then print("five") end end)
     };
     session.entities_loaded(&std::collections::HashMap::from([(Uuid(999), stray)]));
     assert!(platform.take().contains(&"remove 999".to_owned()));
+}
+
+#[test]
+fn centities_appear_near_a_player_by_their_rules_and_go_when_nobody_is_near() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let wisp = r#"{ "nodes": { "glow": { "display": { "type": "block", "block": "minecraft:glowstone" } } },
+  "spawning": { "cap": 2, "light": { "min": 10 }, "blocks": ["minecraft:stone"], "when": "calm" } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/wisp/centity.json", wisp),
+        (
+            "modules/game/init.lua",
+            r#"
+local calm = false
+nf.spawning.condition("calm", function(check) return calm and check.centity == "wisp" end)
+nf.after(20, function() calm = true end)
+nf.on("centity_natural_spawn", function(e) print("appears", e.centity, e.location.position.y) end)
+print(pcall(nf.spawning.condition, "calm", function() end))
+"#,
+        ),
+    ]);
+    *platform.player.borrow_mut() = Some(place(0.5, 64.0, 0.5));
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = printed(&platform.take());
+    assert!(
+        start
+            .first()
+            .is_some_and(|l| l.contains("already registered")),
+        "{start:?}"
+    );
+    // Not calm yet: nothing appears (calm comes at tick 20's start, before its pass).
+    for _ in 0..19 {
+        session.tick();
+    }
+    let early = platform.take();
+    assert_eq!(session.centities().all().count(), 0, "{early:?}");
+    for _ in 0..61 {
+        session.tick();
+    }
+    let lines = printed(&platform.take());
+    let count = session.centities().all().count();
+    assert!((1..=2).contains(&count), "{count} {lines:?}");
+    assert!(lines.iter().all(|l| l == "appears\twisp\t64"), "{lines:?}");
+    for instance in session.centities().all() {
+        let a = instance.anchor();
+        let distance = (a.x * a.x + a.z * a.z).sqrt();
+        assert!(
+            instance.natural && a.y == 64.0 && (23.0..=49.0).contains(&distance),
+            "{a:?}"
+        );
+    }
+    // The player goes far away: at the next sweep these go (others may appear where they are now).
+    let old: Vec<Uuid> = session.centities().all().map(|i| i.id).collect();
+    *platform.player.borrow_mut() = Some(place(5000.5, 64.0, 0.5));
+    for _ in 0..20 {
+        session.tick();
+    }
+    assert!(old.iter().all(|id| session.centities().get(*id).is_none()));
+    assert!(session.centities().all().all(|i| i.anchor().x > 4000.0));
 }

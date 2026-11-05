@@ -135,6 +135,12 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_spawning(&self) -> &dyn netherforge_api::api::NfSpawningApi {
+        match &self.centities {
+            Some(c) => c,
+            None => &Unported,
+        }
+    }
     fn nf_images(&self) -> &dyn NfImagesApi {
         match &self.images {
             Some(i) => i,

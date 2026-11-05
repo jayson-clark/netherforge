@@ -25,6 +25,11 @@ impl Centities {
         self.home = home.to_owned();
     }
 
+    /// The namespace the project's own centities are named in.
+    pub fn home(&self) -> &str {
+        &self.home
+    }
+
     /// A centity's name in full (`shop:turret`).
     fn full(&self, centity: &str) -> String {
         if centity.contains(':') {

@@ -21,6 +21,7 @@ pub mod hitboxes;
 pub mod instance;
 pub mod keyframes;
 pub mod movers;
+pub mod natural;
 pub mod pathing;
 pub mod paths;
 pub mod physics;

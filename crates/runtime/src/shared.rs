@@ -33,6 +33,8 @@ pub struct Shared {
     pub store: Rc<crate::store::Store>,
     /// The `centity:data()` tables scripts asked for, by instance.
     pub centity_data: RefCell<std::collections::HashMap<netherforge_platform::Uuid, DataTable>>,
+    /// Natural spawning: its passes, rules and scripts' conditions.
+    pub spawner: RefCell<crate::centity::natural::Spawner>,
     /// The pictures scripts hold.
     pub images: Rc<crate::images::Images>,
     /// Nodes' rigid bodies.
@@ -54,6 +56,7 @@ impl Shared {
             centity_scripts: RefCell::default(),
             next_flight: std::cell::Cell::new(0),
             path_nodes: std::cell::Cell::new(0),
+            spawner: RefCell::default(),
             images: Rc::default(),
             physics: RefCell::default(),
             stats: RefCell::default(),

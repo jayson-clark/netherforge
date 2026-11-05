@@ -516,6 +516,20 @@ impl CentityContext {
             ) else {
                 return true;
             };
+            // `spawning.keep_on_interact`: a click that reaches a node keeps a natural one, before scripts hear it.
+            let keep = instance.natural
+                && instance
+                    .definition
+                    .spawning
+                    .as_ref()
+                    .and_then(|s| s.keep_on_interact)
+                    == Some(true);
+            if keep {
+                instance.natural = false;
+                for entity in instance.entity_ids() {
+                    self.shared.platform.entities().set_persistent(entity, true);
+                }
+            }
             let nodes = &instance.definition.nodes;
             let mut path = Vec::new();
             let mut at = picked.index as i32;
@@ -523,9 +537,12 @@ impl CentityContext {
                 path.push(nodes[at as usize].name.clone());
                 at = nodes[at as usize].parent_index;
             }
-            (id, path, picked)
+            (id, path, picked, keep)
         };
-        let (id, path, picked) = picked;
+        let (id, path, picked, kept) = picked;
+        if kept {
+            self.shared.centities.borrow_mut().changed(id);
+        }
         let centity = uuid_text(&id);
         let mut stages: Vec<(Target, &str)> = path
             .iter()
@@ -705,6 +722,7 @@ impl CentityContext {
         if released.is_empty() {
             return;
         }
+        self.release_conditions(&released);
         let doomed: Vec<Uuid> = self
             .shared
             .centities
@@ -838,6 +856,7 @@ impl CentityContext {
                 .with_drawing(|c, drawing| c.sync(platform, drawing, id));
         }
         self.touches();
+        self.natural_tick();
     }
 
     /// One step of every rigid body, then `collide`, `wake` and `sleep` on their nodes.
@@ -1317,6 +1336,42 @@ impl CentityContext {
             &netherforge_luau::json::NoTags,
         )
         .map_err(lua_err)
+    }
+}
+
+impl netherforge_api::api::NfSpawningApi for CentityContext {
+    fn condition(&self, caller: &Caller, name: String, callback: Function) -> ApiResult<()> {
+        if !netherforge_format::names::is_id(&name) {
+            return Err(err(format!(
+                "bad argument 'name' (\"{name}\" can't name a spawn condition: {})",
+                netherforge_format::names::ID_RULE
+            )));
+        }
+        let namespace = self
+            .scripts
+            .namespace(caller.scope)
+            .unwrap_or_else(|| self.shared.centities.borrow().home().to_owned());
+        let key = format!("{namespace}:{name}");
+        let mut spawner = self.shared.spawner.borrow_mut();
+        if let Some(existing) = spawner.conditions.get(&key) {
+            let label = self
+                .scripts
+                .host()
+                .scope_name(existing.scope)
+                .unwrap_or_else(|| "a script".into());
+            return Err(err(format!(
+                "the spawn condition \"{name}\" is already registered by {label}"
+            )));
+        }
+        spawner.conditions.insert(
+            key,
+            super::natural::Condition {
+                scope: caller.scope,
+                name,
+                callback,
+            },
+        );
+        Ok(())
     }
 }
 

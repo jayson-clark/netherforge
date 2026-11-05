@@ -612,6 +612,7 @@ impl Service for CentitiesService {
         self.shared.stats.borrow_mut().clear();
         self.shared.physics.borrow_mut().clear();
         self.shared.images.clear();
+        *self.shared.spawner.borrow_mut() = Default::default();
     }
 }
 
