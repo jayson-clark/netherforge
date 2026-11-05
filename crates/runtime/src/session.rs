@@ -330,20 +330,13 @@ fn refusal(platform: &dyn Platform, project: &Loaded) -> Option<Refusal> {
     None
 }
 
-/// What the project's packages declared they need (`requires`), by the names
-/// the manifest's model gives them: each one it says `true` for or lists anything under.
-fn grants(project: &Loaded) -> Vec<String> {
-    let Some(requires) = project.manifest.as_ref().and_then(|m| m.requires.as_ref()) else {
-        return Vec::new();
-    };
-    let serde_json::Value::Object(fields) = serde_json::to_value(requires).expect("a model") else {
-        return Vec::new();
-    };
-    fields
-        .into_iter()
-        .filter(|(_, v)| v.as_bool() == Some(true) || v.as_array().is_some_and(|a| !a.is_empty()))
-        .map(|(k, _)| k)
-        .collect()
+/// What the project declared it may do: its manifest's `requires`, under its namespace.
+fn grants(project: &Loaded) -> crate::Grants {
+    let manifest = project.manifest.as_ref();
+    crate::Grants {
+        namespace: manifest.map(|m| m.namespace.clone()).unwrap_or_default(),
+        requires: manifest.and_then(|m| m.requires.clone()),
+    }
 }
 
 /// Modules: every module of the project's started in a scope of its own, and one that changed restarted

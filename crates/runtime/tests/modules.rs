@@ -2,7 +2,7 @@
 
 use netherforge_luau::mlua::Value;
 use netherforge_luau::{Host, Limits, ScopeId};
-use netherforge_runtime::{Modules, Project, Room};
+use netherforge_runtime::{Grants, Modules, Project, Room};
 
 const BUDGET: u64 = 1_000_000;
 
@@ -22,7 +22,7 @@ struct Test {
 
 impl Test {
     fn new(files: &[(&str, &str)]) -> Test {
-        let room = Room::new(Host::new(Limits::default()).unwrap(), []).unwrap();
+        let room = Room::new(Host::new(Limits::default()).unwrap(), Grants::default()).unwrap();
         let modules = Modules::new(room.scripts().clone(), project(files), BUDGET);
         Test { room, modules }
     }

@@ -225,7 +225,7 @@ runtimes can't disagree about what crosses. `pnpm lint`'s generated-files check 
   wrapped in a three-line Luau shim (`bind.rs`'s `SHIM`): it yields when the binding returns
   the `waiting` sentinel, and what the scheduler resumes the task with is the call's value.
 - `crate::Runtime` is what every binding asks around its call: `requires` (the one
-  capability check, before anything is read).
+  capability check, before anything is read); the runtime's answers through format's `Requirement`).
 
 ## Handles (`crates/api/src/handle.rs`)
 
@@ -660,6 +660,11 @@ Next in format: the compilers, with the runtime pieces that use them. The compil
 - **Display glyphs** (`kind/resource_pack/display.rs`, `DisplayGlyphs`): the pixel glyphs the pack build draws, an
   image's text and runs, the rect, image and text boxes and `fit`. A picture is `image::Pixels`, whose resize rounds
   half-even as Kotlin's `round` does. `tests/display.rs`.
+- **Requirements and policies** (`requirement.rs`, `policy.rs`): `Requirement` (what `requires` grants, its id and
+  declaration, `declared`, `combined` across the tree) and `Policy` (`policy.json`: `refuses`, `check`, `and`), with
+  Kotlin's messages. `Requirement::Plugin` goes with plugin interop, on both runtimes at once. The runtime's one
+  `requires` check asks `Requirement` (`Grants`: the project's own declaration until packages' code is ported;
+  then per package, with the policy and Kotlin's hidden-tail-call rule). `tests/requirements.rs`.
 
 ## One source for each thing
 

@@ -3,7 +3,7 @@
 
 use netherforge_luau::mlua::Value;
 use netherforge_luau::{Failure, Host, Limits, ScopeId, Stop};
-use netherforge_runtime::{MAX_ERRORS, Room, Target};
+use netherforge_runtime::{Grants, MAX_ERRORS, Room, Target};
 
 const BUDGET: u64 = 1_000_000;
 
@@ -15,7 +15,7 @@ impl Test {
     fn new() -> Test {
         let host = Host::new(Limits::default()).unwrap();
         Test {
-            room: Room::new(host, []).unwrap(),
+            room: Room::new(host, Grants::default()).unwrap(),
         }
     }
 
