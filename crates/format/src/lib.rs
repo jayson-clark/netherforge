@@ -38,6 +38,7 @@ pub mod snapshot;
 pub mod startup;
 pub mod text;
 pub mod vanilla;
+pub mod wasm;
 pub mod workspace;
 pub mod worldgen;
 

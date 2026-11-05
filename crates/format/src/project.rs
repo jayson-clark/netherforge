@@ -97,6 +97,15 @@ pub trait ProjectSource {
     fn size(&self, path: &str) -> Option<[u32; 2]> {
         self.image(path).map(|i| [i.width, i.height])
     }
+    /// Whether `wasm` reads WebAssembly modules at all: then `None` for a module that's there means it can't be
+    /// read. The editor doesn't (its dev server says); the server and the CLI do.
+    fn reads_wasm(&self) -> bool {
+        false
+    }
+    /// What a module (`wasm/<id>/module.wasm`) says about itself, read by `wasm::read`.
+    fn wasm(&self, _path: &str) -> Option<crate::wasm::WasmInfo> {
+        None
+    }
 }
 
 /// What only a picture's pixels say (`ImageInfo`): its size, and how far its
@@ -858,6 +867,16 @@ impl<'a> Across<'a> {
     /// A PNG's `[width, height]` by project path.
     pub fn size(&self, path: &str) -> Option<[u32; 2]> {
         self.source.size(path)
+    }
+
+    /// Whether `wasm` reads WebAssembly modules at all.
+    pub fn reads_wasm(&self) -> bool {
+        self.source.reads_wasm()
+    }
+
+    /// What a WebAssembly module says about itself, by project path.
+    pub fn wasm(&self, path: &str) -> Option<crate::wasm::WasmInfo> {
+        self.source.wasm(path)
     }
 
     /// The files in the resource's folder, relative to it.

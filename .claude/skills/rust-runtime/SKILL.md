@@ -605,8 +605,12 @@ features, packages })` reads each package in its own namespace, checks it on its
   `place_of`, `manifest_of`, `references_of` and `nameable` answer for any namespace of the tree.
   `project::Folder` is a project on disk.
 
-Not yet in the project load: a WASM module's checks (with the WASM reader), and `ProjectCache`
-(reading again only the files that changed, for hot reload).
+- **WebAssembly modules** (`wasm.rs`): `WasmInfo` and its reader (`wasm::read`: the framing and the sections a
+  check needs, not the code), the WASI imports the server provides, and a module's checks, which run as the files
+  kind's `cross_check` on what the host read (`ProjectSource::reads_wasm`/`wasm`; a host that reads none, the
+  editor, says nothing). `WasmInfo` reads Kotlin's JSON for it. `tests/wasm.rs` is `WasmTest`.
+
+Not yet in the project load: `ProjectCache` (reading again only the files that changed, for hot reload).
 
 Next in format: the compilers, with the runtime pieces that use them. The compilers are a centity's, a terrain's generator, a pack's build, and the start-up datapack.
 

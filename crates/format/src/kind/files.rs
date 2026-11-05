@@ -158,6 +158,10 @@ pub fn cross_check(found: &Found, cx: &crate::project::Across) -> Vec<Problem> {
             None,
         )],
         "migration" => migrations(found, cx),
+        "wasm" => {
+            let main = found.kind.path_of(&found.id, &found.group);
+            crate::wasm::check(&main, cx.reads_wasm(), cx.wasm(&main).as_ref())
+        }
         _ => Vec::new(),
     }
 }
