@@ -32,6 +32,7 @@ use super::quat::{Quat, look_rotation};
 use crate::events::{parse_uuid, uuid_text};
 use crate::shared::Shared;
 use crate::{Scripts, Target};
+use netherforge_format::animation::Easing;
 
 fn err(message: impl Into<String>) -> ApiError {
     ApiError(message.into())
@@ -410,6 +411,12 @@ impl CentityContext {
                 Some(instance) if !instance.removed => instance.age += 1,
                 _ => continue,
             }
+            // Tweens move the rest pose, which the clips then play over.
+            if let Some(i) = self.shared.centities.borrow_mut().get_mut(id)
+                && !i.tweens.is_empty()
+            {
+                i.step_tweens();
+            }
             let ended = self.shared.centities.borrow_mut().animate(id);
             for clip in ended {
                 if !self.live(id) {
@@ -429,9 +436,66 @@ impl CentityContext {
                     self.scripts.raise(&target, "tick", fields);
                 }
             }
+            if !self.live(id) {
+                continue;
+            }
+            self.lay_ropes(id);
             let platform = &*self.shared.platform;
             self.shared
                 .with_drawing(|c, drawing| c.sync(platform, drawing, id));
+        }
+    }
+
+    /// Where a rope's end is in `world` now; none when it's gone or in another world.
+    fn rope_end(&self, end: &super::ropes::RopeEnd, world: &str) -> Option<Vec3> {
+        use super::ropes::{ENTITY_MIDDLE, PLAYER_HANDS, RopeEnd};
+        match end {
+            RopeEnd::Point(at) => Some(*at),
+            RopeEnd::OfNode { centity, node } => {
+                let centities = self.shared.centities.borrow();
+                let other = centities
+                    .get(*centity)
+                    .filter(|o| !o.removed && o.anchor().world == world)?;
+                let index = other.index_of(node)?;
+                Some(other.world_matrix(index).translation())
+            }
+            RopeEnd::OfEntity(entity) => {
+                let info = self.shared.platform.world_entities().info(*entity)?;
+                let at = info.location;
+                if at.world != world {
+                    return None;
+                }
+                let up = if info.player.is_some() {
+                    PLAYER_HANDS
+                } else {
+                    ENTITY_MIDDLE
+                };
+                Some(Vec3(at.x, at.y + up, at.z))
+            }
+        }
+    }
+
+    /// Lays each strung rope of instance `id` between where its ends are now; one whose end has gone is let go.
+    fn lay_ropes(&self, id: Uuid) {
+        let (world, ropes) = match self.shared.centities.borrow().get(id) {
+            Some(i) if !i.ropes.is_empty() => (i.anchor().world.clone(), i.ropes.clone()),
+            _ => return,
+        };
+        for (name, rope) in ropes {
+            let from = self.rope_end(&rope.from, &world);
+            let to = self.rope_end(&rope.to, &world);
+            let mut centities = self.shared.centities.borrow_mut();
+            let Some(instance) = centities.get_mut(id) else {
+                return;
+            };
+            match (instance.index_of(&name), from, to) {
+                (Some(index), Some(from), Some(to)) => {
+                    super::ropes::lay(instance, index, from, to, rope.length)
+                }
+                _ => {
+                    instance.ropes.remove(&name);
+                }
+            }
         }
     }
 
@@ -1198,6 +1262,15 @@ impl CentityApi for CentityContext {
             .unwrap_or(false))
     }
 
+    fn add_node(
+        &self,
+        this: &handles::Centity,
+        name: String,
+        definition: Value,
+    ) -> ApiResult<Option<handles::Node>> {
+        self.add(this, name, None, definition)
+    }
+
     // ---- not ported yet ----
     fn is_natural(&self, this: &handles::Centity) -> ApiResult<bool> {
         CentityApi::is_natural(&Unported, this)
@@ -1213,14 +1286,6 @@ impl CentityApi for CentityContext {
     }
     fn keep(&self, this: &handles::Centity) -> ApiResult<bool> {
         CentityApi::keep(&Unported, this)
-    }
-    fn add_node(
-        &self,
-        this: &handles::Centity,
-        name: String,
-        definition: Value,
-    ) -> ApiResult<Option<handles::Node>> {
-        CentityApi::add_node(&Unported, this, name, definition)
     }
     fn follow(&self, this: &handles::Centity, player: handles::Player) -> ApiResult<bool> {
         CentityApi::follow(&Unported, this, player)
@@ -1362,6 +1427,40 @@ impl CentityApi for CentityContext {
 }
 
 impl CentityContext {
+    /// Adds a node a script described under node `parent` (a root when none): its handle. The name must be
+    /// free; its entities are made by the next sync, in the same tick.
+    fn add(
+        &self,
+        this: &handles::Centity,
+        name: String,
+        parent: Option<usize>,
+        definition: Value,
+    ) -> ApiResult<Option<handles::Node>> {
+        let host = self.scripts.host();
+        let game = self.shared.platform.game();
+        let node = super::definitions::node_from(
+            &host,
+            &name,
+            parent.map_or(-1, |p| p as i32),
+            &definition,
+            Some(game),
+        )
+        .map_err(err)?;
+        let added = self.with(this, |i| {
+            if i.index_of(&name).is_some() {
+                return Err(err(format!(
+                    "bad argument 'name' (the centity already has a node called \"{name}\")"
+                )));
+            }
+            i.add_node(node);
+            Ok(())
+        });
+        match added {
+            None => Ok(None),
+            Some(result) => result.map(|_| Some(Self::node_handle(&this.id, &name))),
+        }
+    }
+
     fn hidden(
         &self,
         this: &handles::Centity,
@@ -2169,17 +2268,37 @@ impl NodeApi for CentityContext {
             .unwrap_or(false))
     }
 
-    // ---- not ported yet ----
     fn add_child(
         &self,
         this: &handles::Node,
         name: String,
         definition: Value,
     ) -> ApiResult<Option<handles::Node>> {
-        NodeApi::add_child(&Unported, this, name, definition)
+        let Some(parent) = self.with_node(this, |_, at| at) else {
+            return Ok(None);
+        };
+        let centity = handles::Centity {
+            id: this.centity.clone(),
+        };
+        self.add(&centity, name, Some(parent), definition)
     }
     fn remove(&self, this: &handles::Node) -> ApiResult<bool> {
-        NodeApi::remove(&Unported, this)
+        let name = this.name.clone();
+        let Some(result) = self.with_node(this, |i, at| {
+            if !i.is_added(at) {
+                return Err(err(format!(
+                    "node \"{name}\" is declared by centity.json; only nodes a script added can be removed"
+                )));
+            }
+            Ok((i.id, i.remove_node(at)))
+        }) else {
+            return Ok(false);
+        };
+        let (id, gone) = result?;
+        for node in gone {
+            self.drop_node(id, &node);
+        }
+        Ok(true)
     }
     fn stretch_between(
         &self,
@@ -2188,10 +2307,25 @@ impl NodeApi for CentityContext {
         to: values::Vec3,
         options: Option<shapes::StretchOptions>,
     ) -> ApiResult<bool> {
-        NodeApi::stretch_between(&Unported, this, from, to, options)
+        let thickness = options.and_then(|o| o.thickness);
+        if let Some(t) = thickness
+            && !(t > 0.0 && t.is_finite())
+        {
+            return Err(err(format!(
+                "bad argument 'options.thickness' (more than 0, got {})",
+                lua_number(t)
+            )));
+        }
+        Ok(self
+            .with_node(this, |i, at| {
+                super::ropes::stretch(i, at, vec(from), vec(to), thickness, None)
+            })
+            .unwrap_or(false))
     }
     fn is_rope(&self, this: &handles::Node) -> ApiResult<bool> {
-        NodeApi::is_rope(&Unported, this)
+        Ok(self
+            .with_node(this, |i, at| i.definition.nodes[at].rope.is_some())
+            .unwrap_or(false))
     }
     fn rope_between(
         &self,
@@ -2200,20 +2334,112 @@ impl NodeApi for CentityContext {
         to: unions::Vec3OrNodeOrEntity,
         options: Option<shapes::RopeOptions>,
     ) -> ApiResult<bool> {
-        NodeApi::rope_between(&Unported, this, from, to, options)
+        use super::ropes::{RopeEnd, StrungRope};
+        let length = options.and_then(|o| o.length);
+        if let Some(l) = length
+            && !(l > 0.0 && l.is_finite())
+        {
+            return Err(err(format!(
+                "bad argument 'options.length' (more than 0, got {})",
+                lua_number(l)
+            )));
+        }
+        let end = |end: unions::Vec3OrNodeOrEntity| -> Option<RopeEnd> {
+            Some(match end {
+                unions::Vec3OrNodeOrEntity::Vec3(p) => RopeEnd::Point(vec(p)),
+                unions::Vec3OrNodeOrEntity::Node(n) => RopeEnd::OfNode {
+                    centity: parse_uuid(&n.centity)?,
+                    node: n.name,
+                },
+                unions::Vec3OrNodeOrEntity::Entity(e) => RopeEnd::OfEntity(parse_uuid(&e.id)?),
+            })
+        };
+        let name = this.name.clone();
+        let (from, to) = (end(from), end(to));
+        self.with_node(this, |i, at| {
+            if i.definition.nodes[at].rope.is_none() {
+                return Err(err(format!(
+                    "node \"{name}\" isn't a rope: give it \"rope\" in centity.json"
+                )));
+            }
+            let (Some(from), Some(to)) = (from, to) else {
+                return Ok(false);
+            };
+            // Laid on each of its ticks from the next, wherever its ends are then.
+            i.ropes
+                .insert(name.clone(), StrungRope { from, to, length });
+            Ok(true)
+        })
+        .unwrap_or(Ok(false))
     }
     fn release_rope(&self, this: &handles::Node) -> ApiResult<()> {
-        NodeApi::release_rope(&Unported, this)
+        self.with_node(this, |i, _| i.ropes.remove(&this.name));
+        Ok(())
     }
     fn tween(&self, this: &handles::Node, options: shapes::TweenOptions) -> ApiResult<bool> {
-        NodeApi::tween(&Unported, this, options)
+        let targets: Vec<(Channel, values::Vec3)> = [
+            (Channel::Translation, options.translation),
+            (Channel::Rotation, options.rotation),
+            (Channel::Scale, options.scale),
+        ]
+        .into_iter()
+        .filter_map(|(c, v)| Some((c, v?)))
+        .collect();
+        if targets.is_empty() {
+            return Err(err(
+                "bad argument 'options' (a tween needs translation, rotation or scale)",
+            ));
+        }
+        if options.ticks < 1 {
+            return Err(err(format!(
+                "bad argument 'options.ticks' (at least 1, got {})",
+                options.ticks
+            )));
+        }
+        let easing = match options.easing.as_deref() {
+            None => Easing::EaseInOut,
+            Some(name) => serde_json::from_value(serde_json::Value::String(name.to_owned())).map_err(|_| {
+                err(format!(
+                    "bad argument 'options.easing' (linear, step, ease_in, ease_out, ease_in_out, got \"{name}\")"
+                ))
+            })?,
+        };
+        let ticks = options.ticks.min(i64::from(i32::MAX / 2)) as i32;
+        let back = options.back == Some(true);
+        Ok(self
+            .with_node(this, |i, at| {
+                for (channel, to) in &targets {
+                    let from = i.rest(at, *channel);
+                    i.tween(super::instance::Tween {
+                        index: at,
+                        channel: *channel,
+                        from,
+                        to: vec(*to),
+                        ticks,
+                        easing,
+                        back,
+                        tick: 0,
+                    });
+                }
+            })
+            .is_some())
     }
     fn is_tweening(&self, this: &handles::Node) -> ApiResult<bool> {
-        NodeApi::is_tweening(&Unported, this)
+        Ok(self
+            .with_node(this, |i, at| i.tweens.iter().any(|t| t.index == at))
+            .unwrap_or(false))
     }
     fn stop_tween(&self, this: &handles::Node) -> ApiResult<bool> {
-        NodeApi::stop_tween(&Unported, this)
+        Ok(self
+            .with_node(this, |i, at| {
+                let before = i.tweens.len();
+                i.tweens.retain(|t| t.index != at);
+                i.tweens.len() != before
+            })
+            .unwrap_or(false))
     }
+
+    // ---- not ported yet ----
     fn image(&self, this: &handles::Node) -> ApiResult<Option<handles::Image>> {
         NodeApi::image(&Unported, this)
     }

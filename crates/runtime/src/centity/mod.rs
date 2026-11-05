@@ -13,11 +13,13 @@
 
 pub mod animation;
 pub mod api;
+pub mod definitions;
 pub mod drawing;
 pub mod hitboxes;
 pub mod instance;
 pub mod keyframes;
 pub mod quat;
+pub mod ropes;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::rc::Rc;

@@ -15,8 +15,33 @@ use netherforge_platform::{
 };
 use netherforge_runtime::session::Session;
 
+/// Game facts that know no registry, and every block as one without properties.
+struct NoFacts;
+
+impl netherforge_format::game::GameData for NoFacts {
+    fn minecraft_version(&self) -> &str {
+        "26.3"
+    }
+    fn registry(&self, _: &str) -> Option<&std::collections::BTreeSet<String>> {
+        None
+    }
+    fn tag(&self, _: &str, _: &str) -> Option<&std::collections::BTreeSet<String>> {
+        None
+    }
+    fn item_durability(&self, _: &str) -> u32 {
+        0
+    }
+    fn particle(&self, _: &str) -> Option<netherforge_format::game::ParticleData> {
+        None
+    }
+    /// Every block there is, with no properties.
+    fn block_properties(&self, _: &str) -> Option<BTreeMap<String, Vec<String>>> {
+        Some(BTreeMap::new())
+    }
+}
+
 struct Fake {
-    game: netherforge_format::game::GameDataBundle,
+    game: NoFacts,
     calls: RefCell<Vec<String>>,
     next: RefCell<u128>,
     poses: RefCell<BTreeMap<u128, DisplayPose>>,
@@ -25,7 +50,7 @@ struct Fake {
 impl Default for Fake {
     fn default() -> Fake {
         Fake {
-            game: netherforge_format::game::GameDataBundle::new("26.3"),
+            game: NoFacts,
             calls: RefCell::default(),
             next: RefCell::default(),
             poses: RefCell::default(),
@@ -643,4 +668,113 @@ print(string.format("%.1f %.1f", label:rotation().x, label:rotation().y))
         ],
         "{start:?}"
     );
+}
+
+#[test]
+fn a_script_adds_and_removes_nodes_and_tweens_one() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &lamp(1.0)),
+        (
+            "modules/game/init.lua",
+            r#"
+local lamp = nf.centities.spawn("lamp", vector.create(0, 64, 0))
+local arm = lamp:add_node("arm", { transform = { translation = vector.create(1, 0, 0) }, display = { type = "block", block = "minecraft:oak_log" } })
+local hand = arm:add_child("hand", { display = { type = "block", block = "minecraft:glass" }, hitbox = {} })
+print(#lamp:nodes(), hand:parent():name(), hand:world_position().x)
+print(pcall(lamp.add_node, lamp, "arm", {}))
+print(pcall(lamp.add_node, lamp, "x", { display = { type = "block", blok = "minecraft:stone" } }))
+print(pcall(lamp.add_node, lamp, "y", { itemTransform = 1 }))
+print(pcall(lamp.node(lamp, "base").remove, lamp:node("base")))
+arm:tween({ translation = vector.create(3, 0, 0), ticks = 4, easing = "linear" })
+nf.after(2, function() print("tween", arm:translation().x, arm:is_tweening()) end)
+nf.after(6, function()
+    print("tween", arm:translation().x, arm:is_tweening())
+    print(arm:remove(), #lamp:nodes(), lamp:node("hand"))
+end)
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(
+        printed(&start)
+            .get(..5)
+            .unwrap_or_else(|| panic!("{start:?}")),
+        [
+            "4\tarm\t1",
+            "false\tmodules/game/init.lua:6: bad argument 'name' (the centity already has a node called \"arm\")",
+            "false\tmodules/game/init.lua:7: definition.display: Unknown key \"blok\"",
+            "false\tmodules/game/init.lua:8: definition.itemTransform: Lua spells keys in snake_case, so it's item_transform",
+            "false\tmodules/game/init.lua:9: node \"base\" is declared by centity.json; only nodes a script added can be removed",
+        ],
+        "{start:?}"
+    );
+    // The added nodes' entities are made at the next sync.
+    session.tick();
+    let calls = platform.take();
+    assert!(calls.iter().any(|c| c.contains(" arm block")), "{calls:?}");
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("hitbox") && c.contains("hand")),
+        "{calls:?}"
+    );
+    for _ in 0..6 {
+        session.tick();
+    }
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        ["tween\t1.5\ttrue", "tween\t3\tfalse", "true\t2\tnil"],
+        "{calls:?}"
+    );
+}
+
+#[test]
+fn a_rope_is_laid_between_its_ends_each_tick() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = r#"{ "nodes": {
+  "line": { "display": { "type": "block", "block": "minecraft:chain" }, "rope": { "links": 4, "linkLength": 1 } }
+} }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/line/centity.json", centity),
+        (
+            "modules/game/init.lua",
+            r#"
+local line = nf.centities.spawn("line", vector.create(0, 64, 0))
+local rope = line:node("line")
+print(rope:is_rope(), line:node("base") == nil, #line:nodes())
+local link = line:node("line[1]")
+print(pcall(link.rope_between, link, vector.create(0, 64, 0), vector.create(1, 64, 0)))
+rope:rope_between(vector.create(0, 65, 0), vector.create(2, 65, 0))
+nf.after(2, function()
+    local shown = 0
+    for _, node in line:nodes() do
+        if node:name() ~= "line" and node:is_visible() then shown += 1 end
+    end
+    print("shown", shown, string.format("%.2f", link:world_position().x))
+end)
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    let lines = printed(&start);
+    assert_eq!(
+        lines.first().map(String::as_str),
+        Some("true\ttrue\t5"),
+        "{start:?}"
+    );
+    assert!(
+        lines.get(1).is_some_and(|l| l.contains("isn't a rope")),
+        "{start:?}"
+    );
+    for _ in 0..3 {
+        session.tick();
+    }
+    // Taut over two blocks: two of its four links, the first halfway along its block.
+    assert_eq!(printed(&platform.take()), ["shown\t2\t0.50"]);
 }

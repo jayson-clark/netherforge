@@ -14,7 +14,7 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use indexmap::{IndexMap, IndexSet};
-use netherforge_format::kind::centity::compiled::CompiledCentity;
+use netherforge_format::kind::centity::compiled::{CompiledCentity, Node};
 use netherforge_format::kind::centity::{Billboard, DEFAULT_BILLBOARD, DisplayDef, Transform};
 use netherforge_format::math::{Matrix4, Vec3};
 use netherforge_luau::ScopeId;
@@ -36,6 +36,43 @@ pub const DEFAULT_INTERPOLATION_TICKS: i32 = 1;
 pub const MAX_TELEPORT_TICKS: i32 = 59;
 
 /// `degrees` wrapped into [-180, 180), as Minecraft wraps a facing; anything not finite is 0.
+/// A node's channel easing from where it was to where a script sent it (`node:tween`).
+#[derive(Clone, Debug)]
+pub struct Tween {
+    pub index: usize,
+    pub channel: Channel,
+    pub from: Vec3,
+    pub to: Vec3,
+    pub ticks: i32,
+    pub easing: netherforge_format::animation::Easing,
+    /// Out, then home again.
+    pub back: bool,
+    pub tick: i32,
+}
+
+impl Tween {
+    pub fn done(&self) -> bool {
+        self.tick
+            >= if self.back {
+                self.ticks * 2
+            } else {
+                self.ticks
+            }
+    }
+
+    /// Where it is at its tick: out, then (with `back`) home again.
+    pub fn value(&self) -> Vec3 {
+        let (tick, ticks) = (f64::from(self.tick), f64::from(self.ticks));
+        let out = if self.tick <= self.ticks {
+            tick / ticks
+        } else {
+            2.0 - tick / ticks
+        };
+        let t = self.easing.apply(out.clamp(0.0, 1.0));
+        self.from + (self.to - self.from) * t
+    }
+}
+
 /// One channel of a transform.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Channel {
@@ -94,6 +131,8 @@ pub struct PushedPose {
 
 pub struct Instance {
     pub id: Uuid,
+    /// Its centity's definition as the file declares it: `definition` is this plus the nodes scripts added.
+    pub declared: Rc<CompiledCentity>,
     /// What the centity's file says.
     pub definition: Rc<CompiledCentity>,
     /// Where every display stands: they ride the anchor entity there, their offsets in their transforms.
@@ -147,6 +186,10 @@ pub struct Instance {
     unclickable: Vec<bool>,
     /// The clips playing on it.
     pub animations: AnimationPlayer,
+    /// The tweens easing its nodes, at most one per node and channel.
+    pub tweens: Vec<Tween>,
+    /// Its rope nodes strung between two ends, by node name: laid again each tick.
+    pub ropes: HashMap<String, super::ropes::StrungRope>,
     /// Nodes something other than a clip changed since the last sync (a script, being shown or hidden):
     /// their pose is sent now rather than planned ahead.
     edited: Vec<bool>,
@@ -172,6 +215,7 @@ impl Instance {
     pub fn new(id: Uuid, definition: Rc<CompiledCentity>, anchor: Location, yaw: f64) -> Instance {
         let mut instance = Instance {
             id,
+            declared: definition.clone(),
             definition: definition.clone(),
             anchor: Location {
                 yaw: 0.0,
@@ -204,6 +248,8 @@ impl Instance {
             jumps: Vec::new(),
             unclickable: Vec::new(),
             animations: AnimationPlayer::default(),
+            tweens: Vec::new(),
+            ropes: HashMap::new(),
             edited: Vec::new(),
             all_edited: true,
             synced_clips: 0,
@@ -243,6 +289,9 @@ impl Instance {
         self.due = vec![0; n];
         self.all_edited = true;
         self.animations.stop_all();
+        self.tweens.clear();
+        self.ropes.clear();
+        self.declared = next.clone();
         self.definition = next;
         self.needs_reconcile = true;
         self.force_sync = true;
@@ -256,6 +305,116 @@ impl Instance {
 
     pub fn index_of(&self, node: &str) -> Option<usize> {
         self.definition.index_of(node)
+    }
+
+    /// Whether node `index` was added by a script rather than declared by the file.
+    pub fn is_added(&self, index: usize) -> bool {
+        index >= self.declared.nodes.len()
+    }
+
+    /// Adds `node` (its parent, if any, already there) after every other node: its index.
+    pub fn add_node(&mut self, node: Node) -> usize {
+        let mut nodes = self.definition.nodes.clone();
+        nodes.push(node);
+        self.reshape(nodes);
+        self.definition.nodes.len() - 1
+    }
+
+    /// Removes the added node `index` and every node below it: their names. Everything else keeps its
+    /// state, moved to its new index.
+    pub fn remove_node(&mut self, index: usize) -> Vec<String> {
+        let nodes = &self.definition.nodes;
+        let mut doomed = vec![false; nodes.len()];
+        // Parents come first, so one pass finds every descendant.
+        for (at, node) in nodes.iter().enumerate() {
+            doomed[at] =
+                at == index || (node.parent_index >= 0 && doomed[node.parent_index as usize]);
+        }
+        let mut renumber = vec![-1i32; nodes.len()];
+        let mut kept = 0;
+        for at in 0..nodes.len() {
+            if !doomed[at] {
+                renumber[at] = kept;
+                kept += 1;
+            }
+        }
+        let names: Vec<String> = (0..nodes.len())
+            .filter(|at| doomed[*at])
+            .map(|at| nodes[at].name.clone())
+            .collect();
+        let next: Vec<Node> = nodes
+            .iter()
+            .enumerate()
+            .filter(|(at, _)| !doomed[*at])
+            .map(|(_, n)| Node {
+                parent_index: if n.parent_index < 0 {
+                    -1
+                } else {
+                    renumber[n.parent_index as usize]
+                },
+                ..n.clone()
+            })
+            .collect();
+        self.tweens.retain(|t| !doomed[t.index]);
+        for tween in &mut self.tweens {
+            tween.index = renumber[tween.index] as usize;
+        }
+        self.reshape(next);
+        names
+    }
+
+    /// Moves onto `nodes` (declared nodes first, unchanged), carrying each surviving node's state by name.
+    fn reshape(&mut self, nodes: Vec<Node>) {
+        let old = self.definition.clone();
+        let from: Vec<Option<usize>> = nodes.iter().map(|n| old.index_of(&n.name)).collect();
+        fn carry<T: Clone>(from: &[Option<usize>], old: &[T], new: impl Fn(usize) -> T) -> Vec<T> {
+            from.iter()
+                .enumerate()
+                .map(|(i, f)| f.map_or_else(|| new(i), |f| old[f].clone()))
+                .collect()
+        }
+        self.rest = carry(&from, &self.rest, |i| nodes[i].transform.clone());
+        self.pose = carry(&from, &self.pose, |i| nodes[i].transform.clone());
+        self.content = carry(&from, &self.content, |i| nodes[i].display.clone());
+        self.looks = carry(&from, &self.looks, |_| default_look());
+        self.hidden = carry(&from, &self.hidden, |_| false);
+        self.content_changed = carry(&from, &self.content_changed, |_| false);
+        self.unclickable = carry(&from, &self.unclickable, |_| false);
+        self.interpolation = carry(&from, &self.interpolation, |_| DEFAULT_INTERPOLATION_TICKS);
+        let n = nodes.len();
+        self.edited = vec![false; n];
+        self.jumps = vec![false; n];
+        self.due = vec![0; n];
+        self.all_edited = true;
+        self.definition = Rc::new(CompiledCentity {
+            nodes,
+            ..(*self.declared).clone()
+        });
+        self.needs_reconcile = true;
+        self.posed();
+    }
+
+    /// Starts `tween`, replacing any of the same node and channel.
+    pub fn tween(&mut self, tween: Tween) {
+        self.tweens
+            .retain(|t| !(t.index == tween.index && t.channel == tween.channel));
+        self.tweens.push(tween);
+    }
+
+    /// Moves every tween on a tick, setting its channel's rest pose, and drops those that are done.
+    pub fn step_tweens(&mut self) {
+        let mut tweens = std::mem::take(&mut self.tweens);
+        for tween in &mut tweens {
+            tween.tick += 1;
+            self.set(tween.index, tween.channel, tween.value(), false);
+        }
+        tweens.retain(|t| !t.done());
+        self.tweens = tweens;
+    }
+
+    /// A channel of node `index`'s rest pose: the authored transform, or what a script last set.
+    pub fn rest(&self, index: usize, channel: Channel) -> Vec3 {
+        channel.of(&self.rest[index])
     }
 
     // ---- where it is ----
