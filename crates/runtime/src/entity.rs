@@ -443,7 +443,7 @@ impl EntityApi for GameContext {
         let saved = entities.data(id);
         let table = match saved
             .as_deref()
-            .map(|t| netherforge_luau::json::decode(lua, t, &netherforge_luau::json::NoTags))
+            .map(|t| netherforge_luau::json::decode(lua, t, &netherforge_api::handle::SavedHandles))
         {
             Some(Ok(Value::Table(t))) => t,
             _ => lua.create_table().map_err(|e| err(e.to_string()))?,
@@ -762,8 +762,8 @@ impl EntitiesService {
                 &host,
                 &Value::Table(table),
                 "data",
-                "save",
-                &netherforge_luau::json::NoTags,
+                "saved",
+                &netherforge_api::handle::SavedHandles,
             );
             let encoded = match encoded {
                 Ok(encoded) => encoded,

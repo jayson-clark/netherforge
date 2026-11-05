@@ -10,6 +10,7 @@ rust-version.workspace = true
 [dependencies]
 mlua.workspace = true
 netherforge-luau = { path = "../luau" }
+serde_json.workspace = true
 
 [lints]
 workspace = true

@@ -550,7 +550,11 @@ package (the calling scope's namespace); a thing's table is the thing's, whoever
 saved and is logged once while it stays so. The store's rows are its `centity_data`, `player_data` and
 `named_data` (`Store::data`, `put_data`, `delete_data`). `nf` is `NfContext` (`lib.rs`): `Scripts`' functions,
 with `nf.data` the session's. `player:session()` is `SessionTablesService`'s: a plain table per online player, never
-saved, gone after their `player_quit` handlers. Not yet: tagged values (a handle in a table is reported and skipped).
+saved, gone after their `player_quit` handlers. A saveable handle (the spec's `saveable`: `Centity`, `Entity`,
+`World`, generated as `handles::SAVEABLE`) is written `{"$entity":["<uuid>"]}` and read back as that root
+class (`handle::SavedHandles`, the codec's `Tags`); any other handle is a problem at its key path (`a Task
+handle can't be saved`), logged once while it stays. A `Location` is a plain table holding a `World` handle,
+so it round-trips without a tag of its own (Kotlin's `$location`). `entity:data()` uses the same tags.
 
 ## Permissions (`crates/runtime/src/permissions.rs`)
 

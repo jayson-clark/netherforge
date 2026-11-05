@@ -211,3 +211,55 @@ pub fn push_any(lua: &Lua, value: &Handle) -> mlua::Result<AnyUserData> {
 pub fn host(lua: &Lua) -> Option<Host> {
     lua.app_data_ref::<WeakHost>()?.upgrade()
 }
+
+/// Handles in saved tables and `nf.json` (the prelude's `saved_handles`): a saveable class (the spec's
+/// `saveable`: each at the top of its chain) is written by its tag and key, `{"$entity":["<uuid>"]}`, so a
+/// `Player` or a `Mob` is saved as the `Entity` it is and comes back as whatever the server then says it is.
+/// Any other handle is a problem at its key path (`a Menu handle can't be saved`).
+pub struct SavedHandles;
+
+impl netherforge_luau::json::Tags for SavedHandles {
+    fn tags(&self) -> &[&str] {
+        static TAGS: std::sync::LazyLock<Vec<&'static str>> = std::sync::LazyLock::new(|| {
+            crate::handles::SAVEABLE
+                .iter()
+                .map(|(_, tag)| *tag)
+                .collect()
+        });
+        &TAGS
+    }
+
+    fn encode(&self, value: &Value) -> Option<Result<(String, Vec<serde_json::Value>), String>> {
+        let Value::UserData(u) = value else {
+            return None;
+        };
+        let data = u.borrow::<HandleData>().ok()?;
+        let saved = crate::handles::SAVEABLE
+            .iter()
+            .find(|(class, _)| is_a(data.class(), class));
+        Some(match saved {
+            Some((_, tag)) => Ok((
+                (*tag).to_owned(),
+                data.key()
+                    .iter()
+                    .map(|part| match part {
+                        KeyPart::Str(s) => serde_json::Value::String(s.clone()),
+                        KeyPart::Int(i) => serde_json::Value::from(*i),
+                    })
+                    .collect(),
+            )),
+            None => Err(a_or_an(&format!("{} handle", data.class()))),
+        })
+    }
+
+    fn revive(&self, lua: &Lua, tag: &str, parts: &[serde_json::Value]) -> Option<Value> {
+        let (class, _) = crate::handles::SAVEABLE.iter().find(|(_, t)| *t == tag)?;
+        // Each saved class is keyed by one string.
+        let [serde_json::Value::String(key)] = parts else {
+            return None;
+        };
+        push_key(lua, class, class, vec![KeyPart::Str(key.clone())])
+            .ok()
+            .map(Value::UserData)
+    }
+}

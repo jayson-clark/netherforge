@@ -2071,6 +2071,10 @@ fn saved_tables_are_saved_when_they_change_and_carried_into_a_restart() {
 local s = nf.data("scores")
 print(s.top, pcall(nf.data, "Bad Name"))
 s.top = (s.top or 0) + 1
+if s.spot then print("spot", s.home == nf.worlds.default(), s.spot.world:name(), s.spot.position.y) end
+s.home = nf.worlds.default()
+s.spot = nf.worlds.default():location(vector.create(1, 2, 3))
+s.timer = nf.after(1000, function() end)
 nf.worlds.default():players()[1]:data().coins = 3
 local alex = nf.worlds.default():players()[1]
 alex:session().streak = 4
@@ -2109,8 +2113,21 @@ nf.on("player_quit", function(e) print("quit", e.player:session().streak) end)
     server
         .session_mut()
         .reload(&["netherforge.json".to_owned()]);
+    let raw = platform.take();
+    assert!(
+        raw.contains(
+            &"warn Saving nf.data(\"scores\")'s data: data.timer: a Task handle can't be saved"
+                .to_owned()
+        ),
+        "{raw:?}"
+    );
+    let restarted = printed(&raw);
+    assert!(
+        restarted.contains(&"spot\ttrue\tworld\t2".to_owned()),
+        "{restarted:?}"
+    );
     assert_eq!(
-        printed(&platform.take())[0],
+        restarted[0],
         "1\tfalse\tmodules/scores/init.lua:3: \"Bad Name\" isn't a data table name (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)"
     );
     server.session_mut().stop();
@@ -2118,7 +2135,11 @@ nf.on("player_quit", function(e) print("quit", e.player:session().streak) end)
         namespace: "demo".into(),
         name: "scores".into(),
     };
-    assert_eq!(store.data(&named).as_deref(), Some(r#"{"top":2}"#));
+    let text = store.data(&named).expect("saved");
+    assert!(
+        text.contains(r#""home":{"$world":["world"]}"#) && text.contains(r#""top":2"#),
+        "{text}"
+    );
 }
 
 #[test]

@@ -535,6 +535,14 @@ pub const CHAINS: &[&[&str]] = &[
     &["Hud"],
 ];
 
+/// The handle classes a saved table (and `nf.json`) may keep (`saveable` in the spec), each at the top of
+/// its chain, with the tag it is saved under: `{"$entity":[id]}`.
+pub const SAVEABLE: &[(&str, &str)] = &[
+    ("Centity", "centity"),
+    ("Entity", "entity"),
+    ("World", "world"),
+];
+
 impl HandleClass for Centity {
     const NAME: &'static str = "Centity";
     const ROOT: &'static str = "Centity";

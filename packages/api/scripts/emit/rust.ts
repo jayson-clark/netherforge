@@ -204,6 +204,17 @@ export function handlesRust(classes: ClassBinding[]): string {
     'pub const CHAINS: &[&[&str]] = &[',
     ...handles.map((it) => `    &[${it.handle!.chain.map((c) => JSON.stringify(c)).join(', ')}],`),
     '];',
+    '',
+    '/// The handle classes a saved table (and `nf.json`) may keep (`saveable` in the spec), each at the top of',
+    '/// its chain, with the tag it is saved under: `{"$entity":[id]}`.',
+    'pub const SAVEABLE: &[(&str, &str)] = &[',
+    ...handles
+      .filter((it) => it.cls.saveable)
+      .map(
+        (it) =>
+          `    (${JSON.stringify(it.handle!.name)}, ${JSON.stringify(it.handle!.name.toLowerCase())}),`,
+      ),
+    '];',
   )
   for (const binding of handles) {
     const handle = binding.handle!

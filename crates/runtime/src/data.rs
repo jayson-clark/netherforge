@@ -16,8 +16,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use mlua::Value;
+use netherforge_api::handle::SavedHandles;
 use netherforge_luau::Host;
-use netherforge_luau::json::NoTags;
 use netherforge_platform::{Platform, PlayerRef, Uuid};
 
 use crate::Room;
@@ -99,7 +99,7 @@ impl ScriptData {
         };
         let made = match text
             .as_deref()
-            .map(|t| netherforge_luau::json::decode(lua, t, &NoTags))
+            .map(|t| netherforge_luau::json::decode(lua, t, &SavedHandles))
         {
             Some(Ok(Value::Table(t))) => t,
             Some(_) => {
@@ -132,8 +132,8 @@ impl ScriptData {
             host,
             &Value::Table(live),
             "data",
-            "save",
-            &NoTags,
+            "saved",
+            &SavedHandles,
         ) {
             Ok(encoded) => encoded,
             Err(e) => {
