@@ -19,21 +19,9 @@ pub struct DatapackRefusal(pub Dynamic);
 #[derive(Clone, Debug, PartialEq)]
 pub struct BlockCarrier(pub Dynamic);
 
-/// format's `game` `GameData`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct GameData(pub Dynamic);
-
-/// format's `game` `GameDataBundle`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct GameDataBundle(pub Dynamic);
-
 /// format's `game` `GameIds`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GameIds(pub Dynamic);
-
-/// format's `item` `ItemDef`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ItemDef(pub Dynamic);
 
 /// format's `item` `AttributeOperation`.
 #[derive(Clone, Debug, PartialEq)]

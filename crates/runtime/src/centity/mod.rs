@@ -17,6 +17,7 @@ pub mod drawing;
 pub mod hitboxes;
 pub mod instance;
 pub mod keyframes;
+pub mod quat;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
@@ -315,7 +316,7 @@ impl Centities {
             );
         }
         if let Some(instance) = self.instances.get_mut(&id) {
-            sync_hitboxes(entities, instance, vehicle, &world);
+            sync_hitboxes(platform.game(), entities, instance, vehicle, &world);
         }
         let instance = self.instances.get_mut(&id).expect("listed");
         instance.mark_synced();
@@ -425,7 +426,7 @@ impl Centities {
             {
                 continue;
             }
-            let b = hitboxes::bounds(&boxes_of(instance, index), &world[index]);
+            let b = hitboxes::bounds(&boxes_of(platform.game(), instance, index), &world[index]);
             let spawned = entities.spawn_hitbox(
                 offset(&anchor, b.center_x, b.bottom_y, b.center_z),
                 b.width,
@@ -647,24 +648,47 @@ fn offset(at: &Location, x: f64, y: f64, z: f64) -> Location {
     }
 }
 
-/// The boxes a node's hitbox is made of, in node space: its own, else the unit cube a block display fills.
-/// (`shape: collision` takes a block's collision boxes once the game's facts reach the runtime; until then
-/// it's the unit cube.)
-pub fn boxes_of(instance: &Instance, index: usize) -> Vec<netherforge_format::math::BoundingBox> {
-    match instance.definition.nodes[index]
-        .hitbox
-        .as_ref()
-        .and_then(|h| h.boxes.clone())
-    {
-        Some(boxes) => boxes,
-        None => vec![hitboxes::UNIT_CUBE],
+/// The boxes a node's hitbox is made of, in node space: its own; for `shape: collision`, the collision boxes
+/// of the block its display shows (its properties' defaults filled in), as the game's facts give them; else the
+/// unit cube a block display fills.
+pub fn boxes_of(
+    game: &dyn netherforge_format::game::GameData,
+    instance: &Instance,
+    index: usize,
+) -> Vec<netherforge_format::math::BoundingBox> {
+    let Some(hitbox) = &instance.definition.nodes[index].hitbox else {
+        return vec![hitboxes::UNIT_CUBE];
+    };
+    if let Some(boxes) = &hitbox.boxes {
+        return boxes.clone();
     }
+    if hitbox.follows_collision()
+        && let Some(DisplayDef::Block { block }) = instance.display(index)
+        && let Some(mut state) = netherforge_format::block_state::BlockState::parse(block)
+    {
+        if let Some(properties) = game.block_properties(&state.id) {
+            for name in properties.keys() {
+                if !state.properties.iter().any(|(k, _)| k == name)
+                    && let Some(value) = game.block_default(&state.id, name)
+                {
+                    state.properties.push((name.clone(), value));
+                }
+            }
+        }
+        if let Some(boxes) = game.collision_boxes(&state.to_string(), &state.id)
+            && !boxes.is_empty()
+        {
+            return boxes;
+        }
+    }
+    vec![hitboxes::UNIT_CUBE]
 }
 
 /// Each hitbox's interaction entity where its node's boxes are now: riding the anchor entity when it
 /// stands at the anchor, on its own anywhere else; collapsed to a sliver when its node is hidden or
 /// unclickable, so clicks pass it by.
 fn sync_hitboxes(
+    game: &dyn netherforge_format::game::GameData,
     entities: &dyn EntityOps,
     instance: &mut Instance,
     vehicle: Option<Uuid>,
@@ -681,7 +705,7 @@ fn sync_hitboxes(
             continue;
         };
         let b = if instance.shown(index) && instance.clickable(index) {
-            hitboxes::bounds(&boxes_of(instance, index), &world[index])
+            hitboxes::bounds(&boxes_of(game, instance, index), &world[index])
         } else {
             hitboxes::Bounds::collapsed(world[index].translation())
         };

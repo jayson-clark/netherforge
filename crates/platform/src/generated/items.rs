@@ -18,7 +18,7 @@ use super::*;
 /// item's current look, or keeps the stamp [raw] carries).
 #[derive(Clone, Debug, PartialEq)]
 pub struct ItemData {
-    pub def: external::ItemDef,
+    pub def: netherforge_format::item::ItemDef,
     /// Default: `null`.
     pub raw: Option<String>,
     /// Default: `null`.
@@ -28,7 +28,7 @@ pub struct ItemData {
 /// A project item's look: its definition as an item ([dev.netherforge.format.item.ItemFile.look]) and that look's hash.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ItemLook {
-    pub def: external::ItemDef,
+    pub def: netherforge_format::item::ItemDef,
     pub hash: String,
 }
 

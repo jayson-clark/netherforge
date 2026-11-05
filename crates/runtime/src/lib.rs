@@ -16,6 +16,7 @@ use netherforge_luau::{Host, ScopeId};
 
 pub mod centity;
 pub mod events;
+pub mod items;
 pub mod modules;
 pub mod scripts;
 pub mod session;

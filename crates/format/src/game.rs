@@ -74,6 +74,12 @@ pub trait GameData {
         None
     }
 
+    /// A block state's collision boxes (`state` its canonical string, `id` its block, whose boxes stand in
+    /// for a state the facts don't list), each in the block's own unit cube; `None` when the facts don't say.
+    fn collision_boxes(&self, _state: &str, _id: &str) -> Option<Vec<crate::math::BoundingBox>> {
+        None
+    }
+
     /// Whether `registry` has `id` (namespaced).
     fn has(&self, registry: Registry, id: &str) -> bool {
         self.registry(registry.key())
@@ -270,6 +276,9 @@ impl GameData for GameDataBundle {
     }
     fn map_colors(&self) -> Option<&[u32]> {
         self.map_colors_u32.as_deref()
+    }
+    fn collision_boxes(&self, state: &str, id: &str) -> Option<Vec<BoundingBox>> {
+        GameDataBundle::collision_boxes(self, state, id).map(<[BoundingBox]>::to_vec)
     }
 }
 

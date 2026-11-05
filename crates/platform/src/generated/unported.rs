@@ -1915,7 +1915,7 @@ impl Platform for Unported {
         unported("Platform::info")
     }
 
-    fn game(&self) -> external::GameData {
+    fn game(&self) -> &dyn netherforge_format::game::GameData {
         unported("Platform::game")
     }
 
@@ -2103,7 +2103,7 @@ impl Platform for Unported {
         unported("Platform::watch")
     }
 
-    fn export_game_data(&self) -> external::GameDataBundle {
+    fn export_game_data(&self) -> netherforge_format::game::GameDataBundle {
         unported("Platform::export_game_data")
     }
 
@@ -2119,7 +2119,7 @@ pub trait FakePlatform {
         <Unported as Platform>::info(&Unported)
     }
 
-    fn game(&self) -> external::GameData {
+    fn game(&self) -> &dyn netherforge_format::game::GameData {
         <Unported as Platform>::game(&Unported)
     }
 
@@ -2307,7 +2307,7 @@ pub trait FakePlatform {
         <Unported as Platform>::watch(&Unported, event, listening)
     }
 
-    fn export_game_data(&self) -> external::GameDataBundle {
+    fn export_game_data(&self) -> netherforge_format::game::GameDataBundle {
         <Unported as Platform>::export_game_data(&Unported)
     }
 
@@ -2321,7 +2321,7 @@ impl<T: FakePlatform> Platform for T {
         FakePlatform::info(self)
     }
 
-    fn game(&self) -> external::GameData {
+    fn game(&self) -> &dyn netherforge_format::game::GameData {
         FakePlatform::game(self)
     }
 
@@ -2509,7 +2509,7 @@ impl<T: FakePlatform> Platform for T {
         FakePlatform::watch(self, event, listening)
     }
 
-    fn export_game_data(&self) -> external::GameDataBundle {
+    fn export_game_data(&self) -> netherforge_format::game::GameDataBundle {
         FakePlatform::export_game_data(self)
     }
 

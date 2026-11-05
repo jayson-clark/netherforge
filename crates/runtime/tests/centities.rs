@@ -15,11 +15,22 @@ use netherforge_platform::{
 };
 use netherforge_runtime::session::Session;
 
-#[derive(Default)]
 struct Fake {
+    game: netherforge_format::game::GameDataBundle,
     calls: RefCell<Vec<String>>,
     next: RefCell<u128>,
     poses: RefCell<BTreeMap<u128, DisplayPose>>,
+}
+
+impl Default for Fake {
+    fn default() -> Fake {
+        Fake {
+            game: netherforge_format::game::GameDataBundle::new("26.3"),
+            calls: RefCell::default(),
+            next: RefCell::default(),
+            poses: RefCell::default(),
+        }
+    }
 }
 
 impl Fake {
@@ -156,6 +167,9 @@ impl FakePlatform for Fake {
     }
     fn log(&self) -> &dyn PlatformLog {
         self
+    }
+    fn game(&self) -> &dyn netherforge_format::game::GameData {
+        &self.game
     }
     fn entities(&self) -> &dyn EntityOps {
         self
@@ -567,5 +581,66 @@ nf.centities.spawn("lamp", vector.create(10, 64, 0))
     assert_eq!(
         printed(&platform.take()),
         ["base\tbase\tright\t65", "centity\tbase\tright\t65"]
+    );
+}
+
+#[test]
+fn a_script_changes_looks_displays_and_turns() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = r##"{ "nodes": {
+  "base": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} },
+  "label": { "parent": "base", "transform": { "translation": [0, 2, 0] }, "display": { "type": "text", "text": "hi" } },
+  "panel": { "display": { "type": "rect", "color": "#ff0000" } }
+} }"##;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/sign/centity.json", centity),
+        (
+            "modules/game/init.lua",
+            r##"
+local sign = nf.centities.spawn("sign", vector.create(0, 64, 0))
+print(sign:is_glowing(), sign:set_glowing(true), sign:is_glowing())
+print(sign:set_glow_color("#00ff00"), sign:glow_color(), sign:node("label"):glow_color())
+print(pcall(sign.set_glow_color, sign, "green"))
+local label = sign:node("label")
+print(label:set_display_text_style({ alignment = "left", opacity = 128 }))
+local style = label:display_text_style()
+print(style.alignment, style.opacity, style.line_width, style.shadow)
+local panel = sign:node("panel")
+print(panel:display_size().x, panel:set_display_size(vector.create(2, 0.5, 0)), panel:display_size().y)
+print(pcall(panel.set_display_size, panel, vector.create(0, 1, 0)))
+print(panel:display_anchor(), panel:set_display_anchor("bottom"), panel:display_anchor())
+print(sign:node("base"):set_brightness({ block_light = 15, sky_light = 3 }), sign:node("base"):brightness().sky_light)
+local b = sign:bounds()
+print(b.min.y, b.max.y)
+sign:look_at(vector.create(10, 64, 0))
+print(sign:yaw())
+label:rotate(vector.create(0, 1, 0), 90)
+print(string.format("%.3f", label:rotation().y), string.format("%.3f", label:world_rotation().y))
+label:look_at(vector.create(0, 66, 5))
+print(string.format("%.1f %.1f", label:rotation().x, label:rotation().y))
+"##,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(
+        printed(&start),
+        [
+            "false\ttrue\ttrue",
+            "true\t#00ff00\tnil",
+            "false\tmodules/game/init.lua:5: bad argument 'color' (#RRGGBB expected, got \"green\")",
+            "true",
+            "left\t128\t200\tfalse",
+            "1\ttrue\t0.5",
+            "false\tmodules/game/init.lua:12: bad argument 'size' (a width and height more than 0, got 0 by 1)",
+            "center\ttrue\tbottom",
+            "true\t3",
+            "64\t65",
+            "-90",
+            "90.000\t0.000",
+            "0.0 -90.0",
+        ],
+        "{start:?}"
     );
 }

@@ -220,9 +220,8 @@ impl EventSession for Running<'_> {
         }
     }
 
-    /// Items are ported with their area: until then an item crosses as an empty one.
-    fn item(&self, _: &ItemData) -> values::Item {
-        values::Item("{}".into())
+    fn item(&self, item: &ItemData) -> values::Item {
+        crate::items::to_value(item)
     }
 
     fn status_effect(&self, effect: &StatusEffectData) -> shapes::StatusEffect {
@@ -256,20 +255,40 @@ impl EventSession for Running<'_> {
         }
     }
 
-    /// Items are ported with their area: until then a handler's item leaves the server's as it was.
-    fn item_back(&self, _: values::Item, before: &ItemData) -> ItemData {
-        before.clone()
+    /// A handler's item, or the server's as it was when it's the same item or can't be read (said in the log).
+    fn item_back(&self, after: values::Item, before: &ItemData) -> ItemData {
+        match crate::items::from_value(&after, "event.item", self.platform.game()) {
+            Ok(item) if item == *before => before.clone(),
+            Ok(item) => item,
+            Err(mistake) => {
+                self.platform
+                    .log()
+                    .warn(format!("A handler left {mistake}; it's left as it was"));
+                before.clone()
+            }
+        }
     }
 
     fn item_back_opt(
         &self,
-        _: Option<values::Item>,
+        after: Option<values::Item>,
         before: &Option<ItemData>,
     ) -> Option<ItemData> {
-        before.clone()
+        let after = after?;
+        Some(match before {
+            Some(before) => self.item_back(after, before),
+            None => crate::items::from_value(&after, "event.item", self.platform.game()).ok()?,
+        })
     }
 
-    fn items_back(&self, _: Vec<values::Item>, before: &[ItemData]) -> Vec<ItemData> {
-        before.to_vec()
+    fn items_back(&self, after: Vec<values::Item>, before: &[ItemData]) -> Vec<ItemData> {
+        after
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, item)| match before.get(i) {
+                Some(was) => Some(self.item_back(item, was)),
+                None => crate::items::from_value(&item, "event.items", self.platform.game()).ok(),
+            })
+            .collect()
     }
 }

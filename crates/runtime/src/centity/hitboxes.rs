@@ -97,6 +97,28 @@ pub fn bounds(boxes: &[BoundingBox], world: &Matrix4) -> Bounds {
     }
 }
 
+/// The axis-aligned box around `boxes` once `matrix` has placed them.
+pub fn bounds_of(boxes: &[BoundingBox], matrix: &Matrix4) -> BoundingBox {
+    let (mut min, mut max) = ([f64::MAX; 3], [-f64::MAX; 3]);
+    for b in boxes {
+        for corner in 0..8 {
+            let p = matrix.transform_position(Vec3(
+                if corner & 1 == 0 { b.min.0 } else { b.max.0 },
+                if corner & 2 == 0 { b.min.1 } else { b.max.1 },
+                if corner & 4 == 0 { b.min.2 } else { b.max.2 },
+            ));
+            for (axis, value) in p.coordinates().into_iter().enumerate() {
+                min[axis] = min[axis].min(value);
+                max[axis] = max[axis].max(value);
+            }
+        }
+    }
+    BoundingBox {
+        min: Vec3(min[0], min[1], min[2]),
+        max: Vec3(max[0], max[1], max[2]),
+    }
+}
+
 /// Where a ray meets a hitbox: how far along it (in units of the ray's direction), and the unit normal of
 /// the face it entered through, in the frame the ray was given in. A ray starting inside hits at 0, and its
 /// normal points back along the ray.

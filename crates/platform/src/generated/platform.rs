@@ -24,7 +24,7 @@ pub trait Platform {
     fn info(&self) -> ServerInfo;
 
     /// Game facts from the live server's registries. Never a bundled table.
-    fn game(&self) -> external::GameData;
+    fn game(&self) -> &dyn netherforge_format::game::GameData;
 
     fn log(&self) -> &dyn PlatformLog;
 
@@ -202,7 +202,7 @@ pub trait Platform {
     /// Everything the editor caches about this Minecraft version: blocks with
     /// their properties and defaults, items, entity types, and collision boxes.
     /// Called rarely (once per version per machine), so it may take a moment.
-    fn export_game_data(&self) -> external::GameDataBundle;
+    fn export_game_data(&self) -> netherforge_format::game::GameDataBundle;
 
     /// Stops the server cleanly (worlds saved, plugins disabled), as `/stop`
     /// would. Only a dev server whose editor has gone away asks for this: see

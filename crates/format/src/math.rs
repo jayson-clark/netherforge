@@ -39,6 +39,39 @@ impl Vec3 {
     pub fn times(self, other: Vec3) -> Vec3 {
         Vec3(self.0 * other.0, self.1 * other.1, self.2 * other.2)
     }
+
+    pub fn dot(self, o: Vec3) -> f64 {
+        self.0 * o.0 + self.1 * o.1 + self.2 * o.2
+    }
+
+    pub fn cross(self, o: Vec3) -> Vec3 {
+        Vec3(
+            self.1 * o.2 - self.2 * o.1,
+            self.2 * o.0 - self.0 * o.2,
+            self.0 * o.1 - self.1 * o.0,
+        )
+    }
+
+    pub fn length(self) -> f64 {
+        self.dot(self).sqrt()
+    }
+
+    /// This direction at length 1; zero stays zero.
+    pub fn normalized(self) -> Vec3 {
+        let length = self.length();
+        if length < 1e-12 {
+            Vec3::ZERO
+        } else {
+            self * (1.0 / length)
+        }
+    }
+}
+
+impl std::ops::Neg for Vec3 {
+    type Output = Vec3;
+    fn neg(self) -> Vec3 {
+        Vec3(-self.0, -self.1, -self.2)
+    }
 }
 
 impl std::ops::Add for Vec3 {

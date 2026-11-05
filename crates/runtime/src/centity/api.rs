@@ -17,7 +17,9 @@ use netherforge_api::codec::Codec;
 use netherforge_api::handles::{self, Handle};
 use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, Caller, codecs, handle, shapes, unions, values};
-use netherforge_format::kind::centity::{Billboard, DisplayDef, LoopMode};
+use netherforge_format::kind::centity::{
+    Anchor, Billboard, DEFAULT_LINE_WIDTH, DisplayDef, LoopMode, PIXELS_PER_BLOCK, TextAlignment,
+};
 use netherforge_format::math::{Matrix4, Vec3};
 use netherforge_luau::ScopeId;
 use netherforge_platform::{ClickButton, Location, PlayerRef, Ray, Uuid};
@@ -26,6 +28,7 @@ use super::Instance;
 use super::animation::Play;
 use super::instance::Channel;
 use super::instance::SECONDS_PER_TICK;
+use super::quat::{Quat, look_rotation};
 use crate::events::{parse_uuid, uuid_text};
 use crate::shared::Shared;
 use crate::{Scripts, Target};
@@ -223,7 +226,12 @@ impl CentityContext {
             let Some(clicked) = instance.index_of(&name) else {
                 return true;
             };
-            let Some(picked) = pick(instance, clicked, sight.as_ref()) else {
+            let Some(picked) = pick(
+                self.shared.platform.game(),
+                instance,
+                clicked,
+                sight.as_ref(),
+            ) else {
                 return true;
             };
             let nodes = &instance.definition.nodes;
@@ -673,7 +681,12 @@ struct Picked {
     normal: Option<Vec3>,
 }
 
-fn pick(instance: &mut Instance, clicked: usize, sight: Option<&Ray>) -> Option<Picked> {
+fn pick(
+    game: &dyn netherforge_format::game::GameData,
+    instance: &mut Instance,
+    clicked: usize,
+    sight: Option<&Ray>,
+) -> Option<Picked> {
     let sight = match sight {
         Some(s) if s.world == instance.anchor().world => s,
         _ => {
@@ -688,7 +701,7 @@ fn pick(instance: &mut Instance, clicked: usize, sight: Option<&Ray>) -> Option<
     let anchor = instance.anchor().clone();
     let origin = Vec3(sight.x - anchor.x, sight.y - anchor.y, sight.z - anchor.z);
     let direction = Vec3(sight.dx, sight.dy, sight.dz);
-    if let Some((index, hit)) = nearest_hitbox(instance, origin, direction, REACH) {
+    if let Some((index, hit)) = nearest_hitbox(game, instance, origin, direction, REACH) {
         let at = origin + direction * hit.distance;
         return Some(Picked {
             index,
@@ -713,6 +726,7 @@ fn pick(instance: &mut Instance, clicked: usize, sight: Option<&Ray>) -> Option<
 /// relative to the anchor along the world's axes, `direction` a unit vector. A `raycast` node is tested
 /// against its boxes, any other against the interaction entity's bounds: the shapes a click is picked by.
 fn nearest_hitbox(
+    game: &dyn netherforge_format::game::GameData,
     instance: &mut Instance,
     origin: Vec3,
     direction: Vec3,
@@ -728,7 +742,7 @@ fn nearest_hitbox(
         if !instance.shown(index) || !instance.clickable(index) {
             continue;
         }
-        let boxes = super::boxes_of(instance, index);
+        let boxes = super::boxes_of(game, instance, index);
         let hit = if hitbox.raycast() {
             hitboxes::hit(&boxes, &world[index], origin, direction, max_distance)
         } else {
@@ -1096,6 +1110,94 @@ impl CentityApi for CentityContext {
             .unwrap_or(false))
     }
 
+    fn bounds(&self, this: &handles::Centity) -> ApiResult<Option<shapes::Bounds>> {
+        let game = self.shared.platform.game();
+        Ok(self
+            .with(this, |i| {
+                let world = i.placed().to_vec();
+                let mut boxes = Vec::new();
+                for (index, node) in i.definition.nodes.iter().enumerate() {
+                    if node.hitbox.is_none() || !i.shown(index) {
+                        continue;
+                    }
+                    for b in super::boxes_of(game, i, index) {
+                        boxes.push(super::hitboxes::bounds_of(&[b], &world[index]));
+                    }
+                }
+                if boxes.is_empty() {
+                    return None;
+                }
+                let all = super::hitboxes::bounds_of(&boxes, &Matrix4::IDENTITY);
+                let a = i.anchor();
+                Some(shapes::Bounds {
+                    min: value(Vec3(all.min.0 + a.x, all.min.1 + a.y, all.min.2 + a.z)),
+                    max: value(Vec3(all.max.0 + a.x, all.max.1 + a.y, all.max.2 + a.z)),
+                })
+            })
+            .flatten())
+    }
+    fn look_at(&self, this: &handles::Centity, point: values::Vec3) -> ApiResult<bool> {
+        Ok(self
+            .with(this, |i| {
+                let a = i.anchor();
+                let (x, z) = (point.x - a.x, point.z - a.z);
+                // Straight above or below, any facing is as good as another: keep this one.
+                if x * x + z * z >= 1e-18 {
+                    i.turn_to((-x).atan2(z).to_degrees());
+                }
+            })
+            .is_some())
+    }
+    fn is_glowing(&self, this: &handles::Centity) -> ApiResult<bool> {
+        Ok(self
+            .with(this, |i| {
+                let drawn = drawn(i);
+                !drawn.is_empty() && drawn.iter().all(|n| i.look(*n).glowing)
+            })
+            .unwrap_or(false))
+    }
+    fn set_glowing(&self, this: &handles::Centity, glowing: bool) -> ApiResult<bool> {
+        Ok(self
+            .with(this, |i| {
+                for n in drawn(i) {
+                    let mut look = i.look(n).clone();
+                    look.glowing = glowing;
+                    i.set_look(n, look);
+                }
+            })
+            .is_some())
+    }
+    fn glow_color(&self, this: &handles::Centity) -> ApiResult<Option<String>> {
+        Ok(self
+            .with(this, |i| {
+                let mut colours: Vec<Option<i32>> =
+                    coloured(i).iter().map(|n| i.look(*n).glow_color).collect();
+                colours.dedup();
+                match colours.as_slice() {
+                    [Some(rgb)] => Some(format_rgb(*rgb)),
+                    _ => None,
+                }
+            })
+            .flatten())
+    }
+    fn set_glow_color(&self, this: &handles::Centity, color: Option<String>) -> ApiResult<bool> {
+        let rgb = color
+            .as_deref()
+            .map(|c| parse_rgb(c, "color"))
+            .transpose()?;
+        Ok(self
+            .with(this, |i| {
+                let coloured = coloured(i);
+                for n in &coloured {
+                    let mut look = i.look(*n).clone();
+                    look.glow_color = rgb;
+                    i.set_look(*n, look);
+                }
+                !coloured.is_empty()
+            })
+            .unwrap_or(false))
+    }
+
     // ---- not ported yet ----
     fn is_natural(&self, this: &handles::Centity) -> ApiResult<bool> {
         CentityApi::is_natural(&Unported, this)
@@ -1119,12 +1221,6 @@ impl CentityApi for CentityContext {
         definition: Value,
     ) -> ApiResult<Option<handles::Node>> {
         CentityApi::add_node(&Unported, this, name, definition)
-    }
-    fn bounds(&self, this: &handles::Centity) -> ApiResult<Option<shapes::Bounds>> {
-        CentityApi::bounds(&Unported, this)
-    }
-    fn look_at(&self, this: &handles::Centity, point: values::Vec3) -> ApiResult<bool> {
-        CentityApi::look_at(&Unported, this, point)
     }
     fn follow(&self, this: &handles::Centity, player: handles::Player) -> ApiResult<bool> {
         CentityApi::follow(&Unported, this, player)
@@ -1263,18 +1359,6 @@ impl CentityApi for CentityContext {
     fn data(&self, this: &handles::Centity) -> ApiResult<Value> {
         CentityApi::data(&Unported, this)
     }
-    fn is_glowing(&self, this: &handles::Centity) -> ApiResult<bool> {
-        CentityApi::is_glowing(&Unported, this)
-    }
-    fn set_glowing(&self, this: &handles::Centity, glowing: bool) -> ApiResult<bool> {
-        CentityApi::set_glowing(&Unported, this, glowing)
-    }
-    fn glow_color(&self, this: &handles::Centity) -> ApiResult<Option<String>> {
-        CentityApi::glow_color(&Unported, this)
-    }
-    fn set_glow_color(&self, this: &handles::Centity, color: Option<String>) -> ApiResult<bool> {
-        CentityApi::set_glow_color(&Unported, this, color)
-    }
 }
 
 impl CentityContext {
@@ -1298,6 +1382,47 @@ impl CentityContext {
             .borrow_mut()
             .set_hidden(&*self.shared.platform, id, player, hidden);
         Ok(true)
+    }
+}
+
+/// A text display's opacity when it's fully opaque.
+const OPAQUE: i32 = 255;
+
+/// The nodes that draw something.
+fn drawn(instance: &Instance) -> Vec<usize> {
+    (0..instance.definition.nodes.len())
+        .filter(|n| instance.display(*n).is_some())
+        .collect()
+}
+
+/// The block, item and model displays: the ones a glow colour shows on.
+fn coloured(instance: &Instance) -> Vec<usize> {
+    drawn(instance)
+        .into_iter()
+        .filter(|n| !matches!(instance.display(*n), Some(DisplayDef::Text { .. })))
+        .collect()
+}
+
+/// `#RRGGBB` as its number; anything else is an error naming `parameter`.
+fn parse_rgb(text: &str, parameter: &str) -> ApiResult<i32> {
+    if text.len() == 7 && is_color(text) {
+        return Ok(i32::from_str_radix(&text[1..], 16).expect("hex digits"));
+    }
+    Err(err(format!(
+        "bad argument '{parameter}' (#RRGGBB expected, got \"{text}\")"
+    )))
+}
+
+fn format_rgb(rgb: i32) -> String {
+    format!("#{:06x}", rgb & 0xFF_FFFF)
+}
+
+/// A number as Lua prints it: a whole one without a point.
+fn lua_number(n: f64) -> String {
+    if n == n.floor() && n.abs() < 1e15 {
+        format!("{}", n as i64)
+    } else {
+        format!("{n}")
     }
 }
 
@@ -1607,6 +1732,443 @@ impl NodeApi for CentityContext {
         self.with_node(this, |i, at| i.set_clickable(at, clickable));
         Ok(())
     }
+    fn world_rotation(&self, this: &handles::Node) -> ApiResult<Option<values::Vec3>> {
+        Ok(self.with_node(this, |i, at| {
+            value(Quat::from_basis(&i.world_matrix(at)).to_euler())
+        }))
+    }
+    fn world_direction(
+        &self,
+        this: &handles::Node,
+        direction: values::Vec3,
+    ) -> ApiResult<Option<values::Vec3>> {
+        Ok(self.with_node(this, |i, at| {
+            value(Quat::from_basis(&i.world_matrix(at)).rotate(vec(direction)))
+        }))
+    }
+    fn look_at(&self, this: &handles::Node, point: values::Vec3) -> ApiResult<bool> {
+        Ok(self
+            .with_node(this, |i, at| {
+                // Where the point is from the node's origin, in the space its rotation is in: its parent's.
+                let Some(inverse) = i.parent_world_matrix(at).invert_affine() else {
+                    return false;
+                };
+                let target = inverse.transform_position(vec(point));
+                let forward = target - i.get(at, Channel::Translation);
+                let length = forward.length();
+                if length < 1e-9 {
+                    return true;
+                }
+                i.set(
+                    at,
+                    Channel::Rotation,
+                    look_rotation(forward * (1.0 / length)),
+                    false,
+                );
+                true
+            })
+            .unwrap_or(false))
+    }
+    fn rotate(&self, this: &handles::Node, axis: values::Vec3, degrees: f64) -> ApiResult<bool> {
+        let axis = vec(axis);
+        if axis.length() == 0.0 {
+            return Err(err(
+                "bad argument 'axis' (a rotation needs an axis that isn't zero)",
+            ));
+        }
+        Ok(self
+            .with_node(this, |i, at| {
+                // Pre-multiplied: the turn happens about the parent's axis, after the node's own rotation.
+                let turned =
+                    Quat::about(axis, degrees) * Quat::from_euler(i.get(at, Channel::Rotation));
+                i.set(at, Channel::Rotation, turned.normalized().to_euler(), false);
+            })
+            .is_some())
+    }
+    fn display_size(&self, this: &handles::Node) -> ApiResult<Option<values::Vec3>> {
+        Ok(self
+            .with_node(this, |i, at| {
+                let size = match i.display(at)? {
+                    DisplayDef::Rect { size, .. } => size.clone().unwrap_or_else(|| vec![1.0, 1.0]),
+                    DisplayDef::Image {
+                        width,
+                        height,
+                        size,
+                        ..
+                    } => size.clone().unwrap_or_else(|| {
+                        vec![
+                            f64::from(*width) / PIXELS_PER_BLOCK,
+                            f64::from(*height) / PIXELS_PER_BLOCK,
+                        ]
+                    }),
+                    _ => return None,
+                };
+                Some(value(Vec3(size[0], size[1], 0.0)))
+            })
+            .flatten())
+    }
+    fn set_display_size(&self, this: &handles::Node, size: values::Vec3) -> ApiResult<bool> {
+        if !(size.x > 0.0 && size.y > 0.0 && size.x.is_finite() && size.y.is_finite()) {
+            return Err(err(format!(
+                "bad argument 'size' (a width and height more than 0, got {} by {})",
+                lua_number(size.x),
+                lua_number(size.y)
+            )));
+        }
+        let wanted = Some(vec![size.x, size.y]);
+        let name = this.name.clone();
+        self.with_node(this, |i, at| {
+            let mut display = i.display(at).cloned();
+            match &mut display {
+                Some(DisplayDef::Rect { size, .. } | DisplayDef::Image { size, .. }) => {
+                    if *size != wanted {
+                        *size = wanted;
+                        i.set_display(at, display.expect("a display"));
+                    }
+                    Ok(true)
+                }
+                _ => Err(err(format!(
+                    "node \"{name}\" isn't a rect or an image display"
+                ))),
+            }
+        })
+        .unwrap_or(Ok(false))
+    }
+    fn display_anchor(&self, this: &handles::Node) -> ApiResult<Option<String>> {
+        Ok(self
+            .with_node(this, |i, at| {
+                let anchor = match i.display(at)? {
+                    DisplayDef::Rect { anchor, .. } | DisplayDef::Image { anchor, .. } => {
+                        Some(anchor.unwrap_or(Anchor::Center))
+                    }
+                    DisplayDef::Text { anchor, .. } => *anchor,
+                    _ => None,
+                }?;
+                Some(netherforge_format::canonical::name_of(&anchor))
+            })
+            .flatten())
+    }
+    fn set_display_anchor(&self, this: &handles::Node, anchor: Option<String>) -> ApiResult<bool> {
+        let wanted: Option<Anchor> = match &anchor {
+            None => None,
+            Some(name) => Some(
+                serde_json::from_value(serde_json::Value::String(name.clone())).map_err(|_| {
+                    err(format!(
+                        "bad argument 'anchor' (an anchor such as \"bottom\", got \"{name}\")"
+                    ))
+                })?,
+            ),
+        };
+        let name = this.name.clone();
+        self.with_node(this, |i, at| {
+            let mut display = i.display(at).cloned();
+            match &mut display {
+                Some(
+                    DisplayDef::Rect { anchor, .. }
+                    | DisplayDef::Image { anchor, .. }
+                    | DisplayDef::Text { anchor, .. },
+                ) => {
+                    if *anchor != wanted {
+                        *anchor = wanted;
+                        i.set_display(at, display.expect("a display"));
+                    }
+                    Ok(true)
+                }
+                _ => Err(err(format!(
+                    "node \"{name}\" isn't a rect, image or text display"
+                ))),
+            }
+        })
+        .unwrap_or(Ok(false))
+    }
+    fn set_display_block(&self, this: &handles::Node, block: String) -> ApiResult<bool> {
+        let game = self.shared.platform.game();
+        // A block state the server knows, with only properties the block has.
+        let Some(state) = netherforge_format::block_state::BlockState::parse(&block) else {
+            return Ok(false);
+        };
+        let Some(properties) = game.block_properties(&state.id) else {
+            return Ok(false);
+        };
+        if state.properties.iter().any(|(name, value)| {
+            !properties
+                .get(name)
+                .is_some_and(|values| values.contains(value))
+        }) {
+            return Ok(false);
+        }
+        Ok(self
+            .with_node(this, |i, at| match i.display(at) {
+                Some(DisplayDef::Block { .. }) => {
+                    i.set_display(
+                        at,
+                        DisplayDef::Block {
+                            block: state.to_string(),
+                        },
+                    );
+                    true
+                }
+                _ => false,
+            })
+            .unwrap_or(false))
+    }
+    fn display_item(&self, this: &handles::Node) -> ApiResult<Option<values::Item>> {
+        Ok(self
+            .with_node(this, |i, at| match i.display(at) {
+                Some(DisplayDef::Item { item, .. }) => {
+                    Some(crate::items::to_value(&i.look(at).item.clone().unwrap_or(
+                        netherforge_platform::ItemData {
+                            def: netherforge_format::item::ItemDef {
+                                kind: item.clone(),
+                                ..Default::default()
+                            },
+                            raw: None,
+                            look: None,
+                        },
+                    )))
+                }
+                _ => None,
+            })
+            .flatten())
+    }
+    fn set_display_item(&self, this: &handles::Node, item: values::Item) -> ApiResult<bool> {
+        let mut item =
+            crate::items::from_value(&item, "item", self.shared.platform.game()).map_err(err)?;
+        Ok(self
+            .with_node(this, |i, at| match i.display(at).cloned() {
+                Some(DisplayDef::Item { item_transform, .. }) => {
+                    // The content names the kind (what a respawn builds); the look carries the whole item over it.
+                    i.set_display(
+                        at,
+                        DisplayDef::Item {
+                            item: item.def.kind.clone(),
+                            item_transform,
+                        },
+                    );
+                    item.def.count = None;
+                    let mut look = i.look(at).clone();
+                    look.item = Some(item);
+                    i.set_look(at, look);
+                    true
+                }
+                _ => false,
+            })
+            .unwrap_or(false))
+    }
+    fn model(&self, this: &handles::Node) -> ApiResult<Option<String>> {
+        Ok(self
+            .with_node(this, |i, at| match i.display(at) {
+                Some(DisplayDef::Model { model, .. }) => Some(model.clone()),
+                _ => None,
+            })
+            .flatten())
+    }
+    fn set_model(&self, this: &handles::Node, model: String) -> ApiResult<bool> {
+        Ok(self
+            .with_node(this, |i, at| match i.display(at).cloned() {
+                Some(DisplayDef::Model {
+                    model: now,
+                    item_transform,
+                }) => {
+                    if now != model {
+                        i.set_display(
+                            at,
+                            DisplayDef::Model {
+                                model,
+                                item_transform,
+                            },
+                        );
+                    }
+                    true
+                }
+                _ => false,
+            })
+            .unwrap_or(false))
+    }
+    fn display_text_style(&self, this: &handles::Node) -> ApiResult<Option<shapes::TextStyle>> {
+        Ok(self
+            .with_node(this, |i, at| match i.display(at) {
+                Some(DisplayDef::Text {
+                    background,
+                    shadow,
+                    alignment,
+                    line_width,
+                    see_through,
+                    ..
+                }) => Some(shapes::TextStyle {
+                    background: background.clone(),
+                    opacity: Some(i64::from(i.look(at).text_opacity.unwrap_or(OPAQUE))),
+                    shadow: Some(shadow.unwrap_or(false)),
+                    alignment: Some(netherforge_format::canonical::name_of(
+                        &alignment.unwrap_or(TextAlignment::Center),
+                    )),
+                    line_width: Some(i64::from(line_width.unwrap_or(DEFAULT_LINE_WIDTH))),
+                    see_through: Some(see_through.unwrap_or(false)),
+                }),
+                _ => None,
+            })
+            .flatten())
+    }
+    fn set_display_text_style(
+        &self,
+        this: &handles::Node,
+        style: shapes::TextStyle,
+    ) -> ApiResult<bool> {
+        if let Some(background) = &style.background
+            && !(background.len() == 9 && is_color(background))
+        {
+            return Err(err(format!(
+                "bad field 'style.background' (#AARRGGBB expected, got \"{background}\")"
+            )));
+        }
+        if let Some(opacity) = style.opacity
+            && !(0..=i64::from(OPAQUE)).contains(&opacity)
+        {
+            return Err(err(format!(
+                "bad field 'style.opacity' (0 to 255 expected, got {opacity})"
+            )));
+        }
+        let alignment = match style.alignment.as_deref() {
+            None => None,
+            Some("center") => Some(TextAlignment::Center),
+            Some("left") => Some(TextAlignment::Left),
+            Some("right") => Some(TextAlignment::Right),
+            Some(other) => {
+                return Err(err(format!(
+                    "bad field 'style.alignment' (\"center\", \"left\" or \"right\" expected, got \"{other}\")"
+                )));
+            }
+        };
+        if let Some(width) = style.line_width
+            && !(1..=i64::from(i32::MAX)).contains(&width)
+        {
+            return Err(err(format!(
+                "bad field 'style.line_width' (at least 1 expected, got {width})"
+            )));
+        }
+        Ok(self
+            .with_node(this, |i, at| match i.display(at).cloned() {
+                Some(DisplayDef::Text {
+                    text,
+                    billboard,
+                    anchor,
+                    ..
+                }) => {
+                    i.set_display(
+                        at,
+                        DisplayDef::Text {
+                            text,
+                            billboard,
+                            alignment,
+                            background: style.background.clone(),
+                            line_width: style.line_width.map(|w| w as i32),
+                            see_through: style.see_through,
+                            shadow: style.shadow,
+                            anchor,
+                        },
+                    );
+                    let mut look = i.look(at).clone();
+                    look.text_opacity = style.opacity.map(|o| o as i32).filter(|o| *o != OPAQUE);
+                    i.set_look(at, look);
+                    true
+                }
+                _ => false,
+            })
+            .unwrap_or(false))
+    }
+    fn is_glowing(&self, this: &handles::Node) -> ApiResult<bool> {
+        Ok(self
+            .with_node(this, |i, at| i.display(at).is_some() && i.look(at).glowing)
+            .unwrap_or(false))
+    }
+    fn set_glowing(&self, this: &handles::Node, glowing: bool) -> ApiResult<bool> {
+        Ok(self
+            .with_node(this, |i, at| {
+                if i.display(at).is_none() {
+                    return false;
+                }
+                let mut look = i.look(at).clone();
+                look.glowing = glowing;
+                i.set_look(at, look);
+                true
+            })
+            .unwrap_or(false))
+    }
+    fn glow_color(&self, this: &handles::Node) -> ApiResult<Option<String>> {
+        Ok(self
+            .with_node(this, |i, at| match i.display(at) {
+                None | Some(DisplayDef::Text { .. }) => None,
+                Some(_) => i.look(at).glow_color.map(format_rgb),
+            })
+            .flatten())
+    }
+    fn set_glow_color(&self, this: &handles::Node, color: Option<String>) -> ApiResult<bool> {
+        let rgb = color
+            .as_deref()
+            .map(|c| parse_rgb(c, "color"))
+            .transpose()?;
+        Ok(self
+            .with_node(this, |i, at| match i.display(at) {
+                // Minecraft draws no glow colour on a text display.
+                None | Some(DisplayDef::Text { .. }) => false,
+                Some(_) => {
+                    let mut look = i.look(at).clone();
+                    look.glow_color = rgb;
+                    i.set_look(at, look);
+                    true
+                }
+            })
+            .unwrap_or(false))
+    }
+    fn brightness(&self, this: &handles::Node) -> ApiResult<Option<shapes::Brightness>> {
+        Ok(self
+            .with_node(this, |i, at| {
+                i.display(at)?;
+                i.look(at).brightness.as_ref().map(|b| shapes::Brightness {
+                    block_light: Some(i64::from(b.block)),
+                    sky_light: Some(i64::from(b.sky)),
+                })
+            })
+            .flatten())
+    }
+    fn set_brightness(
+        &self,
+        this: &handles::Node,
+        brightness: Option<shapes::Brightness>,
+    ) -> ApiResult<bool> {
+        let level = |value: Option<i64>, field: &str| -> ApiResult<i32> {
+            let value = value.ok_or_else(|| {
+                err(format!(
+                    "bad field 'brightness.{field}' (a light level from 0 to 15 is required)"
+                ))
+            })?;
+            if !(0..=15).contains(&value) {
+                return Err(err(format!(
+                    "bad field 'brightness.{field}' (0 to 15 expected, got {value})"
+                )));
+            }
+            Ok(value as i32)
+        };
+        let levels = match &brightness {
+            None => None,
+            Some(b) => Some(netherforge_platform::DisplayBrightness {
+                block: level(b.block_light, "block_light")?,
+                sky: level(b.sky_light, "sky_light")?,
+            }),
+        };
+        Ok(self
+            .with_node(this, |i, at| {
+                if i.display(at).is_none() {
+                    return false;
+                }
+                let mut look = i.look(at).clone();
+                look.brightness = levels;
+                i.set_look(at, look);
+                true
+            })
+            .unwrap_or(false))
+    }
+
     // ---- not ported yet ----
     fn add_child(
         &self,
@@ -1652,86 +2214,11 @@ impl NodeApi for CentityContext {
     fn stop_tween(&self, this: &handles::Node) -> ApiResult<bool> {
         NodeApi::stop_tween(&Unported, this)
     }
-    fn world_rotation(&self, this: &handles::Node) -> ApiResult<Option<values::Vec3>> {
-        NodeApi::world_rotation(&Unported, this)
-    }
-    fn world_direction(
-        &self,
-        this: &handles::Node,
-        direction: values::Vec3,
-    ) -> ApiResult<Option<values::Vec3>> {
-        NodeApi::world_direction(&Unported, this, direction)
-    }
-    fn look_at(&self, this: &handles::Node, point: values::Vec3) -> ApiResult<bool> {
-        NodeApi::look_at(&Unported, this, point)
-    }
-    fn rotate(&self, this: &handles::Node, axis: values::Vec3, degrees: f64) -> ApiResult<bool> {
-        NodeApi::rotate(&Unported, this, axis, degrees)
-    }
     fn image(&self, this: &handles::Node) -> ApiResult<Option<handles::Image>> {
         NodeApi::image(&Unported, this)
     }
     fn set_image(&self, this: &handles::Node, image: Option<handles::Image>) -> ApiResult<bool> {
         NodeApi::set_image(&Unported, this, image)
-    }
-    fn display_size(&self, this: &handles::Node) -> ApiResult<Option<values::Vec3>> {
-        NodeApi::display_size(&Unported, this)
-    }
-    fn set_display_size(&self, this: &handles::Node, size: values::Vec3) -> ApiResult<bool> {
-        NodeApi::set_display_size(&Unported, this, size)
-    }
-    fn display_anchor(&self, this: &handles::Node) -> ApiResult<Option<String>> {
-        NodeApi::display_anchor(&Unported, this)
-    }
-    fn set_display_anchor(&self, this: &handles::Node, anchor: Option<String>) -> ApiResult<bool> {
-        NodeApi::set_display_anchor(&Unported, this, anchor)
-    }
-    fn set_display_block(&self, this: &handles::Node, block: String) -> ApiResult<bool> {
-        NodeApi::set_display_block(&Unported, this, block)
-    }
-    fn display_item(&self, this: &handles::Node) -> ApiResult<Option<values::Item>> {
-        NodeApi::display_item(&Unported, this)
-    }
-    fn set_display_item(&self, this: &handles::Node, item: values::Item) -> ApiResult<bool> {
-        NodeApi::set_display_item(&Unported, this, item)
-    }
-    fn model(&self, this: &handles::Node) -> ApiResult<Option<String>> {
-        NodeApi::model(&Unported, this)
-    }
-    fn set_model(&self, this: &handles::Node, model: String) -> ApiResult<bool> {
-        NodeApi::set_model(&Unported, this, model)
-    }
-    fn display_text_style(&self, this: &handles::Node) -> ApiResult<Option<shapes::TextStyle>> {
-        NodeApi::display_text_style(&Unported, this)
-    }
-    fn set_display_text_style(
-        &self,
-        this: &handles::Node,
-        style: shapes::TextStyle,
-    ) -> ApiResult<bool> {
-        NodeApi::set_display_text_style(&Unported, this, style)
-    }
-    fn is_glowing(&self, this: &handles::Node) -> ApiResult<bool> {
-        NodeApi::is_glowing(&Unported, this)
-    }
-    fn set_glowing(&self, this: &handles::Node, glowing: bool) -> ApiResult<bool> {
-        NodeApi::set_glowing(&Unported, this, glowing)
-    }
-    fn glow_color(&self, this: &handles::Node) -> ApiResult<Option<String>> {
-        NodeApi::glow_color(&Unported, this)
-    }
-    fn set_glow_color(&self, this: &handles::Node, color: Option<String>) -> ApiResult<bool> {
-        NodeApi::set_glow_color(&Unported, this, color)
-    }
-    fn brightness(&self, this: &handles::Node) -> ApiResult<Option<shapes::Brightness>> {
-        NodeApi::brightness(&Unported, this)
-    }
-    fn set_brightness(
-        &self,
-        this: &handles::Node,
-        brightness: Option<shapes::Brightness>,
-    ) -> ApiResult<bool> {
-        NodeApi::set_brightness(&Unported, this, brightness)
     }
     fn velocity(&self, this: &handles::Node) -> ApiResult<Option<values::Vec3>> {
         NodeApi::velocity(&Unported, this)
