@@ -531,6 +531,13 @@ nil or false while it isn't in the world.
 - `own_id` is Kotlin's `ownId` (a modifier's or goal's id in the project's namespace).
 - `AttributeOperation` is format's in the Platform's Rust types.
 - Not yet: `entity:team()` (teams), a mob's `move_to`/`stop_pathing` and goals (mob goals).
+- **`Player`** (`player.rs`, Kotlin's `PlayerImpl`): what needs them online answers nil or false while they're
+  offline; bans, the whitelist and played times need only a UUID. Their stats and buffs are the stat sheets
+  centities use (`Holder::Player`): `buff_add` and `buff_end` raise on the player too, and a player's buffs
+  count down only while they're online (`stats::Presence`: waiting, not gone). A storage is named in the calling
+  scope's namespace. Not yet (32 functions, each with its area): sounds and particles, permissions, skies,
+  recipes, advancements, menus and dialogs, listings and below-name text, boss bars, resource packs,
+  `player:data()` and `player:session()`.
 
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 

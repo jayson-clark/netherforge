@@ -33,7 +33,7 @@ const OPERATIONS: [AttributeOperation; 3] = [
 ];
 
 impl GameContext {
-    fn subscribe_on(
+    pub(crate) fn subscribe_on(
         &self,
         handle: Handle,
         called: &str,

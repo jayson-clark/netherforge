@@ -23,6 +23,7 @@ pub mod images;
 pub mod items;
 pub mod living;
 pub mod modules;
+pub mod player;
 pub mod scripts;
 pub mod server;
 pub mod session;
@@ -197,6 +198,12 @@ impl LuaApi for Api {
         }
     }
     fn mannequin(&self) -> &dyn netherforge_api::api::MannequinApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn player(&self) -> &dyn netherforge_api::api::PlayerApi {
         match &self.worlds {
             Some(w) => w,
             None => &Unported,

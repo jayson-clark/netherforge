@@ -324,6 +324,31 @@ impl netherforge_platform::FakeBlockOps for Fake {
 }
 
 impl netherforge_platform::FakePlayerOps for Fake {
+    fn message(&self, uuid: Uuid, text: String) -> bool {
+        self.call(format!("message {} {text}", uuid.0));
+        true
+    }
+    fn title(
+        &self,
+        uuid: Uuid,
+        title: String,
+        subtitle: String,
+        fade_in: i32,
+        stay: i32,
+        fade_out: i32,
+    ) -> bool {
+        self.call(format!(
+            "title {} {title}/{subtitle} {fade_in} {stay} {fade_out}",
+            uuid.0
+        ));
+        true
+    }
+    fn game_mode(&self, _: Uuid) -> Option<String> {
+        Some("survival".into())
+    }
+    fn known(&self, _: String) -> Option<PlayerRef> {
+        None
+    }
     fn get(&self, uuid: Uuid) -> Option<PlayerRef> {
         (uuid == Uuid(77)).then(|| PlayerRef {
             uuid,
@@ -1966,4 +1991,55 @@ print(z:hide_from(alex), z:is_hidden_from(alex))
     // The session ends: it shows again.
     server.session_mut().stop();
     assert!(platform.take().contains(&"show 500 to 77".to_owned()));
+}
+
+#[test]
+fn a_player_answers_while_online_and_takes_buffs() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("buffs/swift.json", r#"{ "stats": { "speed": 2 } }"#),
+        (
+            "modules/greet/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+print(alex:name(), alex:is_player(), alex:game_mode(), alex:send_message("<green>hi"))
+print(alex:send_title("Welcome", nil, { stay = 40 }), pcall(alex.send_title, alex, "x", nil, { stay = -1 }))
+print(pcall(alex.set_food, alex, 30))
+print(alex:storage("bank", 27) ~= nil, pcall(alex.storage, alex, "Bank!", 27))
+alex:on("buff_add", function(e) print("buff", e.buff, e.ticks, e.player == alex); e.ticks = 5 end)
+print(alex:add_buff("swift", 100), alex:buff_ticks("swift"), alex:stat("speed"), #alex:buffs())
+alex:on("buff_end", function(e) print("ended", e.buff, e.reason) end)
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "Alex\ttrue\tsurvival\ttrue",
+            "true\tfalse\tmodules/greet/init.lua:4: options.stay can't be negative",
+            "false\tmodules/greet/init.lua:5: food must be from 0 to 20, not 30",
+            "true\tfalse\tmodules/greet/init.lua:6: \"Bank!\" isn't a storage name (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+            "buff\tswift\t100\ttrue",
+            "true\t5\t2\t1",
+        ]
+    );
+    assert!(
+        calls.contains(&"message 77 <green>hi".to_owned()),
+        "{calls:?}"
+    );
+    assert!(
+        calls.contains(&"title 77 Welcome/ 10 40 20".to_owned()),
+        "{calls:?}"
+    );
+    let mut lines = Vec::new();
+    for _ in 0..6 {
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    assert_eq!(lines, ["ended\tswift\texpired"]);
 }

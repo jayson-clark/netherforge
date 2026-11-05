@@ -203,7 +203,7 @@ impl CentityContext {
     }
 
     /// A buff a script names; one the project doesn't have is an error.
-    fn buff(&self, name: &str) -> ApiResult<String> {
+    pub(crate) fn buff(&self, name: &str) -> ApiResult<String> {
         if self.shared.stats.borrow().has(name) {
             return Ok(name.to_owned());
         }
@@ -223,6 +223,17 @@ impl CentityContext {
         payload: C::T,
     ) -> Option<crate::Delivered> {
         let target = self.centity_target(id)?;
+        self.raise_at(target, event, codec, payload)
+    }
+
+    /// Raises `event` on `target` with `payload`: what handlers made of it, none when nothing listens.
+    pub(crate) fn raise_at<C: Codec>(
+        &self,
+        target: Target,
+        event: &str,
+        codec: C,
+        payload: C::T,
+    ) -> Option<crate::Delivered> {
         if !self.scripts.listening(&target, event) {
             return None;
         }
@@ -246,21 +257,22 @@ impl CentityContext {
     }
 
     /// Gives `holder` `buff` for `ticks` through its rules and its `buff_add` handlers: whether it took hold.
-    fn give_buff(&self, holder: crate::stats::Holder, buff: &str, ticks: i64) -> bool {
+    pub(crate) fn give_buff(&self, holder: crate::stats::Holder, buff: &str, ticks: i64) -> bool {
         if self.shared.stats.borrow().blocked(holder, buff) {
             return false;
         }
-        let crate::stats::Holder::Centity(id) = holder else {
-            return false;
-        };
+        let (player, centity) = holder_handles(holder);
         let event = shapes::BuffEvent {
             buff: buff.to_owned(),
             ticks,
-            player: None,
-            centity: Some(handles::Centity { id: uuid_text(&id) }),
+            player,
+            centity,
         };
         let mut given = ticks;
-        if let Some(delivered) = self.raise_on(id, "buff_add", codecs::BuffEvent, event) {
+        let delivered = self
+            .holder_target(holder)
+            .and_then(|target| self.raise_at(target, "buff_add", codecs::BuffEvent, event));
+        if let Some(delivered) = delivered {
             if delivered.cancelled {
                 return false;
             }
@@ -274,18 +286,28 @@ impl CentityContext {
     }
 
     /// `buff_end` for each buff that ended.
-    fn buffs_ended(&self, ended: Vec<crate::stats::Ended>) {
+    pub(crate) fn buffs_ended(&self, ended: Vec<crate::stats::Ended>) {
         for end in ended {
-            let crate::stats::Holder::Centity(id) = end.holder else {
-                continue;
-            };
+            let (player, centity) = holder_handles(end.holder);
             let event = shapes::BuffEndEvent {
                 buff: end.buff,
                 reason: end.reason.to_owned(),
-                player: None,
-                centity: Some(handles::Centity { id: uuid_text(&id) }),
+                player,
+                centity,
             };
-            self.raise_on(id, "buff_end", codecs::BuffEndEvent, event);
+            if let Some(target) = self.holder_target(end.holder) {
+                self.raise_at(target, "buff_end", codecs::BuffEndEvent, event);
+            }
+        }
+    }
+
+    /// Where a holder's buff events are heard: on the player or the centity.
+    fn holder_target(&self, holder: crate::stats::Holder) -> Option<Target> {
+        match holder {
+            crate::stats::Holder::Centity(id) => self.centity_target(id),
+            crate::stats::Holder::Player(id) => {
+                self.handle_target(Handle::Player(handles::Player { id: uuid_text(&id) }))
+            }
         }
     }
 
@@ -299,10 +321,20 @@ impl CentityContext {
     fn tick_stats(&self) {
         let ended = {
             let centities = self.shared.centities.borrow();
+            use crate::stats::Presence;
             let present = |holder: crate::stats::Holder| match holder {
-                crate::stats::Holder::Centity(id) => centities.get(id).is_some_and(|i| !i.removed),
-                // Players' stats are ported with players.
-                crate::stats::Holder::Player(_) => true,
+                crate::stats::Holder::Centity(id)
+                    if centities.get(id).is_some_and(|i| !i.removed) =>
+                {
+                    Presence::Active
+                }
+                crate::stats::Holder::Centity(_) => Presence::Gone,
+                crate::stats::Holder::Player(id)
+                    if self.shared.platform.players().get(id).is_some() =>
+                {
+                    Presence::Active
+                }
+                crate::stats::Holder::Player(_) => Presence::Waiting,
             };
             self.shared.stats.borrow_mut().tick(&present)
         };
@@ -1569,6 +1601,16 @@ fn nearest_hitbox(
         }
     }
     best
+}
+
+/// A buff event's `player` and `centity` for `holder`.
+fn holder_handles(
+    holder: crate::stats::Holder,
+) -> (Option<handles::Player>, Option<handles::Centity>) {
+    match holder {
+        crate::stats::Holder::Player(id) => (Some(handles::Player { id: uuid_text(&id) }), None),
+        crate::stats::Holder::Centity(id) => (None, Some(handles::Centity { id: uuid_text(&id) })),
+    }
 }
 
 /// What a ray hit among the centities: `instance`'s node `index`, where in the world, the face's normal and how

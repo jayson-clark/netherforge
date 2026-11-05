@@ -216,7 +216,7 @@ impl GameContext {
         &*self.shared.platform
     }
 
-    fn centities(&self) -> CentityContext {
+    pub(crate) fn centities(&self) -> CentityContext {
         CentityContext::new(self.shared.clone(), self.scripts.clone())
     }
 

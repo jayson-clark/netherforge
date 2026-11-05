@@ -103,6 +103,44 @@ pub fn inventory_handle(inventory: &InventoryRef) -> handles::Inventory {
     handles::Inventory { holder }
 }
 
+/// What an inventory's handle names (`inventory_handle`'s inverse); none for a key that names nothing.
+pub fn inventory_ref(handle: &handles::Inventory) -> Option<InventoryRef> {
+    use netherforge_platform::{
+        InventoryRefBlock, InventoryRefEnderChest, InventoryRefEntity, InventoryRefPlayer,
+        InventoryRefStorage,
+    };
+    let (kind, rest) = handle.holder.split_once('/')?;
+    Some(match kind {
+        "player" => InventoryRef::Player(InventoryRefPlayer {
+            player: parse_uuid(rest)?,
+        }),
+        "ender_chest" => InventoryRef::EnderChest(InventoryRefEnderChest {
+            player: parse_uuid(rest)?,
+        }),
+        "entity" => InventoryRef::Entity(InventoryRefEntity {
+            entity: parse_uuid(rest)?,
+        }),
+        "storage" => {
+            let mut parts = rest.splitn(3, '/');
+            InventoryRef::Storage(InventoryRefStorage {
+                player: parse_uuid(parts.next()?)?,
+                size: parts.next()?.parse().ok()?,
+                name: parts.next()?.to_owned(),
+            })
+        }
+        "block" => {
+            let mut parts = rest.splitn(4, '/');
+            InventoryRef::Block(InventoryRefBlock {
+                x: parts.next()?.parse().ok()?,
+                y: parts.next()?.parse().ok()?,
+                z: parts.next()?.parse().ok()?,
+                world: parts.next()?.to_owned(),
+            })
+        }
+        _ => return None,
+    })
+}
+
 /// A block's position as a `Block` handle keys on it (Kotlin's `Locations.pack`).
 pub fn pack(x: i32, y: i32, z: i32) -> i64 {
     ((i64::from(x) & 0x3FF_FFFF) << 38)

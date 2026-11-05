@@ -17,6 +17,16 @@ pub enum Holder {
     Centity(Uuid),
 }
 
+/// Whether a holder's buffs count down: a player online, a centity in the world.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Presence {
+    Active,
+    /// Kept as they are: a player offline.
+    Waiting,
+    /// Forgotten: a centity removed.
+    Gone,
+}
+
 /// A buff someone has, with the ticks it has left.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Active {
@@ -240,11 +250,16 @@ impl StatSheets {
             .unwrap_or_default()
     }
 
-    /// One tick: each present holder's buffs count down; a holder that's gone is forgotten. What expired.
-    pub fn tick(&mut self, present: &dyn Fn(Holder) -> bool) -> Vec<Ended> {
+    /// One tick: each active holder's buffs count down, a waiting one's (a player offline) are kept as they
+    /// are, and a holder that's gone is forgotten. What expired.
+    pub fn tick(&mut self, present: &dyn Fn(Holder) -> Presence) -> Vec<Ended> {
         let mut ended = Vec::new();
-        self.sheets.retain(|holder, _| present(*holder));
+        self.sheets
+            .retain(|holder, _| present(*holder) != Presence::Gone);
         for (holder, sheet) in &mut self.sheets {
+            if present(*holder) != Presence::Active {
+                continue;
+            }
             let mut expired = Vec::new();
             for active in sheet.buffs.values_mut() {
                 active.ticks -= 1;
