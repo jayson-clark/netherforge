@@ -31,7 +31,17 @@ impl FakePlatformLog for Fake {
     }
 }
 
+/// Nobody online.
+impl netherforge_platform::FakePlayerOps for Fake {
+    fn online(&self) -> Vec<netherforge_platform::PlayerRef> {
+        Vec::new()
+    }
+}
+
 impl FakePlatform for Fake {
+    fn players(&self) -> &dyn netherforge_platform::PlayerOps {
+        self
+    }
     fn info(&self) -> ServerInfo {
         ServerInfo {
             minecraft_version: "26.3".into(),

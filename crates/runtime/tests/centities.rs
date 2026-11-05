@@ -474,6 +474,14 @@ impl FakeWorldOps for Fake {
     }
 }
 
+impl netherforge_platform::FakePermissionOps for Fake {
+    fn apply(&self, player: Uuid, nodes: std::collections::HashMap<String, bool>) {
+        let mut nodes: Vec<String> = nodes.into_iter().map(|(n, v)| format!("{n}={v}")).collect();
+        nodes.sort();
+        self.call(format!("permissions {} [{}]", player.0, nodes.join(" ")));
+    }
+}
+
 impl FakePlatform for Fake {
     fn info(&self) -> ServerInfo {
         ServerInfo {
@@ -492,6 +500,9 @@ impl FakePlatform for Fake {
         self
     }
     fn worlds(&self) -> &dyn WorldOps {
+        self
+    }
+    fn permissions(&self) -> &dyn netherforge_platform::PermissionOps {
         self
     }
     fn client_entities(&self) -> &dyn netherforge_platform::ClientEntityOps {
@@ -2105,4 +2116,72 @@ nf.worlds.default():players()[1]:data().coins = 3
         name: "scores".into(),
     };
     assert_eq!(store.data(&named).as_deref(), Some(r#"{"top":2}"#));
+}
+
+#[test]
+fn permissions_scripts_set_are_kept_and_held_while_the_project_runs() {
+    use netherforge_platform::{PlatformEvents, game_event};
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let store = std::rc::Rc::new(netherforge_runtime::store::Store::in_memory());
+    let manifest = r#"{ "formatVersion": 1, "name": "Demo", "namespace": "demo", "version": "1.0.0", "minecraft": "26.3", "allow": { "permissions": ["shop"] } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", manifest),
+        (
+            "modules/vip/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+alex:set_permission("shop.vip", true)
+print(pcall(alex.set_permission, alex, "admin.ban", true))
+print(pcall(alex.set_permission, alex, "Not A Node", true))
+print(alex:permissions()["shop.vip"], alex:unset_permission("nope"))
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start_with(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        store.clone(),
+    ));
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "false\tmodules/vip/init.lua:4: Player:set_permission needs permission \"admin.ban\", which package \"demo\" hasn't allowed: add it (or a node above it) to allow.permissions in its netherforge.json (it lists: shop)",
+            "false\tmodules/vip/init.lua:5: \"Not A Node\" isn't a permission node (lowercase letters, digits, _ and -, in parts separated by dots (like shop.vip), at most 255 characters)",
+            "true\tfalse",
+        ]
+    );
+    assert!(
+        calls.contains(&"permissions 77 [shop.vip=true]".to_owned()),
+        "{calls:?}"
+    );
+    // They come back: the server forgot, and it's applied again.
+    let alex = netherforge_platform::PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    server.game().player_join(&mut game_event::PlayerJoin {
+        player: alex,
+        first_join: false,
+        message: None,
+    });
+    assert!(
+        platform
+            .take()
+            .contains(&"permissions 77 [shop.vip=true]".to_owned())
+    );
+    // The project stops: everyone loses what it set; the store keeps it for the next run.
+    server.session_mut().stop();
+    assert!(platform.take().contains(&"permissions 77 []".to_owned()));
+    store.commit();
+    assert_eq!(
+        store
+            .permissions_of("demo")
+            .get(&Uuid(77))
+            .and_then(|n| n.get("shop.vip")),
+        Some(&true)
+    );
 }

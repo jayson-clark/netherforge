@@ -34,6 +34,8 @@ pub struct Shared {
     pub store: Rc<crate::store::Store>,
     /// Scripts' saved tables: `centity:data()`, `player:data()`, `nf.data(name)`.
     pub data: RefCell<crate::data::ScriptData>,
+    /// The permission nodes scripts set on players.
+    pub permissions: RefCell<crate::permissions::Permissions>,
     /// Natural spawning: its passes, rules and scripts' conditions.
     pub spawner: RefCell<crate::centity::natural::Spawner>,
     /// The pictures scripts hold.
@@ -59,6 +61,7 @@ impl Shared {
             platform,
             store,
             data: RefCell::default(),
+            permissions: RefCell::default(),
             centities: RefCell::default(),
             font: RefCell::default(),
             centity_scripts: RefCell::default(),

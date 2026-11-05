@@ -12,6 +12,7 @@
 //! transaction a tick) and moving a file that isn't a database aside.
 
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use indexmap::IndexMap;
@@ -375,6 +376,54 @@ impl Store {
                     Owner::Named { namespace, name } => c.execute(
                         "DELETE FROM named_data WHERE namespace = ?1 AND name = ?2",
                         params![namespace, name],
+                    )?,
+                };
+                Ok(())
+            }),
+        );
+    }
+}
+
+impl Store {
+    /// Every node `namespace`'s scripts set, by player.
+    pub fn permissions_of(&self, namespace: &str) -> BTreeMap<Uuid, BTreeMap<String, bool>> {
+        self.commit();
+        let mut out: BTreeMap<Uuid, BTreeMap<String, bool>> = BTreeMap::new();
+        let Ok(mut statement) = self
+            .connection
+            .prepare("SELECT player, node, value FROM permissions WHERE namespace = ?1")
+        else {
+            return out;
+        };
+        let rows = statement.query_map(params![namespace], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, i64>(2)?,
+            ))
+        });
+        for (player, node, value) in rows.into_iter().flatten().flatten() {
+            if let Some(player) = crate::events::parse_uuid(&player) {
+                out.entry(player).or_default().insert(node, value != 0);
+            }
+        }
+        out
+    }
+
+    /// Sets `node` on `player` for `namespace`, or takes it off when `value` is none.
+    pub fn set_permission(&self, namespace: &str, player: Uuid, node: &str, value: Option<bool>) {
+        let (namespace, player, node) = (namespace.to_owned(), uuid_text(&player), node.to_owned());
+        self.stage(
+            format!("permissions {namespace} {player} {node}"),
+            Box::new(move |c| {
+                match value {
+                    None => c.execute(
+                        "DELETE FROM permissions WHERE namespace = ?1 AND player = ?2 AND node = ?3",
+                        params![namespace, player, node],
+                    )?,
+                    Some(value) => c.execute(
+                        "INSERT INTO permissions (namespace, player, node, value) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (namespace, player, node) DO UPDATE SET value = excluded.value",
+                        params![namespace, player, node, i64::from(value)],
                     )?,
                 };
                 Ok(())

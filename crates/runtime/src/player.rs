@@ -2,7 +2,7 @@
 //! they're offline; what works either way (bans, the whitelist, when they first played) needs only a UUID.
 //! Their stats and buffs are the centities' stat sheets (`crate::stats`, `Holder::Player`).
 //!
-//! Not yet, each with its area: sounds and particles (effects), permissions (the store), skies, recipes,
+//! Not yet, each with its area: sounds and particles (effects), skies, recipes,
 //! advancements, menus and dialogs, who's listed for whom and below-name text (teams), boss bars, resource
 //! packs, and `player:session()`.
 
@@ -40,6 +40,17 @@ const STORAGE_MAX: i64 = 256;
 /// Their UUID, for what works whether they're online or not; a handle that doesn't name anyone is an error.
 fn anyone(this: &handles::Player) -> ApiResult<Uuid> {
     parse_uuid(&this.id).ok_or_else(|| err(format!("{} isn't a player's id", this.id)))
+}
+
+/// A permission node a script gave; anything else is an error.
+fn permission_node(node: &str) -> ApiResult<String> {
+    if !netherforge_format::names::is_permission_node(node) {
+        return Err(err(format!(
+            "\"{node}\" isn't a permission node ({})",
+            netherforge_format::names::PERMISSION_NODE_RULE
+        )));
+    }
+    Ok(node.to_owned())
 }
 
 /// A cooldown group's key (an item kind is its own group), namespaced.
@@ -158,6 +169,44 @@ impl GameContext {
             return Ok(None);
         };
         Ok(Some((world, at)))
+    }
+}
+
+impl GameContext {
+    /// That the calling package allows `node` in its `netherforge.json` (Kotlin's `checkPermission`); code no
+    /// package's scope runs needs every package to.
+    fn check_permission(&self, node: &str, what: &str) -> ApiResult<()> {
+        let state = self.shared.permissions.borrow();
+        let Some(scope) = self.scripts.host().running_scope() else {
+            if !state.allows.is_empty() && state.allows.values().all(|a| a.allows_permission(node))
+            {
+                return Ok(());
+            }
+            return Err(err(format!(
+                "{what} needs permission \"{node}\" and was called by no package's code, so every package must allow it"
+            )));
+        };
+        let namespace = self
+            .scripts
+            .namespace(scope)
+            .unwrap_or_else(|| state.namespace.clone());
+        let allow = state.allows.get(&namespace);
+        if allow.is_some_and(|a| a.allows_permission(node)) {
+            return Ok(());
+        }
+        let mut listed: Vec<String> = allow
+            .and_then(|a| a.permissions.clone())
+            .unwrap_or_default();
+        listed.sort();
+        let lists = if listed.is_empty() {
+            " (it lists none)".to_owned()
+        } else {
+            format!(" (it lists: {})", listed.join(", "))
+        };
+        Err(err(format!(
+            "{what} needs permission \"{node}\", which package \"{namespace}\" hasn't allowed: add it (or a node above it) to allow.permissions in its {}{lists}",
+            netherforge_format::manifest::FILE_NAME
+        )))
     }
 }
 
@@ -355,13 +404,29 @@ impl PlayerApi for GameContext {
         permission: String,
         value: bool,
     ) -> ApiResult<()> {
-        <Unported as PlayerApi>::set_permission(&Unported, this, permission, value)
+        let node = permission_node(&permission)?;
+        self.check_permission(&node, "Player:set_permission")?;
+        crate::permissions::set(&self.shared, anyone(this)?, &node, value);
+        Ok(())
     }
     fn unset_permission(&self, this: &handles::Player, permission: String) -> ApiResult<bool> {
-        <Unported as PlayerApi>::unset_permission(&Unported, this, permission)
+        let node = permission_node(&permission)?;
+        Ok(crate::permissions::unset(
+            &self.shared,
+            anyone(this)?,
+            &node,
+        ))
     }
     fn permissions(&self, this: &handles::Player) -> ApiResult<BTreeMap<String, bool>> {
-        <Unported as PlayerApi>::permissions(&Unported, this)
+        let id = anyone(this)?;
+        Ok(self
+            .shared
+            .permissions
+            .borrow()
+            .nodes
+            .get(&id)
+            .cloned()
+            .unwrap_or_default())
     }
     fn is_operator(&self, this: &handles::Player) -> ApiResult<bool> {
         Ok(parse_uuid(&this.id).is_some_and(|id| self.players().is_operator(id)))

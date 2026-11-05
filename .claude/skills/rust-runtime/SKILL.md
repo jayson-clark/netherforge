@@ -551,6 +551,15 @@ saved and is logged once while it stays so. The store's rows are its `centity_da
 `named_data` (`Store::data`, `put_data`, `delete_data`). `nf` is `NfContext` (`lib.rs`): `Scripts`' functions,
 with `nf.data` the session's. Not yet: tagged values (a handle in a table is reported and skipped).
 
+## Permissions (`crates/runtime/src/permissions.rs`)
+
+Kotlin's `PlayerPermissions`: the nodes scripts set (`player:set_permission`), kept in the store's `permissions`
+rows under the project's namespace, held on each online player through `PermissionOps::apply`. What applies is
+what's kept **and** what some package's `allow.permissions` allows now. The service starts before any script
+(so `has_permission` already answers), re-applies on join, and takes everything off at stop. Setting a node
+needs the calling package to allow it (`check_permission`, Kotlin's words); code no scope runs needs every
+package to.
+
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 
 The roadmap's "describe `Platform` and `PlatformEvents` in a language-neutral spec, and generate

@@ -25,6 +25,7 @@ pub mod images;
 pub mod items;
 pub mod living;
 pub mod modules;
+pub mod permissions;
 pub mod player;
 pub mod scripts;
 pub mod server;
