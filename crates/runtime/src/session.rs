@@ -531,6 +531,7 @@ impl Service for CentitiesService {
     fn stop(&mut self, room: &Room, _platform: &dyn Platform) {
         self.context(room).stop_all();
         self.shared.stats.borrow_mut().clear();
+        self.shared.physics.borrow_mut().clear();
     }
 }
 

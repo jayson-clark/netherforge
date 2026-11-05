@@ -23,6 +23,7 @@ pub mod keyframes;
 pub mod movers;
 pub mod pathing;
 pub mod paths;
+pub mod physics;
 pub mod quat;
 pub mod ropes;
 pub mod spatial;

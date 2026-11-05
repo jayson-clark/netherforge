@@ -796,6 +796,11 @@ impl CentityContext {
                 }
             }
             self.move_body(id);
+        }
+        // Every body in the room is stepped together, once every instance has moved.
+        self.step_physics();
+        let ids: Vec<Uuid> = self.shared.centities.borrow().all().map(|i| i.id).collect();
+        for id in ids {
             if !self.live(id) {
                 continue;
             }
@@ -809,6 +814,67 @@ impl CentityContext {
                 .with_drawing(|c, drawing| c.sync(platform, drawing, id));
         }
         self.touches();
+    }
+
+    /// One step of every rigid body, then `collide`, `wake` and `sleep` on their nodes.
+    fn step_physics(&self) {
+        let (collisions, settled) = {
+            let mut centities = self.shared.centities.borrow_mut();
+            if !centities
+                .all()
+                .any(|i| i.bodies.iter().any(Option::is_some))
+                && !self.shared.physics.borrow().has_bodies()
+            {
+                return;
+            }
+            self.shared
+                .physics
+                .borrow_mut()
+                .step(&*self.shared.platform, &mut centities)
+        };
+        for c in collisions {
+            if !self.live(c.instance) {
+                continue;
+            }
+            let centity = uuid_text(&c.instance);
+            let node = Self::node_handle(&centity, &c.node);
+            let Some(target) = self.handle_target(Handle::Node(node.clone())) else {
+                continue;
+            };
+            if !self.scripts.listening(&target, "collide") {
+                continue;
+            }
+            let event = shapes::CollideEvent {
+                node,
+                other: c.other.map(|(o, n)| Self::node_handle(&uuid_text(&o), &n)),
+                hit_position: value(c.position),
+                hit_normal: value(c.normal),
+                speed: c.speed,
+            };
+            let lua = self.scripts.host().lua().clone();
+            if let Ok(Value::Table(fields)) = codecs::CollideEvent.push(&lua, event) {
+                self.scripts.raise(&target, "collide", fields);
+            }
+        }
+        for s in settled {
+            if !self.live(s.instance) {
+                continue;
+            }
+            let node = Self::node_handle(&uuid_text(&s.instance), &s.node);
+            let Some(target) = self.handle_target(Handle::Node(node.clone())) else {
+                continue;
+            };
+            let event = if s.asleep { "sleep" } else { "wake" };
+            if !self.scripts.listening(&target, event) {
+                continue;
+            }
+            let lua = self.scripts.host().lua().clone();
+            if let Ok(Value::Table(fields)) =
+                codecs::NodeEvent.push(&lua, shapes::NodeEvent { node })
+            {
+                self.scripts.raise(&target, event, fields);
+            }
+        }
     }
 
     /// `touch`: after every instance has moved this tick, each one something listens to `touch` on hears what
@@ -2589,6 +2655,75 @@ fn is_color(color: &str) -> bool {
 }
 
 impl CentityContext {
+    /// Changes a node's body and wakes it; false for a node without `physics`.
+    fn change_body(
+        &self,
+        this: &handles::Node,
+        f: impl FnOnce(&mut super::physics::BodyState),
+    ) -> bool {
+        self.with_node(this, |i, at| {
+            let Some(b) = &mut i.bodies[at] else {
+                return false;
+            };
+            f(b);
+            b.wake();
+            true
+        })
+        .unwrap_or(false)
+    }
+
+    /// Sets or adds to a body's velocity, or (in degrees a second) its spin, and wakes it.
+    fn motion(
+        &self,
+        this: &handles::Node,
+        v: values::Vec3,
+        spin: bool,
+        add: bool,
+    ) -> ApiResult<bool> {
+        let v = finite_velocity(v, if spin { "angular_velocity" } else { "velocity" })?;
+        Ok(self.change_body(this, |b| {
+            if spin {
+                let r = Vec3(v.0.to_radians(), v.1.to_radians(), v.2.to_radians());
+                b.angular_velocity = if add { b.angular_velocity + r } else { r };
+            } else {
+                b.velocity = if add { b.velocity + v } else { v };
+            }
+        }))
+    }
+
+    /// Pushes a node's body with `impulse` (along the world's axes) at world `point`, or through its centre.
+    fn impulse(&self, this: &handles::Node, impulse: Vec3, point: Option<Vec3>) -> bool {
+        let Some((id, has)) = self.with_node(this, |i, at| (i.id, i.bodies[at].is_some())) else {
+            return false;
+        };
+        if !has {
+            return false;
+        }
+        let pushed = self
+            .shared
+            .physics
+            .borrow_mut()
+            .with_body(id, &this.name, |body| {
+                use rapier3d_f64::math::Vector;
+                let i = Vector::new(impulse.0, impulse.1, impulse.2);
+                match point {
+                    Some(p) => body.apply_impulse_at_point(i, Vector::new(p.0, p.1, p.2), true),
+                    None => body.apply_impulse(i, true),
+                }
+                let (v, w) = (body.linvel(), body.angvel());
+                (Vec3(v.x, v.y, v.z), Vec3(w.x, w.y, w.z))
+            });
+        let mass = self.mass(this).unwrap_or(1.0).max(1e-3);
+        self.change_body(this, |b| match pushed {
+            Some((v, w)) => {
+                b.velocity = v;
+                b.angular_velocity = w;
+            }
+            // Not made yet: through its centre, by its mass.
+            None => b.velocity = b.velocity + impulse * (1.0 / mass),
+        })
+    }
+
     fn channel(&self, this: &handles::Node, channel: Channel) -> Option<values::Vec3> {
         self.with_node(this, |i, at| value(i.get(at, channel)))
     }
@@ -3483,37 +3618,59 @@ impl NodeApi for CentityContext {
             .unwrap_or(false))
     }
 
-    // ---- not ported yet ----
-    fn image(&self, this: &handles::Node) -> ApiResult<Option<handles::Image>> {
-        NodeApi::image(&Unported, this)
-    }
-    fn set_image(&self, this: &handles::Node, image: Option<handles::Image>) -> ApiResult<bool> {
-        NodeApi::set_image(&Unported, this, image)
-    }
     fn velocity(&self, this: &handles::Node) -> ApiResult<Option<values::Vec3>> {
-        NodeApi::velocity(&Unported, this)
+        Ok(self.with_node(this, |i, at| {
+            value(i.bodies[at].as_ref().map_or(Vec3::ZERO, |b| b.velocity))
+        }))
     }
     fn set_velocity(&self, this: &handles::Node, velocity: values::Vec3) -> ApiResult<bool> {
-        NodeApi::set_velocity(&Unported, this, velocity)
+        self.motion(this, velocity, false, false)
     }
     fn add_velocity(&self, this: &handles::Node, velocity: values::Vec3) -> ApiResult<bool> {
-        NodeApi::add_velocity(&Unported, this, velocity)
+        self.motion(this, velocity, false, true)
     }
     fn angular_velocity(&self, this: &handles::Node) -> ApiResult<Option<values::Vec3>> {
-        NodeApi::angular_velocity(&Unported, this)
+        Ok(self.with_node(this, |i, at| {
+            let r = i.bodies[at]
+                .as_ref()
+                .map_or(Vec3::ZERO, |b| b.angular_velocity);
+            value(Vec3(r.0.to_degrees(), r.1.to_degrees(), r.2.to_degrees()))
+        }))
     }
     fn set_angular_velocity(
         &self,
         this: &handles::Node,
         angular_velocity: values::Vec3,
     ) -> ApiResult<bool> {
-        NodeApi::set_angular_velocity(&Unported, this, angular_velocity)
+        self.motion(this, angular_velocity, true, false)
     }
     fn mass(&self, this: &handles::Node) -> ApiResult<f64> {
-        NodeApi::mass(&Unported, this)
+        let Some((id, name)) = self.with_node(this, |i, _| (i.id, this.name.clone())) else {
+            return Ok(0.0);
+        };
+        if let Some(mass) = self
+            .shared
+            .physics
+            .borrow_mut()
+            .with_body(id, &name, |b| b.mass())
+        {
+            return Ok(mass);
+        }
+        let game = self.shared.platform.game();
+        Ok(self
+            .with_node(this, |i, at| {
+                let node = &i.definition.nodes[at];
+                let physics = node.physics.as_ref()?;
+                let hitbox = node.hitbox.as_ref().map(|_| super::boxes_of(game, i, at));
+                let boxes = super::physics::collider_boxes(physics, hitbox);
+                let scale = i.world_matrix(at).scale_of();
+                Some(super::physics::mass_of(physics, &boxes, scale))
+            })
+            .flatten()
+            .unwrap_or(0.0))
     }
     fn apply_impulse(&self, this: &handles::Node, impulse: values::Vec3) -> ApiResult<bool> {
-        NodeApi::apply_impulse(&Unported, this, impulse)
+        Ok(self.impulse(this, vec(impulse), None))
     }
     fn apply_impulse_at(
         &self,
@@ -3521,36 +3678,70 @@ impl NodeApi for CentityContext {
         impulse: values::Vec3,
         point: values::Vec3,
     ) -> ApiResult<bool> {
-        NodeApi::apply_impulse_at(&Unported, this, impulse, point)
-    }
-    fn is_on_ground(&self, this: &handles::Node) -> ApiResult<bool> {
-        NodeApi::is_on_ground(&Unported, this)
-    }
-    fn is_asleep(&self, this: &handles::Node) -> ApiResult<bool> {
-        NodeApi::is_asleep(&Unported, this)
-    }
-    fn wake(&self, this: &handles::Node) -> ApiResult<()> {
-        NodeApi::wake(&Unported, this)
+        Ok(self.impulse(this, vec(impulse), Some(vec(point))))
     }
     fn apply_force(&self, this: &handles::Node, force: values::Vec3) -> ApiResult<bool> {
-        NodeApi::apply_force(&Unported, this, force)
+        // A force for one tick is the impulse it adds up to over that tick.
+        Ok(self.impulse(this, vec(force) * SECONDS_PER_TICK, None))
+    }
+    fn is_on_ground(&self, this: &handles::Node) -> ApiResult<bool> {
+        Ok(self
+            .with_node(this, |i, at| {
+                i.bodies[at].as_ref().is_some_and(|b| b.on_ground)
+            })
+            .unwrap_or(false))
+    }
+    fn is_asleep(&self, this: &handles::Node) -> ApiResult<bool> {
+        Ok(self
+            .with_node(this, |i, at| {
+                i.bodies[at].as_ref().is_some_and(|b| b.asleep)
+            })
+            .unwrap_or(false))
+    }
+    fn wake(&self, this: &handles::Node) -> ApiResult<()> {
+        self.with_node(this, |i, at| {
+            if let Some(b) = &mut i.bodies[at] {
+                b.wake();
+            }
+        });
+        Ok(())
     }
     fn has_gravity(&self, this: &handles::Node) -> ApiResult<bool> {
-        NodeApi::has_gravity(&Unported, this)
+        Ok(self
+            .with_node(this, |i, at| {
+                i.bodies[at].as_ref().is_some_and(|b| b.gravity)
+            })
+            .unwrap_or(false))
     }
     fn set_gravity(&self, this: &handles::Node, gravity: bool) -> ApiResult<bool> {
-        NodeApi::set_gravity(&Unported, this, gravity)
+        Ok(self.change_body(this, |b| b.gravity = gravity))
     }
     fn is_kinematic(&self, this: &handles::Node) -> ApiResult<bool> {
-        NodeApi::is_kinematic(&Unported, this)
+        Ok(self
+            .with_node(this, |i, at| {
+                i.bodies[at].as_ref().is_some_and(|b| b.kinematic)
+            })
+            .unwrap_or(false))
     }
     fn set_kinematic(&self, this: &handles::Node, kinematic: bool) -> ApiResult<bool> {
-        NodeApi::set_kinematic(&Unported, this, kinematic)
+        Ok(self.change_body(this, |b| b.kinematic = kinematic))
     }
     fn is_physics_enabled(&self, this: &handles::Node) -> ApiResult<bool> {
-        NodeApi::is_physics_enabled(&Unported, this)
+        Ok(self
+            .with_node(this, |i, at| {
+                i.bodies[at].as_ref().is_some_and(|b| b.enabled)
+            })
+            .unwrap_or(false))
     }
     fn set_physics_enabled(&self, this: &handles::Node, enabled: bool) -> ApiResult<bool> {
-        NodeApi::set_physics_enabled(&Unported, this, enabled)
+        Ok(self.change_body(this, |b| b.enabled = enabled))
+    }
+
+    // ---- not ported yet ----
+    fn image(&self, this: &handles::Node) -> ApiResult<Option<handles::Image>> {
+        NodeApi::image(&Unported, this)
+    }
+    fn set_image(&self, this: &handles::Node, image: Option<handles::Image>) -> ApiResult<bool> {
+        NodeApi::set_image(&Unported, this, image)
     }
 }

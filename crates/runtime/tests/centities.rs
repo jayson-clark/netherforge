@@ -1201,3 +1201,79 @@ print(pcall(w.move_to, w, vector.create(0, 64, 0), { speed = 50 }))
     }
     assert_eq!(lines, ["arrived\ttrue\t2"], "{lines:?}");
 }
+
+#[test]
+fn a_physics_body_falls_lands_settles_and_is_pushed() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let crate_ = r#"{ "nodes": { "box": { "display": { "type": "block", "block": "minecraft:barrel" }, "physics": {} } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/crate/centity.json", crate_),
+        (
+            "modules/game/init.lua",
+            r#"
+local c = nf.centities.spawn("crate", vector.create(0.5, 67, 0.5))
+local b = c:node("box")
+b:on("collide", function(e) print("collide", e.other, e.hit_normal.y > 0.5, e.speed > 1) end)
+b:on("sleep", function() print("sleep", string.format("%.2f", b:world_position().y), b:is_on_ground()) end)
+b:on("wake", function() print("wake") end)
+print(b:mass(), b:has_gravity(), b:is_physics_enabled())
+nf.after(120, function()
+    print(b:apply_impulse(vector.create(0, 5, 0)), b:velocity().y > 0)
+end)
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(printed(&start), ["1\ttrue\ttrue"], "{start:?}");
+    let mut lines = Vec::new();
+    for _ in 0..130 {
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    assert!(
+        lines
+            .first()
+            .is_some_and(|l| l == "collide\tnil\ttrue\ttrue"),
+        "{lines:?}"
+    );
+    // It comes to rest on the floor at y 64 (its unit cube's bottom is its origin).
+    assert!(lines.iter().any(|l| l == "sleep\t64.00\ttrue"), "{lines:?}");
+    assert!(lines.iter().any(|l| l == "true\ttrue"), "{lines:?}");
+    assert!(lines.iter().any(|l| l == "wake"), "{lines:?}");
+}
+
+#[test]
+fn a_body_lands_on_another_centitys_hitbox_and_on_another_centitys_body() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let crate_ = r#"{ "nodes": { "box": { "display": { "type": "block", "block": "minecraft:barrel" }, "physics": {} } } }"#;
+    let table = r#"{ "nodes": { "top": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/crate/centity.json", crate_),
+        ("centities/table/centity.json", table),
+        (
+            "modules/game/init.lua",
+            r#"
+nf.centities.spawn("table", vector.create(0, 64, 0))
+local a = nf.centities.spawn("crate", vector.create(0, 66, 0))
+local b = nf.centities.spawn("crate", vector.create(5, 64, 0))
+local c = nf.centities.spawn("crate", vector.create(5, 67, 0))
+nf.after(100, function()
+    print(string.format("%.2f %.2f %.2f",
+        a:node("box"):world_position().y, b:node("box"):world_position().y, c:node("box"):world_position().y))
+end)
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    platform.take();
+    let mut lines = Vec::new();
+    for _ in 0..101 {
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    // On the table's hitbox; on the floor; on the other crate.
+    assert_eq!(lines, ["65.00 64.00 65.00"], "{lines:?}");
+}

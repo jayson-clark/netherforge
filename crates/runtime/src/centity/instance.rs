@@ -174,6 +174,8 @@ pub struct Instance {
     pub opened_doors: Vec<super::paths::Doorway>,
     /// Its walk (`move_to`), while it's on one.
     pub walk: Option<super::paths::Walk>,
+    /// Each node's rigid body, for the nodes with `physics`.
+    pub bodies: Vec<Option<super::physics::BodyState>>,
     /// Its flight, while it's launched.
     pub flight: Option<super::flights::Flight>,
     /// Its `body`, when its file gives it one or a script did (`set_body`).
@@ -269,6 +271,7 @@ impl Instance {
             health: None,
             mover: None,
             flight: None,
+            bodies: Vec::new(),
             walk: None,
             opened_doors: Vec::new(),
             follower: None,
@@ -371,6 +374,16 @@ impl Instance {
         self.jumps = vec![false; n];
         self.edited = vec![false; n];
         self.unclickable = vec![false; n];
+        // A reload starts every body again from the file's pose, at rest.
+        self.bodies = next
+            .nodes
+            .iter()
+            .map(|node| {
+                node.physics
+                    .is_some()
+                    .then(super::physics::BodyState::default)
+            })
+            .collect();
         self.due = vec![0; n];
         self.all_edited = true;
         self.animations.stop_all();
@@ -478,6 +491,12 @@ impl Instance {
         self.content_changed = carry(&from, &self.content_changed, |_| false);
         self.unclickable = carry(&from, &self.unclickable, |_| false);
         self.interpolation = carry(&from, &self.interpolation, |_| DEFAULT_INTERPOLATION_TICKS);
+        self.bodies = carry(&from, &self.bodies, |i| {
+            nodes[i]
+                .physics
+                .is_some()
+                .then(super::physics::BodyState::default)
+        });
         let n = nodes.len();
         self.edited = vec![false; n];
         self.jumps = vec![false; n];

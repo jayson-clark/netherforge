@@ -23,6 +23,8 @@ pub struct Shared {
     pub next_flight: std::cell::Cell<u64>,
     /// Places searched this tick by walks finding a new path on their own.
     pub path_nodes: std::cell::Cell<usize>,
+    /// Nodes' rigid bodies.
+    pub physics: RefCell<crate::centity::physics::Physics>,
     /// Players' and centities' stats and buffs.
     pub stats: RefCell<crate::stats::StatSheets>,
     /// The project's modules, while the session runs: what a resource's script requires through.
@@ -38,6 +40,7 @@ impl Shared {
             centity_scripts: RefCell::default(),
             next_flight: std::cell::Cell::new(0),
             path_nodes: std::cell::Cell::new(0),
+            physics: RefCell::default(),
             stats: RefCell::default(),
             modules: RefCell::default(),
         })
