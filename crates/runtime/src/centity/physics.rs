@@ -6,8 +6,9 @@
 //!
 //! What a body runs into:
 //!  - the world's blocks, as fixed colliders built from their live collision boxes, by chunk section, around
-//!    the awake bodies; a section is read again once it's older than `SECTION_TICKS` (the world's block
-//!    changes reach the runtime with `PlatformEvents`), and let go of when nothing has needed it for a while;
+//!    the awake bodies; a section is read again when a block in it is placed or broken (`block_changed`,
+//!    waking the bodies near it), and once it's older than `SECTION_TICKS` (for the changes no event says:
+//!    an explosion, a piston, fluids), and let go of when nothing has needed it for a while;
 //!  - every centity's hitboxes that no body carries, as fixed colliders, measured again when they change;
 //!  - every other body.
 //!
@@ -316,6 +317,54 @@ impl Physics {
     /// Every body, its section and scenery let go of: the session is ending.
     pub fn clear(&mut self) {
         *self = Physics::default();
+    }
+
+    /// The block at `x, y, z` of `world` was placed or broken: its section's colliders go, to be built again
+    /// from the world as it is by the next step, and every body near it wakes (a crate resting on it falls).
+    pub fn block_changed(&mut self, world: &str, x: i32, y: i32, z: i32) {
+        let Some(w) = self.worlds.get_mut(world) else {
+            return;
+        };
+        let key = (
+            x.div_euclid(SECTION),
+            y.div_euclid(SECTION),
+            z.div_euclid(SECTION),
+        );
+        if let Some(old) = w.sections.remove(&key) {
+            for c in old.colliders {
+                w.remove_collider(c);
+            }
+        }
+        let (lo, hi) = (
+            Vec3(f64::from(x) - 1.0, f64::from(y) - 1.0, f64::from(z) - 1.0),
+            Vec3(f64::from(x) + 2.0, f64::from(y) + 2.0, f64::from(z) + 2.0),
+        );
+        let near: Vec<RigidBodyHandle> = w
+            .rapier
+            .bodies
+            .iter()
+            .filter(|(_, body)| body.is_dynamic())
+            .filter(|(_, body)| {
+                body.colliders().iter().any(|c| {
+                    w.rapier.colliders.get(*c).is_some_and(|collider| {
+                        let aabb = collider.compute_aabb();
+                        let (a, b) = (fv(aabb.mins), fv(aabb.maxs));
+                        a.0 <= hi.0
+                            && b.0 >= lo.0
+                            && a.1 <= hi.1
+                            && b.1 >= lo.1
+                            && a.2 <= hi.2
+                            && b.2 >= lo.2
+                    })
+                })
+            })
+            .map(|(handle, _)| handle)
+            .collect();
+        for handle in near {
+            if let Some(body) = w.rapier.bodies.get_mut(handle) {
+                body.wake_up(true);
+            }
+        }
     }
 
     /// Brings Rapier in line with every instance (bodies made, moved, retyped, removed), steps each world a

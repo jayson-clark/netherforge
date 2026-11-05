@@ -8,10 +8,11 @@
  *    `Player`, a `Uuid` for an entity, a `BlockRef`, a world's name; a writable field written back
  *    through `&mut`, a lazy one a closure), and `WatchedEvent`.
  *  - `crates/runtime/src/generated/game_event_dispatch.rs`: the runtime's side
- *    (`GameEventDispatch`, over the runtime's `EventSession`): each event's handles made, its
- *    path walked (the handle in `raised.first`, then `nf`), its payload built only when
- *    something listens, and its writable fields read back into the platform's payload within
- *    their bounds.
+ *    (`GameEventDispatch`, over the runtime's `EventSource`): the session opened once per event,
+ *    its `Around` hook (what the runtime does around the event, defaulting to nothing) given the
+ *    raise: each event's handles made, its path walked (the handle in `raised.first`, then `nf`),
+ *    its payload built only when something listens, and its writable fields read back into the
+ *    platform's payload within their bounds.
  */
 import type { Codec } from './bindings.ts'
 import { GENERATED_BY } from './common.ts'
@@ -250,9 +251,37 @@ function stages(it: RaisedEvent): { first?: [string, string]; nf: [string, strin
   return { first: [it.first.cls, name], nf }
 }
 
+/** The event's payload type and what raising it returns. */
+const payloadType = (it: RaisedEvent) => `game_event::${it.payload.name}`
+const returns = (it: RaisedEvent) => (it.event.cancellable ? ' -> bool' : '')
+
+/** `GameEvents`' method: the session opened once, then its `Around` hook given the raise. */
 function dispatchMethod(it: RaisedEvent): string[] {
+  const unchanged = it.event.cancellable ? 'false' : ''
+  const name = snake(it.method)
+  return [
+    `${sinkSignature(it)} {`,
+    `    let Some(s) = self.0.open() else { return ${unchanged}; };`,
+    `    s.${name}(event, &|event| ${name}(&s, event))`,
+    '}',
+  ]
+}
+
+/** `Around`'s method: by default only the raise. */
+function aroundMethod(it: RaisedEvent): string[] {
+  const name = snake(it.method)
+  const raise = `&dyn Fn(&mut ${payloadType(it)})${returns(it)}`
+  return [
+    `fn ${name}(&self, event: &mut ${payloadType(it)}, raise: ${raise})${returns(it)} {`,
+    '    raise(event)',
+    '}',
+  ]
+}
+
+/** Raising one event to an open session's scripts. */
+function raiseFunction(it: RaisedEvent): string[] {
   const unchanged = it.event.cancellable ? 'return false;' : 'return;'
-  const body: string[] = ['let s = &self.0;', `if !s.running() { ${unchanged} }`]
+  const body: string[] = []
   const { first, nf } = stages(it)
   const nfStage = `(${JSON.stringify(nf[1])}, None)`
   if (first && it.first) {
@@ -301,7 +330,11 @@ function dispatchMethod(it: RaisedEvent): string[] {
     )
   }
   if (it.event.cancellable) body.push('out.cancelled')
-  return [`${sinkSignature(it)} {`, ...body.map((l) => `    ${l}`), '}']
+  return [
+    `fn ${snake(it.method)}<S: EventSession>(s: &S, event: &mut ${payloadType(it)})${returns(it)} {`,
+    ...body.map((l) => `    ${l}`),
+    '}',
+  ]
 }
 
 export function dispatchRust(events: RaisedEvent[]): string {
@@ -323,17 +356,40 @@ export function dispatchRust(events: RaisedEvent[]): string {
     '',
     'use crate::events::EventSession;',
     '',
-    "/// `GameEvents` raising each event to `S`'s scripts.",
-    'pub struct GameEventDispatch<S: EventSession>(pub S);',
+    '/// Where the dispatch finds the session running now, opened once per event: none while no',
+    "/// project runs (or it can't be reached now), and every event then goes through unchanged.",
+    'pub trait EventSource {',
+    "    type Open<'b>: EventSession + Around where Self: 'b;",
+    "    fn open(&self) -> Option<Self::Open<'_>>;",
+    '}',
     '',
-    'impl<S: EventSession> GameEvents for GameEventDispatch<S> {',
+    "/// What the runtime does around an event besides raising it to scripts (the Kotlin runtime's",
+    '/// `RuntimeGameEvents` overrides): a service hears of it before or after, or adds to its answer.',
+    '/// `raise` raises it; each defaults to only that.',
+    'pub trait Around {',
   ]
+  events.forEach((it, k) => {
+    if (k) lines.push('')
+    lines.push(...aroundMethod(it).map((l) => `    ${l}`))
+  })
+  lines.push(
+    '}',
+    '',
+    "/// `GameEvents` raising each event to `S`'s session's scripts, through its `Around`.",
+    'pub struct GameEventDispatch<S: EventSource>(pub S);',
+    '',
+    'impl<S: EventSource> GameEvents for GameEventDispatch<S> {',
+  )
   events.forEach((it, k) => {
     if (k) lines.push('')
     lines.push(...dispatchMethod(it).map((l) => `    ${l}`))
   })
+  lines.push('}')
+  events.forEach((it) => {
+    lines.push('', ...raiseFunction(it))
+  })
   lines.push(
-    '}',
+    '',
     '',
     '/// What scripts listen to each watched event as, `(class, event)`: while any is listened to, it is watched.',
     'pub const WATCHED: &[(WatchedEvent, &[(&str, &str)])] = &[',

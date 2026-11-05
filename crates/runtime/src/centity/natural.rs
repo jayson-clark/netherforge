@@ -86,6 +86,11 @@ impl Spawner {
         }
     }
 
+    /// A player left: their passes go.
+    pub fn forget(&mut self, player: Uuid) {
+        self.due.remove(&player);
+    }
+
     fn unit(&mut self) -> f64 {
         (self.random.next_word() >> 11) as f64 / (1u64 << 53) as f64
     }

@@ -11,14 +11,17 @@ use netherforge_platform::{
     BlockRef, InventoryRef, ItemData, Location, Platform, PlayerRef, StatusEffectData, Uuid,
 };
 
+use std::cell::RefCell;
+
 use crate::Room;
 use crate::scripts::Target;
+use crate::session::Session;
 
 #[path = "generated/game_event_dispatch.rs"]
 #[rustfmt::skip]
 mod dispatch;
 
-pub use dispatch::{GameEventDispatch, RAISED, WATCHED};
+pub use dispatch::{Around, EventSource, GameEventDispatch, RAISED, WATCHED};
 
 /// One stage of an event's path: the event's name there, on a handle or on `nf` (none).
 pub type Stage<'a> = (&'a str, Option<Handle>);
@@ -31,8 +34,6 @@ pub struct Emitted {
 
 /// What the dispatch asks of the session running now.
 pub trait EventSession {
-    /// Whether a project runs: while none does, every event goes through unchanged.
-    fn running(&self) -> bool;
     /// Whether anything listens anywhere along `stages`: whether building the payload is worth it.
     fn listening(&self, stages: &[Stage]) -> bool;
     /// Raises `payload` (pushed with `codec`) along `stages`; none when it couldn't be.
@@ -95,16 +96,35 @@ pub fn pack(x: i32, y: i32, z: i32) -> i64 {
         | (i64::from(y) & 0xFFF)
 }
 
-/// The session running now, as the dispatch asks for it: its room (none while no project runs) and the
-/// server.
-pub struct Running<'a> {
-    pub room: Option<&'a Room>,
-    pub platform: &'a dyn Platform,
+/// The session running now, as the dispatch asks for it: open while the event is handled, and only while it
+/// runs (`Running::open`).
+pub struct Running<'b, 'a> {
+    session: std::cell::Ref<'b, Session<'a>>,
 }
 
-impl Running<'_> {
-    fn lua(&self) -> Option<Lua> {
-        self.room.map(|r| r.host().lua().clone())
+impl<'b, 'a> Running<'b, 'a> {
+    /// The session in `cell`, when it runs and isn't being changed (a reload, a stop: an event the server
+    /// raises meanwhile goes through unchanged).
+    pub fn open(cell: &'b RefCell<Session<'a>>) -> Option<Running<'b, 'a>> {
+        let session = cell.try_borrow().ok()?;
+        session.room()?;
+        Some(Running { session })
+    }
+
+    pub fn session(&self) -> &Session<'a> {
+        &self.session
+    }
+
+    pub fn room(&self) -> &Room {
+        self.session.room().expect("open only while it runs")
+    }
+
+    pub fn platform(&self) -> &dyn Platform {
+        self.session.platform()
+    }
+
+    fn lua(&self) -> Lua {
+        self.room().host().lua().clone()
     }
 
     fn target(&self, lua: &Lua, handle: &Option<Handle>) -> Option<Target> {
@@ -115,24 +135,18 @@ impl Running<'_> {
     }
 }
 
-impl EventSession for Running<'_> {
-    fn running(&self) -> bool {
-        self.room.is_some()
-    }
-
+impl EventSession for Running<'_, '_> {
     fn listening(&self, stages: &[Stage]) -> bool {
-        let (Some(room), Some(lua)) = (self.room, self.lua()) else {
-            return false;
-        };
+        let lua = self.lua();
         stages.iter().any(|(event, handle)| {
             self.target(&lua, handle)
-                .is_some_and(|target| room.scripts().listening(&target, event))
+                .is_some_and(|target| self.room().scripts().listening(&target, event))
         })
     }
 
     fn emit<C: Codec>(&self, stages: &[Stage], codec: C, payload: C::T) -> Option<Emitted> {
-        let room = self.room?;
-        let lua = self.lua()?;
+        let room = self.room();
+        let lua = self.lua();
         let Value::Table(fields) = codec.push(&lua, payload).ok()? else {
             return None;
         };
@@ -141,6 +155,8 @@ impl EventSession for Running<'_> {
             .filter_map(|(event, handle)| Some((self.target(&lua, handle)?, *event)))
             .collect();
         let delivered = room.scripts().raise_path(&path, fields, false);
+        // What a handler's scope let go of meanwhile goes now (a temporary centity it spawned).
+        self.session.released();
         Some(Emitted {
             cancelled: delivered.cancelled,
             fields: delivered.fields,
@@ -148,12 +164,12 @@ impl EventSession for Running<'_> {
     }
 
     fn read<C: Codec>(&self, out: &Emitted, field: &str, codec: C) -> Option<C::T> {
-        let lua = self.lua()?;
+        let lua = self.lua();
         let value: Value = out.fields.raw_get(field).ok()?;
         match codec.read(&lua, value, &format!("event.{field}")) {
             Ok(v) => Some(v),
             Err(mistake) => {
-                self.platform
+                self.platform()
                     .log()
                     .warn(format!("A handler left {}; it's left as it was", mistake.0));
                 None
@@ -240,7 +256,7 @@ impl EventSession for Running<'_> {
     }
 
     fn placed(&self, location: values::Location, was: &Location) -> Location {
-        let world = if self.platform.worlds().exists(location.world.name.clone()) {
+        let world = if self.platform().worlds().exists(location.world.name.clone()) {
             location.world.name
         } else {
             was.world.clone()
@@ -257,11 +273,11 @@ impl EventSession for Running<'_> {
 
     /// A handler's item, or the server's as it was when it's the same item or can't be read (said in the log).
     fn item_back(&self, after: values::Item, before: &ItemData) -> ItemData {
-        match crate::items::from_value(&after, "event.item", self.platform.game()) {
+        match crate::items::from_value(&after, "event.item", self.platform().game()) {
             Ok(item) if item == *before => before.clone(),
             Ok(item) => item,
             Err(mistake) => {
-                self.platform
+                self.platform()
                     .log()
                     .warn(format!("A handler left {mistake}; it's left as it was"));
                 before.clone()
@@ -277,7 +293,7 @@ impl EventSession for Running<'_> {
         let after = after?;
         Some(match before {
             Some(before) => self.item_back(after, before),
-            None => crate::items::from_value(&after, "event.item", self.platform.game()).ok()?,
+            None => crate::items::from_value(&after, "event.item", self.platform().game()).ok()?,
         })
     }
 
@@ -287,8 +303,52 @@ impl EventSession for Running<'_> {
             .enumerate()
             .filter_map(|(i, item)| match before.get(i) {
                 Some(was) => Some(self.item_back(item, was)),
-                None => crate::items::from_value(&item, "event.items", self.platform.game()).ok(),
+                None => crate::items::from_value(&item, "event.items", self.platform().game()).ok(),
             })
             .collect()
+    }
+}
+
+/// What the session's services do around the server's events (Kotlin's `RuntimeGameEvents`): they hear of a join
+/// before scripts and of a quit after, keep a chunk's centities once its scripts have had it, and physics reads
+/// again the blocks a placement changed.
+impl Around for Running<'_, '_> {
+    fn player_join(
+        &self,
+        event: &mut netherforge_platform::game_event::PlayerJoin,
+        raise: &dyn Fn(&mut netherforge_platform::game_event::PlayerJoin),
+    ) {
+        self.session.player_joined(&event.player);
+        raise(event)
+    }
+
+    fn player_quit(
+        &self,
+        event: &mut netherforge_platform::game_event::PlayerQuit,
+        raise: &dyn Fn(&mut netherforge_platform::game_event::PlayerQuit),
+    ) {
+        raise(event);
+        self.session.player_quit(&event.player);
+    }
+
+    fn chunk_unload(
+        &self,
+        event: &mut netherforge_platform::game_event::Chunk,
+        raise: &dyn Fn(&mut netherforge_platform::game_event::Chunk),
+    ) {
+        raise(event);
+        self.session.chunk_unloading(&event.world, event.x, event.z);
+    }
+
+    fn block_place(
+        &self,
+        event: &mut netherforge_platform::game_event::BlockPlace,
+        raise: &dyn Fn(&mut netherforge_platform::game_event::BlockPlace) -> bool,
+    ) -> bool {
+        let cancelled = raise(event);
+        if !cancelled {
+            self.session.block_changed(&event.block);
+        }
+        cancelled
     }
 }

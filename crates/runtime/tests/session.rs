@@ -368,7 +368,7 @@ fn a_repeated_error_is_logged_once_in_a_while_and_counted_in_between() {
         ),
         ("modules/dead/init.lua", "local x = nil\nx.y = 1"),
     ]);
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     let start = platform.take();
     assert!(
         start.contains(&"warn module dead: body failed: attempt to index nil with 'y' (modules/dead/init.lua:2). It's disabled until it's reloaded.".to_owned()),
@@ -433,7 +433,8 @@ fn a_repeated_error_is_logged_once_in_a_while_and_counted_in_between() {
 
 #[test]
 fn the_servers_events_reach_scripts_and_what_they_write_goes_back() {
-    use netherforge_platform::{GameEvents, PlayerRef, Uuid, game_event};
+    use netherforge_platform::{PlatformEvents, PlayerRef, Uuid, game_event};
+    use netherforge_runtime::server::ServerEvents;
     let platform = std::rc::Rc::new(Fake::default());
     let files = Files::new(&[
         ("netherforge.json", MANIFEST),
@@ -443,33 +444,37 @@ fn the_servers_events_reach_scripts_and_what_they_write_goes_back() {
 nf.on('player_chat', function(e) if e.message == 'bad' then e:cancel() end end)",
         ),
     ]);
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
     let alex = PlayerRef {
         uuid: Uuid(0x0f1b_0c7e_6a43_3d1f_9a8c_2b5e_8f1a_0c11),
         name: "Alex".into(),
     };
-    let mut join = game_event::PlayerJoin {
+    let join = |message: &str| game_event::PlayerJoin {
         player: alex.clone(),
         first_join: true,
-        message: Some("Alex joined".into()),
+        message: Some(message.into()),
     };
-    session.game_events().player_join(&mut join);
-    assert_eq!(join.message.as_deref(), Some("welcome, new one"));
+    let mut joined = join("Alex joined");
+    server.game().player_join(&mut joined);
+    assert_eq!(joined.message.as_deref(), Some("welcome, new one"));
     let mut chat = game_event::PlayerChat {
         player: alex.clone(),
         message: "bad".into(),
         format: "<Alex> bad".into(),
     };
-    assert!(session.game_events().player_chat(&mut chat), "cancelled");
+    assert!(server.game().player_chat(&mut chat), "cancelled");
     chat.message = "fine".into();
-    assert!(!session.game_events().player_chat(&mut chat));
-    // Nothing runs while the session doesn't: the event goes through as it was.
-    session.stop();
-    let mut join = game_event::PlayerJoin {
-        player: alex,
-        first_join: false,
-        message: Some("Alex joined".into()),
-    };
-    session.game_events().player_join(&mut join);
-    assert_eq!(join.message.as_deref(), Some("Alex joined"));
+    assert!(!server.game().player_chat(&mut chat));
+    // While the session is being changed (a reload), an event goes through as it was.
+    {
+        let _changing = server.session_mut();
+        let mut joined = join("Alex joined");
+        server.game().player_join(&mut joined);
+        assert_eq!(joined.message.as_deref(), Some("Alex joined"));
+    }
+    // Nothing runs while the session doesn't.
+    server.session_mut().stop();
+    let mut joined = join("Alex joined");
+    server.game().player_join(&mut joined);
+    assert_eq!(joined.message.as_deref(), Some("Alex joined"));
 }

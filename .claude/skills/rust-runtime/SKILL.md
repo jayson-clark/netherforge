@@ -378,9 +378,43 @@ dead: body failed: … (modules/dead/init.lua:2). It's disabled until it's reloa
   call no scope makes passes only when every package declares it. The policy (`policy.json`) comes
   with the server's config.
 
+- **A service's hooks take `&self`** (Kotlin's `RuntimeService`'s): `player_joined` (before scripts hear),
+  `player_quit` (after), `entity_gone`, `entities_loaded`, `entities_unloading`, `chunk_unloading` (after its
+  scripts), `world_saving`, `plugins_changed`, `block_changed`; the session fans each out in registration order
+  (`Session::each`) and commits the store after a save. They're `&self`, and so is `Session::tick`, because the
+  server's events reach a session while it ticks (a script teleports a player: the teleport is an event): a
+  service keeps what changes in cells and never holds one borrowed across a script call. Only `reload` and
+  `stop` take `&mut`.
+
 Not yet: the game's facts from the Platform (`external::GameData` is a placeholder, so format reads
 without them), reloading a package's files, the policy, the bridge to the editor, the debugger, and every service but modules and centities (menus, dialogs, items...),
 each with the compiler it needs.
+
+## The server's events (`crates/runtime/src/server.rs`)
+
+`ServerEvents` is Kotlin's `ServerEvents` (with `NetherForgeRuntime`'s hold on the session): it owns the
+`Session` in a `RefCell` and implements `PlatformEvents`, which is what the adapter will call.
+
+- **Each event opens the session once** (`Running::open`, `events.rs`): a shared borrow, and only while it
+  runs. While the session is borrowed mutably (`session_mut()`: a reload, a stop) an event can't reach it
+  and goes through unchanged, as when no project runs, rather than panicking. `tick` and the hooks that
+  keep the world in order (`entity_clicked`, `entities_loaded`, `world_saving`...) reach a session that
+  isn't running too, as Kotlin's do.
+- **The game's events** (`game()`) are the generated `GameEventDispatch` over an `EventSource` (the session's
+  cell). The generator writes, per event, a raise function and an `Around` trait method defaulting to only
+  raising it: Kotlin's `open class GameEventDispatch` with `RuntimeGameEvents` overriding some, in Rust.
+  `Running`'s `Around` is that: services hear `player_join` before scripts and `player_quit` after,
+  `chunk_unload` after scripts, and a `block_place` scripts let through changes physics' blocks.
+- **`PlatformEvents`' own events raise their paths by hand**, as Kotlin's do: `player_interact`
+  (`interact` on the player, `player_interact`), `use_item`, `drop_item`, `pickup_item`, `consume_item`,
+  `block_break` (on the world, then `nf`; drops and experience written back, `None` when cancelled),
+  `player_died` (`player_death`, then `entity_death` with what that left; keeping the inventory drops nothing
+  unless a handler said what does), `entity_damaged` (the amount back, at least 0), `entity_died` (then
+  `entity_gone`, which drops the entity handle's subscriptions), `player_interact_entity`. A payload is built
+  only when something listens. What handlers print is logged at the next tick, as other reports are.
+- Not yet, each with its service, answering "unchanged" until then: project items' stages (a held item's
+  handlers first) and looks, custom blocks, structure markers, generated loot, menus, dialogs, resource packs,
+  screens.
 
 ## Centities (`crates/runtime/src/centity`)
 
@@ -434,8 +468,10 @@ is `physics.mass` or the volume. Gravity is the body's gravity scale against a w
 writes the node's pose through the setters and remembers it; a node moved by anything else teleports its body.
 Bodies past `REANCHOR` (16) blocks move the anchor under them. `collide` (with the other body's node, any
 instance), `wake`, `sleep`. Collision groups: blocks, hitboxes, bodies (`physics.blocks`/`entities` filter).
-Not yet: invalidating a section when a block changes (it waits for `PlatformEvents::block_updated`); the spec's
-`rigid_body()`, joints, materials and sensors.
+A block placed or broken (`block_place` scripts let through, `block_break`) drops its section and wakes the bodies
+near it (`Physics::block_changed`), so a crate on a broken block falls at once; changes no event names (explosions,
+pistons, fluids) still wait for the section's re-read. Not yet: the spec's `rigid_body()`, joints, materials and
+sensors.
 
 **Persistence** (`saving.rs`, `crate::store`): the store is rusqlite on the Kotlin runtime's own migration
 file (one `netherforge.db` for both). A normal instance's record is staged when it changes and written at the
@@ -449,9 +485,9 @@ centity is gone and revived when it's back. `centity:data()` is the JSON codec's
 crate (PNG, JPEG, GIF, BMP), encoded as PNG. Not yet: letting go when Lua drops a handle (they go with the
 session).
 
-**The session's platform events**: `Session::entity_clicked`, `entities_loaded` (pushed whole and hidden again,
-strays removed), `player_joined`, `world_saving`, `chunk_unloading`. They're what `PlatformEvents` will call
-once the session implements it.
+**The session's platform events**: `Session::entity_clicked`, and the centities service's hooks:
+`entities_loaded` (pushed whole and hidden again, strays removed), `player_joined`, `player_quit` (the natural
+spawner forgets them), `world_saving`, `chunk_unloading`, `block_changed` (physics). `ServerEvents` calls them.
 
 Not yet, outside the centity classes: `world:raycast` against hitboxes, `world:centities` and the
 `overlap_*`/`sweep`/`nearest` questions (the `World` class, whose spatial core is `spatial.rs`).
@@ -508,7 +544,7 @@ side). Types are strings in Kotlin's spelling (`src/types.ts`, parsed by `src/ty
 Still to come: the Kotlin side generated from the spec (then `extract.ts` and the drift test
 go), the FFM glue between them, the coarse crossings the roadmap asks for (per-tick batches,
 handles as integers, flat buffers: annotations on the spec's methods), and the rest of
-`PlatformEvents` (the session implementing it, each hook to its service).
+`PlatformEvents`' events as their services come (`ServerEvents`, above).
 
 ## Format (`crates/format`)
 

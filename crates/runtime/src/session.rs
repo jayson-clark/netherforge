@@ -23,7 +23,9 @@ use netherforge_format::names::MinecraftVersion;
 use netherforge_format::package::PackageSources;
 use netherforge_format::project::{self, Project as Loaded, ProjectSource};
 use netherforge_luau::{Host, Limits};
-use netherforge_platform::Platform;
+use std::collections::{HashMap, HashSet};
+
+use netherforge_platform::{BlockRef, EntityTag, Platform, PlayerRef, Uuid};
 
 use crate::centity::api::CentityContext;
 use crate::modules::{self, Modules, Owner};
@@ -40,6 +42,10 @@ pub struct Define<'s> {
 }
 
 /// A part of the runtime that holds something of the project's (`RuntimeService`).
+///
+/// Its hooks take `&self`: the server's events reach a session while it ticks (a script teleports a player,
+/// and the teleport is an event), so a service keeps what changes in cells, and never holds one borrowed
+/// while it calls a script.
 pub trait Service {
     /// Its name, for the log.
     fn name(&self) -> &'static str;
@@ -48,15 +54,34 @@ pub trait Service {
         &[]
     }
     /// Starts it in `room`, with what the project defines.
-    fn start(&mut self, _room: &Room, _project: &Define) {}
+    fn start(&self, _room: &Room, _project: &Define) {}
     /// Every service has started: what waited for the others (a restored centity's script requires modules).
-    fn after_start(&mut self, _room: &Room) {}
+    fn after_start(&self, _room: &Room) {}
     /// One tick.
-    fn tick(&mut self, _room: &Room, _platform: &dyn Platform) {}
+    fn tick(&self, _room: &Room, _platform: &dyn Platform) {}
     /// The resources of `kind` (one it reloads) that changed, by id, the project as it reads now.
-    fn reload(&mut self, _room: &Room, _kind: &str, _ids: &BTreeSet<String>, _project: &Define) {}
+    fn reload(&self, _room: &Room, _kind: &str, _ids: &BTreeSet<String>, _project: &Define) {}
     /// Stops it: everything it holds goes.
-    fn stop(&mut self, _room: &Room, _platform: &dyn Platform) {}
+    fn stop(&self, _room: &Room, _platform: &dyn Platform) {}
+
+    /// A player joined, before scripts hear of it.
+    fn player_joined(&self, _player: &PlayerRef) {}
+    /// A player left, after scripts heard of it.
+    fn player_quit(&self, _player: &PlayerRef) {}
+    /// An entity died or was removed for good.
+    fn entity_gone(&self, _entity: Uuid) {}
+    /// Entities came into the world with their chunk: NetherForge's own by `tagged`, the rest `untagged`.
+    fn entities_loaded(&self, _tagged: &HashMap<Uuid, EntityTag>, _untagged: &[Uuid]) {}
+    /// Entities are about to unload with their chunk, while they can still be written.
+    fn entities_unloading(&self, _entities: &HashSet<Uuid>) {}
+    /// A chunk is about to unload, once its scripts have heard of it.
+    fn chunk_unloading(&self, _world: &str, _chunk_x: i32, _chunk_z: i32) {}
+    /// A world is being saved (an autosave, `/save-all`, the server stopping).
+    fn world_saving(&self, _world: &str) {}
+    /// Another plugin was enabled or disabled, or a service provider registered or went.
+    fn plugins_changed(&self) {}
+    /// A block was placed or broken (once scripts let it be): what's built from the world's blocks reads it again.
+    fn block_changed(&self, _block: &BlockRef) {}
 }
 
 /// Why a project can't run: what the log says, and the problem to report if format didn't.
@@ -196,10 +221,10 @@ impl<'a> Session<'a> {
             source: self.source,
             platform: &*self.platform,
         };
-        for service in &mut self.services {
+        for service in &self.services {
             service.start(&room, &define);
         }
-        for service in &mut self.services {
+        for service in &self.services {
             service.after_start(&room);
         }
         self.room = Some(room);
@@ -270,54 +295,77 @@ impl<'a> Session<'a> {
     }
 
     /// Entities came into memory with their chunk (`PlatformEvents::entities_loaded`).
-    pub fn entities_loaded(
-        &self,
-        tagged: &std::collections::HashMap<
-            netherforge_platform::Uuid,
-            netherforge_platform::EntityTag,
-        >,
-    ) {
-        self.shared
-            .centities
-            .borrow_mut()
-            .entities_loaded(&*self.platform, tagged);
+    pub fn entities_loaded(&self, tagged: &HashMap<Uuid, EntityTag>, untagged: &[Uuid]) {
+        self.each(|s| s.entities_loaded(tagged, untagged));
     }
 
-    /// A player joined: what's hidden from them is hidden again.
-    pub fn player_joined(&self, player: &netherforge_platform::PlayerRef) {
-        self.shared
-            .centities
-            .borrow()
-            .player_joined(&*self.platform, player.uuid);
+    /// Entities are about to unload with their chunk (`PlatformEvents::entities_unloading`).
+    pub fn entities_unloading(&self, entities: &HashSet<Uuid>) {
+        self.each(|s| s.entities_unloading(entities));
     }
 
-    /// The world is saving its entities (`PlatformEvents::world_saving`): the store gets where its
-    /// instances stand now, as of the same moment.
+    /// A player joined: every service hears of it before scripts do (what's hidden from them is hidden again).
+    pub fn player_joined(&self, player: &PlayerRef) {
+        self.each(|s| s.player_joined(player));
+    }
+
+    /// A player left: every service forgets them, after scripts heard of it.
+    pub fn player_quit(&self, player: &PlayerRef) {
+        self.each(|s| s.player_quit(player));
+    }
+
+    /// An entity has gone for good (died, removed): what's kept for it goes, and its handlers.
+    pub fn entity_gone(&self, entity: Uuid) {
+        self.each(|s| s.entity_gone(entity));
+        let Some(room) = &self.room else { return };
+        let handle = netherforge_api::handles::Handle::Entity(netherforge_api::handles::Entity {
+            id: crate::events::uuid_text(&entity),
+        });
+        if let Ok(pushed) = netherforge_api::handle::push_any(room.host().lua(), &handle) {
+            room.scripts()
+                .drop_target(&crate::scripts::Target::Handle(pushed));
+        }
+    }
+
+    /// The world is saving (`PlatformEvents::world_saving`): what its services keep of it is written as of now.
     pub fn world_saving(&self, world: &str) {
-        let store = &self.shared.store;
-        self.shared
-            .centities
-            .borrow_mut()
-            .save_placements_of(store, &|i| i.anchor().world == world);
-        store.commit();
+        self.each(|s| s.world_saving(world));
+        self.shared.store.commit();
     }
 
-    /// A chunk is unloading, and the entities at its instances' anchors with it: their places are saved now.
+    /// A chunk is unloading, its scripts told: what its services keep of it is written now.
     pub fn chunk_unloading(&self, world: &str, chunk_x: i32, chunk_z: i32) {
-        let chunk = |c: f64| (c.floor() as i64).div_euclid(16) as i32;
-        let store = &self.shared.store;
-        self.shared
-            .centities
-            .borrow_mut()
-            .save_placements_of(store, &|i| {
-                let a = i.anchor();
-                a.world == world && chunk(a.x) == chunk_x && chunk(a.z) == chunk_z
-            });
-        store.commit();
+        self.each(|s| s.chunk_unloading(world, chunk_x, chunk_z));
+        self.shared.store.commit();
+    }
+
+    /// Other plugins changed (`PlatformEvents::plugins_changed`).
+    pub fn plugins_changed(&self) {
+        self.each(|s| s.plugins_changed());
+    }
+
+    /// A block was placed or broken.
+    pub fn block_changed(&self, block: &BlockRef) {
+        self.each(|s| s.block_changed(block));
+    }
+
+    /// Every service's hook, in registration order, while it runs.
+    fn each(&self, hook: impl Fn(&dyn Service)) {
+        if self.room.is_none() {
+            return;
+        }
+        for service in &self.services {
+            hook(&**service);
+        }
+    }
+
+    /// The server it runs on.
+    pub fn platform(&self) -> &dyn Platform {
+        &*self.platform
     }
 
     /// What goes with the scopes that stopped since the last time (temporary centities).
-    fn released(&self) {
+    pub(crate) fn released(&self) {
         if let Some(room) = &self.room {
             CentityContext::new(self.shared.clone(), room.scripts().clone()).scopes_released();
         }
@@ -326,15 +374,6 @@ impl<'a> Session<'a> {
     /// Its room, while it runs.
     pub fn room(&self) -> Option<&Room> {
         self.room.as_ref()
-    }
-
-    /// The server's events, raised to its scripts (`GameEvents`, which the Platform's adapter calls); an
-    /// event goes through unchanged while it isn't running. What scripts reported is the next tick's to log.
-    pub fn game_events(&self) -> crate::events::GameEventDispatch<crate::events::Running<'_>> {
-        crate::events::GameEventDispatch(crate::events::Running {
-            room: self.room.as_ref(),
-            platform: &*self.platform,
-        })
     }
 
     /// What's wrong with the project as it reads: format's findings, the session's own refusal, and what its
@@ -358,10 +397,10 @@ impl<'a> Session<'a> {
     }
 
     /// One server tick: each service in order, then what the scripts reported.
-    pub fn tick(&mut self) {
+    pub fn tick(&self) {
         let Some(room) = &self.room else { return };
         room.scripts().tick();
-        for service in &mut self.services {
+        for service in &self.services {
             service.tick(room, &*self.platform);
         }
         self.released();
@@ -404,11 +443,7 @@ impl<'a> Session<'a> {
             modules.update(lua_of(&define));
         }
         for (kind, ids) in &by_kind {
-            if let Some(service) = self
-                .services
-                .iter_mut()
-                .find(|s| s.reloads().contains(kind))
-            {
+            if let Some(service) = self.services.iter().find(|s| s.reloads().contains(kind)) {
                 service.reload(room, kind, ids, &define);
             }
         }
@@ -419,7 +454,7 @@ impl<'a> Session<'a> {
     /// Stops every service, in reverse order, and closes the room.
     pub fn stop(&mut self) {
         let Some(room) = self.room.take() else { return };
-        for service in self.services.iter_mut().rev() {
+        for service in self.services.iter().rev() {
             service.stop(&room, &*self.platform);
         }
         self.services = services(&self.shared);
@@ -513,11 +548,11 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
     vec![
         Box::new(CentitiesService {
             shared: shared.clone(),
-            restored: Vec::new(),
+            restored: Default::default(),
         }),
         Box::new(ModulesService {
             shared: shared.clone(),
-            modules: None,
+            modules: Default::default(),
         }),
     ]
 }
@@ -527,7 +562,7 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
 struct CentitiesService {
     shared: Rc<Shared>,
     /// The instances restored at start, whose scripts start once modules run.
-    restored: Vec<netherforge_platform::Uuid>,
+    restored: std::cell::RefCell<Vec<Uuid>>,
 }
 
 impl CentitiesService {
@@ -576,26 +611,26 @@ impl Service for CentitiesService {
         &["centity", "buff"]
     }
 
-    fn start(&mut self, room: &Room, project: &Define) {
+    fn start(&self, room: &Room, project: &Define) {
         self.define(project);
         self.context(room).define_buffs(buffs(project));
         let mut centities = self.shared.centities.borrow_mut();
         centities.set_home(project.project.namespace());
-        self.restored = centities.restore(project.platform, &self.shared.store);
+        *self.restored.borrow_mut() = centities.restore(project.platform, &self.shared.store);
     }
 
-    fn after_start(&mut self, room: &Room) {
-        let restored = std::mem::take(&mut self.restored);
+    fn after_start(&self, room: &Room) {
+        let restored = self.restored.take();
         self.context(room).start_restored(&restored);
     }
 
-    fn tick(&mut self, room: &Room, _platform: &dyn Platform) {
+    fn tick(&self, room: &Room, _platform: &dyn Platform) {
         let context = self.context(room);
         context.tick();
         context.commit();
     }
 
-    fn reload(&mut self, room: &Room, kind: &str, ids: &BTreeSet<String>, project: &Define) {
+    fn reload(&self, room: &Room, kind: &str, ids: &BTreeSet<String>, project: &Define) {
         let context = self.context(room);
         if kind == "buff" {
             context.define_buffs(buffs(project));
@@ -607,12 +642,61 @@ impl Service for CentitiesService {
     }
 
     /// Instances stay in the world, saved, for the next session to restore; temporary ones go.
-    fn stop(&mut self, room: &Room, _platform: &dyn Platform) {
+    fn stop(&self, room: &Room, _platform: &dyn Platform) {
         self.context(room).stop_all();
         self.shared.stats.borrow_mut().clear();
         self.shared.physics.borrow_mut().clear();
         self.shared.images.clear();
         *self.shared.spawner.borrow_mut() = Default::default();
+    }
+
+    /// What's hidden from them is hidden again: the server forgot it.
+    fn player_joined(&self, player: &PlayerRef) {
+        self.shared
+            .centities
+            .borrow()
+            .player_joined(&*self.shared.platform, player.uuid);
+    }
+
+    /// The natural spawner's passes for them go.
+    fn player_quit(&self, player: &PlayerRef) {
+        self.shared.spawner.borrow_mut().forget(player.uuid);
+    }
+
+    /// Their parts are pushed whole and hidden again; strays are removed.
+    fn entities_loaded(&self, tagged: &HashMap<Uuid, EntityTag>, _untagged: &[Uuid]) {
+        self.shared
+            .centities
+            .borrow_mut()
+            .entities_loaded(&*self.shared.platform, tagged);
+    }
+
+    /// Where its instances stand now goes to the store, as of the same moment.
+    fn world_saving(&self, world: &str) {
+        self.shared
+            .centities
+            .borrow_mut()
+            .save_placements_of(&self.shared.store, &|i| i.anchor().world == world);
+    }
+
+    /// The entities at its instances' anchors go with it: their places are saved now.
+    fn chunk_unloading(&self, world: &str, chunk_x: i32, chunk_z: i32) {
+        let chunk = |c: f64| (c.floor() as i64).div_euclid(16) as i32;
+        self.shared
+            .centities
+            .borrow_mut()
+            .save_placements_of(&self.shared.store, &|i| {
+                let a = i.anchor();
+                a.world == world && chunk(a.x) == chunk_x && chunk(a.z) == chunk_z
+            });
+    }
+
+    /// Bodies near it run into the blocks as they are now.
+    fn block_changed(&self, block: &BlockRef) {
+        self.shared
+            .physics
+            .borrow_mut()
+            .block_changed(&block.world, block.x, block.y, block.z);
     }
 }
 
@@ -713,7 +797,7 @@ fn grants(project: &Loaded) -> crate::Grants {
 /// with every scope that required it.
 struct ModulesService {
     shared: Rc<Shared>,
-    modules: Option<Modules>,
+    modules: std::cell::RefCell<Option<Modules>>,
 }
 
 /// The project's Lua the room runs, its packages' included: every Lua file by project path (a package's at its
@@ -786,15 +870,17 @@ impl Service for ModulesService {
         &["module"]
     }
 
-    fn start(&mut self, room: &Room, project: &Define) {
+    fn start(&self, room: &Room, project: &Define) {
         let modules = Modules::new(room.scripts().clone(), lua_of(project), MODULE_BUDGET);
         *self.shared.modules.borrow_mut() = Some(modules.clone());
+        *self.modules.borrow_mut() = Some(modules.clone());
         modules.start();
-        self.modules = Some(modules);
     }
 
-    fn reload(&mut self, _room: &Room, _kind: &str, ids: &BTreeSet<String>, project: &Define) {
-        let Some(modules) = &self.modules else { return };
+    fn reload(&self, _room: &Room, _kind: &str, ids: &BTreeSet<String>, project: &Define) {
+        let Some(modules) = self.modules.borrow().clone() else {
+            return;
+        };
         let lua = lua_of(project);
         // Each changed module, then every module that required one, once.
         let mut again: Vec<String> = ids.iter().cloned().collect();
@@ -813,8 +899,8 @@ impl Service for ModulesService {
         }
     }
 
-    fn stop(&mut self, _room: &Room, _platform: &dyn Platform) {
-        self.modules = None;
+    fn stop(&self, _room: &Room, _platform: &dyn Platform) {
+        *self.modules.borrow_mut() = None;
         *self.shared.modules.borrow_mut() = None;
     }
 }

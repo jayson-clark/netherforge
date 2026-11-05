@@ -21,6 +21,7 @@ pub mod images;
 pub mod items;
 pub mod modules;
 pub mod scripts;
+pub mod server;
 pub mod session;
 pub mod shared;
 pub mod stats;

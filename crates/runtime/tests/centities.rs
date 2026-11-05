@@ -49,6 +49,8 @@ struct Fake {
     calls: RefCell<Vec<String>>,
     next: RefCell<u128>,
     poses: RefCell<BTreeMap<u128, DisplayPose>>,
+    /// Blocks of the floor that were broken.
+    broken: RefCell<std::collections::HashSet<(i32, i32, i32)>>,
 }
 
 impl Default for Fake {
@@ -60,6 +62,7 @@ impl Default for Fake {
             calls: RefCell::default(),
             next: RefCell::default(),
             poses: RefCell::default(),
+            broken: RefCell::default(),
         }
     }
 }
@@ -314,7 +317,7 @@ impl FakeWorldOps for Fake {
         }
         None
     }
-    /// A floor: every block below y 64 is stone, and a wall of it at x 10.
+    /// A floor: every block below y 64 is stone (but those broken), and a wall of it at x 10.
     fn collision_boxes(
         &self,
         _: String,
@@ -329,7 +332,7 @@ impl FakeWorldOps for Fake {
         for x in min_x.floor() as i32..=max_x.floor() as i32 {
             for y in min_y.floor() as i32..=max_y.floor() as i32 {
                 for z in min_z.floor() as i32..=max_z.floor() as i32 {
-                    if y < 64 || x == 10 {
+                    if (y < 64 || x == 10) && !self.broken.borrow().contains(&(x, y, z)) {
                         let (x, y, z) = (f64::from(x), f64::from(y), f64::from(z));
                         boxes.push(netherforge_format::math::BoundingBox {
                             min: netherforge_format::math::Vec3(x, y, z),
@@ -586,7 +589,7 @@ end)
 "#,
         ),
     ]);
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     assert!(session.refusal().is_none(), "{:?}", session.problems());
     assert_eq!(
         printed(&platform.take()),
@@ -670,7 +673,7 @@ nf.after(10, function() print("at", string.format("%.3f", lamp:animation_tick("r
 "#,
         ),
     ]);
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     let start = platform.take();
     assert_eq!(
         printed(&start),
@@ -737,7 +740,7 @@ nf.centities.spawn("lamp", vector.create(10, 64, 0))
 "#,
         ),
     ]);
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     let start = platform.take();
     // A hitbox for each node, each a unit cube where its node is: off the anchor, so standing on its own.
     let hitboxes: Vec<&String> = start.iter().filter(|c| c.starts_with("hitbox")).collect();
@@ -886,7 +889,7 @@ end)
 "#,
         ),
     ]);
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     let start = platform.take();
     assert_eq!(
         printed(&start)
@@ -950,7 +953,7 @@ end)
 "#,
         ),
     ]);
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     let start = platform.take();
     let lines = printed(&start);
     assert_eq!(
@@ -1077,7 +1080,7 @@ end)
 "#,
         ),
     ]);
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     let start = platform.take();
     assert_eq!(
         printed(&start),
@@ -1137,7 +1140,7 @@ end)
 "#,
         ),
     ]);
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     let start = platform.take();
     assert_eq!(printed(&start), ["true\t1.8\tfalse"], "{start:?}");
     let mut lines = Vec::new();
@@ -1170,7 +1173,7 @@ nf.after(5, function() b:teleport(vector.create(1, 64, 0)) end)
 "#,
         ),
     ]);
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     platform.take();
     let mut lines = Vec::new();
     for _ in 0..7 {
@@ -1210,7 +1213,7 @@ print(pcall(ball.launch, ball, { velocity = vector.create(1, 0, 0), bounce = 2 }
 "#,
         ),
     ]);
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     let start = platform.take();
     let lines = printed(&start);
     assert_eq!(
@@ -1258,7 +1261,7 @@ print(pcall(w.move_to, w, vector.create(0, 64, 0), { speed = 50 }))
 "#,
         ),
     ]);
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     let start = platform.take();
     let lines = printed(&start);
     assert_eq!(
@@ -1303,7 +1306,7 @@ end)
 "#,
         ),
     ]);
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     let start = platform.take();
     assert_eq!(printed(&start), ["1\ttrue\ttrue"], "{start:?}");
     let mut lines = Vec::new();
@@ -1346,7 +1349,7 @@ end)
 "#,
         ),
     ]);
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     platform.take();
     let mut lines = Vec::new();
     for _ in 0..101 {
@@ -1375,7 +1378,7 @@ print("visits", data.visits)
         ("modules/game/init.lua", ""),
     ]);
     {
-        let mut session = Session::start_with(platform.clone(), &files, &NoPackages, store.clone());
+        let session = Session::start_with(platform.clone(), &files, &NoPackages, store.clone());
         session
             .spawn("lamp", place(3.0, 64.0, 3.0), 90.0)
             .expect("spawned");
@@ -1438,7 +1441,7 @@ print(pcall(nf.images.fill, 0, 2, "#ff0000"))
 "##,
         ),
     ]);
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     let start = platform.take();
     assert_eq!(
         printed(&start),
@@ -1477,7 +1480,7 @@ nf.every(1, function() if ticks == 5 then print("five") end end)
 "#,
         ),
     ]);
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     session
         .spawn("lamp", place(0.0, 64.0, 0.0), 0.0)
         .expect("spawned");
@@ -1500,7 +1503,7 @@ nf.every(1, function() if ticks == 5 then print("five") end end)
         node: "x".into(),
         role: EntityRole::Display,
     };
-    session.entities_loaded(&std::collections::HashMap::from([(Uuid(999), stray)]));
+    session.entities_loaded(&std::collections::HashMap::from([(Uuid(999), stray)]), &[]);
     assert!(platform.take().contains(&"remove 999".to_owned()));
 }
 
@@ -1524,7 +1527,7 @@ print(pcall(nf.spawning.condition, "calm", function() end))
         ),
     ]);
     *platform.player.borrow_mut() = Some(place(0.5, 64.0, 0.5));
-    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     let start = printed(&platform.take());
     assert!(
         start
@@ -1561,4 +1564,174 @@ print(pcall(nf.spawning.condition, "calm", function() end))
     }
     assert!(old.iter().all(|id| session.centities().get(*id).is_none()));
     assert!(session.centities().all().all(|i| i.anchor().x > 4000.0));
+}
+
+fn alex() -> netherforge_platform::PlayerRef {
+    netherforge_platform::PlayerRef {
+        uuid: Uuid(0x0f1b_0c7e_6a43_3d1f_9a8c_2b5e_8f1a_0c11),
+        name: "Alex".into(),
+    }
+}
+
+fn stack(item: &str) -> netherforge_platform::ItemData {
+    netherforge_platform::ItemData {
+        def: netherforge_format::item::ItemDef {
+            item: Some(item.into()),
+            ..Default::default()
+        },
+        raw: None,
+        look: None,
+    }
+}
+
+#[test]
+fn the_servers_own_events_reach_scripts_and_their_answers_go_back() {
+    use netherforge_platform::{BlockRef, PlatformEvents};
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/rules/init.lua",
+            r#"
+nf.on("player_interact", function(e) print("interact", e.click, e.block ~= nil, e.face, e.hand); e:cancel() end)
+nf.on("block_break", function(e)
+    print("break", e.state, #e.drops, e.drops[1].item, e.experience)
+    e.drops = {}
+    e.experience = 7
+end)
+nf.on("entity_damage", function(e) print("damage", e.amount, e.cause, e.attacker ~= nil); e.amount = e.amount * 2 end)
+nf.on("player_death", function(e) print("death", e.cause, e.message); e.message = nil; e.keep_inventory = true end)
+nf.on("entity_death", function(e) print("entity death", #e.drops, e.experience) end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    platform.take();
+    let block = BlockRef {
+        world: "world".into(),
+        x: 3,
+        y: 63,
+        z: 4,
+        id: "minecraft:dirt".into(),
+        state: "minecraft:dirt".into(),
+    };
+    assert!(server.player_interact(
+        alex(),
+        ClickButton::Right,
+        Some(block.clone()),
+        Some("up".into()),
+        None,
+        "main_hand".into()
+    ));
+    let answer = server
+        .block_break(
+            alex(),
+            block.clone(),
+            Box::new(|| vec![stack("minecraft:dirt")]),
+            0,
+        )
+        .expect("not cancelled");
+    assert_eq!(answer.drops, Some(vec![]));
+    assert_eq!(answer.experience, 7);
+    assert_eq!(
+        server.entity_damaged(Uuid(5), 3.0, "entity_attack".into(), Some(alex().uuid)),
+        Some(6.0)
+    );
+    // Keeping the inventory drops nothing from it; the message is gone.
+    let death = server.player_died(
+        alex(),
+        None,
+        "fall".into(),
+        Some("Alex fell".into()),
+        false,
+        vec![stack("minecraft:dirt")],
+        10,
+    );
+    assert_eq!(death.message, None);
+    assert!(death.keep_inventory);
+    assert_eq!(death.drops, Some(vec![]));
+    assert_eq!(death.experience, 10);
+    // What handlers printed is logged with the next tick.
+    server.tick();
+    let lines = printed(&platform.take());
+    assert_eq!(
+        lines,
+        [
+            "interact\tright\ttrue\tup\tmain_hand",
+            "break\tminecraft:dirt\t1\tminecraft:dirt\t0",
+            "damage\t3\tentity_attack\ttrue",
+            "death\tfall\tAlex fell",
+            "entity death\t0\t10",
+        ],
+        "{lines:?}"
+    );
+    // Nothing listens to dropping an item: it goes through, and nothing was built for it.
+    assert!(!server.player_drop_item(alex(), stack("minecraft:dirt")));
+    // Once the session stops, every answer is "unchanged".
+    server.session_mut().stop();
+    assert!(!server.player_interact(
+        alex(),
+        ClickButton::Left,
+        None,
+        None,
+        None,
+        "main_hand".into()
+    ));
+    assert_eq!(
+        server.entity_damaged(Uuid(5), 3.0, "fall".into(), None),
+        Some(3.0)
+    );
+}
+
+#[test]
+fn a_body_resting_on_a_block_falls_when_the_block_is_broken() {
+    use netherforge_platform::{BlockRef, PlatformEvents};
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    let crate_ = r#"{ "nodes": { "box": { "display": { "type": "block", "block": "minecraft:barrel" }, "physics": {} } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/crate/centity.json", crate_),
+        (
+            "modules/game/init.lua",
+            r#"
+local b = nf.centities.spawn("crate", vector.create(0.5, 65, 0.5)):node("box")
+b:on("sleep", function() print("sleep", string.format("%.2f", b:world_position().y)) end)
+b:on("wake", function() print("wake") end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let mut lines = Vec::new();
+    for _ in 0..120 {
+        server.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    assert_eq!(lines, ["sleep\t64.00"], "{lines:?}");
+    // The floor under it goes, wider than the crate.
+    for x in -1..=1 {
+        for z in -1..=1 {
+            let block = BlockRef {
+                world: "world".into(),
+                x,
+                y: 63,
+                z,
+                id: "minecraft:stone".into(),
+                state: "minecraft:stone".into(),
+            };
+            server.block_break(alex(), block, Box::new(Vec::new), 0);
+            platform.broken.borrow_mut().insert((x, 63, z));
+        }
+    }
+    // It wakes at once, not when the blocks would next have been read again.
+    server.tick();
+    server.tick();
+    assert_eq!(printed(&platform.take()), ["wake"]);
+    let mut lines = Vec::new();
+    for _ in 0..120 {
+        server.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    assert_eq!(lines, ["sleep\t63.00"], "{lines:?}");
 }
