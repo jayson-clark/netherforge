@@ -656,15 +656,11 @@ impl CentityContext {
             if !self.live(id) {
                 continue;
             }
-            if let Some(target) = self.centity_target(id)
-                && self.scripts.listening(&target, "tick")
-            {
-                let lua = self.scripts.host().lua().clone();
-                let payload = shapes::TickEvent { tick: now as i64 };
-                if let Ok(Value::Table(fields)) = codecs::TickEvent.push(&lua, payload) {
-                    self.scripts.raise(&target, "tick", fields);
-                }
+            self.move_body(id);
+            if !self.live(id) {
+                continue;
             }
+            self.raise_tick(id, now);
             if !self.live(id) {
                 continue;
             }
@@ -672,6 +668,53 @@ impl CentityContext {
             let platform = &*self.shared.platform;
             self.shared
                 .with_drawing(|c, drawing| c.sync(platform, drawing, id));
+        }
+    }
+
+    /// `tick` on instance `id`, to whoever listens.
+    fn raise_tick(&self, id: Uuid, now: u64) {
+        self.raise_on(
+            id,
+            "tick",
+            codecs::TickEvent,
+            shapes::TickEvent { tick: now as i64 },
+        );
+    }
+
+    /// Moves instance `id`'s body a tick (unless something else moves it), and says how it landed and what it
+    /// ran into.
+    fn move_body(&self, id: Uuid) {
+        let moved = {
+            let mut centities = self.shared.centities.borrow_mut();
+            let Some(instance) = centities.get_mut(id) else {
+                return;
+            };
+            if instance.mover.is_none() {
+                return;
+            }
+            super::movers::step(&*self.shared.platform, instance)
+        };
+        let Some(moved) = moved else {
+            return;
+        };
+        let centity = handles::Centity { id: uuid_text(&id) };
+        if let Some(speed) = moved.landed {
+            let event = shapes::CentityLandEvent {
+                centity: centity.clone(),
+                speed,
+            };
+            self.raise_on(id, "land", codecs::CentityLandEvent, event);
+        }
+        for bump in moved.bumps {
+            if !self.live(id) {
+                break;
+            }
+            let event = shapes::CentityBumpEvent {
+                centity: centity.clone(),
+                normal: value(bump.normal),
+                speed: bump.speed,
+            };
+            self.raise_on(id, "bump", codecs::CentityBumpEvent, event);
         }
     }
 
@@ -1772,52 +1815,152 @@ impl CentityApi for CentityContext {
             .unwrap_or(false))
     }
 
-    // ---- not ported yet ----
-    fn follow(&self, this: &handles::Centity, player: handles::Player) -> ApiResult<bool> {
-        CentityApi::follow(&Unported, this, player)
-    }
-    fn stop_following(&self, this: &handles::Centity) -> ApiResult<bool> {
-        CentityApi::stop_following(&Unported, this)
-    }
     fn has_body(&self, this: &handles::Centity) -> ApiResult<bool> {
-        CentityApi::has_body(&Unported, this)
+        Ok(self.with(this, |i| i.mover.is_some()).unwrap_or(false))
     }
     fn body(&self, this: &handles::Centity) -> ApiResult<Option<shapes::BodySettings>> {
-        CentityApi::body(&Unported, this)
+        Ok(self
+            .with(this, |i| {
+                i.mover.as_ref().map(|m| {
+                    let b = &m.settings;
+                    shapes::BodySettings {
+                        width: Some(b.width),
+                        height: Some(b.height),
+                        gravity: Some(b.gravity),
+                        max_fall_speed: Some(b.max_fall_speed),
+                        drag: Some(b.drag),
+                        liquid_drag: Some(b.liquid_drag),
+                        liquid_gravity: Some(b.liquid_gravity),
+                        acceleration: Some(b.acceleration),
+                        air_acceleration: Some(b.air_acceleration),
+                        friction: Some(b.friction),
+                        step_height: Some(b.step_height),
+                        bounce: Some(b.bounce),
+                        fly: Some(b.fly),
+                        blocks: Some(b.blocks),
+                    }
+                })
+            })
+            .flatten())
     }
     fn set_body(&self, this: &handles::Centity, settings: shapes::BodySettings) -> ApiResult<bool> {
-        CentityApi::set_body(&Unported, this, settings)
+        use netherforge_format::kind::centity::BodyDef;
+        use netherforge_format::kind::centity::compiled::ResolvedBody;
+        for (name, value) in [("width", settings.width), ("height", settings.height)] {
+            if let Some(v) = value
+                && !(v > 0.0 && v.is_finite())
+            {
+                return Err(err(format!(
+                    "bad argument 'settings.{name}' (more than 0 expected, got {})",
+                    lua_number(v)
+                )));
+            }
+        }
+        Ok(self
+            .with(this, |i| {
+                let old = i.mover.as_ref().map_or_else(
+                    || ResolvedBody::of(&BodyDef::default()),
+                    |m| m.settings.clone(),
+                );
+                let next = ResolvedBody::of(&BodyDef {
+                    width: Some(settings.width.unwrap_or(old.width)),
+                    height: Some(settings.height.unwrap_or(old.height)),
+                    gravity: Some(settings.gravity.unwrap_or(old.gravity)),
+                    max_fall_speed: Some(settings.max_fall_speed.unwrap_or(old.max_fall_speed)),
+                    drag: Some(settings.drag.unwrap_or(old.drag)),
+                    liquid_drag: Some(settings.liquid_drag.unwrap_or(old.liquid_drag)),
+                    liquid_gravity: Some(settings.liquid_gravity.unwrap_or(old.liquid_gravity)),
+                    acceleration: Some(settings.acceleration.unwrap_or(old.acceleration)),
+                    air_acceleration: Some(
+                        settings.air_acceleration.unwrap_or(old.air_acceleration),
+                    ),
+                    friction: Some(settings.friction.unwrap_or(old.friction)),
+                    step_height: Some(settings.step_height.unwrap_or(old.step_height)),
+                    bounce: Some(settings.bounce.unwrap_or(old.bounce)),
+                    fly: Some(settings.fly.unwrap_or(old.fly)),
+                    blocks: Some(settings.blocks.unwrap_or(old.blocks)),
+                });
+                match &mut i.mover {
+                    Some(m) => m.settings = next,
+                    None => i.mover = Some(super::movers::Mover::new(next)),
+                }
+            })
+            .is_some())
     }
     fn velocity(&self, this: &handles::Centity) -> ApiResult<Option<values::Vec3>> {
-        CentityApi::velocity(&Unported, this)
+        Ok(self.with(this, |i| value(i.velocity())))
     }
     fn set_velocity(&self, this: &handles::Centity, velocity: values::Vec3) -> ApiResult<bool> {
-        CentityApi::set_velocity(&Unported, this, velocity)
+        let v = finite_velocity(velocity, "velocity")?;
+        Ok(self.with(this, |i| i.push(v, false)).unwrap_or(false))
     }
     fn add_velocity(&self, this: &handles::Centity, velocity: values::Vec3) -> ApiResult<bool> {
-        CentityApi::add_velocity(&Unported, this, velocity)
+        let v = finite_velocity(velocity, "velocity")?;
+        Ok(self.with(this, |i| i.push(v, true)).unwrap_or(false))
     }
     fn walk_velocity(&self, this: &handles::Centity) -> ApiResult<Option<values::Vec3>> {
-        CentityApi::walk_velocity(&Unported, this)
+        Ok(self
+            .with(this, |i| i.mover.as_ref().and_then(|m| m.walk).map(value))
+            .flatten())
     }
     fn set_walk_velocity(
         &self,
         this: &handles::Centity,
         velocity: Option<values::Vec3>,
     ) -> ApiResult<bool> {
-        CentityApi::set_walk_velocity(&Unported, this, velocity)
+        let walk = velocity
+            .map(|v| finite_velocity(v, "velocity"))
+            .transpose()?;
+        Ok(self
+            .with(this, |i| {
+                let Some(m) = &mut i.mover else {
+                    return false;
+                };
+                m.walk = walk;
+                true
+            })
+            .unwrap_or(false))
     }
     fn jump(&self, this: &handles::Centity, height: f64) -> ApiResult<bool> {
-        CentityApi::jump(&Unported, this, height)
+        if !(height >= 0.0 && height.is_finite()) {
+            return Err(err(format!(
+                "bad argument 'height' (at least 0 expected, got {})",
+                lua_number(height)
+            )));
+        }
+        Ok(self
+            .with(this, |i| {
+                let Some(m) = &mut i.mover else {
+                    return false;
+                };
+                m.velocity = Vec3(m.velocity.0, m.jump_speed(height), m.velocity.2);
+                m.on_ground = false;
+                true
+            })
+            .unwrap_or(false))
     }
     fn is_on_ground(&self, this: &handles::Centity) -> ApiResult<bool> {
-        CentityApi::is_on_ground(&Unported, this)
+        Ok(self
+            .with(this, |i| i.mover.as_ref().is_some_and(|m| m.on_ground))
+            .unwrap_or(false))
     }
     fn is_in_liquid(&self, this: &handles::Centity) -> ApiResult<bool> {
-        CentityApi::is_in_liquid(&Unported, this)
+        Ok(self
+            .with(this, |i| i.mover.as_ref().is_some_and(|m| m.in_liquid))
+            .unwrap_or(false))
     }
     fn wall(&self, this: &handles::Centity) -> ApiResult<Option<values::Vec3>> {
-        CentityApi::wall(&Unported, this)
+        Ok(self
+            .with(this, |i| i.mover.as_ref().and_then(|m| m.wall).map(value))
+            .flatten())
+    }
+
+    // ---- not ported yet ----
+    fn follow(&self, this: &handles::Centity, player: handles::Player) -> ApiResult<bool> {
+        CentityApi::follow(&Unported, this, player)
+    }
+    fn stop_following(&self, this: &handles::Centity) -> ApiResult<bool> {
+        CentityApi::stop_following(&Unported, this)
     }
     fn launch(&self, this: &handles::Centity, options: shapes::LaunchOptions) -> ApiResult<bool> {
         CentityApi::launch(&Unported, this, options)
@@ -1938,6 +2081,16 @@ fn parse_rgb(text: &str, parameter: &str) -> ApiResult<i32> {
 
 fn format_rgb(rgb: i32) -> String {
     format!("#{:06x}", rgb & 0xFF_FFFF)
+}
+
+/// `v`, or an error naming `name` when it isn't finite.
+fn finite_velocity(v: values::Vec3, name: &str) -> ApiResult<Vec3> {
+    if !(v.x.is_finite() && v.y.is_finite() && v.z.is_finite()) {
+        return Err(err(format!(
+            "bad argument '{name}' (a finite velocity expected)"
+        )));
+    }
+    Ok(vec(v))
 }
 
 /// A number as Lua prints it: a whole one without a point.

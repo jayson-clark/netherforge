@@ -19,8 +19,10 @@ pub mod health;
 pub mod hitboxes;
 pub mod instance;
 pub mod keyframes;
+pub mod movers;
 pub mod quat;
 pub mod ropes;
+pub mod world_shapes;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::rc::Rc;

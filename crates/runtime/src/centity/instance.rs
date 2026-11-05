@@ -166,6 +166,8 @@ pub struct Instance {
     /// The only players a private instance is shown to: its entities are client entities only their
     /// clients have. Set before anything is made; only a temporary instance is private.
     pub viewers: Option<IndexSet<Uuid>>,
+    /// Its `body`, when its file gives it one or a script did (`set_body`).
+    pub mover: Option<super::movers::Mover>,
     /// Its health, when its file gives it one or a script did (`set_max_health`).
     pub health: Option<super::health::Health>,
     /// Its script's scope, while it runs.
@@ -249,6 +251,7 @@ impl Instance {
             expires: None,
             viewers: None,
             health: None,
+            mover: None,
             scope: None,
             age: 0,
             removed: false,
@@ -282,6 +285,23 @@ impl Instance {
         };
         instance.redefine(definition);
         instance
+    }
+
+    /// How fast it moves, blocks a second: its body's velocity, or none.
+    pub fn velocity(&self) -> Vec3 {
+        self.mover.as_ref().map_or(Vec3::ZERO, |m| m.velocity)
+    }
+
+    /// Sets its velocity to `v`, or adds `v` (`add`): false when nothing moves it.
+    pub fn push(&mut self, v: Vec3, add: bool) -> bool {
+        let Some(m) = &mut self.mover else {
+            return false;
+        };
+        m.velocity = if add { m.velocity + v } else { v };
+        if v.1 > 0.0 {
+            m.on_ground = false;
+        }
+        true
     }
 
     /// Never saved, its entities never persistent.
@@ -324,6 +344,7 @@ impl Instance {
         self.animations.stop_all();
         self.tweens.clear();
         self.ropes.clear();
+        self.mover = next.body.clone().map(super::movers::Mover::new);
         self.declared = next.clone();
         self.definition = next;
         self.needs_reconcile = true;

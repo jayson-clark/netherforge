@@ -180,6 +180,18 @@ impl netherforge_platform::FakeClientEntityOps for Fake {
     }
 }
 
+impl netherforge_platform::FakeBlockOps for Fake {
+    fn get(
+        &self,
+        _: String,
+        _: i32,
+        _: i32,
+        _: i32,
+    ) -> Option<netherforge_platform::BlockSnapshot> {
+        None
+    }
+}
+
 impl FakeWorldOps for Fake {
     fn exists(&self, world: String) -> bool {
         world == "world"
@@ -189,6 +201,36 @@ impl FakeWorldOps for Fake {
     }
     fn entities_loaded(&self, _: Location) -> bool {
         true
+    }
+    fn is_chunk_loaded(&self, _: String, _: i32, _: i32) -> bool {
+        true
+    }
+    /// A floor: every block below y 64 is stone, and a wall of it at x 10.
+    fn collision_boxes(
+        &self,
+        _: String,
+        min_x: f64,
+        min_y: f64,
+        min_z: f64,
+        max_x: f64,
+        max_y: f64,
+        max_z: f64,
+    ) -> Vec<netherforge_format::math::BoundingBox> {
+        let mut boxes = Vec::new();
+        for x in min_x.floor() as i32..=max_x.floor() as i32 {
+            for y in min_y.floor() as i32..=max_y.floor() as i32 {
+                for z in min_z.floor() as i32..=max_z.floor() as i32 {
+                    if y < 64 || x == 10 {
+                        let (x, y, z) = (f64::from(x), f64::from(y), f64::from(z));
+                        boxes.push(netherforge_format::math::BoundingBox {
+                            min: netherforge_format::math::Vec3(x, y, z),
+                            max: netherforge_format::math::Vec3(x + 1.0, y + 1.0, z + 1.0),
+                        });
+                    }
+                }
+            }
+        }
+        boxes
     }
 }
 
@@ -213,6 +255,9 @@ impl FakePlatform for Fake {
         self
     }
     fn client_entities(&self) -> &dyn netherforge_platform::ClientEntityOps {
+        self
+    }
+    fn blocks(&self) -> &dyn netherforge_platform::BlockOps {
         self
     }
 }
@@ -928,4 +973,49 @@ end)
         ],
         "{lines:?}"
     );
+}
+
+#[test]
+fn a_body_falls_lands_walks_into_a_wall_and_jumps() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = lamp(1.0);
+    let end = centity.rfind('}').expect("an object");
+    let centity = format!(
+        r#"{}, "body": {{ "width": 0.6, "height": 1.8 }} }}"#,
+        centity[..end].trim_end()
+    );
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/walker/centity.json", &centity),
+        (
+            "modules/game/init.lua",
+            r#"
+local w = nf.centities.spawn("walker", vector.create(8.5, 66, 0.5))
+w:on("land", function(e) print("landed", e.speed > 0, w:position().y, w:is_on_ground()) end)
+w:on("bump", function(e) print("bump", e.normal.x) end)
+print(w:has_body(), w:body().height, w:is_on_ground())
+nf.after(30, function()
+    w:set_walk_velocity(vector.create(4, 0, 0))
+end)
+nf.after(50, function()
+    print("at wall", string.format("%.1f", w:position().x), w:wall() and w:wall().x)
+    w:set_walk_velocity(nil)
+    print(w:jump(1.25), w:is_on_ground(), w:velocity().y > 0)
+end)
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(printed(&start), ["true\t1.8\tfalse"], "{start:?}");
+    let mut lines = Vec::new();
+    for _ in 0..52 {
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    assert_eq!(lines[0], "landed\ttrue\t64\ttrue", "{lines:?}");
+    assert!(lines.iter().any(|l| l == "bump\t-1"), "{lines:?}");
+    // It stops with its side against the wall's face, at x 10.
+    assert!(lines.iter().any(|l| l == "at wall\t9.7\t-1"), "{lines:?}");
+    assert!(lines.iter().any(|l| l == "true\tfalse\ttrue"), "{lines:?}");
 }
