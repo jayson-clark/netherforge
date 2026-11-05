@@ -37,6 +37,7 @@ pub mod shared;
 pub mod sky;
 pub mod stats;
 pub mod store;
+pub mod utilities;
 pub mod world;
 
 pub use modules::{Modules, Owner, Project};
@@ -190,6 +191,8 @@ struct Api {
     worlds: Option<world::GameContext>,
     /// `nf.schedule` and `Schedule`.
     schedules: Option<schedule::ScheduleContext>,
+    /// `nf.server`, `nf.players`, `Sender`, `nf.math`, `nf.json`, `nf.random`, `nf.time`, `nf.text`.
+    utilities: Option<utilities::UtilitiesContext>,
 }
 
 impl Runtime for Api {
@@ -344,6 +347,60 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_server(&self) -> &dyn netherforge_api::api::NfServerApi {
+        match &self.utilities {
+            Some(u) => u,
+            None => &Unported,
+        }
+    }
+    fn nf_players(&self) -> &dyn netherforge_api::api::NfPlayersApi {
+        match &self.utilities {
+            Some(u) => u,
+            None => &Unported,
+        }
+    }
+    fn sender(&self) -> &dyn netherforge_api::api::SenderApi {
+        match &self.utilities {
+            Some(u) => u,
+            None => &Unported,
+        }
+    }
+    fn nf_math(&self) -> &dyn netherforge_api::api::NfMathApi {
+        match &self.utilities {
+            Some(u) => u,
+            None => &Unported,
+        }
+    }
+    fn nf_json(&self) -> &dyn netherforge_api::api::NfJsonApi {
+        match &self.utilities {
+            Some(u) => u,
+            None => &Unported,
+        }
+    }
+    fn nf_random(&self) -> &dyn netherforge_api::api::NfRandomApi {
+        match &self.utilities {
+            Some(u) => u,
+            None => &Unported,
+        }
+    }
+    fn random(&self) -> &dyn netherforge_api::api::RandomApi {
+        match &self.utilities {
+            Some(u) => u,
+            None => &Unported,
+        }
+    }
+    fn nf_time(&self) -> &dyn netherforge_api::api::NfTimeApi {
+        match &self.utilities {
+            Some(u) => u,
+            None => &Unported,
+        }
+    }
+    fn nf_text(&self) -> &dyn netherforge_api::api::NfTextApi {
+        match &self.utilities {
+            Some(u) => u,
+            None => &Unported,
+        }
+    }
     fn nf_worlds(&self) -> &dyn netherforge_api::api::NfWorldsApi {
         match &self.worlds {
             Some(w) => w,
@@ -377,6 +434,11 @@ impl Room {
             shared: shared.clone(),
             scripts: scripts.clone(),
         });
+        let utilities = shared.as_ref().map(|shared| utilities::UtilitiesContext {
+            shared: shared.clone(),
+            scripts: scripts.clone(),
+            randoms: Default::default(),
+        });
         let centities = shared.map(|shared| {
             centity::api::CentityContext::install_liveness(&shared, &scripts);
             centity::api::CentityContext::new(shared, scripts.clone())
@@ -393,6 +455,7 @@ impl Room {
             centities,
             images,
             schedules,
+            utilities,
             worlds,
         };
         netherforge_api::install(&host, Rc::new(api))?;

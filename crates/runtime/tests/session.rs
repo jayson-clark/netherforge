@@ -31,6 +31,14 @@ impl FakePlatformLog for Fake {
     }
 }
 
+/// A console that says what it ran.
+impl netherforge_platform::FakeCommandOps for Fake {
+    fn run_console(&self, line: String) -> bool {
+        self.lines.borrow_mut().push(format!("console {line}"));
+        true
+    }
+}
+
 /// Nobody online.
 impl netherforge_platform::FakePlayerOps for Fake {
     fn online(&self) -> Vec<netherforge_platform::PlayerRef> {
@@ -40,6 +48,9 @@ impl netherforge_platform::FakePlayerOps for Fake {
 
 impl FakePlatform for Fake {
     fn players(&self) -> &dyn netherforge_platform::PlayerOps {
+        self
+    }
+    fn commands(&self) -> &dyn netherforge_platform::CommandOps {
         self
     }
     fn info(&self) -> ServerInfo {
@@ -324,11 +335,9 @@ fn a_call_is_held_to_the_package_whose_code_makes_it() {
         )),
         "{lines:?}"
     );
-    // The project's own call passes the check (and reaches what isn't ported yet).
+    // The project's own call passes the check and reaches the console.
     assert!(
-        lines.iter().any(|l| l.contains(
-            "false\tmodules/shop/init.lua:1: nf.server.run isn't on the Rust runtime yet"
-        )),
+        lines.iter().any(|l| l.contains("console say hi")),
         "{lines:?}"
     );
     assert!(

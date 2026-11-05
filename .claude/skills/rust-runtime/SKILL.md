@@ -603,6 +603,20 @@ sky has are what the server **started with** (`DatapackOps::started`, read once 
 another world, jumps straight to the sky. Timers run before the service in a tick, so a change a timer makes
 steps that same tick. Not yet: the refusal's own words (`DatapackOps::refused` is a placeholder).
 
+## The small namespaces (`crates/runtime/src/utilities.rs`)
+
+`nf.server`, `nf.players`, `Sender`, `nf.math`, `nf.json`, `nf.random`/`Random`, `nf.time`, `nf.text`: Kotlin's
+`NfServerImpl`... and the prelude's `utilities.lua` for the `impl: "lua"` ones, with their words.
+- `Random` is the prelude's xoshiro256** (`netherforge_luau::random`, already held to Lua 5.4's streams);
+  `weighted` sorts keys as the prelude did (numbers, strings, booleans, the rest) and charges the caller as the
+  prelude's `affordable` did (`Host::charge`). A generator's state is kept by id until the session ends (the
+  prelude's were collected with the handle).
+- **Noise is Kotlin's simplex noise over Java's `SplittableRandom`**, ported bit for bit: the tests hold both
+  to numbers jshell printed (`SplittableRandom` draws, and a Java transcription of `noise2`/`noise3`).
+- `nf.json` encodes and decodes with the saved tables' handle tags; text that isn't JSON decodes to nil.
+- `nf.server.unix_time` reads the same wall clock schedules do (a session's `Config` can fix it).
+- Not yet: `nf.time.format`/`parse` (Java's pattern language), `nf.text.glyph`/`space` (the built pack).
+
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 
 The roadmap's "describe `Platform` and `PlatformEvents` in a language-neutral spec, and generate

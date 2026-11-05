@@ -2545,3 +2545,42 @@ print(pcall(alex.grant_advancement, alex, "explorer"))
     );
     assert!(calls.contains(&"grant 77 minecraft:story/mine_diamond Some(\"diamond\")".to_owned()));
 }
+
+#[test]
+fn the_small_namespaces_answer_as_the_prelude_did() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/util/init.lua",
+            r#"
+print(nf.math.lerp(0, 10, 0.25), nf.math.clamp(12, 0, 10), nf.math.remap(5, 0, 10, 100, 200), nf.math.ease("ease_in", 0.5))
+print(pcall(nf.math.clamp, 1, 5, 2))
+local text = nf.json.encode({ home = nf.worlds.default(), list = { 1, 2.5, "x" } })
+print(text, nf.json.decode(text).home == nf.worlds.default(), nf.json.decode("not json"))
+local a, b = nf.random.new(42), nf.random.new(42)
+print(a:integer(1, 100) == b:integer(1, 100), a:number() == b:number(), a:pick({ "x" }), a:weighted({ only = 1, never = 0 }))
+local list = { 1, 2, 3, 4, 5 }
+a:shuffle(list)
+print(#list, pcall(a.weighted, a, { bad = -1 }))
+print(nf.time.duration(90061000), nf.time.duration(-5000), nf.time.parse_duration("1h 30m"), nf.time.parse_duration("250ms"), nf.time.parse_duration("1h 1h"))
+print(nf.server.tick(), #nf.random.uuid())
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "2.5\t10\t150\t0.25",
+            "false\tmodules/util/init.lua:3: bad argument 'min' (5 is greater than max, 2)",
+            r#"{"home":{"$world":["world"]},"list":[1,2.5,"x"]}	true	nil"#,
+            "true\ttrue\tx\tonly",
+            "5\tfalse\tmodules/util/init.lua:10: bad argument 'weights' (the weight of bad must be a number from 0 up, not -1)",
+            "1d 1h 1m 1s\t-5s\t5400000\t250\tnil",
+            "0\t36",
+        ]
+    );
+}
