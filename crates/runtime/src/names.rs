@@ -129,6 +129,12 @@ impl Calling<'_> {
         )))
     }
 
+    /// `reference`, a look of `kind` the calling code named, as the server names it (`ui/coin`,
+    /// `library:gems/gem`).
+    pub fn look_name(&self, kind: RefKind, reference: &str) -> ApiResult<String> {
+        Ok(self.look(kind, reference)?.relative_to(self.home()))
+    }
+
     /// For a bare look its own package lacks: the loaded package that has it, and how to write it.
     fn elsewhere(&self, kind: RefKind, key: &ResourceKey) -> String {
         let path = key.relative_to(&key.namespace);

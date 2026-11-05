@@ -571,6 +571,36 @@ impl netherforge_platform::FakeAdvancementOps for Fake {
     }
 }
 
+impl netherforge_platform::FakeBossBarOps for Fake {
+    fn create(&self, id: i32, look: netherforge_platform::BossBarLook) {
+        self.call(format!("bar {id} made {} {}", look.text, look.progress));
+    }
+    fn update(&self, id: i32, look: netherforge_platform::BossBarLook) {
+        self.call(format!("bar {id} {} {}", look.text, look.progress));
+    }
+    fn show(&self, id: i32, player: Uuid) -> bool {
+        self.call(format!("bar {id} shown to {}", player.0));
+        true
+    }
+    fn hide(&self, id: i32, player: Uuid) {
+        self.call(format!("bar {id} hidden from {}", player.0));
+    }
+    fn remove(&self, id: i32) {
+        self.call(format!("bar {id} removed"));
+    }
+}
+
+impl netherforge_platform::FakeSidebarOps for Fake {
+    fn show(&self, player: Uuid, title: String, lines: Vec<String>) -> bool {
+        self.call(format!("sidebar {} {title} {lines:?}", player.0));
+        true
+    }
+    fn hide(&self, player: Uuid) -> bool {
+        self.call(format!("sidebar {} hidden", player.0));
+        true
+    }
+}
+
 impl netherforge_platform::FakePermissionOps for Fake {
     fn apply(&self, player: Uuid, nodes: std::collections::HashMap<String, bool>) {
         let mut nodes: Vec<String> = nodes.into_iter().map(|(n, v)| format!("{n}={v}")).collect();
@@ -612,6 +642,12 @@ impl FakePlatform for Fake {
         self
     }
     fn advancements(&self) -> &dyn netherforge_platform::AdvancementOps {
+        self
+    }
+    fn boss_bars(&self) -> &dyn netherforge_platform::BossBarOps {
+        self
+    }
+    fn sidebars(&self) -> &dyn netherforge_platform::SidebarOps {
         self
     }
     fn sounds(&self) -> &dyn netherforge_platform::SoundOps {
@@ -2582,5 +2618,67 @@ print(nf.server.tick(), #nf.random.uuid())
             "1d 1h 1m 1s\t-5s\t5400000\t250\tnil",
             "0\t36",
         ]
+    );
+}
+
+#[test]
+fn boss_bars_show_follow_a_centity_and_go_with_their_script() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let boss = r#"{ "nodes": { "body": { "display": { "type": "block", "block": "minecraft:stone" } } }, "health": { "max": 10 } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/boss/centity.json", boss),
+        (
+            "modules/arena/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local bar = nf.bossbars.create({ text = "Wave 1", progress = 0.5 })
+print(bar:show_to(alex), #alex:bossbars(), pcall(bar.set_progress, bar, 2))
+local boss = nf.centities.spawn("boss", vector.create(10, 64, 0))
+local health = nf.bossbars.create({ text = "Boss" })
+print(health:attach(boss, { range = 20 }), health:attached() == boss)
+boss:damage(5)
+alex:sidebar():set_lines({ "Kills: 3" })
+print(alex:sidebar():lines()[1], #alex:sidebar():lines())
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "true\t1\tfalse\tmodules/arena/init.lua:4: progress must be from 0 to 1, not 2",
+            "true\ttrue",
+            "Kills: 3\t1",
+        ]
+    );
+    session.tick();
+    let ticked = platform.take();
+    let bars: Vec<&String> = calls
+        .iter()
+        .chain(&ticked)
+        .filter(|c| c.starts_with("bar") || c.starts_with("sidebar"))
+        .collect();
+    assert_eq!(
+        bars,
+        [
+            "bar 1 made Wave 1 0.5",
+            "bar 1 shown to 77",
+            "bar 2 made Boss 1",
+            "bar 2 shown to 77",
+            "sidebar 77  [\"Kills: 3\"]",
+            "bar 2 Boss 0.5",
+        ]
+    );
+    // The module's reloaded: its bars go with its old scope.
+    session.reload(&["modules/arena/init.lua".to_owned()]);
+    let reloaded = platform.take();
+    assert!(
+        reloaded.contains(&"bar 1 removed".to_owned())
+            && reloaded.contains(&"bar 2 removed".to_owned()),
+        "{reloaded:?}"
     );
 }

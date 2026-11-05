@@ -607,6 +607,7 @@ steps that same tick. Not yet: the refusal's own words (`DatapackOps::refused` i
 
 `nf.server`, `nf.players`, `Sender`, `nf.math`, `nf.json`, `nf.random`/`Random`, `nf.time`, `nf.text`: Kotlin's
 `NfServerImpl`... and the prelude's `utilities.lua` for the `impl: "lua"` ones, with their words.
+
 - `Random` is the prelude's xoshiro256** (`netherforge_luau::random`, already held to Lua 5.4's streams);
   `weighted` sorts keys as the prelude did (numbers, strings, booleans, the rest) and charges the caller as the
   prelude's `affordable` did (`Host::charge`). A generator's state is kept by id until the session ends (the
@@ -616,6 +617,15 @@ steps that same tick. Not yet: the refusal's own words (`DatapackOps::refused` i
 - `nf.json` encodes and decodes with the saved tables' handle tags; text that isn't JSON decodes to nil.
 - `nf.server.unix_time` reads the same wall clock schedules do (a session's `Config` can fix it).
 - Not yet: `nf.time.format`/`parse` (Java's pattern language), `nf.text.glyph`/`space` (the built pack).
+
+## Boss bars and sidebars (`crates/runtime/src/bossbar.rs`)
+
+Kotlin's `BossBars` and `Sidebars`: a bar's look and its viewers by UUID (shown again when they rejoin), its icon
+a glyph placed left of the bar (`<at:-92:from=center:align=right>`), gone with the scope that made it
+(`Service::scope_released`, which every service now hears: the session takes the released scopes once and hands
+them to centities and to each service). An attached bar follows its centity's health and shows to who's in
+range; it goes, or comes off (`remove_with: false`), when the centity does. A sidebar is each online player's,
+forgotten when they leave; everyone gets the main scoreboard back at the end.
 
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 

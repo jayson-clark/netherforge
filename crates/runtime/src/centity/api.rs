@@ -749,12 +749,8 @@ impl CentityContext {
     }
 
     /// The temporary instances whose scope has gone (it closed, or its body failed): they go with it.
-    pub fn scopes_released(&self) {
-        let released = self.scripts.take_released();
-        if released.is_empty() {
-            return;
-        }
-        self.release_conditions(&released);
+    pub fn scopes_released(&self, released: &[ScopeId]) {
+        self.release_conditions(released);
         let doomed: Vec<Uuid> = self
             .shared
             .centities

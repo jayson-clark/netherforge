@@ -17,6 +17,7 @@ use netherforge_format::requirement::Requirement;
 use netherforge_luau::{Host, ScopeId};
 
 pub mod block;
+pub mod bossbar;
 pub mod centity;
 pub mod data;
 pub mod effects;
@@ -398,6 +399,24 @@ impl LuaApi for Api {
     fn nf_text(&self) -> &dyn netherforge_api::api::NfTextApi {
         match &self.utilities {
             Some(u) => u,
+            None => &Unported,
+        }
+    }
+    fn nf_bossbars(&self) -> &dyn netherforge_api::api::NfBossbarsApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn bossbar(&self) -> &dyn netherforge_api::api::BossBarApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn sidebar(&self) -> &dyn netherforge_api::api::SidebarApi {
+        match &self.worlds {
+            Some(w) => w,
             None => &Unported,
         }
     }

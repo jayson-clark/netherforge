@@ -44,6 +44,8 @@ pub struct Shared {
     pub names: RefCell<netherforge_format::project::Names>,
     /// The skies over worlds and players.
     pub skies: RefCell<crate::sky::Skies>,
+    /// Boss bars scripts made, and players' sidebars.
+    pub bars: RefCell<crate::bossbar::Bars>,
     /// Natural spawning: its passes, rules and scripts' conditions.
     pub spawner: RefCell<crate::centity::natural::Spawner>,
     /// The pictures scripts hold.
@@ -74,6 +76,7 @@ impl Shared {
             schedules: RefCell::default(),
             names: RefCell::default(),
             skies: RefCell::default(),
+            bars: RefCell::default(),
             centities: RefCell::default(),
             font: RefCell::default(),
             centity_scripts: RefCell::default(),

@@ -64,6 +64,8 @@ pub trait Service {
     /// Stops it: everything it holds goes.
     fn stop(&self, _room: &Room, _platform: &dyn Platform) {}
 
+    /// Scopes stopped for good (closed, or disabled by a failing body): what they made here goes.
+    fn scope_released(&self, _scopes: &[netherforge_luau::ScopeId]) {}
     /// A player joined, before scripts hear of it.
     fn player_joined(&self, _player: &PlayerRef) {}
     /// A player left, after scripts heard of it.
@@ -402,7 +404,14 @@ impl<'a> Session<'a> {
     /// What goes with the scopes that stopped since the last time (temporary centities).
     pub(crate) fn released(&self) {
         if let Some(room) = &self.room {
-            CentityContext::new(self.shared.clone(), room.scripts().clone()).scopes_released();
+            let released = room.scripts().take_released();
+            if !released.is_empty() {
+                CentityContext::new(self.shared.clone(), room.scripts().clone())
+                    .scopes_released(&released);
+                for service in &self.services {
+                    service.scope_released(&released);
+                }
+            }
         }
         let gone = std::mem::take(&mut *self.shared.gone.borrow_mut());
         for entity in gone {
@@ -606,6 +615,9 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         Box::new(crate::entity::EntitiesService {
             shared: shared.clone(),
             host: Default::default(),
+        }),
+        Box::new(crate::bossbar::BarsService {
+            shared: shared.clone(),
         }),
         Box::new(crate::sky::SkiesService {
             shared: shared.clone(),

@@ -3,7 +3,7 @@
 //! Their stats and buffs are the centities' stat sheets (`crate::stats`, `Holder::Player`).
 //!
 //! Not yet, each with its area: recipes (with items), menus and dialogs, who's listed for whom and below-name
-//! text (teams), boss bars, and resource packs.
+//! text (teams), and resource packs.
 
 use std::collections::BTreeMap;
 
@@ -1096,7 +1096,9 @@ impl PlayerApi for GameContext {
         <Unported as PlayerApi>::set_below_name(&Unported, this, text)
     }
     fn bossbars(&self, this: &handles::Player) -> ApiResult<Vec<handles::BossBar>> {
-        <Unported as PlayerApi>::bossbars(&Unported, this)
+        Ok(parse_uuid(&this.id)
+            .map(|id| self.bars_of(id))
+            .unwrap_or_default())
     }
     fn resource_pack_status(
         &self,
