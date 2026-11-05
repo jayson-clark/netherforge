@@ -39,8 +39,6 @@ struct Installed {
     api: Rc<dyn LuaApi>,
     /// What a waiting binding returns to its shim: "yield now".
     waiting: Table,
-    /// Wraps a waiting binding in the shim that yields.
-    shim: Function,
 }
 
 /// The value a waiting binding returns, which its shim answers by yielding.
@@ -50,41 +48,25 @@ pub fn waiting(lua: &Lua) -> mlua::Result<Value> {
         .ok_or_else(|| mlua::Error::runtime("the API isn't installed"))
 }
 
-/// A Luau function can yield where a Rust one can't (without mlua's async
-/// machinery, which would drive tasks itself): so a waiting binding returns,
-/// and this shim yields its task's coroutine, which the scheduler resumes
-/// with the call's value.
-///
-/// It also checks the task can yield here: a function called back from
-/// outside Luau (`table.sort`'s comparator) can't, and Rust can't tell.
-const SHIM: &str = r#"
-local waiting, yield, isyieldable, error = ...
-return function(binding, called)
-  local stuck = called
-    .. " can't wait inside a function called back from outside Lua (like table.sort's comparator or string.gsub's replacement): wait in the task's own code"
-  return function(...)
-    local result = binding(...)
-    if result == waiting then
-      if not isyieldable() then
-        error(stuck, 2)
-      end
-      return yield()
-    end
-    return result
-  end
-end
-"#;
-
-fn shimmed(lua: &Lua, binding: &Binding, f: Function) -> mlua::Result<Function> {
+/// `binding` as scripts call it, through the host's wrapper (`Host::script_function`): its failure raised as a
+/// string at the script's line. A Luau function can yield where a Rust one can't (without mlua's async
+/// machinery, which would drive tasks itself), so a waiting binding returns `waiting` and the wrapper yields its
+/// task's coroutine, which the scheduler resumes with the call's value.
+fn wrapped(
+    host: &Host,
+    binding: &Binding,
+    f: impl Fn(&Lua, MultiValue) -> mlua::Result<MultiValue> + 'static,
+) -> mlua::Result<Function> {
     if !binding.waits {
-        return Ok(f);
+        return host.script_function(f);
     }
-    let shim = lua
-        .app_data_ref::<Installed>()
-        .map(|i| i.shim.clone())
-        .ok_or_else(|| mlua::Error::runtime("the API isn't installed"))?;
+    let waiting = waiting(host.lua())?;
     let separator = if binding.method { ":" } else { "." };
-    shim.call((f, format!("{}{separator}{}", binding.class, binding.name)))
+    host.waiting_function(
+        f,
+        waiting,
+        &format!("{}{separator}{}", binding.class, binding.name),
+    )
 }
 
 /// Puts the bindings into `host`'s state, implemented by `api`. Each handle
@@ -93,21 +75,9 @@ pub fn install(host: &Host, api: Rc<dyn LuaApi>) -> mlua::Result<()> {
     let lua = host.lua();
     lua.set_app_data(host.downgrade());
     let waiting = lua.create_table()?;
-    let coroutine: Table = lua.globals().get("coroutine")?;
-    let shim: Function = lua
-        .load(SHIM)
-        .set_name("=nf/waits")
-        .set_compiler(mlua::chunk::Compiler::new().set_debug_level(0))
-        .call((
-            waiting.clone(),
-            coroutine.get::<Function>("yield")?,
-            coroutine.get::<Function>("isyieldable")?,
-            lua.globals().get::<Function>("error")?,
-        ))?;
     lua.set_app_data(Installed {
         api: api.clone(),
         waiting,
-        shim,
     });
 
     // A method's function is made once and shared by every class that has it.
@@ -115,11 +85,10 @@ pub fn install(host: &Host, api: Rc<dyn LuaApi>) -> mlua::Result<()> {
     for binding in BINDINGS.iter().filter(|b| b.method) {
         let api = api.clone();
         let call = binding.call;
-        let f = lua.create_function(move |lua, args: MultiValue| {
+        let f = wrapped(host, binding, move |lua, args: MultiValue| {
             let args: Vec<Value> = args.into_vec();
             call(lua, &*api, None, &args)
         })?;
-        let f = shimmed(lua, binding, f)?;
         own.entry(binding.class)
             .or_default()
             .push((binding.name, f));
@@ -160,10 +129,16 @@ fn namespace(lua: &Lua, scope: ScopeId, path: &'static str) -> mlua::Result<Tabl
             Ok(value)
         })?,
     )?;
+    let host =
+        crate::handle::host(lua).ok_or_else(|| mlua::Error::runtime("the API isn't installed"))?;
     meta.raw_set(
         "__newindex",
-        lua.create_function(move |_, (_, name): (Value, String)| {
-            Err::<(), _>(mlua::Error::runtime(format!(
+        host.script_function(move |_, args: MultiValue| {
+            let name = args
+                .get(1)
+                .and_then(|v| v.as_string().map(|s| s.to_string_lossy()))
+                .unwrap_or_default();
+            Err::<MultiValue, _>(mlua::Error::runtime(format!(
                 "{path}.{name}: {path} is the API's, and can't be changed"
             )))
         })?,
@@ -185,11 +160,13 @@ fn lookup(lua: &Lua, scope: ScopeId, path: &'static str, name: &str) -> mlua::Re
             .map(|i| i.api.clone())
             .ok_or_else(|| mlua::Error::runtime("the API isn't installed"))?;
         let call = binding.call;
-        let f = lua.create_function(move |lua, args: MultiValue| {
+        let host = crate::handle::host(lua)
+            .ok_or_else(|| mlua::Error::runtime("the API isn't installed"))?;
+        let f = wrapped(&host, binding, move |lua, args: MultiValue| {
             let args: Vec<Value> = args.into_vec();
             call(lua, &*api, Some(scope), &args)
         })?;
-        return Ok(Value::Function(shimmed(lua, binding, f)?));
+        return Ok(Value::Function(f));
     }
     let child = format!("{path}.{name}");
     if let Some(binding) = BINDINGS.iter().find(|b| !b.method && b.class == child) {

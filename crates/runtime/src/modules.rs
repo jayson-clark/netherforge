@@ -15,12 +15,21 @@
 //!
 //! A file runs once per scope it runs in, and its result is kept there, so
 //! every requirer of a module gets the module that's running, state and all.
+//!
+//! **Packages.** The packages the project depends on have modules too, named
+//! as the runtime names a package's resources (`acme:api`), their files at
+//! package paths (`acme:modules/api/init.lua`), each in a scope of the
+//! package's own, so its calls are held to the package's `requires`. A bare
+//! name is in the caller's own package; `require("acme:api")` names a module of
+//! package `acme`, which the caller's package must depend on and `acme` must
+//! export (`exports.modules`). A module's folder may be in group folders
+//! (`modules/(combat)/sword`): its place says where.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::rc::{Rc, Weak};
 
-use mlua::{Function, Value};
+use mlua::{Function, IntoLuaMulti, MultiValue, Value};
 use netherforge_luau::{Failure, ScopeId};
 
 use crate::scripts::Scripts;
@@ -28,24 +37,77 @@ use crate::scripts::Scripts;
 /// The file a module's folder starts with.
 pub const ENTRY: &str = "init.lua";
 
-/// The project as the runtime sees it: its files' text, by project path.
+/// What a package (or the project) says about its modules: what it depends on, and which of its modules others
+/// may require.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PackageModules {
+    pub dependencies: BTreeSet<String>,
+    pub exports: BTreeSet<String>,
+}
+
+/// The project as the runtime sees it: its files' text by project path (a package's at package paths,
+/// `acme:modules/api/init.lua`), and its modules.
 #[derive(Clone, Debug, Default)]
 pub struct Project {
     pub files: BTreeMap<String, String>,
+    /// The project's namespace: whose its own code is.
+    pub home: String,
+    /// Each module's folder by its id (`sword` at `modules/(combat)/sword`, `acme:api` at
+    /// `acme:modules/api`).
+    pub places: BTreeMap<String, String>,
+    /// The project's and each package's dependencies and exported modules, by namespace.
+    pub packages: BTreeMap<String, PackageModules>,
 }
 
 impl Project {
-    /// Every module: each folder `modules/<id>/` with an `init.lua`.
-    pub fn modules(&self) -> BTreeSet<String> {
-        self.files
+    /// The project's own `files` alone, its modules found by their folders (`modules/<id>/`).
+    pub fn of(files: BTreeMap<String, String>) -> Project {
+        let places = files
             .keys()
             .filter_map(|path| {
-                let rest = path.strip_prefix("modules/")?;
-                let (id, file) = rest.split_once('/')?;
-                (file == ENTRY).then(|| id.to_owned())
+                let (id, _) = path.strip_prefix("modules/")?.split_once('/')?;
+                Some((id.to_owned(), format!("modules/{id}")))
             })
-            .collect()
+            .collect();
+        Project {
+            files,
+            places,
+            ..Project::default()
+        }
     }
+
+    /// Every module, by id.
+    pub fn modules(&self) -> BTreeSet<String> {
+        self.places.keys().cloned().collect()
+    }
+
+    /// Where module `id` is: its place, or `modules/` itself (in its package) when it has none.
+    fn place(&self, id: &str) -> String {
+        if let Some(place) = self.places.get(id) {
+            return place.clone();
+        }
+        match split_package(id) {
+            (Some(ns), local) => package_path(ns, &format!("modules/{local}")),
+            (None, local) => format!("modules/{local}"),
+        }
+    }
+
+    fn init_path(&self, id: &str) -> String {
+        format!("{}/{ENTRY}", self.place(id))
+    }
+
+    fn has_init(&self, id: &str) -> bool {
+        self.files.contains_key(&self.init_path(id))
+    }
+}
+
+/// A path's (or a module id's) package, and what it is inside it.
+fn split_package(path: &str) -> (Option<&str>, &str) {
+    netherforge_format::kinds::split_package(path)
+}
+
+fn package_path(namespace: &str, path: &str) -> String {
+    netherforge_format::kinds::package_path(namespace, path)
 }
 
 /// Whose a scope is.
@@ -96,28 +158,39 @@ impl Modules {
     /// Starts every module that hasn't started (each when its turn comes, or
     /// when something requires it first), in name order.
     pub fn start(&self) {
-        let ids = self.0.project.borrow().modules();
+        let ids: Vec<String> = {
+            let project = self.0.project.borrow();
+            project
+                .modules()
+                .into_iter()
+                .filter(|id| project.has_init(id))
+                .collect()
+        };
         for id in ids {
             let _ = self.module(&id);
         }
     }
 
-    /// The scope module `id` runs in, started if it hasn't: its scope opened
-    /// and its `init.lua` run. A body that fails disables the scope (until
-    /// it's reloaded), and that's reported once.
+    /// The scope module `id` runs in (a package's named `ns:id`), started if it hasn't: its scope opened in
+    /// its package's namespace and its `init.lua` run, if it has one. A body that fails disables the scope
+    /// (until it's reloaded), and that's reported once.
     pub fn module(&self, id: &str) -> Result<ScopeId, Failure> {
         if let Some(scope) = self.0.modules.borrow().get(id) {
             return Ok(*scope);
         }
+        let place = self.0.project.borrow().place(id);
         let scope = self
             .open(
                 &format!("module {id}"),
-                &format!("modules/{id}"),
+                &place,
                 Owner::Module(id.to_owned()),
             )
             .map_err(|e| Failure::of(&e))?;
         self.0.modules.borrow_mut().insert(id.to_owned(), scope);
-        let path = format!("modules/{id}/{ENTRY}");
+        if !self.0.project.borrow().has_init(id) {
+            return Ok(scope);
+        }
+        let path = self.0.project.borrow().init_path(id);
         let result = self.run_file(scope, &path);
         if let Err(failure) = &result {
             self.0.scripts.fail_body(scope, failure.clone());
@@ -193,11 +266,18 @@ impl Modules {
     }
 
     fn open(&self, name: &str, memory_key: &str, owner: Owner) -> mlua::Result<ScopeId> {
-        let scope = self.0.scripts.open(name, memory_key, self.0.budget)?;
+        let namespace = match &owner {
+            Owner::Module(id) | Owner::Script(id) => split_package(id).0.map(str::to_owned),
+        };
+        let scope =
+            self.0
+                .scripts
+                .open_in(name, memory_key, self.0.budget, namespace.as_deref())?;
         self.0.owners.borrow_mut().insert(scope, owner);
         let host = self.0.scripts.host();
         let weak: Weak<Inner> = Rc::downgrade(&self.0);
-        let require = host.lua().create_function(move |_, name: Value| {
+        let require = host.script_function(move |lua, args: MultiValue| {
+            let name = args.into_iter().next().unwrap_or(Value::Nil);
             let Some(inner) = weak.upgrade() else {
                 return Err(mistake("the project is gone"));
             };
@@ -209,7 +289,9 @@ impl Modules {
             };
             let modules = Modules(inner);
             let (path, owner) = modules.resolve(scope, &name.to_string_lossy())?;
-            modules.load_path(owner, &path)
+            modules
+                .load_path(owner, &path)
+                .and_then(|v| v.into_lua_multi(lua))
         })?;
         host.env(scope)
             .expect("just opened")
@@ -217,30 +299,55 @@ impl Modules {
         Ok(scope)
     }
 
-    /// Resolves `require(name)` from `caller` to a project file and the scope
-    /// it runs in.
+    /// Resolves `require(name)` from `caller` to a project file and the scope it runs in (see the module's
+    /// docs): the caller's own files first for a bare name, then the module the first part names, in the
+    /// caller's package or the one before a colon.
     fn resolve(&self, caller: ScopeId, name: &str) -> mlua::Result<(String, ScopeId)> {
-        let parts: Vec<&str> = name.split('.').collect();
+        let (named, local) = split_package(name);
+        let parts: Vec<&str> = local.split('.').collect();
         let valid = |part: &str| {
             !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
         };
-        if !parts.iter().all(|p| valid(p)) {
+        if !parts.iter().all(|p| valid(p))
+            || named.is_some_and(|n| !netherforge_format::names::is_namespace(n))
+        {
             return Err(mistake(format!(
                 "\"{name}\" isn't a module name: use dots between folder and file names, like \"greeter.messages\", and a package's namespace before a colon, like \"acme:api\""
             )));
         }
+        let home = self.0.project.borrow().home.clone();
+        // The package the calling code is in (none: the project's own), where a bare name is looked for.
+        let from = self.0.scripts.namespace(caller).filter(|n| *n != home);
+        let pkg = match named {
+            None => from.clone(),
+            Some(n) if n == home => None,
+            Some(n) => Some(n.to_owned()),
+        };
+        if pkg != from {
+            self.check_exported(from.as_deref(), pkg.as_deref(), parts[0], name)?;
+        }
         let joined = parts.join("/");
         let owner = self.owner(caller);
-        let (own_folder, script) = match &owner {
-            Some(Owner::Module(id)) => (Some(format!("modules/{id}")), None),
-            Some(Owner::Script(file)) => (
-                Some(
-                    file.rsplit_once('/')
-                        .map_or(String::new(), |(f, _)| f.to_owned()),
-                ),
-                Some(file.clone()),
-            ),
-            None => (None, None),
+        let project = self.0.project.borrow();
+        // A resource's script, whose folder holds its own files; a module's are in its folder. Only a bare name
+        // looks there.
+        let script = match &owner {
+            Some(Owner::Script(file)) => Some(file.clone()),
+            _ => None,
+        };
+        let caller_module = match &owner {
+            Some(Owner::Module(id)) => Some(id.clone()),
+            _ => None,
+        };
+        let own = if named.is_some() {
+            None
+        } else if let Some(id) = &caller_module {
+            Some(project.place(id))
+        } else {
+            script.as_ref().map(|f| {
+                f.rsplit_once('/')
+                    .map_or(String::new(), |(d, _)| d.to_owned())
+            })
         };
         let within = |folder: &str, file: String| {
             if folder.is_empty() {
@@ -249,7 +356,7 @@ impl Modules {
                 format!("{folder}/{file}")
             }
         };
-        let own_files: Vec<String> = own_folder
+        let own_files: Vec<String> = own
             .iter()
             .flat_map(|f| {
                 [
@@ -258,26 +365,33 @@ impl Modules {
                 ]
             })
             .collect();
-        let id = parts[0];
+        let id = match &pkg {
+            Some(p) => package_path(p, parts[0]),
+            None => parts[0].to_owned(),
+        };
         let rest = parts[1..].join("/");
         let module_files: Vec<String> = if rest.is_empty() {
-            vec![format!("modules/{id}/{ENTRY}")]
+            vec![project.init_path(&id)]
         } else {
+            let place = project.place(&id);
             vec![
-                format!("modules/{id}/{rest}.lua"),
-                format!("modules/{id}/{rest}/{ENTRY}"),
+                format!("{place}/{rest}.lua"),
+                format!("{place}/{rest}/{ENTRY}"),
             ]
         };
-        let modules = self.0.project.borrow().modules();
-        let project = self.0.project.borrow();
+        let modules = project.modules();
         let found = own_files
             .iter()
-            .find(|p| project.files.contains_key(*p))
+            .find(|p| {
+                project.files.contains_key(*p)
+                    && (script.is_some()
+                        || caller_module.as_ref().is_some_and(|m| modules.contains(m)))
+            })
             .map(|p| (p.clone(), true))
             .or_else(|| {
                 module_files
                     .iter()
-                    .find(|p| project.files.contains_key(*p) && modules.contains(id))
+                    .find(|p| project.files.contains_key(*p) && modules.contains(&id))
                     .map(|p| (p.clone(), false))
             });
         drop(project);
@@ -302,9 +416,9 @@ impl Modules {
             }
             return Ok((path, caller));
         }
-        let module = match (&owner, own) {
-            (Some(Owner::Module(own_id)), true) => own_id.clone(),
-            _ => id.to_owned(),
+        let module = match (&caller_module, own) {
+            (Some(own_id), true) => own_id.clone(),
+            _ => id,
         };
         let started = self.0.modules.borrow().get(&module).copied();
         let scope = match started {
@@ -318,7 +432,7 @@ impl Modules {
                 "module \"{module}\" failed to load; fix it and save to reload"
             )));
         }
-        if self.owner(caller) != Some(Owner::Module(module.clone())) {
+        if caller_module.as_deref() != Some(module.as_str()) {
             self.0
                 .requires
                 .borrow_mut()
@@ -327,6 +441,42 @@ impl Modules {
                 .insert(module);
         }
         Ok((path, scope))
+    }
+
+    /// Code in package `from` (none: the project's) may require `module` of package `to` (none: the
+    /// project's) only when `from` depends on `to` and `to` exports it: a package's other modules are its own.
+    fn check_exported(
+        &self,
+        from: Option<&str>,
+        to: Option<&str>,
+        module: &str,
+        name: &str,
+    ) -> mlua::Result<()> {
+        use netherforge_format::reference::{not_exported, unknown_namespace};
+        let project = self.0.project.borrow();
+        let requirer = from.unwrap_or(&project.home);
+        let target = to.unwrap_or(&project.home);
+        let depends = project
+            .packages
+            .get(requirer)
+            .is_some_and(|p| p.dependencies.contains(target));
+        if !depends {
+            return Err(mistake(format!(
+                "\"{name}\": {}",
+                for_script(&unknown_namespace(target, requirer).message)
+            )));
+        }
+        let Some(package) = project.packages.get(target) else {
+            return Err(mistake(format!(
+                "\"{name}\": the package \"{target}\" isn't loaded"
+            )));
+        };
+        if !package.exports.contains(module) {
+            return Err(mistake(for_script(
+                &not_exported(target, &format!("module \"{module}\"")).message,
+            )));
+        }
+        Ok(())
     }
 
     /// Runs `path` in `owner`'s scope, once: what it returned (or `true`).
@@ -366,5 +516,14 @@ impl Modules {
             self.0.loaded.borrow_mut().insert(key, value.clone());
         }
         Ok(value)
+    }
+}
+
+/// A reference's problem as a script is told it: its message, starting lower case.
+fn for_script(message: &str) -> String {
+    let mut chars = message.chars();
+    match chars.next() {
+        Some(first) => first.to_lowercase().chain(chars).collect(),
+        None => String::new(),
     }
 }

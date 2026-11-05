@@ -7,7 +7,9 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
-use netherforge_format::package::NoPackages;
+use netherforge_format::package::{
+    NoPackages, OpenedPackage, PackageLookup, PackageRequest, PackageSources,
+};
 use netherforge_format::project::ProjectSource;
 use netherforge_platform::{FakePlatform, FakePlatformLog, PlatformError, PlatformLog, ServerInfo};
 use netherforge_runtime::session::Session;
@@ -103,6 +105,7 @@ fn a_projects_modules_start_tick_and_reload() {
         platform.take(),
         [
             "info [module door] hello (modules/door/init.lua:1)",
+            "info Requires nothing beyond what every project may do",
             "info Running \"Demo\": 2 modules",
         ]
     );
@@ -167,4 +170,183 @@ fn reaching_a_group_the_fake_doesnt_fake_says_which() {
     }));
     let message = failed.unwrap_err().downcast::<String>().unwrap();
     assert_eq!(*message, "TeamOps::names isn't on this platform");
+}
+
+// ---- packages ----
+
+/// Packages beside the project, each a set of files by namespace.
+struct Packages(BTreeMap<&'static str, Vec<(&'static str, String)>>);
+
+impl PackageSources for Packages {
+    fn open(&self, namespace: &str, _: &PackageRequest) -> PackageLookup<'_> {
+        match self.0.get(namespace) {
+            Some(files) => {
+                let files: Vec<(&str, &str)> =
+                    files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+                PackageLookup::Opened(OpenedPackage {
+                    source: Box::new(Files::new(&files)),
+                    hash: None,
+                    commit: None,
+                    from: None,
+                })
+            }
+            None => PackageLookup::Missing(None),
+        }
+    }
+}
+
+fn package_manifest(namespace: &str, more: &str) -> String {
+    format!(
+        r#"{{ "formatVersion": 1, "name": "{namespace}", "namespace": "{namespace}", "version": "1.0.0", "minecraft": "26.3"{more} }}"#
+    )
+}
+
+fn depending(more: &str) -> String {
+    MANIFEST.replace(
+        r#""minecraft": "26.3""#,
+        &format!(
+            r#""minecraft": "26.3", "dependencies": {{ "acme": {{ "path": "../acme" }} }}{more}"#
+        ),
+    )
+}
+
+/// `acme`: an exported `api` module that uses its own unexported `util`, and an unexported `secret`.
+fn acme(more: &str) -> Packages {
+    Packages(BTreeMap::from([(
+        "acme",
+        vec![
+            (
+                "netherforge.json",
+                package_manifest("acme", &format!(r#", "exports": {{ "modules": ["api"] }}{more}"#)),
+            ),
+            (
+                "modules/api/init.lua",
+                "local util = require('util') return { greet = function() return util.word() end, run = function() nf.server.run('say hi') end }".into(),
+            ),
+            ("modules/util/init.lua", "return { word = function() return 'hello' end }".into()),
+            ("modules/secret/init.lua", "return 'hidden'".into()),
+        ],
+    )]))
+}
+
+fn warnings(lines: &[String]) -> Vec<String> {
+    lines
+        .iter()
+        .filter(|l| l.starts_with("warn "))
+        .cloned()
+        .collect()
+}
+
+#[test]
+fn a_packages_exported_module_is_required_by_its_namespace() {
+    let platform = Fake::default();
+    let files = Files::new(&[
+        ("netherforge.json", &depending("")),
+        (
+            "modules/shop/init.lua",
+            "local api = require('acme:api') print(api.greet()) print(pcall(require, 'acme:secret')) print(type(select(2, pcall(require, 'acme:secret'))))",
+        ),
+    ]);
+    let packages = acme("");
+    let _session = Session::start(&platform, &files, &packages);
+    let lines = platform.take();
+    // The package's module finds its own `util` by a bare name, in its own package.
+    assert!(
+        lines
+            .iter()
+            .any(|l| l == "info [module shop] hello (modules/shop/init.lua:1)"),
+        "{lines:?}"
+    );
+    // Its other modules are its own.
+    assert!(
+        lines.iter().any(|l| l.contains(
+            "false\tmodules/shop/init.lua:1: package \"acme\" doesn't export its module \"secret\""
+        )),
+        "{lines:?}"
+    );
+    // What `pcall` catches is a string, as Lua's own errors are.
+    assert!(
+        lines
+            .iter()
+            .any(|l| l == "info [module shop] string (modules/shop/init.lua:1)"),
+        "{lines:?}"
+    );
+    assert_eq!(warnings(&lines), Vec::<String>::new());
+}
+
+#[test]
+fn a_package_the_project_doesnt_depend_on_isnt_there() {
+    let platform = Fake::default();
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("modules/shop/init.lua", "print(pcall(require, 'acme:api'))"),
+    ]);
+    let _session = Session::start(&platform, &files, &NoPackages);
+    let lines = platform.take();
+    assert!(
+        lines.iter().any(|l| l.contains(
+            "false\tmodules/shop/init.lua:1: \"acme:api\": \"acme\" is neither this project's namespace (\"demo\") nor a package's it depends on"
+        )),
+        "{lines:?}"
+    );
+}
+
+#[test]
+fn a_call_is_held_to_the_package_whose_code_makes_it() {
+    let platform = Fake::default();
+    // The project declares console; the package doesn't: the package's code is refused.
+    let files = Files::new(&[
+        (
+            "netherforge.json",
+            &depending(r#", "requires": { "console": true }"#),
+        ),
+        (
+            "modules/shop/init.lua",
+            "local api = require('acme:api') print(pcall(api.run)) print(pcall(nf.server.run, 'say hi'))",
+        ),
+    ]);
+    let packages = acme("");
+    let _session = Session::start(&platform, &files, &packages);
+    let lines = platform.take();
+    assert!(
+        lines.iter().any(|l| l.contains(
+            "false\tacme:modules/api/init.lua:1: nf.server.run needs console, which package \"acme\" hasn't declared: add \"requires\": { \"console\": true } to its netherforge.json"
+        )),
+        "{lines:?}"
+    );
+    // The project's own call passes the check (and reaches what isn't ported yet).
+    assert!(
+        lines.iter().any(|l| l.contains(
+            "false\tmodules/shop/init.lua:1: nf.server.run isn't on the Rust runtime yet"
+        )),
+        "{lines:?}"
+    );
+    assert!(
+        lines
+            .iter()
+            .any(|l| l == "info Requires (by its packages' netherforge.json): console (demo)"),
+        "{lines:?}"
+    );
+}
+
+#[test]
+fn a_module_in_group_folders_is_required_by_its_id() {
+    let platform = Fake::default();
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("modules/(combat)/sword/init.lua", "return { damage = 7 }"),
+        ("modules/(combat)/sword/edge.lua", "return 'sharp'"),
+        (
+            "modules/door/init.lua",
+            "print(require('sword').damage, require('sword.edge'))",
+        ),
+    ]);
+    let _session = Session::start(&platform, &files, &NoPackages);
+    let lines = platform.take();
+    assert!(
+        lines
+            .iter()
+            .any(|l| l == "info [module door] 7\tsharp (modules/door/init.lua:1)"),
+        "{lines:?}"
+    );
 }

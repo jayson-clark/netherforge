@@ -2,6 +2,7 @@
 //! room runs. So far its scripts: scopes, events, timers and tasks. See the
 //! rust-runtime skill.
 
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use netherforge_api::api::{LuaApi, NfApi, SubscriptionApi, TaskApi};
@@ -17,13 +18,25 @@ pub mod session;
 pub use modules::{Modules, Owner, Project};
 pub use scripts::{Delivered, Log, MAX_ERRORS, Report, Scripts, Target};
 
-/// What a room's code has declared it may do (`requires` in its `netherforge.json`): the project's own until
-/// packages' code is ported, then each package's (Kotlin's `Requirements`, with the policy).
+/// What each package of a room's code has declared it may do (`requires` in its `netherforge.json`), and the
+/// project's namespace: Kotlin's `Requirements`. A call is held to the package whose code makes it, never to the
+/// project that depends on it: a library's script needs `moderation` in the library's own manifest.
 #[derive(Clone, Debug, Default)]
 pub struct Grants {
-    /// The package whose declaration it is, as refusals name it.
-    pub namespace: String,
-    pub requires: Option<Requires>,
+    /// The project's namespace: whose its own code is.
+    pub home: String,
+    /// Each package's declaration by namespace, the project's own included.
+    pub requires: BTreeMap<String, Option<Requires>>,
+}
+
+impl Grants {
+    /// Only the project, `home`, declaring `requires`.
+    pub fn only(home: &str, requires: Option<Requires>) -> Grants {
+        Grants {
+            home: home.into(),
+            requires: BTreeMap::from([(home.to_owned(), requires)]),
+        }
+    }
 }
 
 /// The API as the runtime implements it so far, every other class unported.
@@ -33,21 +46,37 @@ struct Api {
 }
 
 impl Runtime for Api {
-    /// Format's `Requirement` decides, as the spec's `requires` names it (`db`, `http`, `plugin:vault`), and a
-    /// refusal says what to add, as the Kotlin runtime's does.
-    fn requires(&self, _: Option<ScopeId>, requirement: &str, called: &str) -> ApiResult<()> {
+    /// Format's `Requirement` decides, as the spec's `requires` names it (`db`, `http`, `plugin:vault`), for the
+    /// package whose code `scope` runs, and a refusal says what to add, as the Kotlin runtime's does. A call no
+    /// scope makes (none of the project's code) passes only when every package declares it.
+    fn requires(&self, scope: Option<ScopeId>, requirement: &str, called: &str) -> ApiResult<()> {
         let Some(wanted) = Requirement::parse(requirement) else {
             return Err(ApiError(format!(
                 "{called} needs \"{requirement}\", which isn't a requirement"
             )));
         };
-        if wanted.granted_by(self.grants.requires.as_ref()) {
+        let granted = |namespace: &str| {
+            wanted.granted_by(self.grants.requires.get(namespace).and_then(Option::as_ref))
+        };
+        let Some(scope) = scope else {
+            if self.grants.requires.keys().all(|n| granted(n)) {
+                return Ok(());
+            }
+            return Err(ApiError(format!(
+                "{called} was called by no package's code, and not every package declares {}",
+                wanted.id()
+            )));
+        };
+        let namespace = self
+            .scripts
+            .namespace(scope)
+            .unwrap_or_else(|| self.grants.home.clone());
+        if granted(&namespace) {
             return Ok(());
         }
         Err(ApiError(format!(
-            "{called} needs {}, which package \"{}\" hasn't declared: add {} to its {}",
+            "{called} needs {}, which package \"{namespace}\" hasn't declared: add {} to its {}",
             wanted.id(),
-            self.grants.namespace,
             wanted.declaration(),
             netherforge_format::manifest::FILE_NAME
         )))

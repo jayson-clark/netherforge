@@ -17,7 +17,7 @@ use serde_json::Value;
 
 use crate::schema::Visit;
 
-pub use index::{BrokenRef, Defined, ReferenceIndex};
+pub use index::{BrokenRef, Defined, ReferenceIndex, not_exported, unknown_namespace};
 
 /// Where what a [`RefKind`] names lives.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

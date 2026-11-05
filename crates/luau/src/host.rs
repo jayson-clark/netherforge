@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::ffi::c_int;
 use std::rc::{Rc, Weak};
 
-use mlua::{FromLuaMulti, Function, IntoLuaMulti, Lua, Table, Value, VmState, ffi};
+use mlua::{FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Value, VmState, ffi};
 
 use crate::clock::{Clock, SystemClock};
 use crate::failure::{Failure, Location, Stop};
@@ -132,6 +132,10 @@ impl Guard {
 struct Inner {
     lua: Lua,
     guard: Rc<RefCell<Guard>>,
+    /// Wraps a Rust function scripts call (`Host::script_function`).
+    shim: Function,
+    /// What a wrapped function returns first when it failed, then its message.
+    failed: Table,
     base: Table,
     scopes: RefCell<HashMap<ScopeId, Scope>>,
     categories: RefCell<Categories>,
@@ -211,9 +215,27 @@ impl Host {
             Err(mlua::Error::runtime(stop.to_string()))
         });
 
+        let failed = lua.create_table()?;
+        let shim: Function = lua
+            .load(SHIM)
+            .set_name("=nf/shim")
+            .set_compiler(mlua::chunk::Compiler::new().set_debug_level(0))
+            .call((
+                failed.clone(),
+                locator(&lua)?,
+                lua.globals().get::<Function>("error")?,
+                lua.globals()
+                    .get::<Table>("coroutine")?
+                    .get::<Function>("yield")?,
+                lua.globals()
+                    .get::<Table>("coroutine")?
+                    .get::<Function>("isyieldable")?,
+            ))?;
         Ok(Host(Rc::new(Inner {
             lua,
             guard,
+            shim,
+            failed,
             base,
             scopes: RefCell::new(HashMap::new()),
             categories: RefCell::new(Categories {
@@ -233,6 +255,58 @@ impl Host {
     /// through [`Host::invoke`], never a bare `call`, so they're guarded.
     pub fn lua(&self) -> &Lua {
         &self.0.lua
+    }
+
+    /// `f` as a function scripts call. mlua raises a Rust function's error as
+    /// a userdata of its own, where Lua (and the Kotlin runtime) raise a
+    /// string: so a failure here is raised as its message, located at the
+    /// script's line (`modules/shop/init.lua:3: no module "x"`), and
+    /// `pcall` hands the script a string, as it would for `error`.
+    pub fn script_function<F>(&self, f: F) -> mlua::Result<Function>
+    where
+        F: Fn(&Lua, MultiValue) -> mlua::Result<MultiValue> + 'static,
+    {
+        self.wrapped(f, None)
+    }
+
+    /// `script_function` for a function that waits: when it returns `waiting`, its task yields (and is resumed
+    /// with the call's value). One called back from outside Luau (`table.sort`'s comparator) can't yield, and
+    /// fails as `called` (`nf.wait`) can't wait there.
+    pub fn waiting_function<F>(&self, f: F, waiting: Value, called: &str) -> mlua::Result<Function>
+    where
+        F: Fn(&Lua, MultiValue) -> mlua::Result<MultiValue> + 'static,
+    {
+        self.wrapped(f, Some((waiting, called)))
+    }
+
+    fn wrapped<F>(&self, f: F, waiting: Option<(Value, &str)>) -> mlua::Result<Function>
+    where
+        F: Fn(&Lua, MultiValue) -> mlua::Result<MultiValue> + 'static,
+    {
+        let failed = self.0.failed.clone();
+        let raw = self
+            .0
+            .lua
+            .create_function(move |lua, args: MultiValue| match f(lua, args) {
+                Ok(values) => Ok(values),
+                Err(e) => {
+                    let message = lua.create_string(message_of(&e))?;
+                    Ok(MultiValue::from_vec(vec![
+                        Value::Table(failed.clone()),
+                        Value::String(message),
+                    ]))
+                }
+            })?;
+        let (waiting, stuck) = match waiting {
+            Some((value, called)) => (
+                value,
+                Some(format!(
+                    "{called} can't wait inside a function called back from outside Lua (like table.sort's comparator or string.gsub's replacement): wait in the task's own code"
+                )),
+            ),
+            None => (Value::Nil, None),
+        };
+        self.0.shim.call((raw, waiting, stuck))
     }
 
     /// Opens a scope named `name` (for reports), whose memory is charged to
@@ -460,6 +534,49 @@ fn unknown_scope(scope: ScopeId) -> Failure {
     }
 }
 
+/// Wraps a Rust function scripts call: a failure (`failed`, then its message) is raised as the message located
+/// at the script's line; a waiting function's `waiting` yields its task, where it can.
+const SHIM: &str = r#"
+local failed, locate, error, yield, isyieldable = ...
+return function(f, waiting, stuck)
+  local function finish(first, ...)
+    if first == failed then
+      error(locate((...)), 0)
+    end
+    if waiting ~= nil and first == waiting then
+      if not isyieldable() then
+        error(locate(stuck), 0)
+      end
+      return yield()
+    end
+    return first, ...
+  end
+  return function(...)
+    return finish(f(...))
+  end
+end
+"#;
+
+/// The message of an error a Rust function returned: the error itself, not mlua's wrapping of it.
+pub fn message_of(e: &mlua::Error) -> String {
+    match e {
+        mlua::Error::RuntimeError(message) => message.clone(),
+        mlua::Error::CallbackError { cause, .. } => message_of(cause),
+        mlua::Error::WithContext { cause, .. } => message_of(cause),
+        other => other.to_string(),
+    }
+}
+
+/// A message located at the script's line (`modules/shop/init.lua:3: ...`), unless it's already there.
+fn locator(lua: &Lua) -> mlua::Result<Function> {
+    lua.create_function(|lua, message: String| {
+        Ok(match project_location(lua) {
+            Some(at) if !message.starts_with(&at.chunk) => format!("{at}: {message}"),
+            _ => message,
+        })
+    })
+}
+
 /// Where the innermost script frame on the stack is: the first function from
 /// a project chunk (`@path`), past the host's own and the library's.
 pub fn project_location(lua: &Lua) -> Option<Location> {
@@ -523,12 +640,7 @@ fn install_caps(lua: &Lua, guard: &Rc<RefCell<Guard>>) -> mlua::Result<()> {
         guard.since_clock = guard.since_clock.saturating_add(interrupts);
         Ok(())
     })?;
-    let locate = lua.create_function(|lua, message: String| {
-        Ok(match project_location(lua) {
-            Some(at) if !message.starts_with(&at.chunk) => format!("{at}: {message}"),
-            _ => message,
-        })
-    })?;
+    let locate = locator(lua)?;
     let stripped = || mlua::chunk::Compiler::new().set_debug_level(0);
     let refuse: Function = lua
         .load("local locate, error = ...\nreturn function(message) error(locate(message), 0) end")

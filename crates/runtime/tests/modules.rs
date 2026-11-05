@@ -7,12 +7,12 @@ use netherforge_runtime::{Grants, Modules, Project, Room};
 const BUDGET: u64 = 1_000_000;
 
 fn project(files: &[(&str, &str)]) -> Project {
-    Project {
-        files: files
+    Project::of(
+        files
             .iter()
             .map(|(p, s)| (p.to_string(), s.to_string()))
             .collect(),
-    }
+    )
 }
 
 struct Test {

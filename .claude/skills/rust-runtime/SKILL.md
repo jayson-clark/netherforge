@@ -175,8 +175,14 @@ What replaces `LuaHost`, the prelude's `guard` and `sandbox` modules, and the me
   - Luau has no `__gc` for tables, so the cap on `setmetatable` refusing `__gc` changes
     nothing there. It stays for the Kotlin runtime.
 
-Still to come in the host: the prelude's event core, tasks and `require`, and generated
-bindings.
+- **Rust functions scripts call raise strings** (`Host::script_function`, `waiting_function`).
+  mlua raises a Rust function's error as a userdata of its own, so `pcall` would hand a script a
+  value of type `userdata` where Lua and the Kotlin runtime give a string (Kosmoi's SDK inspects
+  them). Every binding, `require` and `nf`'s `__newindex` go through one Luau shim (`SHIM`, without
+  debug information): a failure comes back as a sentinel and its message, which the shim raises
+  located at the script's line, as the caps' `refuse` does (`modules/shop/init.lua:3: no module
+"x"`); a waiting binding's `waiting` yields its task there. Not yet: a handle's metamethods
+  (assigning to a handle's field), which are mlua `UserData` methods and raise mlua's userdata.
 
 ## The API crate (`crates/api`)
 
@@ -325,8 +331,13 @@ project path; a module is a folder `modules/<id>/` with an `init.lua`, started o
 - Every scope also gets `_G` (its own environment), and `log` and `print`, whose lines
   (`Scripts::take_logs`) carry the script's location.
 
-Not ported yet: packages (`acme:api`, exports, namespaces), group folders (`modules/(x)/m`),
-and where the session's reload restarts dependents.
+- **Packages' modules** are named as the runtime names a package's resources (`acme:api`), their
+  files at package paths (`acme:modules/api/init.lua`), each in a scope of its package's namespace
+  (`Scripts::open_in`, `namespace`). A bare name is in the caller's own package;
+  `require("acme:api")` needs the caller's package to depend on `acme` and `acme` to export the
+  module (`exports.modules`), with format's messages (`unknown_namespace`, `not_exported`). A
+  module's folder is its place (`Project::places`, from format: group folders, packages), so
+  `modules/(combat)/sword` is `require("sword")`. Every module runs, errors or not, as Kotlin's do.
 
 ## Sessions (`crates/runtime/src/session.rs`)
 
@@ -339,18 +350,21 @@ Kotlin's words), otherwise its services started in a `Room`, ticked, reloaded an
   registration order, stops in reverse, and a kind of resource reloads through the one service whose
   `reloads()` names it. `reload(changed paths)` reads the project again and hands each changed kind's
   ids to its service; a change to `netherforge.json` or the lock restarts the session whole.
-- **Modules** are the first service: every module of the project's without errors starts in a
-  scope of its own (`Modules`), and one that changed restarts from its new files with every module
-  that required it.
+- **Modules** are the first service: every module of the tree (the packages' included) with an
+  `init.lua` starts in a scope of its own (`Modules`), and one that changed restarts from its new
+  files with every module that required it.
 - **Reports go to the Platform's log**: a script's failure as a warning (an error once it gave up
   after `MAX_ERRORS`), a line it logged as info with its scope and place
   (`[module door] hello (modules/door/init.lua:1)`), and the project's errors as warnings as it
-  starts. What a session's packages may use is what the manifest's `requires` says, by the names its
-  model gives them.
+  starts, with what the tree requires (`requirement::combined`).
+- **Grants are per package** (`Grants`, by namespace): a call is held to the `requires` of the
+  package whose code makes it, which the binding knows (the scope `nf` was bound to, or the running
+  scope's for a handle method), so Kotlin's rule for a tail call hiding the caller isn't needed. A
+  call no scope makes passes only when every package declares it. The policy (`policy.json`) comes
+  with the server's config.
 
 Not yet: the game's facts from the Platform (`external::GameData` is a placeholder, so format reads
-without them), packages' modules (a module is the project's own), per-package grants, the bridge to
-the editor, the debugger, and every service but modules (centities, menus, dialogs, items...),
+without them), reloading a package's files, the policy, the bridge to the editor, the debugger, and every service but modules (centities, menus, dialogs, items...),
 each with the compiler it needs.
 
 ## The Platform boundary (`packages/platform`, `crates/platform`)

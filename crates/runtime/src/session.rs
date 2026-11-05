@@ -135,6 +135,19 @@ impl<'a> Session<'a> {
         }
         self.room = Some(room);
         self.report();
+        let uses = netherforge_format::requirement::combined(&self.project);
+        log.info(if uses.is_empty() {
+            "Requires nothing beyond what every project may do".to_owned()
+        } else {
+            let each: Vec<String> = uses
+                .iter()
+                .map(|u| format!("{} ({})", u.requirement, u.packages.join(", ")))
+                .collect();
+            format!(
+                "Requires (by its packages' netherforge.json): {}",
+                each.join("; ")
+            )
+        });
         log.info(format!(
             "Running \"{name}\": {} modules",
             self.project.everywhere("module").len()
@@ -330,12 +343,24 @@ fn refusal(platform: &dyn Platform, project: &Loaded) -> Option<Refusal> {
     None
 }
 
-/// What the project declared it may do: its manifest's `requires`, under its namespace.
+/// Every namespace of the project's tree: the project's own, then each package's.
+fn namespaces(project: &Loaded) -> Vec<String> {
+    std::iter::once(project.namespace().to_owned())
+        .chain(project.packages.keys().cloned())
+        .collect()
+}
+
+/// What each package of the tree declared it may do: its manifest's `requires`, by namespace.
 fn grants(project: &Loaded) -> crate::Grants {
-    let manifest = project.manifest.as_ref();
     crate::Grants {
-        namespace: manifest.map(|m| m.namespace.clone()).unwrap_or_default(),
-        requires: manifest.and_then(|m| m.requires.clone()),
+        home: project.namespace().to_owned(),
+        requires: namespaces(project)
+            .into_iter()
+            .map(|ns| {
+                let requires = project.manifest_of(&ns).and_then(|m| m.requires.clone());
+                (ns, requires)
+            })
+            .collect(),
     }
 }
 
@@ -346,29 +371,65 @@ struct ModulesService {
     modules: Option<Modules>,
 }
 
-/// The project's Lua the room runs, by project path: its modules' files, the ones without errors.
+/// The project's Lua the room runs, its packages' included: every Lua file by project path (a package's at its
+/// package path, `acme:modules/api/init.lua`), every module's place (errors or not: a file is Lua the server
+/// runs, and its problems are reported as the project's), and what each package depends on and exports.
 fn lua_of(define: &Define) -> modules::Project {
-    let running: BTreeSet<&str> = define
-        .project
-        .resources
-        .iter()
-        .filter(|r| r.found.kind.id == "module" && !r.errors)
-        .map(|r| r.found.id.as_str())
-        .collect();
-    let files = define
+    use netherforge_format::kinds::package_path;
+    let project = define.project;
+    let lua = |path: &String| path.ends_with(".lua");
+    let mut files: BTreeMap<String, String> = define
         .source
         .files()
         .iter()
-        .filter(|path| {
-            path.ends_with(".lua")
-                && path
-                    .strip_prefix("modules/")
-                    .and_then(|rest| rest.split_once('/'))
-                    .is_some_and(|(id, _)| running.contains(id))
-        })
-        .filter_map(|path| Some((path.clone(), define.source.read(path)?)))
+        .filter(|p| lua(p))
+        .filter_map(|p| Some((p.clone(), define.source.read(p)?)))
         .collect();
-    modules::Project { files }
+    for (namespace, package) in &project.packages {
+        let source = &package.resolved.source;
+        for path in source.files().iter().filter(|p| lua(p)) {
+            if let Some(text) = source.read(path) {
+                files.insert(package_path(namespace, path), text);
+            }
+        }
+    }
+    let places = project
+        .everywhere("module")
+        .into_iter()
+        .map(|(id, resource)| {
+            let found = &resource.found;
+            let location = found.kind.location_of(&found.id, &found.group);
+            let place = match netherforge_format::kinds::split_package(&id) {
+                (Some(namespace), _) => package_path(namespace, &location),
+                (None, _) => location,
+            };
+            (id, place)
+        })
+        .collect();
+    let packages = namespaces(project)
+        .into_iter()
+        .map(|ns| {
+            let manifest = project.manifest_of(&ns);
+            let info = modules::PackageModules {
+                dependencies: manifest
+                    .and_then(|m| m.dependencies.as_ref())
+                    .map(|d| d.iter().map(|(k, _)| k.0.clone()).collect())
+                    .unwrap_or_default(),
+                exports: manifest
+                    .and_then(|m| m.exports.as_ref())
+                    .and_then(|e| e.get_str("modules"))
+                    .map(|ids| ids.iter().cloned().collect())
+                    .unwrap_or_default(),
+            };
+            (ns, info)
+        })
+        .collect();
+    modules::Project {
+        files,
+        home: project.namespace().to_owned(),
+        places,
+        packages,
+    }
 }
 
 impl Service for ModulesService {

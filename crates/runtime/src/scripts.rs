@@ -76,6 +76,8 @@ fn class_of(target: &Target) -> &'static str {
 
 struct ScopeInfo {
     budget: u64,
+    /// The package whose code it runs (its namespace), or none for the project's own.
+    namespace: Option<String>,
     disabled: bool,
     subs: BTreeSet<u64>,
     timers: BTreeSet<u64>,
@@ -217,8 +219,30 @@ impl Scripts {
         self.0.state.borrow().tick
     }
 
-    /// Opens a scope whose calls get `budget` steps, with its own `nf`.
+    /// Opens a scope of the project's own code whose calls get `budget` steps, with its own `nf`.
     pub fn open(&self, name: &str, memory_key: &str, budget: u64) -> mlua::Result<ScopeId> {
+        self.open_in(name, memory_key, budget, None)
+    }
+
+    /// The package whose code `scope` runs (its namespace), or none for the project's own: what its calls are
+    /// held to (`requires` in that package's `netherforge.json`).
+    pub fn namespace(&self, scope: ScopeId) -> Option<String> {
+        self.0
+            .state
+            .borrow()
+            .scopes
+            .get(&scope)
+            .and_then(|s| s.namespace.clone())
+    }
+
+    /// Opens a scope of package `namespace`'s code (none: the project's own) whose calls get `budget` steps.
+    pub fn open_in(
+        &self,
+        name: &str,
+        memory_key: &str,
+        budget: u64,
+        namespace: Option<&str>,
+    ) -> mlua::Result<ScopeId> {
         let host = &self.host();
         let scope = host.open_scope(name, memory_key)?;
         let lua = host.lua();
@@ -257,6 +281,7 @@ impl Scripts {
             scope,
             ScopeInfo {
                 budget,
+                namespace: namespace.map(str::to_owned),
                 disabled: false,
                 subs: BTreeSet::new(),
                 timers: BTreeSet::new(),
