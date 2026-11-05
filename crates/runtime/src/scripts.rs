@@ -172,7 +172,14 @@ struct Fns {
     newindex: Function,
 }
 
+/// Whether the thing a handle names is still there (a centity, a window): a service's answer for the classes
+/// it keeps, none for one it doesn't.
+pub type Liveness = Box<dyn Fn(&netherforge_api::handles::Handle) -> Option<bool>>;
+
 struct Inner {
+    /// Each service's liveness check (Kotlin's `Liveness`): a handle to something gone gets a subscription
+    /// that never runs.
+    liveness: RefCell<Vec<Liveness>>,
     /// Weak: the room owns the host, and the host's state holds these scripts
     /// (the installed API), so a strong one would keep both alive for good.
     host: WeakHost,
@@ -206,10 +213,32 @@ impl Scripts {
             private,
         };
         Ok(Scripts(Rc::new(Inner {
+            liveness: RefCell::new(Vec::new()),
             host: host.downgrade(),
             state: RefCell::new(State::default()),
             fns,
         })))
+    }
+
+    /// Adds a service's answer to whether a handle's thing is still there.
+    pub fn add_liveness(&self, check: Liveness) {
+        self.0.liveness.borrow_mut().push(check);
+    }
+
+    /// Whether the thing `target` names is still there (anything no service keeps is).
+    pub fn alive(&self, target: &Target) -> bool {
+        let Target::Handle(u) = target else {
+            return true;
+        };
+        let Some(handle) = netherforge_api::handle::read_any(u) else {
+            return true;
+        };
+        self.0
+            .liveness
+            .borrow()
+            .iter()
+            .find_map(|check| check(&handle))
+            .unwrap_or(true)
     }
 
     /// The host these scripts run in. Its room keeps it for as long as they run.
@@ -548,7 +577,8 @@ impl Scripts {
 
     // ---- events
 
-    fn subscribe(
+    /// Subscribes `handler` to `event` on `target`, as `scope`'s code (`:on`, `:once`).
+    pub fn subscribe(
         &self,
         scope: ScopeId,
         target: Target,
@@ -589,6 +619,11 @@ impl Scripts {
             }
             Some(n) => Some(n as u64),
         };
+        // A handle to something already gone gets a subscription that never runs.
+        if !self.alive(&target) {
+            let id = self.0.state.borrow_mut().id();
+            return Ok(handles::Subscription { id: id as i64 });
+        }
         let mut state = self.0.state.borrow_mut();
         let id = state.id();
         let key = key_of(&target);
@@ -889,7 +924,8 @@ impl Scripts {
         Ok((ev, view))
     }
 
-    fn emit_custom(&self, target: Target, event: String, payload: Value) -> ApiResult<bool> {
+    /// Raises custom `event` on `target` (`:emit`): whether anything heard it.
+    pub fn emit_custom(&self, target: Target, event: String, payload: Value) -> ApiResult<bool> {
         if !events::is_custom(&event) {
             return Err(err(format!(
                 "\"{event}\" is a built-in event name: only the server raises those; a custom event's name has a ':' in it"

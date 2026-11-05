@@ -79,6 +79,15 @@ pub fn uuid_text(id: &Uuid) -> String {
     )
 }
 
+/// A UUID from its text (`uuid_text`'s, or without the dashes, either case); none for anything else.
+pub fn parse_uuid(text: &str) -> Option<Uuid> {
+    let hex: String = text.chars().filter(|c| *c != '-').collect();
+    if hex.len() != 32 {
+        return None;
+    }
+    u128::from_str_radix(&hex, 16).ok().map(Uuid)
+}
+
 /// A block's position as a `Block` handle keys on it (Kotlin's `Locations.pack`).
 pub fn pack(x: i32, y: i32, z: i32) -> i64 {
     ((i64::from(x) & 0x3FF_FFFF) << 38)

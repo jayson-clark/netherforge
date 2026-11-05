@@ -6,9 +6,12 @@
 //! display per node that has one. `sync` brings them in line with the instance each tick, writing only what
 //! changed; `reconcile` makes them match its definition (after a reload, or when one went missing).
 //!
-//! Not yet (each with its area): hitboxes and clicks, scripts and events on instances, saving placements,
+//! `api` is the centity API scripts call and an instance's life around its script (`spawn`, `remove`, `tick`).
+//!
+//! Not yet (each with its area): hitboxes and clicks, saving placements,
 //! private instances (client entities), animations, physics and movement, health, natural spawning, ropes.
 
+pub mod api;
 pub mod drawing;
 pub mod instance;
 

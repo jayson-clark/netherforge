@@ -31,6 +31,34 @@ pub const DEFAULT_INTERPOLATION_TICKS: i32 = 1;
 pub const MAX_TELEPORT_TICKS: i32 = 59;
 
 /// `degrees` wrapped into [-180, 180), as Minecraft wraps a facing; anything not finite is 0.
+/// One channel of a transform.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Channel {
+    Translation,
+    Rotation,
+    Scale,
+}
+
+impl Channel {
+    /// This channel of `transform`, its default where it sets none.
+    pub fn of(self, transform: &Transform) -> Vec3 {
+        match self {
+            Channel::Translation => transform.translation.unwrap_or(Vec3(0.0, 0.0, 0.0)),
+            Channel::Rotation => transform.rotation.unwrap_or(Vec3(0.0, 0.0, 0.0)),
+            Channel::Scale => transform.scale.unwrap_or(Vec3(1.0, 1.0, 1.0)),
+        }
+    }
+
+    fn put(self, transform: &mut Transform, value: Vec3) {
+        let slot = match self {
+            Channel::Translation => &mut transform.translation,
+            Channel::Rotation => &mut transform.rotation,
+            Channel::Scale => &mut transform.scale,
+        };
+        *slot = Some(value);
+    }
+}
+
 pub fn wrap_degrees(degrees: f64) -> f64 {
     if !degrees.is_finite() {
         return 0.0;
@@ -248,6 +276,36 @@ impl Instance {
             self.jumps[index] = true;
         }
         self.posed();
+    }
+
+    /// A channel of node `index`'s local transform as shown now, its default where the file sets none.
+    pub fn get(&self, index: usize, channel: Channel) -> Vec3 {
+        channel.of(&self.pose[index])
+    }
+
+    /// Sets one channel of node `index`'s rest pose (and the pose shown now), the others kept.
+    pub fn set(&mut self, index: usize, channel: Channel, value: Vec3, instant: bool) {
+        channel.put(&mut self.rest[index], value);
+        channel.put(&mut self.pose[index], value);
+        if instant {
+            self.jumps[index] = true;
+        }
+        self.posed();
+    }
+
+    /// Node `index`'s matrix into the world.
+    pub fn world_matrix(&self, index: usize) -> Matrix4 {
+        let composed = self.definition.world(Some(&self.pose));
+        self.space().mul(&composed[index])
+    }
+
+    /// The matrix into the world of the space node `index`'s transform is in: its parent's, or the
+    /// centity's for a root.
+    pub fn parent_world_matrix(&self, index: usize) -> Matrix4 {
+        match self.definition.nodes[index].parent_index {
+            p if p < 0 => self.space(),
+            p => self.world_matrix(p as usize),
+        }
     }
 
     /// The centity's facing as a rotation, from its axes to the world's: its +Z (the way a centity faces)

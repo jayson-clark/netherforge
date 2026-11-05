@@ -87,7 +87,7 @@ const MANIFEST: &str = r#"{ "formatVersion": 1, "name": "Demo", "namespace": "de
 
 #[test]
 fn a_projects_modules_start_tick_and_reload() {
-    let platform = Fake::default();
+    let platform = std::rc::Rc::new(Fake::default());
     let files = Files::new(&[
         ("netherforge.json", MANIFEST),
         (
@@ -99,7 +99,7 @@ fn a_projects_modules_start_tick_and_reload() {
             "local greeter = require('greeter') print(greeter.hello()) nf.after(2, function() print('later') end)",
         ),
     ]);
-    let mut session = Session::start(&platform, &files, &NoPackages);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
     assert!(session.refusal().is_none());
     assert_eq!(
         platform.take(),
@@ -143,9 +143,9 @@ fn a_projects_modules_start_tick_and_reload() {
 
 #[test]
 fn a_project_for_another_minecraft_is_refused() {
-    let platform = Fake::default();
+    let platform = std::rc::Rc::new(Fake::default());
     let files = Files::new(&[("netherforge.json", &MANIFEST.replace("26.3", "26.1"))]);
-    let session = Session::start(&platform, &files, &NoPackages);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
     assert_eq!(
         session
             .refusal()
@@ -164,9 +164,9 @@ fn a_project_for_another_minecraft_is_refused() {
 
 #[test]
 fn reaching_a_group_the_fake_doesnt_fake_says_which() {
-    let platform = Fake::default();
+    let platform = std::rc::Rc::new(Fake::default());
     let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        netherforge_platform::Platform::teams(&platform).names()
+        netherforge_platform::Platform::teams(&*platform).names()
     }));
     let message = failed.unwrap_err().downcast::<String>().unwrap();
     assert_eq!(*message, "TeamOps::names isn't on this platform");
@@ -239,7 +239,7 @@ fn warnings(lines: &[String]) -> Vec<String> {
 
 #[test]
 fn a_packages_exported_module_is_required_by_its_namespace() {
-    let platform = Fake::default();
+    let platform = std::rc::Rc::new(Fake::default());
     let files = Files::new(&[
         ("netherforge.json", &depending("")),
         (
@@ -248,7 +248,7 @@ fn a_packages_exported_module_is_required_by_its_namespace() {
         ),
     ]);
     let packages = acme("");
-    let _session = Session::start(&platform, &files, &packages);
+    let _session = Session::start(platform.clone(), &files, &packages);
     let lines = platform.take();
     // The package's module finds its own `util` by a bare name, in its own package.
     assert!(
@@ -276,12 +276,12 @@ fn a_packages_exported_module_is_required_by_its_namespace() {
 
 #[test]
 fn a_package_the_project_doesnt_depend_on_isnt_there() {
-    let platform = Fake::default();
+    let platform = std::rc::Rc::new(Fake::default());
     let files = Files::new(&[
         ("netherforge.json", MANIFEST),
         ("modules/shop/init.lua", "print(pcall(require, 'acme:api'))"),
     ]);
-    let _session = Session::start(&platform, &files, &NoPackages);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
     let lines = platform.take();
     assert!(
         lines.iter().any(|l| l.contains(
@@ -293,7 +293,7 @@ fn a_package_the_project_doesnt_depend_on_isnt_there() {
 
 #[test]
 fn a_call_is_held_to_the_package_whose_code_makes_it() {
-    let platform = Fake::default();
+    let platform = std::rc::Rc::new(Fake::default());
     // The project declares console; the package doesn't: the package's code is refused.
     let files = Files::new(&[
         (
@@ -306,7 +306,7 @@ fn a_call_is_held_to_the_package_whose_code_makes_it() {
         ),
     ]);
     let packages = acme("");
-    let _session = Session::start(&platform, &files, &packages);
+    let _session = Session::start(platform.clone(), &files, &packages);
     let lines = platform.take();
     assert!(
         lines.iter().any(|l| l.contains(
@@ -331,7 +331,7 @@ fn a_call_is_held_to_the_package_whose_code_makes_it() {
 
 #[test]
 fn a_module_in_group_folders_is_required_by_its_id() {
-    let platform = Fake::default();
+    let platform = std::rc::Rc::new(Fake::default());
     let files = Files::new(&[
         ("netherforge.json", MANIFEST),
         ("modules/(combat)/sword/init.lua", "return { damage = 7 }"),
@@ -341,7 +341,7 @@ fn a_module_in_group_folders_is_required_by_its_id() {
             "print(require('sword').damage, require('sword.edge'))",
         ),
     ]);
-    let _session = Session::start(&platform, &files, &NoPackages);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
     let lines = platform.take();
     assert!(
         lines
@@ -353,7 +353,7 @@ fn a_module_in_group_folders_is_required_by_its_id() {
 
 #[test]
 fn a_repeated_error_is_logged_once_in_a_while_and_counted_in_between() {
-    let platform = Fake::default();
+    let platform = std::rc::Rc::new(Fake::default());
     let files = Files::new(&[
         ("netherforge.json", MANIFEST),
         // Fails every other tick: never 20 in a row, so it keeps running.
@@ -368,7 +368,7 @@ fn a_repeated_error_is_logged_once_in_a_while_and_counted_in_between() {
         ),
         ("modules/dead/init.lua", "local x = nil\nx.y = 1"),
     ]);
-    let mut session = Session::start(&platform, &files, &NoPackages);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
     let start = platform.take();
     assert!(
         start.contains(&"warn module dead: body failed: attempt to index nil with 'y' (modules/dead/init.lua:2). It's disabled until it's reloaded.".to_owned()),
@@ -434,7 +434,7 @@ fn a_repeated_error_is_logged_once_in_a_while_and_counted_in_between() {
 #[test]
 fn the_servers_events_reach_scripts_and_what_they_write_goes_back() {
     use netherforge_platform::{GameEvents, PlayerRef, Uuid, game_event};
-    let platform = Fake::default();
+    let platform = std::rc::Rc::new(Fake::default());
     let files = Files::new(&[
         ("netherforge.json", MANIFEST),
         (
@@ -443,7 +443,7 @@ fn the_servers_events_reach_scripts_and_what_they_write_goes_back() {
 nf.on('player_chat', function(e) if e.message == 'bad' then e:cancel() end end)",
         ),
     ]);
-    let mut session = Session::start(&platform, &files, &NoPackages);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
     let alex = PlayerRef {
         uuid: Uuid(0x0f1b_0c7e_6a43_3d1f_9a8c_2b5e_8f1a_0c11),
         name: "Alex".into(),

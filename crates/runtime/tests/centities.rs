@@ -32,7 +32,9 @@ impl Fake {
 }
 
 impl FakePlatformLog for Fake {
-    fn info(&self, _: String) {}
+    fn info(&self, message: String) {
+        self.call(format!("info {message}"));
+    }
     fn warn(&self, message: String) {
         self.call(format!("warn {message}"));
     }
@@ -112,6 +114,9 @@ impl FakeEntityOps for Fake {
 impl FakeWorldOps for Fake {
     fn exists(&self, world: String) -> bool {
         world == "world"
+    }
+    fn default_world(&self) -> String {
+        "world".into()
     }
     fn entities_loaded(&self, _: Location) -> bool {
         true
@@ -193,12 +198,12 @@ fn place(x: f64, y: f64, z: f64) -> Location {
 
 #[test]
 fn an_instance_is_drawn_synced_reloaded_and_removed() {
-    let platform = Fake::default();
+    let platform = std::rc::Rc::new(Fake::default());
     let files = Files::new(&[
         ("netherforge.json", MANIFEST),
         ("centities/lamp/centity.json", &lamp(1.0)),
     ]);
-    let mut session = Session::start(&platform, &files, &NoPackages);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
     assert!(session.refusal().is_none(), "{:?}", session.problems());
     platform.take();
 
@@ -264,10 +269,121 @@ fn an_instance_is_drawn_synced_reloaded_and_removed() {
     );
 
     // Removed: its entities go.
-    assert!(session.centities().remove(&platform, lamp));
+    assert!(session.centities().remove(&*platform, lamp));
     let calls = platform.take();
     for id in [1, 2, 3] {
         assert!(calls.contains(&format!("remove {id}")), "{calls:?}");
     }
     assert!(session.centities().get(lamp).is_none());
+}
+
+/// The lamp, with a script.
+fn scripted_lamp() -> String {
+    let lamp = lamp(1.0);
+    let end = lamp.rfind('}').expect("an object");
+    format!(
+        r#"{}, "script": {{ "file": "script.lua" }} }}"#,
+        lamp[..end].trim_end()
+    )
+}
+
+/// What scripts printed, in order: the log's `info [who] line` without the location.
+fn printed(calls: &[String]) -> Vec<String> {
+    calls
+        .iter()
+        .filter_map(|c| c.strip_prefix("info ["))
+        .map(|c| {
+            let (_, rest) = c.split_once("] ").expect("a label");
+            rest.rsplit_once(" (")
+                .map_or(rest, |(line, _)| line)
+                .to_owned()
+        })
+        .collect()
+}
+
+#[test]
+fn scripts_spawn_instances_and_an_instance_runs_its_own_script() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &scripted_lamp()),
+        (
+            "centities/lamp/script.lua",
+            r#"
+print("body", this:kind(), this:node("head"):translation().y)
+this:node("head"):set_translation(vector.create(0, 3, 0), { instant = true })
+local ticks = 0
+this:on("spawn", function(e) print("spawn", e.centity == this) end)
+this:on("tick", function() ticks += 1 end)
+this:on("remove", function() print("remove after", ticks, "ticks", this:exists()) end)
+"#,
+        ),
+        (
+            "modules/game/init.lua",
+            r#"
+local lamp = nf.centities.spawn("lamp", vector.create(1, 64, 2))
+print("spawned", lamp:exists(), lamp:position().x, #lamp:nodes(), lamp:node("nope"))
+print("found", nf.centities.get(lamp:id()) == lamp, #nf.centities.all({ kind = "lamp" }))
+print("world", lamp:node("head"):world_position().y)
+print(pcall(nf.centities.spawn, "lmap", vector.create(0, 0, 0)))
+nf.after(3, function()
+    lamp:remove()
+    print("gone", lamp:exists(), lamp:position(), nf.centities.get(lamp:id()))
+    lamp:on("tick", function() print("never") end)
+end)
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    assert!(session.refusal().is_none(), "{:?}", session.problems());
+    assert_eq!(
+        printed(&platform.take()),
+        [
+            "body\tlamp\t1",
+            "spawn\ttrue",
+            "spawned\ttrue\t1\t2\tnil",
+            "found\ttrue\t1",
+            "world\t67",
+            "false\tmodules/game/init.lua:6: no centity \"lmap\" in this project (did you mean \"lamp\"?)",
+        ]
+    );
+    for _ in 0..4 {
+        session.tick();
+    }
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        ["remove after\t2\tticks\ttrue", "gone\tfalse\tnil\tnil"],
+        "{calls:?}"
+    );
+    assert!(calls.contains(&"remove 1".to_owned()), "{calls:?}");
+    assert!(session.centities().all().next().is_none());
+}
+
+#[test]
+fn a_reload_restarts_an_instances_script_without_spawn() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = scripted_lamp();
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &centity),
+        (
+            "centities/lamp/script.lua",
+            r#"print("v1"); this:on("spawn", function() print("spawn") end)"#,
+        ),
+        (
+            "modules/game/init.lua",
+            r#"local lamp = nf.centities.spawn("lamp", vector.create(0, 64, 0))
+lamp:node("head"):on("click", function() end)"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(printed(&start), ["v1", "spawn"], "{start:?}");
+    files.write(
+        "centities/lamp/script.lua",
+        r#"print("v2", this:node("head") ~= nil); this:on("spawn", function() print("spawn") end)"#,
+    );
+    session.reload(&["centities/lamp/script.lua".into()]);
+    assert_eq!(printed(&platform.take()), ["v2\ttrue"]);
 }

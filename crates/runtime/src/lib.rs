@@ -5,7 +5,10 @@
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
-use netherforge_api::api::{LuaApi, NfApi, SubscriptionApi, TaskApi};
+use netherforge_api::api::{
+    CentityApi, LuaApi, NfApi, NfCentitiesApi, NodeApi, SubscriptionApi, TaskApi,
+};
+use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, Runtime};
 use netherforge_format::manifest::Requires;
 use netherforge_format::requirement::Requirement;
@@ -16,9 +19,11 @@ pub mod events;
 pub mod modules;
 pub mod scripts;
 pub mod session;
+pub mod shared;
 
 pub use modules::{Modules, Owner, Project};
 pub use scripts::{Delivered, Log, MAX_ERRORS, Report, Scripts, Target};
+pub use shared::Shared;
 
 /// What each package of a room's code has declared it may do (`requires` in its `netherforge.json`), and the
 /// project's namespace: Kotlin's `Requirements`. A call is held to the package whose code makes it, never to the
@@ -45,6 +50,8 @@ impl Grants {
 struct Api {
     scripts: Scripts,
     grants: Grants,
+    /// The centity classes, when the room runs a session's centities.
+    centities: Option<centity::api::CentityContext>,
 }
 
 impl Runtime for Api {
@@ -103,6 +110,24 @@ impl LuaApi for Api {
     fn task(&self) -> &dyn TaskApi {
         &self.scripts
     }
+    fn nf_centities(&self) -> &dyn NfCentitiesApi {
+        match &self.centities {
+            Some(c) => c,
+            None => &Unported,
+        }
+    }
+    fn centity(&self) -> &dyn CentityApi {
+        match &self.centities {
+            Some(c) => c,
+            None => &Unported,
+        }
+    }
+    fn node(&self) -> &dyn NodeApi {
+        match &self.centities {
+            Some(c) => c,
+            None => &Unported,
+        }
+    }
 }
 
 /// A room: its Luau state and its scripts.
@@ -114,10 +139,20 @@ pub struct Room {
 impl Room {
     /// A room on `host`, whose code may do what `grants` declares.
     pub fn new(host: Host, grants: Grants) -> mlua::Result<Room> {
+        Room::with(host, grants, None)
+    }
+
+    /// A room whose API reaches what a session shares (its centities), when it's given.
+    pub fn with(host: Host, grants: Grants, shared: Option<Rc<Shared>>) -> mlua::Result<Room> {
         let scripts = Scripts::new(host.clone())?;
+        let centities = shared.map(|shared| {
+            centity::api::CentityContext::install_liveness(&shared, &scripts);
+            centity::api::CentityContext::new(shared, scripts.clone())
+        });
         let api = Api {
             scripts: scripts.clone(),
             grants,
+            centities,
         };
         netherforge_api::install(&host, Rc::new(api))?;
         Ok(Room { host, scripts })

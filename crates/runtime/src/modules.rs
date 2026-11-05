@@ -202,15 +202,48 @@ impl Modules {
     /// `file`, and runs its body. Its memory is charged to `memory_key` (its
     /// resource: every instance together).
     pub fn script(&self, name: &str, memory_key: &str, file: &str) -> Result<ScopeId, Failure> {
-        let scope = self
-            .open(name, memory_key, Owner::Script(file.to_owned()))
-            .map_err(|e| Failure::of(&e))?;
-        let source = self.source(file).ok_or_else(|| Failure::Error {
+        let (scope, ran) = self.script_with(name, memory_key, file, &[]);
+        ran?;
+        scope.ok_or_else(|| Failure::Error {
             message: format!("no file {file}"),
             traceback: None,
-        })?;
-        self.0.scripts.run_body(scope, file, &source)?;
-        Ok(scope)
+        })
+    }
+
+    /// `script`, with `globals` set in its scope before its body runs (a centity's `this`): its scope (none
+    /// when it couldn't open, or there's no such file), and whether its body ran to the end. A scope whose
+    /// body failed stays open, disabled, for its owner to close.
+    pub fn script_with(
+        &self,
+        name: &str,
+        memory_key: &str,
+        file: &str,
+        globals: &[(&str, Value)],
+    ) -> (Option<ScopeId>, Result<(), Failure>) {
+        let scope = match self.open(name, memory_key, Owner::Script(file.to_owned())) {
+            Ok(scope) => scope,
+            Err(e) => return (None, Err(Failure::of(&e))),
+        };
+        if let Some(env) = self.0.scripts.host().env(scope) {
+            for (name, value) in globals {
+                if let Err(e) = env.raw_set(*name, value.clone()) {
+                    self.close(scope);
+                    return (None, Err(Failure::of(&e)));
+                }
+            }
+        }
+        let Some(source) = self.source(file) else {
+            self.close(scope);
+            return (
+                None,
+                Err(Failure::Error {
+                    message: format!("no file {file}"),
+                    traceback: None,
+                }),
+            );
+        };
+        let ran = self.0.scripts.run_body(scope, file, &source);
+        (Some(scope), ran)
     }
 
     /// Closes `scope` and forgets what it required.
@@ -224,6 +257,12 @@ impl Modules {
         if let Some(id) = module {
             self.0.modules.borrow_mut().remove(&id);
         }
+    }
+
+    /// The project's Lua as it reads now: what scripts that start from here on run and require. Nothing
+    /// running restarts.
+    pub fn update(&self, project: Project) {
+        *self.0.project.borrow_mut() = project;
     }
 
     /// Scopes other than module `id`'s own that required it, so its reload

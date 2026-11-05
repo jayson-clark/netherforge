@@ -379,7 +379,7 @@ dead: body failed: … (modules/dead/init.lua:2). It's disabled until it's reloa
   with the server's config.
 
 Not yet: the game's facts from the Platform (`external::GameData` is a placeholder, so format reads
-without them), reloading a package's files, the policy, the bridge to the editor, the debugger, and every service but modules (centities, menus, dialogs, items...),
+without them), reloading a package's files, the policy, the bridge to the editor, the debugger, and every service but modules and centities (menus, dialogs, items...),
 each with the compiler it needs.
 
 ## Centities (`crates/runtime/src/centity`)
@@ -396,11 +396,36 @@ went missing); a reload moves instances onto the new definition, and removes tho
 gone. A rect, an image or anchored text is drawn as a text display with a fit (`drawing.rs`, format's
 display glyphs; anchored text measured with the project's `fonts/default.json` through `TextWidth`).
 
-The session owns the `Centities` (`Session::centities`, `Session::spawn`) and shares it with its service;
-services get the Platform in every hook. Not yet: hitboxes and clicks, scripts, events and the Lua API on
-instances, saving placements (until then a stopping session removes its instances, so nothing is left
-behind unowned), private instances, animations, physics and movement, health, natural spawning, ropes,
-images' pixels (an image draws blank, its text whole rather than in runs).
+**What a session shares** (`Shared`, `shared.rs`): the Platform (`Rc<dyn Platform>`: the session takes
+one), the `Centities`, the font text is measured with, each centity's script path and the project's
+`Modules`. The session owns it and the room's API holds it too, so an API implementation is `'static`;
+every piece is a `RefCell`, and no borrow is held while Lua runs. `Room::with(host, grants, Some(shared))`
+installs the centity classes; `Room::new` leaves them unported.
+
+**The API and an instance's life** (`centity/api.rs`, `CentityContext`: Kotlin's `NfCentitiesImpl`,
+`CentityImpl`, `NodeImpl` and the lifecycle half of `Centities`):
+- `spawn` makes the entities, runs the centity's script in a scope of its own (`Modules::script_with`,
+  labelled `centity lamp 00000000`, its memory key the centity's folder) with `this` its handle, then
+  raises `spawn`. A bare `Vec3` means the calling centity script's own world, else the server's default.
+- `tick` raises `tick` on an instance only when something listens, then syncs it (Kotlin's order).
+- `remove` raises `remove` while the instance is still itself (`removing`), then its script closes, every
+  handler on it and its nodes goes (`drop_target`), then its entities.
+- A reload stops the scripts of the changed centities' instances, moves them onto the new definition,
+  drops the handlers on nodes that went, and starts each script again without `spawn`. `Modules::update`
+  hands every reload the project's Lua as it reads now.
+- **Liveness** (`Scripts::add_liveness`): each service answers for the handle classes it keeps, so `:on`
+  on a removed instance (or a node it doesn't have) gets a subscription that never runs.
+- A handle outlives what it names: once it's gone, getters answer nil/false/empty and setters do nothing.
+- **Unported methods are explicit**: the class traits have no defaults, so `CentityApi` and `NodeApi`
+  implement what's ported and delegate the rest one by one to `Unported` (`CentityApi::damage(&Unported,
+  this, amount, options)`), in the "not ported yet" part of each impl. Porting one moves it up.
+- Centities are defined before modules start (the services' order): a module's body may spawn one.
+- `nf.centities.spawn`'s `temporary`, `lifetime` and `viewers` refuse ("isn't on the Rust runtime yet").
+
+Not yet: hitboxes and clicks, saving placements (until then a stopping session removes its instances, so
+nothing is left behind unowned), temporary and private instances, animations, physics and movement,
+health, natural spawning, ropes, script-added nodes, tweens, a module's reload restarting the centity
+scripts that required it, images' pixels (an image draws blank, its text whole rather than in runs).
 
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 
