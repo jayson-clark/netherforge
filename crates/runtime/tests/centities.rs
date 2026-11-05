@@ -47,6 +47,8 @@ impl netherforge_format::game::GameData for NoFacts {
 }
 
 struct Fake {
+    /// Each scoreboard team's entries.
+    teams: RefCell<BTreeMap<String, Vec<String>>>,
     game: NoFacts,
     /// Whether every chunk's entities are loaded.
     unloaded: std::cell::Cell<bool>,
@@ -62,6 +64,10 @@ struct Fake {
 impl Default for Fake {
     fn default() -> Fake {
         Fake {
+            teams: RefCell::new(BTreeMap::from([
+                ("nf.stale".to_owned(), Vec::new()),
+                ("red".to_owned(), Vec::new()),
+            ])),
             game: NoFacts,
             unloaded: std::cell::Cell::new(false),
             player: RefCell::new(None),
@@ -345,6 +351,13 @@ impl netherforge_platform::FakeBlockOps for Fake {
 }
 
 impl netherforge_platform::FakePlayerOps for Fake {
+    fn find(&self, name: String) -> Option<PlayerRef> {
+        let alex = name == "Alex";
+        alex.then_some(PlayerRef {
+            uuid: Uuid(77),
+            name,
+        })
+    }
     fn message(&self, uuid: Uuid, text: String) -> bool {
         self.call(format!("message {} {text}", uuid.0));
         true
@@ -601,6 +614,54 @@ impl netherforge_platform::FakeSidebarOps for Fake {
     }
 }
 
+impl netherforge_platform::FakeTeamOps for Fake {
+    fn names(&self) -> Vec<String> {
+        self.teams.borrow().keys().cloned().collect()
+    }
+    fn create(&self, name: String, _: netherforge_platform::TeamLook) -> bool {
+        self.call(format!("team {name} made"));
+        self.teams.borrow_mut().insert(name, Vec::new()).is_none()
+    }
+    fn update(&self, name: String, look: netherforge_platform::TeamLook) -> bool {
+        self.call(format!("team {name} {} {:?}", look.prefix, look.color));
+        true
+    }
+    fn remove(&self, name: String) -> bool {
+        self.call(format!("team {name} removed"));
+        self.teams.borrow_mut().remove(&name).is_some()
+    }
+    fn entries(&self, name: String) -> Option<Vec<String>> {
+        self.teams.borrow().get(&name).cloned()
+    }
+    fn add_entry(&self, name: String, entry: String) -> bool {
+        self.teams
+            .borrow_mut()
+            .get_mut(&name)
+            .map(|e| e.push(entry))
+            .is_some()
+    }
+    fn team_of(&self, entry: String) -> Option<String> {
+        self.teams
+            .borrow()
+            .iter()
+            .find(|(_, e)| e.contains(&entry))
+            .map(|(n, _)| n.clone())
+    }
+    fn set_below_name(&self, player: String, text: Option<String>) {
+        self.call(format!("below {player} {text:?}"));
+    }
+    fn clear_below_names(&self) {
+        self.call("below cleared".into());
+    }
+}
+
+impl netherforge_platform::FakePlayerListOps for Fake {
+    fn set_listed(&self, viewer: Uuid, player: Uuid, listed: bool) -> bool {
+        self.call(format!("listed {} for {} {listed}", player.0, viewer.0));
+        true
+    }
+}
+
 impl netherforge_platform::FakePermissionOps for Fake {
     fn apply(&self, player: Uuid, nodes: std::collections::HashMap<String, bool>) {
         let mut nodes: Vec<String> = nodes.into_iter().map(|(n, v)| format!("{n}={v}")).collect();
@@ -645,6 +706,12 @@ impl FakePlatform for Fake {
         self
     }
     fn boss_bars(&self) -> &dyn netherforge_platform::BossBarOps {
+        self
+    }
+    fn teams(&self) -> &dyn netherforge_platform::TeamOps {
+        self
+    }
+    fn player_list(&self) -> &dyn netherforge_platform::PlayerListOps {
         self
     }
     fn sidebars(&self) -> &dyn netherforge_platform::SidebarOps {
@@ -2681,4 +2748,74 @@ print(alex:sidebar():lines()[1], #alex:sidebar():lines())
             && reloaded.contains(&"bar 2 removed".to_owned()),
         "{reloaded:?}"
     );
+}
+
+#[test]
+fn teams_are_the_projects_own_on_the_scoreboard_and_go_at_the_end() {
+    use netherforge_platform::{PlatformEvents, game_event};
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/teams/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local zombie = nf.worlds.default():entities()[1]
+local blue = nf.teams.create("blue", { prefix = "[B] " })
+print(blue:add_member(alex), blue:add_member(zombie), alex:team() == blue, #blue:members(), blue:members()[1]:is_player())
+print(pcall(nf.teams.create, "blue"), pcall(nf.teams.create, "no spaces"))
+print(blue:set_color("blue"), blue:color(), #nf.teams.all())
+alex:set_below_name("Level 3")
+print(alex:below_name(), alex:set_listed_for(alex, false), alex:is_listed_for(alex))
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            // Entries sorted: the zombie's UUID before "Alex".
+            "true\ttrue\ttrue\t2\tfalse",
+            "false\tfalse\tmodules/teams/init.lua:6: a team's name is letters, digits and _ - . +, not \"no spaces\"",
+            "true\tblue\t1",
+            "Level 3\ttrue\tfalse",
+        ]
+    );
+    // A crash's leftover of ours goes before anything runs; another plugin's stays.
+    assert!(
+        calls.contains(&"team nf.stale removed".to_owned())
+            && !calls.contains(&"team red removed".to_owned())
+    );
+    assert!(
+        calls.contains(&"team nf.blue [B]  Some(\"blue\")".to_owned()),
+        "{calls:?}"
+    );
+    // They come back: out of their own list again.
+    let alex = netherforge_platform::PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    server.game().player_join(&mut game_event::PlayerJoin {
+        player: alex,
+        first_join: false,
+        message: None,
+    });
+    assert!(
+        platform
+            .take()
+            .contains(&"listed 77 for 77 false".to_owned())
+    );
+    server.session_mut().stop();
+    let stopped = platform.take();
+    for line in [
+        "team nf.blue removed",
+        "below cleared",
+        "listed 77 for 77 true",
+    ] {
+        assert!(stopped.contains(&line.to_owned()), "{line} {stopped:?}");
+    }
 }

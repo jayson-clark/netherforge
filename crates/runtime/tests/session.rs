@@ -39,6 +39,14 @@ impl netherforge_platform::FakeCommandOps for Fake {
     }
 }
 
+/// An empty scoreboard.
+impl netherforge_platform::FakeTeamOps for Fake {
+    fn names(&self) -> Vec<String> {
+        Vec::new()
+    }
+    fn clear_below_names(&self) {}
+}
+
 /// Nobody online.
 impl netherforge_platform::FakePlayerOps for Fake {
     fn online(&self) -> Vec<netherforge_platform::PlayerRef> {
@@ -51,6 +59,9 @@ impl FakePlatform for Fake {
         self
     }
     fn commands(&self) -> &dyn netherforge_platform::CommandOps {
+        self
+    }
+    fn teams(&self) -> &dyn netherforge_platform::TeamOps {
         self
     }
     fn info(&self) -> ServerInfo {
@@ -187,10 +198,10 @@ fn a_project_for_another_minecraft_is_refused() {
 fn reaching_a_group_the_fake_doesnt_fake_says_which() {
     let platform = std::rc::Rc::new(Fake::default());
     let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        netherforge_platform::Platform::teams(&*platform).names()
+        netherforge_platform::Platform::mannequins(&*platform).look(netherforge_platform::Uuid(1))
     }));
     let message = failed.unwrap_err().downcast::<String>().unwrap();
-    assert_eq!(*message, "TeamOps::names isn't on this platform");
+    assert_eq!(*message, "MannequinOps::look isn't on this platform");
 }
 
 // ---- packages ----

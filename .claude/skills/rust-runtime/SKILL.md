@@ -627,6 +627,14 @@ them to centities and to each service). An attached bar follows its centity's he
 range; it goes, or comes off (`remove_with: false`), when the centity does. A sidebar is each online player's,
 forgotten when they leave; everyone gets the main scoreboard back at the end.
 
+## Teams (`crates/runtime/src/team.rs`)
+
+Kotlin's `Teams` and `PlayerListings`: a team is `nf.<name>` on the main scoreboard (leftovers of ours are removed
+as a session starts; others' are never touched), its look kept here as scripts set it, its members the
+scoreboard's (a player by name, any other entity by UUID: `scoreboard_entry`). It goes with its scope. Lines under
+name tags and who's out of whose player list are kept and applied again on join; the session's end undoes all
+three. `entity:team()` is the project's team the entity is in, if any.
+
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 
 The roadmap's "describe `Platform` and `PlatformEvents` in a language-neutral spec, and generate

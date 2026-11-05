@@ -46,6 +46,8 @@ pub struct Shared {
     pub skies: RefCell<crate::sky::Skies>,
     /// Boss bars scripts made, and players' sidebars.
     pub bars: RefCell<crate::bossbar::Bars>,
+    /// Teams scripts made, lines under name tags, and who's out of whose player list.
+    pub teams: RefCell<crate::team::Teams>,
     /// Natural spawning: its passes, rules and scripts' conditions.
     pub spawner: RefCell<crate::centity::natural::Spawner>,
     /// The pictures scripts hold.
@@ -77,6 +79,7 @@ impl Shared {
             names: RefCell::default(),
             skies: RefCell::default(),
             bars: RefCell::default(),
+            teams: RefCell::default(),
             centities: RefCell::default(),
             font: RefCell::default(),
             centity_scripts: RefCell::default(),
@@ -122,6 +125,22 @@ impl Shared {
             self.classed.borrow_mut().push(pushed);
         }
         handles::Entity { id }
+    }
+
+    /// Player `id` as the `Entity` the spec's type says, its value a `Player`'s.
+    pub fn player_entity(
+        &self,
+        lua: &mlua::Lua,
+        id: netherforge_platform::Uuid,
+    ) -> handles::Entity {
+        let text = crate::events::uuid_text(&id);
+        if let Ok(pushed) = netherforge_api::handle::push_any(
+            lua,
+            &Handle::Player(handles::Player { id: text.clone() }),
+        ) {
+            self.classed.borrow_mut().push(pushed);
+        }
+        handles::Entity { id: text }
     }
 
     /// The entity `id` as its class, when the server knows it; an `Entity` otherwise.

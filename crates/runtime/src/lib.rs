@@ -38,6 +38,7 @@ pub mod shared;
 pub mod sky;
 pub mod stats;
 pub mod store;
+pub mod team;
 pub mod utilities;
 pub mod world;
 
@@ -415,6 +416,18 @@ impl LuaApi for Api {
         }
     }
     fn sidebar(&self) -> &dyn netherforge_api::api::SidebarApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn nf_teams(&self) -> &dyn netherforge_api::api::NfTeamsApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn team(&self) -> &dyn netherforge_api::api::TeamApi {
         match &self.worlds {
             Some(w) => w,
             None => &Unported,

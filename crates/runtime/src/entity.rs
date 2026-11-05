@@ -6,8 +6,6 @@
 //! players each entity is hidden from, applied again when they join and when the entity loads; and the
 //! `entity:data()` tables, read from the entity the first time a script asks and written back when its chunk
 //! unloads, a world saves and the session ends, only when changed.
-//!
-//! Not yet: `entity:team()` (teams).
 
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -15,7 +13,6 @@ use std::rc::Rc;
 use mlua::{Function, Value};
 use netherforge_api::api::{DroppedItemApi, EntityApi};
 use netherforge_api::handles::{self, Handle};
-use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, shapes, unions, values};
 use netherforge_format::math::Vec3;
 use netherforge_platform::{
@@ -522,7 +519,7 @@ impl EntityApi for GameContext {
     }
 
     fn team(&self, this: &handles::Entity) -> ApiResult<Option<handles::Team>> {
-        <Unported as EntityApi>::team(&Unported, this)
+        Ok(self.team_of(this))
     }
 
     fn is_silent(&self, this: &handles::Entity) -> ApiResult<bool> {

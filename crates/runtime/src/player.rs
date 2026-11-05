@@ -2,8 +2,7 @@
 //! they're offline; what works either way (bans, the whitelist, when they first played) needs only a UUID.
 //! Their stats and buffs are the centities' stat sheets (`crate::stats`, `Holder::Player`).
 //!
-//! Not yet, each with its area: recipes (with items), menus and dialogs, who's listed for whom and below-name
-//! text (teams), and resource packs.
+//! Not yet, each with its area: recipes (with items), menus and dialogs, and resource packs.
 
 use std::collections::BTreeMap;
 
@@ -1075,7 +1074,11 @@ impl PlayerApi for GameContext {
             .is_some_and(|id| self.shared.platform.player_list().set_order(id, order)))
     }
     fn is_listed_for(&self, this: &handles::Player, viewer: handles::Player) -> ApiResult<bool> {
-        <Unported as PlayerApi>::is_listed_for(&Unported, this, viewer)
+        let (Some(player), Some(other)) = (self.player_online(this), self.player_online(&viewer))
+        else {
+            return Ok(false);
+        };
+        Ok(self.is_listed(other, player))
     }
     fn set_listed_for(
         &self,
@@ -1083,17 +1086,31 @@ impl PlayerApi for GameContext {
         viewer: handles::Player,
         listed: bool,
     ) -> ApiResult<bool> {
-        <Unported as PlayerApi>::set_listed_for(&Unported, this, viewer, listed)
+        let (Some(player), Some(other)) = (self.player_online(this), self.player_online(&viewer))
+        else {
+            return Ok(false);
+        };
+        Ok(self.set_listed(other, player, listed))
     }
     fn below_name(&self, this: &handles::Player) -> ApiResult<Option<values::Text>> {
-        <Unported as PlayerApi>::below_name(&Unported, this)
+        Ok(self
+            .player_online(this)
+            .and_then(|id| self.below_name(id))
+            .map(values::Text))
     }
     fn set_below_name(
         &self,
         this: &handles::Player,
         text: Option<values::Text>,
     ) -> ApiResult<bool> {
-        <Unported as PlayerApi>::set_below_name(&Unported, this, text)
+        let Some(player) = self
+            .player_online(this)
+            .and_then(|id| self.players().get(id))
+        else {
+            return Ok(false);
+        };
+        GameContext::set_below_name(self, &player, text.map(|t| t.0));
+        Ok(true)
     }
     fn bossbars(&self, this: &handles::Player) -> ApiResult<Vec<handles::BossBar>> {
         Ok(parse_uuid(&this.id)
