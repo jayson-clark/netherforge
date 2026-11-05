@@ -180,6 +180,19 @@ impl netherforge_platform::FakeClientEntityOps for Fake {
     }
 }
 
+impl netherforge_platform::FakeWorldEntityOps for Fake {
+    fn boxes(
+        &self,
+        _: String,
+        _: netherforge_format::math::BoundingBox,
+    ) -> Vec<netherforge_platform::EntityBox> {
+        Vec::new()
+    }
+    fn info(&self, _: Uuid) -> Option<netherforge_platform::EntityInfo> {
+        None
+    }
+}
+
 impl netherforge_platform::FakeBlockOps for Fake {
     fn get(
         &self,
@@ -258,6 +271,9 @@ impl FakePlatform for Fake {
         self
     }
     fn blocks(&self) -> &dyn netherforge_platform::BlockOps {
+        self
+    }
+    fn world_entities(&self) -> &dyn netherforge_platform::WorldEntityOps {
         self
     }
 }
@@ -1018,4 +1034,40 @@ end)
     // It stops with its side against the wall's face, at x 10.
     assert!(lines.iter().any(|l| l == "at wall\t9.7\t-1"), "{lines:?}");
     assert!(lines.iter().any(|l| l == "true\tfalse\ttrue"), "{lines:?}");
+}
+
+#[test]
+fn centities_hear_what_their_hitboxes_start_touching() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let block = r#"{ "nodes": { "cube": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/cube/centity.json", block),
+        (
+            "modules/game/init.lua",
+            r#"
+local a = nf.centities.spawn("cube", vector.create(0, 64, 0))
+local b = nf.centities.spawn("cube", vector.create(0.5, 64, 0))
+a:on("touch", function(e) print("touch", e.node:name(), e.other == b, e.other_node:name(), e.entity) end)
+nf.after(3, function() b:teleport(vector.create(5, 64, 0)) end)
+nf.after(5, function() b:teleport(vector.create(1, 64, 0)) end)
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    platform.take();
+    let mut lines = Vec::new();
+    for _ in 0..7 {
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    // Once as they start touching, not again while they do; again after they part and meet (faces touching).
+    assert_eq!(
+        lines,
+        [
+            "touch\tcube\ttrue\tcube\tnil",
+            "touch\tcube\ttrue\tcube\tnil"
+        ],
+        "{lines:?}"
+    );
 }

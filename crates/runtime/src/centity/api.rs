@@ -669,6 +669,83 @@ impl CentityContext {
             self.shared
                 .with_drawing(|c, drawing| c.sync(platform, drawing, id));
         }
+        self.touches();
+    }
+
+    /// `touch`: after every instance has moved this tick, each one something listens to `touch` on hears what
+    /// its hitboxes started touching since the last tick. One nobody listens to keeps no contacts.
+    fn touches(&self) {
+        let ids: Vec<Uuid> = self.shared.centities.borrow().all().map(|i| i.id).collect();
+        let platform = &*self.shared.platform;
+        for id in ids {
+            let listening = self
+                .centity_target(id)
+                .is_some_and(|t| self.scripts.listening(&t, "touch"));
+            let (now, before, nodes) = {
+                let mut centities = self.shared.centities.borrow_mut();
+                let Some(instance) = centities.get(id) else {
+                    continue;
+                };
+                if instance.removed {
+                    continue;
+                }
+                if !listening || !super::Centities::loaded(platform, instance) {
+                    if let Some(i) = centities.get_mut(id) {
+                        i.touching.clear();
+                    }
+                    continue;
+                }
+                let now = centities.contacts(platform, id);
+                let Some(instance) = centities.get_mut(id) else {
+                    continue;
+                };
+                let before =
+                    std::mem::replace(&mut instance.touching, now.keys().copied().collect());
+                let names: Vec<String> = instance
+                    .definition
+                    .nodes
+                    .iter()
+                    .map(|n| n.name.clone())
+                    .collect();
+                (now, before, names)
+            };
+            let centity = uuid_text(&id);
+            for (other, contact) in now {
+                if before.contains(&other) {
+                    continue;
+                }
+                if !self.live(id) {
+                    break;
+                }
+                let other_node = contact.other.and_then(|(o, n)| {
+                    let name = self
+                        .shared
+                        .centities
+                        .borrow()
+                        .get(o)?
+                        .definition
+                        .nodes
+                        .get(n)?
+                        .name
+                        .clone();
+                    Some(Self::node_handle(&uuid_text(&o), &name))
+                });
+                let event = shapes::TouchEvent {
+                    centity: handles::Centity {
+                        id: centity.clone(),
+                    },
+                    node: Self::node_handle(&centity, &nodes[contact.node]),
+                    other: contact
+                        .other
+                        .map(|(o, _)| handles::Centity { id: uuid_text(&o) }),
+                    other_node,
+                    entity: contact
+                        .entity
+                        .map(|e| handles::Entity { id: uuid_text(&e) }),
+                };
+                self.raise_on(id, "touch", codecs::TouchEvent, event);
+            }
+        }
     }
 
     /// `tick` on instance `id`, to whoever listens.

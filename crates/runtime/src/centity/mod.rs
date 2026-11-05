@@ -22,6 +22,7 @@ pub mod keyframes;
 pub mod movers;
 pub mod quat;
 pub mod ropes;
+pub mod spatial;
 pub mod world_shapes;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -47,6 +48,10 @@ pub struct Centities {
     instances: IndexMap<Uuid, Instance>,
     /// Each entity of ours, by its instance and node.
     owners: HashMap<Uuid, (Uuid, String)>,
+    /// Where every instance's hitboxes are, by world cell.
+    grid: spatial::Grid,
+    /// The instances reshaped since the grid last filed them: each instance holds this set too.
+    dirty: Rc<std::cell::RefCell<indexmap::IndexSet<Uuid>>>,
     /// The next instance's id, for a platform that doesn't make them (tests); see `spawn`.
     next_id: u128,
     /// Anchored texts already warned about, so one set every tick warns once.
@@ -109,6 +114,8 @@ impl Centities {
         self.next_id += 1;
         let id = Uuid(self.next_id);
         let mut instance = Instance::new(id, definition, at, yaw);
+        instance.dirty = Some(self.dirty.clone());
+        instance.reshaped();
         // Before anything is made: its entities are made temporary or private as they're claimed.
         setup(&mut instance);
         health::adopt(platform.game(), &mut instance);
@@ -124,6 +131,8 @@ impl Centities {
             return false;
         };
         instance.removed = true;
+        self.grid.unfile(id);
+        self.dirty.borrow_mut().shift_remove(&id);
         let entities = ops(platform, &instance);
         for entity in instance.entity_ids() {
             self.owners.remove(&entity);
@@ -201,7 +210,12 @@ impl Centities {
         ended
     }
 
-    fn loaded(platform: &dyn Platform, instance: &Instance) -> bool {
+    /// Where instance `id` comes in the order they were made: what questions answer in.
+    pub fn order_of(&self, id: Uuid) -> usize {
+        self.instances.get_index_of(&id).unwrap_or(usize::MAX)
+    }
+
+    pub fn loaded(platform: &dyn Platform, instance: &Instance) -> bool {
         (instance.anchor_entity.is_none()
             && instance.displays.is_empty()
             && instance.hitboxes.is_empty())

@@ -182,6 +182,12 @@ pub struct Instance {
     /// Players it's hidden from, online or not: what's said again when the server forgets.
     pub hidden_from: IndexSet<Uuid>,
 
+    /// What its hitboxes touched at the last look, while something listens to its `touch`.
+    pub touching: std::collections::HashSet<Uuid>,
+    /// Its shown hitboxes as last measured (`Centities::obstacles`), until they change.
+    pub obstacles: Option<Rc<super::spatial::Obstacles>>,
+    /// Where it says it was reshaped, so the grid files it again: its `Centities`' own.
+    pub dirty: Option<Rc<std::cell::RefCell<IndexSet<Uuid>>>>,
     /// The entities no longer match the definition.
     pub needs_reconcile: bool,
     /// Everything must be pushed again: entities just came back from disk, or were just respawned.
@@ -258,6 +264,9 @@ impl Instance {
             removing: false,
             view_range: DEFAULT_VIEW_RANGE,
             hidden_from: IndexSet::new(),
+            touching: std::collections::HashSet::new(),
+            obstacles: None,
+            dirty: None,
             needs_reconcile: true,
             force_sync: true,
             moved: false,
@@ -355,6 +364,15 @@ impl Instance {
     fn posed(&mut self) {
         self.pose_dirty = true;
         self.placed_cache = None;
+        self.reshaped();
+    }
+
+    /// Its hitboxes may have changed: they're measured and filed again before the next question.
+    pub fn reshaped(&mut self) {
+        self.obstacles = None;
+        if let Some(dirty) = &self.dirty {
+            dirty.borrow_mut().insert(self.id);
+        }
     }
 
     pub fn index_of(&self, node: &str) -> Option<usize> {
@@ -484,6 +502,7 @@ impl Instance {
             ..to
         };
         self.moved = true;
+        self.reshaped();
     }
 
     pub fn yaw(&self) -> f64 {
@@ -688,6 +707,7 @@ impl Instance {
             return;
         }
         self.hidden[index] = !value;
+        self.reshaped();
         self.edited[index] = true;
         self.jumps[index] = true;
         self.pose_dirty = true;
@@ -712,6 +732,7 @@ impl Instance {
     pub fn set_display(&mut self, index: usize, display: DisplayDef) {
         self.content[index] = Some(display);
         self.content_changed[index] = true;
+        self.reshaped();
         // Its fit may change with it (a rect's size, an anchor), so its pose is sent now too.
         self.edited[index] = true;
         self.pose_dirty = true;
