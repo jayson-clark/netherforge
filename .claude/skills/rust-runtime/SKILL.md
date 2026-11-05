@@ -104,7 +104,7 @@ becomes.
 
 | Path           | What it is                                                                                   |
 | -------------- | -------------------------------------------------------------------------------------------- |
-| `Cargo.toml`   | The runtime's workspace (`crates/*`). The editor's backend is still its own workspace.       |
+| `Cargo.toml`   | The runtime's workspace (`crates/*`). The editor's backend is still its own workspace, taking `netherforge-format` by path (map colours so far), which turns on serde_json's `preserve_order` there too. |
 | `crates/luau/` | `netherforge-luau`: the Luau host. One state per room, scopes, the guards, memory per scope. |
 | `crates/api/`  | `netherforge-api`: the Lua API for the Rust runtime, generated from `packages/api`.          |
 
@@ -670,6 +670,12 @@ Next in format: the compilers, with the runtime pieces that use them. The compil
   from Kotlin's stdlib on every branch (a power of two by its bits, the rest by rejection), held to `random.txt`,
   which `RandomGoldenTest` now writes with long draws after the old ones. An error (a missing table, a cycle past
   `MOST_DEPTH`) is a `Result`, where Kotlin threw.
+- **Map colours** (`map_colors.rs`, `MapPalette` and `Dither`): the palette, the redmean match (per 15-bit cell,
+  exact for Floyd–Steinberg) and the three dithers, whole-number arithmetic only. It was the editor's video
+  converter's Rust copy (`src-tauri/src/video/palette.rs`), moved here and made general over where pixels come from
+  (`Dither::apply` takes a pixel function and answers none for a clear one); the editor now uses it, so the server's
+  pictures and the editor's videos are matched by one definition. The game's colours come from
+  `GameData::map_colors`. `tests/map_colors.rs` has `ScreenTest`'s cases.
 
 ## One source for each thing
 

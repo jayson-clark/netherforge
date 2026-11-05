@@ -64,6 +64,11 @@ pub trait GameData {
     fn data_pack_format(&self) -> Option<[i32; 2]> {
         None
     }
+    /// Each map colour by its index, `0xAARRGGBB` (alpha 0 for an index that draws nothing): the server's
+    /// own table. `None` when the facts don't say.
+    fn map_colors(&self) -> Option<&[u32]> {
+        None
+    }
 
     /// Whether `registry` has `id` (namespaced).
     fn has(&self, registry: Registry, id: &str) -> bool {

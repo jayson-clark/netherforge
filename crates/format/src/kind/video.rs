@@ -56,10 +56,15 @@ pub struct VideoFile {
     pub audio: Option<bool>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// How a picture's colours become map colours (`map_colors`): each pixel the nearest one (`None`), or the error
+/// of each pushed onto the pixels after it so areas average out to the right colour (`FloydSteinberg`, best for
+/// photos and video, and a video's when it doesn't say), or a fixed pattern of thresholds (`Ordered`, which
+/// doesn't crawl from one video frame to the next).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Dither {
     None,
+    #[default]
     FloydSteinberg,
     Ordered,
 }

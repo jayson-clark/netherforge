@@ -16,6 +16,7 @@ pub mod kind;
 pub mod kinds;
 pub mod lua;
 pub mod manifest;
+pub mod map_colors;
 pub mod math;
 pub mod names;
 pub mod noise;

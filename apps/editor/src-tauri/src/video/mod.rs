@@ -22,7 +22,7 @@ use sha2::{Digest, Sha256};
 
 use crate::error::{Context, Error, ErrorCode, Result, bail};
 use crate::fs::{ProjectRoot, atomic};
-use palette::{Dither, Palette};
+use palette::Palette;
 
 /// A video's file, as far as converting it goes (format's `VideoFile`; unknown keys are format's to refuse).
 #[derive(Debug, Clone, Deserialize)]
@@ -278,7 +278,7 @@ pub fn convert(
             "A video is 1 to 20 frames a second: fix {folder}/{FILE} first"
         );
     }
-    let dither = Dither::parse(settings.dither.as_deref()).ok_or_else(|| {
+    let dither = palette::parse_dither(settings.dither.as_deref()).ok_or_else(|| {
         Error::new(
             ErrorCode::Invalid,
             format!("{folder}/{FILE} names a dither there isn't"),
@@ -387,7 +387,7 @@ pub fn convert(
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
             Err(e) => return Err(e).context(|| "Couldn't read ffmpeg's frames".to_string()),
         }
-        writer.add(palette.dither(&frame, width, height, dither))?;
+        writer.add(palette::dither(&mut palette, &frame, width, height, dither))?;
         let done = writer.frames() as u32;
         if done.is_multiple_of(fps as u32) {
             report("frames", done, total.max(done));
