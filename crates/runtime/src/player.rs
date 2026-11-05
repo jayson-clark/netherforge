@@ -2,7 +2,7 @@
 //! they're offline; what works either way (bans, the whitelist, when they first played) needs only a UUID.
 //! Their stats and buffs are the centities' stat sheets (`crate::stats`, `Holder::Player`).
 //!
-//! Not yet, each with its area: skies, recipes,
+//! Not yet, each with its area: recipes,
 //! advancements, menus and dialogs, who's listed for whom and below-name text (teams), boss bars, resource
 //! and packs.
 
@@ -648,7 +648,11 @@ impl PlayerApi for GameContext {
         }))
     }
     fn sky(&self, this: &handles::Player) -> ApiResult<Option<String>> {
-        <Unported as PlayerApi>::sky(&Unported, this)
+        let Some(id) = self.player_online(this) else {
+            return Ok(None);
+        };
+        let sky = self.shared.skies.borrow().of_player(id);
+        Ok(sky.map(|s| self.with_names(|names| names.spell(&s))))
     }
     fn set_sky(
         &self,
@@ -656,14 +660,26 @@ impl PlayerApi for GameContext {
         sky: String,
         options: Option<shapes::SkyOptions>,
     ) -> ApiResult<()> {
-        <Unported as PlayerApi>::set_sky(&Unported, this, sky, options)
+        let name = self.with_names(|names| names.resource("sky", &sky))?;
+        let fade = crate::sky::fade_ticks(options.and_then(|o| o.fade_ticks))?;
+        let platform = &*self.shared.platform;
+        let mut skies = self.shared.skies.borrow_mut();
+        skies.check(platform, &name)?;
+        if let Some(id) = self.player_online(this) {
+            skies.set_player(platform, id, &name, fade)?;
+        }
+        Ok(())
     }
     fn clear_sky(
         &self,
         this: &handles::Player,
         options: Option<shapes::SkyOptions>,
     ) -> ApiResult<()> {
-        <Unported as PlayerApi>::clear_sky(&Unported, this, options)
+        let fade = crate::sky::fade_ticks(options.and_then(|o| o.fade_ticks))?;
+        if let Some(id) = self.player_online(this) {
+            self.shared.skies.borrow_mut().clear_player(id, fade);
+        }
+        Ok(())
     }
     fn storage(
         &self,

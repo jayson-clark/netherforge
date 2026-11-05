@@ -607,6 +607,9 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
             shared: shared.clone(),
             host: Default::default(),
         }),
+        Box::new(crate::sky::SkiesService {
+            shared: shared.clone(),
+        }),
         Box::new(crate::schedule::SchedulesService {
             shared: shared.clone(),
         }),

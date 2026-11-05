@@ -34,6 +34,7 @@ pub mod scripts;
 pub mod server;
 pub mod session;
 pub mod shared;
+pub mod sky;
 pub mod stats;
 pub mod store;
 pub mod world;

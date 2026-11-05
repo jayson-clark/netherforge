@@ -510,7 +510,7 @@ spawner forgets them), `world_saving`, `chunk_unloading`, `block_changed` (physi
 - A world's spawn category is format's `SpawnCategory` (the Platform spec's external, now real).
 - `set_block` and `fill_blocks` (at most 32768, loaded chunks only) write canonical states. `spawn_entity` checks
   the kind and tags and encodes `options.data` with the saved tables' tags; `spawn_item` takes an item table.
-- Not yet, delegated to `Unported`: skies, gradual fills, structures,
+- Not yet, delegated to `Unported`: gradual fills, structures,
   `locate_biome`, managed worlds, `block:custom` and
   `block:data`. Until custom blocks come, no block is a project block (`blocks`' `custom`, `flood`'s
   matcher), and a project biome is spelled without the project's namespace (not yet relative to a package).
@@ -593,6 +593,15 @@ scaled clock.
   the viewers in range (32 blocks, 128 forced); `sound`/`sound_id` take a pack sound by reference, else the
   server's (a registry the facts don't know says nothing, as format's `lacks`). `World:spawn_particle`,
   `play_sound` and `Player:play_sound`, `stop_sound`, `spawn_particle` use them.
+
+## Skies (`crates/runtime/src/sky.rs`)
+
+Kotlin's `Skies`: a world's and a player's sky (a player's own over their world's; the fade of whichever
+changed last), shown to each online player a fade step at a time through `SkyOps::show`. The steps and clock a
+sky has are what the server **started with** (`DatapackOps::started`, read once per sky, with format's
+`startup::sky` keys): a sky with none is new since the start and refused until a restart. A first view, or
+another world, jumps straight to the sky. Timers run before the service in a tick, so a change a timer makes
+steps that same tick. Not yet: the refusal's own words (`DatapackOps::refused` is a placeholder).
 
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 

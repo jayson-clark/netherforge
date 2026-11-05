@@ -42,6 +42,8 @@ pub struct Shared {
     pub schedules: RefCell<crate::schedule::Schedules>,
     /// What each package of the tree can name, as the project last read: how names cross between packages.
     pub names: RefCell<netherforge_format::project::Names>,
+    /// The skies over worlds and players.
+    pub skies: RefCell<crate::sky::Skies>,
     /// Natural spawning: its passes, rules and scripts' conditions.
     pub spawner: RefCell<crate::centity::natural::Spawner>,
     /// The pictures scripts hold.
@@ -71,6 +73,7 @@ impl Shared {
             session_tables: RefCell::default(),
             schedules: RefCell::default(),
             names: RefCell::default(),
+            skies: RefCell::default(),
             centities: RefCell::default(),
             font: RefCell::default(),
             centity_scripts: RefCell::default(),

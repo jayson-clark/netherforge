@@ -537,6 +537,30 @@ impl netherforge_platform::FakeSoundOps for Fake {
     }
 }
 
+/// The server started with three steps of sky `demo:dusk`'s twins.
+impl netherforge_platform::FakeDatapackOps for Fake {
+    fn started(&self) -> std::collections::HashMap<String, Vec<u8>> {
+        (1..=3)
+            .map(|step| {
+                (
+                    format!("data/demo/worldgen/biome/sky/demo/dusk/{step}/minecraft/plains.json"),
+                    Vec::new(),
+                )
+            })
+            .collect()
+    }
+}
+
+impl netherforge_platform::FakeSkyOps for Fake {
+    fn show(&self, player: Uuid, sky: Option<netherforge_platform::SkyView>) {
+        self.call(format!(
+            "sky {} {:?}",
+            player.0,
+            sky.map(|s| (s.sky, s.step))
+        ));
+    }
+}
+
 impl netherforge_platform::FakePermissionOps for Fake {
     fn apply(&self, player: Uuid, nodes: std::collections::HashMap<String, bool>) {
         let mut nodes: Vec<String> = nodes.into_iter().map(|(n, v)| format!("{n}={v}")).collect();
@@ -569,6 +593,12 @@ impl FakePlatform for Fake {
         self
     }
     fn particles(&self) -> &dyn netherforge_platform::ParticleOps {
+        self
+    }
+    fn datapacks(&self) -> &dyn netherforge_platform::DatapackOps {
+        self
+    }
+    fn skies(&self) -> &dyn netherforge_platform::SkyOps {
         self
     }
     fn sounds(&self) -> &dyn netherforge_platform::SoundOps {
@@ -2415,5 +2445,59 @@ print(pcall(w.spawn_entity, w, "pig", vector.create(0, 64, 0), { data = 5 }))
     assert!(
         calls.contains(&r#"spawn minecraft:pig at 3 Some("Wilbur") ["farm"] Some("{\"age\":2,\"home\":{\"$world\":[\"world\"]}}")"#.to_owned()),
         "{calls:?}"
+    );
+}
+
+#[test]
+fn a_worlds_sky_fades_a_step_at_a_time() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("skies/dusk.json", r##"{ "sky": "#203060", "fade": 3 }"##),
+        ("skies/storm.json", r##"{ "sky": "#404040" }"##),
+        (
+            "modules/sky/init.lua",
+            r#"
+local w = nf.worlds.default()
+print(w:set_sky("dusk", { fade_ticks = 6 }), w:sky())
+print(pcall(w.set_sky, w, "storm"))
+print(pcall(w.set_sky, w, "nope"))
+nf.after(4, function() w:clear_sky({ fade_ticks = 6 }) end)
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert!(!start.iter().any(|l| l.starts_with("warn")), "{start:?}");
+    assert_eq!(
+        printed(&start),
+        [
+            "true\tdusk",
+            "false\tmodules/sky/init.lua:4: sky \"storm\" is new since the server started: a sky's colours are biomes, which the game learns as it starts, so restart it",
+            "false\tmodules/sky/init.lua:5: there's no sky \"nope\" (skies/nope.json)",
+        ]
+    );
+    let mut shown = Vec::new();
+    for tick in 1..=14 {
+        session.tick();
+        shown.extend(
+            platform
+                .take()
+                .into_iter()
+                .filter(|c| c.starts_with("sky"))
+                .map(|c| format!("{tick}: {c}")),
+        );
+    }
+    // A player who hadn't seen the world is shown its sky at once; cleared over six ticks, its three steps go one
+    // every two.
+    assert_eq!(
+        shown,
+        [
+            "1: sky 77 Some((\"demo:dusk\", 3))",
+            "4: sky 77 Some((\"demo:dusk\", 2))",
+            "6: sky 77 Some((\"demo:dusk\", 1))",
+            "8: sky 77 None",
+        ]
     );
 }

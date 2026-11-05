@@ -3,7 +3,7 @@
 //! see (an unknown game rule) is an error. The centity questions (`raycast` against hitboxes, `overlap_*`,
 //! `sweep`, `nearest`, `centities`) go to the centities' spatial index.
 //!
-//! Not yet, each with the area it needs: skies, gradual fills and structures, `locate_biome` (the workers),
+//! Not yet, each with the area it needs: gradual fills and structures, `locate_biome` (the workers),
 //! managed worlds (`create`, `load`, `copy`, `import`, `unload`). `blocks`'
 //! `custom` and `flood`'s project blocks wait for custom blocks: until then no block is a project block.
 
@@ -597,7 +597,11 @@ impl WorldApi for GameContext {
     }
 
     fn sky(&self, this: &handles::World) -> ApiResult<Option<String>> {
-        <Unported as WorldApi>::sky(&Unported, this)
+        let Some(world) = self.live(this) else {
+            return Ok(None);
+        };
+        let sky = self.shared.skies.borrow().of_world(world);
+        Ok(sky.map(|s| self.with_names(|names| names.spell(&s))))
     }
 
     fn set_sky(
@@ -606,7 +610,16 @@ impl WorldApi for GameContext {
         sky: String,
         options: Option<shapes::SkyOptions>,
     ) -> ApiResult<bool> {
-        <Unported as WorldApi>::set_sky(&Unported, this, sky, options)
+        let name = self.with_names(|names| names.resource("sky", &sky))?;
+        let fade = crate::sky::fade_ticks(options.and_then(|o| o.fade_ticks))?;
+        let Some(world) = self.live(this) else {
+            return Ok(false);
+        };
+        self.shared
+            .skies
+            .borrow_mut()
+            .set_world(self.platform(), world, &name, fade)?;
+        Ok(true)
     }
 
     fn clear_sky(
@@ -614,7 +627,11 @@ impl WorldApi for GameContext {
         this: &handles::World,
         options: Option<shapes::SkyOptions>,
     ) -> ApiResult<()> {
-        <Unported as WorldApi>::clear_sky(&Unported, this, options)
+        let fade = crate::sky::fade_ticks(options.and_then(|o| o.fade_ticks))?;
+        if let Some(world) = self.live(this) {
+            self.shared.skies.borrow_mut().clear_world(world, fade);
+        }
+        Ok(())
     }
 
     fn spawn_location(&self, this: &handles::World) -> ApiResult<Option<values::Location>> {
