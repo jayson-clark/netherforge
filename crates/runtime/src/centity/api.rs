@@ -1069,6 +1069,11 @@ impl CentityContext {
         let platform = &*self.shared.platform;
         self.shared
             .with_drawing(|c, drawing| c.reload(platform, drawing, ids));
+        // Inert ones whose centity is back are instances again.
+        let revived = self.shared.centities.borrow_mut().revive(platform, ids);
+        for id in revived {
+            self.start_script(id, false);
+        }
         for (id, nodes) in before {
             let now: Option<Vec<String>> = self
                 .shared
@@ -1108,15 +1113,108 @@ impl CentityContext {
     }
 
     /// Every instance's script ends and its entities go (the session stops; placements aren't saved yet).
+    /// The session is ending: a temporary instance belongs to scripts that are stopping, so it goes; every
+    /// other one's script stops, its data table, record, place and facing are saved, and it's left in the
+    /// world (its entities are persistent) for the next session to restore.
     pub fn stop_all(&self) {
+        let temporary: Vec<Uuid> = self
+            .shared
+            .centities
+            .borrow()
+            .all()
+            .filter(|i| i.temporary)
+            .map(|i| i.id)
+            .collect();
+        for id in temporary {
+            self.remove(id);
+        }
         let ids: Vec<Uuid> = self.shared.centities.borrow().all().map(|i| i.id).collect();
         for id in ids {
             self.stop_script(id);
         }
-        self.shared
-            .centities
-            .borrow_mut()
-            .remove_all(&*self.shared.platform);
+        self.save_data();
+        self.shared.centity_data.borrow_mut().clear();
+        let store = &self.shared.store;
+        let mut centities = self.shared.centities.borrow_mut();
+        centities.flush(store);
+        centities.save_placements(store);
+        store.commit();
+        *centities = super::Centities::default();
+    }
+
+    /// Every `centity:data()` table that changed since it was saved.
+    pub fn save_data(&self) {
+        let host = self.scripts.host();
+        let ids: Vec<Uuid> = self.shared.centity_data.borrow().keys().copied().collect();
+        for id in ids {
+            let Some(table) = self
+                .shared
+                .centity_data
+                .borrow()
+                .get(&id)
+                .map(|d| d.table.clone())
+            else {
+                continue;
+            };
+            if !self.live(id) {
+                self.shared.centity_data.borrow_mut().remove(&id);
+                continue;
+            }
+            let encoded = netherforge_luau::json::encode(
+                &host,
+                &Value::Table(table),
+                "data",
+                "save",
+                &netherforge_luau::json::NoTags,
+            );
+            let Ok(encoded) = encoded else { continue };
+            for problem in &encoded.problems {
+                self.shared.platform.log().warn(format!(
+                    "Saving centity {}'s data: {problem}",
+                    uuid_text(&id)
+                ));
+            }
+            let Some(text) = encoded.text else { continue };
+            if text.len() > MAX_DATA_BYTES {
+                self.shared.platform.log().warn(format!(
+                    "centity {}'s data takes {:.1} MiB, more than the 1 MiB a table may, so it wasn't saved: the last save stands",
+                    uuid_text(&id),
+                    text.len() as f64 / 1_048_576.0
+                ));
+                continue;
+            }
+            let mut data = self.shared.centity_data.borrow_mut();
+            let Some(kept) = data.get_mut(&id) else {
+                continue;
+            };
+            if kept.saved.as_deref() != Some(text.as_str()) {
+                kept.saved = Some(text.clone());
+                self.shared.store.put_centity_data(id, text);
+            }
+        }
+    }
+
+    /// The store hears what changed this tick; every so often every data table is saved too.
+    pub fn commit(&self) {
+        if self.scripts.tick_count().is_multiple_of(AUTOSAVE_EVERY) {
+            self.save_data();
+            self.shared
+                .centities
+                .borrow_mut()
+                .save_placements(&self.shared.store);
+        }
+        self.shared.centities.borrow_mut().flush(&self.shared.store);
+        self.shared.store.commit();
+        for failure in self.shared.store.take_failures() {
+            self.shared.platform.log().error(failure, None);
+        }
+    }
+
+    /// The instances the store had, back as they were: their scripts start, without `spawn`.
+    pub fn start_restored(&self, ids: &[Uuid]) {
+        for id in ids {
+            self.start_script(*id, false);
+        }
     }
 
     // ---- looking things up ----
@@ -2514,10 +2612,41 @@ impl CentityApi for CentityContext {
             .flatten())
     }
 
-    // ---- not ported yet ----
     fn data(&self, this: &handles::Centity) -> ApiResult<Value> {
-        CentityApi::data(&Unported, this)
+        let Some(id) = self.with(this, |i| i.id) else {
+            return Ok(Value::Nil);
+        };
+        if let Some(kept) = self.shared.centity_data.borrow().get(&id) {
+            return Ok(Value::Table(kept.table.clone()));
+        }
+        let host = self.scripts.host();
+        let lua = host.lua();
+        let saved = self.shared.store.centity_data(id);
+        let table = match saved
+            .as_deref()
+            .map(|t| netherforge_luau::json::decode(lua, t, &netherforge_luau::json::NoTags))
+        {
+            Some(Ok(Value::Table(t))) => t,
+            Some(_) => {
+                self.shared.platform.log().warn(format!(
+                    "What the store has for centity {}'s data isn't a saved table; it starts empty",
+                    this.id
+                ));
+                lua.create_table().map_err(lua_err)?
+            }
+            None => lua.create_table().map_err(lua_err)?,
+        };
+        self.shared.centity_data.borrow_mut().insert(
+            id,
+            crate::shared::DataTable {
+                table: table.clone(),
+                saved,
+            },
+        );
+        Ok(Value::Table(table))
     }
+
+    // ---- not ported yet ----
 }
 
 impl CentityContext {
@@ -2577,6 +2706,11 @@ impl CentityContext {
         Ok(true)
     }
 }
+
+/// The most a data table may take, encoded.
+const MAX_DATA_BYTES: usize = 1 << 20;
+/// How often every table and place that changed is saved: five minutes, as the server's own autosave.
+const AUTOSAVE_EVERY: u64 = 6000;
 
 /// What a launch without them flies with.
 const DEFAULT_RADIUS: f64 = 0.1;

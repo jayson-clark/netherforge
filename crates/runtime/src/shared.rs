@@ -12,6 +12,12 @@ use netherforge_platform::Platform;
 use crate::Modules;
 use crate::centity::{Centities, Drawing};
 
+/// A `centity:data()` table, live, and the text it was last saved or read as.
+pub struct DataTable {
+    pub table: mlua::Table,
+    pub saved: Option<String>,
+}
+
 pub struct Shared {
     pub platform: Rc<dyn Platform>,
     pub centities: RefCell<Centities>,
@@ -23,6 +29,10 @@ pub struct Shared {
     pub next_flight: std::cell::Cell<u64>,
     /// Places searched this tick by walks finding a new path on their own.
     pub path_nodes: std::cell::Cell<usize>,
+    /// The runtime's store: placements and saved tables.
+    pub store: Rc<crate::store::Store>,
+    /// The `centity:data()` tables scripts asked for, by instance.
+    pub centity_data: RefCell<std::collections::HashMap<netherforge_platform::Uuid, DataTable>>,
     /// Nodes' rigid bodies.
     pub physics: RefCell<crate::centity::physics::Physics>,
     /// Players' and centities' stats and buffs.
@@ -32,9 +42,11 @@ pub struct Shared {
 }
 
 impl Shared {
-    pub fn new(platform: Rc<dyn Platform>) -> Rc<Shared> {
+    pub fn new(platform: Rc<dyn Platform>, store: Rc<crate::store::Store>) -> Rc<Shared> {
         Rc::new(Shared {
             platform,
+            store,
+            centity_data: RefCell::default(),
             centities: RefCell::default(),
             font: RefCell::default(),
             centity_scripts: RefCell::default(),

@@ -49,6 +49,8 @@ pub trait Service {
     }
     /// Starts it in `room`, with what the project defines.
     fn start(&mut self, _room: &Room, _project: &Define) {}
+    /// Every service has started: what waited for the others (a restored centity's script requires modules).
+    fn after_start(&mut self, _room: &Room) {}
     /// One tick.
     fn tick(&mut self, _room: &Room, _platform: &dyn Platform) {}
     /// The resources of `kind` (one it reloads) that changed, by id, the project as it reads now.
@@ -124,8 +126,23 @@ impl<'a> Session<'a> {
         source: &'a dyn ProjectSource,
         packages: &'a dyn PackageSources,
     ) -> Session<'a> {
+        Session::start_with(
+            platform,
+            source,
+            packages,
+            Rc::new(crate::store::Store::in_memory()),
+        )
+    }
+
+    /// `start`, keeping what outlives a session in `store` (the server's `netherforge.db`).
+    pub fn start_with(
+        platform: Rc<dyn Platform>,
+        source: &'a dyn ProjectSource,
+        packages: &'a dyn PackageSources,
+        store: Rc<crate::store::Store>,
+    ) -> Session<'a> {
         let project = load(source, packages);
-        let shared = Shared::new(platform.clone());
+        let shared = Shared::new(platform.clone(), store);
         let mut session = Session {
             refusal: refusal(&*platform, &project),
             platform,
@@ -181,6 +198,9 @@ impl<'a> Session<'a> {
         };
         for service in &mut self.services {
             service.start(&room, &define);
+        }
+        for service in &mut self.services {
+            service.after_start(&room);
         }
         self.room = Some(room);
         self.released();
@@ -446,6 +466,7 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
     vec![
         Box::new(CentitiesService {
             shared: shared.clone(),
+            restored: Vec::new(),
         }),
         Box::new(ModulesService {
             shared: shared.clone(),
@@ -458,6 +479,8 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
 /// each tick.
 struct CentitiesService {
     shared: Rc<Shared>,
+    /// The instances restored at start, whose scripts start once modules run.
+    restored: Vec<netherforge_platform::Uuid>,
 }
 
 impl CentitiesService {
@@ -509,10 +532,20 @@ impl Service for CentitiesService {
     fn start(&mut self, room: &Room, project: &Define) {
         self.define(project);
         self.context(room).define_buffs(buffs(project));
+        let mut centities = self.shared.centities.borrow_mut();
+        centities.set_home(project.project.namespace());
+        self.restored = centities.restore(project.platform, &self.shared.store);
+    }
+
+    fn after_start(&mut self, room: &Room) {
+        let restored = std::mem::take(&mut self.restored);
+        self.context(room).start_restored(&restored);
     }
 
     fn tick(&mut self, room: &Room, _platform: &dyn Platform) {
-        self.context(room).tick();
+        let context = self.context(room);
+        context.tick();
+        context.commit();
     }
 
     fn reload(&mut self, room: &Room, kind: &str, ids: &BTreeSet<String>, project: &Define) {
@@ -526,8 +559,7 @@ impl Service for CentitiesService {
         context.reload(ids, &before);
     }
 
-    /// Placements aren't saved yet: until they are, a session's instances go with it rather than staying
-    /// behind as strays nothing owns.
+    /// Instances stay in the world, saved, for the next session to restore; temporary ones go.
     fn stop(&mut self, room: &Room, _platform: &dyn Platform) {
         self.context(room).stop_all();
         self.shared.stats.borrow_mut().clear();

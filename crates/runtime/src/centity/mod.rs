@@ -26,6 +26,7 @@ pub mod paths;
 pub mod physics;
 pub mod quat;
 pub mod ropes;
+pub mod saving;
 pub mod spatial;
 pub mod world_shapes;
 
@@ -56,8 +57,14 @@ pub struct Centities {
     grid: spatial::Grid,
     /// The instances reshaped since the grid last filed them: each instance holds this set too.
     dirty: Rc<std::cell::RefCell<indexmap::IndexSet<Uuid>>>,
-    /// The next instance's id, for a platform that doesn't make them (tests); see `spawn`.
-    next_id: u128,
+    /// The namespace the project's own centities are named in.
+    home: String,
+    /// Records whose centity is gone, kept until it comes back.
+    inert: IndexMap<Uuid, crate::store::InstanceRecord>,
+    /// Where each stored instance was last stored, so an unmoved one isn't written again.
+    stored: HashMap<Uuid, (Location, f64)>,
+    /// Instances whose identity changed since the store last heard.
+    changed: indexmap::IndexSet<Uuid>,
     /// Anchored texts already warned about, so one set every tick warns once.
     unmeasured: HashSet<String>,
 }
@@ -115,8 +122,7 @@ impl Centities {
         if !platform.worlds().exists(at.world.clone()) {
             return None;
         }
-        self.next_id += 1;
-        let id = Uuid(self.next_id);
+        let id = saving::random_uuid();
         let mut instance = Instance::new(id, definition, at, yaw);
         instance.dirty = Some(self.dirty.clone());
         instance.reshaped();
@@ -125,6 +131,7 @@ impl Centities {
         health::adopt(platform.game(), &mut instance);
         autoplay(&mut instance);
         self.instances.insert(id, instance);
+        self.changed(id);
         self.sync(platform, drawing, id);
         Some(id)
     }
@@ -135,6 +142,7 @@ impl Centities {
             return false;
         };
         instance.removed = true;
+        self.changed(id);
         self.grid.unfile(id);
         self.dirty.borrow_mut().shift_remove(&id);
         let entities = ops(platform, &instance);
@@ -155,7 +163,7 @@ impl Centities {
     }
 
     /// Moves every instance of the centities in `ids` onto their new definitions (an instance of one that's
-    /// gone is removed). How many instances moved.
+    /// gone goes inert: out of the world, its entities and record kept). How many instances moved.
     pub fn reload(
         &mut self,
         platform: &dyn Platform,
@@ -181,9 +189,7 @@ impl Centities {
                     }
                     self.sync(platform, drawing, id);
                 }
-                None => {
-                    self.remove(platform, id);
-                }
+                None => self.make_inert(platform, id),
             }
         }
         moved
@@ -530,6 +536,7 @@ impl Centities {
         }
         let instance = self.instances.get_mut(&id).expect("listed");
         instance.needs_reconcile = false;
+        self.changed.insert(id);
         instance.force_sync = true;
     }
 
@@ -665,6 +672,7 @@ impl Centities {
             self.forget(id, entity);
         }
         self.instances.get_mut(&id).expect("listed").needs_reconcile = true;
+        self.changed.insert(id);
     }
 
     fn forget(&mut self, id: Uuid, entity: Uuid) {

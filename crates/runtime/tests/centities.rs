@@ -315,16 +315,18 @@ impl FakePlatform for Fake {
     }
 }
 
-#[derive(Default)]
 struct Files {
-    names: std::collections::BTreeSet<String>,
+    /// Leaked anew on each change: a test's few lists, so a running session can see files come and go.
+    names: RefCell<&'static std::collections::BTreeSet<String>>,
     texts: RefCell<BTreeMap<String, String>>,
 }
 
 impl Files {
     fn new(files: &[(&str, &str)]) -> Files {
         Files {
-            names: files.iter().map(|(p, _)| p.to_string()).collect(),
+            names: RefCell::new(Box::leak(Box::new(
+                files.iter().map(|(p, _)| p.to_string()).collect(),
+            ))),
             texts: RefCell::new(
                 files
                     .iter()
@@ -338,9 +340,24 @@ impl Files {
     }
 }
 
+impl Files {
+    fn delete(&self, path: &str) {
+        let mut names = (*self.names.borrow()).clone();
+        names.remove(path);
+        *self.names.borrow_mut() = Box::leak(Box::new(names));
+        self.texts.borrow_mut().remove(path);
+    }
+    fn add(&self, path: &str, text: &str) {
+        let mut names = (*self.names.borrow()).clone();
+        names.insert(path.into());
+        *self.names.borrow_mut() = Box::leak(Box::new(names));
+        self.write(path, text);
+    }
+}
+
 impl ProjectSource for Files {
     fn files(&self) -> &std::collections::BTreeSet<String> {
-        &self.names
+        *self.names.borrow()
     }
     fn read(&self, path: &str) -> Option<String> {
         self.texts.borrow().get(path).cloned()
@@ -1276,4 +1293,64 @@ end)
     }
     // On the table's hitbox; on the floor; on the other crate.
     assert_eq!(lines, ["65.00 64.00 65.00"], "{lines:?}");
+}
+
+#[test]
+fn an_instance_and_its_data_outlive_the_session_and_its_centity_going_away() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let store = std::rc::Rc::new(netherforge_runtime::store::Store::in_memory());
+    let centity = scripted_lamp();
+    let script = r#"
+this:on("spawn", function() print("spawn") end)
+local data = this:data()
+data.visits = (data.visits or 0) + 1
+print("visits", data.visits)
+"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &centity),
+        ("centities/lamp/script.lua", script),
+        ("modules/game/init.lua", ""),
+    ]);
+    {
+        let mut session = Session::start_with(platform.clone(), &files, &NoPackages, store.clone());
+        session
+            .spawn("lamp", place(3.0, 64.0, 3.0), 90.0)
+            .expect("spawned");
+        session.tick();
+        let calls = platform.take();
+        assert_eq!(printed(&calls), ["visits\t1", "spawn"], "{calls:?}");
+    }
+    // The session stopped: its instance stays in the world, its entities with it.
+    let calls = platform.take();
+    assert!(!calls.iter().any(|c| c.starts_with("remove")), "{calls:?}");
+    assert_eq!(store.instances().len(), 1);
+    let id = store.instances()[0].id;
+    {
+        let mut session = Session::start_with(platform.clone(), &files, &NoPackages, store.clone());
+        let calls = platform.take();
+        // Restored, not spawned: no new entities, no `spawn`, the data as it was saved.
+        assert_eq!(printed(&calls), ["visits\t2"], "{calls:?}");
+        session.tick();
+        let calls = platform.take();
+        assert!(
+            !calls
+                .iter()
+                .any(|c| c.starts_with("anchor") || c.starts_with("display")),
+            "{calls:?}"
+        );
+        assert_eq!(session.centities().get(id).map(|i| i.yaw()), Some(90.0));
+        // Its centity goes: it's inert, kept; back, it's an instance again.
+        files.delete("centities/lamp/centity.json");
+        session.reload(&["centities/lamp/centity.json".into()]);
+        assert!(session.centities().get(id).is_none());
+        assert_eq!(session.centities().inert().count(), 1);
+        session.tick();
+        assert_eq!(store.instances().len(), 1);
+        files.add("centities/lamp/centity.json", &centity);
+        session.reload(&["centities/lamp/centity.json".into()]);
+        session.tick();
+        assert!(session.centities().get(id).is_some());
+        assert_eq!(printed(&platform.take()), ["visits\t3"]);
+    }
 }

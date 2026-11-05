@@ -8,6 +8,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+getrandom.workspace = true
 indexmap.workspace = true
 mlua.workspace = true
 netherforge-luau = { path = "../luau" }
@@ -16,6 +17,7 @@ netherforge-format = { path = "../format" }
 netherforge-platform = { path = "../platform" }
 serde_json.workspace = true
 rapier3d-f64 = "0.36"
+rusqlite = { version = "0.37", features = ["bundled"] }
 
 [lints]
 workspace = true
