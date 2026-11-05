@@ -281,10 +281,21 @@ impl CentityContext {
     /// Puts a new instance of `centity` into the world at `at`, facing `yaw`: its entities made, its
     /// script's body run and `spawn` heard. None when there's no such centity or world.
     pub fn spawn(&self, centity: &str, at: Location, yaw: f64) -> Option<Uuid> {
+        self.spawn_with(centity, at, yaw, &|_| {})
+    }
+
+    /// `spawn`, with `setup` run on the instance before anything of it is made (temporary, private).
+    pub fn spawn_with(
+        &self,
+        centity: &str,
+        at: Location,
+        yaw: f64,
+        setup: &dyn Fn(&mut Instance),
+    ) -> Option<Uuid> {
         let platform = &*self.shared.platform;
         let id = self
             .shared
-            .with_drawing(|c, drawing| c.spawn(platform, drawing, centity, at, yaw, None))?;
+            .with_drawing(|c, drawing| c.spawn(platform, drawing, centity, at, yaw, setup))?;
         self.start_script(id, true);
         Some(id)
     }
@@ -402,10 +413,41 @@ impl CentityContext {
         }
     }
 
-    /// One tick of every instance: `tick` to whoever listens on it, then its entities synced.
+    /// The temporary instances whose scope has gone (it closed, or its body failed): they go with it.
+    pub fn scopes_released(&self) {
+        let released = self.scripts.take_released();
+        if released.is_empty() {
+            return;
+        }
+        let doomed: Vec<Uuid> = self
+            .shared
+            .centities
+            .borrow()
+            .all()
+            .filter(|i| i.temporary && !i.removed && i.owner.is_some_and(|o| released.contains(&o)))
+            .map(|i| i.id)
+            .collect();
+        for id in doomed {
+            self.remove(id);
+        }
+    }
+
+    /// One tick of every instance: lifetimes run out (loaded or not), then each one's `tick` to whoever
+    /// listens on it, then its entities synced.
     pub fn tick(&self) {
-        let ids: Vec<Uuid> = self.shared.centities.borrow().all().map(|i| i.id).collect();
         let now = self.scripts.tick_count();
+        let expired: Vec<Uuid> = self
+            .shared
+            .centities
+            .borrow()
+            .all()
+            .filter(|i| !i.removed && i.expires.is_some_and(|e| now >= e))
+            .map(|i| i.id)
+            .collect();
+        for id in expired {
+            self.remove(id);
+        }
+        let ids: Vec<Uuid> = self.shared.centities.borrow().all().map(|i| i.id).collect();
         for id in ids {
             match self.shared.centities.borrow_mut().get_mut(id) {
                 Some(instance) if !instance.removed => instance.age += 1,
@@ -655,23 +697,27 @@ impl NfCentitiesApi for CentityContext {
         location_or_position: unions::LocationOrVec3,
         options: Option<shapes::CentitySpawnOptions>,
     ) -> ApiResult<Option<handles::Centity>> {
-        if let Some(options) = &options {
-            if options.temporary == Some(true) {
-                return Err(err(
-                    "option 'temporary' of nf.centities.spawn isn't on the Rust runtime yet",
-                ));
-            }
-            if options.lifetime.is_some() {
-                return Err(err(
-                    "option 'lifetime' of nf.centities.spawn isn't on the Rust runtime yet",
-                ));
-            }
-            if options.viewers.is_some() {
-                return Err(err(
-                    "option 'viewers' of nf.centities.spawn isn't on the Rust runtime yet",
-                ));
-            }
+        let lifetime = options.as_ref().and_then(|o| o.lifetime);
+        if let Some(l) = lifetime
+            && l < 1
+        {
+            return Err(err(format!(
+                "bad argument 'options.lifetime' (at least 1 expected, got {l})"
+            )));
         }
+        let temporary =
+            options.as_ref().and_then(|o| o.temporary) == Some(true) || lifetime.is_some();
+        let viewers: Option<indexmap::IndexSet<Uuid>> = options
+            .as_ref()
+            .and_then(|o| o.viewers.as_ref())
+            .map(|v| v.iter().filter_map(|p| parse_uuid(&p.id)).collect());
+        if viewers.is_some() && !temporary {
+            return Err(err(
+                "bad argument 'options.viewers' (only a temporary centity can be private: give it `temporary = true` or a `lifetime`)",
+            ));
+        }
+        let now = self.scripts.tick_count();
+        let owner = caller.scope;
         if self.shared.centities.borrow().definition(&kind).is_none() {
             return Err(err(not_in_project("centity", &kind, &self.known())));
         }
@@ -687,7 +733,16 @@ impl NfCentitiesApi for CentityContext {
             yaw: 0.0,
             pitch: 0.0,
         };
-        Ok(CentityContext::spawn(self, &kind, at, yaw.unwrap_or(0.0))
+        let setup = |i: &mut Instance| {
+            if temporary {
+                i.temporary = true;
+                i.owner = Some(owner);
+                i.expires = lifetime.map(|l| now + l as u64);
+            }
+            i.viewers = viewers.clone();
+        };
+        Ok(self
+            .spawn_with(&kind, at, yaw.unwrap_or(0.0), &setup)
             .map(|id| handles::Centity { id: uuid_text(&id) }))
     }
 
@@ -973,13 +1028,18 @@ impl CentityApi for CentityContext {
         let Some(player) = parse_uuid(&player.id) else {
             return Ok(false);
         };
-        Ok(self
-            .with(this, |i| i.hidden_from.contains(&player))
-            .unwrap_or(false))
+        Ok(self.with(this, |i| !i.sees(player)).unwrap_or(false))
     }
-    fn viewers(&self, _: &handles::Centity) -> ApiResult<Option<Vec<handles::Player>>> {
-        // Only a private centity has viewers, and those aren't ported yet.
-        Ok(None)
+    fn viewers(&self, this: &handles::Centity) -> ApiResult<Option<Vec<handles::Player>>> {
+        Ok(self
+            .with(this, |i| {
+                i.viewers.as_ref().map(|v| {
+                    v.iter()
+                        .map(|p| handles::Player { id: uuid_text(p) })
+                        .collect()
+                })
+            })
+            .flatten())
     }
     fn view_range(&self, this: &handles::Centity) -> ApiResult<Option<f64>> {
         Ok(self.with(this, |i| i.view_range()))
@@ -1271,22 +1331,67 @@ impl CentityApi for CentityContext {
         self.add(this, name, None, definition)
     }
 
-    // ---- not ported yet ----
     fn is_natural(&self, this: &handles::Centity) -> ApiResult<bool> {
-        CentityApi::is_natural(&Unported, this)
+        Ok(self.with(this, |i| i.natural).unwrap_or(false))
     }
     fn is_temporary(&self, this: &handles::Centity) -> ApiResult<bool> {
-        CentityApi::is_temporary(&Unported, this)
+        Ok(self.with(this, |i| i.temporary).unwrap_or(false))
     }
     fn lifetime(&self, this: &handles::Centity) -> ApiResult<Option<i64>> {
-        CentityApi::lifetime(&Unported, this)
+        let now = self.scripts.tick_count();
+        Ok(self
+            .with(this, |i| i.expires.map(|e| e.saturating_sub(now) as i64))
+            .flatten())
     }
     fn set_lifetime(&self, this: &handles::Centity, ticks: Option<i64>) -> ApiResult<bool> {
-        CentityApi::set_lifetime(&Unported, this, ticks)
+        if let Some(t) = ticks
+            && t < 1
+        {
+            return Err(err(format!(
+                "bad argument 'ticks' (at least 1 expected, got {t})"
+            )));
+        }
+        let now = self.scripts.tick_count();
+        let platform = &*self.shared.platform;
+        Ok(self
+            .with(this, |i| {
+                // One that wasn't temporary becomes so, going by its lifetime alone.
+                if !i.temporary {
+                    i.temporary = true;
+                    let entities = if i.viewers.is_some() {
+                        platform.client_entities() as &dyn netherforge_platform::EntityOps
+                    } else {
+                        platform.entities()
+                    };
+                    for entity in i.entity_ids() {
+                        entities.set_persistent(entity, false);
+                    }
+                }
+                i.expires = ticks.map(|t| now + t as u64);
+            })
+            .is_some())
     }
     fn keep(&self, this: &handles::Centity) -> ApiResult<bool> {
-        CentityApi::keep(&Unported, this)
+        let platform = &*self.shared.platform;
+        Ok(self
+            .with(this, |i| {
+                // A private one stays temporary: its viewers' clients are all there is of it.
+                if !i.transient() || i.viewers.is_some() {
+                    return false;
+                }
+                i.natural = false;
+                i.temporary = false;
+                i.owner = None;
+                i.expires = None;
+                for entity in i.entity_ids() {
+                    platform.entities().set_persistent(entity, true);
+                }
+                true
+            })
+            .unwrap_or(false))
     }
+
+    // ---- not ported yet ----
     fn follow(&self, this: &handles::Centity, player: handles::Player) -> ApiResult<bool> {
         CentityApi::follow(&Unported, this, player)
     }

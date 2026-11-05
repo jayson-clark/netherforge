@@ -142,6 +142,9 @@ struct Task {
 #[derive(Default)]
 struct State {
     tick: u64,
+    /// Scopes stopped for good since the last `take_released` (closed, or disabled by a failing body): what
+    /// a scope owned (temporary centities) goes with them.
+    released: Vec<ScopeId>,
     next_id: u64,
     scopes: HashMap<ScopeId, ScopeInfo>,
     subs: HashMap<u64, Sub>,
@@ -341,12 +344,17 @@ impl Scripts {
             let Some(info) = state.scopes.get_mut(&scope) else {
                 return;
             };
+            let was = info.disabled;
             info.disabled = true;
-            (
+            let made = (
                 std::mem::take(&mut info.subs),
                 std::mem::take(&mut info.timers),
                 std::mem::take(&mut info.tasks),
-            )
+            );
+            if !was {
+                state.released.push(scope);
+            }
+            made
         };
         for id in subs {
             self.unsubscribe(id);
@@ -360,6 +368,11 @@ impl Scripts {
     }
 
     /// Closes `scope`: what it made goes, and so does its environment.
+    /// The scopes stopped for good since the last call.
+    pub fn take_released(&self) -> Vec<ScopeId> {
+        std::mem::take(&mut self.0.state.borrow_mut().released)
+    }
+
     pub fn close(&self, scope: ScopeId) {
         self.disable(scope);
         self.0.state.borrow_mut().scopes.remove(&scope);

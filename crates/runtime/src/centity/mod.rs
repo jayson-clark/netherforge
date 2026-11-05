@@ -97,17 +97,17 @@ impl Centities {
         centity: &str,
         at: Location,
         yaw: f64,
-        id: Option<Uuid>,
+        setup: &dyn Fn(&mut Instance),
     ) -> Option<Uuid> {
         let definition = self.definitions.get(centity)?.clone();
         if !platform.worlds().exists(at.world.clone()) {
             return None;
         }
-        let id = id.unwrap_or_else(|| {
-            self.next_id += 1;
-            Uuid(self.next_id)
-        });
+        self.next_id += 1;
+        let id = Uuid(self.next_id);
         let mut instance = Instance::new(id, definition, at, yaw);
+        // Before anything is made: its entities are made temporary or private as they're claimed.
+        setup(&mut instance);
         autoplay(&mut instance);
         self.instances.insert(id, instance);
         self.sync(platform, drawing, id);
@@ -120,10 +120,11 @@ impl Centities {
             return false;
         };
         instance.removed = true;
+        let entities = ops(platform, &instance);
         for entity in instance.entity_ids() {
             self.owners.remove(&entity);
             // An entity in an unloaded chunk is cleaned up as a stray when it loads.
-            platform.entities().remove(entity);
+            entities.remove(entity);
         }
         true
     }
@@ -231,7 +232,7 @@ impl Centities {
         if !instance.pose_dirty() && !instance.force_sync && !instance.moved {
             return;
         }
-        let entities = platform.entities();
+        let entities = ops(platform, instance);
         let vehicle = self.sync_anchor(platform, id);
         let mut needs_reconcile = false;
         let nodes: Vec<(usize, String)> = self.instances[&id]
@@ -338,7 +339,7 @@ impl Centities {
             teleport_ticks: instance.move_ticks(),
             ..instance::default_look()
         };
-        let entities = platform.entities();
+        let entities = ops(platform, instance);
         if instance.force_sync || instance.pushed_looks.get(&vehicle) != Some(&look) {
             entities.set_look(vehicle, look.clone());
             instance.pushed_looks.insert(vehicle, look);
@@ -352,7 +353,7 @@ impl Centities {
     /// Makes the entities match the definition: removes ones whose node is gone, updates every display's
     /// content (respawning one whose kind changed), spawns what's missing.
     fn reconcile(&mut self, platform: &dyn Platform, drawing: &Drawing, id: Uuid) {
-        let entities = platform.entities();
+        let entities = ops(platform, &self.instances[&id]);
         let stale: Vec<(String, Uuid)> = {
             let instance = &self.instances[&id];
             instance
@@ -508,9 +509,20 @@ impl Centities {
         instance.force_sync = true;
     }
 
-    /// Who sees a new entity of an instance: everyone it isn't hidden from.
+    /// Who sees a new entity of an instance: a private one's viewers, or everyone it isn't hidden from. A
+    /// temporary one's entities aren't saved with their chunk, so a crash can't leave them behind.
     fn show_new(&self, platform: &dyn Platform, id: Uuid, entity: Uuid) {
-        for player in &self.instances[&id].hidden_from {
+        let instance = &self.instances[&id];
+        if instance.transient() {
+            ops(platform, instance).set_persistent(entity, false);
+        }
+        if let Some(viewers) = &instance.viewers {
+            platform
+                .client_entities()
+                .set_viewers(entity, viewers.iter().copied().collect());
+            return;
+        }
+        for player in &instance.hidden_from {
             platform.entities().set_hidden(*player, entity, true);
         }
     }
@@ -520,6 +532,21 @@ impl Centities {
         let Some(instance) = self.instances.get_mut(&id) else {
             return;
         };
+        // A private instance's viewers lose or gain the player instead.
+        if let Some(viewers) = &mut instance.viewers {
+            let changed = if hidden {
+                viewers.shift_remove(&player)
+            } else {
+                viewers.insert(player)
+            };
+            if changed {
+                let now: Vec<Uuid> = viewers.iter().copied().collect();
+                for entity in instance.shown_entities() {
+                    platform.client_entities().set_viewers(entity, now.clone());
+                }
+            }
+            return;
+        }
         let changed = if hidden {
             instance.hidden_from.insert(player)
         } else {
@@ -547,9 +574,11 @@ impl Centities {
 
     fn retire(&mut self, platform: &dyn Platform, id: Uuid, entity: Uuid) {
         self.forget(id, entity);
-        if !platform.entities().remove(entity)
-            && let Some(instance) = self.instances.get_mut(&id)
-        {
+        let removed = match self.instances.get(&id) {
+            Some(instance) => ops(platform, instance).remove(entity),
+            None => platform.entities().remove(entity),
+        };
+        if !removed && let Some(instance) = self.instances.get_mut(&id) {
             instance.orphans.push(entity);
         }
     }
@@ -557,8 +586,12 @@ impl Centities {
     /// Forgets entities that can't be reached although their chunk's entities are loaded: something else
     /// removed them. `reconcile` spawns them again.
     fn drop_gone(&mut self, platform: &dyn Platform, id: Uuid) {
-        let entities = platform.entities();
         let instance = &self.instances[&id];
+        // A private one's client entities go only when we remove them.
+        if instance.viewers.is_some() {
+            return;
+        }
+        let entities = platform.entities();
         let anchor = instance.anchor().clone();
         let gone = |entity: Uuid, at: &Location| {
             !entities.is_loaded(entity) && platform.worlds().entities_loaded(at.clone())
@@ -626,8 +659,10 @@ impl Centities {
         let Some(instance) = self.instances.get_mut(&id) else {
             return;
         };
-        for entity in instance.orphans.drain(..) {
-            platform.entities().remove(entity);
+        let orphans: Vec<Uuid> = instance.orphans.drain(..).collect();
+        let entities = ops(platform, &self.instances[&id]);
+        for entity in orphans {
+            entities.remove(entity);
         }
     }
 }
@@ -637,6 +672,16 @@ fn ride(entities: &dyn EntityOps, instance: &mut Instance, vehicle: Uuid, entity
         instance.riders.insert(entity);
     } else {
         instance.riders.remove(&entity);
+    }
+}
+
+/// The entities `instance` is made of: a private one's are client entities, only its viewers' clients have
+/// them.
+fn ops<'p>(platform: &'p dyn Platform, instance: &Instance) -> &'p dyn EntityOps {
+    if instance.viewers.is_some() {
+        platform.client_entities()
+    } else {
+        platform.entities()
     }
 }
 

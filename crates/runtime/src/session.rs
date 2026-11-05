@@ -183,6 +183,7 @@ impl<'a> Session<'a> {
             service.start(&room, &define);
         }
         self.room = Some(room);
+        self.released();
         self.report();
         let uses = netherforge_format::requirement::combined(&self.project);
         log.info(if uses.is_empty() {
@@ -242,8 +243,17 @@ impl<'a> Session<'a> {
         let Some(room) = self.room.as_ref() else {
             return false;
         };
-        CentityContext::new(self.shared.clone(), room.scripts().clone())
-            .click(entity, player, button, sight)
+        let ours = CentityContext::new(self.shared.clone(), room.scripts().clone())
+            .click(entity, player, button, sight);
+        self.released();
+        ours
+    }
+
+    /// What goes with the scopes that stopped since the last time (temporary centities).
+    fn released(&self) {
+        if let Some(room) = &self.room {
+            CentityContext::new(self.shared.clone(), room.scripts().clone()).scopes_released();
+        }
     }
 
     /// Its room, while it runs.
@@ -287,6 +297,7 @@ impl<'a> Session<'a> {
         for service in &mut self.services {
             service.tick(room, &*self.platform);
         }
+        self.released();
         self.report();
     }
 
@@ -334,6 +345,7 @@ impl<'a> Session<'a> {
                 service.reload(room, kind, ids, &define);
             }
         }
+        self.released();
         self.report();
     }
 

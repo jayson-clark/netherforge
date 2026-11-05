@@ -154,6 +154,18 @@ pub struct Instance {
     /// Entities of ours we couldn't remove when they stopped being wanted: tried again when it's loaded.
     pub orphans: Vec<Uuid>,
 
+    /// It appeared by itself, from its `spawning` rules: not saved, removed when nobody's near.
+    pub natural: bool,
+    /// A script spawned it temporary (`temporary` or `lifetime`): not saved, its entities not persistent,
+    /// removed when `owner` (the scope that spawned it) goes or at `expires`. `keep()` ends it.
+    pub temporary: bool,
+    /// The scope a temporary instance goes with.
+    pub owner: Option<ScopeId>,
+    /// The server tick a temporary instance with a lifetime is removed at.
+    pub expires: Option<u64>,
+    /// The only players a private instance is shown to: its entities are client entities only their
+    /// clients have. Set before anything is made; only a temporary instance is private.
+    pub viewers: Option<IndexSet<Uuid>>,
     /// Its script's scope, while it runs.
     pub scope: Option<ScopeId>,
     /// Ticks it has been ticked.
@@ -229,6 +241,11 @@ impl Instance {
             anchor_entity: None,
             riders: HashSet::new(),
             orphans: Vec::new(),
+            natural: false,
+            temporary: false,
+            owner: None,
+            expires: None,
+            viewers: None,
             scope: None,
             age: 0,
             removed: false,
@@ -262,6 +279,19 @@ impl Instance {
         };
         instance.redefine(definition);
         instance
+    }
+
+    /// Never saved, its entities never persistent.
+    pub fn transient(&self) -> bool {
+        self.natural || self.temporary
+    }
+
+    /// Whether `player` sees it: one of a private instance's viewers, or anyone it isn't hidden from.
+    pub fn sees(&self, player: Uuid) -> bool {
+        match &self.viewers {
+            Some(viewers) => viewers.contains(&player),
+            None => !self.hidden_from.contains(&player),
+        }
     }
 
     pub fn centity(&self) -> &str {

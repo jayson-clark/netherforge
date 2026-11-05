@@ -107,6 +107,9 @@ impl FakeEntityOps for Fake {
     fn dismount(&self, id: Uuid) {
         self.call(format!("dismount {}", id.0));
     }
+    fn set_persistent(&self, id: Uuid, persistent: bool) {
+        self.call(format!("persistent {} {persistent}", id.0));
+    }
     fn spawn_anchor(&self, location: Location, tag: EntityTag) -> Option<Uuid> {
         *self.next.borrow_mut() += 1;
         let id = *self.next.borrow();
@@ -170,6 +173,13 @@ impl FakeEntityOps for Fake {
     }
 }
 
+impl netherforge_platform::FakeClientEntityOps for Fake {
+    fn set_viewers(&self, id: Uuid, viewers: Vec<Uuid>) {
+        let who: Vec<String> = viewers.iter().map(|v| v.0.to_string()).collect();
+        self.call(format!("viewers {} {}", id.0, who.join(",")));
+    }
+}
+
 impl FakeWorldOps for Fake {
     fn exists(&self, world: String) -> bool {
         world == "world"
@@ -200,6 +210,9 @@ impl FakePlatform for Fake {
         self
     }
     fn worlds(&self) -> &dyn WorldOps {
+        self
+    }
+    fn client_entities(&self) -> &dyn netherforge_platform::ClientEntityOps {
         self
     }
 }
@@ -777,4 +790,72 @@ end)
     }
     // Taut over two blocks: two of its four links, the first halfway along its block.
     assert_eq!(printed(&platform.take()), ["shown\t2\t0.50"]);
+}
+
+#[test]
+fn temporary_centities_go_with_their_scope_or_their_lifetime_and_a_private_one_is_its_viewers_alone()
+ {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &lamp(1.0)),
+        (
+            "modules/game/init.lua",
+            r#"
+local timed = nf.centities.spawn("lamp", vector.create(0, 64, 0), { lifetime = 3 })
+timed:on("remove", function() print("timed gone") end)
+local kept = nf.centities.spawn("lamp", vector.create(5, 64, 0), { temporary = true })
+print(kept:is_temporary(), kept:keep(), kept:is_temporary(), timed:lifetime())
+local scoped = nf.centities.spawn("lamp", vector.create(9, 64, 0), { temporary = true })
+-- Private, with no viewers yet: its client entities are sent to nobody.
+local mine = nf.centities.spawn("lamp", vector.create(0, 70, 0), { temporary = true, viewers = {} })
+print(#mine:viewers())
+print(pcall(nf.centities.spawn, "lamp", vector.create(0, 0, 0), { viewers = {} }))
+print(pcall(nf.centities.spawn, "lamp", vector.create(0, 0, 0), { lifetime = 0 }))
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    let lines = printed(&start);
+    assert_eq!(
+        lines.first().map(String::as_str),
+        Some("true\ttrue\tfalse\t3"),
+        "{start:?}"
+    );
+    assert_eq!(lines.get(1).map(String::as_str), Some("0"), "{start:?}");
+    assert!(
+        lines
+            .get(2)
+            .is_some_and(|l| l.contains("only a temporary centity can be private")),
+        "{start:?}"
+    );
+    assert!(
+        lines
+            .get(3)
+            .is_some_and(|l| l.contains("at least 1 expected, got 0")),
+        "{start:?}"
+    );
+    assert!(
+        start
+            .iter()
+            .any(|c| c.starts_with("viewers ") && c.ends_with(' ')),
+        "{start:?}"
+    );
+    // A temporary one's entities aren't saved; keeping one makes them so again.
+    assert!(
+        start.contains(&"persistent 1 false".to_owned()),
+        "{start:?}"
+    );
+    assert!(start.contains(&"persistent 4 true".to_owned()), "{start:?}");
+    for _ in 0..3 {
+        session.tick();
+    }
+    assert_eq!(printed(&platform.take()), ["timed gone"]);
+    assert_eq!(session.centities().all().count(), 3);
+    // The module reloads: what it spawned temporary goes with its scope; the kept one stays.
+    files.write("modules/game/init.lua", "");
+    session.reload(&["modules/game/init.lua".into()]);
+    platform.take();
+    assert_eq!(session.centities().all().count(), 1);
 }
