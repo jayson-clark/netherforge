@@ -9,9 +9,9 @@ use netherforge_format::kind::centity::DisplayDef;
 use netherforge_format::package::NoPackages;
 use netherforge_format::project::ProjectSource;
 use netherforge_platform::{
-    DisplayLook, DisplayPose, EntityOps, EntityRole, EntityTag, FakeEntityOps, FakePlatform,
-    FakePlatformLog, FakeWorldOps, Location, PlatformError, PlatformLog, ServerInfo, Uuid,
-    WorldOps,
+    ClickButton, DisplayLook, DisplayPose, EntityOps, EntityRole, EntityTag, FakeEntityOps,
+    FakePlatform, FakePlatformLog, FakeWorldOps, Location, PlatformError, PlatformLog, PlayerRef,
+    Ray, ServerInfo, Uuid, WorldOps,
 };
 use netherforge_runtime::session::Session;
 
@@ -48,6 +48,29 @@ fn at(l: &Location) -> String {
 }
 
 impl FakeEntityOps for Fake {
+    fn spawn_hitbox(
+        &self,
+        location: Location,
+        width: f64,
+        height: f64,
+        tag: EntityTag,
+    ) -> Option<Uuid> {
+        *self.next.borrow_mut() += 1;
+        let id = *self.next.borrow();
+        assert_eq!(tag.role, EntityRole::Hitbox);
+        self.call(format!(
+            "hitbox {id} {} at {} size {width} {height}",
+            tag.node,
+            at(&location)
+        ));
+        Some(Uuid(id))
+    }
+    fn resize_hitbox(&self, id: Uuid, width: f64, height: f64) {
+        self.call(format!("resize {} {width} {height}", id.0));
+    }
+    fn dismount(&self, id: Uuid) {
+        self.call(format!("dismount {}", id.0));
+    }
     fn spawn_anchor(&self, location: Location, tag: EntityTag) -> Option<Uuid> {
         *self.next.borrow_mut() += 1;
         let id = *self.next.borrow();
@@ -447,5 +470,102 @@ nf.after(10, function() print("at", string.format("%.3f", lamp:animation_tick("r
     assert!(
         poses.last().unwrap().starts_with("pose 3 0 1 0"),
         "{poses:?}"
+    );
+}
+
+#[test]
+fn a_click_goes_to_the_hitbox_the_line_of_sight_meets_and_up_its_path() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = r#"{ "nodes": {
+  "base": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} },
+  "head": { "parent": "base", "transform": { "translation": [0, 1, 0] }, "hitbox": {} }
+}, "script": { "file": "script.lua" } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", centity),
+        (
+            "centities/lamp/script.lua",
+            r#"
+local function said(where)
+    return function(e)
+        print(where, e.target:name(), e.click, e.hit_position and e.hit_position.y)
+    end
+end
+this:node("head"):on("click", said("head"))
+this:node("base"):on("click", said("base"))
+this:on("click", function(e)
+    said("centity")(e)
+    if e.target:name() == "base" then e:stop() end
+end)
+nf.on("centity_click", said("nf"))
+nf.after(3, function() this:node("head"):set_clickable(false) end)
+"#,
+        ),
+        (
+            "modules/game/init.lua",
+            r#"
+nf.centities.spawn("lamp", vector.create(10, 64, 0))
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    // A hitbox for each node, each a unit cube where its node is: off the anchor, so standing on its own.
+    let hitboxes: Vec<&String> = start.iter().filter(|c| c.starts_with("hitbox")).collect();
+    assert_eq!(
+        hitboxes,
+        [
+            "hitbox 2 base at world 10.5 64 0.5 size 1 1",
+            "hitbox 3 head at world 10.5 65 0.5 size 1 1"
+        ],
+        "{start:?}"
+    );
+    let player = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let down = |x: f64, z: f64| Ray {
+        world: "world".into(),
+        x,
+        y: 70.0,
+        z,
+        dx: 0.0,
+        dy: -1.0,
+        dz: 0.0,
+    };
+    // The client picked the base, but the line of sight meets the head's top first.
+    assert!(session.entity_clicked(Uuid(2), &player, ClickButton::Right, Some(down(10.5, 0.5))));
+    // What scripts print is logged with the next tick's report.
+    session.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        [
+            "head\thead\tright\t66",
+            "base\thead\tright\t66",
+            "centity\thead\tright\t66",
+            "nf\thead\tright\t66"
+        ]
+    );
+    // Without a line of sight, the entity the client picked; the centity's handler stops it there.
+    assert!(session.entity_clicked(Uuid(2), &player, ClickButton::Left, None));
+    session.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        ["base\tbase\tleft\tnil", "centity\tbase\tleft\tnil"]
+    );
+    // Not one of ours.
+    assert!(!session.entity_clicked(Uuid(999), &player, ClickButton::Left, None));
+    // The head takes no clicks: its hitbox collapses, and the same line of sight reaches the base.
+    session.tick();
+    let calls = platform.take();
+    assert!(
+        calls.iter().any(|c| c.starts_with("resize 3 0.01 0.01")),
+        "{calls:?}"
+    );
+    assert!(session.entity_clicked(Uuid(3), &player, ClickButton::Right, Some(down(10.5, 0.5))));
+    session.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        ["base\tbase\tright\t65", "centity\tbase\tright\t65"]
     );
 }

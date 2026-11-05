@@ -104,6 +104,10 @@ pub struct Instance {
 
     /// Node name → its display entity.
     pub displays: IndexMap<String, Uuid>,
+    /// Node name → its hitbox's interaction entity.
+    pub hitboxes: IndexMap<String, Uuid>,
+    /// Each hitbox entity's box as last sent.
+    pub pushed_hitboxes: HashMap<Uuid, super::hitboxes::Bounds>,
     /// The invisible entity at the anchor every display rides: moving the centity is one teleport of it.
     pub anchor_entity: Option<Uuid>,
     /// The entities known to ride the anchor entity now.
@@ -139,6 +143,8 @@ pub struct Instance {
     interpolation: Vec<i32>,
     /// Nodes whose display jumps to its next pose rather than easing there.
     jumps: Vec<bool>,
+    /// Nodes whose hitbox takes no clicks (`set_clickable(false)`).
+    unclickable: Vec<bool>,
     /// The clips playing on it.
     pub animations: AnimationPlayer,
     /// Nodes something other than a clip changed since the last sync (a script, being shown or hidden):
@@ -174,6 +180,8 @@ impl Instance {
             },
             yaw: wrap_degrees(yaw),
             displays: IndexMap::new(),
+            hitboxes: IndexMap::new(),
+            pushed_hitboxes: HashMap::new(),
             anchor_entity: None,
             riders: HashSet::new(),
             orphans: Vec::new(),
@@ -194,6 +202,7 @@ impl Instance {
             looks: Vec::new(),
             interpolation: Vec::new(),
             jumps: Vec::new(),
+            unclickable: Vec::new(),
             animations: AnimationPlayer::default(),
             edited: Vec::new(),
             all_edited: true,
@@ -230,6 +239,7 @@ impl Instance {
         self.interpolation = vec![DEFAULT_INTERPOLATION_TICKS; n];
         self.jumps = vec![false; n];
         self.edited = vec![false; n];
+        self.unclickable = vec![false; n];
         self.due = vec![0; n];
         self.all_edited = true;
         self.animations.stop_all();
@@ -531,6 +541,19 @@ impl Instance {
         }
     }
 
+    /// Whether node `index`'s hitbox takes clicks.
+    pub fn clickable(&self, index: usize) -> bool {
+        !self.unclickable[index]
+    }
+
+    pub fn set_clickable(&mut self, index: usize, value: bool) {
+        if self.unclickable[index] == !value {
+            return;
+        }
+        self.unclickable[index] = !value;
+        self.pose_dirty = true;
+    }
+
     /// Ticks node `index`'s display eases to a new pose over.
     pub fn interpolation(&self, index: usize) -> i32 {
         self.interpolation[index]
@@ -573,16 +596,18 @@ impl Instance {
             .iter()
             .copied()
             .chain(self.displays.values().copied())
+            .chain(self.hitboxes.values().copied())
             .chain(self.orphans.iter().copied())
             .collect()
     }
 
-    /// The entities a player sees of it: its anchor and displays.
+    /// The entities a player sees of it: its anchor, displays and hitboxes.
     pub fn shown_entities(&self) -> Vec<Uuid> {
         self.anchor_entity
             .iter()
             .copied()
             .chain(self.displays.values().copied())
+            .chain(self.hitboxes.values().copied())
             .collect()
     }
 }

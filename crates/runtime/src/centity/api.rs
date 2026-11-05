@@ -20,7 +20,7 @@ use netherforge_api::{ApiError, ApiResult, Caller, codecs, handle, shapes, union
 use netherforge_format::kind::centity::{Billboard, DisplayDef, LoopMode};
 use netherforge_format::math::{Matrix4, Vec3};
 use netherforge_luau::ScopeId;
-use netherforge_platform::{Location, Uuid};
+use netherforge_platform::{ClickButton, Location, PlayerRef, Ray, Uuid};
 
 use super::Instance;
 use super::animation::Play;
@@ -191,6 +191,80 @@ impl CentityContext {
                 )))
             }
         }
+    }
+
+    // ---- clicks ----
+
+    /// Routes a click on one of our entities (Kotlin's `CentityClicks.click`): true when the entity is
+    /// ours, whether or not any script wanted the click. When the player's line of sight is known the click
+    /// goes to the nearest node it actually hits, not just the entity the client picked: a node whose box sits
+    /// in front wins over a sibling whose padding is nearer, and a click through the padding of a `raycast`
+    /// node reaches nothing. Then along its path: the node, each node above it, the centity, then
+    /// `nf.on("centity_click")`, until a handler stops it.
+    pub fn click(
+        &self,
+        entity: Uuid,
+        player: &PlayerRef,
+        button: ClickButton,
+        sight: Option<Ray>,
+    ) -> bool {
+        let picked = {
+            let mut centities = self.shared.centities.borrow_mut();
+            let Some((id, name)) = centities.owner_of(entity).cloned() else {
+                return false;
+            };
+            let Some(instance) = centities.get_mut(id) else {
+                return true;
+            };
+            // The server keeps a hidden interaction from being clicked; this says so for any platform.
+            if instance.removed || instance.hidden_from.contains(&player.uuid) {
+                return true;
+            }
+            let Some(clicked) = instance.index_of(&name) else {
+                return true;
+            };
+            let Some(picked) = pick(instance, clicked, sight.as_ref()) else {
+                return true;
+            };
+            let nodes = &instance.definition.nodes;
+            let mut path = Vec::new();
+            let mut at = picked.index as i32;
+            while at >= 0 {
+                path.push(nodes[at as usize].name.clone());
+                at = nodes[at as usize].parent_index;
+            }
+            (id, path, picked)
+        };
+        let (id, path, picked) = picked;
+        let centity = uuid_text(&id);
+        let mut stages: Vec<(Target, &str)> = path
+            .iter()
+            .filter_map(|name| {
+                let node = Handle::Node(Self::node_handle(&centity, name));
+                Some((self.handle_target(node)?, "click"))
+            })
+            .collect();
+        if let Some(target) = self.centity_target(id) {
+            stages.push((target, "click"));
+        }
+        stages.push((Target::Nf, "centity_click"));
+        if !stages.iter().any(|(t, e)| self.scripts.listening(t, e)) {
+            return true;
+        }
+        let lua = self.scripts.host().lua().clone();
+        let event = shapes::ClickEvent {
+            player: handles::Player {
+                id: uuid_text(&player.uuid),
+            },
+            target: Self::node_handle(&centity, &path[0]),
+            click: button.lua_name().to_owned(),
+            hit_position: picked.position.map(value),
+            hit_normal: picked.normal.map(value),
+        };
+        if let Ok(Value::Table(fields)) = codecs::ClickEvent.push(&lua, event) {
+            self.scripts.raise_path(&stages, fields, false);
+        }
+        true
     }
 
     // ---- lives ----
@@ -586,6 +660,88 @@ impl NfCentitiesApi for CentityContext {
             })
             .collect())
     }
+}
+
+/// How far a click may reach for the narrow phase; past any reach the server allows.
+pub const REACH: f64 = 8.0;
+
+/// The node a click lands on, with where the line of sight met it and the face's normal, in the world (none
+/// when there's no line of sight to go by).
+struct Picked {
+    index: usize,
+    position: Option<Vec3>,
+    normal: Option<Vec3>,
+}
+
+fn pick(instance: &mut Instance, clicked: usize, sight: Option<&Ray>) -> Option<Picked> {
+    let sight = match sight {
+        Some(s) if s.world == instance.anchor().world => s,
+        _ => {
+            return instance.clickable(clicked).then_some(Picked {
+                index: clicked,
+                position: None,
+                normal: None,
+            });
+        }
+    };
+    // Relative to the anchor along the world's axes, where the entities are shown.
+    let anchor = instance.anchor().clone();
+    let origin = Vec3(sight.x - anchor.x, sight.y - anchor.y, sight.z - anchor.z);
+    let direction = Vec3(sight.dx, sight.dy, sight.dz);
+    if let Some((index, hit)) = nearest_hitbox(instance, origin, direction, REACH) {
+        let at = origin + direction * hit.distance;
+        return Some(Picked {
+            index,
+            position: Some(Vec3(at.0 + anchor.x, at.1 + anchor.y, at.2 + anchor.z)),
+            normal: Some(hit.normal),
+        });
+    }
+    // A node without the narrow phase is its interaction entity, so a ray that missed it is a stale look
+    // vector, not a miss.
+    let raycast = instance.definition.nodes[clicked]
+        .hitbox
+        .as_ref()
+        .is_some_and(|h| h.raycast());
+    (!raycast && instance.clickable(clicked)).then_some(Picked {
+        index: clicked,
+        position: None,
+        normal: None,
+    })
+}
+
+/// The node of `instance` whose hitbox a ray hits first within `max_distance`, with the hit: `origin`
+/// relative to the anchor along the world's axes, `direction` a unit vector. A `raycast` node is tested
+/// against its boxes, any other against the interaction entity's bounds: the shapes a click is picked by.
+fn nearest_hitbox(
+    instance: &mut Instance,
+    origin: Vec3,
+    direction: Vec3,
+    max_distance: f64,
+) -> Option<(usize, super::hitboxes::Hit)> {
+    use super::hitboxes;
+    let world = instance.placed().to_vec();
+    let mut best: Option<(usize, hitboxes::Hit)> = None;
+    for (index, node) in instance.definition.nodes.iter().enumerate() {
+        let Some(hitbox) = &node.hitbox else {
+            continue;
+        };
+        if !instance.shown(index) || !instance.clickable(index) {
+            continue;
+        }
+        let boxes = super::boxes_of(instance, index);
+        let hit = if hitbox.raycast() {
+            hitboxes::hit(&boxes, &world[index], origin, direction, max_distance)
+        } else {
+            let b = hitboxes::bounds(&boxes, &world[index]);
+            hitboxes::hit_bounds(&b, origin, direction, max_distance)
+        };
+        if let Some(hit) = hit
+            && best.is_none_or(|(_, b)| hit.distance < b.distance)
+        {
+            best = Some((index, hit));
+        }
+    }
+    best
 }
 
 /// Where an instance is: its anchor, facing its yaw.
@@ -1442,6 +1598,15 @@ impl NodeApi for CentityContext {
             .subscribe(scope, target, event, handler, None, true)
     }
 
+    fn is_clickable(&self, this: &handles::Node) -> ApiResult<bool> {
+        Ok(self
+            .with_node(this, |i, at| i.clickable(at))
+            .unwrap_or(false))
+    }
+    fn set_clickable(&self, this: &handles::Node, clickable: bool) -> ApiResult<()> {
+        self.with_node(this, |i, at| i.set_clickable(at, clickable));
+        Ok(())
+    }
     // ---- not ported yet ----
     fn add_child(
         &self,
@@ -1502,12 +1667,6 @@ impl NodeApi for CentityContext {
     }
     fn rotate(&self, this: &handles::Node, axis: values::Vec3, degrees: f64) -> ApiResult<bool> {
         NodeApi::rotate(&Unported, this, axis, degrees)
-    }
-    fn is_clickable(&self, this: &handles::Node) -> ApiResult<bool> {
-        NodeApi::is_clickable(&Unported, this)
-    }
-    fn set_clickable(&self, this: &handles::Node, clickable: bool) -> ApiResult<()> {
-        NodeApi::set_clickable(&Unported, this, clickable)
     }
     fn image(&self, this: &handles::Node) -> ApiResult<Option<handles::Image>> {
         NodeApi::image(&Unported, this)

@@ -429,9 +429,18 @@ installs the centity classes; `Room::new` leaves them unported.
   ahead with that many ticks to ease (`reach`, up to 20, within 0.01 blocks of the clip at every tick
   between), then nothing until it's due. Anything else (a script's set, shown/hidden, a turn, a clip
   started or moved: `Instance::edited`) sends the pose now. A linear clip over 20 ticks is 3 pose writes.
+- **Hitboxes** (`hitboxes.rs`, Kotlin's `Hitboxes`): a node's hitbox is an interaction entity with a
+  square footprint around its boxes as placed (`bounds`), riding the anchor entity when it stands at the
+  anchor and on its own anywhere else; hidden or unclickable, it collapses to a sliver. `shape:
+  collision` is the unit cube until the game's collision boxes reach the runtime.
+- **Clicks** (`CentityContext::click`, `Session::entity_clicked`, what `PlatformEvents::entity_clicked`
+  will call): with a line of sight, the nearest hitbox it meets (a `raycast` node's own boxes, any other's
+  bounds), else the entity the client picked; then `click` on that node, each node above it, the
+  centity, and `nf`'s `centity_click`, one event until `stop()`. What scripts print in a click is logged
+  with the next tick's report.
 - `nf.centities.spawn`'s `temporary`, `lifetime` and `viewers` refuse ("isn't on the Rust runtime yet").
 
-Not yet: hitboxes and clicks, saving placements (until then a stopping session removes its instances, so
+Not yet: `world:raycast` against hitboxes, saving placements (until then a stopping session removes its instances, so
 nothing is left behind unowned), temporary and private instances, physics and movement,
 health, natural spawning, ropes, script-added nodes, tweens, a module's reload restarting the centity
 scripts that required it, images' pixels (an image draws blank, its text whole rather than in runs).

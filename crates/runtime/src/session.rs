@@ -230,6 +230,22 @@ impl<'a> Session<'a> {
         CentityContext::new(self.shared.clone(), room.scripts().clone()).spawn(centity, at, yaw)
     }
 
+    /// A player clicked `entity` (`PlatformEvents::entity_clicked`): true when it's one of ours, which the
+    /// adapter cancels whatever scripts did with it.
+    pub fn entity_clicked(
+        &self,
+        entity: netherforge_platform::Uuid,
+        player: &netherforge_platform::PlayerRef,
+        button: netherforge_platform::ClickButton,
+        sight: Option<netherforge_platform::Ray>,
+    ) -> bool {
+        let Some(room) = self.room.as_ref() else {
+            return false;
+        };
+        CentityContext::new(self.shared.clone(), room.scripts().clone())
+            .click(entity, player, button, sight)
+    }
+
     /// Its room, while it runs.
     pub fn room(&self) -> Option<&Room> {
         self.room.as_ref()

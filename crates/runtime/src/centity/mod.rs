@@ -14,6 +14,7 @@
 pub mod animation;
 pub mod api;
 pub mod drawing;
+pub mod hitboxes;
 pub mod instance;
 pub mod keyframes;
 
@@ -192,7 +193,9 @@ impl Centities {
     }
 
     fn loaded(platform: &dyn Platform, instance: &Instance) -> bool {
-        (instance.anchor_entity.is_none() && instance.displays.is_empty())
+        (instance.anchor_entity.is_none()
+            && instance.displays.is_empty()
+            && instance.hitboxes.is_empty())
             || platform.worlds().entities_loaded(instance.anchor().clone())
     }
 
@@ -311,6 +314,9 @@ impl Centities {
                 &mut ahead,
             );
         }
+        if let Some(instance) = self.instances.get_mut(&id) {
+            sync_hitboxes(entities, instance, vehicle, &world);
+        }
         let instance = self.instances.get_mut(&id).expect("listed");
         instance.mark_synced();
         if needs_reconcile {
@@ -364,6 +370,28 @@ impl Centities {
                 .shift_remove(&name);
             self.retire(platform, id, entity);
         }
+        let stale: Vec<(String, Uuid)> = {
+            let instance = &self.instances[&id];
+            instance
+                .hitboxes
+                .iter()
+                .filter(|(name, _)| {
+                    instance
+                        .definition
+                        .node(name)
+                        .is_none_or(|n| n.hitbox.is_none())
+                })
+                .map(|(n, e)| (n.clone(), *e))
+                .collect()
+        };
+        for (name, entity) in stale {
+            self.instances
+                .get_mut(&id)
+                .expect("listed")
+                .hitboxes
+                .shift_remove(&name);
+            self.retire(platform, id, entity);
+        }
         let instance = self.instances.get_mut(&id).expect("listed");
         let world: Vec<Matrix4> = instance.placed().to_vec();
         let cull = cull_size(&world);
@@ -389,6 +417,35 @@ impl Centities {
             .enumerate()
             .map(|(i, n)| (i, n.name.clone()))
             .collect();
+        for (index, name) in &nodes {
+            let index = *index;
+            let instance = &self.instances[&id];
+            if instance.definition.nodes[index].hitbox.is_none()
+                || instance.hitboxes.contains_key(name)
+            {
+                continue;
+            }
+            let b = hitboxes::bounds(&boxes_of(instance, index), &world[index]);
+            let spawned = entities.spawn_hitbox(
+                offset(&anchor, b.center_x, b.bottom_y, b.center_z),
+                b.width,
+                b.height,
+                EntityTag {
+                    instance: id,
+                    node: name.clone(),
+                    role: EntityRole::Hitbox,
+                },
+            );
+            if let Some(entity) = spawned {
+                self.instances
+                    .get_mut(&id)
+                    .expect("listed")
+                    .hitboxes
+                    .insert(name.clone(), entity);
+                self.owners.insert(entity, (id, name.clone()));
+                self.show_new(platform, id, entity);
+            }
+        }
         for (index, name) in nodes {
             let Some(display) = self.instances[&id].display(index).cloned() else {
                 continue;
@@ -509,9 +566,28 @@ impl Centities {
             .filter(|(_, e)| gone(**e, instance.pushed_spots.get(e).unwrap_or(&anchor)))
             .map(|(n, e)| (n.clone(), *e))
             .collect();
+        let gone_hitboxes: Vec<(String, Uuid)> = instance
+            .hitboxes
+            .iter()
+            .filter(|(_, e)| {
+                let at = instance.pushed_hitboxes.get(e).map_or(anchor.clone(), |b| {
+                    offset(&anchor, b.center_x, b.bottom_y, b.center_z)
+                });
+                gone(**e, &at)
+            })
+            .map(|(n, e)| (n.clone(), *e))
+            .collect();
         let gone_anchor = instance.anchor_entity.filter(|e| gone(*e, &anchor));
-        if gone_displays.is_empty() && gone_anchor.is_none() {
+        if gone_displays.is_empty() && gone_hitboxes.is_empty() && gone_anchor.is_none() {
             return;
+        }
+        for (name, entity) in gone_hitboxes {
+            self.instances
+                .get_mut(&id)
+                .expect("listed")
+                .hitboxes
+                .shift_remove(&name);
+            self.forget(id, entity);
         }
         if let Some(entity) = gone_anchor {
             // Its riders are left standing where they were: the new one picks them up.
@@ -538,6 +614,7 @@ impl Centities {
             instance.pushed_poses.remove(&entity);
             instance.pushed_looks.remove(&entity);
             instance.pushed_spots.remove(&entity);
+            instance.pushed_hitboxes.remove(&entity);
         }
     }
 
@@ -560,8 +637,81 @@ fn ride(entities: &dyn EntityOps, instance: &mut Instance, vehicle: Uuid, entity
     }
 }
 
-/// Shows node `index`'s display at `matrix` (its pose now, collapsed when hidden), eased as the node says,
-/// unless it was last shown just so.
+/// `at` moved by (x, y, z).
+fn offset(at: &Location, x: f64, y: f64, z: f64) -> Location {
+    Location {
+        x: at.x + x,
+        y: at.y + y,
+        z: at.z + z,
+        ..at.clone()
+    }
+}
+
+/// The boxes a node's hitbox is made of, in node space: its own, else the unit cube a block display fills.
+/// (`shape: collision` takes a block's collision boxes once the game's facts reach the runtime; until then
+/// it's the unit cube.)
+pub fn boxes_of(instance: &Instance, index: usize) -> Vec<netherforge_format::math::BoundingBox> {
+    match instance.definition.nodes[index]
+        .hitbox
+        .as_ref()
+        .and_then(|h| h.boxes.clone())
+    {
+        Some(boxes) => boxes,
+        None => vec![hitboxes::UNIT_CUBE],
+    }
+}
+
+/// Each hitbox's interaction entity where its node's boxes are now: riding the anchor entity when it
+/// stands at the anchor, on its own anywhere else; collapsed to a sliver when its node is hidden or
+/// unclickable, so clicks pass it by.
+fn sync_hitboxes(
+    entities: &dyn EntityOps,
+    instance: &mut Instance,
+    vehicle: Option<Uuid>,
+    world: &[Matrix4],
+) {
+    let anchor = instance.anchor().clone();
+    let hitboxes: Vec<(String, Uuid)> = instance
+        .hitboxes
+        .iter()
+        .map(|(n, e)| (n.clone(), *e))
+        .collect();
+    for (name, entity) in hitboxes {
+        let Some(index) = instance.index_of(&name) else {
+            continue;
+        };
+        let b = if instance.shown(index) && instance.clickable(index) {
+            hitboxes::bounds(&boxes_of(instance, index), &world[index])
+        } else {
+            hitboxes::Bounds::collapsed(world[index].translation())
+        };
+        let was_riding = instance.riders.contains(&entity);
+        match vehicle {
+            Some(vehicle) if b.at_anchor() => {
+                if instance.force_sync || !was_riding {
+                    ride(entities, instance, vehicle, entity);
+                }
+            }
+            _ if was_riding || instance.force_sync => {
+                entities.dismount(entity);
+                instance.riders.remove(&entity);
+            }
+            _ => {}
+        }
+        let riding = instance.riders.contains(&entity);
+        let reshaped = instance.force_sync || instance.pushed_hitboxes.get(&entity) != Some(&b);
+        if riding {
+            if reshaped || !was_riding {
+                entities.resize_hitbox(entity, b.width, b.height);
+            }
+        } else if reshaped || instance.moved || was_riding {
+            entities.teleport(entity, offset(&anchor, b.center_x, b.bottom_y, b.center_z));
+            entities.resize_hitbox(entity, b.width, b.height);
+        }
+        instance.pushed_hitboxes.insert(entity, b);
+    }
+}
+
 /// Starts the clips its file says play by themselves.
 fn autoplay(instance: &mut Instance) {
     let definition = instance.definition.clone();
