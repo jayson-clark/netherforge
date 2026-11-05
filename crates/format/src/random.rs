@@ -2,7 +2,8 @@
 //! particle sampler and terrain generator draw from (the same on the JVM and in
 //! JS), so a seed gives the same points and the same world wherever it runs.
 //! Only what format draws is here: `next_int`, `next_bits`, `next_int_below`,
-//! `next_int_in`, `next_double`, `next_boolean`.
+//! `next_int_in`, `next_double`, `next_boolean`, `next_long`, `next_long_below`
+//! (the loot roller's).
 
 /// Marsaglia's xorwow with Kotlin's seeding (`kotlin.random.XorWowRandom`).
 #[derive(Clone, Debug)]
@@ -110,6 +111,54 @@ impl Random {
     pub fn next_boolean(&mut self) -> bool {
         self.next_bits(1) != 0
     }
+
+    /// Two ints, high then low (Kotlin's `nextLong()`).
+    pub fn next_long(&mut self) -> i64 {
+        let high = i64::from(self.next_int()) << 32;
+        high.wrapping_add(i64::from(self.next_int()))
+    }
+
+    /// From 0 (inclusive) to `until` (exclusive, more than 0).
+    pub fn next_long_below(&mut self, until: i64) -> i64 {
+        self.next_long_in(0, until)
+    }
+
+    /// From `from` (inclusive) to `until` (exclusive, more than `from`), as Kotlin's `nextLong(from, until)`
+    /// draws it: a power of two from its bits, anything else by rejection.
+    pub fn next_long_in(&mut self, from: i64, until: i64) -> i64 {
+        assert!(until > from, "an empty range: {from} until {until}");
+        let n = until.wrapping_sub(from);
+        if n <= 0 {
+            loop {
+                let picked = self.next_long();
+                if (from..until).contains(&picked) {
+                    return picked;
+                }
+            }
+        }
+        let log2 = |v: i32| 31 - v.leading_zeros();
+        let unsigned = |v: i32| i64::from(v as u32);
+        let picked = if n & n.wrapping_neg() == n {
+            let (low, high) = (n as i32, (n >> 32) as i32);
+            if low != 0 {
+                unsigned(self.next_bits(log2(low)))
+            } else if high == 1 {
+                unsigned(self.next_int())
+            } else {
+                let top = i64::from(self.next_bits(log2(high))) << 32;
+                top.wrapping_add(unsigned(self.next_int()))
+            }
+        } else {
+            loop {
+                let bits = ((self.next_long() as u64) >> 1) as i64;
+                let v = bits % n;
+                if bits.wrapping_sub(v).wrapping_add(n - 1) >= 0 {
+                    break v;
+                }
+            }
+        };
+        from.wrapping_add(picked)
+    }
 }
 
 #[cfg(test)]
@@ -118,7 +167,8 @@ mod tests {
 
     /// What Kotlin's `Random(seed)` draws (`testdata/random.txt`, written by
     /// format's `RandomGoldenTest`): three ints, a double by its bits, then
-    /// `nextInt(10)`, `nextInt(-5, 5)`, `nextInt(7)` and `nextBoolean()`.
+    /// `nextInt(10)`, `nextInt(-5, 5)`, `nextInt(7)` and `nextBoolean()`, then
+    /// `nextLong()` and `nextLong(n)` for 10, 2^40, 2^32, 2^20 and 3e9.
     #[test]
     fn draws_what_kotlin_draws() {
         let golden = include_str!("../../../packages/format/testdata/random.txt");
@@ -129,7 +179,7 @@ mod tests {
                 let mut r = Random::new(seed);
                 let ints = [r.next_int(), r.next_int(), r.next_int()];
                 format!(
-                    "{seed}: {} {} {} {} {} {} {} {}\n",
+                    "{seed}: {} {} {} {} {} {} {} {} {} {} {} {} {} {}\n",
                     ints[0],
                     ints[1],
                     ints[2],
@@ -137,7 +187,13 @@ mod tests {
                     r.next_int_below(10),
                     r.next_int_in(-5, 5),
                     r.next_int_below(7),
-                    r.next_boolean()
+                    r.next_boolean(),
+                    r.next_long(),
+                    r.next_long_below(10),
+                    r.next_long_below(1 << 40),
+                    r.next_long_below(1 << 32),
+                    r.next_long_below(1 << 20),
+                    r.next_long_below(3_000_000_000),
                 )
             })
             .collect();

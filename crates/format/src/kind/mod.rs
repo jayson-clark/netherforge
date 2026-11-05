@@ -15,6 +15,7 @@ pub mod files;
 pub mod game_block;
 pub mod item;
 pub mod loot;
+pub mod loot_roll;
 pub mod menu;
 pub mod module;
 pub mod particle;

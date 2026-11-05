@@ -6,7 +6,7 @@ import kotlin.test.Test
 import kotlin.test.fail
 
 /**
- * What `Random(seed)` draws, which the particle sampler and the terrain generator depend on: the Rust port
+ * What `Random(seed)` draws, which the particle sampler, the terrain generator and the loot roller depend on: the Rust port
  * (`crates/format/src/random.rs`) is held to `testdata/random.txt` (`UPDATE_GOLDEN=1` rewrites it). A double is
  * written by its bits.
  */
@@ -16,7 +16,9 @@ class RandomGoldenTest {
         val actual = SEEDS.joinToString("") { seed ->
             val r = Random(seed)
             val ints = List(3) { r.nextInt() }.joinToString(" ")
-            "$seed: $ints ${r.nextDouble().toRawBits()} ${r.nextInt(10)} ${r.nextInt(-5, 5)} ${r.nextInt(7)} ${r.nextBoolean()}\n"
+            val before = "${r.nextDouble().toRawBits()} ${r.nextInt(10)} ${r.nextInt(-5, 5)} ${r.nextInt(7)} ${r.nextBoolean()}"
+            val longs = listOf(r.nextLong(), r.nextLong(10), r.nextLong(1L shl 40), r.nextLong(1L shl 32), r.nextLong(1L shl 20), r.nextLong(3_000_000_000))
+            "$seed: $ints $before ${longs.joinToString(" ")}\n"
         }
         val path = "packages/format/testdata/random.txt"
         if (actual == TestFiles.read(path)) return

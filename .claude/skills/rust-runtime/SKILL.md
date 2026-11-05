@@ -665,6 +665,11 @@ Next in format: the compilers, with the runtime pieces that use them. The compil
   Kotlin's messages. `Requirement::Plugin` goes with plugin interop, on both runtimes at once. The runtime's one
   `requires` check asks `Requirement` (`Grants`: the project's own declaration until packages' code is ported;
   then per package, with the policy and Kotlin's hidden-tail-call rule). `tests/requirements.rs`.
+- **Rolling loot** (`kind/loot_roll.rs`, `LootRoller`): vanilla's rules on Kotlin's `Random`, so a seed's drops are
+  the JVM's and JS's (Kotlin's test pins one seed's, and it agrees). It draws `nextLong` too, which `random.rs` has
+  from Kotlin's stdlib on every branch (a power of two by its bits, the rest by rejection), held to `random.txt`,
+  which `RandomGoldenTest` now writes with long draws after the old ones. An error (a missing table, a cycle past
+  `MOST_DEPTH`) is a `Result`, where Kotlin threw.
 
 ## One source for each thing
 
