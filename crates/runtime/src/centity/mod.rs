@@ -591,6 +591,55 @@ impl Centities {
         }
     }
 
+    /// Entities came into memory with their chunk (`PlatformEvents::entities_loaded`): one of ours is pushed
+    /// again whole and hidden again from whom it's hidden (the server forgot); a tagged one no instance or
+    /// inert record knows is a stray, and goes.
+    pub fn entities_loaded(&mut self, platform: &dyn Platform, tagged: &HashMap<Uuid, EntityTag>) {
+        for (entity, tag) in tagged {
+            // A screen's frame is the screens' to keep or take down.
+            if tag.role == EntityRole::Screen {
+                continue;
+            }
+            if let Some((owner, _)) = self.owners.get(entity).cloned() {
+                if let Some(instance) = self.instances.get_mut(&owner) {
+                    instance.force_sync = true;
+                    for player in &instance.hidden_from {
+                        platform.entities().set_hidden(*player, *entity, true);
+                    }
+                }
+                continue;
+            }
+            let known = self
+                .instances
+                .get(&tag.instance)
+                .is_some_and(|i| i.orphans.contains(entity))
+                || self.inert.contains_key(&tag.instance);
+            if !known {
+                platform.entities().remove(*entity);
+            }
+        }
+    }
+
+    /// The places of the instances `which` picks that changed since they were stored.
+    pub fn save_placements_of(
+        &mut self,
+        store: &crate::store::Store,
+        which: &dyn Fn(&Instance) -> bool,
+    ) {
+        let records: Vec<crate::store::InstanceRecord> = self
+            .instances
+            .values()
+            .filter(|i| !i.transient() && !i.removed && which(i))
+            .filter(|i| self.stored.get(&i.id) != Some(&(i.anchor().clone(), i.yaw())))
+            .map(|i| self.record(i))
+            .collect();
+        for record in records {
+            self.stored
+                .insert(record.id, (record.anchor.clone(), record.yaw));
+            store.put_instance(record);
+        }
+    }
+
     /// A player joined: everything hidden from them is hidden again, since the server forgot.
     pub fn player_joined(&self, platform: &dyn Platform, player: Uuid) {
         for instance in self.instances.values() {

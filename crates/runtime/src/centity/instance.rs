@@ -194,6 +194,8 @@ pub struct Instance {
     /// Players it's hidden from, online or not: what's said again when the server forgets.
     pub hidden_from: IndexSet<Uuid>,
 
+    /// Whether its chunk's entities were loaded at the last look, once its script has started.
+    pub chunk_loaded: Option<bool>,
     /// What its hitboxes touched at the last look, while something listens to its `touch`.
     pub touching: std::collections::HashSet<Uuid>,
     /// Its shown hitboxes as last measured (`Centities::obstacles`), until they change.
@@ -282,6 +284,7 @@ impl Instance {
             removing: false,
             view_range: DEFAULT_VIEW_RANGE,
             hidden_from: IndexSet::new(),
+            chunk_loaded: None,
             touching: std::collections::HashSet::new(),
             obstacles: None,
             dirty: None,

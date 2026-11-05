@@ -42,6 +42,8 @@ impl netherforge_format::game::GameData for NoFacts {
 
 struct Fake {
     game: NoFacts,
+    /// Whether every chunk's entities are loaded.
+    unloaded: std::cell::Cell<bool>,
     calls: RefCell<Vec<String>>,
     next: RefCell<u128>,
     poses: RefCell<BTreeMap<u128, DisplayPose>>,
@@ -51,6 +53,7 @@ impl Default for Fake {
     fn default() -> Fake {
         Fake {
             game: NoFacts,
+            unloaded: std::cell::Cell::new(false),
             calls: RefCell::default(),
             next: RefCell::default(),
             poses: RefCell::default(),
@@ -220,7 +223,7 @@ impl FakeWorldOps for Fake {
         "world".into()
     }
     fn entities_loaded(&self, _: Location) -> bool {
-        true
+        !self.unloaded.get()
     }
     fn is_chunk_loaded(&self, _: String, _: i32, _: i32) -> bool {
         true
@@ -1403,4 +1406,48 @@ print(pcall(nf.images.fill, 0, 2, "#ff0000"))
             .any(|c| c.starts_with("update ") && !c.ends_with("runs 0")),
         "{calls:?}"
     );
+}
+
+#[test]
+fn an_instance_hears_its_chunk_unload_and_load_and_strays_go() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &scripted_lamp()),
+        (
+            "centities/lamp/script.lua",
+            r#"
+this:on("chunk_unload", function() print("unload") end)
+this:on("chunk_load", function() print("load") end)
+local ticks = 0
+this:on("tick", function() ticks += 1 end)
+nf.every(1, function() if ticks == 5 then print("five") end end)
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    session
+        .spawn("lamp", place(0.0, 64.0, 0.0), 0.0)
+        .expect("spawned");
+    platform.take();
+    session.tick();
+    platform.unloaded.set(true);
+    for _ in 0..10 {
+        session.tick();
+    }
+    platform.unloaded.set(false);
+    for _ in 0..5 {
+        session.tick();
+    }
+    // One tick, ten without (unloaded), then five more: its tick handler ran six times.
+    let lines = printed(&platform.take());
+    assert_eq!(lines, ["unload", "load", "five"], "{lines:?}");
+    // A tagged entity no instance knows is a stray.
+    let stray = netherforge_platform::EntityTag {
+        instance: Uuid(12345),
+        node: "x".into(),
+        role: EntityRole::Display,
+    };
+    session.entities_loaded(&std::collections::HashMap::from([(Uuid(999), stray)]));
+    assert!(platform.take().contains(&"remove 999".to_owned()));
 }

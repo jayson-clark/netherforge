@@ -269,6 +269,53 @@ impl<'a> Session<'a> {
         ours
     }
 
+    /// Entities came into memory with their chunk (`PlatformEvents::entities_loaded`).
+    pub fn entities_loaded(
+        &self,
+        tagged: &std::collections::HashMap<
+            netherforge_platform::Uuid,
+            netherforge_platform::EntityTag,
+        >,
+    ) {
+        self.shared
+            .centities
+            .borrow_mut()
+            .entities_loaded(&*self.platform, tagged);
+    }
+
+    /// A player joined: what's hidden from them is hidden again.
+    pub fn player_joined(&self, player: &netherforge_platform::PlayerRef) {
+        self.shared
+            .centities
+            .borrow()
+            .player_joined(&*self.platform, player.uuid);
+    }
+
+    /// The world is saving its entities (`PlatformEvents::world_saving`): the store gets where its
+    /// instances stand now, as of the same moment.
+    pub fn world_saving(&self, world: &str) {
+        let store = &self.shared.store;
+        self.shared
+            .centities
+            .borrow_mut()
+            .save_placements_of(store, &|i| i.anchor().world == world);
+        store.commit();
+    }
+
+    /// A chunk is unloading, and the entities at its instances' anchors with it: their places are saved now.
+    pub fn chunk_unloading(&self, world: &str, chunk_x: i32, chunk_z: i32) {
+        let chunk = |c: f64| (c.floor() as i64).div_euclid(16) as i32;
+        let store = &self.shared.store;
+        self.shared
+            .centities
+            .borrow_mut()
+            .save_placements_of(store, &|i| {
+                let a = i.anchor();
+                a.world == world && chunk(a.x) == chunk_x && chunk(a.z) == chunk_z
+            });
+        store.commit();
+    }
+
     /// What goes with the scopes that stopped since the last time (temporary centities).
     fn released(&self) {
         if let Some(room) = &self.room {

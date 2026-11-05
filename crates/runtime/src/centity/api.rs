@@ -588,6 +588,10 @@ impl CentityContext {
             _ => return,
         };
         let script = self.shared.centity_scripts.borrow().get(&centity).cloned();
+        let platform = &*self.shared.platform;
+        if let Some(i) = self.shared.centities.borrow_mut().get_mut(id) {
+            i.chunk_loaded = Some(super::Centities::loaded(platform, i));
+        }
         let modules = self.shared.modules.borrow().clone();
         if let (Some(path), Some(modules)) = (script, modules) {
             let this = handle::push_any(
@@ -733,9 +737,27 @@ impl CentityContext {
         self.shared.path_nodes.set(0);
         let ids: Vec<Uuid> = self.shared.centities.borrow().all().map(|i| i.id).collect();
         for id in ids {
-            match self.shared.centities.borrow_mut().get_mut(id) {
-                Some(instance) if !instance.removed => instance.age += 1,
-                _ => continue,
+            // Into or out of loaded chunks: `chunk_load` or `chunk_unload`; one that isn't loaded doesn't tick.
+            let (was, loaded) = {
+                let platform = &*self.shared.platform;
+                let mut centities = self.shared.centities.borrow_mut();
+                let Some(instance) = centities.get_mut(id).filter(|i| !i.removed) else {
+                    continue;
+                };
+                let loaded = super::Centities::loaded(platform, instance);
+                (
+                    std::mem::replace(&mut instance.chunk_loaded, Some(loaded)),
+                    loaded,
+                )
+            };
+            if was.is_some_and(|was| was != loaded) {
+                self.raise_centity(id, if loaded { "chunk_load" } else { "chunk_unload" });
+            }
+            if !loaded || !self.live(id) {
+                continue;
+            }
+            if let Some(instance) = self.shared.centities.borrow_mut().get_mut(id) {
+                instance.age += 1;
             }
             if let Some(i) = self.shared.centities.borrow_mut().get_mut(id) {
                 super::health::hide_bar(i, now);
@@ -800,7 +822,13 @@ impl CentityContext {
         self.step_physics();
         let ids: Vec<Uuid> = self.shared.centities.borrow().all().map(|i| i.id).collect();
         for id in ids {
-            if !self.live(id) {
+            let loaded = self
+                .shared
+                .centities
+                .borrow()
+                .get(id)
+                .is_some_and(|i| !i.removed && i.chunk_loaded == Some(true));
+            if !loaded {
                 continue;
             }
             self.raise_tick(id, now);

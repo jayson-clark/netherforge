@@ -96,16 +96,7 @@ impl Centities {
 
     /// Every place and facing that changed since it was stored.
     pub fn save_placements(&mut self, store: &Store) {
-        let records: Vec<InstanceRecord> = self
-            .instances
-            .values()
-            .filter(|i| !i.transient() && !i.removed)
-            .filter(|i| self.stored.get(&i.id) != Some(&(i.anchor().clone(), i.yaw())))
-            .map(|i| self.record(i))
-            .collect();
-        for record in records {
-            self.put(store, record);
-        }
+        self.save_placements_of(store, &|_| true);
     }
 
     /// Every record the store has, as instances again (inert where their centity is gone). Their scripts
