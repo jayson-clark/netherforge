@@ -168,8 +168,8 @@ pub struct BlockHit {
     pub x: i32,
     pub y: i32,
     pub z: i32,
-    pub position: external::Vec3,
-    pub normal: external::Vec3,
+    pub position: netherforge_format::math::Vec3,
+    pub normal: netherforge_format::math::Vec3,
 }
 
 /// Which value a game rule takes.
@@ -201,9 +201,9 @@ impl GameRuleType {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParticleSpawn {
     pub particle: String,
-    pub position: external::Vec3,
+    pub position: netherforge_format::math::Vec3,
     pub count: i32,
-    pub offset: external::Vec3,
+    pub offset: netherforge_format::math::Vec3,
     pub speed: f64,
     pub data: Option<external::SpawnData>,
     pub force: bool,
@@ -230,7 +230,7 @@ pub struct SoundPlay {
 
 pub trait SoundOps {
     /// Plays at a position in a world, for everyone near enough. False when the world doesn't exist.
-    fn play(&self, world: String, position: external::Vec3, sound: SoundPlay) -> bool;
+    fn play(&self, world: String, position: netherforge_format::math::Vec3, sound: SoundPlay) -> bool;
 
     /// Plays for one player only, following them. False when they're offline.
     fn play_to(&self, player: Uuid, sound: SoundPlay) -> bool;
@@ -259,7 +259,7 @@ pub trait WorldOps {
     /// physics body can land on. The live collision shape of each block (a body
     /// lands on a fence where a player would and falls past a torch). Blocks in
     /// chunks that aren't loaded are left out, never loaded for this.
-    fn collision_boxes(&self, world: String, min_x: f64, min_y: f64, min_z: f64, max_x: f64, max_y: f64, max_z: f64) -> Vec<external::Box>;
+    fn collision_boxes(&self, world: String, min_x: f64, min_y: f64, min_z: f64, max_x: f64, max_y: f64, max_z: f64) -> Vec<netherforge_format::math::BoundingBox>;
 
     /// `normal`, `nether` or `end` (a custom dimension is `normal`).
     fn environment(&self, world: String) -> Option<String>;
@@ -340,14 +340,14 @@ pub trait WorldOps {
     /// doesn't exist or the server has no such biome.
     fn biome_search(&self, world: String, x: i32, y: i32, z: i32, radius: i32, biome: String) -> Option<&dyn BiomeSearch>;
 
-    fn explode(&self, world: String, position: external::Vec3, power: f64, fire: bool, break_blocks: bool) -> bool;
+    fn explode(&self, world: String, position: netherforge_format::math::Vec3, power: f64, fire: bool, break_blocks: bool) -> bool;
 
-    fn strike_lightning(&self, world: String, position: external::Vec3, effect_only: bool) -> bool;
+    fn strike_lightning(&self, world: String, position: netherforge_format::math::Vec3, effect_only: bool) -> bool;
 
     /// The first block whose collision shape a ray hits within [maxDistance],
     /// or null. [direction] is a unit vector. Water and lava are hit as solid
     /// only with [fluids]. Blocks in chunks that aren't loaded aren't hit.
-    fn raycast_blocks(&self, world: String, origin: external::Vec3, direction: external::Vec3, max_distance: f64, fluids: bool) -> Option<BlockHit>;
+    fn raycast_blocks(&self, world: String, origin: netherforge_format::math::Vec3, direction: netherforge_format::math::Vec3, max_distance: f64, fluids: bool) -> Option<BlockHit>;
 }
 
 /// A biome search [WorldOps.biomeSearch] made: it reads only what the world's
@@ -356,5 +356,5 @@ pub trait WorldOps {
 /// when the biome is far or nowhere).
 pub trait BiomeSearch {
     /// The block position it found the biome at, or null when there's none within the radius.
-    fn run(&self) -> Option<external::Vec3>;
+    fn run(&self) -> Option<netherforge_format::math::Vec3>;
 }

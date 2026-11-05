@@ -654,8 +654,36 @@ impl Scripts {
     /// returns what handlers made of it: whether it ended cancelled, and the
     /// payload, whose writable fields they may have set.
     pub fn raise(&self, target: &Target, event: &str, payload: Table) -> Delivered {
-        let spec = events::of(class_of(target), event);
-        self.deliver(target, event, payload, spec, false)
+        self.raise_path(&[(target.clone(), event)], payload, false)
+    }
+
+    /// Raises a built-in event along a path (Kotlin's `Scripts.emit`): each stage's event on its target in
+    /// turn (a player's `player_join`, then `nf`'s), sharing one event and its payload, until a handler calls
+    /// `stop()`. The first stage's event says what's cancellable and writable. A stage whose target's class
+    /// has no such event (a `Player`'s `death` is `player_death`, not a `Living`'s) is left out.
+    /// `precancelled` is where cancelling starts.
+    pub fn raise_path(
+        &self,
+        path: &[(Target, &str)],
+        payload: Table,
+        precancelled: bool,
+    ) -> Delivered {
+        let Some((first_target, first_event)) = path.first() else {
+            return Delivered {
+                cancelled: precancelled,
+                fields: payload,
+            };
+        };
+        let spec = events::of(class_of(first_target), first_event);
+        let stages: Vec<(Target, String)> = path
+            .iter()
+            .filter(|(target, event)| match target {
+                Target::Nf => true,
+                Target::Handle(_) => events::of(class_of(target), event).is_some(),
+            })
+            .map(|(t, e)| (t.clone(), (*e).to_owned()))
+            .collect();
+        self.deliver_path(&stages, payload, spec, false, precancelled)
     }
 
     fn deliver(
@@ -666,20 +694,43 @@ impl Scripts {
         spec: Option<&'static EventType>,
         custom: bool,
     ) -> Delivered {
-        let ids: Vec<u64> = self
-            .0
-            .state
-            .borrow()
-            .listeners
-            .get(&(key_of(target), event.to_owned()))
-            .cloned()
-            .unwrap_or_default();
-        if ids.is_empty() {
+        self.deliver_path(
+            &[(target.clone(), event.to_owned())],
+            fields,
+            spec,
+            custom,
+            false,
+        )
+    }
+
+    fn deliver_path(
+        &self,
+        stages: &[(Target, String)],
+        fields: Table,
+        spec: Option<&'static EventType>,
+        custom: bool,
+        precancelled: bool,
+    ) -> Delivered {
+        let listened: Vec<(Target, String, Vec<u64>)> = {
+            let state = self.0.state.borrow();
+            stages
+                .iter()
+                .filter_map(|(target, event)| {
+                    let ids = state
+                        .listeners
+                        .get(&(key_of(target), event.clone()))
+                        .cloned()
+                        .unwrap_or_default();
+                    (!ids.is_empty()).then(|| (target.clone(), event.clone(), ids))
+                })
+                .collect()
+        };
+        let Some((first_target, first_event, _)) = listened.first() else {
             return Delivered {
-                cancelled: false,
+                cancelled: precancelled,
                 fields,
             };
-        }
+        };
         let cancellable = custom || spec.is_some_and(|s| s.cancellable);
         let writable: Option<&'static [&'static str]> = if custom {
             None
@@ -687,18 +738,46 @@ impl Scripts {
             Some(spec.map_or(&[], |s| s.writable))
         };
         let payload = spec.and_then(|s| s.payload);
-        let (ev, view) =
-            match self.new_event(target, event, &fields, cancellable, writable, payload) {
-                Ok(it) => it,
-                Err(_) => {
-                    return Delivered {
-                        cancelled: false,
-                        fields,
-                    };
-                }
+        let (ev, view) = match self.new_event(
+            first_target,
+            first_event,
+            &fields,
+            cancellable,
+            writable,
+            payload,
+        ) {
+            Ok(it) => it,
+            Err(_) => {
+                return Delivered {
+                    cancelled: precancelled,
+                    fields,
+                };
+            }
+        };
+        if precancelled {
+            let _ = view.raw_set("cancelled", true);
+        }
+        for (target, event, ids) in &listened {
+            let _ = view.raw_set("name", event.as_str());
+            let _ = match target {
+                Target::Handle(u) => view.raw_set("current", u.clone()),
+                Target::Nf => view.raw_set("current", Value::Nil),
             };
+            self.run_handlers(ids, &ev, &view);
+            if view.raw_get::<bool>("stopped").unwrap_or(false) {
+                break;
+            }
+        }
+        Delivered {
+            cancelled: view.raw_get::<bool>("cancelled").unwrap_or(false),
+            fields,
+        }
+    }
+
+    /// One stage's handlers, in order, on `ev`, until one stops it.
+    fn run_handlers(&self, ids: &[u64], ev: &Table, view: &Table) {
         let tick = self.tick_count();
-        for id in ids {
+        for &id in ids {
             let (scope, handler, once, what) = {
                 let state = self.0.state.borrow();
                 let Some(sub) = state.subs.get(&id) else {
@@ -751,10 +830,6 @@ impl Scripts {
             if view.raw_get::<bool>("stopped").unwrap_or(false) {
                 break;
             }
-        }
-        Delivered {
-            cancelled: view.raw_get::<bool>("cancelled").unwrap_or(false),
-            fields,
         }
     }
 

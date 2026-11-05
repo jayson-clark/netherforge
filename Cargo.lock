@@ -274,6 +274,9 @@ dependencies = [
 [[package]]
 name = "netherforge-platform"
 version = "0.0.0"
+dependencies = [
+ "netherforge-format",
+]
 
 [[package]]
 name = "netherforge-runtime"

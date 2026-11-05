@@ -15,7 +15,7 @@ pub trait PlatformEvents {
     /// Every other event the server raises to scripts, generated from the API
     /// spec (an `nf` event's `raised`): the adapter maps the server's event to
     /// its payload and applies what comes back.
-    fn game(&self) -> external::GameEvents;
+    fn game(&self) -> &dyn crate::api::GameEvents;
 
     /// Once per server tick.
     fn tick(&self);

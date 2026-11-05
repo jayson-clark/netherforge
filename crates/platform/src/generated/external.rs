@@ -2,21 +2,14 @@
 
 //! The types the boundary carries that the spec doesn't declare (`EXTERNAL`): format's,
 //! the Lua API's and the runtime's. Each is a placeholder until its side is ported to Rust,
-//! carrying the value as a `Dynamic` (its JSON); then it becomes the real type here.
+//! carrying the value as a `Dynamic` (its JSON); then the generator names its real type
+//! instead (`RUST_EXTERNAL` in packages/platform/scripts/rust.ts) and it's gone from here.
 
 use super::Dynamic;
 
 /// The Lua API's `ArgumentType`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ArgumentType(pub Dynamic);
-
-/// The Lua API's `GameEvents`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct GameEvents(pub Dynamic);
-
-/// The Lua API's `WatchedEvent`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct WatchedEvent(pub Dynamic);
 
 /// The runtime's `DatapackRefusal`.
 #[derive(Clone, Debug, PartialEq)]
@@ -25,18 +18,6 @@ pub struct DatapackRefusal(pub Dynamic);
 /// format's `block` `BlockCarrier`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BlockCarrier(pub Dynamic);
-
-/// format's `math` `Vec3`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Vec3(pub Dynamic);
-
-/// format's `math` `Matrix4`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Matrix4(pub Dynamic);
-
-/// format's `game` `Box`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Box(pub Dynamic);
 
 /// format's `game` `GameData`.
 #[derive(Clone, Debug, PartialEq)]

@@ -11,6 +11,7 @@ use netherforge_format::manifest::Requires;
 use netherforge_format::requirement::Requirement;
 use netherforge_luau::{Host, ScopeId};
 
+pub mod events;
 pub mod modules;
 pub mod scripts;
 pub mod session;

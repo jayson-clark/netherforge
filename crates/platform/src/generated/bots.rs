@@ -84,5 +84,5 @@ pub struct SkinTexture {
 #[derive(Clone, Debug, PartialEq)]
 pub struct BotAim {
     pub entity: Uuid,
-    pub at: external::Vec3,
+    pub at: netherforge_format::math::Vec3,
 }

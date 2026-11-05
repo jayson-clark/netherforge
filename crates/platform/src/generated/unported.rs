@@ -667,11 +667,11 @@ impl WorldEntityOps for Unported {
         unported("WorldEntityOps::eye")
     }
 
-    fn velocity(&self, _: Uuid) -> Option<external::Vec3> {
+    fn velocity(&self, _: Uuid) -> Option<netherforge_format::math::Vec3> {
         unported("WorldEntityOps::velocity")
     }
 
-    fn set_velocity(&self, _: Uuid, _: external::Vec3) -> bool {
+    fn set_velocity(&self, _: Uuid, _: netherforge_format::math::Vec3) -> bool {
         unported("WorldEntityOps::set_velocity")
     }
 
@@ -811,15 +811,15 @@ impl WorldEntityOps for Unported {
         unported("WorldEntityOps::spawn")
     }
 
-    fn spawn_item(&self, _: String, _: external::Vec3, _: ItemData) -> Option<Uuid> {
+    fn spawn_item(&self, _: String, _: netherforge_format::math::Vec3, _: ItemData) -> Option<Uuid> {
         unported("WorldEntityOps::spawn_item")
     }
 
-    fn raycast(&self, _: String, _: external::Vec3, _: external::Vec3, _: f64, _: Vec<Uuid>) -> Option<EntityHit> {
+    fn raycast(&self, _: String, _: netherforge_format::math::Vec3, _: netherforge_format::math::Vec3, _: f64, _: Vec<Uuid>) -> Option<EntityHit> {
         unported("WorldEntityOps::raycast")
     }
 
-    fn boxes(&self, _: String, _: external::Box) -> Vec<EntityBox> {
+    fn boxes(&self, _: String, _: netherforge_format::math::BoundingBox) -> Vec<EntityBox> {
         unported("WorldEntityOps::boxes")
     }
 }
@@ -839,11 +839,11 @@ pub trait FakeWorldEntityOps {
         <Unported as WorldEntityOps>::eye(&Unported, id)
     }
 
-    fn velocity(&self, id: Uuid) -> Option<external::Vec3> {
+    fn velocity(&self, id: Uuid) -> Option<netherforge_format::math::Vec3> {
         <Unported as WorldEntityOps>::velocity(&Unported, id)
     }
 
-    fn set_velocity(&self, id: Uuid, velocity: external::Vec3) -> bool {
+    fn set_velocity(&self, id: Uuid, velocity: netherforge_format::math::Vec3) -> bool {
         <Unported as WorldEntityOps>::set_velocity(&Unported, id, velocity)
     }
 
@@ -983,15 +983,15 @@ pub trait FakeWorldEntityOps {
         <Unported as WorldEntityOps>::spawn(&Unported, kind, at, setup)
     }
 
-    fn spawn_item(&self, world: String, position: external::Vec3, item: ItemData) -> Option<Uuid> {
+    fn spawn_item(&self, world: String, position: netherforge_format::math::Vec3, item: ItemData) -> Option<Uuid> {
         <Unported as WorldEntityOps>::spawn_item(&Unported, world, position, item)
     }
 
-    fn raycast(&self, world: String, origin: external::Vec3, direction: external::Vec3, max_distance: f64, ignore: Vec<Uuid>) -> Option<EntityHit> {
+    fn raycast(&self, world: String, origin: netherforge_format::math::Vec3, direction: netherforge_format::math::Vec3, max_distance: f64, ignore: Vec<Uuid>) -> Option<EntityHit> {
         <Unported as WorldEntityOps>::raycast(&Unported, world, origin, direction, max_distance, ignore)
     }
 
-    fn boxes(&self, world: String, region: external::Box) -> Vec<EntityBox> {
+    fn boxes(&self, world: String, region: netherforge_format::math::BoundingBox) -> Vec<EntityBox> {
         <Unported as WorldEntityOps>::boxes(&Unported, world, region)
     }
 }
@@ -1009,11 +1009,11 @@ impl<T: FakeWorldEntityOps> WorldEntityOps for T {
         FakeWorldEntityOps::eye(self, id)
     }
 
-    fn velocity(&self, id: Uuid) -> Option<external::Vec3> {
+    fn velocity(&self, id: Uuid) -> Option<netherforge_format::math::Vec3> {
         FakeWorldEntityOps::velocity(self, id)
     }
 
-    fn set_velocity(&self, id: Uuid, velocity: external::Vec3) -> bool {
+    fn set_velocity(&self, id: Uuid, velocity: netherforge_format::math::Vec3) -> bool {
         FakeWorldEntityOps::set_velocity(self, id, velocity)
     }
 
@@ -1153,15 +1153,15 @@ impl<T: FakeWorldEntityOps> WorldEntityOps for T {
         FakeWorldEntityOps::spawn(self, kind, at, setup)
     }
 
-    fn spawn_item(&self, world: String, position: external::Vec3, item: ItemData) -> Option<Uuid> {
+    fn spawn_item(&self, world: String, position: netherforge_format::math::Vec3, item: ItemData) -> Option<Uuid> {
         FakeWorldEntityOps::spawn_item(self, world, position, item)
     }
 
-    fn raycast(&self, world: String, origin: external::Vec3, direction: external::Vec3, max_distance: f64, ignore: Vec<Uuid>) -> Option<EntityHit> {
+    fn raycast(&self, world: String, origin: netherforge_format::math::Vec3, direction: netherforge_format::math::Vec3, max_distance: f64, ignore: Vec<Uuid>) -> Option<EntityHit> {
         FakeWorldEntityOps::raycast(self, world, origin, direction, max_distance, ignore)
     }
 
-    fn boxes(&self, world: String, region: external::Box) -> Vec<EntityBox> {
+    fn boxes(&self, world: String, region: netherforge_format::math::BoundingBox) -> Vec<EntityBox> {
         FakeWorldEntityOps::boxes(self, world, region)
     }
 }
@@ -1855,7 +1855,7 @@ impl<T: FakeMobGoalOps> MobGoalOps for T {
 }
 
 impl PathfindingOps for Unported {
-    fn move_to(&self, _: Uuid, _: external::Vec3, _: f64) -> bool {
+    fn move_to(&self, _: Uuid, _: netherforge_format::math::Vec3, _: f64) -> bool {
         unported("PathfindingOps::move_to")
     }
 
@@ -1867,7 +1867,7 @@ impl PathfindingOps for Unported {
         unported("PathfindingOps::has_path")
     }
 
-    fn path_end(&self, _: Uuid) -> Option<external::Vec3> {
+    fn path_end(&self, _: Uuid) -> Option<netherforge_format::math::Vec3> {
         unported("PathfindingOps::path_end")
     }
 }
@@ -1875,7 +1875,7 @@ impl PathfindingOps for Unported {
 /// A [`PathfindingOps`] that means only some of it: implement this, and every method it
 /// doesn't answers as [`Unported`] does.
 pub trait FakePathfindingOps {
-    fn move_to(&self, id: Uuid, to: external::Vec3, speed: f64) -> bool {
+    fn move_to(&self, id: Uuid, to: netherforge_format::math::Vec3, speed: f64) -> bool {
         <Unported as PathfindingOps>::move_to(&Unported, id, to, speed)
     }
 
@@ -1887,13 +1887,13 @@ pub trait FakePathfindingOps {
         <Unported as PathfindingOps>::has_path(&Unported, id)
     }
 
-    fn path_end(&self, id: Uuid) -> Option<external::Vec3> {
+    fn path_end(&self, id: Uuid) -> Option<netherforge_format::math::Vec3> {
         <Unported as PathfindingOps>::path_end(&Unported, id)
     }
 }
 
 impl<T: FakePathfindingOps> PathfindingOps for T {
-    fn move_to(&self, id: Uuid, to: external::Vec3, speed: f64) -> bool {
+    fn move_to(&self, id: Uuid, to: netherforge_format::math::Vec3, speed: f64) -> bool {
         FakePathfindingOps::move_to(self, id, to, speed)
     }
 
@@ -1905,7 +1905,7 @@ impl<T: FakePathfindingOps> PathfindingOps for T {
         FakePathfindingOps::has_path(self, id)
     }
 
-    fn path_end(&self, id: Uuid) -> Option<external::Vec3> {
+    fn path_end(&self, id: Uuid) -> Option<netherforge_format::math::Vec3> {
         FakePathfindingOps::path_end(self, id)
     }
 }
@@ -2099,7 +2099,7 @@ impl Platform for Unported {
         unported("Platform::bind_text")
     }
 
-    fn watch(&self, _: external::WatchedEvent, _: bool) {
+    fn watch(&self, _: crate::api::WatchedEvent, _: bool) {
         unported("Platform::watch")
     }
 
@@ -2303,7 +2303,7 @@ pub trait FakePlatform {
         <Unported as Platform>::bind_text(&Unported, space, layout)
     }
 
-    fn watch(&self, event: external::WatchedEvent, listening: bool) {
+    fn watch(&self, event: crate::api::WatchedEvent, listening: bool) {
         <Unported as Platform>::watch(&Unported, event, listening)
     }
 
@@ -2505,7 +2505,7 @@ impl<T: FakePlatform> Platform for T {
         FakePlatform::bind_text(self, space, layout)
     }
 
-    fn watch(&self, event: external::WatchedEvent, listening: bool) {
+    fn watch(&self, event: crate::api::WatchedEvent, listening: bool) {
         FakePlatform::watch(self, event, listening)
     }
 
@@ -2659,7 +2659,7 @@ impl<T: FakePlatformLog> PlatformLog for T {
 }
 
 impl PlatformEvents for Unported {
-    fn game(&self) -> external::GameEvents {
+    fn game(&self) -> &dyn crate::api::GameEvents {
         unported("PlatformEvents::game")
     }
 
@@ -2807,7 +2807,7 @@ impl PlatformEvents for Unported {
 /// A [`PlatformEvents`] that means only some of it: implement this, and every method it
 /// doesn't answers as [`Unported`] does.
 pub trait FakePlatformEvents {
-    fn game(&self) -> external::GameEvents {
+    fn game(&self) -> &dyn crate::api::GameEvents {
         <Unported as PlatformEvents>::game(&Unported)
     }
 
@@ -2953,7 +2953,7 @@ pub trait FakePlatformEvents {
 }
 
 impl<T: FakePlatformEvents> PlatformEvents for T {
-    fn game(&self) -> external::GameEvents {
+    fn game(&self) -> &dyn crate::api::GameEvents {
         FakePlatformEvents::game(self)
     }
 
@@ -5251,7 +5251,7 @@ impl<T: FakeParticleOps> ParticleOps for T {
 }
 
 impl SoundOps for Unported {
-    fn play(&self, _: String, _: external::Vec3, _: SoundPlay) -> bool {
+    fn play(&self, _: String, _: netherforge_format::math::Vec3, _: SoundPlay) -> bool {
         unported("SoundOps::play")
     }
 
@@ -5267,7 +5267,7 @@ impl SoundOps for Unported {
 /// A [`SoundOps`] that means only some of it: implement this, and every method it
 /// doesn't answers as [`Unported`] does.
 pub trait FakeSoundOps {
-    fn play(&self, world: String, position: external::Vec3, sound: SoundPlay) -> bool {
+    fn play(&self, world: String, position: netherforge_format::math::Vec3, sound: SoundPlay) -> bool {
         <Unported as SoundOps>::play(&Unported, world, position, sound)
     }
 
@@ -5281,7 +5281,7 @@ pub trait FakeSoundOps {
 }
 
 impl<T: FakeSoundOps> SoundOps for T {
-    fn play(&self, world: String, position: external::Vec3, sound: SoundPlay) -> bool {
+    fn play(&self, world: String, position: netherforge_format::math::Vec3, sound: SoundPlay) -> bool {
         FakeSoundOps::play(self, world, position, sound)
     }
 
@@ -5315,7 +5315,7 @@ impl WorldOps for Unported {
         unported("WorldOps::entities_loaded")
     }
 
-    fn collision_boxes(&self, _: String, _: f64, _: f64, _: f64, _: f64, _: f64, _: f64) -> Vec<external::Box> {
+    fn collision_boxes(&self, _: String, _: f64, _: f64, _: f64, _: f64, _: f64, _: f64) -> Vec<netherforge_format::math::BoundingBox> {
         unported("WorldOps::collision_boxes")
     }
 
@@ -5419,15 +5419,15 @@ impl WorldOps for Unported {
         unported("WorldOps::biome_search")
     }
 
-    fn explode(&self, _: String, _: external::Vec3, _: f64, _: bool, _: bool) -> bool {
+    fn explode(&self, _: String, _: netherforge_format::math::Vec3, _: f64, _: bool, _: bool) -> bool {
         unported("WorldOps::explode")
     }
 
-    fn strike_lightning(&self, _: String, _: external::Vec3, _: bool) -> bool {
+    fn strike_lightning(&self, _: String, _: netherforge_format::math::Vec3, _: bool) -> bool {
         unported("WorldOps::strike_lightning")
     }
 
-    fn raycast_blocks(&self, _: String, _: external::Vec3, _: external::Vec3, _: f64, _: bool) -> Option<BlockHit> {
+    fn raycast_blocks(&self, _: String, _: netherforge_format::math::Vec3, _: netherforge_format::math::Vec3, _: f64, _: bool) -> Option<BlockHit> {
         unported("WorldOps::raycast_blocks")
     }
 }
@@ -5455,7 +5455,7 @@ pub trait FakeWorldOps {
         <Unported as WorldOps>::entities_loaded(&Unported, at)
     }
 
-    fn collision_boxes(&self, world: String, min_x: f64, min_y: f64, min_z: f64, max_x: f64, max_y: f64, max_z: f64) -> Vec<external::Box> {
+    fn collision_boxes(&self, world: String, min_x: f64, min_y: f64, min_z: f64, max_x: f64, max_y: f64, max_z: f64) -> Vec<netherforge_format::math::BoundingBox> {
         <Unported as WorldOps>::collision_boxes(&Unported, world, min_x, min_y, min_z, max_x, max_y, max_z)
     }
 
@@ -5559,15 +5559,15 @@ pub trait FakeWorldOps {
         <Unported as WorldOps>::biome_search(&Unported, world, x, y, z, radius, biome)
     }
 
-    fn explode(&self, world: String, position: external::Vec3, power: f64, fire: bool, break_blocks: bool) -> bool {
+    fn explode(&self, world: String, position: netherforge_format::math::Vec3, power: f64, fire: bool, break_blocks: bool) -> bool {
         <Unported as WorldOps>::explode(&Unported, world, position, power, fire, break_blocks)
     }
 
-    fn strike_lightning(&self, world: String, position: external::Vec3, effect_only: bool) -> bool {
+    fn strike_lightning(&self, world: String, position: netherforge_format::math::Vec3, effect_only: bool) -> bool {
         <Unported as WorldOps>::strike_lightning(&Unported, world, position, effect_only)
     }
 
-    fn raycast_blocks(&self, world: String, origin: external::Vec3, direction: external::Vec3, max_distance: f64, fluids: bool) -> Option<BlockHit> {
+    fn raycast_blocks(&self, world: String, origin: netherforge_format::math::Vec3, direction: netherforge_format::math::Vec3, max_distance: f64, fluids: bool) -> Option<BlockHit> {
         <Unported as WorldOps>::raycast_blocks(&Unported, world, origin, direction, max_distance, fluids)
     }
 }
@@ -5593,7 +5593,7 @@ impl<T: FakeWorldOps> WorldOps for T {
         FakeWorldOps::entities_loaded(self, at)
     }
 
-    fn collision_boxes(&self, world: String, min_x: f64, min_y: f64, min_z: f64, max_x: f64, max_y: f64, max_z: f64) -> Vec<external::Box> {
+    fn collision_boxes(&self, world: String, min_x: f64, min_y: f64, min_z: f64, max_x: f64, max_y: f64, max_z: f64) -> Vec<netherforge_format::math::BoundingBox> {
         FakeWorldOps::collision_boxes(self, world, min_x, min_y, min_z, max_x, max_y, max_z)
     }
 
@@ -5697,21 +5697,21 @@ impl<T: FakeWorldOps> WorldOps for T {
         FakeWorldOps::biome_search(self, world, x, y, z, radius, biome)
     }
 
-    fn explode(&self, world: String, position: external::Vec3, power: f64, fire: bool, break_blocks: bool) -> bool {
+    fn explode(&self, world: String, position: netherforge_format::math::Vec3, power: f64, fire: bool, break_blocks: bool) -> bool {
         FakeWorldOps::explode(self, world, position, power, fire, break_blocks)
     }
 
-    fn strike_lightning(&self, world: String, position: external::Vec3, effect_only: bool) -> bool {
+    fn strike_lightning(&self, world: String, position: netherforge_format::math::Vec3, effect_only: bool) -> bool {
         FakeWorldOps::strike_lightning(self, world, position, effect_only)
     }
 
-    fn raycast_blocks(&self, world: String, origin: external::Vec3, direction: external::Vec3, max_distance: f64, fluids: bool) -> Option<BlockHit> {
+    fn raycast_blocks(&self, world: String, origin: netherforge_format::math::Vec3, direction: netherforge_format::math::Vec3, max_distance: f64, fluids: bool) -> Option<BlockHit> {
         FakeWorldOps::raycast_blocks(self, world, origin, direction, max_distance, fluids)
     }
 }
 
 impl BiomeSearch for Unported {
-    fn run(&self) -> Option<external::Vec3> {
+    fn run(&self) -> Option<netherforge_format::math::Vec3> {
         unported("BiomeSearch::run")
     }
 }
@@ -5719,13 +5719,13 @@ impl BiomeSearch for Unported {
 /// A [`BiomeSearch`] that means only some of it: implement this, and every method it
 /// doesn't answers as [`Unported`] does.
 pub trait FakeBiomeSearch {
-    fn run(&self) -> Option<external::Vec3> {
+    fn run(&self) -> Option<netherforge_format::math::Vec3> {
         <Unported as BiomeSearch>::run(&Unported)
     }
 }
 
 impl<T: FakeBiomeSearch> BiomeSearch for T {
-    fn run(&self) -> Option<external::Vec3> {
+    fn run(&self) -> Option<netherforge_format::math::Vec3> {
         FakeBiomeSearch::run(self)
     }
 }

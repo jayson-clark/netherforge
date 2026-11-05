@@ -51,6 +51,7 @@ import {
 } from './emit/rust.ts'
 import { raisableKotlin } from './emit/raisable.ts'
 import { dispatchKotlin, platformKotlin, raisedEvents } from './emit/raised.ts'
+import { dispatchRust, gameEventsRust } from './emit/raisedRust.ts'
 import { luals, lualsGates, lualsSurfaces } from './emit/luals.ts'
 import { terrainReference, terrainStubs } from './emit/terrain.ts'
 import { terrainApi } from '../src/terrain.ts'
@@ -135,5 +136,17 @@ writeDir(
     ['unported.rs', unportedRust(boundRust.classes)],
     ['events.rs', eventsRust(api)],
   ]),
+  '.rs',
+)
+// The server's events for the Rust runtime: the sink in the platform's crate, the dispatch in the runtime's.
+const raisedRust = raisedEvents(api, boundRust)
+writeDir(
+  'crates/platform/src/api',
+  new Map([['game_events.rs', gameEventsRust(raisedRust)]]),
+  '.rs',
+)
+writeDir(
+  'crates/runtime/src/generated',
+  new Map([['game_event_dispatch.rs', dispatchRust(raisedRust)]]),
   '.rs',
 )

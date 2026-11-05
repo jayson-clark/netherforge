@@ -46,13 +46,13 @@ const KEYWORDS = new Set(
 )
 
 /** A Lua name as a Rust identifier: `type` → `r#type`. */
-const ident = (name: string) => (KEYWORDS.has(name) ? `r#${name}` : name)
+export const ident = (name: string) => (KEYWORDS.has(name) ? `r#${name}` : name)
 
 /** `play_animation` stays; `nf.server` → `nf_server`. */
 const snake = (name: string) => name.replace(/\./g, '_')
 
 /** The file's first lines: who made it, what it is ([about], a module doc), what it uses. */
-function header(about: string[], uses: string[]): string[] {
+export function header(about: string[], uses: string[]): string[] {
   return [
     `// ${GENERATED_BY}`,
     '',
@@ -63,12 +63,12 @@ function header(about: string[], uses: string[]): string[] {
   ]
 }
 
-function finish(lines: string[]): string {
+export function finish(lines: string[]): string {
   return `${lines.join('\n').replace(/\n{3,}/g, '\n\n')}\n`
 }
 
 /** A doc comment: each line of [doc] behind `///`, at [indent]. */
-function rustdoc(doc: string, indent: string): string[] {
+export function rustdoc(doc: string, indent: string): string[] {
   if (!doc.trim()) return []
   return doc
     .trim()
@@ -413,7 +413,7 @@ export function apiRust(classes: ClassBinding[]): string {
 // ---- codecs.rs and bind.rs: the glue -----------------------------------------------
 
 /** A Rust expression for [codec]'s codec (a zero-sized value): `Opt(List(Str))`. */
-function codecExpr(codec: Codec, boxed: Set<string> = new Set()): string {
+export function codecExpr(codec: Codec, boxed: Set<string> = new Set()): string {
   switch (codec.kind) {
     case 'string':
       return 'Str'

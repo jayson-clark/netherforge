@@ -197,7 +197,7 @@ pub trait Platform {
     /// only while one does, because watching them costs even when nobody
     /// cares: the runtime calls this whenever the answer changes (never twice
     /// in a row with the same answer), starting from not listening.
-    fn watch(&self, event: external::WatchedEvent, listening: bool);
+    fn watch(&self, event: crate::api::WatchedEvent, listening: bool);
 
     /// Everything the editor caches about this Minecraft version: blocks with
     /// their properties and defaults, items, entity types, and collision boxes.

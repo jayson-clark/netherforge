@@ -398,8 +398,10 @@ side). Types are strings in Kotlin's spelling (`src/types.ts`, parsed by `src/ty
   callbacks; an interface method with a body is kept, marked `defaulted`.
 - **Types it doesn't declare** are `EXTERNAL`: format's (`Vec3`, `ItemDef`...), the Lua API's
   (`GameEvents`, `WatchedEvent`, `ArgumentType`, generated from `packages/api` for each
-  language), and two of the runtime's. In Rust they're placeholders (`external::*`, carrying a
-  `Dynamic`) until their side is ported.
+  language), and two of the runtime's. In Rust each is a placeholder (`external::*`, carrying a
+  `Dynamic`) until its side is ported; then `RUST_EXTERNAL` in `scripts/rust.ts` names its real
+  type (format's `Vec3`, `Matrix4`, `Box` as `BoundingBox`; the API's `GameEvents`, a trait object,
+  and `WatchedEvent`), and the platform crate depends on format for them.
 - **The Rust target** (`scripts/rust.ts`, `pnpm generate`, covered by the generated-files check):
   records are structs (Kotlin's defaults in their docs), enums are enums with each entry's values
   as methods (`EntityFlag::settable`) and `ALL`, a union is an enum of case structs
@@ -417,10 +419,22 @@ side). Types are strings in Kotlin's spelling (`src/types.ts`, parsed by `src/ty
   (`tests/session.rs`: the log and the server's info), so it's written as the ported runtime needs
   it and can't drift from the spec. Kotlin's hand-written `FakePlatform` (testkit) has no Rust twin.
 
+- **The server's events** (`GameEvents`, from `packages/api`'s `raised`, by
+  `emit/raisedRust.ts` beside the Kotlin targets): the sink is `crates/platform/src/api/`
+  (`GameEvents`, a method per raised event taking `&mut game_event::<Name>`, the payload in the
+  platform's types, a writable field written back through it, a lazy one a closure;
+  `WatchedEvent`). The runtime's side is generated into `crates/runtime/src/generated/`
+  (`GameEventDispatch<S: EventSession>`): each event's handles made, its path raised (the handle in
+  `raised.first`, then `nf`: `Scripts::raise_path`, one event shared by the stages until `stop()`),
+  its payload pushed only when something listens, its writable fields read back with their codecs
+  and bounds. `events::Running` is the session's `EventSession`, and `Session::game_events()` the
+  dispatch. Not yet: an entity's exact class (it's an `Entity`, or the `Living`/`Mob` the event
+  says), and items, which cross as empty and are never written back until their area is ported.
+
 Still to come: the Kotlin side generated from the spec (then `extract.ts` and the drift test
 go), the FFM glue between them, the coarse crossings the roadmap asks for (per-tick batches,
-handles as integers, flat buffers: annotations on the spec's methods), and the server's raised
-events (`GameEvents`) in Rust, from `packages/api`'s `raised`.
+handles as integers, flat buffers: annotations on the spec's methods), and the rest of
+`PlatformEvents` (the session implementing it, each hook to its service).
 
 ## Format (`crates/format`)
 

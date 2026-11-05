@@ -63,7 +63,7 @@ pub struct StructureMarker {
 /// it a display offset far from its entity vanishes at some camera angles.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DisplayPose {
-    pub matrix: external::Matrix4,
+    pub matrix: netherforge_format::math::Matrix4,
     pub interpolation_ticks: i32,
     pub cull_size: f64,
 }

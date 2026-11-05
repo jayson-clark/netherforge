@@ -210,6 +210,15 @@ impl<'a> Session<'a> {
         self.room.as_ref()
     }
 
+    /// The server's events, raised to its scripts (`GameEvents`, which the Platform's adapter calls); an
+    /// event goes through unchanged while it isn't running. What scripts reported is the next tick's to log.
+    pub fn game_events(&self) -> crate::events::GameEventDispatch<crate::events::Running<'_>> {
+        crate::events::GameEventDispatch(crate::events::Running {
+            room: self.room.as_ref(),
+            platform: self.platform,
+        })
+    }
+
     /// What's wrong with the project as it reads: format's findings, the session's own refusal, and what its
     /// running scripts caused (a body that failed, a handler that errors), until the scope closes.
     pub fn problems(&self) -> Vec<Problem> {

@@ -193,15 +193,15 @@ pub struct SpawnSetup {
     /// Default: `null`.
     pub data: Option<String>,
     /// Default: `null`.
-    pub velocity: Option<external::Vec3>,
+    pub velocity: Option<netherforge_format::math::Vec3>,
 }
 
 /// What a ray hit: the entity, where it entered its box, and that face's normal.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EntityHit {
     pub id: Uuid,
-    pub position: external::Vec3,
-    pub normal: external::Vec3,
+    pub position: netherforge_format::math::Vec3,
+    pub normal: netherforge_format::math::Vec3,
 }
 
 /// An entity's bounding box in the world: [kind] namespaced (`minecraft:zombie`), [player] whether it's a player.
@@ -210,7 +210,7 @@ pub struct EntityBox {
     pub id: Uuid,
     pub kind: String,
     pub player: bool,
-    pub r#box: external::Box,
+    pub r#box: netherforge_format::math::BoundingBox,
 }
 
 /// Entities by UUID. Everything answers null or false for an entity that isn't
@@ -224,9 +224,9 @@ pub trait WorldEntityOps {
     /// Where it looks from and which way, with a normalised direction.
     fn eye(&self, id: Uuid) -> Option<Ray>;
 
-    fn velocity(&self, id: Uuid) -> Option<external::Vec3>;
+    fn velocity(&self, id: Uuid) -> Option<netherforge_format::math::Vec3>;
 
-    fn set_velocity(&self, id: Uuid, velocity: external::Vec3) -> bool;
+    fn set_velocity(&self, id: Uuid, velocity: netherforge_format::math::Vec3) -> bool;
 
     /// Moves it, passengers and all.
     fn teleport(&self, id: Uuid, to: Location) -> bool;
@@ -319,16 +319,16 @@ pub trait WorldEntityOps {
     fn spawn(&self, kind: String, at: Location, setup: SpawnSetup) -> Option<Uuid>;
 
     /// Drops an item stack; null when it couldn't be.
-    fn spawn_item(&self, world: String, position: external::Vec3, item: ItemData) -> Option<Uuid>;
+    fn spawn_item(&self, world: String, position: netherforge_format::math::Vec3, item: ItemData) -> Option<Uuid>;
 
     /// The first entity's box a ray hits within [maxDistance], leaving out [ignore]. [direction] is a unit vector.
-    fn raycast(&self, world: String, origin: external::Vec3, direction: external::Vec3, max_distance: f64, ignore: Vec<Uuid>) -> Option<EntityHit>;
+    fn raycast(&self, world: String, origin: netherforge_format::math::Vec3, direction: netherforge_format::math::Vec3, max_distance: f64, ignore: Vec<Uuid>) -> Option<EntityHit>;
 
     /// Every entity whose bounding box reaches into [region] (world coordinates) in [world], players
     /// included, as the server measures it now: only in loaded chunks, never one of ours (tagged) or a
     /// player in spectator mode, which nothing can touch. What the spatial queries (`world:overlap_*`,
     /// `sweep`, `nearest`) and centities' `touch` test.
-    fn boxes(&self, world: String, region: external::Box) -> Vec<EntityBox>;
+    fn boxes(&self, world: String, region: netherforge_format::math::BoundingBox) -> Vec<EntityBox>;
 }
 
 #[derive(Clone, Debug, PartialEq)]

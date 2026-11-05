@@ -13,7 +13,7 @@ pub trait PathfindingOps {
     /// Finds a path to [to], in the mob's own world, and starts walking it at
     /// [speed] times its walking speed, replacing the path it was on. False
     /// when there's no path from where it is.
-    fn move_to(&self, id: Uuid, to: external::Vec3, speed: f64) -> bool;
+    fn move_to(&self, id: Uuid, to: netherforge_format::math::Vec3, speed: f64) -> bool;
 
     /// Stops it walking.
     fn stop(&self, id: Uuid) -> bool;
@@ -22,5 +22,5 @@ pub trait PathfindingOps {
     fn has_path(&self, id: Uuid) -> bool;
 
     /// Where the path it's walking ends, or null when it isn't walking one.
-    fn path_end(&self, id: Uuid) -> Option<external::Vec3>;
+    fn path_end(&self, id: Uuid) -> Option<netherforge_format::math::Vec3>;
 }

@@ -7,6 +7,16 @@
 #[rustfmt::skip]
 mod generated;
 
+/// What the Lua API spec says the platform carries: the server's events (`GameEvents`), written by
+/// `packages/api`'s `pnpm generate`.
+pub mod api {
+    #[rustfmt::skip]
+    mod game_events;
+
+    pub use game_events::*;
+}
+
+pub use api::{GameEvents, WatchedEvent, game_event};
 
 pub use generated::*;
 

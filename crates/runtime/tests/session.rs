@@ -430,3 +430,46 @@ fn a_repeated_error_is_logged_once_in_a_while_and_counted_in_between() {
         ]
     );
 }
+
+#[test]
+fn the_servers_events_reach_scripts_and_what_they_write_goes_back() {
+    use netherforge_platform::{GameEvents, PlayerRef, Uuid, game_event};
+    let platform = Fake::default();
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/greeter/init.lua",
+            "nf.on('player_join', function(e) e.message = 'welcome' .. (e.first_join and ', new one' or '') end)
+nf.on('player_chat', function(e) if e.message == 'bad' then e:cancel() end end)",
+        ),
+    ]);
+    let mut session = Session::start(&platform, &files, &NoPackages);
+    let alex = PlayerRef {
+        uuid: Uuid(0x0f1b_0c7e_6a43_3d1f_9a8c_2b5e_8f1a_0c11),
+        name: "Alex".into(),
+    };
+    let mut join = game_event::PlayerJoin {
+        player: alex.clone(),
+        first_join: true,
+        message: Some("Alex joined".into()),
+    };
+    session.game_events().player_join(&mut join);
+    assert_eq!(join.message.as_deref(), Some("welcome, new one"));
+    let mut chat = game_event::PlayerChat {
+        player: alex.clone(),
+        message: "bad".into(),
+        format: "<Alex> bad".into(),
+    };
+    assert!(session.game_events().player_chat(&mut chat), "cancelled");
+    chat.message = "fine".into();
+    assert!(!session.game_events().player_chat(&mut chat));
+    // Nothing runs while the session doesn't: the event goes through as it was.
+    session.stop();
+    let mut join = game_event::PlayerJoin {
+        player: alex,
+        first_join: false,
+        message: Some("Alex joined".into()),
+    };
+    session.game_events().player_join(&mut join);
+    assert_eq!(join.message.as_deref(), Some("Alex joined"));
+}
