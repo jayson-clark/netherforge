@@ -86,8 +86,8 @@ fn distance(a: &str, b: &str) -> usize {
 /// The centity API and the instances' lives, for one room.
 #[derive(Clone)]
 pub struct CentityContext {
-    shared: Rc<Shared>,
-    scripts: Scripts,
+    pub(crate) shared: Rc<Shared>,
+    pub(crate) scripts: Scripts,
 }
 
 impl CentityContext {
@@ -117,14 +117,14 @@ impl CentityContext {
         }));
     }
 
-    fn handle_target(&self, handle: Handle) -> Option<Target> {
+    pub(crate) fn handle_target(&self, handle: Handle) -> Option<Target> {
         let host = self.scripts.host();
         handle::push_any(host.lua(), &handle)
             .ok()
             .map(Target::Handle)
     }
 
-    fn centity_target(&self, id: Uuid) -> Option<Target> {
+    pub(crate) fn centity_target(&self, id: Uuid) -> Option<Target> {
         self.handle_target(Handle::Centity(handles::Centity { id: uuid_text(&id) }))
     }
 
@@ -145,7 +145,7 @@ impl CentityContext {
         }
     }
 
-    fn live(&self, id: Uuid) -> bool {
+    pub(crate) fn live(&self, id: Uuid) -> bool {
         self.shared
             .centities
             .borrow()
@@ -199,7 +199,7 @@ impl CentityContext {
 
     // ---- stats, buffs and health ----
 
-    fn holder(&self, this: &handles::Centity) -> Option<crate::stats::Holder> {
+    pub(crate) fn holder(&self, this: &handles::Centity) -> Option<crate::stats::Holder> {
         self.with(this, |i| crate::stats::Holder::Centity(i.id))
     }
 
@@ -216,7 +216,7 @@ impl CentityContext {
 
     /// Raises `event` on centity `id` with `payload` (pushed by `codec`): what handlers made of it, none
     /// when nothing listens.
-    fn raise_on<C: Codec>(
+    pub(crate) fn raise_on<C: Codec>(
         &self,
         id: Uuid,
         event: &str,
@@ -235,7 +235,12 @@ impl CentityContext {
     }
 
     /// What a handler left in writable field `field`; none when it can't be read.
-    fn field<C: Codec>(&self, delivered: &crate::Delivered, field: &str, codec: C) -> Option<C::T> {
+    pub(crate) fn field<C: Codec>(
+        &self,
+        delivered: &crate::Delivered,
+        field: &str,
+        codec: C,
+    ) -> Option<C::T> {
         let lua = self.scripts.host().lua().clone();
         let value: Value = delivered.fields.raw_get(field).ok()?;
         codec.read(&lua, value, &format!("event.{field}")).ok()
@@ -378,6 +383,100 @@ impl CentityContext {
             }
         }
         Some(taken)
+    }
+
+    // ---- following a player ----
+
+    /// Makes instance `id` ride `player`: its anchor entity mounts them, and each tick it moves to their place
+    /// and turns to their body. False when they're offline. A walk it was on ends.
+    pub(crate) fn follow_player(&self, id: Uuid, player: Uuid) -> bool {
+        let Some(at) = self.shared.platform.players().location(player) else {
+            return false;
+        };
+        if let Some(i) = self.shared.centities.borrow_mut().get_mut(id) {
+            i.walk = None;
+            i.follower = Some(player);
+        }
+        self.follow_at(id, at);
+        true
+    }
+
+    /// Stops following, where the centity is now. False when it wasn't following.
+    pub(crate) fn unfollow(&self, id: Uuid) -> bool {
+        let mut centities = self.shared.centities.borrow_mut();
+        let Some(i) = centities.get_mut(id) else {
+            return false;
+        };
+        if i.follower.take().is_none() {
+            return false;
+        }
+        if std::mem::take(&mut i.follow_mounted)
+            && let Some(vehicle) = i.anchor_entity
+        {
+            let entities: &dyn netherforge_platform::EntityOps = if i.viewers.is_some() {
+                self.shared.platform.client_entities()
+            } else {
+                self.shared.platform.entities()
+            };
+            entities.dismount(vehicle);
+        }
+        true
+    }
+
+    /// Moves a following centity to its player (each tick, before its sync).
+    fn follow_tick(&self, id: Uuid) {
+        let Some(player) = self
+            .shared
+            .centities
+            .borrow()
+            .get(id)
+            .and_then(|i| i.follower)
+        else {
+            return;
+        };
+        match self.shared.platform.players().location(player) {
+            Some(at) => self.follow_at(id, at),
+            None => {
+                // Offline: the anchor is left where it was, as after `stop_following`.
+                if let Some(i) = self.shared.centities.borrow_mut().get_mut(id) {
+                    i.follower = None;
+                    i.follow_mounted = false;
+                }
+            }
+        }
+    }
+
+    /// Puts the anchor at `at` and turns the centity to the player's body, then mounts the anchor entity on
+    /// the player (which also puts it back after something got it off).
+    fn follow_at(&self, id: Uuid, at: Location) {
+        let platform = &*self.shared.platform;
+        let mut centities = self.shared.centities.borrow_mut();
+        let Some(i) = centities.get_mut(id) else {
+            return;
+        };
+        let anchor = Location {
+            yaw: 0.0,
+            pitch: 0.0,
+            ..at.clone()
+        };
+        if *i.anchor() != anchor {
+            i.set_anchor(anchor);
+        }
+        let player = i.follower;
+        i.turn_to(
+            player
+                .and_then(|p| platform.world_entities().body_yaw(p))
+                .unwrap_or(at.yaw),
+        );
+        let entities: &dyn netherforge_platform::EntityOps = if i.viewers.is_some() {
+            platform.client_entities()
+        } else {
+            platform.entities()
+        };
+        i.follow_mounted = match (i.anchor_entity, player) {
+            (Some(vehicle), Some(player)) => entities.mount(player, vehicle),
+            _ => false,
+        };
     }
 
     // ---- clicks ----
@@ -556,6 +655,7 @@ impl CentityContext {
             instance.removing = true;
         }
         self.raise_centity(id, "remove");
+        self.shut_all(id);
         let nodes: Vec<String> = match self.shared.centities.borrow_mut().get_mut(id) {
             Some(instance) => {
                 instance.removed = true;
@@ -631,6 +731,7 @@ impl CentityContext {
             self.remove(id);
         }
         self.tick_stats();
+        self.shared.path_nodes.set(0);
         let ids: Vec<Uuid> = self.shared.centities.borrow().all().map(|i| i.id).collect();
         for id in ids {
             match self.shared.centities.borrow_mut().get_mut(id) {
@@ -655,6 +756,44 @@ impl CentityContext {
             }
             if !self.live(id) {
                 continue;
+            }
+            // A follow moves it to its player first, as a walk does; it never has both.
+            if self
+                .shared
+                .centities
+                .borrow()
+                .get(id)
+                .is_some_and(|i| i.follower.is_some())
+            {
+                self.follow_tick(id);
+            }
+            // Walking moves the whole centity first, so physics settles its bodies where it has been walked to.
+            if self
+                .shared
+                .centities
+                .borrow()
+                .get(id)
+                .is_some_and(|i| i.walk.is_some() && i.flight.is_none())
+            {
+                self.step_walk(id);
+                if !self.live(id) {
+                    continue;
+                }
+            }
+            // Doors a walk opened and didn't get to shut shut once it's out of them.
+            self.shut_behind(id);
+            // A flight moves the whole centity, and nothing else does while it flies.
+            if self
+                .shared
+                .centities
+                .borrow()
+                .get(id)
+                .is_some_and(|i| i.flight.is_some())
+            {
+                self.step_flight(id);
+                if !self.live(id) {
+                    continue;
+                }
             }
             self.move_body(id);
             if !self.live(id) {
@@ -766,7 +905,8 @@ impl CentityContext {
             let Some(instance) = centities.get_mut(id) else {
                 return;
             };
-            if instance.mover.is_none() {
+            // A walk or a flight moves it instead.
+            if instance.mover.is_none() || instance.walk.is_some() || instance.flight.is_some() {
                 return;
             }
             super::movers::step(&*self.shared.platform, instance)
@@ -920,7 +1060,11 @@ impl CentityContext {
     }
 
     /// `f` of the live instance `this` names; none once it's gone.
-    fn with<R>(&self, this: &handles::Centity, f: impl FnOnce(&mut Instance) -> R) -> Option<R> {
+    pub(crate) fn with<R>(
+        &self,
+        this: &handles::Centity,
+        f: impl FnOnce(&mut Instance) -> R,
+    ) -> Option<R> {
         let id = Self::id_of(this)?;
         let mut centities = self.shared.centities.borrow_mut();
         let instance = centities.get_mut(id).filter(|i| !i.removed)?;
@@ -940,7 +1084,7 @@ impl CentityContext {
         Some(f(instance, index))
     }
 
-    fn node_handle(centity: &str, name: &str) -> handles::Node {
+    pub(crate) fn node_handle(centity: &str, name: &str) -> handles::Node {
         handles::Node {
             centity: centity.to_owned(),
             name: name.to_owned(),
@@ -1301,6 +1445,10 @@ impl CentityApi for CentityContext {
         if !self.shared.platform.worlds().exists(world.clone()) {
             return Ok(false);
         }
+        // A teleport ends a walk, as `stop_pathing` does, and a follow; the doors it opened shut.
+        self.with(this, |i| i.walk = None);
+        self.shut_all(id);
+        self.unfollow(id);
         self.with(this, |i| {
             i.set_anchor(Location {
                 world,
@@ -2032,21 +2180,158 @@ impl CentityApi for CentityContext {
             .flatten())
     }
 
-    // ---- not ported yet ----
-    fn follow(&self, this: &handles::Centity, player: handles::Player) -> ApiResult<bool> {
-        CentityApi::follow(&Unported, this, player)
-    }
-    fn stop_following(&self, this: &handles::Centity) -> ApiResult<bool> {
-        CentityApi::stop_following(&Unported, this)
-    }
     fn launch(&self, this: &handles::Centity, options: shapes::LaunchOptions) -> ApiResult<bool> {
-        CentityApi::launch(&Unported, this, options)
+        let velocity = finite_velocity(options.velocity, "options.velocity")?;
+        let at_least = |value: Option<f64>, least: f64, name: &str| -> ApiResult<()> {
+            match value {
+                Some(v) if !(v >= least && v.is_finite()) => Err(err(format!(
+                    "bad argument 'options.{name}' (at least {} expected, got {})",
+                    lua_number(least),
+                    lua_number(v)
+                ))),
+                _ => Ok(()),
+            }
+        };
+        let within = |value: Option<f64>, name: &str| -> ApiResult<()> {
+            match value {
+                Some(v) if !(0.0..=1.0).contains(&v) => Err(err(format!(
+                    "bad argument 'options.{name}' (0 to 1 expected, got {})",
+                    lua_number(v)
+                ))),
+                _ => Ok(()),
+            }
+        };
+        at_least(options.radius, 0.0, "radius")?;
+        at_least(options.rest_speed, 0.0, "rest_speed")?;
+        within(options.drag, "drag")?;
+        within(options.bounce, "bounce")?;
+        within(options.friction, "friction")?;
+        for (name, value) in [
+            ("pierce", options.pierce),
+            ("gravity_delay", options.gravity_delay),
+            ("max_bounces", options.max_bounces),
+        ] {
+            if let Some(v) = value
+                && v < 0
+            {
+                return Err(err(format!(
+                    "bad argument 'options.{name}' (at least 0 expected, got {v})"
+                )));
+            }
+        }
+        for (name, value) in [("rehit", options.rehit), ("lifetime", options.lifetime)] {
+            if let Some(v) = value
+                && v < 1
+            {
+                return Err(err(format!(
+                    "bad argument 'options.{name}' (at least 1 expected, got {v})"
+                )));
+            }
+        }
+        if let Some(h) = &options.homing {
+            at_least(Some(h.range), 0.0, "homing.range")?;
+            at_least(h.turn, 0.0, "homing.turn")?;
+        }
+        let gravity = options.gravity.unwrap_or(0.0);
+        if !gravity.is_finite() {
+            return Err(err(
+                "bad argument 'options.gravity' (a finite number expected)",
+            ));
+        }
+        let mut filter = match &options.hits {
+            Some(hits) => super::flights::query_filter(hits).map_err(err)?,
+            None => super::spatial::QueryFilter::default(),
+        };
+        match &options.owner {
+            Some(Handle::Centity(c)) => {
+                if let Some(id) = parse_uuid(&c.id) {
+                    filter.exclude_centities.insert(id);
+                }
+            }
+            Some(Handle::Entity(e)) => {
+                if let Some(id) = parse_uuid(&e.id) {
+                    filter.exclude_entities.insert(id);
+                }
+            }
+            _ => {}
+        }
+        // A question's own limit and line of sight aren't a flight's: it meets what's in its way, in order.
+        filter.limit = usize::MAX;
+        filter.line_of_sight = false;
+        let number = self.shared.next_flight.get() + 1;
+        self.shared.next_flight.set(number);
+        let launched = self.with(this, |i| {
+            if let Some(aim) = &options.aim
+                && i.index_of(aim).is_none()
+            {
+                return Err(err(format!(
+                    "bad argument 'options.aim' (the centity has no node \"{aim}\")"
+                )));
+            }
+            i.walk = None;
+            i.flight = Some(super::flights::Flight {
+                velocity,
+                gravity,
+                gravity_delay: options.gravity_delay.unwrap_or(0),
+                drag: options.drag.unwrap_or(0.0),
+                radius: options.radius.unwrap_or(DEFAULT_RADIUS),
+                pierce: options.pierce.unwrap_or(0),
+                rehit: options.rehit,
+                filter,
+                owner: options.owner.clone(),
+                blocks: options.blocks != Some(false),
+                bounce: options.bounce,
+                friction: options.friction.unwrap_or(1.0),
+                max_bounces: options.max_bounces,
+                rest_speed: options.rest_speed.unwrap_or(DEFAULT_REST_SPEED),
+                stick: options.stick == Some(true),
+                homing_range: options.homing.as_ref().map(|h| h.range),
+                homing_turn: options
+                    .homing
+                    .as_ref()
+                    .and_then(|h| h.turn)
+                    .unwrap_or(DEFAULT_HOMING_TURN),
+                lifetime: options.lifetime.unwrap_or(DEFAULT_LIFETIME),
+                aim: options.aim.clone(),
+                remove_on_end: options.remove_on_end != Some(false),
+                age: 0,
+                bounces: 0,
+                still: false,
+                hit_at: Default::default(),
+                number,
+            });
+            Ok(i.id)
+        });
+        match launched {
+            None => Ok(false),
+            Some(Err(e)) => Err(e),
+            Some(Ok(id)) => {
+                self.aim_flight(id);
+                Ok(true)
+            }
+        }
     }
     fn is_launched(&self, this: &handles::Centity) -> ApiResult<bool> {
-        CentityApi::is_launched(&Unported, this)
+        Ok(self.with(this, |i| i.flight.is_some()).unwrap_or(false))
     }
     fn stop_flight(&self, this: &handles::Centity) -> ApiResult<bool> {
-        CentityApi::stop_flight(&Unported, this)
+        let Some(id) = self.with(this, |i| i.id) else {
+            return Ok(false);
+        };
+        Ok(self.stop_flight_of(id))
+    }
+
+    fn follow(&self, this: &handles::Centity, player: handles::Player) -> ApiResult<bool> {
+        let (Some(id), Some(who)) = (self.with(this, |i| i.id), parse_uuid(&player.id)) else {
+            return Ok(false);
+        };
+        Ok(self.follow_player(id, who))
+    }
+    fn stop_following(&self, this: &handles::Centity) -> ApiResult<bool> {
+        let Some(id) = self.with(this, |i| i.id) else {
+            return Ok(false);
+        };
+        Ok(self.unfollow(id))
     }
     fn move_to(
         &self,
@@ -2054,17 +2339,116 @@ impl CentityApi for CentityContext {
         target: unions::LocationOrVec3OrEntityOrCentity,
         options: Option<shapes::CentityPathOptions>,
     ) -> ApiResult<bool> {
-        CentityApi::move_to(&Unported, this, target, options)
+        use super::paths::{self, PathSettings, PathTarget};
+        let o = options.unwrap_or(shapes::CentityPathOptions {
+            speed: None,
+            fly: None,
+            face: None,
+            width: None,
+            height: None,
+            step_height: None,
+            max_drop: None,
+            open_doors: None,
+            range: None,
+        });
+        let check = |field: &str,
+                     value: Option<f64>,
+                     ok: &dyn Fn(f64) -> bool,
+                     what: String|
+         -> ApiResult<Option<f64>> {
+            match value {
+                Some(v) if !v.is_finite() || !ok(v) => Err(err(format!(
+                    "options.{field} must be {what}, not {}",
+                    lua_number(v)
+                ))),
+                _ => Ok(value),
+            }
+        };
+        let most = |n: f64| format!("more than 0 and at most {}", n as i64);
+        let speed = check(
+            "speed",
+            o.speed,
+            &|v| v > 0.0 && v <= paths::MAX_SPEED,
+            most(paths::MAX_SPEED),
+        )?;
+        let width = check(
+            "width",
+            o.width,
+            &|v| v > 0.0 && v <= paths::MAX_WIDTH,
+            most(paths::MAX_WIDTH),
+        )?;
+        let height = check(
+            "height",
+            o.height,
+            &|v| v > 0.0 && v <= paths::MAX_HEIGHT,
+            most(paths::MAX_HEIGHT),
+        )?;
+        let step = check(
+            "step_height",
+            o.step_height,
+            &|v| v >= 0.0,
+            "at least 0".into(),
+        )?;
+        let drop = check("max_drop", o.max_drop, &|v| v >= 0.0, "at least 0".into())?;
+        let range = check(
+            "range",
+            o.range,
+            &|v| v > 0.0 && v <= paths::MAX_RANGE,
+            most(paths::MAX_RANGE),
+        )?;
+        let settings = PathSettings {
+            speed: speed.unwrap_or(paths::DEFAULT_SPEED),
+            fly: o.fly == Some(true),
+            face: o.face != Some(false),
+            width,
+            height,
+            step_height: step.unwrap_or(paths::DEFAULT_STEP_HEIGHT),
+            max_drop: drop.unwrap_or(paths::DEFAULT_MAX_DROP),
+            range: range.unwrap_or(paths::DEFAULT_RANGE),
+            open_doors: o.open_doors == Some(true),
+        };
+        let Some((id, world)) = self.with(this, |i| (i.id, i.anchor().world.clone())) else {
+            return Ok(false);
+        };
+        let goal = match target {
+            unions::LocationOrVec3OrEntityOrCentity::Location(l) => {
+                (l.world.name == world).then(|| PathTarget::Place(vec(l.position)))
+            }
+            unions::LocationOrVec3OrEntityOrCentity::Vec3(p) => Some(PathTarget::Place(vec(p))),
+            unions::LocationOrVec3OrEntityOrCentity::Centity(c) => {
+                parse_uuid(&c.id).map(PathTarget::Centity)
+            }
+            unions::LocationOrVec3OrEntityOrCentity::Entity(e) => {
+                parse_uuid(&e.id).map(PathTarget::Entity)
+            }
+        };
+        let Some(goal) = goal else {
+            return Ok(false);
+        };
+        // A walk ends a follow, as a teleport does.
+        self.unfollow(id);
+        Ok(self.start_walk(id, goal, settings))
     }
     fn stop_pathing(&self, this: &handles::Centity) -> ApiResult<bool> {
-        CentityApi::stop_pathing(&Unported, this)
+        Ok(self
+            .with(this, |i| i.walk.take().is_some())
+            .unwrap_or(false))
     }
     fn has_path(&self, this: &handles::Centity) -> ApiResult<bool> {
-        CentityApi::has_path(&Unported, this)
+        Ok(self.with(this, |i| i.walk.is_some()).unwrap_or(false))
     }
     fn path_target(&self, this: &handles::Centity) -> ApiResult<Option<values::Vec3>> {
-        CentityApi::path_target(&Unported, this)
+        Ok(self
+            .with(this, |i| {
+                i.walk
+                    .as_ref()
+                    .and_then(|w| w.points.last().copied())
+                    .map(value)
+            })
+            .flatten())
     }
+
+    // ---- not ported yet ----
     fn data(&self, this: &handles::Centity) -> ApiResult<Value> {
         CentityApi::data(&Unported, this)
     }
@@ -2127,6 +2511,12 @@ impl CentityContext {
         Ok(true)
     }
 }
+
+/// What a launch without them flies with.
+const DEFAULT_RADIUS: f64 = 0.1;
+const DEFAULT_REST_SPEED: f64 = 1.0;
+const DEFAULT_HOMING_TURN: f64 = 180.0;
+const DEFAULT_LIFETIME: i64 = 600;
 
 /// A text display's opacity when it's fully opaque.
 const OPAQUE: i32 = 255;

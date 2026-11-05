@@ -218,6 +218,43 @@ impl FakeWorldOps for Fake {
     fn is_chunk_loaded(&self, _: String, _: i32, _: i32) -> bool {
         true
     }
+    /// The first solid block along a ray, by small steps.
+    fn raycast_blocks(
+        &self,
+        _: String,
+        origin: netherforge_format::math::Vec3,
+        direction: netherforge_format::math::Vec3,
+        max_distance: f64,
+        _: bool,
+    ) -> Option<netherforge_platform::BlockHit> {
+        let solid = |x: i32, y: i32, _: i32| y < 64 || x == 10;
+        let cell = |p: netherforge_format::math::Vec3| {
+            (p.0.floor() as i32, p.1.floor() as i32, p.2.floor() as i32)
+        };
+        let mut previous = cell(origin);
+        let mut t = 0.0;
+        while t <= max_distance {
+            let p = origin + direction * t;
+            let c = cell(p);
+            if c != previous && solid(c.0, c.1, c.2) {
+                let normal = netherforge_format::math::Vec3(
+                    f64::from(previous.0 - c.0),
+                    f64::from(previous.1 - c.1),
+                    f64::from(previous.2 - c.2),
+                );
+                return Some(netherforge_platform::BlockHit {
+                    x: c.0,
+                    y: c.1,
+                    z: c.2,
+                    position: p,
+                    normal,
+                });
+            }
+            previous = c;
+            t += 0.01;
+        }
+        None
+    }
     /// A floor: every block below y 64 is stone, and a wall of it at x 10.
     fn collision_boxes(
         &self,
@@ -1070,4 +1107,97 @@ nf.after(5, function() b:teleport(vector.create(1, 64, 0)) end)
         ],
         "{lines:?}"
     );
+}
+
+#[test]
+fn a_launched_centity_hits_what_it_meets_and_ends_on_a_block() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let cube = r#"{ "nodes": { "cube": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/cube/centity.json", cube),
+        (
+            "modules/game/init.lua",
+            r#"
+local target = nf.centities.spawn("cube", vector.create(5, 64, 0))
+local shot = nf.centities.spawn("cube", vector.create(0, 64.5, 0.5))
+shot:on("hit", function(e) print("hit", e.target == target, e.node:name()) end)
+shot:on("flight_end", function(e) print("end", e.reason, e.target == target) end)
+print(shot:launch({ velocity = vector.create(20, 0, 0) }), shot:is_launched(), shot:velocity().x)
+local ball = nf.centities.spawn("cube", vector.create(-5, 66, 0.5))
+ball:on("flight_end", function(e) print("ball", e.reason, e.normal and e.normal.y, e.block ~= nil) end)
+ball:launch({ velocity = vector.create(0, -10, 0), radius = 0 })
+print(pcall(ball.launch, ball, { velocity = vector.create(1, 0, 0), bounce = 2 }))
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    let lines = printed(&start);
+    assert_eq!(
+        lines.first().map(String::as_str),
+        Some("true\ttrue\t20"),
+        "{start:?}"
+    );
+    assert!(
+        lines
+            .get(1)
+            .is_some_and(|l| l.contains("0 to 1 expected, got 2")),
+        "{start:?}"
+    );
+    let mut lines = Vec::new();
+    for _ in 0..20 {
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    assert!(lines.contains(&"hit\ttrue\tcube".to_owned()), "{lines:?}");
+    assert!(lines.contains(&"end\thit\ttrue".to_owned()), "{lines:?}");
+    assert!(
+        lines.contains(&"ball\tblock\t1\ttrue".to_owned()),
+        "{lines:?}"
+    );
+    // Both flights removed what flew; the target stays.
+    assert_eq!(session.centities().all().count(), 1);
+}
+
+#[test]
+fn a_centity_walks_to_a_place() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let walker = r#"{ "nodes": { "body": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": { "boxes": [{ "min": [-0.3, 0, -0.3], "max": [0.3, 1.8, 0.3] }] } } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/walker/centity.json", walker),
+        (
+            "modules/game/init.lua",
+            r#"
+local w = nf.centities.spawn("walker", vector.create(8.5, 64, 0.5))
+w:on("path_end", function(e) print("arrived", e.reached, math.floor(w:position().x)) end)
+print(w:move_to(vector.create(2.5, 64, 0.5)), w:has_path(), w:path_target().x)
+print(w:move_to(vector.create(12.5, 64, 0.5)), w:has_path())
+print(w:move_to(vector.create(2.5, 64, 0.5), { speed = 8 }))
+print(pcall(w.move_to, w, vector.create(0, 64, 0), { speed = 50 }))
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    let lines = printed(&start);
+    assert_eq!(
+        lines.first().map(String::as_str),
+        Some("true\ttrue\t2.5"),
+        "{start:?}"
+    );
+    // The wall at x 10 is endless: a partial path, as close as it gets (Kotlin walks it too).
+    assert_eq!(
+        lines.get(1).map(String::as_str),
+        Some("true\ttrue"),
+        "{start:?}"
+    );
+    assert!(lines.get(3).is_some_and(|l| l.contains("options.speed must be more than 0 and at most 20, not 50")), "{start:?}");
+    let mut lines = Vec::new();
+    for _ in 0..40 {
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    assert_eq!(lines, ["arrived\ttrue\t2"], "{lines:?}");
 }

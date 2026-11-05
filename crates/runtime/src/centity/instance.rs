@@ -166,6 +166,16 @@ pub struct Instance {
     /// The only players a private instance is shown to: its entities are client entities only their
     /// clients have. Set before anything is made; only a temporary instance is private.
     pub viewers: Option<IndexSet<Uuid>>,
+    /// The player it follows, if any.
+    pub follower: Option<Uuid>,
+    /// Whether its anchor entity rides its follower now: while it does, the anchor isn't teleported.
+    pub follow_mounted: bool,
+    /// The doors its walks opened and haven't shut yet.
+    pub opened_doors: Vec<super::paths::Doorway>,
+    /// Its walk (`move_to`), while it's on one.
+    pub walk: Option<super::paths::Walk>,
+    /// Its flight, while it's launched.
+    pub flight: Option<super::flights::Flight>,
     /// Its `body`, when its file gives it one or a script did (`set_body`).
     pub mover: Option<super::movers::Mover>,
     /// Its health, when its file gives it one or a script did (`set_max_health`).
@@ -258,6 +268,11 @@ impl Instance {
             viewers: None,
             health: None,
             mover: None,
+            flight: None,
+            walk: None,
+            opened_doors: Vec::new(),
+            follower: None,
+            follow_mounted: false,
             scope: None,
             age: 0,
             removed: false,
@@ -298,11 +313,19 @@ impl Instance {
 
     /// How fast it moves, blocks a second: its body's velocity, or none.
     pub fn velocity(&self) -> Vec3 {
+        if let Some(f) = &self.flight {
+            return f.velocity;
+        }
         self.mover.as_ref().map_or(Vec3::ZERO, |m| m.velocity)
     }
 
     /// Sets its velocity to `v`, or adds `v` (`add`): false when nothing moves it.
     pub fn push(&mut self, v: Vec3, add: bool) -> bool {
+        if let Some(f) = &mut self.flight {
+            f.velocity = if add { f.velocity + v } else { v };
+            f.still = false;
+            return true;
+        }
         let Some(m) = &mut self.mover else {
             return false;
         };
@@ -354,6 +377,8 @@ impl Instance {
         self.tweens.clear();
         self.ropes.clear();
         self.mover = next.body.clone().map(super::movers::Mover::new);
+        // A walk was sized from the old hitboxes.
+        self.walk = None;
         self.declared = next.clone();
         self.definition = next;
         self.needs_reconcile = true;

@@ -15,11 +15,14 @@ pub mod animation;
 pub mod api;
 pub mod definitions;
 pub mod drawing;
+pub mod flights;
 pub mod health;
 pub mod hitboxes;
 pub mod instance;
 pub mod keyframes;
 pub mod movers;
+pub mod pathing;
+pub mod paths;
 pub mod quat;
 pub mod ropes;
 pub mod spatial;
@@ -363,7 +366,8 @@ impl Centities {
             entities.set_look(vehicle, look.clone());
             instance.pushed_looks.insert(vehicle, look);
         }
-        if instance.moved {
+        // Riding a followed player, it moves with them: a teleport would get it off.
+        if instance.moved && !instance.follow_mounted {
             entities.teleport(vehicle, instance.anchor().clone());
         }
         Some(vehicle)
