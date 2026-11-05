@@ -1,6 +1,6 @@
 //! Lua source as format reads it without running it (format's `LuaStrings`):
-//! its string literals, comments skipped, escapes and long brackets understood.
-//! (Its tokens, which the editor's network uses read, come with the editor.)
+//! its string literals and its tokens, comments skipped, escapes and long
+//! brackets understood.
 
 /// Every string literal in `source`, in order, its escapes worked out (`\z`,
 /// `\x`, `\u{…}` and decimal ones too).
@@ -38,6 +38,102 @@ pub fn literals(source: &str) -> Vec<String> {
             out.push(text);
             i = next;
         } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+/// What a token of Lua source is, as `tokens` reads it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TokenKind {
+    /// A name, a keyword or a number.
+    Name,
+    /// A string literal's text, its escapes worked out.
+    String,
+    /// One character of anything else (`..` is two `.`).
+    Punct,
+}
+
+/// A token of Lua source, with its 1-based line.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Token {
+    pub kind: TokenKind,
+    pub text: String,
+    pub line: usize,
+}
+
+/// `source` as tokens, enough to follow calls: names (keywords and numbers
+/// too), string literals with their escapes worked out, and every other
+/// character on its own. Comments and whitespace are skipped.
+pub fn tokens(source: &str) -> Vec<Token> {
+    let chars: Vec<char> = source.chars().collect();
+    let n = chars.len();
+    let mut out = Vec::new();
+    let mut i = 0;
+    let mut line = 1;
+    let advance = |i: &mut usize, line: &mut usize, to: usize| {
+        *line += chars[*i..to.min(n)].iter().filter(|c| **c == '\n').count();
+        *i = to;
+    };
+    while i < n {
+        let c = chars[i];
+        if c == '-' && i + 1 < n && chars[i + 1] == '-' {
+            let to = match long_open(&chars, i + 2) {
+                Some(level) => long_close(&chars, i + 2 + level + 2, level).1,
+                None => chars[i..]
+                    .iter()
+                    .position(|c| *c == '\n')
+                    .map_or(n, |p| i + p),
+            };
+            advance(&mut i, &mut line, to);
+        } else if c == '['
+            && let Some(level) = long_open(&chars, i)
+        {
+            let at = line;
+            let mut start = i + level + 2;
+            if start < n && chars[start] == '\r' {
+                start += 1;
+            }
+            if start < n && chars[start] == '\n' {
+                start += 1;
+            }
+            let (text, next) = long_close(&chars, start, level);
+            out.push(Token {
+                kind: TokenKind::String,
+                text,
+                line: at,
+            });
+            advance(&mut i, &mut line, next);
+        } else if c == '"' || c == '\'' {
+            let at = line;
+            let (text, next) = quoted(&chars, i + 1, c);
+            out.push(Token {
+                kind: TokenKind::String,
+                text,
+                line: at,
+            });
+            advance(&mut i, &mut line, next);
+        } else if c.is_alphanumeric() || c == '_' {
+            let mut j = i;
+            while j < n && (chars[j].is_alphanumeric() || chars[j] == '_') {
+                j += 1;
+            }
+            out.push(Token {
+                kind: TokenKind::Name,
+                text: chars[i..j].iter().collect(),
+                line,
+            });
+            i = j;
+        } else if c.is_whitespace() {
+            let next = i + 1;
+            advance(&mut i, &mut line, next);
+        } else {
+            out.push(Token {
+                kind: TokenKind::Punct,
+                text: c.to_string(),
+                line,
+            });
             i += 1;
         }
     }

@@ -676,6 +676,9 @@ Next in format: the compilers, with the runtime pieces that use them. The compil
   (`Dither::apply` takes a pixel function and answers none for a clear one); the editor now uses it, so the server's
   pictures and the editor's videos are matched by one definition. The game's colours come from
   `GameData::map_colors`. `tests/map_colors.rs` has `ScreenTest`'s cases.
+- **Workspaces** (`workspace.rs`): `netherforge-workspace.json` (its model, canonical form and checks), its project
+  patterns (`is_pattern`, `expand`), and the network names scripts use (`network_uses`, `check_network_uses`) on the
+  Lua tokens of `lua.rs` (`tokens`, beside `literals`). `tests/workspace.rs`.
 
 ## One source for each thing
 
