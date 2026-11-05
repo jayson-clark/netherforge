@@ -65,6 +65,13 @@ pub trait Runtime {
     /// (`requires` in its `netherforge.json`): the one check, before anything
     /// is read or done. `called` names the function (`nf.http.request`).
     fn requires(&self, scope: Option<ScopeId>, requirement: &str, called: &str) -> ApiResult<()>;
+
+    /// The task whose own code is running, for an `async` function `called` without a callback (its waiting
+    /// form); an error anywhere else, said before any work starts.
+    fn waiting_task(&self, called: &str) -> ApiResult<u64>;
+
+    /// Task `task` waits for async wait `wait`'s value: it's resumed with `value, err` when that's delivered.
+    fn wait_on(&self, task: u64, wait: u64);
 }
 
 /// What a call into the API did wrong, as the script is told: its message

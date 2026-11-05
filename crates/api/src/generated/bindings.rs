@@ -220,10 +220,14 @@ fn nf_bots_join(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Val
     let a_name = arg(lua, args, 0, "name", Str)?;
     let a_location_or_position = arg(lua, args, 1, "location_or_position", Opt(codecs::LocationOrVec3))?;
     let a_options = arg(lua, args, 2, "options", Opt(codecs::BotJoinOptions))?;
+    let callback = crate::pending::callback(args.get(3))?;
+    let task = match callback { None => Some(api.waiting_task("nf.bots.join").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.nf_bots().join(&caller, a_name, a_location_or_position, a_options).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(3).cloned();
-    let id = crate::pending::defer(lua, Some(caller.scope), pending, HandleOf::<handles::Bot>::default(), callback, "nf.bots.join")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, Some(caller.scope), pending, HandleOf::<handles::Bot>::default(), callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn nf_bots_all(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -260,10 +264,14 @@ fn nf_worlds_copy(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[V
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.worlds.copy needs a calling script"))? };
     let a_map = arg(lua, args, 0, "map", Str)?;
     let a_name = arg(lua, args, 1, "name", Str)?;
+    let callback = crate::pending::callback(args.get(2))?;
+    let task = match callback { None => Some(api.waiting_task("nf.worlds.copy").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.nf_worlds().copy(&caller, a_map, a_name).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(2).cloned();
-    let id = crate::pending::defer(lua, Some(caller.scope), pending, HandleOf::<handles::World>::default(), callback, "nf.worlds.copy")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, Some(caller.scope), pending, HandleOf::<handles::World>::default(), callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn nf_worlds_import(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -271,10 +279,14 @@ fn nf_worlds_import(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &
     let a_folder = arg(lua, args, 0, "folder", Str)?;
     let a_name = arg(lua, args, 1, "name", Str)?;
     let a_options = arg(lua, args, 2, "options", Opt(codecs::WorldImportOptions))?;
+    let callback = crate::pending::callback(args.get(3))?;
+    let task = match callback { None => Some(api.waiting_task("nf.worlds.import").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.nf_worlds().import(&caller, a_folder, a_name, a_options).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(3).cloned();
-    let id = crate::pending::defer(lua, Some(caller.scope), pending, HandleOf::<handles::World>::default(), callback, "nf.worlds.import")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, Some(caller.scope), pending, HandleOf::<handles::World>::default(), callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn nf_worlds_default(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -627,10 +639,14 @@ fn nf_images_download(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args:
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.images.download needs a calling script"))? };
     api.requires(Some(caller.scope), "http", "nf.images.download").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_options = arg(lua, args, 0, "options", codecs::HttpRequestOptions)?;
+    let callback = crate::pending::callback(args.get(1))?;
+    let task = match callback { None => Some(api.waiting_task("nf.images.download").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.nf_images().download(&caller, a_options).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(1).cloned();
-    let id = crate::pending::defer(lua, Some(caller.scope), pending, HandleOf::<handles::Image>::default(), callback, "nf.images.download")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, Some(caller.scope), pending, HandleOf::<handles::Image>::default(), callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn nf_files_get(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -772,10 +788,14 @@ fn nf_http_request(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.http.request needs a calling script"))? };
     api.requires(Some(caller.scope), "http", "nf.http.request").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_options = arg(lua, args, 0, "options", codecs::HttpRequestOptions)?;
+    let callback = crate::pending::callback(args.get(1))?;
+    let task = match callback { None => Some(api.waiting_task("nf.http.request").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.nf_http().request(&caller, a_options).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(1).cloned();
-    let id = crate::pending::defer(lua, Some(caller.scope), pending, codecs::HttpResponse, callback, "nf.http.request")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, Some(caller.scope), pending, codecs::HttpResponse, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn nf_http_stream(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -835,10 +855,14 @@ fn nf_wasm_instantiate(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.wasm.instantiate needs a calling script"))? };
     api.requires(Some(caller.scope), "wasm", "nf.wasm.instantiate").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_module = arg(lua, args, 0, "module", Str)?;
+    let callback = crate::pending::callback(args.get(1))?;
+    let task = match callback { None => Some(api.waiting_task("nf.wasm.instantiate").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.nf_wasm().instantiate(&caller, a_module).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(1).cloned();
-    let id = crate::pending::defer(lua, Some(caller.scope), pending, HandleOf::<handles::WasmInstance>::default(), callback, "nf.wasm.instantiate")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, Some(caller.scope), pending, HandleOf::<handles::WasmInstance>::default(), callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn nf_wasm_run(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -846,10 +870,14 @@ fn nf_wasm_run(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Valu
     api.requires(Some(caller.scope), "wasm", "nf.wasm.run").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_module = arg(lua, args, 0, "module", Str)?;
     let a_options = arg(lua, args, 1, "options", Opt(codecs::WasmRunOptions))?;
+    let callback = crate::pending::callback(args.get(2))?;
+    let task = match callback { None => Some(api.waiting_task("nf.wasm.run").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.nf_wasm().run(&caller, a_module, a_options).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(2).cloned();
-    let id = crate::pending::defer(lua, Some(caller.scope), pending, codecs::WasmRunResult, callback, "nf.wasm.run")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, Some(caller.scope), pending, codecs::WasmRunResult, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn nf_wasm_start(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -969,20 +997,28 @@ fn nf_network_ban(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[V
     api.requires(Some(caller.scope), "moderation", "nf.network.ban").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_player = arg(lua, args, 0, "player", codecs::PlayerOrString)?;
     let a_options = arg(lua, args, 1, "options", Opt(codecs::NetworkSanctionOptions))?;
+    let callback = crate::pending::callback(args.get(2))?;
+    let task = match callback { None => Some(api.waiting_task("nf.network.ban").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.nf_network().ban(&caller, a_player, a_options).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(2).cloned();
-    let id = crate::pending::defer(lua, Some(caller.scope), pending, Bool, callback, "nf.network.ban")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, Some(caller.scope), pending, Bool, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn nf_network_unban(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.network.unban needs a calling script"))? };
     api.requires(Some(caller.scope), "moderation", "nf.network.unban").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_player = arg(lua, args, 0, "player", codecs::PlayerOrString)?;
+    let callback = crate::pending::callback(args.get(1))?;
+    let task = match callback { None => Some(api.waiting_task("nf.network.unban").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.nf_network().unban(&caller, a_player).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(1).cloned();
-    let id = crate::pending::defer(lua, Some(caller.scope), pending, Bool, callback, "nf.network.unban")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, Some(caller.scope), pending, Bool, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn nf_network_mute(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -990,20 +1026,28 @@ fn nf_network_mute(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[
     api.requires(Some(caller.scope), "moderation", "nf.network.mute").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_player = arg(lua, args, 0, "player", codecs::PlayerOrString)?;
     let a_options = arg(lua, args, 1, "options", Opt(codecs::NetworkSanctionOptions))?;
+    let callback = crate::pending::callback(args.get(2))?;
+    let task = match callback { None => Some(api.waiting_task("nf.network.mute").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.nf_network().mute(&caller, a_player, a_options).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(2).cloned();
-    let id = crate::pending::defer(lua, Some(caller.scope), pending, Bool, callback, "nf.network.mute")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, Some(caller.scope), pending, Bool, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn nf_network_unmute(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.network.unmute needs a calling script"))? };
     api.requires(Some(caller.scope), "moderation", "nf.network.unmute").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_player = arg(lua, args, 0, "player", codecs::PlayerOrString)?;
+    let callback = crate::pending::callback(args.get(1))?;
+    let task = match callback { None => Some(api.waiting_task("nf.network.unmute").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.nf_network().unmute(&caller, a_player).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(1).cloned();
-    let id = crate::pending::defer(lua, Some(caller.scope), pending, Bool, callback, "nf.network.unmute")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, Some(caller.scope), pending, Bool, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn nf_network_is_banned(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -1036,10 +1080,14 @@ fn nf_network_send_player(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, a
     let a_player = arg(lua, args, 0, "player", codecs::PlayerOrString)?;
     let a_target = arg(lua, args, 1, "target", codecs::StringOrNetworkSendOptions)?;
     let a_data = arg(lua, args, 2, "data", ANY)?;
+    let callback = crate::pending::callback(args.get(3))?;
+    let task = match callback { None => Some(api.waiting_task("nf.network.send_player").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.nf_network().send_player(&caller, a_player, a_target, a_data).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(3).cloned();
-    let id = crate::pending::defer(lua, Some(caller.scope), pending, Str, callback, "nf.network.send_player")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, Some(caller.scope), pending, Str, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn nf_network_send_players(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -1048,10 +1096,14 @@ fn nf_network_send_players(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, 
     let a_players = arg(lua, args, 0, "players", List(codecs::PlayerOrString))?;
     let a_target = arg(lua, args, 1, "target", codecs::StringOrNetworkSendOptions)?;
     let a_data = arg(lua, args, 2, "data", ANY)?;
+    let callback = crate::pending::callback(args.get(3))?;
+    let task = match callback { None => Some(api.waiting_task("nf.network.send_players").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.nf_network().send_players(&caller, a_players, a_target, a_data).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(3).cloned();
-    let id = crate::pending::defer(lua, Some(caller.scope), pending, Str, callback, "nf.network.send_players")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, Some(caller.scope), pending, Str, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn nf_time_format(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -5284,10 +5336,14 @@ fn bot_walk_to(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Valu
     api.requires(host_scope(lua), "bots", "Bot:walk_to").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_position = arg(lua, args, 1, "position", Vec3Codec)?;
     let a_options = arg(lua, args, 2, "options", Opt(codecs::BotWalkOptions))?;
+    let callback = crate::pending::callback(args.get(3))?;
+    let task = match callback { None => Some(api.waiting_task("Bot:walk_to").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.bot().walk_to(&this, a_position, a_options).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(3).cloned();
-    let id = crate::pending::defer(lua, host_scope(lua), pending, Vec3Codec, callback, "Bot:walk_to")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, host_scope(lua), pending, Vec3Codec, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn bot_stop(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -5429,10 +5485,14 @@ fn bot_break_block(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[
     let this = HandleOf::<handles::Bot>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     api.requires(host_scope(lua), "bots", "Bot:break_block").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_position = arg(lua, args, 1, "position", Vec3Codec)?;
+    let callback = crate::pending::callback(args.get(2))?;
+    let task = match callback { None => Some(api.waiting_task("Bot:break_block").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.bot().break_block(&this, a_position).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(2).cloned();
-    let id = crate::pending::defer(lua, host_scope(lua), pending, Bool, callback, "Bot:break_block")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, host_scope(lua), pending, Bool, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn bot_swap_hands(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -5775,10 +5835,14 @@ fn world_fill_gradually(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, arg
     let a_to = arg(lua, args, 2, "to", Vec3Codec)?;
     let a_state = arg(lua, args, 3, "state", Str)?;
     let a_options = arg(lua, args, 4, "options", Opt(codecs::GradualFillOptions))?;
+    let callback = crate::pending::callback(args.get(5))?;
+    let task = match callback { None => Some(api.waiting_task("World:fill_gradually").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.world().fill_gradually(&this, a_from, a_to, a_state, a_options).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(5).cloned();
-    let id = crate::pending::defer(lua, host_scope(lua), pending, Int, callback, "World:fill_gradually")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, host_scope(lua), pending, Int, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn world_highest_block(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -5819,10 +5883,14 @@ fn world_locate_biome(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args:
     let this = HandleOf::<handles::World>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_id = arg(lua, args, 1, "id", Str)?;
     let a_options = arg(lua, args, 2, "options", Opt(codecs::BiomeSearchOptions))?;
+    let callback = crate::pending::callback(args.get(3))?;
+    let task = match callback { None => Some(api.waiting_task("World:locate_biome").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.world().locate_biome(&this, a_id, a_options).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(3).cloned();
-    let id = crate::pending::defer(lua, host_scope(lua), pending, Vec3Codec, callback, "World:locate_biome")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, host_scope(lua), pending, Vec3Codec, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn world_players(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -6124,10 +6192,14 @@ fn world_place_gradually(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, ar
     let a_id = arg(lua, args, 1, "id", Str)?;
     let a_position = arg(lua, args, 2, "position", Vec3Codec)?;
     let a_options = arg(lua, args, 3, "options", Opt(codecs::GradualPlaceOptions))?;
+    let callback = crate::pending::callback(args.get(4))?;
+    let task = match callback { None => Some(api.waiting_task("World:place_gradually").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.world().place_gradually(&this, a_id, a_position, a_options).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(4).cloned();
-    let id = crate::pending::defer(lua, host_scope(lua), pending, Int, callback, "World:place_gradually")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, host_scope(lua), pending, Int, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn world_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -7125,10 +7197,14 @@ fn database_query(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[V
     let this = HandleOf::<handles::Database>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_sql = arg(lua, args, 1, "sql", Str)?;
     let a_params = arg(lua, args, 2, "params", ANY)?;
+    let callback = crate::pending::callback(args.get(3))?;
+    let task = match callback { None => Some(api.waiting_task("Database:query").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.database().query(&this, a_sql, a_params).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(3).cloned();
-    let id = crate::pending::defer(lua, host_scope(lua), pending, List(Map(Str, ANY)), callback, "Database:query")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, host_scope(lua), pending, List(Map(Str, ANY)), callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn database_execute(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -7139,10 +7215,14 @@ fn database_execute(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &
     let this = HandleOf::<handles::Database>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_sql = arg(lua, args, 1, "sql", Str)?;
     let a_params = arg(lua, args, 2, "params", ANY)?;
+    let callback = crate::pending::callback(args.get(3))?;
+    let task = match callback { None => Some(api.waiting_task("Database:execute").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.database().execute(&this, a_sql, a_params).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(3).cloned();
-    let id = crate::pending::defer(lua, host_scope(lua), pending, codecs::DatabaseResult, callback, "Database:execute")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, host_scope(lua), pending, codecs::DatabaseResult, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn database_transaction(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -7152,10 +7232,14 @@ fn database_transaction(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, arg
     };
     let this = HandleOf::<handles::Database>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_statements = arg(lua, args, 1, "statements", List(codecs::DatabaseStatement))?;
+    let callback = crate::pending::callback(args.get(2))?;
+    let task = match callback { None => Some(api.waiting_task("Database:transaction").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.database().transaction(&this, a_statements).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(2).cloned();
-    let id = crate::pending::defer(lua, host_scope(lua), pending, List(codecs::DatabaseResult), callback, "Database:transaction")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, host_scope(lua), pending, List(codecs::DatabaseResult), callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn menu_id(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -8255,10 +8339,14 @@ fn wasminstance_call(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: 
     let this = HandleOf::<handles::WasmInstance>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_name = arg(lua, args, 1, "name", Str)?;
     let a_arguments = arg(lua, args, 2, "arguments", ANY)?;
+    let callback = crate::pending::callback(args.get(3))?;
+    let task = match callback { None => Some(api.waiting_task("WasmInstance:call").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.wasminstance().call(&this, a_name, a_arguments).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(3).cloned();
-    let id = crate::pending::defer(lua, host_scope(lua), pending, List(ANY), callback, "WasmInstance:call")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, host_scope(lua), pending, List(ANY), callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn wasminstance_call_text(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -8269,10 +8357,14 @@ fn wasminstance_call_text(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, a
     let this = HandleOf::<handles::WasmInstance>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_name = arg(lua, args, 1, "name", Str)?;
     let a_arguments = arg(lua, args, 2, "arguments", ANY)?;
+    let callback = crate::pending::callback(args.get(3))?;
+    let task = match callback { None => Some(api.waiting_task("WasmInstance:call_text").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.wasminstance().call_text(&this, a_name, a_arguments).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(3).cloned();
-    let id = crate::pending::defer(lua, host_scope(lua), pending, Str, callback, "WasmInstance:call_text")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, host_scope(lua), pending, Str, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn wasminstance_close(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -8381,10 +8473,14 @@ fn networkchannel_request(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, a
     let this = HandleOf::<handles::NetworkChannel>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
     let a_target = arg(lua, args, 1, "target", codecs::StringOrNetworkTarget)?;
     let a_data = arg(lua, args, 2, "data", ANY)?;
+    let callback = crate::pending::callback(args.get(3))?;
+    let task = match callback { None => Some(api.waiting_task("NetworkChannel:request").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.networkchannel().request(&this, a_target, a_data).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(3).cloned();
-    let id = crate::pending::defer(lua, host_scope(lua), pending, ANY, callback, "NetworkChannel:request")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, host_scope(lua), pending, ANY, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn networkchannel_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -8497,10 +8593,14 @@ fn networkmap_add(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[V
     let a_key = arg(lua, args, 1, "key", Str)?;
     let a_amount = arg(lua, args, 2, "amount", Num)?;
     let a_options = arg(lua, args, 3, "options", Opt(codecs::NetworkMapWriteOptions))?;
+    let callback = crate::pending::callback(args.get(4))?;
+    let task = match callback { None => Some(api.waiting_task("NetworkMap:add").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.networkmap().add(&this, a_key, a_amount, a_options).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(4).cloned();
-    let id = crate::pending::defer(lua, host_scope(lua), pending, Num, callback, "NetworkMap:add")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, host_scope(lua), pending, Num, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn networkmap_insert(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -8512,10 +8612,14 @@ fn networkmap_insert(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: 
     let a_key = arg(lua, args, 1, "key", Str)?;
     let a_data = arg(lua, args, 2, "data", ANY)?;
     let a_options = arg(lua, args, 3, "options", Opt(codecs::NetworkMapWriteOptions))?;
+    let callback = crate::pending::callback(args.get(4))?;
+    let task = match callback { None => Some(api.waiting_task("NetworkMap:insert").map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };
     let pending = api.networkmap().insert(&this, a_key, a_data, a_options).map_err(|e| mlua::Error::runtime(e.0))?;
-    let callback = args.get(4).cloned();
-    let id = crate::pending::defer(lua, host_scope(lua), pending, Bool, callback, "NetworkMap:insert")?;
-    Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))
+    let id = crate::pending::defer(lua, host_scope(lua), pending, Bool, callback)?;
+    match task {
+        Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }
+        None => Ok(MultiValue::new()),
+    }
 }
 
 fn networkmap_on(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
@@ -9640,14 +9744,14 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "nf.players", name: "known", method: false, waits: false, call: nf_players_known },
     Binding { class: "nf.players", name: "banned", method: false, waits: false, call: nf_players_banned },
     Binding { class: "nf.players", name: "whitelisted", method: false, waits: false, call: nf_players_whitelisted },
-    Binding { class: "nf.bots", name: "join", method: false, waits: false, call: nf_bots_join },
+    Binding { class: "nf.bots", name: "join", method: false, waits: true, call: nf_bots_join },
     Binding { class: "nf.bots", name: "all", method: false, waits: false, call: nf_bots_all },
     Binding { class: "nf.worlds", name: "all", method: false, waits: false, call: nf_worlds_all },
     Binding { class: "nf.worlds", name: "get", method: false, waits: false, call: nf_worlds_get },
     Binding { class: "nf.worlds", name: "create", method: false, waits: false, call: nf_worlds_create },
     Binding { class: "nf.worlds", name: "load", method: false, waits: false, call: nf_worlds_load },
-    Binding { class: "nf.worlds", name: "copy", method: false, waits: false, call: nf_worlds_copy },
-    Binding { class: "nf.worlds", name: "import", method: false, waits: false, call: nf_worlds_import },
+    Binding { class: "nf.worlds", name: "copy", method: false, waits: true, call: nf_worlds_copy },
+    Binding { class: "nf.worlds", name: "import", method: false, waits: true, call: nf_worlds_import },
     Binding { class: "nf.worlds", name: "default", method: false, waits: false, call: nf_worlds_default },
     Binding { class: "nf.structures", name: "exists", method: false, waits: false, call: nf_structures_exists },
     Binding { class: "nf.structures", name: "size", method: false, waits: false, call: nf_structures_size },
@@ -9700,7 +9804,7 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "nf.images", name: "create", method: false, waits: false, call: nf_images_create },
     Binding { class: "nf.images", name: "fill", method: false, waits: false, call: nf_images_fill },
     Binding { class: "nf.images", name: "decode", method: false, waits: false, call: nf_images_decode },
-    Binding { class: "nf.images", name: "download", method: false, waits: false, call: nf_images_download },
+    Binding { class: "nf.images", name: "download", method: false, waits: true, call: nf_images_download },
     Binding { class: "nf.files", name: "get", method: false, waits: false, call: nf_files_get },
     Binding { class: "nf.text", name: "escape", method: false, waits: false, call: nf_text_escape },
     Binding { class: "nf.text", name: "strip", method: false, waits: false, call: nf_text_strip },
@@ -9723,7 +9827,7 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "nf.encoding", name: "hex_decode", method: false, waits: false, call: nf_encoding_hex_decode },
     Binding { class: "nf.crypto", name: "hash", method: false, waits: false, call: nf_crypto_hash },
     Binding { class: "nf.crypto", name: "sign", method: false, waits: false, call: nf_crypto_sign },
-    Binding { class: "nf.http", name: "request", method: false, waits: false, call: nf_http_request },
+    Binding { class: "nf.http", name: "request", method: false, waits: true, call: nf_http_request },
     Binding { class: "nf.http", name: "stream", method: false, waits: false, call: nf_http_stream },
     Binding { class: "nf.http", name: "websocket", method: false, waits: false, call: nf_http_websocket },
     Binding { class: "nf.web", name: "route", method: false, waits: false, call: nf_web_route },
@@ -9731,8 +9835,8 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "nf.web", name: "verify_signature", method: false, waits: false, call: nf_web_verify_signature },
     Binding { class: "nf.web", name: "oauth", method: false, waits: false, call: nf_web_oauth },
     Binding { class: "nf.wasm", name: "functions", method: false, waits: false, call: nf_wasm_functions },
-    Binding { class: "nf.wasm", name: "instantiate", method: false, waits: false, call: nf_wasm_instantiate },
-    Binding { class: "nf.wasm", name: "run", method: false, waits: false, call: nf_wasm_run },
+    Binding { class: "nf.wasm", name: "instantiate", method: false, waits: true, call: nf_wasm_instantiate },
+    Binding { class: "nf.wasm", name: "run", method: false, waits: true, call: nf_wasm_run },
     Binding { class: "nf.wasm", name: "start", method: false, waits: false, call: nf_wasm_start },
     Binding { class: "nf.network", name: "server_name", method: false, waits: false, call: nf_network_server_name },
     Binding { class: "nf.network", name: "server_role", method: false, waits: false, call: nf_network_server_role },
@@ -9750,15 +9854,15 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "nf.network", name: "find_player", method: false, waits: false, call: nf_network_find_player },
     Binding { class: "nf.network", name: "channel", method: false, waits: false, call: nf_network_channel },
     Binding { class: "nf.network", name: "map", method: false, waits: false, call: nf_network_map },
-    Binding { class: "nf.network", name: "ban", method: false, waits: false, call: nf_network_ban },
-    Binding { class: "nf.network", name: "unban", method: false, waits: false, call: nf_network_unban },
-    Binding { class: "nf.network", name: "mute", method: false, waits: false, call: nf_network_mute },
-    Binding { class: "nf.network", name: "unmute", method: false, waits: false, call: nf_network_unmute },
+    Binding { class: "nf.network", name: "ban", method: false, waits: true, call: nf_network_ban },
+    Binding { class: "nf.network", name: "unban", method: false, waits: true, call: nf_network_unban },
+    Binding { class: "nf.network", name: "mute", method: false, waits: true, call: nf_network_mute },
+    Binding { class: "nf.network", name: "unmute", method: false, waits: true, call: nf_network_unmute },
     Binding { class: "nf.network", name: "is_banned", method: false, waits: false, call: nf_network_is_banned },
     Binding { class: "nf.network", name: "is_muted", method: false, waits: false, call: nf_network_is_muted },
     Binding { class: "nf.network", name: "report", method: false, waits: false, call: nf_network_report },
-    Binding { class: "nf.network", name: "send_player", method: false, waits: false, call: nf_network_send_player },
-    Binding { class: "nf.network", name: "send_players", method: false, waits: false, call: nf_network_send_players },
+    Binding { class: "nf.network", name: "send_player", method: false, waits: true, call: nf_network_send_player },
+    Binding { class: "nf.network", name: "send_players", method: false, waits: true, call: nf_network_send_players },
     Binding { class: "nf.time", name: "format", method: false, waits: false, call: nf_time_format },
     Binding { class: "nf.time", name: "parse", method: false, waits: false, call: nf_time_parse },
     Binding { class: "nf.time", name: "duration", method: false, waits: false, call: nf_time_duration },
@@ -10201,7 +10305,7 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "Player", name: "on", method: true, waits: false, call: player_on },
     Binding { class: "Player", name: "once", method: true, waits: false, call: player_once },
     Binding { class: "Bot", name: "leave", method: true, waits: false, call: bot_leave },
-    Binding { class: "Bot", name: "walk_to", method: true, waits: false, call: bot_walk_to },
+    Binding { class: "Bot", name: "walk_to", method: true, waits: true, call: bot_walk_to },
     Binding { class: "Bot", name: "stop", method: true, waits: false, call: bot_stop },
     Binding { class: "Bot", name: "look_at", method: true, waits: false, call: bot_look_at },
     Binding { class: "Bot", name: "jump", method: true, waits: false, call: bot_jump },
@@ -10214,7 +10318,7 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "Bot", name: "release_item", method: true, waits: false, call: bot_release_item },
     Binding { class: "Bot", name: "swing", method: true, waits: false, call: bot_swing },
     Binding { class: "Bot", name: "use_block", method: true, waits: false, call: bot_use_block },
-    Binding { class: "Bot", name: "break_block", method: true, waits: false, call: bot_break_block },
+    Binding { class: "Bot", name: "break_block", method: true, waits: true, call: bot_break_block },
     Binding { class: "Bot", name: "swap_hands", method: true, waits: false, call: bot_swap_hands },
     Binding { class: "Bot", name: "drop_item", method: true, waits: false, call: bot_drop_item },
     Binding { class: "Bot", name: "click_slot", method: true, waits: false, call: bot_click_slot },
@@ -10248,11 +10352,11 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "World", name: "flood", method: true, waits: false, call: world_flood },
     Binding { class: "World", name: "set_block", method: true, waits: false, call: world_set_block },
     Binding { class: "World", name: "fill_blocks", method: true, waits: false, call: world_fill_blocks },
-    Binding { class: "World", name: "fill_gradually", method: true, waits: false, call: world_fill_gradually },
+    Binding { class: "World", name: "fill_gradually", method: true, waits: true, call: world_fill_gradually },
     Binding { class: "World", name: "highest_block", method: true, waits: false, call: world_highest_block },
     Binding { class: "World", name: "is_chunk_loaded", method: true, waits: false, call: world_is_chunk_loaded },
     Binding { class: "World", name: "load_chunk", method: true, waits: false, call: world_load_chunk },
-    Binding { class: "World", name: "locate_biome", method: true, waits: false, call: world_locate_biome },
+    Binding { class: "World", name: "locate_biome", method: true, waits: true, call: world_locate_biome },
     Binding { class: "World", name: "players", method: true, waits: false, call: world_players },
     Binding { class: "World", name: "centities", method: true, waits: false, call: world_centities },
     Binding { class: "World", name: "entities", method: true, waits: false, call: world_entities },
@@ -10279,7 +10383,7 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "World", name: "border", method: true, waits: false, call: world_border },
     Binding { class: "World", name: "save_structure", method: true, waits: false, call: world_save_structure },
     Binding { class: "World", name: "place_structure", method: true, waits: false, call: world_place_structure },
-    Binding { class: "World", name: "place_gradually", method: true, waits: false, call: world_place_gradually },
+    Binding { class: "World", name: "place_gradually", method: true, waits: true, call: world_place_gradually },
     Binding { class: "World", name: "on", method: true, waits: false, call: world_on },
     Binding { class: "World", name: "once", method: true, waits: false, call: world_once },
     Binding { class: "WorldBorder", name: "center", method: true, waits: false, call: worldborder_center },
@@ -10383,9 +10487,9 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "Team", name: "collision", method: true, waits: false, call: team_collision },
     Binding { class: "Team", name: "set_collision", method: true, waits: false, call: team_set_collision },
     Binding { class: "Team", name: "remove", method: true, waits: false, call: team_remove },
-    Binding { class: "Database", name: "query", method: true, waits: false, call: database_query },
-    Binding { class: "Database", name: "execute", method: true, waits: false, call: database_execute },
-    Binding { class: "Database", name: "transaction", method: true, waits: false, call: database_transaction },
+    Binding { class: "Database", name: "query", method: true, waits: true, call: database_query },
+    Binding { class: "Database", name: "execute", method: true, waits: true, call: database_execute },
+    Binding { class: "Database", name: "transaction", method: true, waits: true, call: database_transaction },
     Binding { class: "Menu", name: "id", method: true, waits: false, call: menu_id },
     Binding { class: "Menu", name: "kind", method: true, waits: false, call: menu_kind },
     Binding { class: "Menu", name: "template", method: true, waits: false, call: menu_template },
@@ -10496,8 +10600,8 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "OAuthFlow", name: "on", method: true, waits: false, call: oauthflow_on },
     Binding { class: "OAuthFlow", name: "once", method: true, waits: false, call: oauthflow_once },
     Binding { class: "WasmInstance", name: "module", method: true, waits: false, call: wasminstance_module },
-    Binding { class: "WasmInstance", name: "call", method: true, waits: false, call: wasminstance_call },
-    Binding { class: "WasmInstance", name: "call_text", method: true, waits: false, call: wasminstance_call_text },
+    Binding { class: "WasmInstance", name: "call", method: true, waits: true, call: wasminstance_call },
+    Binding { class: "WasmInstance", name: "call_text", method: true, waits: true, call: wasminstance_call_text },
     Binding { class: "WasmInstance", name: "close", method: true, waits: false, call: wasminstance_close },
     Binding { class: "WasmProcess", name: "module", method: true, waits: false, call: wasmprocess_module },
     Binding { class: "WasmProcess", name: "state", method: true, waits: false, call: wasmprocess_state },
@@ -10508,7 +10612,7 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "WasmProcess", name: "once", method: true, waits: false, call: wasmprocess_once },
     Binding { class: "NetworkChannel", name: "name", method: true, waits: false, call: networkchannel_name },
     Binding { class: "NetworkChannel", name: "publish", method: true, waits: false, call: networkchannel_publish },
-    Binding { class: "NetworkChannel", name: "request", method: true, waits: false, call: networkchannel_request },
+    Binding { class: "NetworkChannel", name: "request", method: true, waits: true, call: networkchannel_request },
     Binding { class: "NetworkChannel", name: "on", method: true, waits: false, call: networkchannel_on },
     Binding { class: "NetworkChannel", name: "once", method: true, waits: false, call: networkchannel_once },
     Binding { class: "NetworkHold", name: "release", method: true, waits: false, call: networkhold_release },
@@ -10519,8 +10623,8 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "NetworkMap", name: "all", method: true, waits: false, call: networkmap_all },
     Binding { class: "NetworkMap", name: "set", method: true, waits: false, call: networkmap_set },
     Binding { class: "NetworkMap", name: "delete", method: true, waits: false, call: networkmap_delete },
-    Binding { class: "NetworkMap", name: "add", method: true, waits: false, call: networkmap_add },
-    Binding { class: "NetworkMap", name: "insert", method: true, waits: false, call: networkmap_insert },
+    Binding { class: "NetworkMap", name: "add", method: true, waits: true, call: networkmap_add },
+    Binding { class: "NetworkMap", name: "insert", method: true, waits: true, call: networkmap_insert },
     Binding { class: "NetworkMap", name: "on", method: true, waits: false, call: networkmap_on },
     Binding { class: "NetworkMap", name: "once", method: true, waits: false, call: networkmap_once },
     Binding { class: "Cutscene", name: "kind", method: true, waits: false, call: cutscene_kind },

@@ -556,8 +556,8 @@ export function codecsRust(bindings: Bindings, spec: ApiSpec): string {
     }
   lines.push(
     '/// Reads `value` as writable field `name` of event payload `shape`, as it will be read back',
-    "/// once the handlers have run: what a handler assigning it is checked against. `None` for",
-    '/// a field that isn\'t a writable one.',
+    '/// once the handlers have run: what a handler assigning it is checked against. `None` for',
+    "/// a field that isn't a writable one.",
     'pub fn check_field(lua: &Lua, shape: &str, name: &str, value: Value, at: &str) -> Option<crate::ApiResult<()>> {',
     '    let _ = (&lua, &value, &at);',
     '    match (shape, name) {',
@@ -651,13 +651,18 @@ function glue(binding: ClassBinding, fn: FnBinding): string[] {
       break
     }
     case 'async':
-      // The work has started (or the call failed, keeping nothing): only now is the callback
-      // kept, and the wait's id goes back for `Task:cancel`.
+      // Its two forms: a callback, called with `value, err` once the work is done (the call returns
+      // nothing), or, without one and inside a task, the task waits and is resumed with `value, err`.
+      // A mistaken callback, or no callback outside a task, is said before any work starts.
       lines.push(
+        `let callback = crate::pending::callback(args.get(${index}))?;`,
+        `let task = match callback { None => Some(api.waiting_task(${JSON.stringify(called(binding, fn))}).map_err(|e| mlua::Error::runtime(e.0))?), Some(_) => None };`,
         `let pending = ${invoke}.map_err(|e| mlua::Error::runtime(e.0))?;`,
-        `let callback = args.get(${index}).cloned();`,
-        `let id = crate::pending::defer(lua, ${scope}, pending, ${codecExpr(returns.codec)}, callback, ${JSON.stringify(called(binding, fn))})?;`,
-        'Ok(MultiValue::from_vec(vec![Value::Number(id as f64)]))',
+        `let id = crate::pending::defer(lua, ${scope}, pending, ${codecExpr(returns.codec)}, callback)?;`,
+        'match task {',
+        '    Some(task) => { api.wait_on(task, id); Ok(MultiValue::from_vec(vec![crate::bind::waiting(lua)?])) }',
+        '    None => Ok(MultiValue::new()),',
+        '}',
       )
       break
   }
@@ -697,7 +702,7 @@ export function bindRust(classes: ClassBinding[]): string {
     for (const fn of binding.functions) {
       lines.push(...glue(binding, fn))
       entries.push(
-        `    Binding { class: ${JSON.stringify(binding.cls.name)}, name: ${JSON.stringify(fn.fn.name)}, method: ${fn.method}, waits: ${!!fn.fn.waits}, call: ${glueName(binding, fn)} },`,
+        `    Binding { class: ${JSON.stringify(binding.cls.name)}, name: ${JSON.stringify(fn.fn.name)}, method: ${fn.method}, waits: ${!!fn.fn.waits || fn.returns.kind === 'async'}, call: ${glueName(binding, fn)} },`,
       )
     }
   lines.push(

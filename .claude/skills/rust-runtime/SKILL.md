@@ -258,10 +258,10 @@ refuses assignment. Handle methods use the running scope, as before.
 ## Async values (`crates/api/src/pending.rs`)
 
 An `async` function's trait method returns a `Pending<T>` (a future). The binding hands it to
-`pending::defer` with the script's callback and returns the wait's id. `pending::deliver`
-polls every wait once at the room's tick boundary and calls back the ready ones (through the
-host's guarded call) with `value, err`. Nothing is delivered inside the call, and game logic
-never runs off the room's thread. Tasks waiting on a value come with the prelude's tasks.
+`pending::defer` with the script's callback, or none for the waiting form. `pending::deliver`
+polls every wait once at the room's tick boundary and hands back the ready ones, which the room
+calls back (through the host's guarded call) or wakes their task with, `value, err`. Nothing is
+delivered inside the call, and game logic never runs off the room's thread.
 
 - **The events registry** (`events.rs`, `crate::events`): every built-in event with its owner,
   payload shape, `cancellable`, `bubbles`, `writable`, `options`, `local` and `since`, and
@@ -308,10 +308,17 @@ Kotlin `Scripts`, in Rust, implementing `nf.on`/`once`/`emit`, `nf.after`/`every
   fields), so a mistake is an error at the handler's line: `bad value for event.message (string or
 nil expected, got number)`, Kotlin's words.
 
+- **Async values** are delivered at the start of each tick (`pending::deliver`, `deliver_async`):
+  to the callback, as its scope's code (not if the scope has stopped), or, for the waiting form
+  (called without a callback, in a task), to the task, resumed with `value, err`. The binding asks
+  `Runtime::waiting_task` before any work starts (outside a task: Kotlin's "only works inside a
+  task"), registers the wait (`wait_on`, `Wait::Async`) and yields through the host's waiting
+  wrapper; a callback that isn't a function is refused first too. The callback form returns
+  nothing, as the spec says. Ending a waiting task drops its wait (`pending::cancel`).
+
 Not ported yet (the Kotlin runtime does them): `:on` on handles other than `nf` (it needs each
 service's liveness), `nf.wait_for` on a handle, the per-scope time per tick (`maxTickMillis`, which
-holds back timers and tick handlers), time per scope and the profiler, and an async function's
-waiting form (no callback, in a task).
+holds back timers and tick handlers), and time per scope and the profiler.
 
 ## Modules (`crates/runtime/src/modules.rs`)
 

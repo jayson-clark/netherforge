@@ -81,6 +81,14 @@ impl Runtime for Api {
             netherforge_format::manifest::FILE_NAME
         )))
     }
+
+    fn waiting_task(&self, called: &str) -> ApiResult<u64> {
+        self.scripts.waiting_task(called)
+    }
+
+    fn wait_on(&self, task: u64, wait: u64) {
+        self.scripts.wait_on(task, wait);
+    }
 }
 
 impl LuaApi for Api {

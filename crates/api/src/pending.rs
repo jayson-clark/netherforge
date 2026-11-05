@@ -1,8 +1,8 @@
 //! An `async` function's value, delivered later. The work runs elsewhere
 //! (the runtime's pool); its future is polled at the room's tick boundary,
-//! and the value reaches the script there as `value, err`, to its callback.
-//! Game logic never runs anywhere but the room's own thread. (Tasks waiting
-//! on a value come with the prelude's tasks.)
+//! and the value reaches the script there as `value, err`: to its callback, or
+//! (called without one, in a task) to the task waiting on it. Game logic never
+//! runs anywhere but the room's own thread.
 
 use std::collections::BTreeMap;
 use std::task::{Context, Poll, Waker};
@@ -29,25 +29,29 @@ pub struct Waits {
     waits: BTreeMap<u64, Wait>,
 }
 
+/// An async function's callback argument: a function, or none for its waiting form; anything else is a mistake,
+/// said before any work starts.
+pub fn callback(value: Option<&Value>) -> mlua::Result<Option<Function>> {
+    match value {
+        None | Some(Value::Nil) => Ok(None),
+        Some(Value::Function(f)) => Ok(Some(f.clone())),
+        Some(other) => Err(mlua::Error::runtime(format!(
+            "bad argument 'callback' (function or nil expected, got {})",
+            crate::codec::type_name(other)
+        ))),
+    }
+}
+
 /// Keeps `pending` until it's ready, then hands its value (pushed with
-/// `codec`) or its error to `callback`. Returns the wait's id.
+/// `codec`) or its error to `callback`, or, without one, to whoever waits on
+/// the wait's id. Returns the id.
 pub fn defer<C: Codec + 'static>(
     lua: &Lua,
     scope: Option<ScopeId>,
     mut pending: Pending<C::T>,
     codec: C,
-    callback: Option<Value>,
-    called: &str,
+    callback: Option<Function>,
 ) -> mlua::Result<u64> {
-    let callback = match callback {
-        None | Some(Value::Nil) => None,
-        Some(Value::Function(f)) => Some(f),
-        Some(_) => {
-            return Err(mlua::Error::runtime(format!(
-                "bad argument to {called} (a function to call with the result expected)"
-            )));
-        }
-    };
     let mut codec = Some(codec);
     let poll = Box::new(
         move |cx: &mut Context<'_>| match pending.as_mut().poll(cx) {
@@ -78,17 +82,24 @@ pub fn defer<C: Codec + 'static>(
     Ok(id)
 }
 
-/// Polls every wait once, and calls back those that are ready, through
-/// `call` (the host's guarded call, for the wait's scope). The room calls it at
-/// each tick boundary.
-pub fn deliver(
-    lua: &Lua,
-    mut call: impl FnMut(Option<ScopeId>, &Function, Value, Value),
-) -> mlua::Result<()> {
+/// A wait whose value is ready: its id, the scope it belongs to, its callback (none: a task waits on it), and
+/// `value, err`.
+pub struct Ready {
+    pub id: u64,
+    pub scope: Option<ScopeId>,
+    pub callback: Option<Function>,
+    pub value: Value,
+    pub err: Value,
+}
+
+/// Polls every wait once, and hands over those that are ready, in the order they were made. The room calls it
+/// at each tick boundary, and calls each one's callback (through the host's guarded call, for its scope) or
+/// wakes the task waiting on it.
+pub fn deliver(lua: &Lua) -> mlua::Result<Vec<Ready>> {
     let mut ready = Vec::new();
     {
         let Some(mut waits) = lua.app_data_mut::<Waits>() else {
-            return Ok(());
+            return Ok(Vec::new());
         };
         let mut cx = Context::from_waker(Waker::noop());
         let ids: Vec<u64> = waits.waits.keys().copied().collect();
@@ -96,17 +107,22 @@ pub fn deliver(
             let wait = waits.waits.get_mut(&id).expect("listed");
             if let Poll::Ready(deliver) = (wait.poll)(&mut cx) {
                 let wait = waits.waits.remove(&id).expect("listed");
-                ready.push((wait.scope, wait.callback, deliver));
+                ready.push((id, wait.scope, wait.callback, deliver));
             }
         }
     }
-    for (scope, callback, deliver) in ready {
+    let mut out = Vec::with_capacity(ready.len());
+    for (id, scope, callback, deliver) in ready {
         let (value, err) = deliver(lua)?;
-        if let Some(f) = callback {
-            call(scope, &f, value, err);
-        }
+        out.push(Ready {
+            id,
+            scope,
+            callback,
+            value,
+            err,
+        });
     }
-    Ok(())
+    Ok(out)
 }
 
 /// Forgets a wait (`Task:cancel`): its value is dropped when it comes.

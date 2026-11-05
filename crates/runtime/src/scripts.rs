@@ -126,6 +126,8 @@ enum Wait {
     },
     /// `nf.wait_for`: a subscription that wakes it with the event.
     Event { sub: u64, filter: Option<Function> },
+    /// An `async` function's waiting form: the wait (`pending`'s id) whose `value, err` wakes it.
+    Async(u64),
 }
 
 struct Task {
@@ -412,6 +414,7 @@ impl Scripts {
             state.tick += 1;
             state.tick
         };
+        self.deliver_async();
         self.run_timers(now);
         self.check_wait_untils(now);
         let host = self.host();
@@ -963,6 +966,10 @@ impl Scripts {
             Some(Wait::Event { sub, .. }) => {
                 self.unsubscribe(sub);
             }
+            // Nothing is delivered now (the work itself goes on).
+            Some(Wait::Async(wait)) => {
+                netherforge_api::pending::cancel(self.host().lua(), wait);
+            }
             _ => {}
         }
         true
@@ -976,6 +983,7 @@ impl Scripts {
                 (Some(Wait::Timer(a)), Wait::Timer(b)) => a == b,
                 (Some(Wait::Event { sub: a, .. }), Wait::Event { sub: b, .. }) => a == b,
                 (Some(Wait::Until { .. }), Wait::Until { .. }) => true,
+                (Some(Wait::Async(a)), Wait::Async(b)) => a == b,
                 _ => false,
             }
         };
@@ -986,6 +994,59 @@ impl Scripts {
             task.waiting = None;
         }
         self.resume(id, values);
+    }
+
+    /// Hands every async value that's ready to its callback (as its scope's code, unless the scope has
+    /// stopped by then) or to the task waiting on it.
+    fn deliver_async(&self) {
+        let host = self.host();
+        let Ok(ready) = netherforge_api::pending::deliver(host.lua()) else {
+            return;
+        };
+        for it in ready {
+            match it.callback {
+                Some(callback) => {
+                    let Some(scope) = it.scope.filter(|s| self.is_live(*s)) else {
+                        continue;
+                    };
+                    let budget = self.budget(scope);
+                    if let Err(failure) =
+                        host.invoke::<()>(scope, budget, &callback, (it.value, it.err))
+                    {
+                        self.report(scope, "callback", failure, false);
+                    }
+                }
+                None => {
+                    let task = self
+                        .0
+                        .state
+                        .borrow()
+                        .tasks
+                        .iter()
+                        .find(|(_, t)| matches!(t.waiting, Some(Wait::Async(w)) if w == it.id))
+                        .map(|(id, _)| *id);
+                    if let Some(task) = task {
+                        self.wake(
+                            task,
+                            Wait::Async(it.id),
+                            MultiValue::from_vec(vec![it.value, it.err]),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// The task waiting form of an async function `called` runs in: the running task's own code, or an error.
+    pub fn waiting_task(&self, called: &str) -> ApiResult<u64> {
+        self.running_task(called)
+    }
+
+    /// Task `task` waits for async wait `wait`.
+    pub fn wait_on(&self, task: u64, wait: u64) {
+        if let Some(t) = self.0.state.borrow_mut().tasks.get_mut(&task) {
+            t.waiting = Some(Wait::Async(wait));
+        }
     }
 
     /// The task whose own code is running, for a wait called `what`; an error

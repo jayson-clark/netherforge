@@ -17,6 +17,9 @@ struct Fake {
     callers: RefCell<Vec<ScopeId>>,
     bars: RefCell<Vec<shapes::BossBarOptions>>,
     joins: RefCell<Vec<(String, bool)>>,
+    /// Whether a task is running (the waiting form's), and the waits it was put on.
+    in_task: std::cell::Cell<bool>,
+    waits: RefCell<Vec<(u64, u64)>>,
 }
 
 impl Runtime for Fake {
@@ -27,6 +30,15 @@ impl Runtime for Fake {
         Err(ApiError(format!(
             "{called} needs `{requirement}` in requires"
         )))
+    }
+    fn waiting_task(&self, called: &str) -> ApiResult<u64> {
+        if self.in_task.get() {
+            return Ok(7);
+        }
+        Err(ApiError(format!("{called} only works inside a task")))
+    }
+    fn wait_on(&self, task: u64, wait: u64) {
+        self.waits.borrow_mut().push((task, wait));
     }
 }
 
@@ -303,14 +315,71 @@ nf.bots.join('nobody', nil, nil, function(bot, err) got.taken = err end)",
     let before: Value = run(&host, s, "return got.bot").unwrap();
     assert!(before.is_nil());
     let lua = host.lua();
-    pending::deliver(lua, |scope, f, value, err| {
-        host.invoke::<()>(scope.unwrap(), 1_000_000, f, (value, err))
-            .unwrap();
-    })
-    .unwrap();
+    for ready in pending::deliver(lua).unwrap() {
+        let f = ready.callback.expect("a callback form");
+        host.invoke::<()>(
+            ready.scope.unwrap(),
+            1_000_000,
+            &f,
+            (ready.value, ready.err),
+        )
+        .unwrap();
+    }
     let after: (String, Value, String) =
         run(&host, s, "return got.bot, got.err, got.taken").unwrap();
     assert_eq!(after.0, "Bot Alex");
     assert!(after.1.is_nil());
     assert_eq!(after.2, "that name is taken");
+}
+
+#[test]
+fn an_async_functions_waiting_form_waits_in_a_task_and_is_refused_elsewhere() {
+    let (host, fake) = setup();
+    let s = scope(&host, "s");
+    // Outside a task, without a callback: refused before any work starts, as a string at the line.
+    let message: String = run(
+        &host,
+        s,
+        "local ok, why = pcall(nf.bots.join, 'Alex') return type(why) .. ' ' .. why",
+    )
+    .unwrap();
+    assert_eq!(
+        message,
+        "string modules/t/init.lua:1: nf.bots.join only works inside a task"
+    );
+    assert!(fake.joins.borrow().is_empty());
+    // A callback that isn't a function is a mistake, before the work too.
+    let message = error_of(run(&host, s, "nf.bots.join('Alex', nil, nil, 5)"));
+    assert!(
+        message.contains("bad argument 'callback' (function or nil expected, got number)"),
+        "{message}"
+    );
+    assert!(fake.joins.borrow().is_empty());
+
+    // In a task: the work starts, the task waits on it, and is resumed with `value, err`.
+    fake.in_task.set(true);
+    run::<()>(
+        &host,
+        s,
+        "co = coroutine.create(function() return nf.bots.join('Alex') end)
+first = { coroutine.resume(co) }",
+    )
+    .unwrap();
+    assert_eq!(*fake.joins.borrow(), [("Alex".to_owned(), false)]);
+    let status: String = run(&host, s, "return coroutine.status(co)").unwrap();
+    assert_eq!(status, "suspended", "it yields until the value comes");
+    let ready = pending::deliver(host.lua()).unwrap();
+    assert_eq!(ready.len(), 1);
+    assert!(
+        ready[0].callback.is_none(),
+        "no callback: a task waits on it"
+    );
+    assert_eq!(*fake.waits.borrow(), [(7, ready[0].id)]);
+    // What the runtime does with it: resumes the task with `value, err`.
+    let co: netherforge_luau::mlua::Thread = host.env(s).unwrap().get("co").unwrap();
+    let (bot, err): (Value, Value) = co
+        .resume((ready[0].value.clone(), ready[0].err.clone()))
+        .unwrap();
+    assert_eq!(bot.to_string().unwrap(), "Bot Alex");
+    assert!(err.is_nil());
 }
