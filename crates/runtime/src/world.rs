@@ -4,7 +4,7 @@
 //! `sweep`, `nearest`, `centities`) go to the centities' spatial index.
 //!
 //! Not yet, each with the area it needs: skies, gradual fills and structures, `locate_biome` (the workers),
-//! spawning entities and items, managed worlds (`create`, `load`, `copy`, `import`, `unload`). `blocks`'
+//! managed worlds (`create`, `load`, `copy`, `import`, `unload`). `blocks`'
 //! `custom` and `flood`'s project blocks wait for custom blocks: until then no block is a project block.
 
 use std::collections::{HashMap, HashSet};
@@ -1041,7 +1041,71 @@ impl WorldApi for GameContext {
         location_or_position: unions::LocationOrVec3,
         options: Option<shapes::EntitySpawnOptions>,
     ) -> ApiResult<Option<handles::Entity>> {
-        <Unported as WorldApi>::spawn_entity(&Unported, this, kind, location_or_position, options)
+        let id = game::normalize(&kind);
+        if !game::is_id(&kind) || !self.platform().world_entities().spawnable(id.clone()) {
+            return Err(err(format!(
+                "\"{kind}\" isn't an entity this server can spawn"
+            )));
+        }
+        let at = place_in(location_or_position, &this.name)?;
+        let (custom_name, tags, data, velocity) = match options {
+            Some(o) => (
+                o.custom_name,
+                o.tags.unwrap_or_default(),
+                o.data,
+                o.velocity,
+            ),
+            None => (None, Vec::new(), Value::Nil, None),
+        };
+        for tag in &tags {
+            if tag.is_empty()
+                || !tag
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "_.+-".contains(c))
+            {
+                return Err(err(format!(
+                    "\"{tag}\" isn't a tag: letters, digits, _, -, . and +"
+                )));
+            }
+        }
+        let data = match data {
+            Value::Nil => None,
+            Value::Table(_) => {
+                let host = self.scripts.host();
+                let encoded = netherforge_luau::json::encode(
+                    &host,
+                    &data,
+                    "options.data",
+                    "saved",
+                    &netherforge_api::handle::SavedHandles,
+                )
+                .map_err(|e| err(format!("{e:?}")))?;
+                if let Some(problem) = encoded.problems.into_iter().next() {
+                    return Err(err(problem));
+                }
+                encoded.text.filter(|t| t != "{}" && t != "[]")
+            }
+            _ => {
+                return Err(err(
+                    "options.data must be a table of your own values, like { guard = true }",
+                ));
+            }
+        };
+        if self.live(this).is_none() {
+            return Ok(None);
+        }
+        let setup = netherforge_platform::SpawnSetup {
+            custom_name: custom_name.map(|t| t.0),
+            tags,
+            data,
+            velocity: velocity.map(|v| vec(&v)),
+        };
+        let lua = self.scripts.host().lua().clone();
+        Ok(self
+            .platform()
+            .world_entities()
+            .spawn(id, at, setup)
+            .map(|entity| self.shared.entity_by_id(&lua, entity)))
     }
 
     fn spawn_item(
@@ -1050,7 +1114,15 @@ impl WorldApi for GameContext {
         position: values::Vec3,
         item: values::Item,
     ) -> ApiResult<Option<handles::DroppedItem>> {
-        <Unported as WorldApi>::spawn_item(&Unported, this, position, item)
+        let item = crate::items::from_value(&item, "item", self.platform().game()).map_err(err)?;
+        let Some(world) = self.live(this) else {
+            return Ok(None);
+        };
+        Ok(self
+            .platform()
+            .world_entities()
+            .spawn_item(world.to_owned(), vec(&position), item)
+            .map(|id| handles::DroppedItem { id: uuid_text(&id) }))
     }
 
     fn spawn_particle(

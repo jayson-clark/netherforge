@@ -234,6 +234,21 @@ impl netherforge_platform::FakeWorldEntityOps for Fake {
     ) -> Option<netherforge_platform::EntityHit> {
         None
     }
+    fn spawnable(&self, kind: String) -> bool {
+        kind == "minecraft:pig"
+    }
+    fn spawn(
+        &self,
+        kind: String,
+        at: Location,
+        setup: netherforge_platform::SpawnSetup,
+    ) -> Option<Uuid> {
+        self.call(format!(
+            "spawn {kind} at {} {:?} {:?} {:?}",
+            at.x, setup.custom_name, setup.tags, setup.data
+        ));
+        Some(Uuid(600))
+    }
     fn number(&self, _: Uuid, number: netherforge_platform::EntityNumber) -> Option<f64> {
         use netherforge_platform::EntityNumber;
         matches!(number, EntityNumber::Health | EntityNumber::MaxHealth).then_some(20.0)
@@ -2368,5 +2383,37 @@ print(alex:play_sound("block.note_block.pling"), pcall(alex.spawn_particle, alex
             "sound world minecraft:entity.pig.ambient 1 1.5",
             "sound to 77 minecraft:block.note_block.pling",
         ]
+    );
+}
+
+#[test]
+fn a_world_spawns_entities_with_their_tags_and_data() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/farm/init.lua",
+            r#"
+local w = nf.worlds.default()
+local pig = w:spawn_entity("pig", vector.create(3, 64, 0), { custom_name = "Wilbur", tags = { "farm" }, data = { home = w, age = 2 } })
+print(pig ~= nil, pcall(w.spawn_entity, w, "dragon", vector.create(0, 64, 0)))
+print(pcall(w.spawn_entity, w, "pig", vector.create(0, 64, 0), { tags = { "no spaces" } }))
+print(pcall(w.spawn_entity, w, "pig", vector.create(0, 64, 0), { data = 5 }))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "true\tfalse\tmodules/farm/init.lua:4: \"dragon\" isn't an entity this server can spawn",
+            "false\tmodules/farm/init.lua:5: \"no spaces\" isn't a tag: letters, digits, _, -, . and +",
+            "false\tmodules/farm/init.lua:6: options.data must be a table of your own values, like { guard = true }",
+        ]
+    );
+    assert!(
+        calls.contains(&r#"spawn minecraft:pig at 3 Some("Wilbur") ["farm"] Some("{\"age\":2,\"home\":{\"$world\":[\"world\"]}}")"#.to_owned()),
+        "{calls:?}"
     );
 }
