@@ -404,6 +404,7 @@ installs the centity classes; `Room::new` leaves them unported.
 
 **The API and an instance's life** (`centity/api.rs`, `CentityContext`: Kotlin's `NfCentitiesImpl`,
 `CentityImpl`, `NodeImpl` and the lifecycle half of `Centities`):
+
 - `spawn` makes the entities, runs the centity's script in a scope of its own (`Modules::script_with`,
   labelled `centity lamp 00000000`, its memory key the centity's folder) with `this` its handle, then
   raises `spawn`. A bare `Vec3` means the calling centity script's own world, else the server's default.
@@ -418,7 +419,7 @@ installs the centity classes; `Room::new` leaves them unported.
 - A handle outlives what it names: once it's gone, getters answer nil/false/empty and setters do nothing.
 - **Unported methods are explicit**: the class traits have no defaults, so `CentityApi` and `NodeApi`
   implement what's ported and delegate the rest one by one to `Unported` (`CentityApi::damage(&Unported,
-  this, amount, options)`), in the "not ported yet" part of each impl. Porting one moves it up.
+this, amount, options)`), in the "not ported yet" part of each impl. Porting one moves it up.
 - Centities are defined before modules start (the services' order): a module's body may spawn one.
 - **Animations** (`animation.rs`, Kotlin's `AnimationPlayer`): clips by their centity and index (nothing
   copied per play), applied in start order, additive ones last; the pose is rest plus clips
@@ -432,7 +433,7 @@ installs the centity classes; `Room::new` leaves them unported.
 - **Hitboxes** (`hitboxes.rs`, Kotlin's `Hitboxes`): a node's hitbox is an interaction entity with a
   square footprint around its boxes as placed (`bounds`), riding the anchor entity when it stands at the
   anchor and on its own anywhere else; hidden or unclickable, it collapses to a sliver. `shape:
-  collision` is the unit cube until the game's collision boxes reach the runtime.
+collision` is the unit cube until the game's collision boxes reach the runtime.
 - **Clicks** (`CentityContext::click`, `Session::entity_clicked`, what `PlatformEvents::entity_clicked`
   will call): with a line of sight, the nearest hitbox it meets (a `raycast` node's own boxes, any other's
   bounds), else the entity the client picked; then `click` on that node, each node above it, the
