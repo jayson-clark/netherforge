@@ -51,49 +51,6 @@ pub const INVISIBLE_MODEL: &str = "netherforge:invisible";
 const HIDDEN: &str = "hidden";
 const BLOCK_MODELS: &str = "block/";
 
-/// The engine's pixel glyphs (format's `DisplayGlyphs`), which draw image displays: run `2^k` is
-/// `PIXEL_START + k`, one white picture each.
-pub mod display_glyphs {
-    pub const PIXEL_START: u32 = 0xF840;
-    pub const RUNS: u32 = 8;
-    /// A pixel glyph's drawn height: a line.
-    pub const PIXEL_HEIGHT: i32 = 10;
-    /// Ascent that puts a glyph's top at its line's top.
-    pub const TOP_ASCENT: i32 = 7;
-    pub const NAMESPACE: &str = "netherforge";
-
-    /// The character of the run glyph for `2^k` pixels.
-    pub fn run_char(k: u32) -> char {
-        char::from_u32(PIXEL_START + k).expect("a private-use character")
-    }
-
-    /// Every file the pixel glyphs need in a pack, path to bytes.
-    pub fn pictures() -> Vec<(String, Vec<u8>)> {
-        (0..RUNS)
-            .map(|k| {
-                let width = 1u32 << k;
-                let white = vec![u32::MAX; width as usize];
-                (
-                    format!("assets/{NAMESPACE}/textures/font/pixel_{width}.png"),
-                    crate::png::write(width, 1, &white),
-                )
-            })
-            .collect()
-    }
-
-    /// Each run glyph's provider: its picture's resource key and its character.
-    pub fn providers() -> Vec<(String, char)> {
-        (0..RUNS)
-            .map(|k| {
-                (
-                    format!("{NAMESPACE}:font/pixel_{}.png", 1u32 << k),
-                    run_char(k),
-                )
-            })
-            .collect()
-    }
-}
-
 /// A video's converted sound for the pack: the video `id` of `namespace`, whose whole sound is `project_path`
 /// and whose pieces are `chunks`, in order.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -744,14 +701,14 @@ pub fn build(
         text(&json!({ "model": { "type": "minecraft:empty" } })),
     );
     // The engine's pixel glyphs, which draw image displays.
-    for (path, bytes) in display_glyphs::pictures() {
+    for (path, bytes) in super::display::pictures() {
         out.insert(path, Entry::Bytes(bytes));
     }
-    for (file, ch) in display_glyphs::providers() {
+    for (file, ch) in super::display::providers() {
         default_font.push(bitmap(
             &file,
-            display_glyphs::PIXEL_HEIGHT,
-            display_glyphs::TOP_ASCENT,
+            super::display::PIXEL_HEIGHT,
+            super::display::TOP_ASCENT,
             &ch.to_string(),
         ));
     }

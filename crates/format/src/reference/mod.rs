@@ -369,123 +369,20 @@ pub fn find_in(schema: &crate::schema::Schema, value: &Value) -> Vec<Found> {
                     text: text.clone(),
                     span: None,
                 }),
-                Some(Mark::Text) => out.extend(glyphs(text).into_iter().map(|g| Found {
-                    kind: RefKind::Glyph,
-                    path: path.to_owned(),
-                    text: g.reference,
-                    span: Some((g.start, g.end)),
-                })),
+                Some(Mark::Text) => {
+                    out.extend(crate::text::glyph::find(text).into_iter().map(|g| Found {
+                        kind: RefKind::Glyph,
+                        path: path.to_owned(),
+                        text: g.reference,
+                        span: Some((g.start, g.end)),
+                    }))
+                }
                 None => {}
             },
             _ => {}
         },
     );
     out
-}
-
-/// The tag `<glyph:ui/coin>` names a pack's glyph inside MiniMessage text.
-pub const GLYPH_TAG: &str = "glyph";
-
-/// One `<glyph:…>` in a text (`GlyphTags.Found`): the reference it names and
-/// where the tag is, `start` at `<` and `end` past `>`, in UTF-16 code units.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Glyph {
-    pub reference: String,
-    pub start: usize,
-    pub end: usize,
-}
-
-/// The reference a tag names, from its inside (`glyph:ui/coin`), if it's a
-/// glyph tag: MiniMessage's arguments joined with `:`, so `glyph:acme:ui/coin`
-/// and `glyph:'acme:ui/coin'` both name `acme:ui/coin`.
-pub fn glyph_reference(tag: &str) -> Option<String> {
-    let (name, rest) = match tag.split_once(':') {
-        Some((n, r)) => (n, Some(r)),
-        None => (tag, None),
-    };
-    if !name.eq_ignore_ascii_case(GLYPH_TAG) {
-        return None;
-    }
-    Some(rest.map_or_else(String::new, |r| arguments(r).join(":")))
-}
-
-/// MiniMessage's split of a tag's arguments: at `:`, except inside quotes;
-/// quotes removed, `\` escapes the next character inside them.
-pub fn arguments(text: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut current = String::new();
-    let mut quote: Option<char> = None;
-    let mut chars = text.chars().peekable();
-    while let Some(c) = chars.next() {
-        match quote {
-            Some(_) if c == '\\' && chars.peek().is_some() => current.push(chars.next().unwrap()),
-            Some(q) if c == q => quote = None,
-            None if (c == '\'' || c == '"') && current.is_empty() => quote = Some(c),
-            None if c == ':' => out.push(std::mem::take(&mut current)),
-            _ => current.push(c),
-        }
-    }
-    out.push(current);
-    out
-}
-
-/// Every glyph tag in MiniMessage `text`, in order. A tag escaped with `\<` isn't one.
-pub fn glyphs(text: &str) -> Vec<Glyph> {
-    glyph_tags(text)
-        .into_iter()
-        .map(|(reference, open, close)| {
-            let start = utf16_len(&text[..open]);
-            Glyph {
-                reference,
-                start,
-                end: start + utf16_len(&text[open..close]),
-            }
-        })
-        .collect()
-}
-
-/// Each glyph tag's reference and where it is in `text`, in bytes (`<` to past `>`).
-fn glyph_tags(text: &str) -> Vec<(String, usize, usize)> {
-    let mut out = Vec::new();
-    let mut cursor = 0;
-    while let Some(open) = text[cursor..].find('<').map(|i| cursor + i) {
-        if text[..open].ends_with('\\') {
-            cursor = open + 1;
-            continue;
-        }
-        let Some(close) = text[open..].find('>').map(|i| open + i) else {
-            break;
-        };
-        if let Some(reference) = glyph_reference(&text[open + 1..close]) {
-            out.push((reference, open, close + 1));
-        }
-        cursor = close + 1;
-    }
-    out
-}
-
-/// `text` with each glyph tag rewritten as `replace` answers for its reference:
-/// new text (the tag becomes `<glyph:new>`), `""` to drop it, `None` to leave
-/// it. `None` when nothing changed (`GlyphTags.rewrite`).
-pub fn rewrite_glyphs(
-    text: &str,
-    replace: &mut dyn FnMut(&str) -> Option<String>,
-) -> Option<String> {
-    let mut out = String::new();
-    let mut cursor = 0;
-    let mut changed = false;
-    for (reference, open, close) in glyph_tags(text) {
-        let Some(next) = replace(&reference) else {
-            continue;
-        };
-        out.push_str(&text[cursor..open]);
-        if !next.is_empty() {
-            out.push_str(&format!("<{GLYPH_TAG}:{next}>"));
-        }
-        cursor = close;
-        changed = true;
-    }
-    changed.then(|| out + &text[cursor..])
 }
 
 /// `json`, a document of `schema`, with every reference `replace` answers new
@@ -512,7 +409,7 @@ pub fn rewrite(
             continue;
         };
         let next = if text {
-            rewrite_glyphs(string, &mut |r| replace(RefKind::Glyph, r))
+            crate::text::glyph::rewrite(string, &mut |r| replace(RefKind::Glyph, r))
         } else {
             replace(kind, string)
         };
@@ -536,8 +433,4 @@ pub fn qualify(schema: &crate::schema::Schema, json: &Value, home: &str) -> Valu
             .map(|k| k.to_string())
             .filter(|full| full != text)
     })
-}
-
-fn utf16_len(text: &str) -> usize {
-    text.encode_utf16().count()
 }

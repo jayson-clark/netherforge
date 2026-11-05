@@ -91,7 +91,7 @@ fn every_mark_names_a_kind_of_reference() {
 
 #[test]
 fn glyph_tags_are_found_as_minimessage_splits_them() {
-    use netherforge_format::reference::glyphs;
+    use netherforge_format::text::glyph::find as glyphs;
     let found: Vec<(String, usize, usize)> =
         glyphs("é <glyph:acme:ui/coin> \\<glyph:no> <GLYPH:'a:b/c'> <bold>")
             .into_iter()

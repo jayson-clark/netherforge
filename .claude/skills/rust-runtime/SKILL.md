@@ -651,6 +651,15 @@ Next in format: the compilers, with the runtime pieces that use them. The compil
   running resources), dispatched through `kinds::ALL`, so there's no list of kinds that write files. Biomes,
   dimension types, structures, advancements, dialogs, skies' twins and generated loot are `startup`'s submodules;
   the text (MiniMessage to JSON) comes in as `TextJson`. `tests/startup.rs` agrees with `testdata/datapack`.
+- **Text** (`text/`): glyph tags (`text::glyph`, moved out of `reference`, so the references' walk, the measures
+  and the pass read tags one way), space tags (`text::space`), the MiniMessage pass and `TextMetrics` (the editor's
+  previews), and `TextWidth` (the server's exact `nf.text.width` and its `<at>` layout). The two measurers stay apart
+  for Kotlin's reasons (`metrics.rs` says why). **Positions are UTF-16 code units**, as the editor counts: the pass
+  and the measures walk the text's UTF-16 units, so they're Kotlin's index for index. `tests/text.rs` is the three
+  Kotlin tests. The default font's advances are `font.rs`.
+- **Display glyphs** (`kind/resource_pack/display.rs`, `DisplayGlyphs`): the pixel glyphs the pack build draws, an
+  image's text and runs, the rect, image and text boxes and `fit`. A picture is `image::Pixels`, whose resize rounds
+  half-even as Kotlin's `round` does. `tests/display.rs`.
 
 ## One source for each thing
 

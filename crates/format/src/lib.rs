@@ -9,6 +9,7 @@ pub mod document;
 pub mod features;
 pub mod font;
 pub mod game;
+pub mod image;
 pub mod item;
 pub mod json;
 pub mod kind;
@@ -32,6 +33,7 @@ pub mod script;
 pub mod settings;
 pub mod snapshot;
 pub mod startup;
+pub mod text;
 pub mod vanilla;
 pub mod worldgen;
 

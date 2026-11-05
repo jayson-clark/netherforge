@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
-use super::{Found, GLYPH_TAG, RefKind, RefScope, ResourceKey, resolve, resolve_any};
+use super::{Found, RefKind, RefScope, ResourceKey, resolve, resolve_any};
 use crate::kind::datapack::layout::entry_file;
 use crate::kinds::{self, PathRole};
 use crate::problem::{Location, ProblemCode, codes};
@@ -309,7 +309,12 @@ impl ReferenceIndex {
     pub fn check_use(&self, use_: &RefUse) -> Option<BrokenRef> {
         let mut broken = self.check(use_.kind, &use_.text)?;
         if use_.start.is_some() {
-            broken.message = format!("<{GLYPH_TAG}:{}>: {}", use_.text, broken.message);
+            broken.message = format!(
+                "<{}:{}>: {}",
+                crate::text::glyph::NAME,
+                use_.text,
+                broken.message
+            );
         }
         Some(broken)
     }

@@ -29,6 +29,8 @@ pub const MAX_LINKS: i32 = 64;
 pub const DEFAULT_LINK_LENGTH: f64 = 0.5;
 pub const MAX_LINK_LENGTH: f64 = 8.0;
 pub const DEFAULT_LINE_WIDTH: i32 = 200;
+/// A text display's billboard when it doesn't say.
+pub const DEFAULT_BILLBOARD: Billboard = Billboard::Center;
 pub const IMAGE_MAX_SIDE: i32 = 256;
 pub const IMAGE_MAX_PIXELS: i32 = 128 * 128;
 pub const PIXELS_PER_BLOCK: f64 = 16.0;
