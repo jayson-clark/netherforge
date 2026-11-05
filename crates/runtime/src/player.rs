@@ -2,9 +2,8 @@
 //! they're offline; what works either way (bans, the whitelist, when they first played) needs only a UUID.
 //! Their stats and buffs are the centities' stat sheets (`crate::stats`, `Holder::Player`).
 //!
-//! Not yet, each with its area: recipes,
-//! advancements, menus and dialogs, who's listed for whom and below-name text (teams), boss bars, resource
-//! and packs.
+//! Not yet, each with its area: recipes (with items), menus and dialogs, who's listed for whom and below-name
+//! text (teams), boss bars, and resource packs.
 
 use std::collections::BTreeMap;
 
@@ -207,6 +206,60 @@ impl GameContext {
             "{what} needs permission \"{node}\", which package \"{namespace}\" hasn't allowed: add it (or a node above it) to allow.permissions in its {}{lists}",
             netherforge_format::manifest::FILE_NAME
         )))
+    }
+}
+
+impl GameContext {
+    /// The server's key for an advancement a script names, once the server is known to have it (and
+    /// `criterion`, when given): an error otherwise, even for someone offline. A namespace that's neither the
+    /// project's nor a package's is the game's (`minecraft:…`, a datapack's) as written; anything else is the
+    /// project's or a package's, named as every resource a script names.
+    fn advancement(&self, name: &str, criterion: Option<&str>) -> ApiResult<String> {
+        let (key, ours) = self.with_names(|names| -> ApiResult<(String, bool)> {
+            let namespace = name.split_once(':').map(|(n, _)| n);
+            if let Some(namespace) = namespace
+                && !names.names.namespaces.contains_key(namespace)
+            {
+                if !netherforge_format::game::is_id(name) {
+                    return Err(err(format!("\"{name}\" isn't an advancement's key (<namespace>:<path>)")));
+                }
+                return Ok((name.to_owned(), false));
+            }
+            let resolved = netherforge_format::reference::resolve_any(&names.from, name)
+                .filter(|k| netherforge_format::names::is_id(&k.path));
+            if resolved.is_none() {
+                return Err(err(format!(
+                    "\"{name}\" isn't an advancement: a project advancement's id, or a key like \"minecraft:story/mine_diamond\""
+                )));
+            }
+            let named = names.resource("advancement", name)?;
+            let key = netherforge_format::reference::resolve_any(&names.names.home, &named).expect("resolved");
+            let ours = names
+                .names
+                .namespaces
+                .get(&key.namespace)
+                .is_some_and(|n| n.resources.contains(&("advancement".to_owned(), key.path.clone())));
+            Ok((key.to_string(), ours))
+        })?;
+        let Some(criteria) = self.shared.platform.advancements().criteria(key.clone()) else {
+            return Err(err(if ours {
+                format!(
+                    "the server has no advancement \"{key}\" yet: it learns the project's advancements as it starts, so restart it"
+                )
+            } else {
+                format!("the server has no advancement \"{key}\"")
+            }));
+        };
+        if let Some(criterion) = criterion
+            && !criteria.iter().any(|c| c == criterion)
+        {
+            let has: Vec<String> = criteria.iter().map(|c| format!("\"{c}\"")).collect();
+            return Err(err(format!(
+                "advancement \"{key}\" has no criterion \"{criterion}\" (it has {})",
+                has.join(", ")
+            )));
+        }
+        Ok(key)
     }
 }
 
@@ -831,7 +884,13 @@ impl PlayerApi for GameContext {
         advancement: String,
         criterion: Option<String>,
     ) -> ApiResult<bool> {
-        <Unported as PlayerApi>::grant_advancement(&Unported, this, advancement, criterion)
+        let key = self.advancement(&advancement, criterion.as_deref())?;
+        Ok(self.player_online(this).is_some_and(|id| {
+            self.shared
+                .platform
+                .advancements()
+                .grant(id, key, criterion)
+        }))
     }
     fn revoke_advancement(
         &self,
@@ -839,17 +898,30 @@ impl PlayerApi for GameContext {
         advancement: String,
         criterion: Option<String>,
     ) -> ApiResult<bool> {
-        <Unported as PlayerApi>::revoke_advancement(&Unported, this, advancement, criterion)
+        let key = self.advancement(&advancement, criterion.as_deref())?;
+        Ok(self.player_online(this).is_some_and(|id| {
+            self.shared
+                .platform
+                .advancements()
+                .revoke(id, key, criterion)
+        }))
     }
     fn has_advancement(&self, this: &handles::Player, advancement: String) -> ApiResult<bool> {
-        <Unported as PlayerApi>::has_advancement(&Unported, this, advancement)
+        let key = self.advancement(&advancement, None)?;
+        Ok(self
+            .player_online(this)
+            .is_some_and(|id| self.shared.platform.advancements().has(id, key)))
     }
     fn advancement_progress(
         &self,
         this: &handles::Player,
         advancement: String,
     ) -> ApiResult<Option<shapes::AdvancementProgress>> {
-        <Unported as PlayerApi>::advancement_progress(&Unported, this, advancement)
+        let key = self.advancement(&advancement, None)?;
+        Ok(self
+            .player_online(this)
+            .and_then(|id| self.shared.platform.advancements().progress(id, key))
+            .map(|(done, remaining)| shapes::AdvancementProgress { done, remaining }))
     }
     fn item_cooldown(&self, this: &handles::Player, key: String) -> ApiResult<Option<i64>> {
         let group = cooldown_key(&key)?;

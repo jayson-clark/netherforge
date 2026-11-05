@@ -561,6 +561,16 @@ impl netherforge_platform::FakeSkyOps for Fake {
     }
 }
 
+impl netherforge_platform::FakeAdvancementOps for Fake {
+    fn criteria(&self, key: String) -> Option<Vec<String>> {
+        (key == "minecraft:story/mine_diamond").then(|| vec!["diamond".into()])
+    }
+    fn grant(&self, player: Uuid, key: String, criterion: Option<String>) -> bool {
+        self.call(format!("grant {} {key} {criterion:?}", player.0));
+        true
+    }
+}
+
 impl netherforge_platform::FakePermissionOps for Fake {
     fn apply(&self, player: Uuid, nodes: std::collections::HashMap<String, bool>) {
         let mut nodes: Vec<String> = nodes.into_iter().map(|(n, v)| format!("{n}={v}")).collect();
@@ -599,6 +609,9 @@ impl FakePlatform for Fake {
         self
     }
     fn skies(&self) -> &dyn netherforge_platform::SkyOps {
+        self
+    }
+    fn advancements(&self) -> &dyn netherforge_platform::AdvancementOps {
         self
     }
     fn sounds(&self) -> &dyn netherforge_platform::SoundOps {
@@ -2500,4 +2513,35 @@ nf.after(4, function() w:clear_sky({ fade_ticks = 6 }) end)
             "8: sky 77 None",
         ]
     );
+}
+
+#[test]
+fn advancements_are_checked_against_the_server() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/goals/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+print(alex:grant_advancement("minecraft:story/mine_diamond", "diamond"))
+print(pcall(alex.grant_advancement, alex, "minecraft:story/mine_diamond", "gold"))
+print(pcall(alex.grant_advancement, alex, "minecraft:nope"))
+print(pcall(alex.grant_advancement, alex, "explorer"))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "true",
+            "false\tmodules/goals/init.lua:4: advancement \"minecraft:story/mine_diamond\" has no criterion \"gold\" (it has \"diamond\")",
+            "false\tmodules/goals/init.lua:5: the server has no advancement \"minecraft:nope\"",
+            "false\tmodules/goals/init.lua:6: the server has no advancement \"demo:explorer\"",
+        ]
+    );
+    assert!(calls.contains(&"grant 77 minecraft:story/mine_diamond Some(\"diamond\")".to_owned()));
 }

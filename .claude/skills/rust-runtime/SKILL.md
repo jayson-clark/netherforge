@@ -536,8 +536,8 @@ nil or false while it isn't in the world.
   offline; bans, the whitelist and played times need only a UUID. Their stats and buffs are the stat sheets
   centities use (`Holder::Player`): `buff_add` and `buff_end` raise on the player too, and a player's buffs
   count down only while they're online (`stats::Presence`: waiting, not gone). A storage is named in the calling
-  scope's namespace. Not yet (32 functions, each with its area): sounds and particles, permissions, skies,
-  recipes, advancements, menus and dialogs, listings and below-name text, boss bars, resource packs,
+  scope's namespace. Advancements are the server's by key, or the project's and its packages' by name (a
+  project one the server lacks says to restart). Not yet, each with its area: recipes, menus and dialogs, listings and below-name text, boss bars, resource packs,
   `player:data()` and `player:session()`.
 
 ## Saved tables (`crates/runtime/src/data.rs`)
