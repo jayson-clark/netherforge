@@ -745,10 +745,7 @@ impl CentityContext {
                     continue;
                 };
                 let loaded = super::Centities::loaded(platform, instance);
-                (
-                    std::mem::replace(&mut instance.chunk_loaded, Some(loaded)),
-                    loaded,
-                )
+                (instance.chunk_loaded.replace(loaded), loaded)
             };
             if was.is_some_and(|was| was != loaded) {
                 self.raise_centity(id, if loaded { "chunk_load" } else { "chunk_unload" });
