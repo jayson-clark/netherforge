@@ -32,6 +32,15 @@ const RUST_EXTERNAL: Record<string, { path: string; interface?: boolean }> = {
   Vec3: { path: 'netherforge_format::math::Vec3' },
   Matrix4: { path: 'netherforge_format::math::Matrix4' },
   Box: { path: 'netherforge_format::math::BoundingBox' },
+  DisplayDef: { path: 'netherforge_format::kind::centity::DisplayDef' },
+  Billboard: { path: 'netherforge_format::kind::centity::Billboard' },
+  BotState: { path: 'netherforge_format::bridge::BotState' },
+  BotPosition: { path: 'netherforge_format::bridge::BotPosition' },
+  BotPackAnswer: { path: 'netherforge_format::bridge::BotPackAnswer' },
+  BotInfo: { path: 'netherforge_format::bridge::BotInfo' },
+  BotEvents: { path: 'netherforge_format::bridge::BotEvents' },
+  BotAction: { path: 'netherforge_format::bridge::BotAction' },
+  BotActResult: { path: 'netherforge_format::bridge::BotActResult' },
 }
 
 const GENERATED_BY =

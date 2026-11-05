@@ -95,7 +95,7 @@ impl<T: FakeAttributeOps> AttributeOps for T {
 }
 
 impl BotOps for Unported {
-    fn join(&self, _: BotJoin, _: Box<dyn Fn(Result<external::BotInfo, PlatformError>)>) {
+    fn join(&self, _: BotJoin, _: Box<dyn Fn(Result<netherforge_format::bridge::BotInfo, PlatformError>)>) {
         unported("BotOps::join")
     }
 
@@ -107,7 +107,7 @@ impl BotOps for Unported {
         unported("BotOps::leave_all")
     }
 
-    fn list(&self) -> Vec<external::BotInfo> {
+    fn list(&self) -> Vec<netherforge_format::bridge::BotInfo> {
         unported("BotOps::list")
     }
 
@@ -115,15 +115,15 @@ impl BotOps for Unported {
         unported("BotOps::is_bot")
     }
 
-    fn act(&self, _: String, _: external::BotAction, _: Option<BotAim>, _: Box<dyn Fn(Result<external::BotActResult, PlatformError>)>) {
+    fn act(&self, _: String, _: netherforge_format::bridge::BotAction, _: Option<BotAim>, _: Box<dyn Fn(Result<netherforge_format::bridge::BotActResult, PlatformError>)>) {
         unported("BotOps::act")
     }
 
-    fn state(&self, _: String) -> external::BotState {
+    fn state(&self, _: String) -> netherforge_format::bridge::BotState {
         unported("BotOps::state")
     }
 
-    fn events(&self, _: String, _: i32) -> external::BotEvents {
+    fn events(&self, _: String, _: i32) -> netherforge_format::bridge::BotEvents {
         unported("BotOps::events")
     }
 }
@@ -131,7 +131,7 @@ impl BotOps for Unported {
 /// A [`BotOps`] that means only some of it: implement this, and every method it
 /// doesn't answers as [`Unported`] does.
 pub trait FakeBotOps {
-    fn join(&self, join: BotJoin, done: Box<dyn Fn(Result<external::BotInfo, PlatformError>)>) {
+    fn join(&self, join: BotJoin, done: Box<dyn Fn(Result<netherforge_format::bridge::BotInfo, PlatformError>)>) {
         <Unported as BotOps>::join(&Unported, join, done)
     }
 
@@ -143,7 +143,7 @@ pub trait FakeBotOps {
         <Unported as BotOps>::leave_all(&Unported)
     }
 
-    fn list(&self) -> Vec<external::BotInfo> {
+    fn list(&self) -> Vec<netherforge_format::bridge::BotInfo> {
         <Unported as BotOps>::list(&Unported)
     }
 
@@ -151,21 +151,21 @@ pub trait FakeBotOps {
         <Unported as BotOps>::is_bot(&Unported, id)
     }
 
-    fn act(&self, name: String, action: external::BotAction, aim: Option<BotAim>, done: Box<dyn Fn(Result<external::BotActResult, PlatformError>)>) {
+    fn act(&self, name: String, action: netherforge_format::bridge::BotAction, aim: Option<BotAim>, done: Box<dyn Fn(Result<netherforge_format::bridge::BotActResult, PlatformError>)>) {
         <Unported as BotOps>::act(&Unported, name, action, aim, done)
     }
 
-    fn state(&self, name: String) -> external::BotState {
+    fn state(&self, name: String) -> netherforge_format::bridge::BotState {
         <Unported as BotOps>::state(&Unported, name)
     }
 
-    fn events(&self, name: String, since: i32) -> external::BotEvents {
+    fn events(&self, name: String, since: i32) -> netherforge_format::bridge::BotEvents {
         <Unported as BotOps>::events(&Unported, name, since)
     }
 }
 
 impl<T: FakeBotOps> BotOps for T {
-    fn join(&self, join: BotJoin, done: Box<dyn Fn(Result<external::BotInfo, PlatformError>)>) {
+    fn join(&self, join: BotJoin, done: Box<dyn Fn(Result<netherforge_format::bridge::BotInfo, PlatformError>)>) {
         FakeBotOps::join(self, join, done)
     }
 
@@ -177,7 +177,7 @@ impl<T: FakeBotOps> BotOps for T {
         FakeBotOps::leave_all(self)
     }
 
-    fn list(&self) -> Vec<external::BotInfo> {
+    fn list(&self) -> Vec<netherforge_format::bridge::BotInfo> {
         FakeBotOps::list(self)
     }
 
@@ -185,15 +185,15 @@ impl<T: FakeBotOps> BotOps for T {
         FakeBotOps::is_bot(self, id)
     }
 
-    fn act(&self, name: String, action: external::BotAction, aim: Option<BotAim>, done: Box<dyn Fn(Result<external::BotActResult, PlatformError>)>) {
+    fn act(&self, name: String, action: netherforge_format::bridge::BotAction, aim: Option<BotAim>, done: Box<dyn Fn(Result<netherforge_format::bridge::BotActResult, PlatformError>)>) {
         FakeBotOps::act(self, name, action, aim, done)
     }
 
-    fn state(&self, name: String) -> external::BotState {
+    fn state(&self, name: String) -> netherforge_format::bridge::BotState {
         FakeBotOps::state(self, name)
     }
 
-    fn events(&self, name: String, since: i32) -> external::BotEvents {
+    fn events(&self, name: String, since: i32) -> netherforge_format::bridge::BotEvents {
         FakeBotOps::events(self, name, since)
     }
 }
@@ -423,7 +423,7 @@ impl<T: FakeDatapackOps> DatapackOps for T {
 }
 
 impl EntityOps for Unported {
-    fn spawn_display(&self, _: Location, _: external::DisplayDef, _: DisplayPose, _: EntityTag) -> Option<Uuid> {
+    fn spawn_display(&self, _: Location, _: netherforge_format::kind::centity::DisplayDef, _: DisplayPose, _: EntityTag) -> Option<Uuid> {
         unported("EntityOps::spawn_display")
     }
 
@@ -447,7 +447,7 @@ impl EntityOps for Unported {
         unported("EntityOps::is_loaded")
     }
 
-    fn update_display(&self, _: Uuid, _: external::DisplayDef) -> bool {
+    fn update_display(&self, _: Uuid, _: netherforge_format::kind::centity::DisplayDef) -> bool {
         unported("EntityOps::update_display")
     }
 
@@ -495,7 +495,7 @@ impl EntityOps for Unported {
 /// A [`EntityOps`] that means only some of it: implement this, and every method it
 /// doesn't answers as [`Unported`] does.
 pub trait FakeEntityOps {
-    fn spawn_display(&self, at: Location, display: external::DisplayDef, pose: DisplayPose, tag: EntityTag) -> Option<Uuid> {
+    fn spawn_display(&self, at: Location, display: netherforge_format::kind::centity::DisplayDef, pose: DisplayPose, tag: EntityTag) -> Option<Uuid> {
         <Unported as EntityOps>::spawn_display(&Unported, at, display, pose, tag)
     }
 
@@ -519,7 +519,7 @@ pub trait FakeEntityOps {
         <Unported as EntityOps>::is_loaded(&Unported, id)
     }
 
-    fn update_display(&self, id: Uuid, display: external::DisplayDef) -> bool {
+    fn update_display(&self, id: Uuid, display: netherforge_format::kind::centity::DisplayDef) -> bool {
         <Unported as EntityOps>::update_display(&Unported, id, display)
     }
 
@@ -565,7 +565,7 @@ pub trait FakeEntityOps {
 }
 
 impl<T: FakeEntityOps> EntityOps for T {
-    fn spawn_display(&self, at: Location, display: external::DisplayDef, pose: DisplayPose, tag: EntityTag) -> Option<Uuid> {
+    fn spawn_display(&self, at: Location, display: netherforge_format::kind::centity::DisplayDef, pose: DisplayPose, tag: EntityTag) -> Option<Uuid> {
         FakeEntityOps::spawn_display(self, at, display, pose, tag)
     }
 
@@ -589,7 +589,7 @@ impl<T: FakeEntityOps> EntityOps for T {
         FakeEntityOps::is_loaded(self, id)
     }
 
-    fn update_display(&self, id: Uuid, display: external::DisplayDef) -> bool {
+    fn update_display(&self, id: Uuid, display: netherforge_format::kind::centity::DisplayDef) -> bool {
         FakeEntityOps::update_display(self, id, display)
     }
 

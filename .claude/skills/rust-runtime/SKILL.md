@@ -382,6 +382,26 @@ Not yet: the game's facts from the Platform (`external::GameData` is a placehold
 without them), reloading a package's files, the policy, the bridge to the editor, the debugger, and every service but modules (centities, menus, dialogs, items...),
 each with the compiler it needs.
 
+## Centities (`crates/runtime/src/centity`)
+
+Kotlin's `Centities` and `Instance`, a slice at a time. An instance (`Instance`) keeps per-node state in
+vectors aligned with its definition's nodes (format's `CompiledCentity`, parents first) and its entities
+by node name, so a reload keeps what's still there; local transforms are the truth, and `placed()` is
+each node's matrix from the anchor along the world's axes (format's `world`, turned by the yaw: quarter
+turns exact, 90 is west). `Centities` spawns an instance as an anchor entity and a display per node with
+one, each riding the anchor with its offset in its pose; `sync` each tick writes only what changed
+(content, look, a billboard standing on its own at its node, riding, the pose eased as the node says, a
+hidden node collapsed); `reconcile` makes the entities match a definition (after a reload, or when one
+went missing); a reload moves instances onto the new definition, and removes those of a centity that's
+gone. A rect, an image or anchored text is drawn as a text display with a fit (`drawing.rs`, format's
+display glyphs; anchored text measured with the project's `fonts/default.json` through `TextWidth`).
+
+The session owns the `Centities` (`Session::centities`, `Session::spawn`) and shares it with its service;
+services get the Platform in every hook. Not yet: hitboxes and clicks, scripts, events and the Lua API on
+instances, saving placements (until then a stopping session removes its instances, so nothing is left
+behind unowned), private instances, animations, physics and movement, health, natural spawning, ropes,
+images' pixels (an image draws blank, its text whole rather than in runs).
+
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 
 The roadmap's "describe `Platform` and `PlatformEvents` in a language-neutral spec, and generate

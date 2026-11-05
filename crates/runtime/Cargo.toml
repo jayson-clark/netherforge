@@ -8,6 +8,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+indexmap.workspace = true
 mlua.workspace = true
 netherforge-luau = { path = "../luau" }
 netherforge-api = { path = "../api" }

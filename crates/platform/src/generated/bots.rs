@@ -22,7 +22,7 @@ pub trait BotOps {
     /// Joins a bot as [join] says (its name not online already) and calls
     /// [done] once it's in the world: ticks later, since joining loads the
     /// world around it.
-    fn join(&self, join: BotJoin, done: Box<dyn Fn(Result<external::BotInfo, PlatformError>)>);
+    fn join(&self, join: BotJoin, done: Box<dyn Fn(Result<netherforge_format::bridge::BotInfo, PlatformError>)>);
 
     /// Disconnects bot [name], as a player quitting: a bot still joining stops trying (its [join] fails).
     fn leave(&self, name: String);
@@ -30,7 +30,7 @@ pub trait BotOps {
     /// Disconnects every bot (the plugin is stopping).
     fn leave_all(&self);
 
-    fn list(&self) -> Vec<external::BotInfo>;
+    fn list(&self) -> Vec<netherforge_format::bridge::BotInfo>;
 
     /// Whether the online player [id] is a bot (either kind).
     fn is_bot(&self, id: Uuid) -> bool;
@@ -38,11 +38,11 @@ pub trait BotOps {
     /// Has bot [name] do [action]; [done] is called when it has, now or ticks
     /// later (walking, mining). [aim] is where an [BotAction.Interact] or
     /// [BotAction.Attack] naming a centity was resolved to, by the runtime.
-    fn act(&self, name: String, action: external::BotAction, aim: Option<BotAim>, done: Box<dyn Fn(Result<external::BotActResult, PlatformError>)>);
+    fn act(&self, name: String, action: netherforge_format::bridge::BotAction, aim: Option<BotAim>, done: Box<dyn Fn(Result<netherforge_format::bridge::BotActResult, PlatformError>)>);
 
-    fn state(&self, name: String) -> external::BotState;
+    fn state(&self, name: String) -> netherforge_format::bridge::BotState;
 
-    fn events(&self, name: String, since: i32) -> external::BotEvents;
+    fn events(&self, name: String, since: i32) -> netherforge_format::bridge::BotEvents;
 }
 
 /// How a bot joins: as [name], at [at] when given (else where it last was,
@@ -52,9 +52,9 @@ pub trait BotOps {
 pub struct BotJoin {
     pub name: String,
     /// Default: `null`.
-    pub at: Option<external::BotPosition>,
+    pub at: Option<netherforge_format::bridge::BotPosition>,
     /// Default: `BotPackAnswer.DECLINE`.
-    pub pack: external::BotPackAnswer,
+    pub pack: netherforge_format::bridge::BotPackAnswer,
     /// Default: `null`.
     pub script: Option<ScriptBot>,
 }

@@ -34,6 +34,7 @@ pub const MODULE_BUDGET: u64 = 1_000_000;
 pub struct Define<'s> {
     pub project: &'s Loaded<'s>,
     pub source: &'s dyn ProjectSource,
+    pub platform: &'s dyn Platform,
 }
 
 /// A part of the runtime that holds something of the project's (`RuntimeService`).
@@ -47,11 +48,11 @@ pub trait Service {
     /// Starts it in `room`, with what the project defines.
     fn start(&mut self, _room: &Room, _project: &Define) {}
     /// One tick.
-    fn tick(&mut self, _room: &Room) {}
+    fn tick(&mut self, _room: &Room, _platform: &dyn Platform) {}
     /// The resources of `kind` (one it reloads) that changed, by id, the project as it reads now.
     fn reload(&mut self, _room: &Room, _kind: &str, _ids: &BTreeSet<String>, _project: &Define) {}
     /// Stops it: everything it holds goes.
-    fn stop(&mut self, _room: &Room) {}
+    fn stop(&mut self, _room: &Room, _platform: &dyn Platform) {}
 }
 
 /// Why a project can't run: what the log says, and the problem to report if format didn't.
@@ -70,6 +71,8 @@ pub struct Session<'a> {
     refusal: Option<Refusal>,
     room: Option<Room>,
     services: Vec<Box<dyn Service>>,
+    /// The instances of its centities, shared with their service.
+    centities: std::rc::Rc<std::cell::RefCell<crate::centity::Centities>>,
     reported: std::cell::RefCell<Reported>,
 }
 
@@ -120,6 +123,8 @@ impl<'a> Session<'a> {
         packages: &'a dyn PackageSources,
     ) -> Session<'a> {
         let project = load(source, packages);
+        let centities =
+            std::rc::Rc::new(std::cell::RefCell::new(crate::centity::Centities::default()));
         let mut session = Session {
             platform,
             source,
@@ -127,7 +132,8 @@ impl<'a> Session<'a> {
             refusal: refusal(platform, &project),
             project,
             room: None,
-            services: services(),
+            services: services(&centities),
+            centities,
             reported: Default::default(),
         };
         session.run();
@@ -170,6 +176,7 @@ impl<'a> Session<'a> {
         let define = Define {
             project: &self.project,
             source: self.source,
+            platform: self.platform,
         };
         for service in &mut self.services {
             service.start(&room, &define);
@@ -203,6 +210,36 @@ impl<'a> Session<'a> {
     /// Why it isn't running, when it's refused.
     pub fn refusal(&self) -> Option<&Refusal> {
         self.refusal.as_ref()
+    }
+
+    /// Its centities' instances.
+    pub fn centities(&self) -> std::cell::RefMut<'_, crate::centity::Centities> {
+        self.centities.borrow_mut()
+    }
+
+    /// Spawns an instance of `centity` at `at`, facing `yaw`, as `nf.centities.spawn` will: its id, or none
+    /// when there's no such centity or world.
+    pub fn spawn(
+        &self,
+        centity: &str,
+        at: netherforge_platform::Location,
+        yaw: f64,
+    ) -> Option<netherforge_platform::Uuid> {
+        self.room.as_ref()?;
+        let font = self.project.default_font.as_ref();
+        let text_size = |text: &str| {
+            let width = netherforge_format::text::TextWidth::of_font(font?);
+            Some((width.measure(text)?, width.line_count(text) as i32))
+        };
+        let platform = self.platform;
+        let warn = |message: String| platform.log().warn(message);
+        let drawing = crate::centity::Drawing {
+            text_size: &text_size,
+            warn: &warn,
+        };
+        self.centities
+            .borrow_mut()
+            .spawn(platform, &drawing, centity, at, yaw, None)
     }
 
     /// Its room, while it runs.
@@ -244,7 +281,7 @@ impl<'a> Session<'a> {
         let Some(room) = &self.room else { return };
         room.scripts().tick();
         for service in &mut self.services {
-            service.tick(room);
+            service.tick(room, self.platform);
         }
         self.report();
     }
@@ -278,6 +315,7 @@ impl<'a> Session<'a> {
         let define = Define {
             project: &self.project,
             source: self.source,
+            platform: self.platform,
         };
         for (kind, ids) in &by_kind {
             if let Some(service) = self
@@ -295,9 +333,9 @@ impl<'a> Session<'a> {
     pub fn stop(&mut self) {
         let Some(room) = self.room.take() else { return };
         for service in self.services.iter_mut().rev() {
-            service.stop(&room);
+            service.stop(&room, self.platform);
         }
-        self.services = services();
+        self.services = services(&self.centities);
     }
 
     /// What the scripts reported since the last time, to the log (Kotlin's `ScriptReports`): a body that
@@ -382,8 +420,89 @@ impl Drop for Session<'_> {
 }
 
 /// The services a session runs, in the one order they start, tick and stop in.
-fn services() -> Vec<Box<dyn Service>> {
-    vec![Box::new(ModulesService::default())]
+fn services(
+    centities: &std::rc::Rc<std::cell::RefCell<crate::centity::Centities>>,
+) -> Vec<Box<dyn Service>> {
+    vec![
+        Box::new(ModulesService::default()),
+        Box::new(CentitiesService {
+            centities: centities.clone(),
+            font: None,
+        }),
+    ]
+}
+
+/// Centities: the project's compiled definitions, and their instances' entities synced each tick.
+struct CentitiesService {
+    centities: std::rc::Rc<std::cell::RefCell<crate::centity::Centities>>,
+    /// The project's `fonts/default.json`, which anchored text is measured with.
+    font: Option<netherforge_format::font::DefaultFontFile>,
+}
+
+impl CentitiesService {
+    fn define(&mut self, project: &Define) {
+        use netherforge_format::kind::centity::compiled::CompiledCentity;
+        let definitions = project
+            .project
+            .compiled::<CompiledCentity>()
+            .into_iter()
+            .map(|(id, c)| (id, std::rc::Rc::new(c.clone())))
+            .collect();
+        self.centities.borrow_mut().define(definitions);
+        self.font = project.project.default_font.clone();
+    }
+
+    fn with_drawing<R>(
+        &self,
+        platform: &dyn Platform,
+        f: impl FnOnce(&mut crate::centity::Centities, &crate::centity::Drawing) -> R,
+    ) -> R {
+        let font = self.font.as_ref();
+        let text_size = |text: &str| {
+            let width = netherforge_format::text::TextWidth::of_font(font?);
+            Some((width.measure(text)?, width.line_count(text) as i32))
+        };
+        let warn = |message: String| platform.log().warn(message);
+        let drawing = crate::centity::Drawing {
+            text_size: &text_size,
+            warn: &warn,
+        };
+        f(&mut self.centities.borrow_mut(), &drawing)
+    }
+}
+
+impl Service for CentitiesService {
+    fn name(&self) -> &'static str {
+        "centities"
+    }
+
+    fn reloads(&self) -> &'static [&'static str] {
+        &["centity"]
+    }
+
+    fn start(&mut self, _room: &Room, project: &Define) {
+        self.define(project);
+    }
+
+    fn tick(&mut self, _room: &Room, platform: &dyn Platform) {
+        self.with_drawing(platform, |centities, drawing| {
+            centities.tick(platform, drawing)
+        });
+    }
+
+    fn reload(&mut self, _room: &Room, _kind: &str, ids: &BTreeSet<String>, project: &Define) {
+        self.define(project);
+        let platform = project.platform;
+        self.with_drawing(platform, |centities, drawing| {
+            centities.reload(platform, drawing, ids);
+        });
+    }
+
+    /// Placements aren't saved yet: until they are, a session's instances go with it rather than staying
+    /// behind as strays nothing owns.
+    fn stop(&mut self, _room: &Room, platform: &dyn Platform) {
+        self.centities.borrow_mut().remove_all(platform);
+    }
 }
 
 /// Whose a scope is, for the log: `module greeter`, a script's file.
@@ -572,7 +691,7 @@ impl Service for ModulesService {
         }
     }
 
-    fn stop(&mut self, _room: &Room) {
+    fn stop(&mut self, _room: &Room, _platform: &dyn Platform) {
         self.modules = None;
     }
 }

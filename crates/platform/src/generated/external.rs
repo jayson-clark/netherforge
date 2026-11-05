@@ -79,42 +79,6 @@ pub struct DialogFile(pub Dynamic);
 #[derive(Clone, Debug, PartialEq)]
 pub struct GameDatapack(pub Dynamic);
 
-/// format's `centity` `DisplayDef`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct DisplayDef(pub Dynamic);
-
-/// format's `centity` `Billboard`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Billboard(pub Dynamic);
-
-/// format's `bridge` `BotState`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct BotState(pub Dynamic);
-
-/// format's `bridge` `BotPosition`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct BotPosition(pub Dynamic);
-
-/// format's `bridge` `BotPackAnswer`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct BotPackAnswer(pub Dynamic);
-
-/// format's `bridge` `BotInfo`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct BotInfo(pub Dynamic);
-
-/// format's `bridge` `BotEvents`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct BotEvents(pub Dynamic);
-
-/// format's `bridge` `BotAction`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct BotAction(pub Dynamic);
-
-/// format's `bridge` `BotActResult`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct BotActResult(pub Dynamic);
-
 /// format's `java.nio.file` `Path`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Path(pub Dynamic);

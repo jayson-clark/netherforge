@@ -178,7 +178,9 @@ impl EventSession for Running<'_> {
     }
 
     fn world(&self, name: &str) -> handles::World {
-        handles::World { name: name.to_owned() }
+        handles::World {
+            name: name.to_owned(),
+        }
     }
 
     fn inventory(&self, inventory: &InventoryRef) -> handles::Inventory {

@@ -85,7 +85,7 @@ pub struct DisplayLook {
     /// Null leaves it as its content says (a text display's `billboard`; fixed for the others).
     ///
     /// Default: `null`.
-    pub billboard: Option<external::Billboard>,
+    pub billboard: Option<netherforge_format::kind::centity::Billboard>,
     /// Minecraft's view range: a multiplier, 1 being 64 blocks at the client's 100% entity distance.
     ///
     /// Default: `1.0`.
@@ -115,7 +115,7 @@ pub struct DisplayBrightness {
 /// something, one interaction entity per node with a hitbox.
 pub trait EntityOps {
     /// Spawns a display at [at] showing [display] posed by [pose], or null if it can't (unknown block or item).
-    fn spawn_display(&self, at: Location, display: external::DisplayDef, pose: DisplayPose, tag: EntityTag) -> Option<Uuid>;
+    fn spawn_display(&self, at: Location, display: netherforge_format::kind::centity::DisplayDef, pose: DisplayPose, tag: EntityTag) -> Option<Uuid>;
 
     /// Spawns an interaction entity: [width] square footprint, standing on [at].
     fn spawn_hitbox(&self, at: Location, width: f64, height: f64, tag: EntityTag) -> Option<Uuid>;
@@ -140,7 +140,7 @@ pub trait EntityOps {
     /// Shows [display] on an existing display entity. False when the entity is
     /// the wrong kind for it (a block display asked to show text), which only
     /// a respawn fixes.
-    fn update_display(&self, id: Uuid, display: external::DisplayDef) -> bool;
+    fn update_display(&self, id: Uuid, display: netherforge_format::kind::centity::DisplayDef) -> bool;
 
     fn set_pose(&self, id: Uuid, pose: DisplayPose);
 
