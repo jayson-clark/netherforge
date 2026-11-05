@@ -47,6 +47,10 @@ pub struct Shared {
     /// Handles pushed as their real class (`classed`), held until the tick ends so the class stays with them
     /// until the script has its value.
     pub classed: RefCell<Vec<mlua::AnyUserData>>,
+    /// Who entities are hidden from, and their `data()` tables.
+    pub entities: RefCell<crate::entity::EntityState>,
+    /// Entities scripts removed since the session last looked: gone for good.
+    pub gone: RefCell<Vec<netherforge_platform::Uuid>>,
 }
 
 impl Shared {
@@ -66,6 +70,8 @@ impl Shared {
             stats: RefCell::default(),
             modules: RefCell::default(),
             classed: RefCell::default(),
+            entities: RefCell::default(),
+            gone: RefCell::default(),
         })
     }
 

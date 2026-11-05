@@ -369,6 +369,10 @@ impl<'a> Session<'a> {
         if let Some(room) = &self.room {
             CentityContext::new(self.shared.clone(), room.scripts().clone()).scopes_released();
         }
+        let gone = std::mem::take(&mut *self.shared.gone.borrow_mut());
+        for entity in gone {
+            self.entity_gone(entity);
+        }
     }
 
     /// Its room, while it runs.
@@ -550,6 +554,10 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         Box::new(CentitiesService {
             shared: shared.clone(),
             restored: Default::default(),
+        }),
+        Box::new(crate::entity::EntitiesService {
+            shared: shared.clone(),
+            host: Default::default(),
         }),
         Box::new(ModulesService {
             shared: shared.clone(),

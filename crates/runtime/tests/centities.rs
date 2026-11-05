@@ -228,6 +228,37 @@ impl netherforge_platform::FakeWorldEntityOps for Fake {
     ) -> Option<netherforge_platform::EntityHit> {
         None
     }
+    fn number(&self, _: Uuid, number: netherforge_platform::EntityNumber) -> Option<f64> {
+        use netherforge_platform::EntityNumber;
+        matches!(number, EntityNumber::Health | EntityNumber::MaxHealth).then_some(20.0)
+    }
+    fn set_number(&self, id: Uuid, number: netherforge_platform::EntityNumber, value: f64) -> bool {
+        self.call(format!("number {} {} {value}", id.0, number.name()));
+        true
+    }
+    fn set_custom_name(&self, id: Uuid, name: Option<String>) -> bool {
+        self.call(format!("custom name {} {name:?}", id.0));
+        true
+    }
+    fn data(&self, _: Uuid) -> Option<String> {
+        Some(r#"{"kills":2}"#.into())
+    }
+    fn set_data(&self, id: Uuid, json: Option<String>) -> bool {
+        self.call(format!("data {} {json:?}", id.0));
+        true
+    }
+    fn hide(&self, viewer: Uuid, id: Uuid) -> bool {
+        self.call(format!("hide {} from {}", id.0, viewer.0));
+        true
+    }
+    fn show(&self, viewer: Uuid, id: Uuid) -> bool {
+        self.call(format!("show {} to {}", id.0, viewer.0));
+        true
+    }
+    fn remove(&self, id: Uuid) -> bool {
+        self.call(format!("remove entity {}", id.0));
+        true
+    }
 }
 
 impl netherforge_platform::FakeBlockOps for Fake {
@@ -293,6 +324,12 @@ impl netherforge_platform::FakeBlockOps for Fake {
 }
 
 impl netherforge_platform::FakePlayerOps for Fake {
+    fn get(&self, uuid: Uuid) -> Option<PlayerRef> {
+        (uuid == Uuid(77)).then(|| PlayerRef {
+            uuid,
+            name: "Alex".into(),
+        })
+    }
     fn online(&self) -> Vec<PlayerRef> {
         match &*self.player.borrow() {
             Some(_) => vec![PlayerRef {
@@ -1864,4 +1901,69 @@ print(w:fill_blocks(vector.create(0, 319, 0), vector.create(1, 321, 0), "glass")
         all.contains(&"set 2 63 2 minecraft:stone false".to_owned()),
         "{all:?}"
     );
+}
+
+#[test]
+fn entities_answer_from_the_server_and_keep_what_it_forgets() {
+    use netherforge_platform::{PlatformEvents, game_event};
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/zoo/init.lua",
+            r#"
+local z = nf.worlds.default():entities({ kind = "zombie" })[1]
+print(z:kind(), z:is_mob(), z:is_living(), z:is_player(), z:tags()[1], z:has_tag("guard"), z:position().x)
+print(pcall(z.add_tag, z, "no spaces"))
+print(z:health(), z:max_health(), z:set_health(5), pcall(z.set_health, z, 50))
+print(z:set_custom_name("<red>Bob"), z:data().kills)
+z:data().kills = 3
+local alex = nf.worlds.default():players()[1]
+print(z:hide_from(alex), z:is_hidden_from(alex))
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "minecraft:zombie\ttrue\ttrue\tfalse\tguard\ttrue\t5",
+            "false\tmodules/zoo/init.lua:4: \"no spaces\" isn't a tag: letters, digits, _, -, . and +",
+            "20\t20\ttrue\tfalse\tmodules/zoo/init.lua:5: health must be from 0 to max_health() (20), not 50",
+            "true\t2",
+            "true\ttrue",
+        ]
+    );
+    assert!(
+        calls.contains(&"number 500 HEALTH 5".to_owned()),
+        "{calls:?}"
+    );
+    assert!(calls.contains(&"hide 500 from 77".to_owned()), "{calls:?}");
+    // A save writes the changed table back; the next save, unchanged, doesn't.
+    server.world_saving("world".into());
+    assert!(
+        platform
+            .take()
+            .contains(&r#"data 500 Some("{\"kills\":3}")"#.to_owned())
+    );
+    server.world_saving("world".into());
+    assert!(!platform.take().iter().any(|c| c.starts_with("data")));
+    // The server forgot who it was hidden from when Alex left: it's hidden again as they join.
+    let mut join = game_event::PlayerJoin {
+        player: netherforge_platform::PlayerRef {
+            uuid: Uuid(77),
+            name: "Alex".into(),
+        },
+        first_join: false,
+        message: None,
+    };
+    server.game().player_join(&mut join);
+    assert!(platform.take().contains(&"hide 500 from 77".to_owned()));
+    // The session ends: it shows again.
+    server.session_mut().stop();
+    assert!(platform.take().contains(&"show 500 to 77".to_owned()));
 }

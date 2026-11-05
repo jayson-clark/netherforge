@@ -514,6 +514,24 @@ spawner forgets them), `world_saving`, `chunk_unloading`, `block_changed` (physi
   `block:data`. Until custom blocks come, no block is a project block (`blocks`' `custom`, `flood`'s
   matcher), and a project biome is spelled without the project's namespace (not yet relative to a package).
 
+## Entities (`crates/runtime/src/entity.rs`, `living.rs`)
+
+`GameContext` (the same context as worlds and blocks) implements `Entity`, `DroppedItem`, `Living`, `Mob` and
+`Mannequin` (Kotlin's `EntityImpl`... `MannequinImpl`): an entity by UUID, read live through the Platform,
+nil or false while it isn't in the world.
+
+- `is_player`, `is_living`, `is_mob` (the prelude's in Kotlin) ask the handle value's class, made as specific as
+  the server says first (`Shared::entity_by_id`).
+- **The entities service** (`EntitiesService`, Kotlin's `HiddenEntities` and `EntityData`): who each entity
+  is hidden from, applied again when the player joins and when the entity loads, everything shown again when
+  the session stops; and `entity:data()` tables, read from the entity the first time, written back on
+  unload, world save and stop, only when changed (the same codec and 1 MiB cap as `centity:data()`).
+- An entity a script removes is gone for good: `Shared::gone`, drained by the session into `entity_gone`
+  (its table, who it was hidden from, its handle's subscriptions).
+- `own_id` is Kotlin's `ownId` (a modifier's or goal's id in the project's namespace).
+- `AttributeOperation` is format's in the Platform's Rust types.
+- Not yet: `entity:team()` (teams), a mob's `move_to`/`stop_pathing` and goals (mob goals).
+
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 
 The roadmap's "describe `Platform` and `PlatformEvents` in a language-neutral spec, and generate

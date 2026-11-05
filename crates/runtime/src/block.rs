@@ -16,7 +16,7 @@ use netherforge_format::game::GameData;
 use netherforge_platform::{BlockSnapshot, InventoryRef, InventoryRefBlock};
 
 use crate::events::{inventory_handle, pack};
-use crate::world::{WorldContext, block_at, unpack};
+use crate::world::{GameContext, block_at, unpack};
 
 fn err(message: impl Into<String>) -> ApiError {
     ApiError(message.into())
@@ -75,7 +75,7 @@ fn face(name: &str) -> Option<(i32, i32, i32)> {
     })
 }
 
-impl WorldContext {
+impl GameContext {
     fn snapshot(&self, this: &handles::Block) -> Option<BlockSnapshot> {
         let (x, y, z) = unpack(this.position);
         self.shared
@@ -115,7 +115,7 @@ impl WorldContext {
     }
 }
 
-impl BlockApi for WorldContext {
+impl BlockApi for GameContext {
     fn world(&self, this: &handles::Block) -> ApiResult<handles::World> {
         Ok(handles::World {
             name: this.world.clone(),
@@ -123,7 +123,7 @@ impl BlockApi for WorldContext {
     }
 
     fn position(&self, this: &handles::Block) -> ApiResult<values::Vec3> {
-        Ok(WorldContext::corner(this))
+        Ok(GameContext::corner(this))
     }
 
     fn location(&self, this: &handles::Block) -> ApiResult<values::Location> {
@@ -131,7 +131,7 @@ impl BlockApi for WorldContext {
             world: handles::World {
                 name: this.world.clone(),
             },
-            position: WorldContext::corner(this),
+            position: GameContext::corner(this),
             yaw: None,
             pitch: None,
         })

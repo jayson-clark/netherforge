@@ -23,10 +23,6 @@ pub struct BlockCarrier(pub Dynamic);
 #[derive(Clone, Debug, PartialEq)]
 pub struct GameIds(pub Dynamic);
 
-/// format's `item` `AttributeOperation`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct AttributeOperation(pub Dynamic);
-
 /// format's `terrain` `TerrainScripts`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TerrainScripts(pub Dynamic);

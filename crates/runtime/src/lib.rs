@@ -17,9 +17,11 @@ use netherforge_luau::{Host, ScopeId};
 
 pub mod block;
 pub mod centity;
+pub mod entity;
 pub mod events;
 pub mod images;
 pub mod items;
+pub mod living;
 pub mod modules;
 pub mod scripts;
 pub mod server;
@@ -63,7 +65,7 @@ struct Api {
     /// `nf.images` and `Image`, with them.
     images: Option<images::ImagesApi>,
     /// `World` and `nf.worlds`, with them.
-    worlds: Option<world::WorldContext>,
+    worlds: Option<world::GameContext>,
 }
 
 impl Runtime for Api {
@@ -170,6 +172,36 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn entity(&self) -> &dyn netherforge_api::api::EntityApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn droppeditem(&self) -> &dyn netherforge_api::api::DroppedItemApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn living(&self) -> &dyn netherforge_api::api::LivingApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn mob(&self) -> &dyn netherforge_api::api::MobApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn mannequin(&self) -> &dyn netherforge_api::api::MannequinApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
     fn nf_worlds(&self) -> &dyn netherforge_api::api::NfWorldsApi {
         match &self.worlds {
             Some(w) => w,
@@ -198,7 +230,7 @@ impl Room {
         });
         let worlds = shared
             .as_ref()
-            .map(|shared| world::WorldContext::new(shared.clone(), scripts.clone()));
+            .map(|shared| world::GameContext::new(shared.clone(), scripts.clone()));
         let centities = shared.map(|shared| {
             centity::api::CentityContext::install_liveness(&shared, &scripts);
             centity::api::CentityContext::new(shared, scripts.clone())

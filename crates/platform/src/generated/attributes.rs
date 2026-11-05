@@ -10,7 +10,7 @@ use super::*;
 pub struct AttributeModifierData {
     pub id: String,
     pub amount: f64,
-    pub operation: external::AttributeOperation,
+    pub operation: netherforge_format::item::AttributeOperation,
     /// Default: `true`.
     pub saved: bool,
 }

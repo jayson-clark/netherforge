@@ -200,16 +200,16 @@ fn id_of(state: &str) -> &str {
     state.split('[').next().unwrap_or(state)
 }
 
-/// `World` and `nf.worlds`, for one room.
+/// The classes of the game's own things (`World`, `nf.worlds`, `Block`, entities), for one room.
 #[derive(Clone)]
-pub struct WorldContext {
+pub struct GameContext {
     pub(crate) shared: Rc<Shared>,
     pub(crate) scripts: Scripts,
 }
 
-impl WorldContext {
-    pub fn new(shared: Rc<Shared>, scripts: Scripts) -> WorldContext {
-        WorldContext { shared, scripts }
+impl GameContext {
+    pub fn new(shared: Rc<Shared>, scripts: Scripts) -> GameContext {
+        GameContext { shared, scripts }
     }
 
     fn platform(&self) -> &dyn Platform {
@@ -237,7 +237,7 @@ impl WorldContext {
         self.shared.entity_by_id(self.scripts.host().lua(), id)
     }
 
-    fn running_scope(&self, called: &str) -> ApiResult<ScopeId> {
+    pub(crate) fn running_scope(&self, called: &str) -> ApiResult<ScopeId> {
         self.scripts
             .host()
             .running_scope()
@@ -489,7 +489,7 @@ impl<P: Fn(&BoxState) -> bool> Flood<'_, P> {
     }
 }
 
-impl WorldApi for WorldContext {
+impl WorldApi for GameContext {
     fn name(&self, this: &handles::World) -> ApiResult<String> {
         Ok(this.name.clone())
     }
@@ -1534,7 +1534,7 @@ fn filter_of(options: Option<&shapes::QueryOptions>) -> ApiResult<QueryFilter> {
     }
 }
 
-impl NfWorldsApi for WorldContext {
+impl NfWorldsApi for GameContext {
     fn all(&self, _: &Caller) -> ApiResult<Vec<handles::World>> {
         let worlds = self.platform().worlds();
         let default = worlds.default_world();
