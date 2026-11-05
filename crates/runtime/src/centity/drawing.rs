@@ -3,8 +3,8 @@
 //! `display` glyphs) with a fit, the matrix in the display's own space that puts its text exactly where the
 //! node's box is.
 //!
-//! Not yet: an image's pixels (scripts set them, with the image area): until then an image is drawn blank,
-//! and its text whole rather than in the runs a platform sends it in.
+//! An image is drawn from the pixels a script set (`node:set_image`), blank without; its text goes to the
+//! platform as runs too, which is what it sends.
 
 use netherforge_format::kind::centity::{
     Anchor, Billboard, DisplayDef, PIXELS_PER_BLOCK, TextAlignment,
@@ -49,6 +49,7 @@ fn text(
         see_through: None,
         shadow: Some(false),
         anchor: None,
+        runs: None,
     }
 }
 
@@ -82,6 +83,7 @@ pub fn drawn(
             height,
             size,
             anchor,
+            pixels,
         } => {
             let (w, h) = (*width, *height);
             let size = size.clone().unwrap_or_else(|| {
@@ -90,12 +92,18 @@ pub fn drawn(
                     f64::from(h) / PIXELS_PER_BLOCK,
                 ]
             });
-            let shown = text(
-                display::image_text(w.max(0) as u32, h.max(0) as u32, None),
+            let (pw, ph) = (w.max(0) as u32, h.max(0) as u32);
+            let pixels = pixels.as_deref();
+            let mut shown = text(
+                display::image_text(pw, ph, pixels),
                 Some(TextAlignment::Left),
                 TRANSPARENT,
                 Some(display::image_line_width(w)),
             );
+            // What a platform draws: a picture's text is too long to be one piece of the game's text.
+            if let DisplayDef::Text { runs, .. } = &mut shown {
+                *runs = Some(display::image_runs(pw, ph, pixels));
+            }
             Drawn {
                 shown,
                 fit: Some(display::fit(

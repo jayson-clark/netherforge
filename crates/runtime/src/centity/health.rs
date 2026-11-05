@@ -86,6 +86,7 @@ fn bar_node(game: &dyn GameData, instance: &mut Instance) {
             see_through: None,
             shadow: Some(true),
             anchor: None,
+            runs: None,
         }),
         ..NodeDef::default()
     };
@@ -120,32 +121,12 @@ pub fn draw(instance: &mut Instance, show: bool, now: u64) {
         bar.empty,
         bar.glyph.repeat((bar.segments - full).max(0) as usize)
     );
-    if let Some(DisplayDef::Text { text: now_text, .. }) = instance.display(index)
-        && *now_text != text
-        && let Some(DisplayDef::Text {
-            billboard,
-            alignment,
-            background,
-            line_width,
-            see_through,
-            shadow,
-            anchor,
-            ..
-        }) = instance.display(index).cloned()
+    if let Some(mut display @ DisplayDef::Text { .. }) = instance.display(index).cloned()
+        && let DisplayDef::Text { text: now, .. } = &mut display
+        && *now != text
     {
-        instance.set_display(
-            index,
-            DisplayDef::Text {
-                text,
-                billboard,
-                alignment,
-                background,
-                line_width,
-                see_through,
-                shadow,
-                anchor,
-            },
-        );
+        *now = text;
+        instance.set_display(index, display);
     }
     let mut shown_until = health.shown_until;
     if bar.show_ticks == 0 {

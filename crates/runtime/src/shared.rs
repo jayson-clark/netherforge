@@ -33,6 +33,8 @@ pub struct Shared {
     pub store: Rc<crate::store::Store>,
     /// The `centity:data()` tables scripts asked for, by instance.
     pub centity_data: RefCell<std::collections::HashMap<netherforge_platform::Uuid, DataTable>>,
+    /// The pictures scripts hold.
+    pub images: Rc<crate::images::Images>,
     /// Nodes' rigid bodies.
     pub physics: RefCell<crate::centity::physics::Physics>,
     /// Players' and centities' stats and buffs.
@@ -52,6 +54,7 @@ impl Shared {
             centity_scripts: RefCell::default(),
             next_flight: std::cell::Cell::new(0),
             path_nodes: std::cell::Cell::new(0),
+            images: Rc::default(),
             physics: RefCell::default(),
             stats: RefCell::default(),
             modules: RefCell::default(),

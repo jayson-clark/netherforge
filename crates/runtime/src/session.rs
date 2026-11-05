@@ -564,6 +564,7 @@ impl Service for CentitiesService {
         self.context(room).stop_all();
         self.shared.stats.borrow_mut().clear();
         self.shared.physics.borrow_mut().clear();
+        self.shared.images.clear();
     }
 }
 

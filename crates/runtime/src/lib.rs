@@ -6,7 +6,8 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use netherforge_api::api::{
-    CentityApi, LuaApi, NfApi, NfCentitiesApi, NodeApi, SubscriptionApi, TaskApi,
+    CentityApi, ImageApi, LuaApi, NfApi, NfCentitiesApi, NfImagesApi, NodeApi, SubscriptionApi,
+    TaskApi,
 };
 use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, Runtime};
@@ -16,6 +17,7 @@ use netherforge_luau::{Host, ScopeId};
 
 pub mod centity;
 pub mod events;
+pub mod images;
 pub mod items;
 pub mod modules;
 pub mod scripts;
@@ -55,6 +57,8 @@ struct Api {
     grants: Grants,
     /// The centity classes, when the room runs a session's centities.
     centities: Option<centity::api::CentityContext>,
+    /// `nf.images` and `Image`, with them.
+    images: Option<images::ImagesApi>,
 }
 
 impl Runtime for Api {
@@ -131,6 +135,18 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_images(&self) -> &dyn NfImagesApi {
+        match &self.images {
+            Some(i) => i,
+            None => &Unported,
+        }
+    }
+    fn image(&self) -> &dyn ImageApi {
+        match &self.images {
+            Some(i) => i,
+            None => &Unported,
+        }
+    }
 }
 
 /// A room: its Luau state and its scripts.
@@ -148,6 +164,9 @@ impl Room {
     /// A room whose API reaches what a session shares (its centities), when it's given.
     pub fn with(host: Host, grants: Grants, shared: Option<Rc<Shared>>) -> mlua::Result<Room> {
         let scripts = Scripts::new(host.clone())?;
+        let images = shared.as_ref().map(|shared| images::ImagesApi {
+            images: shared.images.clone(),
+        });
         let centities = shared.map(|shared| {
             centity::api::CentityContext::install_liveness(&shared, &scripts);
             centity::api::CentityContext::new(shared, scripts.clone())
@@ -156,6 +175,7 @@ impl Room {
             scripts: scripts.clone(),
             grants,
             centities,
+            images,
         };
         netherforge_api::install(&host, Rc::new(api))?;
         Ok(Room { host, scripts })

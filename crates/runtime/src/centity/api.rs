@@ -15,7 +15,6 @@ use mlua::{Function, Value};
 use netherforge_api::api::{CentityApi, NfCentitiesApi, NodeApi};
 use netherforge_api::codec::Codec;
 use netherforge_api::handles::{self, Handle};
-use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, Caller, codecs, handle, shapes, unions, values};
 use netherforge_format::kind::centity::{
     Anchor, Billboard, DEFAULT_LINE_WIDTH, DisplayDef, LoopMode, PIXELS_PER_BLOCK, TextAlignment,
@@ -3025,29 +3024,11 @@ impl NodeApi for CentityContext {
     fn set_display_text(&self, this: &handles::Node, text: values::Text) -> ApiResult<bool> {
         Ok(self
             .with_node(this, |i, at| match i.display(at).cloned() {
-                Some(DisplayDef::Text {
-                    text: _,
-                    billboard,
-                    alignment,
-                    background,
-                    line_width,
-                    see_through,
-                    shadow,
-                    anchor,
-                }) => {
-                    i.set_display(
-                        at,
-                        DisplayDef::Text {
-                            text: text.0,
-                            billboard,
-                            alignment,
-                            background,
-                            line_width,
-                            see_through,
-                            shadow,
-                            anchor,
-                        },
-                    );
+                Some(mut display @ DisplayDef::Text { .. }) => {
+                    if let DisplayDef::Text { text: now, .. } = &mut display {
+                        *now = text.0;
+                    }
+                    i.set_display(at, display);
                     true
                 }
                 _ => false,
@@ -3460,25 +3441,23 @@ impl NodeApi for CentityContext {
         }
         Ok(self
             .with_node(this, |i, at| match i.display(at).cloned() {
-                Some(DisplayDef::Text {
-                    text,
-                    billboard,
-                    anchor,
-                    ..
-                }) => {
-                    i.set_display(
-                        at,
-                        DisplayDef::Text {
-                            text,
-                            billboard,
-                            alignment,
-                            background: style.background.clone(),
-                            line_width: style.line_width.map(|w| w as i32),
-                            see_through: style.see_through,
-                            shadow: style.shadow,
-                            anchor,
-                        },
-                    );
+                Some(mut display @ DisplayDef::Text { .. }) => {
+                    if let DisplayDef::Text {
+                        alignment: a,
+                        background,
+                        line_width,
+                        see_through,
+                        shadow,
+                        ..
+                    } = &mut display
+                    {
+                        *a = alignment;
+                        *background = style.background.clone();
+                        *line_width = style.line_width.map(|w| w as i32);
+                        *see_through = style.see_through;
+                        *shadow = style.shadow;
+                    }
+                    i.set_display(at, display);
                     let mut look = i.look(at).clone();
                     look.text_opacity = style.opacity.map(|o| o as i32).filter(|o| *o != OPAQUE);
                     i.set_look(at, look);
@@ -3871,11 +3850,40 @@ impl NodeApi for CentityContext {
         Ok(self.change_body(this, |b| b.enabled = enabled))
     }
 
-    // ---- not ported yet ----
     fn image(&self, this: &handles::Node) -> ApiResult<Option<handles::Image>> {
-        NodeApi::image(&Unported, this)
+        let pixels = self
+            .with_node(this, |i, at| match i.display(at) {
+                Some(DisplayDef::Image { pixels, .. }) => pixels.clone(),
+                _ => None,
+            })
+            .flatten();
+        pixels.map(|p| self.shared.images.hold(p)).transpose()
     }
     fn set_image(&self, this: &handles::Node, image: Option<handles::Image>) -> ApiResult<bool> {
-        NodeApi::set_image(&Unported, this, image)
+        let pixels = match image {
+            None => None,
+            Some(handle) => Some(
+                self.shared
+                    .images
+                    .get(handle.number)
+                    .ok_or_else(|| err("this image is gone (the session that made it ended)"))?,
+            ),
+        };
+        let name = this.name.clone();
+        self.with_node(this, |i, at| match i.display(at).cloned() {
+            Some(mut display @ DisplayDef::Image { .. }) => {
+                if let DisplayDef::Image { pixels: now, .. } = &mut display
+                    && *now != pixels
+                {
+                    *now = pixels;
+                    i.set_display(at, display);
+                }
+                Ok(true)
+            }
+            _ => Err(err(format!("node \"{name}\" isn't an image display"))),
+        })
+        .unwrap_or(Ok(false))
     }
+
+    // ---- not ported yet ----
 }

@@ -311,6 +311,11 @@ pub enum DisplayDef {
         shadow: Option<bool>,
         #[serde(skip_serializing_if = "Option::is_none")]
         anchor: Option<Anchor>,
+        /// What a platform draws instead of `text`, when it's set: a picture's text is too long to be one piece
+        /// of the game's text. Never in a file.
+        #[serde(skip)]
+        #[schemars(skip)]
+        runs: Option<Vec<crate::kind::resource_pack::display::TextRun>>,
     },
     Rect {
         #[schemars(extend("pattern" = crate::rules::ARGB, "x-problem" = "centity.color", "x-rule" = "#RRGGBB or #AARRGGBB"))]
@@ -329,6 +334,10 @@ pub enum DisplayDef {
         size: Option<Vec<f64>>,
         #[serde(skip_serializing_if = "Option::is_none")]
         anchor: Option<Anchor>,
+        /// The picture a script set (`node:set_image`), none for blank. Never in a file.
+        #[serde(skip)]
+        #[schemars(skip)]
+        pixels: Option<std::sync::Arc<crate::image::Pixels>>,
     },
 }
 

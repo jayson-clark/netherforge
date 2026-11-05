@@ -161,7 +161,14 @@ impl FakeEntityOps for Fake {
     fn teleport(&self, id: Uuid, to: Location) {
         self.call(format!("teleport {} to {}", id.0, at(&to)));
     }
-    fn update_display(&self, _: Uuid, _: DisplayDef) -> bool {
+    fn update_display(&self, id: Uuid, display: DisplayDef) -> bool {
+        if let DisplayDef::Text {
+            runs: Some(runs), ..
+        } = &display
+        {
+            let coloured = runs.iter().filter(|r| r.rgb.is_some()).count();
+            self.call(format!("update {} runs {coloured}", id.0));
+        }
         true
     }
     fn is_loaded(&self, _: Uuid) -> bool {
@@ -1353,4 +1360,47 @@ print("visits", data.visits)
         assert!(session.centities().get(id).is_some());
         assert_eq!(printed(&platform.take()), ["visits\t3"]);
     }
+}
+
+#[test]
+fn a_script_draws_a_picture_on_an_image_display() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity =
+        r#"{ "nodes": { "screen": { "display": { "type": "image", "width": 2, "height": 2 } } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/screen/centity.json", centity),
+        (
+            "modules/game/init.lua",
+            r##"
+local s = nf.centities.spawn("screen", vector.create(0, 64, 0)):node("screen")
+local red = nf.images.fill(2, 2, "#ff0000")
+print(red:width(), red:pixel(1, 1), red:pixel(5, 5), s:image())
+print(s:set_image(red), s:image():pixel(0, 0))
+local copy = nf.images.decode(red:encode())
+print(copy:height(), copy:pixel(0, 1), red:cropped(1, 0, 1, 2):width())
+print(pcall(nf.images.fill, 0, 2, "#ff0000"))
+"##,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(
+        printed(&start),
+        [
+            "2\t#FF0000\tnil\tnil",
+            "true\t#FF0000",
+            "2\t#FF0000\t1",
+            "false\tmodules/game/init.lua:8: an image is 1 to 2048 pixels each way, not 0 by 2",
+        ],
+        "{start:?}"
+    );
+    session.tick();
+    let calls = platform.take();
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("update ") && !c.ends_with("runs 0")),
+        "{calls:?}"
+    );
 }
