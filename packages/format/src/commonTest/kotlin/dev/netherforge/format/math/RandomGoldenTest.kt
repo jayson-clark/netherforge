@@ -17,7 +17,8 @@ class RandomGoldenTest {
             val r = Random(seed)
             val ints = List(3) { r.nextInt() }.joinToString(" ")
             val before = "${r.nextDouble().toRawBits()} ${r.nextInt(10)} ${r.nextInt(-5, 5)} ${r.nextInt(7)} ${r.nextBoolean()}"
-            val longs = listOf(r.nextLong(), r.nextLong(10), r.nextLong(1L shl 40), r.nextLong(1L shl 32), r.nextLong(1L shl 20), r.nextLong(3_000_000_000))
+            val bounds = listOf(10L, 1L shl 40, 1L shl 32, 1L shl 20, 3_000_000_000)
+            val longs = listOf(r.nextLong()) + bounds.map { r.nextLong(it) }
             "$seed: $ints $before ${longs.joinToString(" ")}\n"
         }
         val path = "packages/format/testdata/random.txt"
