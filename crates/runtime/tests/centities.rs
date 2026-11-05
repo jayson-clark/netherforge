@@ -1833,6 +1833,7 @@ w:on("dusk", function() end)
 local b = w:block(vector.create(2, 63, 2))
 print(b:kind(), b:is_solid(), b:relative("up"):is_air(), b:relative(vector.create(0, 1, 0)) == b:relative("up"), b:position().y)
 print(b:set_state("stone", { update = false }), pcall(b.set_state, b, "minecraft:stone[facing=up]"))
+print(w:fill_blocks(vector.create(0, 319, 0), vector.create(1, 321, 0), "glass"), pcall(w.fill_blocks, w, vector.create(0, 0, 0), vector.create(99, 99, 99), "glass"))
 "#,
         ),
     ]);
@@ -1855,6 +1856,7 @@ print(b:set_state("stone", { update = false }), pcall(b.set_state, b, "minecraft
             "1\tnil",
             "minecraft:stone\ttrue\ttrue\ttrue\t63",
             "true\tfalse\tmodules/look/init.lua:22: state: minecraft:stone has no property \"facing\" (it has: none)",
+            "2\tfalse\tmodules/look/init.lua:23: that box is 1000000 blocks, and one fill_blocks changes at most 32768: spread it over several ticks",
         ],
         "{lines:?}"
     );

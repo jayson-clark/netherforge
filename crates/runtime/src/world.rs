@@ -3,8 +3,7 @@
 //! see (an unknown game rule) is an error. The centity questions (`raycast` against hitboxes, `overlap_*`,
 //! `sweep`, `nearest`, `centities`) go to the centities' spatial index.
 //!
-//! Not yet, each with the area it needs: skies, setting and filling blocks (block states' checks with custom
-//! blocks), gradual fills and structures, `locate_biome` (the workers), spawning entities, items, particles and
+//! Not yet, each with the area it needs: skies, gradual fills and structures, `locate_biome` (the workers), spawning entities, items, particles and
 //! sounds (effects), managed worlds (`create`, `load`, `copy`, `import`, `unload`). `blocks`' `custom` and
 //! `flood`'s project blocks wait for custom blocks: until then no block is a project block.
 
@@ -53,6 +52,9 @@ fn length(v: Vec3) -> f64 {
 }
 
 const DAY: i64 = DAY_TICKS as i64;
+
+/// How many blocks one `world:fill_blocks` may change: `FILL_LIMIT` in the spec (`spec/worlds.ts`).
+const FILL_LIMIT: i64 = 32768;
 
 /// The most blocks `world:blocks` reads in one call: 32 × 32 × 32, so one call can't stall a tick.
 const MAX_BOX: i64 = 32 * 32 * 32;
@@ -822,9 +824,26 @@ impl WorldApi for WorldContext {
         state: String,
         options: Option<shapes::BlockSetOptions>,
     ) -> ApiResult<bool> {
-        <Unported as WorldApi>::set_block(&Unported, this, position, state, options)
+        let (x, y, z) = block_at(&position)?;
+        let canonical = crate::block::canonical_state(self.platform().game(), &state, "state")?;
+        let Some(world) = self.live(this) else {
+            return Ok(false);
+        };
+        let update = options.and_then(|o| o.update) != Some(false);
+        let set = self
+            .platform()
+            .blocks()
+            .set(world.to_owned(), x, y, z, canonical, update);
+        if set {
+            self.shared
+                .physics
+                .borrow_mut()
+                .block_changed(world, x, y, z);
+        }
+        Ok(set)
     }
 
+    /// Every block of the box, in loaded chunks within the world's heights: at most `FILL_LIMIT`.
     fn fill_blocks(
         &self,
         this: &handles::World,
@@ -833,7 +852,41 @@ impl WorldApi for WorldContext {
         state: String,
         options: Option<shapes::BlockSetOptions>,
     ) -> ApiResult<i64> {
-        <Unported as WorldApi>::fill_blocks(&Unported, this, from, to, state, options)
+        let (a, b) = (block_at(&from)?, block_at(&to)?);
+        let canonical = crate::block::canonical_state(self.platform().game(), &state, "state")?;
+        let span = |p: i32, q: i32| i64::from(p.max(q)) - i64::from(p.min(q)) + 1;
+        let volume = span(a.0, b.0) * span(a.1, b.1) * span(a.2, b.2);
+        if volume > FILL_LIMIT {
+            return Err(err(format!(
+                "that box is {volume} blocks, and one fill_blocks changes at most {FILL_LIMIT}: spread it over several ticks"
+            )));
+        }
+        let Some(world) = self.live(this) else {
+            return Ok(0);
+        };
+        let Some((bottom, top)) = self.platform().worlds().heights(world.to_owned()) else {
+            return Ok(0);
+        };
+        let update = options.and_then(|o| o.update) != Some(false);
+        let (worlds, blocks) = (self.platform().worlds(), self.platform().blocks());
+        let mut changed = 0;
+        for x in a.0.min(b.0)..=a.0.max(b.0) {
+            for z in a.2.min(b.2)..=a.2.max(b.2) {
+                if !worlds.is_chunk_loaded(world.to_owned(), x >> 4, z >> 4) {
+                    continue;
+                }
+                for y in a.1.min(b.1).max(bottom)..=a.1.max(b.1).min(top - 1) {
+                    if blocks.set(world.to_owned(), x, y, z, canonical.clone(), update) {
+                        changed += 1;
+                        self.shared
+                            .physics
+                            .borrow_mut()
+                            .block_changed(world, x, y, z);
+                    }
+                }
+            }
+        }
+        Ok(changed)
     }
 
     fn fill_gradually(

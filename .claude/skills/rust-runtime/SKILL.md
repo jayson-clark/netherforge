@@ -508,7 +508,8 @@ spawner forgets them), `world_saving`, `chunk_unloading`, `block_changed` (physi
   dropped item; Kotlin's `entityHandle`), and a handle is one value per thing, so the script's value has that
   class. The pushed value is held until the tick ends (`Shared::classed`) so the weak cache can't drop it first.
 - A world's spawn category is format's `SpawnCategory` (the Platform spec's external, now real).
-- Not yet, delegated to `Unported`: skies, `set_block`/`fill_blocks` and gradual fills, structures,
+- `set_block` and `fill_blocks` (at most 32768, loaded chunks only) write canonical states.
+- Not yet, delegated to `Unported`: skies, gradual fills, structures,
   `locate_biome`, spawning entities and items, particles and sounds, managed worlds, `block:custom` and
   `block:data`. Until custom blocks come, no block is a project block (`blocks`' `custom`, `flood`'s
   matcher), and a project biome is spelled without the project's namespace (not yet relative to a package).
