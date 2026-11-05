@@ -166,6 +166,8 @@ pub struct Instance {
     /// The only players a private instance is shown to: its entities are client entities only their
     /// clients have. Set before anything is made; only a temporary instance is private.
     pub viewers: Option<IndexSet<Uuid>>,
+    /// Its health, when its file gives it one or a script did (`set_max_health`).
+    pub health: Option<super::health::Health>,
     /// Its script's scope, while it runs.
     pub scope: Option<ScopeId>,
     /// Ticks it has been ticked.
@@ -246,6 +248,7 @@ impl Instance {
             owner: None,
             expires: None,
             viewers: None,
+            health: None,
             scope: None,
             age: 0,
             removed: false,

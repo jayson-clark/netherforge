@@ -19,6 +19,8 @@ pub struct Shared {
     pub font: RefCell<Option<DefaultFontFile>>,
     /// Each centity's script, by centity id: its project path.
     pub centity_scripts: RefCell<BTreeMap<String, String>>,
+    /// Players' and centities' stats and buffs.
+    pub stats: RefCell<crate::stats::StatSheets>,
     /// The project's modules, while the session runs: what a resource's script requires through.
     pub modules: RefCell<Option<Modules>>,
 }
@@ -30,6 +32,7 @@ impl Shared {
             centities: RefCell::default(),
             font: RefCell::default(),
             centity_scripts: RefCell::default(),
+            stats: RefCell::default(),
             modules: RefCell::default(),
         })
     }

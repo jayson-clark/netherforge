@@ -15,6 +15,7 @@ pub mod animation;
 pub mod api;
 pub mod definitions;
 pub mod drawing;
+pub mod health;
 pub mod hitboxes;
 pub mod instance;
 pub mod keyframes;
@@ -108,6 +109,7 @@ impl Centities {
         let mut instance = Instance::new(id, definition, at, yaw);
         // Before anything is made: its entities are made temporary or private as they're claimed.
         setup(&mut instance);
+        health::adopt(platform.game(), &mut instance);
         autoplay(&mut instance);
         self.instances.insert(id, instance);
         self.sync(platform, drawing, id);
@@ -158,6 +160,7 @@ impl Centities {
                 Some(next) => {
                     if let Some(instance) = self.instances.get_mut(&id) {
                         instance.redefine(next);
+                        health::adopt(platform.game(), instance);
                         autoplay(instance);
                         moved += 1;
                     }

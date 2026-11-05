@@ -197,6 +197,189 @@ impl CentityContext {
         }
     }
 
+    // ---- stats, buffs and health ----
+
+    fn holder(&self, this: &handles::Centity) -> Option<crate::stats::Holder> {
+        self.with(this, |i| crate::stats::Holder::Centity(i.id))
+    }
+
+    /// A buff a script names; one the project doesn't have is an error.
+    fn buff(&self, name: &str) -> ApiResult<String> {
+        if self.shared.stats.borrow().has(name) {
+            return Ok(name.to_owned());
+        }
+        let file = name.split_once(':').map_or(name, |(_, f)| f);
+        Err(err(format!(
+            "there's no buff \"{name}\" (buffs/{file}.json)"
+        )))
+    }
+
+    /// Raises `event` on centity `id` with `payload` (pushed by `codec`): what handlers made of it, none
+    /// when nothing listens.
+    fn raise_on<C: Codec>(
+        &self,
+        id: Uuid,
+        event: &str,
+        codec: C,
+        payload: C::T,
+    ) -> Option<crate::Delivered> {
+        let target = self.centity_target(id)?;
+        if !self.scripts.listening(&target, event) {
+            return None;
+        }
+        let lua = self.scripts.host().lua().clone();
+        let Ok(Value::Table(fields)) = codec.push(&lua, payload) else {
+            return None;
+        };
+        Some(self.scripts.raise(&target, event, fields))
+    }
+
+    /// What a handler left in writable field `field`; none when it can't be read.
+    fn field<C: Codec>(&self, delivered: &crate::Delivered, field: &str, codec: C) -> Option<C::T> {
+        let lua = self.scripts.host().lua().clone();
+        let value: Value = delivered.fields.raw_get(field).ok()?;
+        codec.read(&lua, value, &format!("event.{field}")).ok()
+    }
+
+    /// Gives `holder` `buff` for `ticks` through its rules and its `buff_add` handlers: whether it took hold.
+    fn give_buff(&self, holder: crate::stats::Holder, buff: &str, ticks: i64) -> bool {
+        if self.shared.stats.borrow().blocked(holder, buff) {
+            return false;
+        }
+        let crate::stats::Holder::Centity(id) = holder else {
+            return false;
+        };
+        let event = shapes::BuffEvent {
+            buff: buff.to_owned(),
+            ticks,
+            player: None,
+            centity: Some(handles::Centity { id: uuid_text(&id) }),
+        };
+        let mut given = ticks;
+        if let Some(delivered) = self.raise_on(id, "buff_add", codecs::BuffEvent, event) {
+            if delivered.cancelled {
+                return false;
+            }
+            given = self
+                .field(&delivered, "ticks", netherforge_api::codec::Int)
+                .unwrap_or(ticks);
+        }
+        let cured = self.shared.stats.borrow_mut().add(holder, buff, given);
+        self.buffs_ended(cured);
+        true
+    }
+
+    /// `buff_end` for each buff that ended.
+    fn buffs_ended(&self, ended: Vec<crate::stats::Ended>) {
+        for end in ended {
+            let crate::stats::Holder::Centity(id) = end.holder else {
+                continue;
+            };
+            let event = shapes::BuffEndEvent {
+                buff: end.buff,
+                reason: end.reason.to_owned(),
+                player: None,
+                centity: Some(handles::Centity { id: uuid_text(&id) }),
+            };
+            self.raise_on(id, "buff_end", codecs::BuffEndEvent, event);
+        }
+    }
+
+    /// The buffs as the project's files say now: those whose file is gone end.
+    pub fn define_buffs(&self, files: BTreeMap<String, netherforge_format::kind::buff::BuffFile>) {
+        let ended = self.shared.stats.borrow_mut().define(files);
+        self.buffs_ended(ended);
+    }
+
+    /// Buffs count down a tick, on every centity still in the world.
+    fn tick_stats(&self) {
+        let ended = {
+            let centities = self.shared.centities.borrow();
+            let present = |holder: crate::stats::Holder| match holder {
+                crate::stats::Holder::Centity(id) => centities.get(id).is_some_and(|i| !i.removed),
+                // Players' stats are ported with players.
+                crate::stats::Holder::Player(_) => true,
+            };
+            self.shared.stats.borrow_mut().tick(&present)
+        };
+        self.buffs_ended(ended);
+    }
+
+    /// Deals `amount` to centity `id` through its `damage` handlers: what was taken, none when it has no
+    /// health or is dead. At 0 it dies (`death`), and is removed when its health says so.
+    pub fn deal_damage(
+        &self,
+        id: Uuid,
+        amount: f64,
+        source: Option<Handle>,
+        cause: Option<String>,
+    ) -> Option<f64> {
+        let before = self.shared.centities.borrow().get(id)?.health.clone()?;
+        if before.dead {
+            return None;
+        }
+        let event = shapes::CentityDamageEvent {
+            centity: handles::Centity { id: uuid_text(&id) },
+            amount,
+            source: source.clone(),
+            cause: cause.clone(),
+        };
+        let mut amount = amount;
+        if let Some(delivered) = self.raise_on(id, "damage", codecs::CentityDamageEvent, event) {
+            let still = self
+                .shared
+                .centities
+                .borrow()
+                .get(id)
+                .filter(|i| !i.removed)
+                .and_then(|i| i.health.clone());
+            if still.is_none_or(|h| h.dead || h.max != before.max) {
+                return None;
+            }
+            if delivered.cancelled {
+                return Some(0.0);
+            }
+            amount = self
+                .field(&delivered, "amount", netherforge_api::codec::Num)
+                .unwrap_or(amount);
+        }
+        let now = self.scripts.tick_count();
+        let (taken, died, remove) = {
+            let mut centities = self.shared.centities.borrow_mut();
+            let instance = centities.get_mut(id)?;
+            let h = instance.health.as_mut()?;
+            let taken = amount.max(0.0).min(h.current);
+            let taken = if taken.is_finite() { taken } else { 0.0 };
+            h.current -= taken;
+            let died = h.current <= 0.0;
+            if died {
+                h.current = 0.0;
+                h.dead = true;
+            }
+            let remove = h.remove_on_death;
+            super::health::draw(instance, true, now);
+            (taken, died, remove)
+        };
+        if died {
+            let event = shapes::CentityDeathEvent {
+                centity: handles::Centity { id: uuid_text(&id) },
+                source,
+                cause,
+            };
+            self.raise_on(id, "death", codecs::CentityDeathEvent, event);
+            let dead = self
+                .shared
+                .centities
+                .borrow()
+                .get(id)
+                .is_some_and(|i| !i.removed && i.health.as_ref().is_some_and(|h| h.dead));
+            if remove && dead {
+                CentityContext::remove(self, id);
+            }
+        }
+        Some(taken)
+    }
+
     // ---- clicks ----
 
     /// Routes a click on one of our entities (Kotlin's `CentityClicks.click`): true when the entity is
@@ -447,11 +630,15 @@ impl CentityContext {
         for id in expired {
             self.remove(id);
         }
+        self.tick_stats();
         let ids: Vec<Uuid> = self.shared.centities.borrow().all().map(|i| i.id).collect();
         for id in ids {
             match self.shared.centities.borrow_mut().get_mut(id) {
                 Some(instance) if !instance.removed => instance.age += 1,
                 _ => continue,
+            }
+            if let Some(i) = self.shared.centities.borrow_mut().get_mut(id) {
+                super::health::hide_bar(i, now);
             }
             // Tweens move the rest pose, which the clips then play over.
             if let Some(i) = self.shared.centities.borrow_mut().get_mut(id)
@@ -1391,25 +1578,25 @@ impl CentityApi for CentityContext {
             .unwrap_or(false))
     }
 
-    // ---- not ported yet ----
-    fn follow(&self, this: &handles::Centity, player: handles::Player) -> ApiResult<bool> {
-        CentityApi::follow(&Unported, this, player)
-    }
-    fn stop_following(&self, this: &handles::Centity) -> ApiResult<bool> {
-        CentityApi::stop_following(&Unported, this)
-    }
     fn stat(&self, this: &handles::Centity, name: String) -> ApiResult<f64> {
-        CentityApi::stat(&Unported, this, name)
+        Ok(self
+            .holder(this)
+            .map_or(0.0, |h| self.shared.stats.borrow_mut().stat(h, &name)))
     }
     fn stats(&self, this: &handles::Centity) -> ApiResult<BTreeMap<String, f64>> {
-        CentityApi::stats(&Unported, this)
+        Ok(self
+            .holder(this)
+            .map(|h| self.shared.stats.borrow_mut().stats(h))
+            .unwrap_or_default())
     }
     fn modifiers(
         &self,
         this: &handles::Centity,
         source: String,
     ) -> ApiResult<Option<BTreeMap<String, f64>>> {
-        CentityApi::modifiers(&Unported, this, source)
+        Ok(self
+            .holder(this)
+            .and_then(|h| self.shared.stats.borrow().modifiers(h, &source)))
     }
     fn set_modifiers(
         &self,
@@ -1417,34 +1604,128 @@ impl CentityApi for CentityContext {
         source: String,
         modifiers: Option<BTreeMap<String, f64>>,
     ) -> ApiResult<bool> {
-        CentityApi::set_modifiers(&Unported, this, source, modifiers)
+        let Some(holder) = self.holder(this) else {
+            return Ok(false);
+        };
+        self.shared
+            .stats
+            .borrow_mut()
+            .set_modifiers(holder, &source, modifiers)
+            .map_err(err)?;
+        Ok(true)
     }
     fn add_buff(&self, this: &handles::Centity, buff: String, ticks: i64) -> ApiResult<bool> {
-        CentityApi::add_buff(&Unported, this, buff, ticks)
+        if ticks < 1 {
+            return Err(err(format!(
+                "bad argument 'ticks' (at least 1 expected, got {ticks})"
+            )));
+        }
+        let id = self.buff(&buff)?;
+        let Some(holder) = self.holder(this) else {
+            return Ok(false);
+        };
+        Ok(self.give_buff(holder, &id, ticks))
     }
     fn remove_buff(&self, this: &handles::Centity, buff: String) -> ApiResult<bool> {
-        CentityApi::remove_buff(&Unported, this, buff)
+        let id = self.buff(&buff)?;
+        let Some(holder) = self.holder(this) else {
+            return Ok(false);
+        };
+        let had = self.shared.stats.borrow_mut().remove(holder, &id);
+        if had {
+            self.buffs_ended(vec![crate::stats::Ended {
+                holder,
+                buff: id,
+                reason: "removed",
+            }]);
+        }
+        Ok(had)
     }
     fn has_buff(&self, this: &handles::Centity, buff: String) -> ApiResult<bool> {
-        CentityApi::has_buff(&Unported, this, buff)
+        let id = self.buff(&buff)?;
+        Ok(self
+            .holder(this)
+            .is_some_and(|h| self.shared.stats.borrow().ticks(h, &id).is_some()))
     }
     fn buff_ticks(&self, this: &handles::Centity, buff: String) -> ApiResult<Option<i64>> {
-        CentityApi::buff_ticks(&Unported, this, buff)
+        let id = self.buff(&buff)?;
+        Ok(self
+            .holder(this)
+            .and_then(|h| self.shared.stats.borrow().ticks(h, &id)))
     }
     fn buffs(&self, this: &handles::Centity) -> ApiResult<Vec<shapes::ActiveBuff>> {
-        CentityApi::buffs(&Unported, this)
+        let Some(holder) = self.holder(this) else {
+            return Ok(Vec::new());
+        };
+        let stats = self.shared.stats.borrow();
+        Ok(stats
+            .buffs(holder)
+            .into_iter()
+            .map(|active| {
+                let file = stats.file(&active.id);
+                shapes::ActiveBuff {
+                    id: active.id.clone(),
+                    ticks: active.ticks,
+                    name: file.and_then(|f| f.name.clone()).map(values::Text),
+                    icon: file.and_then(|f| f.icon.clone()),
+                    color: file.and_then(|f| f.color.clone()),
+                    debuff: file.and_then(|f| f.debuff).unwrap_or(false),
+                }
+            })
+            .collect())
     }
     fn health(&self, this: &handles::Centity) -> ApiResult<Option<f64>> {
-        CentityApi::health(&Unported, this)
+        Ok(self
+            .with(this, |i| i.health.as_ref().map(|h| h.current))
+            .flatten())
     }
     fn max_health(&self, this: &handles::Centity) -> ApiResult<Option<f64>> {
-        CentityApi::max_health(&Unported, this)
+        Ok(self
+            .with(this, |i| i.health.as_ref().map(|h| h.max))
+            .flatten())
     }
     fn set_health(&self, this: &handles::Centity, health: f64) -> ApiResult<bool> {
-        CentityApi::set_health(&Unported, this, health)
+        if !health.is_finite() {
+            return Err(err("bad argument 'health' (a finite number expected)"));
+        }
+        let now = self.scripts.tick_count();
+        Ok(self
+            .with(this, |i| {
+                let Some(h) = &mut i.health else {
+                    return false;
+                };
+                h.current = health.clamp(0.0, h.max);
+                if h.current > 0.0 {
+                    h.dead = false;
+                }
+                super::health::draw(i, true, now);
+                true
+            })
+            .unwrap_or(false))
     }
     fn set_max_health(&self, this: &handles::Centity, max_health: f64) -> ApiResult<bool> {
-        CentityApi::set_max_health(&Unported, this, max_health)
+        if !(max_health > 0.0 && max_health.is_finite()) {
+            return Err(err(format!(
+                "bad argument 'max_health' (more than 0 expected, got {})",
+                lua_number(max_health)
+            )));
+        }
+        let now = self.scripts.tick_count();
+        Ok(self
+            .with(this, |i| {
+                let h = i.health.get_or_insert(super::health::Health {
+                    max: max_health,
+                    current: max_health,
+                    remove_on_death: true,
+                    bar: None,
+                    dead: false,
+                    shown_until: None,
+                });
+                h.max = max_health;
+                h.current = h.current.min(max_health);
+                super::health::draw(i, true, now);
+            })
+            .is_some())
     }
     fn damage(
         &self,
@@ -1452,13 +1733,51 @@ impl CentityApi for CentityContext {
         amount: f64,
         options: Option<shapes::CentityDamageOptions>,
     ) -> ApiResult<Option<f64>> {
-        CentityApi::damage(&Unported, this, amount, options)
+        if !(amount >= 0.0 && amount.is_finite()) {
+            return Err(err(format!(
+                "bad argument 'amount' (at least 0 expected, got {})",
+                lua_number(amount)
+            )));
+        }
+        let Some(id) = self.with(this, |i| i.id) else {
+            return Ok(None);
+        };
+        let (source, cause) = options.map_or((None, None), |o| (o.source, o.cause));
+        Ok(self.deal_damage(id, amount, source, cause))
     }
     fn heal(&self, this: &handles::Centity, amount: f64) -> ApiResult<Option<f64>> {
-        CentityApi::heal(&Unported, this, amount)
+        if !(amount >= 0.0 && amount.is_finite()) {
+            return Err(err(format!(
+                "bad argument 'amount' (at least 0 expected, got {})",
+                lua_number(amount)
+            )));
+        }
+        let now = self.scripts.tick_count();
+        Ok(self
+            .with(this, |i| {
+                let h = i.health.as_mut()?;
+                let gained = amount.max(0.0).min(h.max - h.current);
+                h.current += gained;
+                if h.current > 0.0 {
+                    h.dead = false;
+                }
+                super::health::draw(i, gained > 0.0, now);
+                Some(gained)
+            })
+            .flatten())
     }
     fn is_dead(&self, this: &handles::Centity) -> ApiResult<bool> {
-        CentityApi::is_dead(&Unported, this)
+        Ok(self
+            .with(this, |i| i.health.as_ref().is_some_and(|h| h.dead))
+            .unwrap_or(false))
+    }
+
+    // ---- not ported yet ----
+    fn follow(&self, this: &handles::Centity, player: handles::Player) -> ApiResult<bool> {
+        CentityApi::follow(&Unported, this, player)
+    }
+    fn stop_following(&self, this: &handles::Centity) -> ApiResult<bool> {
+        CentityApi::stop_following(&Unported, this)
     }
     fn has_body(&self, this: &handles::Centity) -> ApiResult<bool> {
         CentityApi::has_body(&Unported, this)

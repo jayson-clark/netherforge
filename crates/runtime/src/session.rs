@@ -503,19 +503,24 @@ impl Service for CentitiesService {
     }
 
     fn reloads(&self) -> &'static [&'static str] {
-        &["centity"]
+        &["centity", "buff"]
     }
 
-    fn start(&mut self, _room: &Room, project: &Define) {
+    fn start(&mut self, room: &Room, project: &Define) {
         self.define(project);
+        self.context(room).define_buffs(buffs(project));
     }
 
     fn tick(&mut self, room: &Room, _platform: &dyn Platform) {
         self.context(room).tick();
     }
 
-    fn reload(&mut self, room: &Room, _kind: &str, ids: &BTreeSet<String>, project: &Define) {
+    fn reload(&mut self, room: &Room, kind: &str, ids: &BTreeSet<String>, project: &Define) {
         let context = self.context(room);
+        if kind == "buff" {
+            context.define_buffs(buffs(project));
+            return;
+        }
         let before = context.instances_of(ids);
         self.define(project);
         context.reload(ids, &before);
@@ -525,7 +530,18 @@ impl Service for CentitiesService {
     /// behind as strays nothing owns.
     fn stop(&mut self, room: &Room, _platform: &dyn Platform) {
         self.context(room).stop_all();
+        self.shared.stats.borrow_mut().clear();
     }
+}
+
+/// The project's buffs, by id.
+fn buffs(project: &Define) -> BTreeMap<String, netherforge_format::kind::buff::BuffFile> {
+    project
+        .project
+        .running::<netherforge_format::kind::buff::BuffFile>()
+        .into_iter()
+        .map(|(id, file)| (id, file.clone()))
+        .collect()
 }
 
 /// Whose a scope is, for the log: `module greeter`, a script's file.

@@ -21,6 +21,7 @@ pub mod modules;
 pub mod scripts;
 pub mod session;
 pub mod shared;
+pub mod stats;
 
 pub use modules::{Modules, Owner, Project};
 pub use scripts::{Delivered, Log, MAX_ERRORS, Report, Scripts, Target};

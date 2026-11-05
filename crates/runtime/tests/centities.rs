@@ -859,3 +859,73 @@ print(pcall(nf.centities.spawn, "lamp", vector.create(0, 0, 0), { lifetime = 0 }
     platform.take();
     assert_eq!(session.centities().all().count(), 1);
 }
+
+#[test]
+fn a_centity_takes_buffs_and_damage_and_dies() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = lamp(1.0);
+    let end = centity.rfind('}').expect("an object");
+    let centity = format!(
+        r#"{}, "health": {{ "max": 10, "bar": {{ "segments": 5 }} }} }}"#,
+        centity[..end].trim_end()
+    );
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/dummy/centity.json", &centity),
+        (
+            "buffs/frail.json",
+            r#"{ "stats": { "defense": -4 }, "blockedBy": ["ironskin"], "stacking": "add" }"#,
+        ),
+        (
+            "buffs/ironskin.json",
+            r#"{ "stats": { "defense": 6 }, "cures": ["frail"] }"#,
+        ),
+        (
+            "modules/game/init.lua",
+            r#"
+local d = nf.centities.spawn("dummy", vector.create(0, 64, 0))
+d:on("buff_end", function(e) print("ended", e.buff, e.reason) end)
+d:on("damage", function(e) e.amount = e.amount / 2 end)
+d:on("death", function(e) print("died", e.cause) end)
+d:on("remove", function() print("removed") end)
+print(d:add_buff("frail", 5), d:stat("defense"), d:buff_ticks("frail"))
+print(d:add_buff("ironskin", 2), d:stat("defense"), d:has_buff("frail"), d:add_buff("frail", 5))
+print(pcall(d.add_buff, d, "slow", 5))
+d:set_modifiers("gear", { defense = 1 })
+print(d:stat("defense"), d:node("health_bar") ~= nil, d:node("health_bar"):display_text())
+print(d:damage(4), d:health(), d:node("health_bar"):is_visible())
+nf.after(4, function()
+    print(#d:buffs(), d:damage(100, { cause = "fall" }), d:exists())
+end)
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(
+        printed(&start),
+        [
+            "true\t-4\t5",
+            "ended\tfrail\tcured",
+            "true\t6\tfalse\tfalse",
+            "false\tmodules/game/init.lua:9: there's no buff \"slow\" (buffs/slow.json)",
+            "7\ttrue\t<red>▮▮▮▮▮<dark_gray>",
+            "2\t8\ttrue",
+        ],
+        "{start:?}"
+    );
+    for _ in 0..5 {
+        session.tick();
+    }
+    let lines = printed(&platform.take());
+    assert_eq!(
+        lines,
+        [
+            "ended\tironskin\texpired",
+            "died\tfall",
+            "removed",
+            "0\t8\tfalse"
+        ],
+        "{lines:?}"
+    );
+}
