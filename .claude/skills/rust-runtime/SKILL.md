@@ -478,8 +478,8 @@ file (one `netherforge.db` for both). A normal instance's record is staged when 
 end of the tick (`CentityContext::commit`), its place saved when the world saves, a chunk unloads, the
 session stops or autosave (6000 ticks). A stopping session leaves instances in the world; the next restores
 them (their scripts start in `Service::after_start`, once modules run, without `spawn`), inert while their
-centity is gone and revived when it's back. `centity:data()` is the JSON codec's text in `centity_data`
-(without tags yet: a handle in it is reported, not saved). The store commits on the main thread for now.
+centity is gone and revived when it's back. `centity:data()` is one of the saved tables
+(`crate::data`, below). The store commits on the main thread for now.
 
 **Images** (`crate::images`): pictures held by number, bounded by `MAX_HELD` pixels, decoded with the `image`
 crate (PNG, JPEG, GIF, BMP), encoded as PNG. Not yet: letting go when Lua drops a handle (they go with the
@@ -538,6 +538,18 @@ nil or false while it isn't in the world.
   scope's namespace. Not yet (32 functions, each with its area): sounds and particles, permissions, skies,
   recipes, advancements, menus and dialogs, listings and below-name text, boss bars, resource packs,
   `player:data()` and `player:session()`.
+
+## Saved tables (`crates/runtime/src/data.rs`)
+
+`ScriptData` is Kotlin's: `centity:data()`, `player:data()` and `nf.data(name)` are one kind of thing, a live
+Lua table by `Owner` (`Centity`, `Player`, `Named { namespace, name }`), made from the store the first time
+and saved, when its encoding changed, at autosave (6000 ticks), when its player quits and when the session
+stops (`DataService`, registered first so it stops after every script's unload). Its encoding as a session
+ends is carried into the next session's table (a restart), not read again from the store. `nf.data` is per
+package (the calling scope's namespace); a thing's table is the thing's, whoever's code asks. Over 1 MiB isn't
+saved and is logged once while it stays so. The store's rows are its `centity_data`, `player_data` and
+`named_data` (`Store::data`, `put_data`, `delete_data`). `nf` is `NfContext` (`lib.rs`): `Scripts`' functions,
+with `nf.data` the session's. Not yet: tagged values (a handle in a table is reported and skipped).
 
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 

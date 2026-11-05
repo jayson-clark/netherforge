@@ -4,7 +4,7 @@
 //!
 //! Not yet, each with its area: sounds and particles (effects), permissions (the store), skies, recipes,
 //! advancements, menus and dialogs, who's listed for whom and below-name text (teams), boss bars, resource
-//! packs, `player:data()` and `player:session()`.
+//! packs, and `player:session()`.
 
 use std::collections::BTreeMap;
 
@@ -1064,8 +1064,14 @@ impl PlayerApi for GameContext {
                 .set_view_distance(id, distance as i32)
         }))
     }
+    /// Theirs whether they're online or not; a handle that doesn't name anyone is an error.
     fn data(&self, this: &handles::Player) -> ApiResult<Value> {
-        <Unported as PlayerApi>::data(&Unported, this)
+        let id = anyone(this)?;
+        let label = format!("player {}", PlayerApi::name(self, this)?);
+        let host = self.scripts.host();
+        crate::data::ScriptData::table(&self.shared, &host, crate::data::Owner::Player(id), label)
+            .map(Value::Table)
+            .map_err(|e| err(e.to_string()))
     }
     fn session(&self, this: &handles::Player) -> ApiResult<Value> {
         <Unported as PlayerApi>::session(&Unported, this)

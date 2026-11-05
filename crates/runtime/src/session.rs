@@ -551,6 +551,11 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
     // Centities are defined before modules start: a module's body may spawn one. Their instances' scripts
     // stop before the modules they require do.
     vec![
+        // Saved tables stop last, after every script's unload has had them.
+        Box::new(crate::data::DataService {
+            shared: shared.clone(),
+            host: Default::default(),
+        }),
         Box::new(CentitiesService {
             shared: shared.clone(),
             restored: Default::default(),

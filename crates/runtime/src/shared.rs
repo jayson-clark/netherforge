@@ -32,8 +32,8 @@ pub struct Shared {
     pub path_nodes: std::cell::Cell<usize>,
     /// The runtime's store: placements and saved tables.
     pub store: Rc<crate::store::Store>,
-    /// The `centity:data()` tables scripts asked for, by instance.
-    pub centity_data: RefCell<std::collections::HashMap<netherforge_platform::Uuid, DataTable>>,
+    /// Scripts' saved tables: `centity:data()`, `player:data()`, `nf.data(name)`.
+    pub data: RefCell<crate::data::ScriptData>,
     /// Natural spawning: its passes, rules and scripts' conditions.
     pub spawner: RefCell<crate::centity::natural::Spawner>,
     /// The pictures scripts hold.
@@ -58,7 +58,7 @@ impl Shared {
         Rc::new(Shared {
             platform,
             store,
-            centity_data: RefCell::default(),
+            data: RefCell::default(),
             centities: RefCell::default(),
             font: RefCell::default(),
             centity_scripts: RefCell::default(),

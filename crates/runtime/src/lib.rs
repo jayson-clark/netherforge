@@ -5,18 +5,20 @@
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
+use mlua::{Function, Value};
 use netherforge_api::api::{
     CentityApi, ImageApi, LuaApi, NfApi, NfCentitiesApi, NfImagesApi, NodeApi, SubscriptionApi,
     TaskApi,
 };
 use netherforge_api::unported::Unported;
-use netherforge_api::{ApiError, ApiResult, Runtime};
+use netherforge_api::{ApiError, ApiResult, Caller, Runtime, Waiting, handles, shapes, unions};
 use netherforge_format::manifest::Requires;
 use netherforge_format::requirement::Requirement;
 use netherforge_luau::{Host, ScopeId};
 
 pub mod block;
 pub mod centity;
+pub mod data;
 pub mod entity;
 pub mod events;
 pub mod images;
@@ -57,9 +59,123 @@ impl Grants {
     }
 }
 
+/// `nf` itself: the scripts' functions, and `nf.data`, whose tables are the session's.
+struct NfContext {
+    scripts: Scripts,
+    shared: Option<Rc<Shared>>,
+    grants: Grants,
+}
+
+impl NfApi for NfContext {
+    fn on(
+        &self,
+        caller: &Caller,
+        event: String,
+        handler: Function,
+        options: Option<shapes::EventOptions>,
+    ) -> ApiResult<handles::Subscription> {
+        NfApi::on(&self.scripts, caller, event, handler, options)
+    }
+
+    fn once(
+        &self,
+        caller: &Caller,
+        event: String,
+        handler: Function,
+    ) -> ApiResult<handles::Subscription> {
+        NfApi::once(&self.scripts, caller, event, handler)
+    }
+
+    fn emit(&self, caller: &Caller, event: String, payload: Value) -> ApiResult<bool> {
+        NfApi::emit(&self.scripts, caller, event, payload)
+    }
+
+    fn after(&self, caller: &Caller, ticks: i64, callback: Function) -> ApiResult<handles::Task> {
+        NfApi::after(&self.scripts, caller, ticks, callback)
+    }
+
+    fn every(&self, caller: &Caller, ticks: i64, callback: Function) -> ApiResult<handles::Task> {
+        NfApi::every(&self.scripts, caller, ticks, callback)
+    }
+
+    fn task(
+        &self,
+        caller: &Caller,
+        callback: Function,
+        rest: Vec<Value>,
+    ) -> ApiResult<handles::Task> {
+        NfApi::task(&self.scripts, caller, callback, rest)
+    }
+
+    fn wait(&self, caller: &Caller, ticks: i64) -> ApiResult<Waiting> {
+        NfApi::wait(&self.scripts, caller, ticks)
+    }
+
+    fn wait_until(
+        &self,
+        caller: &Caller,
+        predicate: Function,
+        timeout: Option<i64>,
+    ) -> ApiResult<Waiting> {
+        NfApi::wait_until(&self.scripts, caller, predicate, timeout)
+    }
+
+    fn wait_for(
+        &self,
+        caller: &Caller,
+        handle: unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable,
+        event: String,
+        filter: Option<Function>,
+    ) -> ApiResult<Waiting> {
+        NfApi::wait_for(&self.scripts, caller, handle, event, filter)
+    }
+
+    fn data(&self, caller: &Caller, name: String) -> ApiResult<Value> {
+        if !netherforge_format::names::is_id(&name) {
+            return Err(ApiError(format!(
+                "\"{name}\" isn't a data table name ({})",
+                netherforge_format::names::ID_RULE
+            )));
+        }
+        let Some(shared) = &self.shared else {
+            return NfApi::data(&Unported, caller, name);
+        };
+        // Each package's own: a dependency's `nf.data("config")` isn't the project's.
+        let namespace = self
+            .scripts
+            .namespace(caller.scope)
+            .unwrap_or_else(|| self.grants.home.clone());
+        let host = self.scripts.host();
+        data::ScriptData::table(
+            shared,
+            &host,
+            data::Owner::Named {
+                namespace,
+                name: name.clone(),
+            },
+            format!("nf.data(\"{name}\")"),
+        )
+        .map(Value::Table)
+        .map_err(|e| ApiError(e.to_string()))
+    }
+
+    fn db(&self, caller: &Caller, name: Option<String>) -> ApiResult<handles::Database> {
+        NfApi::db(&self.scripts, caller, name)
+    }
+
+    fn config(&self, caller: &Caller, name: String) -> ApiResult<Value> {
+        NfApi::config(&self.scripts, caller, name)
+    }
+
+    fn instructions_left(&self, caller: &Caller) -> ApiResult<i64> {
+        NfApi::instructions_left(&self.scripts, caller)
+    }
+}
+
 /// The API as the runtime implements it so far, every other class unported.
 struct Api {
     scripts: Scripts,
+    nf: NfContext,
     grants: Grants,
     /// The centity classes, when the room runs a session's centities.
     centities: Option<centity::api::CentityContext>,
@@ -117,7 +233,7 @@ impl Runtime for Api {
 
 impl LuaApi for Api {
     fn nf(&self) -> &dyn NfApi {
-        &self.scripts
+        &self.nf
     }
     fn subscription(&self) -> &dyn SubscriptionApi {
         &self.scripts
@@ -242,7 +358,13 @@ impl Room {
             centity::api::CentityContext::install_liveness(&shared, &scripts);
             centity::api::CentityContext::new(shared, scripts.clone())
         });
+        let nf = NfContext {
+            scripts: scripts.clone(),
+            shared: worlds.as_ref().map(|w| w.shared.clone()),
+            grants: grants.clone(),
+        };
         let api = Api {
+            nf,
             scripts: scripts.clone(),
             grants,
             centities,

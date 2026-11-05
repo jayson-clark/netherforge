@@ -298,40 +298,85 @@ impl Store {
 
     // ---- saved tables ----
 
-    /// Instance `id`'s `centity:data()` as last saved (the codec's JSON), or none when it never was.
-    pub fn centity_data(&self, id: Uuid) -> Option<String> {
+    /// `owner`'s saved table as last saved (the codec's JSON), or none when it never was.
+    pub fn data(&self, owner: &crate::data::Owner) -> Option<String> {
+        use crate::data::Owner;
         self.commit();
-        self.connection
-            .query_row(
+        let row = match owner {
+            Owner::Centity(id) => self.connection.query_row(
                 "SELECT value FROM centity_data WHERE instance = ?1",
-                params![uuid_text(&id)],
+                params![uuid_text(id)],
                 |r| r.get(0),
-            )
-            .optional()
-            .ok()
-            .flatten()
+            ),
+            Owner::Player(id) => self.connection.query_row(
+                "SELECT value FROM player_data WHERE player = ?1",
+                params![uuid_text(id)],
+                |r| r.get(0),
+            ),
+            Owner::Named { namespace, name } => self.connection.query_row(
+                "SELECT value FROM named_data WHERE namespace = ?1 AND name = ?2",
+                params![namespace, name],
+                |r| r.get(0),
+            ),
+        };
+        row.optional().ok().flatten()
     }
 
-    pub fn put_centity_data(&self, id: Uuid, text: String) {
-        let key = uuid_text(&id);
+    /// The staging key of `owner`'s row, so a later write of it replaces an earlier one.
+    fn data_key(owner: &crate::data::Owner) -> String {
+        use crate::data::Owner;
+        match owner {
+            Owner::Centity(id) => format!("centity_data {}", uuid_text(id)),
+            Owner::Player(id) => format!("player_data {}", uuid_text(id)),
+            Owner::Named { namespace, name } => format!("named_data {namespace}:{name}"),
+        }
+    }
+
+    pub fn put_data(&self, owner: &crate::data::Owner, text: String) {
+        use crate::data::Owner;
+        let owner = owner.clone();
         self.stage(
-            format!("centity_data {key}"),
+            Store::data_key(&owner),
             Box::new(move |c| {
-                c.execute(
-                    "INSERT INTO centity_data (instance, value) VALUES (?1, ?2) ON CONFLICT (instance) DO UPDATE SET value = excluded.value",
-                    params![key, text],
-                )?;
+                match &owner {
+                    Owner::Centity(id) => c.execute(
+                        "INSERT INTO centity_data (instance, value) VALUES (?1, ?2) ON CONFLICT (instance) DO UPDATE SET value = excluded.value",
+                        params![uuid_text(id), text],
+                    )?,
+                    Owner::Player(id) => c.execute(
+                        "INSERT INTO player_data (player, value) VALUES (?1, ?2) ON CONFLICT (player) DO UPDATE SET value = excluded.value",
+                        params![uuid_text(id), text],
+                    )?,
+                    Owner::Named { namespace, name } => c.execute(
+                        "INSERT INTO named_data (namespace, name, value) VALUES (?1, ?2, ?3) ON CONFLICT (namespace, name) DO UPDATE SET value = excluded.value",
+                        params![namespace, name, text],
+                    )?,
+                };
                 Ok(())
             }),
         );
     }
 
-    pub fn delete_centity_data(&self, id: Uuid) {
-        let key = uuid_text(&id);
+    pub fn delete_data(&self, owner: &crate::data::Owner) {
+        use crate::data::Owner;
+        let owner = owner.clone();
         self.stage(
-            format!("centity_data {key}"),
+            Store::data_key(&owner),
             Box::new(move |c| {
-                c.execute("DELETE FROM centity_data WHERE instance = ?1", params![key])?;
+                match &owner {
+                    Owner::Centity(id) => c.execute(
+                        "DELETE FROM centity_data WHERE instance = ?1",
+                        params![uuid_text(id)],
+                    )?,
+                    Owner::Player(id) => c.execute(
+                        "DELETE FROM player_data WHERE player = ?1",
+                        params![uuid_text(id)],
+                    )?,
+                    Owner::Named { namespace, name } => c.execute(
+                        "DELETE FROM named_data WHERE namespace = ?1 AND name = ?2",
+                        params![namespace, name],
+                    )?,
+                };
                 Ok(())
             }),
         );
@@ -377,9 +422,14 @@ mod tests {
                 ..record.clone()
             }]
         );
-        store.put_centity_data(Uuid(42), r#"{"coins":3}"#.into());
+        store.put_data(
+            &crate::data::Owner::Centity(Uuid(42)),
+            r#"{"coins":3}"#.into(),
+        );
         assert_eq!(
-            store.centity_data(Uuid(42)).as_deref(),
+            store
+                .data(&crate::data::Owner::Centity(Uuid(42)))
+                .as_deref(),
             Some(r#"{"coins":3}"#)
         );
         store.delete_instance(Uuid(42));

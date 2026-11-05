@@ -2043,3 +2043,66 @@ alex:on("buff_end", function(e) print("ended", e.buff, e.reason) end)
     }
     assert_eq!(lines, ["ended\tswift\texpired"]);
 }
+
+#[test]
+fn saved_tables_are_saved_when_they_change_and_carried_into_a_restart() {
+    use netherforge_platform::{PlatformEvents, game_event};
+    use netherforge_runtime::data::Owner;
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let store = std::rc::Rc::new(netherforge_runtime::store::Store::in_memory());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/scores/init.lua",
+            r#"
+local s = nf.data("scores")
+print(s.top, pcall(nf.data, "Bad Name"))
+s.top = (s.top or 0) + 1
+nf.worlds.default():players()[1]:data().coins = 3
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start_with(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        store.clone(),
+    ));
+    let first = printed(&platform.take());
+    assert_eq!(
+        first,
+        [
+            "nil\tfalse\tmodules/scores/init.lua:3: \"Bad Name\" isn't a data table name (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)"
+        ]
+    );
+    // Their table is saved as they leave.
+    let alex = netherforge_platform::PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    server.game().player_quit(&mut game_event::PlayerQuit {
+        player: alex,
+        message: None,
+    });
+    store.commit();
+    assert_eq!(
+        store.data(&Owner::Player(Uuid(77))).as_deref(),
+        Some(r#"{"coins":3}"#)
+    );
+    // A restart (netherforge.json changed) starts from the table as the last session left it.
+    server
+        .session_mut()
+        .reload(&["netherforge.json".to_owned()]);
+    assert_eq!(
+        printed(&platform.take())[0],
+        "1\tfalse\tmodules/scores/init.lua:3: \"Bad Name\" isn't a data table name (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)"
+    );
+    server.session_mut().stop();
+    let named = Owner::Named {
+        namespace: "demo".into(),
+        name: "scores".into(),
+    };
+    assert_eq!(store.data(&named).as_deref(), Some(r#"{"top":2}"#));
+}

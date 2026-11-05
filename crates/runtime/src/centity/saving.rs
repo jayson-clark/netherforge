@@ -92,7 +92,7 @@ impl Centities {
                 None => {
                     if self.stored.remove(&id).is_some() {
                         store.delete_instance(id);
-                        store.delete_centity_data(id);
+                        store.delete_data(&crate::data::Owner::Centity(id));
                     }
                 }
             }
