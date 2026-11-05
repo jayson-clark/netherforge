@@ -303,11 +303,15 @@ Kotlin `Scripts`, in Rust, implementing `nf.on`/`once`/`emit`, `nf.after`/`every
 - **Weak host.** `Scripts` holds the host weakly: the host's state holds the installed API,
   which holds `Scripts`, so a strong one would be a cycle. The `Room` owns the host.
 
+- **A writable field is checked as it's assigned**, read by the payload shape's codec for that
+  field as it will be read back (`codecs::check_field`, generated for every event's writable
+  fields), so a mistake is an error at the handler's line: `bad value for event.message (string or
+nil expected, got number)`, Kotlin's words.
+
 Not ported yet (the Kotlin runtime does them): `:on` on handles other than `nf` (it needs each
-service's liveness), `nf.wait_for` on a handle, checking a writable field's value as it's
-assigned (`events.check`), the same error within five seconds only counted, the per-scope time
-per tick (`maxTickMillis`, which holds back timers and tick handlers), time per scope and the
-profiler, and an async function's waiting form (no callback, in a task).
+service's liveness), `nf.wait_for` on a handle, the per-scope time per tick (`maxTickMillis`, which
+holds back timers and tick handlers), time per scope and the profiler, and an async function's
+waiting form (no callback, in a task).
 
 ## Modules (`crates/runtime/src/modules.rs`)
 
@@ -353,10 +357,14 @@ Kotlin's words), otherwise its services started in a `Room`, ticked, reloaded an
 - **Modules** are the first service: every module of the tree (the packages' included) with an
   `init.lua` starts in a scope of its own (`Modules`), and one that changed restarts from its new
   files with every module that required it.
-- **Reports go to the Platform's log**: a script's failure as a warning (an error once it gave up
-  after `MAX_ERRORS`), a line it logged as info with its scope and place
-  (`[module door] hello (modules/door/init.lua:1)`), and the project's errors as warnings as it
-  starts, with what the tree requires (`requirement::combined`).
+- **Reports go to the Platform's log** (Kotlin's `ScriptReports`): a body that failed (`module
+dead: body failed: … (modules/dead/init.lua:2). It's disabled until it's reloaded.`); a handler,
+  timer or task that failed, located, the same error again within `ERROR_QUIET_TICKS` (100) only
+  counted and said with the next (`(and 49 more like it)`); one cancelled after `MAX_ERRORS` in a
+  row, always said. Each is a `script.error` problem in `Session::problems` until its scope closes.
+  A line a script logged is info with its scope and place (`[module door] hello
+(modules/door/init.lua:1)`); the project's errors are warnings as it starts, with what the tree
+  requires (`requirement::combined`).
 - **Grants are per package** (`Grants`, by namespace): a call is held to the `requires` of the
   package whose code makes it, which the binding knows (the scope `nf` was bound to, or the running
   scope's for a handle method), so Kotlin's rule for a tail call hiding the caller isn't needed. A

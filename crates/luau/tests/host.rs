@@ -157,7 +157,13 @@ fn an_endless_loop_is_stopped_at_its_line() {
 
 #[test]
 fn every_kind_of_loop_is_stopped() {
-    let host = host();
+    // The budget is what this is about: a time limit far past it, so a loaded machine can't race it
+    // (catching an error is slow in a debug build: `pcall(error, 'x')` takes ~0.4 s for the budget).
+    let host = Host::new(Limits {
+        deadline: std::time::Duration::from_secs(60),
+        ..Limits::default()
+    })
+    .unwrap();
     for source in [
         "repeat until false",
         "for i = 1, math.huge do end",

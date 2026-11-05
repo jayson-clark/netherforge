@@ -130,7 +130,7 @@ writeDir(
     ['shapes.rs', shapesRust(boundRust)],
     ['unions.rs', unionsRust(boundRust)],
     ['api.rs', apiRust(boundRust.classes)],
-    ['codecs.rs', codecsRust(boundRust)],
+    ['codecs.rs', codecsRust(boundRust, api)],
     ['bindings.rs', bindRust(boundRust.classes)],
     ['unported.rs', unportedRust(boundRust.classes)],
     ['events.rs', eventsRust(api)],

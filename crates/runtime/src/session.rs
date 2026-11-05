@@ -70,6 +70,46 @@ pub struct Session<'a> {
     refusal: Option<Refusal>,
     room: Option<Room>,
     services: Vec<Box<dyn Service>>,
+    reported: std::cell::RefCell<Reported>,
+}
+
+/// How long the same runtime error stays quiet after it's logged: five seconds.
+pub const ERROR_QUIET_TICKS: u64 = 100;
+
+/// What the session has said of its scripts' failures (Kotlin's `ScriptReports`).
+#[derive(Default)]
+struct Reported {
+    /// When each distinct runtime error was last logged, and how many like it were held back since.
+    errors: std::collections::HashMap<String, (u64, u32)>,
+    /// The problems scripts caused while running, by scope, until the scope closes.
+    problems: BTreeMap<netherforge_luau::ScopeId, Vec<Problem>>,
+}
+
+/// A failure's message without its location, and where it was (`modules/door/init.lua`, line 3).
+fn placed(failure: &netherforge_luau::Failure) -> (String, Option<String>, Option<u32>) {
+    use netherforge_luau::Failure;
+    match failure {
+        Failure::Stopped { stop, location } => (
+            stop.to_string(),
+            location.as_ref().map(|l| l.chunk.clone()),
+            location.as_ref().map(|l| l.line),
+        ),
+        Failure::Memory => (failure.to_string(), None, None),
+        Failure::Error { message, .. } => {
+            // Luau locates a message `chunk:line: message`; a chunk is a project path (a package's has a colon).
+            let located = message.match_indices(": ").find_map(|(at, _)| {
+                let (place, rest) = (&message[..at], &message[at + 2..]);
+                let (file, line) = place.rsplit_once(':')?;
+                let line: u32 = line.parse().ok()?;
+                file.ends_with(".lua")
+                    .then(|| (rest.to_owned(), file.to_owned(), line))
+            });
+            match located {
+                Some((rest, file, line)) => (rest, Some(file), Some(line)),
+                None => (message.clone(), None, None),
+            }
+        }
+    }
 }
 
 impl<'a> Session<'a> {
@@ -88,6 +128,7 @@ impl<'a> Session<'a> {
             project,
             room: None,
             services: services(),
+            reported: Default::default(),
         };
         session.run();
         session
@@ -169,14 +210,23 @@ impl<'a> Session<'a> {
         self.room.as_ref()
     }
 
-    /// What's wrong with the project as it reads: format's findings and the session's own refusal.
+    /// What's wrong with the project as it reads: format's findings, the session's own refusal, and what its
+    /// running scripts caused (a body that failed, a handler that errors), until the scope closes.
     pub fn problems(&self) -> Vec<Problem> {
         let refused = self.refusal.as_ref().and_then(|r| r.problem.clone());
+        let mut reported = self.reported.borrow_mut();
+        if let Some(room) = &self.room {
+            let host = room.host();
+            reported
+                .problems
+                .retain(|scope, _| host.scope_name(*scope).is_some());
+        }
         self.project
             .problems
             .iter()
             .cloned()
             .chain(refused)
+            .chain(reported.problems.values().flatten().cloned())
             .collect()
     }
 
@@ -241,26 +291,72 @@ impl<'a> Session<'a> {
         self.services = services();
     }
 
-    /// What the scripts reported since the last time, to the log: failures as
-    /// warnings (an error once it gave up), and the lines they logged.
+    /// What the scripts reported since the last time, to the log (Kotlin's `ScriptReports`): a body that
+    /// failed, whose scope is disabled until it's reloaded; a handler, timer or task that failed, located,
+    /// the same error again within `ERROR_QUIET_TICKS` only counted (the next line says how many were held
+    /// back); one cancelled for failing `MAX_ERRORS` times in a row, which is always said. Each is a
+    /// `script.error` problem too, until its scope closes. Then the lines scripts logged.
     fn report(&self) {
         let Some(room) = &self.room else { return };
         let log = self.platform.log();
         let scripts = room.scripts();
+        let tick = scripts.tick_count();
+        let mut reported = self.reported.borrow_mut();
         for report in scripts.take_reports() {
-            let message = format!(
-                "{} {} failed: {}",
-                label(room, report.scope),
-                report.what,
-                report.failure
-            );
-            if report.gave_up {
-                log.error(
-                    format!("{message} (stopped after {} in a row)", crate::MAX_ERRORS),
-                    None,
-                );
+            let label = label(room, report.scope);
+            let (message, file, line) = placed(&report.failure);
+            let at = match (&file, line) {
+                (Some(file), Some(line)) => format!(" ({file}:{line})"),
+                (Some(file), None) => format!(" ({file})"),
+                _ => String::new(),
+            };
+            if report.what == "body" {
+                log.warn(format!(
+                    "{label}: body failed: {message}{at}. It's disabled until it's reloaded."
+                ));
             } else {
-                log.warn(message);
+                let key = format!(
+                    "{:?}|{}|{message}|{file:?}|{line:?}",
+                    report.scope, report.what
+                );
+                let quiet = reported
+                    .errors
+                    .get(&key)
+                    .is_some_and(|(last, _)| tick.saturating_sub(*last) < ERROR_QUIET_TICKS);
+                if quiet {
+                    if let Some((_, held)) = reported.errors.get_mut(&key) {
+                        *held += 1;
+                    }
+                } else {
+                    let held = reported.errors.get(&key).map_or(0, |(_, held)| *held);
+                    reported.errors.insert(key, (tick, 0));
+                    let more = if held > 0 {
+                        format!(" (and {held} more like it)")
+                    } else {
+                        String::new()
+                    };
+                    log.warn(format!(
+                        "{label}: {} failed: {message}{at}{more}",
+                        report.what
+                    ));
+                }
+                if report.gave_up {
+                    log.warn(format!(
+                        "{label}: {} failed {} times in a row, so it was cancelled{at}",
+                        report.what,
+                        crate::MAX_ERRORS
+                    ));
+                }
+            }
+            let problem = netherforge_format::codes::SCRIPT_ERROR.at(
+                file.as_deref().unwrap_or("modules"),
+                message,
+                None,
+            );
+            let problem = Problem { line, ..problem };
+            let kept = reported.problems.entry(report.scope).or_default();
+            if !kept.contains(&problem) {
+                kept.push(problem);
             }
         }
         for line in scripts.take_logs() {

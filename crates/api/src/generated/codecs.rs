@@ -7350,3 +7350,59 @@ impl Codec for StringOrNumber {
         }
     }
 }
+
+/// Reads `value` as writable field `name` of event payload `shape`, as it will be read back
+/// once the handlers have run: what a handler assigning it is checked against. `None` for
+/// a field that isn't a writable one.
+pub fn check_field(lua: &Lua, shape: &str, name: &str, value: Value, at: &str) -> Option<crate::ApiResult<()>> {
+    let _ = (&lua, &value, &at);
+    match (shape, name) {
+        ("PlayerJoinEvent", "message") => Some(Opt(TextCodec).read(lua, value, at).map(|_| ())),
+        ("PlayerQuitEvent", "message") => Some(Opt(TextCodec).read(lua, value, at).map(|_| ())),
+        ("PlayerChatEvent", "message") => Some(Str.read(lua, value, at).map(|_| ())),
+        ("PlayerChatEvent", "format") => Some(TextCodec.read(lua, value, at).map(|_| ())),
+        ("PlayerTeleportEvent", "to") => Some(LocationCodec.read(lua, value, at).map(|_| ())),
+        ("PlayerDeathEvent", "message") => Some(Opt(TextCodec).read(lua, value, at).map(|_| ())),
+        ("PlayerDeathEvent", "keep_inventory") => Some(Bool.read(lua, value, at).map(|_| ())),
+        ("PlayerDeathEvent", "drops") => Some(List(ItemCodec).read(lua, value, at).map(|_| ())),
+        ("PlayerRespawnEvent", "location") => Some(LocationCodec.read(lua, value, at).map(|_| ())),
+        ("BlockBreakEvent", "drops") => Some(List(ItemCodec).read(lua, value, at).map(|_| ())),
+        ("BlockBreakEvent", "experience") => Some(Int.read(lua, value, at).map(|_| ())),
+        ("EntityDamageEvent", "amount") => Some(Num.read(lua, value, at).map(|_| ())),
+        ("EntityDeathEvent", "drops") => Some(List(ItemCodec).read(lua, value, at).map(|_| ())),
+        ("EntityDeathEvent", "experience") => Some(Int.read(lua, value, at).map(|_| ())),
+        ("PlayerChangeFoodEvent", "food") => Some(Int.read(lua, value, at).map(|_| ())),
+        ("PlayerGainExperienceEvent", "amount") => Some(Int.read(lua, value, at).map(|_| ())),
+        ("PlayerKickEvent", "text") => Some(TextCodec.read(lua, value, at).map(|_| ())),
+        ("PlayerKickEvent", "message") => Some(Opt(TextCodec).read(lua, value, at).map(|_| ())),
+        ("PlayerAdvancementEvent", "message") => Some(Opt(TextCodec).read(lua, value, at).map(|_| ())),
+        ("EntityHealEvent", "amount") => Some(Num.read(lua, value, at).map(|_| ())),
+        ("ExplodeEvent", "breaks_blocks") => Some(Bool.read(lua, value, at).map(|_| ())),
+        ("ExplodeEvent", "yield") => Some(Num.read(lua, value, at).map(|_| ())),
+        ("EntityCombustEvent", "ticks") => Some(Int.read(lua, value, at).map(|_| ())),
+        ("BlockRedstoneEvent", "to") => Some(Int.read(lua, value, at).map(|_| ())),
+        ("BlockStartBreakEvent", "instant") => Some(Bool.read(lua, value, at).map(|_| ())),
+        ("VehicleDamageEvent", "amount") => Some(Num.read(lua, value, at).map(|_| ())),
+        ("PlayerPrepareCraftEvent", "result") => Some(Opt(ItemCodec).read(lua, value, at).map(|_| ())),
+        ("PlayerPrepareAnvilEvent", "result") => Some(Opt(ItemCodec).read(lua, value, at).map(|_| ())),
+        ("PlayerPrepareAnvilEvent", "cost") => Some(Int.read(lua, value, at).map(|_| ())),
+        ("PlayerPrepareSmithingEvent", "result") => Some(Opt(ItemCodec).read(lua, value, at).map(|_| ())),
+        ("PlayerPrepareGrindstoneEvent", "result") => Some(Opt(ItemCodec).read(lua, value, at).map(|_| ())),
+        ("PlayerEnchantItemEvent", "cost") => Some(Int.read(lua, value, at).map(|_| ())),
+        ("FurnaceSmeltEvent", "result") => Some(ItemCodec.read(lua, value, at).map(|_| ())),
+        ("ServerListPingEvent", "description") => Some(TextCodec.read(lua, value, at).map(|_| ())),
+        ("ServerListPingEvent", "online") => Some(Int.read(lua, value, at).map(|_| ())),
+        ("ServerListPingEvent", "max_players") => Some(Int.read(lua, value, at).map(|_| ())),
+        ("ServerListPingEvent", "hide_players") => Some(Bool.read(lua, value, at).map(|_| ())),
+        ("RecipeCraftEvent", "result") => Some(ItemCodec.read(lua, value, at).map(|_| ())),
+        ("ItemViewEvent", "display_name") => Some(Opt(TextCodec).read(lua, value, at).map(|_| ())),
+        ("ItemViewEvent", "lore") => Some(Opt(List(TextCodec)).read(lua, value, at).map(|_| ())),
+        ("CentityNaturalSpawnEvent", "location") => Some(LocationCodec.read(lua, value, at).map(|_| ())),
+        ("CentityDamageEvent", "amount") => Some(Num.read(lua, value, at).map(|_| ())),
+        ("BuffEvent", "ticks") => Some(Int.read(lua, value, at).map(|_| ())),
+        ("ItemRenderEvent", "display_name") => Some(Opt(TextCodec).read(lua, value, at).map(|_| ())),
+        ("ItemRenderEvent", "lore") => Some(Opt(List(TextCodec)).read(lua, value, at).map(|_| ())),
+        ("NetworkRequestEvent", "reply") => Some(ANY.read(lua, value, at).map(|_| ())),
+        _ => None,
+    }
+}

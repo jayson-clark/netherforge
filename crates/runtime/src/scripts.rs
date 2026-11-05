@@ -197,10 +197,10 @@ impl Scripts {
         let private = lua.create_table()?;
         let fns = Fns {
             resume: coroutine.get("resume")?,
-            cancel: event_method(lua, &private, Some(true))?,
-            uncancel: event_method(lua, &private, Some(false))?,
-            stop: event_method(lua, &private, None)?,
-            newindex: event_newindex(lua, &private)?,
+            cancel: event_method(&host, &private, Some(true))?,
+            uncancel: event_method(&host, &private, Some(false))?,
+            stop: event_method(&host, &private, None)?,
+            newindex: event_newindex(&host, &private)?,
             private,
         };
         Ok(Scripts(Rc::new(Inner {
@@ -683,15 +683,17 @@ impl Scripts {
         } else {
             Some(spec.map_or(&[], |s| s.writable))
         };
-        let (ev, view) = match self.new_event(target, event, &fields, cancellable, writable) {
-            Ok(it) => it,
-            Err(_) => {
-                return Delivered {
-                    cancelled: false,
-                    fields,
-                };
-            }
-        };
+        let payload = spec.and_then(|s| s.payload);
+        let (ev, view) =
+            match self.new_event(target, event, &fields, cancellable, writable, payload) {
+                Ok(it) => it,
+                Err(_) => {
+                    return Delivered {
+                        cancelled: false,
+                        fields,
+                    };
+                }
+            };
         let tick = self.tick_count();
         for id in ids {
             let (scope, handler, once, what) = {
@@ -764,6 +766,7 @@ impl Scripts {
         fields: &Table,
         cancellable: bool,
         writable: Option<&'static [&'static str]>,
+        payload: Option<&'static str>,
     ) -> mlua::Result<(Table, Table)> {
         let host = self.host();
         let lua = host.lua();
@@ -789,6 +792,9 @@ impl Scripts {
                 }
                 state.raw_set("writable", set)?;
             }
+        }
+        if let Some(payload) = payload {
+            state.raw_set("payload", payload)?;
         }
         state.raw_set("fields", fields.clone())?;
         view.raw_set(fns.private.clone(), state)?;
@@ -1081,9 +1087,9 @@ fn takes_custom(class: &str) -> bool {
 }
 
 /// `event:cancel()`, `:uncancel()` (`cancel` set) and `:stop()` (`None`).
-fn event_method(lua: &Lua, private: &Table, cancel: Option<bool>) -> mlua::Result<Function> {
+fn event_method(host: &Host, private: &Table, cancel: Option<bool>) -> mlua::Result<Function> {
     let private = private.clone();
-    lua.create_function(move |_, ev: Value| {
+    let body = move |ev: Value| -> mlua::Result<()> {
         let view = match &ev {
             Value::Table(t) => t
                 .metatable()
@@ -1109,13 +1115,16 @@ fn event_method(lua: &Lua, private: &Table, cancel: Option<bool>) -> mlua::Resul
                 view.raw_set("cancelled", on)
             }
         }
+    };
+    host.script_function(move |_, args: MultiValue| {
+        body(args.into_iter().next().unwrap_or(Value::Nil)).map(|_| MultiValue::new())
     })
 }
 
 /// An event's `__newindex`: only its writable fields, into its fields.
-fn event_newindex(lua: &Lua, private: &Table) -> mlua::Result<Function> {
+fn event_newindex(host: &Host, private: &Table) -> mlua::Result<Function> {
     let private = private.clone();
-    lua.create_function(move |_, (ev, key, value): (Table, Value, Value)| {
+    let body = move |lua: &Lua, ev: Table, key: Value, value: Value| -> mlua::Result<()> {
         let view: Table = ev
             .metatable()
             .expect("an event has its metatable")
@@ -1157,11 +1166,46 @@ fn event_newindex(lua: &Lua, private: &Table) -> mlua::Result<Function> {
                         "event.{key_text} can't be assigned on a {name} event ({listed})"
                     )));
                 }
+                // Read as the payload's field will be read back, so a mistake (an item in a list included) is
+                // an error at this line rather than a dropped value later.
+                if let Some(payload) = state.raw_get::<Option<String>>("payload")?
+                    && let Some(Err(mistake)) = netherforge_api::codecs::check_field(
+                        lua,
+                        &payload,
+                        &key_text,
+                        value.clone(),
+                        &format!("event.{key_text}"),
+                    )
+                {
+                    return Err(mlua::Error::runtime(as_value_mistake(&mistake.0)));
+                }
                 fields.raw_set(key, value)
             }
             _ => fields.raw_set(key, value),
         }
+    };
+    host.script_function(move |lua, args: MultiValue| {
+        let mut args = args.into_iter();
+        let Some(Value::Table(ev)) = args.next() else {
+            return Err(mlua::Error::runtime(
+                "an event's fields are assigned on the event",
+            ));
+        };
+        let key = args.next().unwrap_or(Value::Nil);
+        let value = args.next().unwrap_or(Value::Nil);
+        body(lua, ev, key, value).map(|_| MultiValue::new())
     })
+}
+
+/// A codec's mistake about an argument, said of an assigned value as Kotlin's runtime says it:
+/// `bad argument 'event.message' (…)` is `bad value for event.message (…)`.
+fn as_value_mistake(message: &str) -> String {
+    if let Some(rest) = message.strip_prefix("bad argument '")
+        && let Some((at, why)) = rest.split_once("' ")
+    {
+        return format!("bad value for {at} {why}");
+    }
+    message.to_owned()
 }
 
 impl NfApi for Scripts {

@@ -457,7 +457,7 @@ const GLUE_USES = [
   'crate::{codecs, handles, shapes, unions}',
 ]
 
-export function codecsRust(bindings: Bindings): string {
+export function codecsRust(bindings: Bindings, spec: ApiSpec): string {
   const reach = reachable(bindings.shapes)
   const lines = [
     ...header(
@@ -537,6 +537,39 @@ export function codecsRust(bindings: Bindings): string {
       '',
     )
   }
+  // A handler assigning an event's writable field is checked as the field will be read back.
+  const writable = new Map<string, { payload: string; field: string; expr: string }>()
+  const shapesByName = new Map(bindings.shapes.map((it) => [it.shape.name, it]))
+  for (const cls of eventedClasses(spec))
+    for (const event of cls.events) {
+      if (!event.payload) continue
+      const shape = shapesByName.get(event.payload)
+      for (const name of event.writable ?? []) {
+        const field = shape?.fields.find((it) => it.name === name)
+        if (!field) continue
+        writable.set(`${event.payload} ${name}`, {
+          payload: event.payload,
+          field: name,
+          expr: codecExpr(field.codec),
+        })
+      }
+    }
+  lines.push(
+    '/// Reads `value` as writable field `name` of event payload `shape`, as it will be read back',
+    "/// once the handlers have run: what a handler assigning it is checked against. `None` for",
+    '/// a field that isn\'t a writable one.',
+    'pub fn check_field(lua: &Lua, shape: &str, name: &str, value: Value, at: &str) -> Option<crate::ApiResult<()>> {',
+    '    let _ = (&lua, &value, &at);',
+    '    match (shape, name) {',
+    ...[...writable.values()].map(
+      (w) =>
+        `        (${JSON.stringify(w.payload)}, ${JSON.stringify(w.field)}) => Some(${w.expr}.read(lua, value, at).map(|_| ())),`,
+    ),
+    '        _ => None,',
+    '    }',
+    '}',
+    '',
+  )
   return finish(lines)
 }
 

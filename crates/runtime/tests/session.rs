@@ -350,3 +350,83 @@ fn a_module_in_group_folders_is_required_by_its_id() {
         "{lines:?}"
     );
 }
+
+#[test]
+fn a_repeated_error_is_logged_once_in_a_while_and_counted_in_between() {
+    let platform = Fake::default();
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        // Fails every other tick: never 20 in a row, so it keeps running.
+        (
+            "modules/flaky/init.lua",
+            "local n = 0\nnf.on('tick', function() n += 1 if n % 2 == 0 then error('odd') end end)",
+        ),
+        // Fails every tick: cancelled after 20 in a row.
+        (
+            "modules/broken/init.lua",
+            "nf.on('tick', function() error('always') end)",
+        ),
+        ("modules/dead/init.lua", "local x = nil\nx.y = 1"),
+    ]);
+    let mut session = Session::start(&platform, &files, &NoPackages);
+    let start = platform.take();
+    assert!(
+        start.contains(&"warn module dead: body failed: attempt to index nil with 'y' (modules/dead/init.lua:2). It's disabled until it's reloaded.".to_owned()),
+        "{start:?}"
+    );
+    for _ in 0..210 {
+        session.tick();
+    }
+    let lines = warnings(&platform.take());
+    let flaky: Vec<&String> = lines
+        .iter()
+        .filter(|l| l.contains("module flaky"))
+        .collect();
+    assert_eq!(flaky.len(), 3, "{flaky:?}");
+    assert_eq!(
+        flaky[0],
+        "warn module flaky: tick handler failed: odd (modules/flaky/init.lua:2)"
+    );
+    assert_eq!(
+        flaky[1],
+        "warn module flaky: tick handler failed: odd (modules/flaky/init.lua:2) (and 49 more like it)"
+    );
+    let broken: Vec<&String> = lines
+        .iter()
+        .filter(|l| l.contains("module broken"))
+        .collect();
+    assert_eq!(
+        broken,
+        [
+            "warn module broken: tick handler failed: always (modules/broken/init.lua:1)",
+            "warn module broken: tick handler failed 20 times in a row, so it was cancelled (modules/broken/init.lua:1)",
+        ]
+    );
+    // Each is a problem, once, at its line.
+    let problems: Vec<(String, Option<u32>, String)> = session
+        .problems()
+        .into_iter()
+        .filter(|p| p.code.as_deref() == Some("script.error"))
+        .map(|p| (p.file, p.line, p.message))
+        .collect();
+    assert_eq!(
+        problems,
+        [
+            (
+                "modules/broken/init.lua".to_owned(),
+                Some(1),
+                "always".to_owned()
+            ),
+            (
+                "modules/dead/init.lua".to_owned(),
+                Some(2),
+                "attempt to index nil with 'y'".to_owned()
+            ),
+            (
+                "modules/flaky/init.lua".to_owned(),
+                Some(2),
+                "odd".to_owned()
+            ),
+        ]
+    );
+}

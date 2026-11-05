@@ -182,6 +182,37 @@ fn an_events_fields_are_read_only_unless_writable() {
 }
 
 #[test]
+fn a_writable_field_is_read_as_it_will_be_read_back() {
+    let t = Test::new();
+    let s = t.module(
+        "s",
+        "nf.on('player_join', function(e)
+  ok, why = pcall(function() e.message = 5 end)
+  kind = type(why)
+  e.message = 'welcome'
+end)",
+    );
+    let lua = t.room.host().lua().clone();
+    let payload = lua.create_table().unwrap();
+    payload.raw_set("first_join", true).unwrap();
+    let delivered = t.room.scripts().raise(&Target::Nf, "player_join", payload);
+    assert!(!t.get::<bool>(s, "ok"));
+    assert_eq!(
+        t.get::<String>(s, "kind"),
+        "string",
+        "a caught mistake is a string"
+    );
+    assert_eq!(
+        t.get::<String>(s, "why"),
+        "modules/s/init.lua:2: bad value for event.message (string or nil expected, got number)"
+    );
+    assert_eq!(
+        delivered.fields.raw_get::<String>("message").unwrap(),
+        "welcome"
+    );
+}
+
+#[test]
 fn timers_run_when_theyre_due() {
     let t = Test::new();
     let s = t.module(
