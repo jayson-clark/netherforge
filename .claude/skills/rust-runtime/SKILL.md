@@ -384,67 +384,77 @@ each with the compiler it needs.
 
 ## Centities (`crates/runtime/src/centity`)
 
-Kotlin's `Centities` and `Instance`, a slice at a time. An instance (`Instance`) keeps per-node state in
-vectors aligned with its definition's nodes (format's `CompiledCentity`, parents first) and its entities
-by node name, so a reload keeps what's still there; local transforms are the truth, and `placed()` is
-each node's matrix from the anchor along the world's axes (format's `world`, turned by the yaw: quarter
-turns exact, 90 is west). `Centities` spawns an instance as an anchor entity and a display per node with
-one, each riding the anchor with its offset in its pose; `sync` each tick writes only what changed
-(content, look, a billboard standing on its own at its node, riding, the pose eased as the node says, a
-hidden node collapsed); `reconcile` makes the entities match a definition (after a reload, or when one
-went missing); a reload moves instances onto the new definition, and removes those of a centity that's
-gone. A rect, an image or anchored text is drawn as a text display with a fit (`drawing.rs`, format's
-display glyphs; anchored text measured with the project's `fonts/default.json` through `TextWidth`).
+Kotlin's centity package, whole: every `Centity`, `Node`, `nf.centities`, `nf.spawning`, `Image` and
+`nf.images` function is implemented (`Unported` is used for none of them but `nf.images.download`, which
+waits for HTTP).
 
-**What a session shares** (`Shared`, `shared.rs`): the Platform (`Rc<dyn Platform>`: the session takes
-one), the `Centities`, the font text is measured with, each centity's script path and the project's
-`Modules`. The session owns it and the room's API holds it too, so an API implementation is `'static`;
-every piece is a `RefCell`, and no borrow is held while Lua runs. `Room::with(host, grants, Some(shared))`
-installs the centity classes; `Room::new` leaves them unported.
+**Instances** (`instance.rs`): per-node state in vectors aligned with the definition's nodes (format's
+`CompiledCentity`, parents first; script-added nodes after the declared ones, `declared` keeping the file's),
+entities by node name. Local transforms are the truth; `placed()` is each node's matrix from the anchor along
+the world's axes (turned by the yaw: quarter turns exact, 90 is west). `reshape` carries every node's state by
+name when nodes are added or removed. Ids are random UUIDs (`saving::random_uuid`).
 
-**The API and an instance's life** (`centity/api.rs`, `CentityContext`: Kotlin's `NfCentitiesImpl`,
-`CentityImpl`, `NodeImpl` and the lifecycle half of `Centities`):
+**Drawing and sync** (`mod.rs`, `drawing.rs`, `keyframes.rs`): an anchor entity and a display per node, each
+riding the anchor; a hitbox's interaction entity rides it at the anchor and stands alone elsewhere. `sync`
+writes only what changed; `reconcile` makes the entities match the definition. A rect, an image (its pixels
+as runs the platform sends) or anchored text is a text display with a fit. While only clips move a node, its
+pose is sent ahead as far as the client's easing follows (`reach`). A private instance is made of client
+entities only its viewers have (`ops`).
 
-- `spawn` makes the entities, runs the centity's script in a scope of its own (`Modules::script_with`,
-  labelled `centity lamp 00000000`, its memory key the centity's folder) with `this` its handle, then
-  raises `spawn`. A bare `Vec3` means the calling centity script's own world, else the server's default.
-- `tick` raises `tick` on an instance only when something listens, then syncs it (Kotlin's order).
-- `remove` raises `remove` while the instance is still itself (`removing`), then its script closes, every
-  handler on it and its nodes goes (`drop_target`), then its entities.
-- A reload stops the scripts of the changed centities' instances, moves them onto the new definition,
-  drops the handlers on nodes that went, and starts each script again without `spawn`. `Modules::update`
-  hands every reload the project's Lua as it reads now.
-- **Liveness** (`Scripts::add_liveness`): each service answers for the handle classes it keeps, so `:on`
-  on a removed instance (or a node it doesn't have) gets a subscription that never runs.
-- A handle outlives what it names: once it's gone, getters answer nil/false/empty and setters do nothing.
-- **Unported methods are explicit**: the class traits have no defaults, so `CentityApi` and `NodeApi`
-  implement what's ported and delegate the rest one by one to `Unported` (`CentityApi::damage(&Unported,
-this, amount, options)`), in the "not ported yet" part of each impl. Porting one moves it up.
-- Centities are defined before modules start (the services' order): a module's body may spawn one.
-- **Animations** (`animation.rs`, Kotlin's `AnimationPlayer`): clips by their centity and index (nothing
-  copied per play), applied in start order, additive ones last; the pose is rest plus clips
-  (`Instance::animate`), each tick after the clips advance 0.05 s, and `animation_end` is raised for each
-  that ended. `play_animation` raises `animation_start`. Clip math is format's (`resolve`,
-  `Track::sample`, `Transform::posed`). Timers run before the clips move on in a tick.
-- **Keyframes** (`keyframes.rs`): while only clips move a node, `sync_pose` sends the pose some ticks
-  ahead with that many ticks to ease (`reach`, up to 20, within 0.01 blocks of the clip at every tick
-  between), then nothing until it's due. Anything else (a script's set, shown/hidden, a turn, a clip
-  started or moved: `Instance::edited`) sends the pose now. A linear clip over 20 ticks is 3 pose writes.
-- **Hitboxes** (`hitboxes.rs`, Kotlin's `Hitboxes`): a node's hitbox is an interaction entity with a
-  square footprint around its boxes as placed (`bounds`), riding the anchor entity when it stands at the
-  anchor and on its own anywhere else; hidden or unclickable, it collapses to a sliver. `shape:
-collision` is the unit cube until the game's collision boxes reach the runtime.
-- **Clicks** (`CentityContext::click`, `Session::entity_clicked`, what `PlatformEvents::entity_clicked`
-  will call): with a line of sight, the nearest hitbox it meets (a `raycast` node's own boxes, any other's
-  bounds), else the entity the client picked; then `click` on that node, each node above it, the
-  centity, and `nf`'s `centity_click`, one event until `stop()`. What scripts print in a click is logged
-  with the next tick's report.
-- `nf.centities.spawn`'s `temporary`, `lifetime` and `viewers` refuse ("isn't on the Rust runtime yet").
+**The API and an instance's life** (`api.rs`, `CentityContext`, built on the session's `Shared`):
 
-Not yet: `world:raycast` against hitboxes, saving placements (until then a stopping session removes its instances, so
-nothing is left behind unowned), temporary and private instances, physics and movement,
-health, natural spawning, ropes, script-added nodes, tweens, a module's reload restarting the centity
-scripts that required it, images' pixels (an image draws blank, its text whole rather than in runs).
+- `spawn` runs the centity's script with `this` (`Modules::script_with`), then raises `spawn`; `remove`
+  raises `remove` while the instance is still itself, then its script, handlers and entities go.
+- **One tick** (`CentityContext::tick`): lifetimes run out; buffs count down; per loaded instance (`chunk_load`
+  / `chunk_unload` when that changes; an unloaded one doesn't tick): its health bar, tweens, clips
+  (`animation_end`), follow, walk, flight, body (`land`, `bump`); then **one physics step for the room**; then
+  per instance `tick`, ropes, sync; then `touch`; then natural spawning. Kotlin ran physics and `tick` per
+  instance; here every body is stepped together first.
+- **Liveness** (`Scripts::add_liveness`): `:on` on a removed instance or a missing node never runs.
+- **Unported methods were explicit** while the classes were partial: delegations `CentityApi::x(&Unported,
+...)`, generated by a script from the trait, removed as each was ported. Do the same for the next class.
+- A temporary instance goes with the scope that spawned it (`Scripts::take_released`, drained by the session
+  after every call in) or its lifetime; natural ones with nobody near. Neither is stored.
+
+**Areas**, a file each: `animation.rs` (Kotlin's `AnimationPlayer`; clips by centity and index), `health.rs`
+(health and its bar), `crate::stats` (stat sheets and buffs, players' too), `hitboxes.rs` and clicks (line of
+sight picks the node; the path is node, ancestors, centity, `centity_click`), `spatial.rs` (the obstacle grid,
+filed by cell and refiled from a dirty set each instance marks; query shapes and filters; `touch`),
+`movers.rs` and `world_shapes.rs` (a centity `body`: vanilla-style movement, kept custom per the roadmap),
+`flights.rs` (`launch`), `pathing.rs` and `paths.rs` (ground and air A*, walks, doors), `ropes.rs`,
+`definitions.rs` (a node from Lua, read as `centity.json` would be), `quat.rs`, `natural.rs`, `saving.rs`.
+
+**Physics on Rapier** (`physics.rs`, rapier3d-f64): one Rapier world per Minecraft world of a room. Every body
+is simulated together (a crate knocks over another centity's crate: the roadmap's deliberate change). World
+blocks are fixed colliders built per chunk section around awake bodies, read again after `SECTION_TICKS` (40)
+and dropped when idle; full cubes buried among full cubes are skipped. Hitboxes no body carries are fixed
+colliders, rebuilt when an instance's obstacles change. A body's collider is its hitbox boxes (or
+`physics.collider`, unit cube by default; one box for `shape: box`, a ball for `sphere`) scaled by the node; mass
+is `physics.mass` or the volume. Gravity is the body's gravity scale against a world gravity of 1. Physics
+writes the node's pose through the setters and remembers it; a node moved by anything else teleports its body.
+Bodies past `REANCHOR` (16) blocks move the anchor under them. `collide` (with the other body's node, any
+instance), `wake`, `sleep`. Collision groups: blocks, hitboxes, bodies (`physics.blocks`/`entities` filter).
+Not yet: invalidating a section when a block changes (it waits for `PlatformEvents::block_updated`); the spec's
+`rigid_body()`, joints, materials and sensors.
+
+**Persistence** (`saving.rs`, `crate::store`): the store is rusqlite on the Kotlin runtime's own migration
+file (one `netherforge.db` for both). A normal instance's record is staged when it changes and written at the
+end of the tick (`CentityContext::commit`), its place saved when the world saves, a chunk unloads, the
+session stops or autosave (6000 ticks). A stopping session leaves instances in the world; the next restores
+them (their scripts start in `Service::after_start`, once modules run, without `spawn`), inert while their
+centity is gone and revived when it's back. `centity:data()` is the JSON codec's text in `centity_data`
+(without tags yet: a handle in it is reported, not saved). The store commits on the main thread for now.
+
+**Images** (`crate::images`): pictures held by number, bounded by `MAX_HELD` pixels, decoded with the `image`
+crate (PNG, JPEG, GIF, BMP), encoded as PNG. Not yet: letting go when Lua drops a handle (they go with the
+session).
+
+**The session's platform events**: `Session::entity_clicked`, `entities_loaded` (pushed whole and hidden again,
+strays removed), `player_joined`, `world_saving`, `chunk_unloading`. They're what `PlatformEvents` will call
+once the session implements it.
+
+Not yet, outside the centity classes: `world:raycast` against hitboxes, `world:centities` and the
+`overlap_*`/`sweep`/`nearest` questions (the `World` class, whose spatial core is `spatial.rs`).
 
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 
