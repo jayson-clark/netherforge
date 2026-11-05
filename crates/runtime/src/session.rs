@@ -245,6 +245,7 @@ impl<'a> Session<'a> {
                 return;
             }
         };
+        *self.shared.names.borrow_mut() = self.project.names();
         let define = Define {
             project: &self.project,
             source: self.source,
@@ -462,6 +463,7 @@ impl<'a> Session<'a> {
             return;
         }
         self.project = load(self.source, self.packages);
+        *self.shared.names.borrow_mut() = self.project.names();
         let mut by_kind: BTreeMap<&'static str, BTreeSet<String>> = BTreeMap::new();
         for path in changed {
             if let Some(found) = netherforge_format::kinds::classify(path)

@@ -2,7 +2,7 @@
 //! they're offline; what works either way (bans, the whitelist, when they first played) needs only a UUID.
 //! Their stats and buffs are the centities' stat sheets (`crate::stats`, `Holder::Player`).
 //!
-//! Not yet, each with its area: sounds and particles (effects), skies, recipes,
+//! Not yet, each with its area: skies, recipes,
 //! advancements, menus and dialogs, who's listed for whom and below-name text (teams), boss bars, resource
 //! and packs.
 
@@ -150,7 +150,7 @@ impl GameContext {
     }
 
     /// The calling script's namespace: the project's for code no package's scope runs.
-    fn calling_namespace(&self) -> String {
+    pub(crate) fn calling_namespace(&self) -> String {
         self.scripts
             .host()
             .running_scope()
@@ -375,11 +375,25 @@ impl PlayerApi for GameContext {
         sound: String,
         options: Option<shapes::SoundOptions>,
     ) -> ApiResult<bool> {
-        <Unported as PlayerApi>::play_sound(&Unported, this, sound, options)
+        let play = self.with_names(|names| {
+            crate::effects::sound(&*self.shared.platform, names, &sound, options.as_ref())
+        })?;
+        Ok(self
+            .player_online(this)
+            .is_some_and(|id| self.shared.platform.sounds().play_to(id, play)))
     }
     fn stop_sound(&self, this: &handles::Player, sound: Option<String>) -> ApiResult<bool> {
-        <Unported as PlayerApi>::stop_sound(&Unported, this, sound)
+        let id = match sound {
+            Some(sound) => Some(self.with_names(|names| {
+                crate::effects::sound_id(&*self.shared.platform, names, &sound)
+            })?),
+            None => None,
+        };
+        Ok(self
+            .player_online(this)
+            .is_some_and(|uuid| self.shared.platform.sounds().stop(uuid, id)))
     }
+    /// For that player alone, in their world; checked even while they're offline (then false).
     fn spawn_particle(
         &self,
         this: &handles::Player,
@@ -387,7 +401,26 @@ impl PlayerApi for GameContext {
         position: values::Vec3,
         options: Option<shapes::ParticleOptions>,
     ) -> ApiResult<bool> {
-        <Unported as PlayerApi>::spawn_particle(&Unported, this, particle, position, options)
+        let options = options.unwrap_or_else(crate::world::no_particle_options);
+        if options.viewers.is_some() {
+            return Err(err(
+                "options.viewers: player:spawn_particle is only for that player (world:spawn_particle takes viewers)",
+            ));
+        }
+        let platform = &*self.shared.platform;
+        let spawn = crate::effects::particle_spawn(platform, &particle, &position, &options)?;
+        let Some(id) = self.player_online(this) else {
+            return Ok(false);
+        };
+        let Some(world) = self.players().location(id).map(|l| l.world) else {
+            return Ok(false);
+        };
+        Ok(crate::effects::send(
+            platform,
+            &world,
+            spawn,
+            Some(std::slice::from_ref(&this.id)),
+        ))
     }
     fn run(&self, this: &handles::Player, command: String) -> ApiResult<bool> {
         Ok(parse_uuid(&this.id).is_some_and(|id| {

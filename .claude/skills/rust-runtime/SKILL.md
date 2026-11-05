@@ -578,6 +578,21 @@ session's `Config` (`session::Config`, the start of Kotlin's `RuntimeConfig`) gi
 a fixed wall clock (`Session::set_wall_clock`). Not yet: the zone read from `config.yml`, the test servers'
 scaled clock.
 
+## Names across packages, effects (`names.rs`, `effects.rs`)
+
+- **`names::Calling`** is Kotlin's `PackageNames` on format's **`project::Names`**: an owned summary of the
+  loaded tree (each namespace's dependencies, exports, resources that read, and reference index without its
+  uses), made by `Project::names` as the session starts and reloads and kept in `Shared::names`, since the
+  loaded project borrows its sources and `Shared` is `'static`. `Names::nameable` is the one rule (format's
+  `Project::nameable` is defined through it). `GameContext::with_names` gives it as the calling scope's
+  package sees it: `resource` (in), `spell` (out), `biome`/`spell_biome`, `look` (a look is a value: any
+  loaded package's, bare is the caller's own) and `pack_sound`.
+- **Effects** (Kotlin's `Effects`): `particle_spawn` checks a particle and its options against the game's
+  data kind (`ParticleData`), with format's `SpawnData` (the Platform spec's external, now real); `send` picks
+  the viewers in range (32 blocks, 128 forced); `sound`/`sound_id` take a pack sound by reference, else the
+  server's (a registry the facts don't know says nothing, as format's `lacks`). `World:spawn_particle`,
+  `play_sound` and `Player:play_sound`, `stop_sound`, `spawn_particle` use them.
+
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 
 The roadmap's "describe `Platform` and `PlatformEvents` in a language-neutral spec, and generate

@@ -738,6 +738,97 @@ impl<'a> Project<'a> {
     }
 
     /// Why something in `from` (the project's namespace, or a package's) can't
+    /// name `key`, a resource of `kind` (`Names::nameable`).
+    pub fn nameable(
+        &self,
+        from: &str,
+        kind: &str,
+        key: &reference::ResourceKey,
+    ) -> Option<reference::BrokenRef> {
+        self.names().nameable(from, kind, key)
+    }
+
+    /// What naming things across the tree needs, owned: what a runtime keeps to resolve the names scripts
+    /// hand it while the project runs.
+    pub fn names(&self) -> Names {
+        let mut namespaces = BTreeMap::new();
+        let mut add = |namespace: &str, resources: &[Resource], references: &ReferenceIndex| {
+            let manifest = self.manifest_of(namespace);
+            namespaces.insert(
+                namespace.to_owned(),
+                NamespaceNames {
+                    dependencies: manifest
+                        .and_then(|m| m.dependencies.as_ref())
+                        .map(|d| d.iter().map(|(k, _)| k.0.clone()).collect())
+                        .unwrap_or_default(),
+                    exports: manifest
+                        .and_then(|m| m.exports.as_ref())
+                        .map(|e| {
+                            e.iter()
+                                .map(|(k, ids)| (k.0.clone(), ids.iter().cloned().collect()))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    resources: resources
+                        .iter()
+                        .filter(|r| r.read)
+                        .map(|r| (r.found.kind.id.to_owned(), r.found.id.clone()))
+                        .collect(),
+                    // The uses are the files' own, for their checks: naming needs only what's defined.
+                    references: ReferenceIndex {
+                        home: references.home.clone(),
+                        namespaces: references.namespaces.clone(),
+                        uses: Vec::new(),
+                    },
+                },
+            );
+        };
+        add(self.namespace(), &self.resources, &self.references);
+        for (namespace, package) in &self.packages {
+            add(
+                namespace,
+                &package.project.resources,
+                &package.project.references,
+            );
+        }
+        Names {
+            home: self.namespace().to_owned(),
+            namespaces,
+        }
+    }
+}
+
+/// What naming things across a loaded tree needs (`Project::names`): each namespace's dependencies, exports,
+/// resources and what its files can name.
+#[derive(Clone, Debug, Default)]
+pub struct Names {
+    /// The project's namespace.
+    pub home: String,
+    pub namespaces: BTreeMap<String, NamespaceNames>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct NamespaceNames {
+    pub dependencies: BTreeSet<String>,
+    /// Its manifest's exports, by kind folder (`items`).
+    pub exports: BTreeMap<String, BTreeSet<String>>,
+    /// Its resources that read, as `(kind, id)`.
+    pub resources: BTreeSet<(String, String)>,
+    pub references: ReferenceIndex,
+}
+
+impl Names {
+    /// What code or files in `namespace` can name of the packs' entries and the resources files name.
+    pub fn references_of(&self, namespace: &str) -> Option<&ReferenceIndex> {
+        Some(&self.namespaces.get(namespace)?.references)
+    }
+
+    /// Whether the tree spans packages: then names cross between them.
+    pub fn spanning(&self) -> bool {
+        self.namespaces.len() > 1
+    }
+
+    /// Why something in `from` (the project's namespace, or a package's) can't
     /// name `key`, a resource of `kind`: its namespace is neither `from` nor a
     /// package `from` depends on, or it's that package's and it doesn't export
     /// it. `None` when it may (whether it exists is the caller's to say).
@@ -751,25 +842,20 @@ impl<'a> Project<'a> {
             return None;
         }
         let depends = self
-            .manifest_of(from)
-            .and_then(|m| m.dependencies.as_ref())
-            .is_some_and(|d| d.get_str(&key.namespace).is_some());
+            .namespaces
+            .get(from)
+            .is_some_and(|n| n.dependencies.contains(&key.namespace));
         if !depends {
             return Some(reference::index::unknown_namespace(&key.namespace, from));
         }
-        let target = self.packages.get(&key.namespace)?;
+        let target = self.namespaces.get(&key.namespace)?;
         let spec = crate::kinds::by_id(kind).expect("a kind");
         let exists = target
-            .project
             .resources
-            .iter()
-            .any(|r| r.read && r.found.kind.id == kind && r.found.id == key.path);
+            .contains(&(kind.to_owned(), key.path.clone()));
         let exported = target
-            .resolved
-            .manifest
-            .as_ref()
-            .and_then(|m| m.exports.as_ref())
-            .and_then(|e| e.get_str(spec.folder))
+            .exports
+            .get(spec.folder)
             .is_some_and(|ids| ids.contains(&key.path));
         (exists && !exported).then(|| {
             reference::index::not_exported(

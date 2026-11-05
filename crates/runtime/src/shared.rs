@@ -40,6 +40,8 @@ pub struct Shared {
     pub session_tables: RefCell<std::collections::HashMap<netherforge_platform::Uuid, mlua::Table>>,
     /// `nf.schedule`'s live schedules.
     pub schedules: RefCell<crate::schedule::Schedules>,
+    /// What each package of the tree can name, as the project last read: how names cross between packages.
+    pub names: RefCell<netherforge_format::project::Names>,
     /// Natural spawning: its passes, rules and scripts' conditions.
     pub spawner: RefCell<crate::centity::natural::Spawner>,
     /// The pictures scripts hold.
@@ -68,6 +70,7 @@ impl Shared {
             permissions: RefCell::default(),
             session_tables: RefCell::default(),
             schedules: RefCell::default(),
+            names: RefCell::default(),
             centities: RefCell::default(),
             font: RefCell::default(),
             centity_scripts: RefCell::default(),

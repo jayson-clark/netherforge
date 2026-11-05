@@ -205,7 +205,7 @@ pub struct ParticleSpawn {
     pub count: i32,
     pub offset: netherforge_format::math::Vec3,
     pub speed: f64,
-    pub data: Option<external::SpawnData>,
+    pub data: Option<netherforge_format::kind::particle::sample::SpawnData>,
     pub force: bool,
 }
 

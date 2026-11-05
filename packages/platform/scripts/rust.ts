@@ -39,6 +39,7 @@ const RUST_EXTERNAL: Record<string, { path: string; interface?: boolean }> = {
   ItemDef: { path: 'netherforge_format::item::ItemDef' },
   SpawnCategory: { path: 'netherforge_format::manifest::SpawnCategory' },
   AttributeOperation: { path: 'netherforge_format::item::AttributeOperation' },
+  SpawnData: { path: 'netherforge_format::kind::particle::sample::SpawnData' },
   BotState: { path: 'netherforge_format::bridge::BotState' },
   BotPosition: { path: 'netherforge_format::bridge::BotPosition' },
   BotPackAnswer: { path: 'netherforge_format::bridge::BotPackAnswer' },

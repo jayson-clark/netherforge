@@ -31,8 +31,14 @@ impl netherforge_format::game::GameData for NoFacts {
     fn item_durability(&self, _: &str) -> u32 {
         0
     }
-    fn particle(&self, _: &str) -> Option<netherforge_format::game::ParticleData> {
-        None
+    /// Dust (a colour and a size) and flames (nothing).
+    fn particle(&self, id: &str) -> Option<netherforge_format::game::ParticleData> {
+        use netherforge_format::game::ParticleData;
+        match id {
+            "minecraft:dust" => Some(ParticleData::Dust),
+            "minecraft:flame" => Some(ParticleData::None),
+            _ => None,
+        }
     }
     /// Every block there is, with no properties.
     fn block_properties(&self, _: &str) -> Option<BTreeMap<String, Vec<String>>> {
@@ -474,6 +480,48 @@ impl FakeWorldOps for Fake {
     }
 }
 
+impl netherforge_platform::FakeParticleOps for Fake {
+    fn spawn(
+        &self,
+        world: String,
+        spawns: Vec<netherforge_platform::ParticleSpawn>,
+        viewers: Vec<PlayerRef>,
+    ) {
+        for spawn in spawns {
+            self.call(format!(
+                "particle {world} {} x{} {:?} to {}",
+                spawn.particle,
+                spawn.count,
+                spawn.data,
+                viewers
+                    .iter()
+                    .map(|v| v.name.clone())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ));
+        }
+    }
+}
+
+impl netherforge_platform::FakeSoundOps for Fake {
+    fn play(
+        &self,
+        world: String,
+        _: netherforge_format::math::Vec3,
+        sound: netherforge_platform::SoundPlay,
+    ) -> bool {
+        self.call(format!(
+            "sound {world} {} {} {}",
+            sound.sound, sound.volume, sound.pitch
+        ));
+        true
+    }
+    fn play_to(&self, player: Uuid, sound: netherforge_platform::SoundPlay) -> bool {
+        self.call(format!("sound to {} {}", player.0, sound.sound));
+        true
+    }
+}
+
 impl netherforge_platform::FakePermissionOps for Fake {
     fn apply(&self, player: Uuid, nodes: std::collections::HashMap<String, bool>) {
         let mut nodes: Vec<String> = nodes.into_iter().map(|(n, v)| format!("{n}={v}")).collect();
@@ -503,6 +551,12 @@ impl FakePlatform for Fake {
         self
     }
     fn permissions(&self) -> &dyn netherforge_platform::PermissionOps {
+        self
+    }
+    fn particles(&self) -> &dyn netherforge_platform::ParticleOps {
+        self
+    }
+    fn sounds(&self) -> &dyn netherforge_platform::SoundOps {
         self
     }
     fn client_entities(&self) -> &dyn netherforge_platform::ClientEntityOps {
@@ -2265,4 +2319,54 @@ print(cron:next_run())
     platform.take();
     session.tick();
     assert!(printed(&platform.take()).contains(&"nightly".to_owned()));
+}
+
+#[test]
+fn particles_and_sounds_are_checked_and_sent_to_who_is_near() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/fx/init.lua",
+            r##"
+local w = nf.worlds.default()
+print(w:spawn_particle("dust", vector.create(1, 64, 1), { color = "#ff0000", size = 2, count = 3 }))
+w:spawn_particle("flame", vector.create(500, 64, 0))
+print(pcall(w.spawn_particle, w, "flame", vector.create(0, 0, 0), { color = "#ff0000" }))
+print(pcall(w.spawn_particle, w, "dust", vector.create(0, 0, 0), { color = "red" }))
+print(pcall(w.spawn_particle, w, "smoke", vector.create(0, 0, 0)))
+print(w:play_sound("entity.pig.ambient", vector.create(0, 64, 0), { pitch = 1.5 }))
+print(pcall(w.play_sound, w, "x", vector.create(0, 64, 0), { pitch = 3 }))
+local alex = w:players()[1]
+print(alex:play_sound("block.note_block.pling"), pcall(alex.spawn_particle, alex, "flame", vector.create(0, 0, 0), { viewers = {} }))
+"##,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "true",
+            "false\tmodules/fx/init.lua:5: particle \"minecraft:flame\" doesn't take options.color",
+            "false\tmodules/fx/init.lua:6: options.color must be \"#rrggbb\", not \"red\"",
+            "false\tmodules/fx/init.lua:7: no particle \"minecraft:smoke\" on this server",
+            "true",
+            "false\tmodules/fx/init.lua:9: options.pitch must be 0.5 to 2, not 3",
+            "true\tfalse\tmodules/fx/init.lua:11: options.viewers: player:spawn_particle is only for that player (world:spawn_particle takes viewers)",
+        ]
+    );
+    let sent: Vec<&String> = calls
+        .iter()
+        .filter(|c| c.starts_with("particle") || c.starts_with("sound"))
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            "particle world minecraft:dust x3 Some(Dust { color: 16711680, size: 2.0 }) to Alex",
+            "sound world minecraft:entity.pig.ambient 1 1.5",
+            "sound to 77 minecraft:block.note_block.pling",
+        ]
+    );
 }

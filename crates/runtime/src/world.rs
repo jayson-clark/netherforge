@@ -3,9 +3,9 @@
 //! see (an unknown game rule) is an error. The centity questions (`raycast` against hitboxes, `overlap_*`,
 //! `sweep`, `nearest`, `centities`) go to the centities' spatial index.
 //!
-//! Not yet, each with the area it needs: skies, gradual fills and structures, `locate_biome` (the workers), spawning entities, items, particles and
-//! sounds (effects), managed worlds (`create`, `load`, `copy`, `import`, `unload`). `blocks`' `custom` and
-//! `flood`'s project blocks wait for custom blocks: until then no block is a project block.
+//! Not yet, each with the area it needs: skies, gradual fills and structures, `locate_biome` (the workers),
+//! spawning entities and items, managed worlds (`create`, `load`, `copy`, `import`, `unload`). `blocks`'
+//! `custom` and `flood`'s project blocks wait for custom blocks: until then no block is a project block.
 
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -214,6 +214,16 @@ impl GameContext {
 
     fn platform(&self) -> &dyn Platform {
         &*self.shared.platform
+    }
+
+    /// `f` with the tree's names as the calling package sees them.
+    pub(crate) fn with_names<R>(&self, f: impl FnOnce(&crate::names::Calling) -> R) -> R {
+        let from = self.calling_namespace();
+        let names = self.shared.names.borrow();
+        f(&crate::names::Calling {
+            names: &names,
+            from,
+        })
     }
 
     pub(crate) fn centities(&self) -> CentityContext {
@@ -1050,7 +1060,18 @@ impl WorldApi for GameContext {
         position: values::Vec3,
         options: Option<shapes::ParticleOptions>,
     ) -> ApiResult<bool> {
-        <Unported as WorldApi>::spawn_particle(&Unported, this, particle, position, options)
+        let options = options.unwrap_or_else(no_particle_options);
+        let spawn =
+            crate::effects::particle_spawn(self.platform(), &particle, &position, &options)?;
+        let viewers: Option<Vec<String>> = options
+            .viewers
+            .map(|v| v.into_iter().map(|p| p.id).collect());
+        Ok(crate::effects::send(
+            self.platform(),
+            &this.name,
+            spawn,
+            viewers.as_deref(),
+        ))
     }
 
     fn play_sound(
@@ -1060,7 +1081,16 @@ impl WorldApi for GameContext {
         position: values::Vec3,
         options: Option<shapes::SoundOptions>,
     ) -> ApiResult<bool> {
-        <Unported as WorldApi>::play_sound(&Unported, this, sound, position, options)
+        let play = self.with_names(|names| {
+            crate::effects::sound(self.platform(), names, &sound, options.as_ref())
+        })?;
+        let Some(world) = self.live(this) else {
+            return Ok(false);
+        };
+        Ok(self
+            .platform()
+            .sounds()
+            .play(world.to_owned(), vec(&position), play))
     }
 
     fn explode(
@@ -1523,6 +1553,22 @@ impl WorldApi for GameContext {
         let target = self.world_target(this)?;
         self.scripts
             .subscribe(scope, target, event, handler, None, true)
+    }
+}
+
+/// A particle's options when a script gives none.
+pub(crate) fn no_particle_options() -> shapes::ParticleOptions {
+    shapes::ParticleOptions {
+        count: None,
+        spread: None,
+        speed: None,
+        color: None,
+        to_color: None,
+        size: None,
+        block_state: None,
+        item: None,
+        viewers: None,
+        force: None,
     }
 }
 
