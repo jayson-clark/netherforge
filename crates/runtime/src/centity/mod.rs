@@ -11,9 +11,11 @@
 //! Not yet (each with its area): hitboxes and clicks, saving placements,
 //! private instances (client entities), animations, physics and movement, health, natural spawning, ropes.
 
+pub mod animation;
 pub mod api;
 pub mod drawing;
 pub mod instance;
+pub mod keyframes;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
@@ -101,8 +103,9 @@ impl Centities {
             self.next_id += 1;
             Uuid(self.next_id)
         });
-        self.instances
-            .insert(id, Instance::new(id, definition, at, yaw));
+        let mut instance = Instance::new(id, definition, at, yaw);
+        autoplay(&mut instance);
+        self.instances.insert(id, instance);
         self.sync(platform, drawing, id);
         Some(id)
     }
@@ -150,6 +153,7 @@ impl Centities {
                 Some(next) => {
                     if let Some(instance) = self.instances.get_mut(&id) {
                         instance.redefine(next);
+                        autoplay(instance);
                         moved += 1;
                     }
                     self.sync(platform, drawing, id);
@@ -169,8 +173,22 @@ impl Centities {
             if let Some(instance) = self.instances.get_mut(&id) {
                 instance.age += 1;
             }
+            self.animate(id);
             self.sync(platform, drawing, id);
         }
+    }
+
+    /// Moves instance `id`'s clips on a tick and poses it: the clips that reached their end.
+    pub fn animate(&mut self, id: Uuid) -> Vec<String> {
+        let Some(instance) = self.instances.get_mut(&id) else {
+            return Vec::new();
+        };
+        if !instance.animations.active() {
+            return Vec::new();
+        }
+        let ended = instance.animations.advance(instance::SECONDS_PER_TICK);
+        instance.animate();
+        ended
     }
 
     fn loaded(platform: &dyn Platform, instance: &Instance) -> bool {
@@ -224,6 +242,7 @@ impl Centities {
             .placed()
             .to_vec();
         let cull = cull_size(&world);
+        let mut ahead = Lookahead::default();
         for (index, name) in nodes {
             let Some(entity) = self.instances[&id].displays.get(&name).copied() else {
                 continue;
@@ -281,11 +300,15 @@ impl Centities {
             sync_pose(
                 entities,
                 instance,
-                index,
-                entity,
-                matrix,
-                cull,
+                Pose {
+                    index,
+                    entity,
+                    matrix,
+                    shown,
+                    cull,
+                },
                 drawn.as_ref(),
+                &mut ahead,
             );
         }
         let instance = self.instances.get_mut(&id).expect("listed");
@@ -539,25 +562,92 @@ fn ride(entities: &dyn EntityOps, instance: &mut Instance, vehicle: Uuid, entity
 
 /// Shows node `index`'s display at `matrix` (its pose now, collapsed when hidden), eased as the node says,
 /// unless it was last shown just so.
-fn sync_pose(
-    entities: &dyn EntityOps,
-    instance: &mut Instance,
+/// Starts the clips its file says play by themselves.
+fn autoplay(instance: &mut Instance) {
+    let definition = instance.definition.clone();
+    for (index, clip) in definition.animations.iter().enumerate() {
+        if clip.autoplay {
+            instance
+                .animations
+                .play(&definition, index, animation::Play::default(), None);
+        }
+    }
+    instance.animate();
+}
+
+/// Which display `sync_pose` shows, and where: its node's matrix now (collapsed when hidden).
+struct Pose {
     index: usize,
     entity: Uuid,
     matrix: Matrix4,
+    shown: bool,
     cull: f64,
+}
+
+/// `Instance::placed_ahead` for 1, 2, … ticks on, each worked out once, the first time a display asks.
+#[derive(Default)]
+struct Lookahead {
+    ticks: Vec<Vec<Matrix4>>,
+}
+
+impl Lookahead {
+    fn at(&mut self, instance: &Instance, tick: i32) -> &[Matrix4] {
+        while (self.ticks.len() as i32) < tick {
+            let next = instance.placed_ahead(self.ticks.len() as i32 + 1);
+            self.ticks.push(next);
+        }
+        &self.ticks[tick as usize - 1]
+    }
+}
+
+/// Shows a node's display at its matrix. While only clips move it, the pose is sent ahead instead: as far
+/// as the client's easing follows the clips (`keyframes::reach`), and then nothing until it gets there.
+/// Anything else (a script, a new clip, the first sync) sends the pose now, eased as the node says.
+fn sync_pose(
+    entities: &dyn EntityOps,
+    instance: &mut Instance,
+    pose: Pose,
     drawn: Option<&drawing::Drawn>,
+    ahead: &mut Lookahead,
 ) {
+    let Pose {
+        index,
+        entity,
+        matrix,
+        shown,
+        cull,
+    } = pose;
     let billboarded = instance.billboarded(index);
-    let ticks = if instance.force_sync || instance.jumps(index) {
-        0
+    let planned = !instance.force_sync
+        && !billboarded
+        && shown
+        && instance.animations.active()
+        && instance.interpolation(index) > 0
+        && !instance.edited(index);
+    let (target, ticks) = if planned {
+        // Still on its way to what it was sent.
+        if instance.age < instance.due[index] {
+            return;
+        }
+        let reach = keyframes::reach(&matrix, keyframes::MAX_TICKS, &mut |k| {
+            ahead.at(instance, k)[index]
+        });
+        instance.due[index] = instance.age + reach as u64;
+        // The client shows the pose now; it eases on to the pose that many ticks on.
+        (ahead.at(instance, reach)[index], reach)
     } else {
-        instance.interpolation(index)
-    };
-    let target = if billboarded {
-        billboard_pose(&matrix)
-    } else {
-        matrix
+        instance.due[index] = instance.age;
+        let ticks = if instance.force_sync || instance.jumps(index) {
+            0
+        } else {
+            instance.interpolation(index)
+        };
+        let target = if billboarded {
+            billboard_pose(&matrix)
+        } else {
+            matrix
+        };
+        (target, ticks)
     };
     let shown = match (drawn, instance.display(index)) {
         (Some(drawn), Some(display)) => fitted(drawn, display, target),

@@ -17,13 +17,15 @@ use netherforge_api::codec::Codec;
 use netherforge_api::handles::{self, Handle};
 use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, Caller, codecs, handle, shapes, unions, values};
-use netherforge_format::kind::centity::{Billboard, DisplayDef};
+use netherforge_format::kind::centity::{Billboard, DisplayDef, LoopMode};
 use netherforge_format::math::{Matrix4, Vec3};
 use netherforge_luau::ScopeId;
 use netherforge_platform::{Location, Uuid};
 
 use super::Instance;
+use super::animation::Play;
 use super::instance::Channel;
+use super::instance::SECONDS_PER_TICK;
 use crate::events::{parse_uuid, uuid_text};
 use crate::shared::Shared;
 use crate::{Scripts, Target};
@@ -136,6 +138,58 @@ impl CentityContext {
         };
         if let Ok(Value::Table(fields)) = codecs::CentityEvent.push(&lua, payload) {
             self.scripts.raise(&target, event, fields);
+        }
+    }
+
+    fn live(&self, id: Uuid) -> bool {
+        self.shared
+            .centities
+            .borrow()
+            .get(id)
+            .is_some_and(|i| !i.removed)
+    }
+
+    /// Raises `animation_start` or `animation_end` on instance `id`.
+    fn raise_animation(&self, id: Uuid, event: &str, animation: String) {
+        let Some(target) = self.centity_target(id) else {
+            return;
+        };
+        if !self.scripts.listening(&target, event) {
+            return;
+        }
+        let lua = self.scripts.host().lua().clone();
+        let payload = shapes::AnimationEvent {
+            centity: handles::Centity { id: uuid_text(&id) },
+            animation,
+        };
+        if let Ok(Value::Table(fields)) = codecs::AnimationEvent.push(&lua, payload) {
+            self.scripts.raise(&target, event, fields);
+        }
+    }
+
+    /// The index of `this`'s centity's clip `name`; one it doesn't have is an error. None once it's gone.
+    fn clip(&self, this: &handles::Centity, name: &str) -> ApiResult<Option<usize>> {
+        let Some(definition) = self.with(this, |i| i.definition.clone()) else {
+            return Ok(None);
+        };
+        match definition.animations.iter().position(|a| a.name == name) {
+            Some(index) => Ok(Some(index)),
+            None => {
+                let known: Vec<&str> = definition
+                    .animations
+                    .iter()
+                    .map(|a| a.name.as_str())
+                    .collect();
+                let has = if known.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (it has: {})", known.join(", "))
+                };
+                Err(err(format!(
+                    "{} has no animation \"{name}\"{has}",
+                    definition.id
+                )))
+            }
         }
     }
 
@@ -273,6 +327,16 @@ impl CentityContext {
             match self.shared.centities.borrow_mut().get_mut(id) {
                 Some(instance) if !instance.removed => instance.age += 1,
                 _ => continue,
+            }
+            let ended = self.shared.centities.borrow_mut().animate(id);
+            for clip in ended {
+                if !self.live(id) {
+                    break;
+                }
+                self.raise_animation(id, "animation_end", clip);
+            }
+            if !self.live(id) {
+                continue;
             }
             if let Some(target) = self.centity_target(id)
                 && self.scripts.listening(&target, "tick")
@@ -728,6 +792,154 @@ impl CentityApi for CentityContext {
         self.scripts.emit_custom(target, event, payload)
     }
 
+    fn play_animation(
+        &self,
+        this: &handles::Centity,
+        name: String,
+        options: Option<shapes::AnimationOptions>,
+    ) -> ApiResult<bool> {
+        let speed = options.as_ref().and_then(|o| o.speed).unwrap_or(1.0);
+        if !speed.is_finite() || speed < 0.0 {
+            return Err(err("bad field 'options.speed' (a speed can't be negative)"));
+        }
+        let from = options.as_ref().and_then(|o| o.from_tick).unwrap_or(0.0);
+        if !from.is_finite() || from < 0.0 {
+            return Err(err(
+                "bad field 'options.from_tick' (a tick can't be negative)",
+            ));
+        }
+        let blend = options.as_ref().and_then(|o| o.blend_ticks).unwrap_or(0);
+        if blend < 0 {
+            return Err(err(
+                "bad field 'options.blend_ticks' (ticks can't be negative)",
+            ));
+        }
+        let Some(index) = self.clip(this, &name)? else {
+            return Ok(false);
+        };
+        let looped_option = options.as_ref().and_then(|o| o.r#loop);
+        let Some(id) = self.with(this, |i| {
+            let definition = i.definition.clone();
+            let own = definition.animations[index].looped;
+            let looped = looped_option.map(|l| match l {
+                true => LoopMode::Loop,
+                false if own == LoopMode::Loop => LoopMode::Once,
+                false => own,
+            });
+            let play = Play {
+                speed,
+                from: from * SECONDS_PER_TICK,
+                looped,
+                blend_seconds: blend as f64 * SECONDS_PER_TICK,
+            };
+            let pose = i.shown_pose().to_vec();
+            i.animations.play(&definition, index, play, Some(&pose));
+            i.animate();
+            i.id
+        }) else {
+            return Ok(false);
+        };
+        self.raise_animation(id, "animation_start", name);
+        Ok(true)
+    }
+    fn stop_animation(&self, this: &handles::Centity, name: Option<String>) -> ApiResult<()> {
+        self.with(this, |i| {
+            match &name {
+                Some(name) => {
+                    i.animations.stop(name);
+                }
+                None => i.animations.stop_all(),
+            }
+            i.animate();
+        });
+        Ok(())
+    }
+    fn pause_animation(&self, this: &handles::Centity, name: String) -> ApiResult<bool> {
+        if self.clip(this, &name)?.is_none() {
+            return Ok(false);
+        }
+        Ok(self
+            .with(this, |i| i.animations.pause(&name))
+            .unwrap_or(false))
+    }
+    fn resume_animation(&self, this: &handles::Centity, name: String) -> ApiResult<bool> {
+        if self.clip(this, &name)?.is_none() {
+            return Ok(false);
+        }
+        Ok(self
+            .with(this, |i| i.animations.resume(&name))
+            .unwrap_or(false))
+    }
+    fn is_animation_playing(&self, this: &handles::Centity, name: String) -> ApiResult<bool> {
+        Ok(self
+            .with(this, |i| i.animations.is_playing(&name))
+            .unwrap_or(false))
+    }
+    fn playing_animations(&self, this: &handles::Centity) -> ApiResult<Vec<String>> {
+        Ok(self
+            .with(this, |i| i.animations.names())
+            .unwrap_or_default())
+    }
+    fn animations(&self, this: &handles::Centity) -> ApiResult<Vec<String>> {
+        Ok(self
+            .with(this, |i| {
+                i.definition
+                    .animations
+                    .iter()
+                    .map(|a| a.name.clone())
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+    fn animation_tick(&self, this: &handles::Centity, name: String) -> ApiResult<Option<f64>> {
+        if self.clip(this, &name)?.is_none() {
+            return Ok(None);
+        }
+        Ok(self
+            .with(this, |i| i.animations.position(&name))
+            .flatten()
+            .map(|seconds| seconds / SECONDS_PER_TICK))
+    }
+    fn seek_animation(&self, this: &handles::Centity, name: String, tick: f64) -> ApiResult<bool> {
+        if !tick.is_finite() || tick < 0.0 {
+            return Err(err("bad argument 'tick' (a tick can't be negative)"));
+        }
+        if self.clip(this, &name)?.is_none() {
+            return Ok(false);
+        }
+        Ok(self
+            .with(this, |i| {
+                let moved = i.animations.seek(&name, tick * SECONDS_PER_TICK);
+                if moved {
+                    i.animate();
+                }
+                moved
+            })
+            .unwrap_or(false))
+    }
+    fn animation_speed(&self, this: &handles::Centity, name: String) -> ApiResult<Option<f64>> {
+        if self.clip(this, &name)?.is_none() {
+            return Ok(None);
+        }
+        Ok(self.with(this, |i| i.animations.speed(&name)).flatten())
+    }
+    fn set_animation_speed(
+        &self,
+        this: &handles::Centity,
+        name: String,
+        multiplier: f64,
+    ) -> ApiResult<bool> {
+        if !multiplier.is_finite() || multiplier < 0.0 {
+            return Err(err("bad argument 'multiplier' (a speed can't be negative)"));
+        }
+        if self.clip(this, &name)?.is_none() {
+            return Ok(false);
+        }
+        Ok(self
+            .with(this, |i| i.animations.set_speed(&name, multiplier))
+            .unwrap_or(false))
+    }
+
     // ---- not ported yet ----
     fn is_natural(&self, this: &handles::Centity) -> ApiResult<bool> {
         CentityApi::is_natural(&Unported, this)
@@ -894,49 +1106,6 @@ impl CentityApi for CentityContext {
     }
     fn data(&self, this: &handles::Centity) -> ApiResult<Value> {
         CentityApi::data(&Unported, this)
-    }
-    fn play_animation(
-        &self,
-        this: &handles::Centity,
-        name: String,
-        options: Option<shapes::AnimationOptions>,
-    ) -> ApiResult<bool> {
-        CentityApi::play_animation(&Unported, this, name, options)
-    }
-    fn stop_animation(&self, this: &handles::Centity, name: Option<String>) -> ApiResult<()> {
-        CentityApi::stop_animation(&Unported, this, name)
-    }
-    fn pause_animation(&self, this: &handles::Centity, name: String) -> ApiResult<bool> {
-        CentityApi::pause_animation(&Unported, this, name)
-    }
-    fn resume_animation(&self, this: &handles::Centity, name: String) -> ApiResult<bool> {
-        CentityApi::resume_animation(&Unported, this, name)
-    }
-    fn is_animation_playing(&self, this: &handles::Centity, name: String) -> ApiResult<bool> {
-        CentityApi::is_animation_playing(&Unported, this, name)
-    }
-    fn playing_animations(&self, this: &handles::Centity) -> ApiResult<Vec<String>> {
-        CentityApi::playing_animations(&Unported, this)
-    }
-    fn animations(&self, this: &handles::Centity) -> ApiResult<Vec<String>> {
-        CentityApi::animations(&Unported, this)
-    }
-    fn animation_tick(&self, this: &handles::Centity, name: String) -> ApiResult<Option<f64>> {
-        CentityApi::animation_tick(&Unported, this, name)
-    }
-    fn seek_animation(&self, this: &handles::Centity, name: String, tick: f64) -> ApiResult<bool> {
-        CentityApi::seek_animation(&Unported, this, name, tick)
-    }
-    fn animation_speed(&self, this: &handles::Centity, name: String) -> ApiResult<Option<f64>> {
-        CentityApi::animation_speed(&Unported, this, name)
-    }
-    fn set_animation_speed(
-        &self,
-        this: &handles::Centity,
-        name: String,
-        multiplier: f64,
-    ) -> ApiResult<bool> {
-        CentityApi::set_animation_speed(&Unported, this, name, multiplier)
     }
     fn is_glowing(&self, this: &handles::Centity) -> ApiResult<bool> {
         CentityApi::is_glowing(&Unported, this)

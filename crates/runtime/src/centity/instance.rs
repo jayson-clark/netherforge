@@ -20,6 +20,11 @@ use netherforge_format::math::{Matrix4, Vec3};
 use netherforge_luau::ScopeId;
 use netherforge_platform::{DisplayLook, Location, Uuid};
 
+use super::animation::AnimationPlayer;
+
+/// A tick, in seconds: what clips advance by.
+pub const SECONDS_PER_TICK: f64 = 0.05;
+
 /// Minecraft's default view range for a display, in blocks: a multiplier of 1.
 pub const DEFAULT_VIEW_RANGE: f64 = 64.0;
 
@@ -134,6 +139,18 @@ pub struct Instance {
     interpolation: Vec<i32>,
     /// Nodes whose display jumps to its next pose rather than easing there.
     jumps: Vec<bool>,
+    /// The clips playing on it.
+    pub animations: AnimationPlayer,
+    /// Nodes something other than a clip changed since the last sync (a script, being shown or hidden):
+    /// their pose is sent now rather than planned ahead.
+    edited: Vec<bool>,
+    /// Every node is, as for `edited` (it turned, or was just made or redefined).
+    all_edited: bool,
+    /// The clips' `version` at the last sync: a clip started, stopped or moved since means nothing planned
+    /// holds.
+    synced_clips: u64,
+    /// The age at which each display arrives at the pose it was last sent ahead to.
+    pub due: Vec<u64>,
     /// The pose changed since the last sync.
     pose_dirty: bool,
     /// `placed`, kept until the pose or facing changes.
@@ -177,6 +194,11 @@ impl Instance {
             looks: Vec::new(),
             interpolation: Vec::new(),
             jumps: Vec::new(),
+            animations: AnimationPlayer::default(),
+            edited: Vec::new(),
+            all_edited: true,
+            synced_clips: 0,
+            due: Vec::new(),
             pose_dirty: true,
             placed_cache: None,
             pushed_poses: HashMap::new(),
@@ -207,6 +229,10 @@ impl Instance {
         self.looks = vec![default_look(); n];
         self.interpolation = vec![DEFAULT_INTERPOLATION_TICKS; n];
         self.jumps = vec![false; n];
+        self.edited = vec![false; n];
+        self.due = vec![0; n];
+        self.all_edited = true;
+        self.animations.stop_all();
         self.definition = next;
         self.needs_reconcile = true;
         self.force_sync = true;
@@ -248,6 +274,7 @@ impl Instance {
             return;
         }
         self.yaw = yaw;
+        self.all_edited = true;
         self.posed();
     }
 
@@ -272,6 +299,7 @@ impl Instance {
     pub fn set_transform(&mut self, index: usize, transform: Transform, instant: bool) {
         self.rest[index] = transform.clone();
         self.pose[index] = transform;
+        self.edited[index] = true;
         if instant {
             self.jumps[index] = true;
         }
@@ -287,6 +315,7 @@ impl Instance {
     pub fn set(&mut self, index: usize, channel: Channel, value: Vec3, instant: bool) {
         channel.put(&mut self.rest[index], value);
         channel.put(&mut self.pose[index], value);
+        self.edited[index] = true;
         if instant {
             self.jumps[index] = true;
         }
@@ -359,6 +388,52 @@ impl Instance {
         self.placed_cache.as_deref().expect("just made")
     }
 
+    /// The pose as shown now (rest plus clips), for a clip blending in from it.
+    pub fn shown_pose(&self) -> &[Transform] {
+        &self.pose
+    }
+
+    /// The pose again from rest plus the playing clips.
+    pub fn animate(&mut self) {
+        let mut next = self.rest.clone();
+        self.animations.apply(&mut next);
+        if next != self.pose {
+            self.pose = next;
+            self.posed();
+        }
+    }
+
+    /// `placed` as it will be `ticks` ticks from now if only the clips move it: rest plus the clips advanced
+    /// that far, nothing else changing.
+    pub fn placed_ahead(&self, ticks: i32) -> Vec<Matrix4> {
+        let mut ahead = self.rest.clone();
+        self.animations
+            .apply_ahead(&mut ahead, f64::from(ticks) * SECONDS_PER_TICK);
+        let composed = self.definition.world(Some(&ahead));
+        if self.yaw == 0.0 {
+            return composed;
+        }
+        let turn = self.turn();
+        composed.iter().map(|m| turn.mul(m)).collect()
+    }
+
+    /// Whether node `index`'s shown matrix changed since the last sync in a way the clips alone don't
+    /// account for: it, or a node above it, was set by a script, hidden or shown, or eased differently; or
+    /// the centity turned, or a clip was started, stopped or moved.
+    pub fn edited(&self, index: usize) -> bool {
+        if self.all_edited || self.animations.version() != self.synced_clips {
+            return true;
+        }
+        let mut at = index as i32;
+        while at >= 0 {
+            if self.edited[at as usize] {
+                return true;
+            }
+            at = self.definition.nodes[at as usize].parent_index;
+        }
+        false
+    }
+
     /// A position in the centity's space, in the world.
     pub fn to_world(&self, point: Vec3) -> Vec3 {
         self.space().transform_position(point)
@@ -374,6 +449,9 @@ impl Instance {
         self.moved = false;
         self.content_changed.fill(false);
         self.jumps.fill(false);
+        self.edited.fill(false);
+        self.all_edited = false;
+        self.synced_clips = self.animations.version();
     }
 
     // ---- visibility and content ----
@@ -387,6 +465,7 @@ impl Instance {
             return;
         }
         self.hidden[index] = !value;
+        self.edited[index] = true;
         self.jumps[index] = true;
         self.pose_dirty = true;
     }
@@ -410,6 +489,8 @@ impl Instance {
     pub fn set_display(&mut self, index: usize, display: DisplayDef) {
         self.content[index] = Some(display);
         self.content_changed[index] = true;
+        // Its fit may change with it (a rect's size, an anchor), so its pose is sent now too.
+        self.edited[index] = true;
         self.pose_dirty = true;
     }
 
@@ -457,6 +538,7 @@ impl Instance {
 
     pub fn set_interpolation(&mut self, index: usize, ticks: i32) {
         self.interpolation[index] = ticks;
+        self.edited[index] = true;
         self.pose_dirty = true;
     }
 

@@ -420,10 +420,19 @@ installs the centity classes; `Room::new` leaves them unported.
   implement what's ported and delegate the rest one by one to `Unported` (`CentityApi::damage(&Unported,
   this, amount, options)`), in the "not ported yet" part of each impl. Porting one moves it up.
 - Centities are defined before modules start (the services' order): a module's body may spawn one.
+- **Animations** (`animation.rs`, Kotlin's `AnimationPlayer`): clips by their centity and index (nothing
+  copied per play), applied in start order, additive ones last; the pose is rest plus clips
+  (`Instance::animate`), each tick after the clips advance 0.05 s, and `animation_end` is raised for each
+  that ended. `play_animation` raises `animation_start`. Clip math is format's (`resolve`,
+  `Track::sample`, `Transform::posed`). Timers run before the clips move on in a tick.
+- **Keyframes** (`keyframes.rs`): while only clips move a node, `sync_pose` sends the pose some ticks
+  ahead with that many ticks to ease (`reach`, up to 20, within 0.01 blocks of the clip at every tick
+  between), then nothing until it's due. Anything else (a script's set, shown/hidden, a turn, a clip
+  started or moved: `Instance::edited`) sends the pose now. A linear clip over 20 ticks is 3 pose writes.
 - `nf.centities.spawn`'s `temporary`, `lifetime` and `viewers` refuse ("isn't on the Rust runtime yet").
 
 Not yet: hitboxes and clicks, saving placements (until then a stopping session removes its instances, so
-nothing is left behind unowned), temporary and private instances, animations, physics and movement,
+nothing is left behind unowned), temporary and private instances, physics and movement,
 health, natural spawning, ropes, script-added nodes, tweens, a module's reload restarting the centity
 scripts that required it, images' pixels (an image draws blank, its text whole rather than in runs).
 

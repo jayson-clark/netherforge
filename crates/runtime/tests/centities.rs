@@ -387,3 +387,65 @@ lamp:node("head"):on("click", function() end)"#,
     session.reload(&["centities/lamp/script.lua".into()]);
     assert_eq!(printed(&platform.take()), ["v2\ttrue"]);
 }
+
+#[test]
+fn a_clip_is_sent_ahead_as_keyframes_and_its_end_is_heard() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let lamp = lamp(1.0);
+    let end = lamp.rfind('}').expect("an object");
+    let centity = format!(
+        r#"{}, "animations": {{ "rise": {{ "loop": "once", "tracks": {{ "head": {{ "translation": [
+  {{ "time": 0, "value": [0, 1, 0] }}, {{ "time": 1, "value": [0, 3, 0] }} ] }} }} }} }}, "script": {{ "file": "script.lua" }} }}"#,
+        lamp[..end].trim_end()
+    );
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &centity),
+        (
+            "centities/lamp/script.lua",
+            r#"
+this:on("animation_start", function(e) print("start", e.animation) end)
+this:on("animation_end", function(e) print("end", e.animation) end)
+"#,
+        ),
+        (
+            "modules/game/init.lua",
+            r#"
+local lamp = nf.centities.spawn("lamp", vector.create(0, 64, 0))
+print(lamp:play_animation("rise"), lamp:is_animation_playing("rise"), table.concat(lamp:animations(), ","))
+print(pcall(lamp.play_animation, lamp, "fall"))
+nf.after(10, function() print("at", string.format("%.3f", lamp:animation_tick("rise"))) end)
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(
+        printed(&start),
+        [
+            "start\trise",
+            "true\ttrue\trise",
+            "false\tmodules/game/init.lua:4: lamp has no animation \"fall\" (it has: rise)",
+        ],
+        "{start:?}"
+    );
+    let mut poses = Vec::new();
+    let mut lines = Vec::new();
+    for _ in 0..25 {
+        session.tick();
+        let calls = platform.take();
+        lines.extend(printed(&calls));
+        poses.extend(calls.into_iter().filter(|c| c.starts_with("pose 3 ")));
+    }
+    // Timers run before the clips move on: nine ticks in.
+    assert_eq!(lines[0], "at\t9.000", "{lines:?}");
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    assert_eq!(lines[1], "end\trise", "{lines:?}");
+    // A pose now (the clip just started), one planned most of the way, and back to rest at the end.
+    assert!(poses.len() <= 4, "{poses:?}");
+    assert!(poses.iter().any(|p| p.ends_with("eased 17")), "{poses:?}");
+    assert!(
+        poses.last().unwrap().starts_with("pose 3 0 1 0"),
+        "{poses:?}"
+    );
+}
