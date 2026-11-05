@@ -662,6 +662,40 @@ impl netherforge_platform::FakePlayerListOps for Fake {
     }
 }
 
+/// The world's border: 1000 across, at the origin.
+impl netherforge_platform::FakeBorderOps for Fake {
+    fn max_size(&self) -> f64 {
+        59_999_968.0
+    }
+    fn max_center(&self) -> f64 {
+        29_999_984.0
+    }
+    fn get(
+        &self,
+        owner: netherforge_platform::BorderOwner,
+    ) -> Option<netherforge_platform::BorderState> {
+        matches!(owner, netherforge_platform::BorderOwner::World(_)).then_some(
+            netherforge_platform::BorderState {
+                center_x: 0.0,
+                center_z: 0.0,
+                size: 1000.0,
+                damage_amount: 0.2,
+                damage_buffer: 5.0,
+                warning_distance: 5,
+                warning_ticks: 300,
+            },
+        )
+    }
+    fn set_size(&self, _: netherforge_platform::BorderOwner, size: f64, ticks: i64) -> bool {
+        self.call(format!("border size {size} over {ticks}"));
+        true
+    }
+    fn set_damage(&self, _: netherforge_platform::BorderOwner, amount: f64, buffer: f64) -> bool {
+        self.call(format!("border damage {amount} {buffer}"));
+        true
+    }
+}
+
 impl netherforge_platform::FakePermissionOps for Fake {
     fn apply(&self, player: Uuid, nodes: std::collections::HashMap<String, bool>) {
         let mut nodes: Vec<String> = nodes.into_iter().map(|(n, v)| format!("{n}={v}")).collect();
@@ -709,6 +743,9 @@ impl FakePlatform for Fake {
         self
     }
     fn teams(&self) -> &dyn netherforge_platform::TeamOps {
+        self
+    }
+    fn borders(&self) -> &dyn netherforge_platform::BorderOps {
         self
     }
     fn player_list(&self) -> &dyn netherforge_platform::PlayerListOps {
@@ -2818,4 +2855,36 @@ print(alex:below_name(), alex:set_listed_for(alex, false), alex:is_listed_for(al
     ] {
         assert!(stopped.contains(&line.to_owned()), "{line} {stopped:?}");
     }
+}
+
+#[test]
+fn a_worlds_border_is_read_and_set() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/border/init.lua",
+            r#"
+local border = nf.worlds.default():border()
+print(border:size(), border:damage().buffer, border:warning().ticks, border:set_size(500, { ticks = 200 }))
+print(pcall(border.set_size, border, 0), border:set_damage({ amount = 1 }), pcall(border.set_damage, border, { buffer = -1 }))
+print(select(2, pcall(border.set_size, border, 0)))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "1000\t5\t300\ttrue",
+            "false\ttrue\tfalse\tmodules/border/init.lua:4: damage.buffer can't be negative",
+            "modules/border/init.lua:5: a border's size must be from 1 to 59999968, not 0",
+        ]
+    );
+    assert!(
+        calls.contains(&"border size 500 over 200".to_owned())
+            && calls.contains(&"border damage 1 5".to_owned()),
+        "{calls:?}"
+    );
 }

@@ -17,6 +17,7 @@ use netherforge_format::requirement::Requirement;
 use netherforge_luau::{Host, ScopeId};
 
 pub mod block;
+pub mod border;
 pub mod bossbar;
 pub mod centity;
 pub mod data;
@@ -428,6 +429,12 @@ impl LuaApi for Api {
         }
     }
     fn team(&self) -> &dyn netherforge_api::api::TeamApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn worldborder(&self) -> &dyn netherforge_api::api::WorldBorderApi {
         match &self.worlds {
             Some(w) => w,
             None => &Unported,
