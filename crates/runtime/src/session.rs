@@ -556,6 +556,9 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
             shared: shared.clone(),
             host: Default::default(),
         }),
+        Box::new(crate::data::SessionTablesService {
+            shared: shared.clone(),
+        }),
         // Before any script runs, so `has_permission` already answers.
         Box::new(crate::permissions::PermissionsService {
             shared: shared.clone(),

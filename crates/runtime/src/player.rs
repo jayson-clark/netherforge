@@ -4,7 +4,7 @@
 //!
 //! Not yet, each with its area: sounds and particles (effects), skies, recipes,
 //! advancements, menus and dialogs, who's listed for whom and below-name text (teams), boss bars, resource
-//! packs, and `player:session()`.
+//! and packs.
 
 use std::collections::BTreeMap;
 
@@ -1138,8 +1138,29 @@ impl PlayerApi for GameContext {
             .map(Value::Table)
             .map_err(|e| err(e.to_string()))
     }
+    /// Their table while they're online; one made before they left is still theirs until their `player_quit`
+    /// handlers are done.
     fn session(&self, this: &handles::Player) -> ApiResult<Value> {
-        <Unported as PlayerApi>::session(&Unported, this)
+        let Some(id) = parse_uuid(&this.id) else {
+            return Ok(Value::Nil);
+        };
+        if let Some(table) = self.shared.session_tables.borrow().get(&id) {
+            return Ok(Value::Table(table.clone()));
+        }
+        if self.player_online(this).is_none() {
+            return Ok(Value::Nil);
+        }
+        let table = self
+            .scripts
+            .host()
+            .lua()
+            .create_table()
+            .map_err(|e| err(e.to_string()))?;
+        self.shared
+            .session_tables
+            .borrow_mut()
+            .insert(id, table.clone());
+        Ok(Value::Table(table))
     }
     fn on(
         &self,

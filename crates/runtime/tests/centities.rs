@@ -2072,6 +2072,9 @@ local s = nf.data("scores")
 print(s.top, pcall(nf.data, "Bad Name"))
 s.top = (s.top or 0) + 1
 nf.worlds.default():players()[1]:data().coins = 3
+local alex = nf.worlds.default():players()[1]
+alex:session().streak = 4
+nf.on("player_quit", function(e) print("quit", e.player:session().streak) end)
 "#,
         ),
     ]);

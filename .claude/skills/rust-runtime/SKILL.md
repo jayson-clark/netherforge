@@ -549,7 +549,8 @@ ends is carried into the next session's table (a restart), not read again from t
 package (the calling scope's namespace); a thing's table is the thing's, whoever's code asks. Over 1 MiB isn't
 saved and is logged once while it stays so. The store's rows are its `centity_data`, `player_data` and
 `named_data` (`Store::data`, `put_data`, `delete_data`). `nf` is `NfContext` (`lib.rs`): `Scripts`' functions,
-with `nf.data` the session's. Not yet: tagged values (a handle in a table is reported and skipped).
+with `nf.data` the session's. `player:session()` is `SessionTablesService`'s: a plain table per online player, never
+saved, gone after their `player_quit` handlers. Not yet: tagged values (a handle in a table is reported and skipped).
 
 ## Permissions (`crates/runtime/src/permissions.rs`)
 

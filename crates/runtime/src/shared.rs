@@ -36,6 +36,8 @@ pub struct Shared {
     pub data: RefCell<crate::data::ScriptData>,
     /// The permission nodes scripts set on players.
     pub permissions: RefCell<crate::permissions::Permissions>,
+    /// `player:session()`: a plain table per online player, never saved.
+    pub session_tables: RefCell<std::collections::HashMap<netherforge_platform::Uuid, mlua::Table>>,
     /// Natural spawning: its passes, rules and scripts' conditions.
     pub spawner: RefCell<crate::centity::natural::Spawner>,
     /// The pictures scripts hold.
@@ -62,6 +64,7 @@ impl Shared {
             store,
             data: RefCell::default(),
             permissions: RefCell::default(),
+            session_tables: RefCell::default(),
             centities: RefCell::default(),
             font: RefCell::default(),
             centity_scripts: RefCell::default(),

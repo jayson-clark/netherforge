@@ -254,3 +254,24 @@ pub fn centity_label(centity: &str, id: Uuid) -> String {
 pub fn saved(store: &Store, owner: &Owner) -> Option<String> {
     store.data(owner)
 }
+
+/// `player:session()` (Kotlin's `SessionTables`): a plain table per online player, shared by every script and
+/// never saved, made the first time a script asks while they're online and kept until they leave (after their
+/// `player_quit` handlers, which still find it) or the session ends. A module's reload leaves it be.
+pub struct SessionTablesService {
+    pub shared: Rc<Shared>,
+}
+
+impl Service for SessionTablesService {
+    fn name(&self) -> &'static str {
+        "session tables"
+    }
+
+    fn player_quit(&self, player: &PlayerRef) {
+        self.shared.session_tables.borrow_mut().remove(&player.uuid);
+    }
+
+    fn stop(&self, _room: &Room, _platform: &dyn Platform) {
+        self.shared.session_tables.borrow_mut().clear();
+    }
+}
