@@ -23,8 +23,9 @@ description: The dev bridge between the NetherForge editor and the plugin on its
 - **The editor listens** on `127.0.0.1:<port>`, then starts the server with
   `-Dnetherforge.project=<project dir>`, `-Dnetherforge.bridge.port=<port>` and
   the environment variable `NETHERFORGE_BRIDGE_TOKEN`. Constants are in
-  `packages/format/.../bridge/Bridge.kt` (`PROJECT_PROPERTY`, `PORT_PROPERTY`,
-  `TOKEN_ENV`).
+  `crates/format/src/bridge/mod.rs` (`PROJECT_PROPERTY`, `PORT_PROPERTY`,
+  `TOKEN_ENV`), and in the Kotlin plugin's `packages/format/.../bridge/Bridge.kt`
+  while it lasts.
 - **Frames are JSON-RPC 2.0**, one message (or batch) per line (NDJSON):
   requests with an `id` get exactly one response (`result`, or `error` with a
   `code` and a `message`), notifications have no `id` and are never answered.
@@ -107,9 +108,20 @@ description: The dev bridge between the NetherForge editor and the plugin on its
 
 ## Messages
 
-Declared once, in `Bridge.kt` (and `BotsExtension` in `Bots.kt`): each
-method's name, params type, result type and thread. The editor's
-`BridgeRequests` and `BridgeEvents` types are generated from them.
+Declared in Rust, in `crates/format/src/bridge/` (`mod.rs`'s `protocol!`
+table and its messages, `bots.rs`, `rpc.rs`, and the handshake's proofs in
+`auth.rs`): each method's name, params type, result type and thread, written
+once by the macro as a typed marker (`Reload: Method`), the routing tables
+(`requests()`, `EVENTS`, `STREAMS`, `reencode_params`, `check_result`,
+`check_notification`) and the editor's TypeScript maps `BridgeRequests` and
+`BridgeEvents`, which tauri-specta writes into the backend's
+`generated/bindings.ts` (`bridge::typescript_types()`, `pnpm generate`); the UI
+imports them from `core/bridge/protocol.ts`. The encoding is Kotlin's: a field
+left out when it's null or its default, unknown keys ignored. The Kotlin
+plugin's `Bridge.kt` and `Bots.kt` speak the same protocol until the Kotlin
+runtime goes: `crates/format/tests/bridge.rs` holds the Rust side to the
+recorded session and to `Bridge.kt`'s list of methods, as `BridgeTest` holds
+Kotlin's.
 
 | Direction | Method                    | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | --------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -253,14 +265,17 @@ self-contained),
 the session and builds a new one) and `ProjectSession.reload` (the
 semantics above).
 
-**Adding a request**: declare a `BridgeMethod` in `Bridge.kt` (its params
+**Adding a request**: add it to the `protocol!` table in
+`crates/format/src/bridge/mod.rs` with its params and result types (and run
+`pnpm generate` for the editor's types), and, while the Kotlin plugin serves
+the bridge, declare a `BridgeMethod` in `Bridge.kt` too (its params
 and result types; `Unit` for none; `BridgeThread.BRIDGE` only for a control
 request that must not wait for the main thread) and list it in
 `Bridge.requests` (or in an extension's list, under its namespace), add lines
 to `packages/format/testdata/bridge/session.ndjson` (which every side reads),
 handle it with `BridgeService.answer` (or `handle`, for one answered later),
 and test it in the plugin's `BridgeTest`. The editor's `BridgeRequests` type
-follows from the generated contract, Rust passes the frames through
+follows from the Rust table, the backend passes the frames through
 untouched, and the memory backend needs a case. **Adding a notification** is
 a `BridgeEvent` (or, for high-rate data, a `BridgeStream`) in `Bridge.events`
 (`Bridge.streams`), sent through `RuntimeLog.notify` (`BridgeOutput.console`

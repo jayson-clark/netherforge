@@ -1,9 +1,12 @@
 //! Problems: one thing wrong with a project, located as precisely as format
 //! can say, and the catalogue of their kinds. Format's `Problem.kt`.
 
-use serde_json::{Value, json};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[serde(rename_all = "lowercase")]
 pub enum Severity {
     Error,
     Warning,
@@ -19,9 +22,11 @@ impl Severity {
 }
 
 /// A place in a project: a file, and a JSON path into it when it's about a value.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct Location {
     pub file: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
 }
 
@@ -68,49 +73,29 @@ impl Problem {
 /// separators; `path` a JSON path into it (`$.nodes.top.display`) when it's
 /// about a value; `line` and `column` are 1-based and known for a parse error.
 /// `related` are the other places it's about (a reference's other end).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct Problem {
     pub severity: Severity,
     pub file: String,
     pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub column: Option<u32>,
+    /// Stable identifier for the kind of problem (the catalogue's), for tests and for filtering in the editor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub related: Vec<Location>,
 }
 
 impl Problem {
-    /// As format serializes it (`Problem`'s fields, the ones that are set).
+    /// As format serializes it: the fields that are set.
     pub fn to_json(&self) -> Value {
-        let mut out = serde_json::Map::new();
-        out.insert("severity".into(), json!(self.severity.name()));
-        out.insert("file".into(), json!(self.file));
-        out.insert("message".into(), json!(self.message));
-        if let Some(path) = &self.path {
-            out.insert("path".into(), json!(path));
-        }
-        if let Some(line) = self.line {
-            out.insert("line".into(), json!(line));
-        }
-        if let Some(column) = self.column {
-            out.insert("column".into(), json!(column));
-        }
-        if let Some(code) = &self.code {
-            out.insert("code".into(), json!(code));
-        }
-        if !self.related.is_empty() {
-            let related: Vec<Value> = self
-                .related
-                .iter()
-                .map(|l| match &l.path {
-                    Some(p) => json!({ "file": l.file, "path": p }),
-                    None => json!({ "file": l.file }),
-                })
-                .collect();
-            out.insert("related".into(), Value::Array(related));
-        }
-        Value::Object(out)
+        serde_json::to_value(self).expect("a problem serializes")
     }
 }
 

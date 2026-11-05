@@ -242,10 +242,7 @@ export type {
   NumberSetting,
   StringSetting,
   SettingDef,
-  SettingState,
   SettingValueResult,
-  PackageSettings,
-  ServerSettings,
   SingleOptionInput,
   SkinPreview,
   SkinDef,
@@ -309,6 +306,7 @@ export type {
   WorkspaceServerOptions,
   WorkspaceResult,
 } from '@netherforge/format/types'
+export type { SettingState, PackageSettings, ServerSettings } from '@/core/bridge/protocol'
 
 // Defaults, limits, naming rules and where each kind lives, generated from
 // the Kotlin declarations that own them.

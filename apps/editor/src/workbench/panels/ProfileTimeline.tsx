@@ -6,7 +6,7 @@
  * each step, so colour is never the only way to tell them apart.
  */
 import { useEffect, useRef, useState } from 'react'
-import type { ProfileTick } from '@netherforge/format/types'
+import type { ProfileTick } from '@/core/bridge/protocol'
 import { TIMELINE_TICKS } from '@/core/store/profiler'
 import styles from './Profiler.module.css'
 

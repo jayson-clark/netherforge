@@ -13,9 +13,22 @@ serde.workspace = true
 serde_path_to_error.workspace = true
 regex.workspace = true
 schemars.workspace = true
+indexmap.workspace = true
+specta = { workspace = true, optional = true }
+specta-typescript = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+getrandom = { workspace = true, optional = true }
+
+[features]
+# TypeScript types for the editor (`specta::Type` on what crosses to its UI: the dev bridge's messages, problems).
+specta = ["dep:specta", "dep:specta-typescript"]
+# The dev bridge's handshake: HMAC-SHA256 proofs and random nonces (the editor's end, and the runtime's).
+bridge-auth = ["dep:sha2", "dep:getrandom"]
 
 [dev-dependencies]
 sha2.workspace = true
+# The crate's own tests run with every feature: the handshake's proofs, the TypeScript types.
+netherforge-format = { path = ".", features = ["bridge-auth", "specta"] }
 
 [lints]
 workspace = true

@@ -5,7 +5,7 @@
  * editor writes into it on its own (schemas, agent docs, the default font),
  * notices, and the hot reload that follows a write.
  */
-import type { ReloadResult } from '@netherforge/format/types'
+import type { ReloadResult } from '@/core/bridge/protocol'
 import type { AppInfo, CacheStatus, ProjectInfo, Unlisten } from '@/core/backend/types'
 import { editorAgentDocFiles } from '@/core/agentDocs'
 import { DEFAULT_FONT_FILE, defaultFontToWrite, defaultFontWriteFailed } from '@/core/defaultFont'

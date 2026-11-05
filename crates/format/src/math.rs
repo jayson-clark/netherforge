@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 /// Three numbers, written `[x, y, z]`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct Vec3(pub f64, pub f64, pub f64);
 
 impl Vec3 {
@@ -15,6 +16,7 @@ impl Vec3 {
 
 /// An axis-aligned box: its `min` and `max` corners, in blocks.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(deny_unknown_fields)]
 pub struct BoundingBox {
     pub min: Vec3,

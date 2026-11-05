@@ -229,6 +229,7 @@ pub struct ListingPlayers {
 /// A setting the server's owner may change (`settings` in the manifest), by
 /// its `type`. Reading and checking its values comes with settings.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum SettingDef {
     Boolean {
@@ -238,17 +239,17 @@ pub enum SettingDef {
     Integer {
         description: String,
         default: i64,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         min: Option<i64>,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         max: Option<i64>,
     },
     Number {
         description: String,
         default: f64,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         min: Option<f64>,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         max: Option<f64>,
     },
     String {

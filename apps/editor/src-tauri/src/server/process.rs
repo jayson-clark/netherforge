@@ -32,7 +32,7 @@ use crate::app::dirs::AppDirs;
 use crate::app::events::{BridgeMessage, EventSink};
 use crate::app::plugins;
 use crate::app::tools::{PaperSource, Tools};
-use crate::bridge::protocol::{self, Hello};
+use crate::bridge::protocol::{self, HelloParams as Hello};
 use crate::bridge::{self, Bridge, BridgeHandler};
 use crate::error::{Context, Error, ErrorCode, Result, bail};
 use crate::minecraft::cache;

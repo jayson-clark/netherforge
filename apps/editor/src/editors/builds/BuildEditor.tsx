@@ -7,7 +7,7 @@
  * all. Scripts place it with `world:place_gradually`.
  */
 import { useMemo, useState } from 'react'
-import type { PlayerPosition } from '@netherforge/format/types'
+import type { PlayerPosition } from '@/core/bridge/protocol'
 import { BUILD_LIMITS } from '@netherforge/format/constants'
 import { readNbt } from '@netherforge/structures/nbt'
 import { gridOfFiles } from '@netherforge/structures/parts'

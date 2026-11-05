@@ -185,6 +185,478 @@ export type AppInfo = {
 	os: Os,
 };
 
+/**  A stream's notification: its items, in order. */
+export type Batch<T> = {
+	items: T[],
+};
+
+/**  A block's properties: each one's allowed values, in the game's order, and the values the game places it with. */
+export type BlockInfo = BlockInfo_Serialize | BlockInfo_Deserialize;
+
+/**  A block's properties: each one's allowed values, in the game's order, and the values the game places it with. */
+export type BlockInfo_Deserialize = {
+	properties?: { [key in string]: string[] },
+	defaults?: { [key in string]: string },
+};
+
+/**  A block's properties: each one's allowed values, in the game's order, and the values the game places it with. */
+export type BlockInfo_Serialize = {
+	properties?: { [key in string]: string[] },
+	defaults?: { [key in string]: string },
+};
+
+/**  A block position. */
+export type BlockPos = {
+	x: number,
+	y: number,
+	z: number,
+};
+
+export type BotActParams = BotActParams_Serialize | BotActParams_Deserialize;
+
+export type BotActParams_Deserialize = {
+	name: string,
+	action: BotAction_Deserialize,
+};
+
+export type BotActParams_Serialize = {
+	name: string,
+	action: BotAction_Serialize,
+};
+
+/**  What an action did: where the bot is after it, and the event it started at. */
+export type BotActResult = {
+	world: string,
+	x: number,
+	y: number,
+	z: number,
+	since: number,
+};
+
+/**  What a bot does: one of a client's inputs. */
+export type BotAction = BotAction_Serialize | BotAction_Deserialize;
+
+/**  What a bot does: one of a client's inputs. */
+export type BotAction_Deserialize = ({ type: "teleport"; x: number; y: number; z: number; world?: string; yaw?: number; pitch?: number }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never } | ({ type: "look"; yaw: number; pitch: number }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "look_at"; x: number; y: number; z: number }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; yaw?: never } | 
+/**  Walks to `x`, `z` as a client would, until there or `timeoutTicks` pass. */
+({ type: "walk_to"; x: number; z: number; sprint?: boolean; timeoutTicks?: number }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; world?: never; y?: never; yaw?: never } | ({ type: "jump" }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "sneak"; on: boolean }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "sprint"; on: boolean }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "chat"; message: string }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "command"; line: string }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | 
+/**  Right-clicks an entity, a centity (or one of its nodes), or what's at a point. */
+({ type: "interact"; entity?: string; centity?: string; node?: string; hand?: BotHand; x?: number; y?: number; z?: number }) & { all?: never; button?: never; click?: never; face?: never; front?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; yaw?: never } | 
+/**  Hits an entity, a centity (or one of its nodes), or what's at a point. */
+({ type: "attack"; entity?: string; centity?: string; node?: string; x?: number; y?: number; z?: number }) & { all?: never; button?: never; click?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; yaw?: never } | ({ type: "swing" }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "use_item"; hand?: BotHand }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "release_item" }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "fly"; on: boolean }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "edit_sign"; x: number; y: number; z: number; lines: string[]; front?: boolean }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; yaw?: never } | ({ type: "click_button"; button: number }) & { all?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "use_block"; x: number; y: number; z: number; face?: string; hand?: BotHand }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; front?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; yaw?: never } | ({ type: "break_block"; x: number; y: number; z: number; face?: string }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; yaw?: never } | ({ type: "pick_block"; x: number; y: number; z: number }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; yaw?: never } | ({ type: "select_slot"; slot: number }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "swap_hands" }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "drop"; all?: boolean }) & { button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "click_slot"; slot: number; click?: BotClick; hotbar?: number }) & { all?: never; button?: never; centity?: never; entity?: never; face?: never; front?: never; hand?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "drag"; slots: number[]; button?: BotButton }) & { all?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "close_menu" }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | 
+/**  Presses a dialog's button, by its label or index, with its inputs' values. */
+({ type: "dialog_button"; button?: string; index?: number; inputs?: { [key in string]: unknown } }) & { all?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "dialog_close" }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "stop" }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "respawn" }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never };
+
+/**  What a bot does: one of a client's inputs. */
+export type BotAction_Serialize = ({ type: "teleport"; x: number; y: number; z: number; world?: string; yaw?: number; pitch?: number }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never } | ({ type: "look"; yaw: number; pitch: number }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "look_at"; x: number; y: number; z: number }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; yaw?: never } | 
+/**  Walks to `x`, `z` as a client would, until there or `timeoutTicks` pass. */
+({ type: "walk_to"; x: number; z: number; sprint?: boolean; timeoutTicks?: number }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; world?: never; y?: never; yaw?: never } | ({ type: "jump" }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "sneak"; on: boolean }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "sprint"; on: boolean }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "chat"; message: string }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "command"; line: string }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | 
+/**  Right-clicks an entity, a centity (or one of its nodes), or what's at a point. */
+({ type: "interact"; entity?: string; centity?: string; node?: string; hand?: BotHand; x?: number; y?: number; z?: number }) & { all?: never; button?: never; click?: never; face?: never; front?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; yaw?: never } | 
+/**  Hits an entity, a centity (or one of its nodes), or what's at a point. */
+({ type: "attack"; entity?: string; centity?: string; node?: string; x?: number; y?: number; z?: number }) & { all?: never; button?: never; click?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; yaw?: never } | ({ type: "swing" }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "use_item"; hand?: BotHand }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "release_item" }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "fly"; on: boolean }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "edit_sign"; x: number; y: number; z: number; lines: string[]; front?: boolean }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; yaw?: never } | ({ type: "click_button"; button: number }) & { all?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "use_block"; x: number; y: number; z: number; face?: string; hand?: BotHand }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; front?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; yaw?: never } | ({ type: "break_block"; x: number; y: number; z: number; face?: string }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; yaw?: never } | ({ type: "pick_block"; x: number; y: number; z: number }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; yaw?: never } | ({ type: "select_slot"; slot: number }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "swap_hands" }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "drop"; all?: boolean }) & { button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "click_slot"; slot: number; click?: BotClick; hotbar?: number }) & { all?: never; button?: never; centity?: never; entity?: never; face?: never; front?: never; hand?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "drag"; slots: number[]; button?: BotButton }) & { all?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "close_menu" }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | 
+/**  Presses a dialog's button, by its label or index, with its inputs' values. */
+({ type: "dialog_button"; button?: string; index?: number; inputs?: { [key in string]: unknown } }) & { all?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "dialog_close" }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "stop" }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never } | ({ type: "respawn" }) & { all?: never; button?: never; centity?: never; click?: never; entity?: never; face?: never; front?: never; hand?: never; hotbar?: never; index?: never; inputs?: never; line?: never; lines?: never; message?: never; node?: never; on?: never; pitch?: never; slot?: never; slots?: never; sprint?: never; timeoutTicks?: never; world?: never; x?: never; y?: never; yaw?: never; z?: never };
+
+export type BotBossBar = {
+	name: string,
+	progress: number,
+	color: string,
+	overlay: string,
+};
+
+export type BotButton = "left" | "right";
+
+/**  A click on a menu slot, as a client makes them. */
+export type BotClick = "left" | "right" | "shift_left" | "shift_right" | "middle" | "drop" | "drop_all" | "double" | "hotbar" | "off_hand";
+
+export type BotDialog = BotDialog_Serialize | BotDialog_Deserialize;
+
+export type BotDialogInput = BotDialogInput_Serialize | BotDialogInput_Deserialize;
+
+export type BotDialogInput_Deserialize = {
+	key: string,
+	kind: string,
+	label: string,
+	initial?: unknown,
+	options?: string[],
+};
+
+export type BotDialogInput_Serialize = {
+	key: string,
+	kind: string,
+	label: string,
+	initial?: unknown,
+	options?: string[],
+};
+
+export type BotDialog_Deserialize = {
+	type: string,
+	title: string,
+	body?: string[],
+	inputs?: BotDialogInput_Deserialize[],
+	buttons?: string[],
+	canEscape?: boolean,
+};
+
+export type BotDialog_Serialize = {
+	type: string,
+	title: string,
+	body?: string[],
+	inputs?: BotDialogInput_Serialize[],
+	buttons?: string[],
+	canEscape?: boolean,
+};
+
+export type BotEntity = {
+	uuid: string,
+	type: string,
+	x: number,
+	y: number,
+	z: number,
+	distance: number,
+};
+
+/**  What arrived at a bot, in order; `seq` numbers each event. */
+export type BotEvent = BotEvent_Serialize | BotEvent_Deserialize;
+
+/**  What arrived at a bot, in order; `seq` numbers each event. */
+export type BotEvent_Deserialize = ({ type: "chat"; seq: number; text: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "action_bar"; seq: number; text: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "title"; seq: number; text: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "subtitle"; seq: number; text: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "menu_open"; seq: number; menu: string; title: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "menu_close"; seq: number }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "dialog"; seq: number; dialog: BotDialog_Deserialize }) & { count?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "dialog_close"; seq: number }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "resource_pack"; seq: number; id: string; url: string; status: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; text?: never; title?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "sound"; seq: number; sound: string; x: number; y: number; z: number; volume: number; pitch: number }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; reason?: never; shown?: never; slot?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; world?: never } | ({ type: "stop_sound"; seq: number; sound?: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "particle"; seq: number; particle: string; x: number; y: number; z: number; count: number; dx: number; dy: number; dz: number; speed: number; forced: boolean }) & { dialog?: never; entity?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never } | ({ type: "boss_bar"; seq: number; name: string; shown: boolean }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; pages?: never; particle?: never; pitch?: never; reason?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "teleport"; seq: number; x: number; y: number; z: number }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never } | ({ type: "death"; seq: number; message: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "respawn"; seq: number; world: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; x?: never; y?: never; z?: never } | ({ type: "block_change"; seq: number; x: number; y: number; z: number; state: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never } | ({ type: "equipment"; seq: number; entity: string; slot: string; item?: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; forced?: never; id?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "book_open"; seq: number; pages: string[] }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "camera"; seq: number; entity?: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "kicked"; seq: number; reason: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never };
+
+/**  What arrived at a bot, in order; `seq` numbers each event. */
+export type BotEvent_Serialize = ({ type: "chat"; seq: number; text: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "action_bar"; seq: number; text: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "title"; seq: number; text: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "subtitle"; seq: number; text: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "menu_open"; seq: number; menu: string; title: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "menu_close"; seq: number }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "dialog"; seq: number; dialog: BotDialog_Serialize }) & { count?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "dialog_close"; seq: number }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "resource_pack"; seq: number; id: string; url: string; status: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; text?: never; title?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "sound"; seq: number; sound: string; x: number; y: number; z: number; volume: number; pitch: number }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; reason?: never; shown?: never; slot?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; world?: never } | ({ type: "stop_sound"; seq: number; sound?: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "particle"; seq: number; particle: string; x: number; y: number; z: number; count: number; dx: number; dy: number; dz: number; speed: number; forced: boolean }) & { dialog?: never; entity?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never } | ({ type: "boss_bar"; seq: number; name: string; shown: boolean }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; pages?: never; particle?: never; pitch?: never; reason?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "teleport"; seq: number; x: number; y: number; z: number }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never } | ({ type: "death"; seq: number; message: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "respawn"; seq: number; world: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; x?: never; y?: never; z?: never } | ({ type: "block_change"; seq: number; x: number; y: number; z: number; state: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never } | ({ type: "equipment"; seq: number; entity: string; slot: string; item?: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; forced?: never; id?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "book_open"; seq: number; pages: string[] }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "camera"; seq: number; entity?: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; reason?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never } | ({ type: "kicked"; seq: number; reason: string }) & { count?: never; dialog?: never; dx?: never; dy?: never; dz?: never; entity?: never; forced?: never; id?: never; item?: never; menu?: never; message?: never; name?: never; pages?: never; particle?: never; pitch?: never; shown?: never; slot?: never; sound?: never; speed?: never; state?: never; status?: never; text?: never; title?: never; url?: never; volume?: never; world?: never; x?: never; y?: never; z?: never };
+
+/**  Events from `since` on, where to read from next, and how many were dropped (the oldest go past a limit). */
+export type BotEvents = BotEvents_Serialize | BotEvents_Deserialize;
+
+export type BotEventsParams = BotEventsParams_Serialize | BotEventsParams_Deserialize;
+
+export type BotEventsParams_Deserialize = {
+	name: string,
+	since?: number,
+};
+
+export type BotEventsParams_Serialize = {
+	name: string,
+	since?: number,
+};
+
+/**  Events from `since` on, where to read from next, and how many were dropped (the oldest go past a limit). */
+export type BotEvents_Deserialize = {
+	events: BotEvent_Deserialize[],
+	next: number,
+	dropped?: number,
+};
+
+/**  Events from `since` on, where to read from next, and how many were dropped (the oldest go past a limit). */
+export type BotEvents_Serialize = {
+	events: BotEvent_Serialize[],
+	next: number,
+	dropped?: number,
+};
+
+export type BotHand = "main" | "off";
+
+export type BotInfo = {
+	name: string,
+	uuid: string,
+	world: string,
+	x: number,
+	y: number,
+	z: number,
+	/**  How many events it has recorded: where `bots/events` reads from next. */
+	events: number,
+};
+
+export type BotItem = BotItem_Serialize | BotItem_Deserialize;
+
+export type BotItem_Deserialize = {
+	slot: number,
+	item: string,
+	count: number,
+	name: string,
+	lore?: string[],
+};
+
+export type BotItem_Serialize = {
+	slot: number,
+	item: string,
+	count: number,
+	name: string,
+	lore?: string[],
+};
+
+export type BotJoinParams = BotJoinParams_Serialize | BotJoinParams_Deserialize;
+
+export type BotJoinParams_Deserialize = {
+	name: string,
+	at?: BotPosition_Deserialize,
+	resourcePack?: BotPackAnswer,
+};
+
+export type BotJoinParams_Serialize = {
+	name: string,
+	at?: BotPosition_Serialize,
+	resourcePack?: BotPackAnswer,
+};
+
+export type BotListEntry = BotListEntry_Serialize | BotListEntry_Deserialize;
+
+export type BotListEntry_Deserialize = {
+	name: string,
+	uuid: string,
+	listed: boolean,
+	displayName?: string,
+	order?: number,
+	belowName?: string,
+};
+
+export type BotListEntry_Serialize = {
+	name: string,
+	uuid: string,
+	listed: boolean,
+	displayName?: string,
+	order?: number,
+	belowName?: string,
+};
+
+export type BotMenu = BotMenu_Serialize | BotMenu_Deserialize;
+
+export type BotMenu_Deserialize = {
+	type: string,
+	title: string,
+	size: number,
+	items: BotItem_Deserialize[],
+	cursor?: BotItem_Deserialize,
+};
+
+export type BotMenu_Serialize = {
+	type: string,
+	title: string,
+	size: number,
+	items: BotItem_Serialize[],
+	cursor?: BotItem_Serialize,
+};
+
+export type BotPack = {
+	id: string,
+	url: string,
+	hash: string,
+	status: string,
+};
+
+/**  How a bot answers a resource pack the server offers. */
+export type BotPackAnswer = 
+/**  Accept, download it from its URL and check its SHA-1: loaded, or failed to download. */
+"accept" | "decline" | 
+/**  Accept, and say it failed to download. */
+"fail" | 
+/**  Say nothing at all. */
+"ignore" | 
+/**  Say it loaded without downloading it. */
+"loaded";
+
+export type BotParams = {
+	name: string,
+};
+
+/**  Where a bot is, or where to put it. `world` none: the bot's current world (or the default one on joining). */
+export type BotPosition = BotPosition_Serialize | BotPosition_Deserialize;
+
+/**  Where a bot is, or where to put it. `world` none: the bot's current world (or the default one on joining). */
+export type BotPosition_Deserialize = {
+	x: number,
+	y: number,
+	z: number,
+	world?: string,
+	yaw?: number,
+	pitch?: number,
+};
+
+/**  Where a bot is, or where to put it. `world` none: the bot's current world (or the default one on joining). */
+export type BotPosition_Serialize = {
+	x: number,
+	y: number,
+	z: number,
+	world?: string,
+	yaw?: number,
+	pitch?: number,
+};
+
+export type BotSidebar = {
+	title: string,
+	lines: string[],
+};
+
+/**  What a bot's screen shows now. */
+export type BotState = BotState_Serialize | BotState_Deserialize;
+
+/**  What a bot's screen shows now. */
+export type BotState_Deserialize = {
+	name: string,
+	uuid: string,
+	world: string,
+	x: number,
+	y: number,
+	z: number,
+	yaw: number,
+	pitch: number,
+	onGround: boolean,
+	health: number,
+	food: number,
+	gameMode: string,
+	dead: boolean,
+	sneaking: boolean,
+	sprinting: boolean,
+	selectedSlot: number,
+	inventory: BotItem_Deserialize[],
+	menu?: BotMenu_Deserialize,
+	dialog?: BotDialog_Deserialize,
+	bossBars?: BotBossBar[],
+	sidebar?: BotSidebar,
+	title?: string,
+	subtitle?: string,
+	actionBar?: string,
+	resourcePacks?: BotPack[],
+	entities?: BotEntity[],
+	target?: BotTarget_Deserialize,
+	teams?: BotTeam_Deserialize[],
+	playerList?: BotListEntry_Deserialize[],
+	events: number,
+};
+
+/**  What a bot's screen shows now. */
+export type BotState_Serialize = {
+	name: string,
+	uuid: string,
+	world: string,
+	x: number,
+	y: number,
+	z: number,
+	yaw: number,
+	pitch: number,
+	onGround: boolean,
+	health: number,
+	food: number,
+	gameMode: string,
+	dead: boolean,
+	sneaking: boolean,
+	sprinting: boolean,
+	selectedSlot: number,
+	inventory: BotItem_Serialize[],
+	menu?: BotMenu_Serialize,
+	dialog?: BotDialog_Serialize,
+	bossBars?: BotBossBar[],
+	sidebar?: BotSidebar,
+	title?: string,
+	subtitle?: string,
+	actionBar?: string,
+	resourcePacks?: BotPack[],
+	entities?: BotEntity[],
+	target?: BotTarget_Serialize,
+	teams?: BotTeam_Serialize[],
+	playerList?: BotListEntry_Serialize[],
+	events: number,
+};
+
+/**  What the bot's crosshair is on: a block (and its face and state) or an entity (and the centity node it is). */
+export type BotTarget = BotTarget_Serialize | BotTarget_Deserialize;
+
+export type BotTargetKind = "block" | "entity";
+
+/**  What the bot's crosshair is on: a block (and its face and state) or an entity (and the centity node it is). */
+export type BotTarget_Deserialize = {
+	kind: BotTargetKind,
+	x: number,
+	y: number,
+	z: number,
+	distance: number,
+	blockX?: number,
+	blockY?: number,
+	blockZ?: number,
+	face?: string,
+	state?: string,
+	entity?: string,
+	type?: string,
+	centity?: string,
+	node?: string,
+};
+
+/**  What the bot's crosshair is on: a block (and its face and state) or an entity (and the centity node it is). */
+export type BotTarget_Serialize = {
+	kind: BotTargetKind,
+	x: number,
+	y: number,
+	z: number,
+	distance: number,
+	blockX?: number,
+	blockY?: number,
+	blockZ?: number,
+	face?: string,
+	state?: string,
+	entity?: string,
+	type?: string,
+	centity?: string,
+	node?: string,
+};
+
+export type BotTeam = BotTeam_Serialize | BotTeam_Deserialize;
+
+export type BotTeam_Deserialize = {
+	name: string,
+	displayName: string,
+	prefix: string,
+	suffix: string,
+	color?: string,
+	friendlyFire: boolean,
+	seeInvisibleTeammates: boolean,
+	nametags: string,
+	collision: string,
+	members: string[],
+};
+
+export type BotTeam_Serialize = {
+	name: string,
+	displayName: string,
+	prefix: string,
+	suffix: string,
+	color?: string,
+	friendlyFire: boolean,
+	seeInvisibleTeammates: boolean,
+	nametags: string,
+	collision: string,
+	members: string[],
+};
+
+/**  An axis-aligned box: its `min` and `max` corners, in blocks. */
+export type BoundingBox = {
+	min: Vec3,
+	max: Vec3,
+};
+
+/**  Every notification the plugin sends, by method: its params. A stream's carry a batch of items. */
+export type BridgeEvents = BridgeEvents_Serialize | BridgeEvents_Deserialize;
+
+/**  Every notification the plugin sends, by method: its params. A stream's carry a batch of items. */
+export type BridgeEvents_Deserialize = {
+	problems: Problems_Deserialize,
+	status: Status,
+	settings_changed: ServerSettings_Deserialize,
+	dap: unknown,
+	console: Batch<ConsoleEntry_Deserialize>,
+	profiler: Batch<ProfileSample_Deserialize>,
+};
+
+/**  Every notification the plugin sends, by method: its params. A stream's carry a batch of items. */
+export type BridgeEvents_Serialize = {
+	problems: Problems_Serialize,
+	status: Status,
+	settings_changed: ServerSettings_Serialize,
+	dap: unknown,
+	console: Batch<ConsoleEntry_Serialize>,
+	profiler: Batch<ProfileSample_Serialize>,
+};
+
 /**
  *  A frame from the plugin (a JSON-RPC message or batch: responses to the
  *  UI's requests, notifications), as the plugin sent it. The UI's
@@ -195,10 +667,78 @@ export type BridgeMessage = {
 	message: string,
 };
 
+/**
+ *  Every request the editor can send over the dev bridge, by method: its params (`undefined` for none)
+ *  and its result (`null` for none). What the editor's bridge client is typed by.
+ */
+export type BridgeRequests = BridgeRequests_Serialize | BridgeRequests_Deserialize;
+
+/**
+ *  Every request the editor can send over the dev bridge, by method: its params (`undefined` for none)
+ *  and its result (`null` for none). What the editor's bridge client is typed by.
+ */
+export type BridgeRequests_Deserialize = {
+	reload: Call<ReloadParams, ReloadResult_Deserialize>,
+	spawn: Call<SpawnParams_Deserialize, InstanceInfo>,
+	instances: Call<undefined, InstanceInfo[]>,
+	export_game_data: Call<undefined, GameDataBundle_Deserialize>,
+	command: Call<CommandParams, null>,
+	play_particle_effect: Call<PlayParticleEffectParams_Deserialize, null>,
+	stop_particle_effects: Call<undefined, null>,
+	player_position: Call<PlayerPositionParams_Deserialize, PlayerPosition>,
+	worlds: Call<undefined, LoadedWorld[]>,
+	save_structure: Call<SaveStructureParams_Deserialize, SavedStructure>,
+	save_world: Call<SaveWorldParams, SavedWorld_Deserialize>,
+	settings: Call<undefined, ServerSettings_Deserialize>,
+	set_setting: Call<SetSettingParams_Deserialize, ServerSettings_Deserialize>,
+	ping: Call<undefined, null>,
+	profiler_subscribe: Call<ProfilerSubscribeParams, null>,
+	"bots/join": Call<BotJoinParams_Deserialize, BotInfo>,
+	"bots/leave": Call<BotParams, null>,
+	"bots/list": Call<undefined, BotInfo[]>,
+	"bots/act": Call<BotActParams_Deserialize, BotActResult>,
+	"bots/state": Call<BotParams, BotState_Deserialize>,
+	"bots/events": Call<BotEventsParams_Deserialize, BotEvents_Deserialize>,
+};
+
+/**
+ *  Every request the editor can send over the dev bridge, by method: its params (`undefined` for none)
+ *  and its result (`null` for none). What the editor's bridge client is typed by.
+ */
+export type BridgeRequests_Serialize = {
+	reload: Call<ReloadParams, ReloadResult_Serialize>,
+	spawn: Call<SpawnParams_Serialize, InstanceInfo>,
+	instances: Call<undefined, InstanceInfo[]>,
+	export_game_data: Call<undefined, GameDataBundle_Serialize>,
+	command: Call<CommandParams, null>,
+	play_particle_effect: Call<PlayParticleEffectParams_Serialize, null>,
+	stop_particle_effects: Call<undefined, null>,
+	player_position: Call<PlayerPositionParams_Serialize, PlayerPosition>,
+	worlds: Call<undefined, LoadedWorld[]>,
+	save_structure: Call<SaveStructureParams_Serialize, SavedStructure>,
+	save_world: Call<SaveWorldParams, SavedWorld_Serialize>,
+	settings: Call<undefined, ServerSettings_Serialize>,
+	set_setting: Call<SetSettingParams_Serialize, ServerSettings_Serialize>,
+	ping: Call<undefined, null>,
+	profiler_subscribe: Call<ProfilerSubscribeParams, null>,
+	"bots/join": Call<BotJoinParams_Serialize, BotInfo>,
+	"bots/leave": Call<BotParams, null>,
+	"bots/list": Call<undefined, BotInfo[]>,
+	"bots/act": Call<BotActParams_Serialize, BotActResult>,
+	"bots/state": Call<BotParams, BotState_Serialize>,
+	"bots/events": Call<BotEventsParams_Serialize, BotEvents_Serialize>,
+};
+
 export type CacheStatus = {
 	version: string,
 	client: boolean,
 	server: boolean,
+};
+
+/**  A request in TypeScript's map of them: what it takes and answers. */
+export type Call<P, R> = {
+	params: P,
+	result: R,
 };
 
 /**  How far a copy has got, in bytes. */
@@ -215,6 +755,28 @@ export type CommandError = {
 	code: ErrorCode,
 	message: string,
 };
+
+/**  Run a server console command. */
+export type CommandParams = {
+	line: string,
+};
+
+/**  What the console stream carries, in the order it happened. */
+export type ConsoleEntry = ConsoleEntry_Serialize | ConsoleEntry_Deserialize;
+
+/**  What the console stream carries, in the order it happened. */
+export type ConsoleEntry_Deserialize = 
+/**  A line of runtime output. `source` is set when it came from a script. */
+({ type: "log"; level: LogLevel; message: string; source?: SourceRef_Deserialize }) & { traceback?: never } | 
+/**  A Lua error, located in the project so the editor can open it. */
+({ type: "script_error"; message: string; source?: SourceRef_Deserialize; traceback?: string }) & { level?: never };
+
+/**  What the console stream carries, in the order it happened. */
+export type ConsoleEntry_Serialize = 
+/**  A line of runtime output. `source` is set when it came from a script. */
+({ type: "log"; level: LogLevel; message: string; source?: SourceRef_Serialize }) & { traceback?: never } | 
+/**  A Lua error, located in the project so the editor can open it. */
+({ type: "script_error"; message: string; source?: SourceRef_Serialize; traceback?: string }) & { level?: never };
 
 /**  How far a conversion has got. */
 export type ConvertProgress = {
@@ -294,6 +856,128 @@ export type FsChangedEvent = {
 	rescan: boolean,
 };
 
+/**
+ *  A `GameData` backed by plain data (format's `GameDataBundle`): what the dev server exports
+ *  (`export_game_data`), the editor's per-user cache file, or a test fixture.
+ * 
+ *  `registries` and `tags` hold every registry and tag the server has. A registry missing from them is one the
+ *  data doesn't know (`registry` answers `None`), which is how a fixture leaves out what a test doesn't need.
+ *  Collision and model boxes are keyed by the block state's canonical string
+ *  (`minecraft:oak_stairs[facing=east,half=bottom,...]`, properties sorted); a state with no entry falls back to
+ *  the block's bare id. `schema` says which shape wrote it: a change to the shape or to what the export puts in
+ *  it raises `BUNDLE_SCHEMA`, and the editor exports its cache again rather than read one of another shape.
+ */
+export type GameDataBundle = GameDataBundle_Serialize | GameDataBundle_Deserialize;
+
+/**
+ *  A `GameData` backed by plain data (format's `GameDataBundle`): what the dev server exports
+ *  (`export_game_data`), the editor's per-user cache file, or a test fixture.
+ * 
+ *  `registries` and `tags` hold every registry and tag the server has. A registry missing from them is one the
+ *  data doesn't know (`registry` answers `None`), which is how a fixture leaves out what a test doesn't need.
+ *  Collision and model boxes are keyed by the block state's canonical string
+ *  (`minecraft:oak_stairs[facing=east,half=bottom,...]`, properties sorted); a state with no entry falls back to
+ *  the block's bare id. `schema` says which shape wrote it: a change to the shape or to what the export puts in
+ *  it raises `BUNDLE_SCHEMA`, and the editor exports its cache again rather than read one of another shape.
+ */
+export type GameDataBundle_Deserialize = {
+	minecraft: string,
+	/**  Each registry's name → its ids, sorted. */
+	registries?: { [key in string]: string[] },
+	/**  Each registry's name → its tags (without `#`) → what each holds, nested tags resolved, sorted. */
+	tags?: { [key in string]: { [key in string]: string[] } },
+	blocks?: { [key in string]: BlockInfo_Deserialize },
+	collision?: { [key in string]: BoundingBox[] },
+	/**  The boxes a block state is drawn from (client-only; the editor fills it in). */
+	models?: { [key in string]: BoundingBox[] },
+	glyphAdvances?: { [key in string]: number },
+	/**  The resource pack format, `[major, minor]`. */
+	packFormat?: number[],
+	/**  The data pack format, `[major, minor]`. */
+	dataPackFormat?: number[],
+	/**  Particle id → its data kind. */
+	particles?: { [key in string]: ParticleData },
+	/**  Each map colour by its index, `0xAARRGGBB` (written as Kotlin's signed `Int`s). */
+	mapColors?: number[],
+	schema?: number,
+};
+
+/**
+ *  A `GameData` backed by plain data (format's `GameDataBundle`): what the dev server exports
+ *  (`export_game_data`), the editor's per-user cache file, or a test fixture.
+ * 
+ *  `registries` and `tags` hold every registry and tag the server has. A registry missing from them is one the
+ *  data doesn't know (`registry` answers `None`), which is how a fixture leaves out what a test doesn't need.
+ *  Collision and model boxes are keyed by the block state's canonical string
+ *  (`minecraft:oak_stairs[facing=east,half=bottom,...]`, properties sorted); a state with no entry falls back to
+ *  the block's bare id. `schema` says which shape wrote it: a change to the shape or to what the export puts in
+ *  it raises `BUNDLE_SCHEMA`, and the editor exports its cache again rather than read one of another shape.
+ */
+export type GameDataBundle_Serialize = {
+	minecraft: string,
+	/**  Each registry's name → its ids, sorted. */
+	registries?: { [key in string]: string[] },
+	/**  Each registry's name → its tags (without `#`) → what each holds, nested tags resolved, sorted. */
+	tags?: { [key in string]: { [key in string]: string[] } },
+	blocks?: { [key in string]: BlockInfo_Serialize },
+	collision?: { [key in string]: BoundingBox[] },
+	/**  The boxes a block state is drawn from (client-only; the editor fills it in). */
+	models?: { [key in string]: BoundingBox[] },
+	glyphAdvances?: { [key in string]: number },
+	/**  The resource pack format, `[major, minor]`. */
+	packFormat?: number[],
+	/**  The data pack format, `[major, minor]`. */
+	dataPackFormat?: number[],
+	/**  Particle id → its data kind. */
+	particles?: { [key in string]: ParticleData },
+	/**  Each map colour by its index, `0xAARRGGBB` (written as Kotlin's signed `Int`s). */
+	mapColors?: number[],
+	schema: number,
+};
+
+/**
+ *  The own time of one function the runtime calls: `kind` is the event a handler is for (`tick`,
+ *  `player_join`), or `load` (a script's body), `timer`, `task`, `command`, `complete`, `goal`, `callback`.
+ *  `source` is where the function starts (none when it isn't project code).
+ */
+export type HandlerTime = HandlerTime_Serialize | HandlerTime_Deserialize;
+
+/**
+ *  The own time of one function the runtime calls: `kind` is the event a handler is for (`tick`,
+ *  `player_join`), or `load` (a script's body), `timer`, `task`, `command`, `complete`, `goal`, `callback`.
+ *  `source` is where the function starts (none when it isn't project code).
+ */
+export type HandlerTime_Deserialize = {
+	/**  The script it belongs to, as logs name it (`centity tower`, `module shop`). */
+	script: string,
+	kind: string,
+	source?: SourceRef_Deserialize,
+	calls: number,
+	nanos: number,
+	/**  Its slowest single call. */
+	max: number,
+	/**  How many scopes ran it (each instance of a centity has its own). */
+	scopes?: number,
+};
+
+/**
+ *  The own time of one function the runtime calls: `kind` is the event a handler is for (`tick`,
+ *  `player_join`), or `load` (a script's body), `timer`, `task`, `command`, `complete`, `goal`, `callback`.
+ *  `source` is where the function starts (none when it isn't project code).
+ */
+export type HandlerTime_Serialize = {
+	/**  The script it belongs to, as logs name it (`centity tower`, `module shop`). */
+	script: string,
+	kind: string,
+	source?: SourceRef_Serialize,
+	calls: number,
+	nanos: number,
+	/**  Its slowest single call. */
+	max: number,
+	/**  How many scopes ran it (each instance of a centity has its own). */
+	scopes?: number,
+};
+
 /**  How far `mc_import_client` has got. */
 export type ImportProgress = {
 	version: string,
@@ -305,6 +989,40 @@ export type InstallVersion = {
 	version: string,
 	jar: string,
 };
+
+export type InstanceInfo = {
+	uuid: string,
+	centity: string,
+	world: string,
+	x: number,
+	y: number,
+	z: number,
+};
+
+export type LoadedWorld = {
+	name: string,
+	/**  `normal`, `nether` or `end`. */
+	environment: string,
+	/**  The server's main world, which a project never unloads. */
+	main: boolean,
+};
+
+/**  A place in a project: a file, and a JSON path into it when it's about a value. */
+export type Location = Location_Serialize | Location_Deserialize;
+
+/**  A place in a project: a file, and a JSON path into it when it's about a value. */
+export type Location_Deserialize = {
+	file: string,
+	path?: string,
+};
+
+/**  A place in a project: a file, and a JSON path into it when it's about a value. */
+export type Location_Serialize = {
+	file: string,
+	path?: string,
+};
+
+export type LogLevel = "debug" | "info" | "warn" | "error";
 
 export type LualsExit = {
 	generation: number,
@@ -426,6 +1144,29 @@ export type NetworkServerCheck = {
 /**  Serialized as `macos`, `windows` or `linux` (`AppInfo.os`). */
 export type Os = "macos" | "windows" | "linux";
 
+/**  One build of the project's resource pack. */
+export type PackBuild = PackBuild_Serialize | PackBuild_Deserialize;
+
+/**  One build of the project's resource pack. */
+export type PackBuild_Deserialize = {
+	/**  Lowercase hex SHA-1 of the zip: changes only when the content does. */
+	sha1: string,
+	/**  Where clients fetch it, or none when the plugin isn't serving it. */
+	url?: string,
+	/**  The zip's size in bytes. */
+	bytes: number,
+};
+
+/**  One build of the project's resource pack. */
+export type PackBuild_Serialize = {
+	/**  Lowercase hex SHA-1 of the zip: changes only when the content does. */
+	sha1: string,
+	/**  Where clients fetch it, or none when the plugin isn't serving it. */
+	url?: string,
+	/**  The zip's size in bytes. */
+	bytes: number,
+};
+
 export type PackageFile = {
 	/**  Relative to the package's folder, `/`-separated. */
 	path: string,
@@ -443,6 +1184,98 @@ export type PackageFiles = {
 	files: PackageFile[],
 };
 
+/**  One package's settings: the project's own, or a dependency's. */
+export type PackageSettings = PackageSettings_Serialize | PackageSettings_Deserialize;
+
+/**  One package's settings: the project's own, or a dependency's. */
+export type PackageSettings_Deserialize = {
+	namespace: string,
+	/**  The package's name, `netherforge.json`'s. */
+	name: string,
+	/**  Where the server keeps its owner's values for it, relative to the server's folder. */
+	file: string,
+	/**  By name, as `netherforge.json` declares them. */
+	settings: { [key in string]: SettingState_Deserialize },
+};
+
+/**  One package's settings: the project's own, or a dependency's. */
+export type PackageSettings_Serialize = {
+	namespace: string,
+	/**  The package's name, `netherforge.json`'s. */
+	name: string,
+	/**  Where the server keeps its owner's values for it, relative to the server's folder. */
+	file: string,
+	/**  By name, as `netherforge.json` declares them. */
+	settings: { [key in string]: SettingState_Serialize },
+};
+
+/**  What a particle type is: which options a spawn of it carries (Paper's `Particle.dataType`). */
+export type ParticleData = 
+/**  No options: flame, end rod, flash. */
+"none" | 
+/**  A colour and a size. */
+"dust" | 
+/**  A colour, the colour it fades to, and a size. */
+"dust_transition" | 
+/**  A colour: entity effects, tinted leaves. */
+"color" | 
+/**  A block state: block, falling dust, block markers. */
+"block" | 
+/**  An item stack. */
+"item" | 
+/**  Options of another kind (a vibration's path, a shriek's delay). */
+"other";
+
+/**
+ *  Play particle effect `effect` three blocks in front of `player`'s eyes, facing them (or the first online
+ *  player's, or at the default world's spawn), owned by the runtime rather than a script. `loop` overrides the
+ *  file's.
+ */
+export type PlayParticleEffectParams = PlayParticleEffectParams_Serialize | PlayParticleEffectParams_Deserialize;
+
+/**
+ *  Play particle effect `effect` three blocks in front of `player`'s eyes, facing them (or the first online
+ *  player's, or at the default world's spawn), owned by the runtime rather than a script. `loop` overrides the
+ *  file's.
+ */
+export type PlayParticleEffectParams_Deserialize = {
+	effect: string,
+	player?: string,
+	loop?: boolean,
+};
+
+/**
+ *  Play particle effect `effect` three blocks in front of `player`'s eyes, facing them (or the first online
+ *  player's, or at the default world's spawn), owned by the runtime rather than a script. `loop` overrides the
+ *  file's.
+ */
+export type PlayParticleEffectParams_Serialize = {
+	effect: string,
+	player?: string,
+	loop?: boolean,
+};
+
+export type PlayerPosition = {
+	player: string,
+	world: string,
+	x: number,
+	y: number,
+	z: number,
+};
+
+/**  Where an online player stands, to the block: `player` (a name or UUID), or the first online when none. */
+export type PlayerPositionParams = PlayerPositionParams_Serialize | PlayerPositionParams_Deserialize;
+
+/**  Where an online player stands, to the block: `player` (a name or UUID), or the first online when none. */
+export type PlayerPositionParams_Deserialize = {
+	player?: string,
+};
+
+/**  Where an online player stands, to the block: `player` (a name or UUID), or the first online when none. */
+export type PlayerPositionParams_Serialize = {
+	player?: string,
+};
+
 export type PrepareProgress = {
 	step: PrepareStep,
 	label: string,
@@ -454,6 +1287,149 @@ export type PrepareProgress = {
 export type PrepareStep = "java" | "paper" | "plugin" | 
 /**  A dev network's proxy (Velocity) and its folder. */
 "proxy";
+
+/**
+ *  One thing wrong with a project. `file` is project-relative with `/`
+ *  separators; `path` a JSON path into it (`$.nodes.top.display`) when it's
+ *  about a value; `line` and `column` are 1-based and known for a parse error.
+ *  `related` are the other places it's about (a reference's other end).
+ */
+export type Problem = Problem_Serialize | Problem_Deserialize;
+
+/**
+ *  One thing wrong with a project. `file` is project-relative with `/`
+ *  separators; `path` a JSON path into it (`$.nodes.top.display`) when it's
+ *  about a value; `line` and `column` are 1-based and known for a parse error.
+ *  `related` are the other places it's about (a reference's other end).
+ */
+export type Problem_Deserialize = {
+	severity: Severity,
+	file: string,
+	message: string,
+	path?: string,
+	line?: number,
+	column?: number,
+	/**  Stable identifier for the kind of problem (the catalogue's), for tests and for filtering in the editor. */
+	code?: string,
+	related?: Location_Deserialize[],
+};
+
+/**
+ *  One thing wrong with a project. `file` is project-relative with `/`
+ *  separators; `path` a JSON path into it (`$.nodes.top.display`) when it's
+ *  about a value; `line` and `column` are 1-based and known for a parse error.
+ *  `related` are the other places it's about (a reference's other end).
+ */
+export type Problem_Serialize = {
+	severity: Severity,
+	file: string,
+	message: string,
+	path?: string,
+	line?: number,
+	column?: number,
+	/**  Stable identifier for the kind of problem (the catalogue's), for tests and for filtering in the editor. */
+	code?: string,
+	related?: Location_Serialize[],
+};
+
+/**  The problems the plugin found loading the project; replaces any earlier set. */
+export type Problems = Problems_Serialize | Problems_Deserialize;
+
+/**  The problems the plugin found loading the project; replaces any earlier set. */
+export type Problems_Deserialize = {
+	problems: Problem_Deserialize[],
+};
+
+/**  The problems the plugin found loading the project; replaces any earlier set. */
+export type Problems_Serialize = {
+	problems: Problem_Serialize[],
+};
+
+/**
+ *  One batch of the profiler stream: a run of server ticks, every one of them measured exactly (not sampled).
+ *  Sent about once a second while the editor subscribes.
+ */
+export type ProfileSample = ProfileSample_Serialize | ProfileSample_Deserialize;
+
+/**
+ *  One batch of the profiler stream: a run of server ticks, every one of them measured exactly (not sampled).
+ *  Sent about once a second while the editor subscribes.
+ */
+export type ProfileSample_Deserialize = {
+	ticks: ProfileTick_Deserialize[],
+	/**  Every script scope that ran over these ticks, by its own time. */
+	scopes?: ScopeTime_Deserialize[],
+	/**
+	 *  Every function the runtime called into over these ticks (a handler, a timer, a task's resume…), by its
+	 *  own time.
+	 */
+	handlers?: HandlerTime_Deserialize[],
+};
+
+/**
+ *  One batch of the profiler stream: a run of server ticks, every one of them measured exactly (not sampled).
+ *  Sent about once a second while the editor subscribes.
+ */
+export type ProfileSample_Serialize = {
+	ticks: ProfileTick_Serialize[],
+	/**  Every script scope that ran over these ticks, by its own time. */
+	scopes?: ScopeTime_Serialize[],
+	/**
+	 *  Every function the runtime called into over these ticks (a handler, a timer, a task's resume…), by its
+	 *  own time.
+	 */
+	handlers?: HandlerTime_Serialize[],
+};
+
+/**  One server tick, as NetherForge spent it. Times are nanoseconds. */
+export type ProfileTick = ProfileTick_Serialize | ProfileTick_Deserialize;
+
+/**  One server tick, as NetherForge spent it. Times are nanoseconds. */
+export type ProfileTick_Deserialize = {
+	tick: number,
+	/**  NetherForge's whole tick. */
+	nanos: number,
+	/**
+	 *  Each step of the tick, by name, in the order they run (`timers`, `async`, `events`, `world`…): what
+	 *  `nanos` is made of.
+	 */
+	phases: { [key in string]: number },
+	/**  What scripts' own code took, wherever in the tick it ran. */
+	scripts?: number,
+	/**  The scopes that took the most this tick, the most first (at most three). */
+	top?: ScopeTime_Deserialize[],
+	/**
+	 *  What the steps are made of, by path: each service's share of a step (`world/centities`) and the parts a
+	 *  service times itself (`world/centities/sync`). A part's time is inside its parent's.
+	 */
+	parts?: { [key in string]: number },
+};
+
+/**  One server tick, as NetherForge spent it. Times are nanoseconds. */
+export type ProfileTick_Serialize = {
+	tick: number,
+	/**  NetherForge's whole tick. */
+	nanos: number,
+	/**
+	 *  Each step of the tick, by name, in the order they run (`timers`, `async`, `events`, `world`…): what
+	 *  `nanos` is made of.
+	 */
+	phases: { [key in string]: number },
+	/**  What scripts' own code took, wherever in the tick it ran. */
+	scripts?: number,
+	/**  The scopes that took the most this tick, the most first (at most three). */
+	top?: ScopeTime_Serialize[],
+	/**
+	 *  What the steps are made of, by path: each service's share of a step (`world/centities`) and the parts a
+	 *  service times itself (`world/centities/sync`). A part's time is inside its parent's.
+	 */
+	parts?: { [key in string]: number },
+};
+
+/**  Starts (`on`) or stops the profiler stream. */
+export type ProfilerSubscribeParams = {
+	on: boolean,
+};
 
 export type ProjectInfo = {
 	root: string,
@@ -471,6 +1447,185 @@ export type RecentProject = {
 	root: string,
 	name: string,
 	openedAt: string,
+};
+
+/**
+ *  Reload these project-relative paths. The plugin maps each path to the resource that owns it and reloads that
+ *  resource once.
+ */
+export type ReloadParams = {
+	paths: string[],
+};
+
+export type ReloadResult = ReloadResult_Serialize | ReloadResult_Deserialize;
+
+export type ReloadResult_Deserialize = {
+	resources: ReloadedResource_Deserialize[],
+	/**
+	 *  The server must restart for the change to take effect: something it learns only as it starts (the
+	 *  start-up datapack: advancements) is no longer what it started with.
+	 */
+	restart?: boolean,
+};
+
+export type ReloadResult_Serialize = {
+	resources: ReloadedResource_Serialize[],
+	/**
+	 *  The server must restart for the change to take effect: something it learns only as it starts (the
+	 *  start-up datapack: advancements) is no longer what it started with.
+	 */
+	restart?: boolean,
+};
+
+/**
+ *  One resource a reload touched, named as format's `classify` names a path: its package (by its namespace),
+ *  kind and id. A whole package reloaded (its `netherforge.json` changed) has neither kind nor id.
+ */
+export type ReloadedResource = ReloadedResource_Serialize | ReloadedResource_Deserialize;
+
+/**
+ *  One resource a reload touched, named as format's `classify` names a path: its package (by its namespace),
+ *  kind and id. A whole package reloaded (its `netherforge.json` changed) has neither kind nor id.
+ */
+export type ReloadedResource_Deserialize = {
+	package: string,
+	/**  The kind's id in format's registry (`centity`, `module`, `pack`…); none for the whole package. */
+	kind?: string,
+	/**  The resource's id in its package; none for the whole package. */
+	id?: string,
+	ok: boolean,
+	/**
+	 *  What kept running on the new version: live instances moved onto the new definition for a centity; open
+	 *  windows kept for a menu; players the rebuilt resource pack was sent to for a pack.
+	 */
+	reattached?: number,
+	problems?: Problem_Deserialize[],
+	/**  For a pack: the resource pack the plugin built from every pack in the project. */
+	pack?: PackBuild_Deserialize,
+};
+
+/**
+ *  One resource a reload touched, named as format's `classify` names a path: its package (by its namespace),
+ *  kind and id. A whole package reloaded (its `netherforge.json` changed) has neither kind nor id.
+ */
+export type ReloadedResource_Serialize = {
+	package: string,
+	/**  The kind's id in format's registry (`centity`, `module`, `pack`…); none for the whole package. */
+	kind?: string,
+	/**  The resource's id in its package; none for the whole package. */
+	id?: string,
+	ok: boolean,
+	/**
+	 *  What kept running on the new version: live instances moved onto the new definition for a centity; open
+	 *  windows kept for a menu; players the rebuilt resource pack was sent to for a pack.
+	 */
+	reattached?: number,
+	problems?: Problem_Serialize[],
+	/**  For a pack: the resource pack the plugin built from every pack in the project. */
+	pack?: PackBuild_Serialize,
+};
+
+/**
+ *  Save the box from `from` to `to` (both corners included, in any order) in `world` as a structure file, with
+ *  the entities in it when `entities`, into the answer rather than a file: the editor writes it into the project.
+ */
+export type SaveStructureParams = SaveStructureParams_Serialize | SaveStructureParams_Deserialize;
+
+/**
+ *  Save the box from `from` to `to` (both corners included, in any order) in `world` as a structure file, with
+ *  the entities in it when `entities`, into the answer rather than a file: the editor writes it into the project.
+ */
+export type SaveStructureParams_Deserialize = {
+	world: string,
+	from: BlockPos,
+	to: BlockPos,
+	entities?: boolean,
+};
+
+/**
+ *  Save the box from `from` to `to` (both corners included, in any order) in `world` as a structure file, with
+ *  the entities in it when `entities`, into the answer rather than a file: the editor writes it into the project.
+ */
+export type SaveStructureParams_Serialize = {
+	world: string,
+	from: BlockPos,
+	to: BlockPos,
+	entities?: boolean,
+};
+
+/**  Save `world` and flush it to disk, for the editor to copy as a map. */
+export type SaveWorldParams = {
+	world: string,
+};
+
+export type SavedStructure = {
+	/**  The structure file (gzipped NBT, Minecraft's structure format), base64. */
+	nbt: string,
+	/**  Its size in blocks. */
+	size: BlockPos,
+};
+
+/**
+ *  A saved world's files, as `/`-separated paths relative to the server's folder. Since Minecraft 26.1 every
+ *  world is a dimension of the main world's storage: `level` is that storage's `level.dat`, `dimension` the
+ *  world's own folder (`world/dimensions/minecraft/<name>`).
+ */
+export type SavedWorld = SavedWorld_Serialize | SavedWorld_Deserialize;
+
+/**
+ *  A saved world's files, as `/`-separated paths relative to the server's folder. Since Minecraft 26.1 every
+ *  world is a dimension of the main world's storage: `level` is that storage's `level.dat`, `dimension` the
+ *  world's own folder (`world/dimensions/minecraft/<name>`).
+ */
+export type SavedWorld_Deserialize = {
+	level: string,
+	dimension: string,
+	main: boolean,
+	/**  The world's spawn, which `level` holds only for the main world. */
+	spawn: WorldSpawn_Deserialize,
+};
+
+/**
+ *  A saved world's files, as `/`-separated paths relative to the server's folder. Since Minecraft 26.1 every
+ *  world is a dimension of the main world's storage: `level` is that storage's `level.dat`, `dimension` the
+ *  world's own folder (`world/dimensions/minecraft/<name>`).
+ */
+export type SavedWorld_Serialize = {
+	level: string,
+	dimension: string,
+	main: boolean,
+	/**  The world's spawn, which `level` holds only for the main world. */
+	spawn: WorldSpawn_Serialize,
+};
+
+/**
+ *  A script scope's own time: a module, or one centity instance's, menu window's, dialog's or item's script
+ *  (`centity tower 1a2b3c4d`).
+ */
+export type ScopeTime = ScopeTime_Serialize | ScopeTime_Deserialize;
+
+/**
+ *  A script scope's own time: a module, or one centity instance's, menu window's, dialog's or item's script
+ *  (`centity tower 1a2b3c4d`).
+ */
+export type ScopeTime_Deserialize = {
+	scope: string,
+	nanos: number,
+	calls: number,
+	/**  Its most expensive tick. */
+	max?: number,
+};
+
+/**
+ *  A script scope's own time: a module, or one centity instance's, menu window's, dialog's or item's script
+ *  (`centity tower 1a2b3c4d`).
+ */
+export type ScopeTime_Serialize = {
+	scope: string,
+	nanos: number,
+	calls: number,
+	/**  Its most expensive tick. */
+	max?: number,
 };
 
 /**
@@ -492,12 +1647,85 @@ export type ServerOutputEvent = {
 
 export type ServerPhase = "stopped" | "preparing" | "starting" | "running" | "stopping" | "crashed";
 
+/**  Every package's server-owner settings on the dev server, each with the value it runs with. */
+export type ServerSettings = ServerSettings_Serialize | ServerSettings_Deserialize;
+
+/**  Every package's server-owner settings on the dev server, each with the value it runs with. */
+export type ServerSettings_Deserialize = {
+	packages: PackageSettings_Deserialize[],
+};
+
+/**  Every package's server-owner settings on the dev server, each with the value it runs with. */
+export type ServerSettings_Serialize = {
+	packages: PackageSettings_Serialize[],
+};
+
 export type ServerState = {
 	phase: ServerPhase,
 	minecraft: string | null,
 	port: number | null,
 	bridgeConnected: boolean,
 	message: string | null,
+};
+
+/**  Sets a setting of `namespace`'s; a `value` left out puts it back to its default. */
+export type SetSettingParams = SetSettingParams_Serialize | SetSettingParams_Deserialize;
+
+/**  Sets a setting of `namespace`'s; a `value` left out puts it back to its default. */
+export type SetSettingParams_Deserialize = {
+	namespace: string,
+	setting: string,
+	value?: unknown,
+};
+
+/**  Sets a setting of `namespace`'s; a `value` left out puts it back to its default. */
+export type SetSettingParams_Serialize = {
+	namespace: string,
+	setting: string,
+	value?: unknown,
+};
+
+/**
+ *  A setting the server's owner may change (`settings` in the manifest), by
+ *  its `type`. Reading and checking its values comes with settings.
+ */
+export type SettingDef = SettingDef_Serialize | SettingDef_Deserialize;
+
+/**
+ *  A setting the server's owner may change (`settings` in the manifest), by
+ *  its `type`. Reading and checking its values comes with settings.
+ */
+export type SettingDef_Deserialize = ({ type: "boolean"; description: string; default: boolean }) & { choices?: never; max?: never; min?: never } | ({ type: "integer"; description: string; default: number; min?: number; max?: number }) & { choices?: never } | ({ type: "number"; description: string; default: number; min?: number; max?: number }) & { choices?: never } | ({ type: "string"; description: string; default: string }) & { choices?: never; max?: never; min?: never } | ({ type: "choice"; description: string; default: string; choices: string[] }) & { max?: never; min?: never };
+
+/**
+ *  A setting the server's owner may change (`settings` in the manifest), by
+ *  its `type`. Reading and checking its values comes with settings.
+ */
+export type SettingDef_Serialize = ({ type: "boolean"; description: string; default: boolean }) & { choices?: never; max?: never; min?: never } | ({ type: "integer"; description: string; default: number; min?: number; max?: number }) & { choices?: never } | ({ type: "number"; description: string; default: number; min?: number; max?: number }) & { choices?: never } | ({ type: "string"; description: string; default: string }) & { choices?: never; max?: never; min?: never } | ({ type: "choice"; description: string; default: string; choices: string[] }) & { max?: never; min?: never };
+
+/**  A setting as the server runs it. */
+export type SettingState = SettingState_Serialize | SettingState_Deserialize;
+
+/**  A setting as the server runs it. */
+export type SettingState_Deserialize = {
+	definition: SettingDef_Deserialize,
+	/**  What scripts read now: the owner's value, or the default. */
+	value: unknown,
+	/**  Whether the owner set it; otherwise `value` is the default. */
+	set?: boolean,
+	/**  Why the value in the settings file wasn't used, when it couldn't be. */
+	problem?: string,
+};
+
+/**  A setting as the server runs it. */
+export type SettingState_Serialize = {
+	definition: SettingDef_Serialize,
+	/**  What scripts read now: the owner's value, or the default. */
+	value: unknown,
+	/**  Whether the owner set it; otherwise `value` is the default. */
+	set?: boolean,
+	/**  Why the value in the settings file wasn't used, when it couldn't be. */
+	problem?: string,
 };
 
 export type Settings = {
@@ -509,6 +1737,44 @@ export type Settings = {
 	mcpPort: number,
 	/**  ffmpeg, for converting videos for screens (`video/`): a path to it, or empty to find it on `PATH`. */
 	ffmpegPath: string,
+};
+
+export type Severity = "error" | "warning";
+
+/**  A place in the project: `centities/tower/root.lua`, line 12. */
+export type SourceRef = SourceRef_Serialize | SourceRef_Deserialize;
+
+/**  A place in the project: `centities/tower/root.lua`, line 12. */
+export type SourceRef_Deserialize = {
+	file: string,
+	line?: number,
+};
+
+/**  A place in the project: `centities/tower/root.lua`, line 12. */
+export type SourceRef_Serialize = {
+	file: string,
+	line?: number,
+};
+
+/**  Spawn a centity in front of `player` (or the first online player). */
+export type SpawnParams = SpawnParams_Serialize | SpawnParams_Deserialize;
+
+/**  Spawn a centity in front of `player` (or the first online player). */
+export type SpawnParams_Deserialize = {
+	centity: string,
+	player?: string,
+};
+
+/**  Spawn a centity in front of `player` (or the first online player). */
+export type SpawnParams_Serialize = {
+	centity: string,
+	player?: string,
+};
+
+/**  Live state worth showing in the editor's status bar. Sent on change, at most once a second. */
+export type Status = {
+	players: string[],
+	instances: number,
 };
 
 export type Stream = "stdout" | "stderr";
@@ -557,10 +1823,13 @@ export type TestStatus = "passed" |
 /**  Something else went wrong while it ran: a script erroring, the project not starting. */
 "errored";
 
+/**  Three numbers, written `[x, y, z]`. */
+export type Vec3 = [number, number, number];
+
 /**  What a conversion made. */
 export type VideoConverted = {
 	frames: number,
-	seconds: number | null,
+	seconds: number,
 	/**  Whether it has a sound: false when the file says so, or the source has none. */
 	audio: boolean,
 	/**  Bytes of `video.nfv`. */
@@ -623,6 +1892,24 @@ export type WorkspaceServer = {
 	project: string,
 	/**  Its group, capacity and role (the file's `network.options`). */
 	options: ServerOptions,
+};
+
+export type WorldSpawn = WorldSpawn_Serialize | WorldSpawn_Deserialize;
+
+export type WorldSpawn_Deserialize = {
+	x: number,
+	y: number,
+	z: number,
+	yaw?: number,
+	pitch?: number,
+};
+
+export type WorldSpawn_Serialize = {
+	x: number,
+	y: number,
+	z: number,
+	yaw?: number,
+	pitch?: number,
 };
 
 /* Tauri Specta runtime */

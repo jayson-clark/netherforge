@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ProfileSample } from '@netherforge/format/types'
+import type { ProfileSample } from '@/core/bridge/protocol'
 import { openExampleApp, settle } from '@/testing/workspace'
 import { addSample, emptyProfile, handlerKey, sortRows, TIMELINE_TICKS } from './profiler'
 

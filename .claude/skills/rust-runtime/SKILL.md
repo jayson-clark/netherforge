@@ -102,11 +102,11 @@ becomes.
 
 ## Where things are
 
-| Path           | What it is                                                                                   |
-| -------------- | -------------------------------------------------------------------------------------------- |
+| Path           | What it is                                                                                                                                                                                               |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Cargo.toml`   | The runtime's workspace (`crates/*`). The editor's backend is still its own workspace, taking `netherforge-format` by path (map colours so far), which turns on serde_json's `preserve_order` there too. |
-| `crates/luau/` | `netherforge-luau`: the Luau host. One state per room, scopes, the guards, memory per scope. |
-| `crates/api/`  | `netherforge-api`: the Lua API for the Rust runtime, generated from `packages/api`.          |
+| `crates/luau/` | `netherforge-luau`: the Luau host. One state per room, scopes, the guards, memory per scope.                                                                                                             |
+| `crates/api/`  | `netherforge-api`: the Lua API for the Rust runtime, generated from `packages/api`.                                                                                                                      |
 
 `pnpm test` runs `cargo test --workspace`, and `pnpm lint` runs rustfmt and clippy on it.
 
@@ -609,6 +609,15 @@ features, packages })` reads each package in its own namespace, checks it on its
   check needs, not the code), the WASI imports the server provides, and a module's checks, which run as the files
   kind's `cross_check` on what the host read (`ProjectSource::reads_wasm`/`wasm`; a host that reads none, the
   editor, says nothing). `WasmInfo` reads Kotlin's JSON for it. `tests/wasm.rs` is `WasmTest`.
+
+- **The dev bridge** (`bridge/`): the protocol defined in Rust, which the editor's TypeScript is generated from
+  (decided: Rust and specta). One `protocol!` table writes each method's typed marker, the routing tables and the
+  TS maps; the messages follow Kotlin's encoding (left out when null or default: `is_default`, maps as `IndexMap`
+  in their order). `rpc.rs` is `JsonRpc` with its rules and messages, `auth.rs` (feature `bridge-auth`) the
+  handshake's HMAC proofs, moved from the editor's backend. `typescript_types()` (feature `specta`) strips
+  `| null` from `Option` fields, which are never sent as null. `GameDataBundle` (`game.rs`, `export_game_data`'s
+  answer and the editor's cache) is a `GameData`. `Problem` serializes with serde. `tests/bridge.rs` is
+  `BridgeTest` on the recorded session, plus the list of methods held to `Bridge.kt`'s.
 
 Not yet in the project load: `ProjectCache` (reading again only the files that changed, for hot reload).
 

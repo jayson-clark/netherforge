@@ -2448,11 +2448,16 @@ dependencies = [
 name = "netherforge-format"
 version = "0.0.0"
 dependencies = [
+ "getrandom 0.4.3",
+ "indexmap 2.14.2",
  "regex",
  "schemars 1.2.2",
  "serde",
  "serde_json",
  "serde_path_to_error",
+ "sha2",
+ "specta",
+ "specta-typescript",
 ]
 
 [[package]]
@@ -3947,6 +3952,7 @@ version = "2.0.0-rc.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "38f9a30cbcbb7011f1da7d73483983bf838af123883e45f2b36ed76328df9c50"
 dependencies = [
+ "indexmap 2.14.2",
  "paste",
  "rustc_version",
  "specta-macros",

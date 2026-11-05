@@ -18,6 +18,11 @@ serde_path_to_error = "0.1"
 regex = "1"
 schemars = "1"
 sha2 = "0.10"
+indexmap = { version = "2", features = ["serde"] }
+getrandom = "0.4"
+# Pinned exactly, as tauri-specta (the editor) asks while specta 2 is a release candidate.
+specta = { version = "=2.0.0-rc.25", features = ["derive", "indexmap"] }
+specta-typescript = "0.0.12"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
