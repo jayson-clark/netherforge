@@ -489,8 +489,29 @@ session).
 `entities_loaded` (pushed whole and hidden again, strays removed), `player_joined`, `player_quit` (the natural
 spawner forgets them), `world_saving`, `chunk_unloading`, `block_changed` (physics). `ServerEvents` calls them.
 
-Not yet, outside the centity classes: `world:raycast` against hitboxes, `world:centities` and the
-`overlap_*`/`sweep`/`nearest` questions (the `World` class, whose spatial core is `spatial.rs`).
+## Worlds and blocks (`crates/runtime/src/world.rs`, `block.rs`)
+
+`WorldContext` implements `World`, `nf.worlds` and `Block` (Kotlin's `WorldImpl`, `NfWorldsImpl`,
+`BlockImpl`), read live through the Platform: everything answers nil or false once its world has gone.
+
+- The centity questions go to the spatial index: `world:raycast` tests blocks, then entities, then centity
+  hitboxes (`centity::api::raycast`, Kotlin's `CentityClicks.raycast`: the shapes clicks use, unloaded
+  instances left out), each within what the one before left; `overlap_box`/`sphere`/`cone`, `sweep` (a
+  block stops the capsule and is the last hit) and `nearest` are `Centities::find` with the query filter.
+- `world:flood` is Kotlin's `Flood`: breadth-first, reading 16-sided bricks (`BlockOps::box`), each state
+  asked once. Its matcher takes ids, `#tags`, `solid`, `liquid`, `passable`.
+- **A state a script writes is made canonical** (`block::canonical_state`, Kotlin's `Effects.blockState`):
+  parsed by format's `BlockState`, checked against the game's properties, every left-out property at the
+  game's default, sorted. A block set or broken through the API tells physics (`block_changed`).
+- **Entity handles keep their class** where the spec's type is `Entity` (a query hit, `world:entities`):
+  `Shared::entity` pushes the handle as the class the server says it is (player, mob, mannequin, living,
+  dropped item; Kotlin's `entityHandle`), and a handle is one value per thing, so the script's value has that
+  class. The pushed value is held until the tick ends (`Shared::classed`) so the weak cache can't drop it first.
+- A world's spawn category is format's `SpawnCategory` (the Platform spec's external, now real).
+- Not yet, delegated to `Unported`: skies, `set_block`/`fill_blocks` and gradual fills, structures,
+  `locate_biome`, spawning entities and items, particles and sounds, managed worlds, `block:custom` and
+  `block:data`. Until custom blocks come, no block is a project block (`blocks`' `custom`, `flood`'s
+  matcher), and a project biome is spelled without the project's namespace (not yet relative to a package).
 
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 

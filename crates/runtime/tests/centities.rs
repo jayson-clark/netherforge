@@ -204,12 +204,69 @@ impl netherforge_platform::FakeWorldEntityOps for Fake {
     ) -> Vec<netherforge_platform::EntityBox> {
         Vec::new()
     }
-    fn info(&self, _: Uuid) -> Option<netherforge_platform::EntityInfo> {
+    fn info(&self, id: Uuid) -> Option<netherforge_platform::EntityInfo> {
+        self.list("world".into()).into_iter().find(|e| e.id == id)
+    }
+    /// One zombie, standing at (5, 64, 5).
+    fn list(&self, _: String) -> Vec<netherforge_platform::EntityInfo> {
+        vec![netherforge_platform::EntityInfo {
+            id: Uuid(500),
+            kind: "minecraft:zombie".into(),
+            location: place(5.0, 64.0, 5.0),
+            category: netherforge_platform::EntityCategory::Mob,
+            player: None,
+            tags: vec!["guard".into()],
+        }]
+    }
+    fn raycast(
+        &self,
+        _: String,
+        _: netherforge_format::math::Vec3,
+        _: netherforge_format::math::Vec3,
+        _: f64,
+        _: Vec<Uuid>,
+    ) -> Option<netherforge_platform::EntityHit> {
         None
     }
 }
 
 impl netherforge_platform::FakeBlockOps for Fake {
+    fn set(&self, _: String, x: i32, y: i32, z: i32, state: String, update: bool) -> bool {
+        self.call(format!("set {x} {y} {z} {state} {update}"));
+        true
+    }
+    /// The floor's blocks in a box, x fastest, then z, then y.
+    fn r#box(
+        &self,
+        _: String,
+        x0: i32,
+        y0: i32,
+        z0: i32,
+        x1: i32,
+        y1: i32,
+        z1: i32,
+    ) -> Option<netherforge_platform::BlockBoxRead> {
+        let state = |name: &str, solid: bool| netherforge_platform::BoxState {
+            state: name.into(),
+            solid,
+            liquid: false,
+        };
+        let mut cells = Vec::new();
+        for y in y0..=y1 {
+            for _ in z0..=z1 {
+                for x in x0..=x1 {
+                    cells.push(i32::from(y < 64 || x == 10));
+                }
+            }
+        }
+        Some(netherforge_platform::BlockBoxRead {
+            states: vec![
+                state("minecraft:air", false),
+                state("minecraft:stone", true),
+            ],
+            cells,
+        })
+    }
     fn get(
         &self,
         _: String,
@@ -253,6 +310,9 @@ impl netherforge_platform::FakePlayerOps for Fake {
 }
 
 impl FakeWorldOps for Fake {
+    fn names(&self) -> Vec<String> {
+        vec!["world".into()]
+    }
     fn exists(&self, world: String) -> bool {
         world == "world"
     }
@@ -279,6 +339,12 @@ impl FakeWorldOps for Fake {
     }
     fn biome(&self, _: String, _: i32, _: i32, _: i32) -> Option<String> {
         Some("minecraft:plains".into())
+    }
+    fn game_rule_type(&self, rule: String) -> Option<netherforge_platform::GameRuleType> {
+        (rule == "minecraft:keep_inventory").then_some(netherforge_platform::GameRuleType::Boolean)
+    }
+    fn game_rule(&self, _: String, _: String) -> Option<netherforge_platform::Dynamic> {
+        Some(netherforge_platform::Dynamic::Bool(true))
     }
     /// The first solid block along a ray, by small steps.
     fn raycast_blocks(
@@ -1734,4 +1800,66 @@ b:on("wake", function() print("wake") end)
         lines.extend(printed(&platform.take()));
     }
     assert_eq!(lines, ["sleep\t63.00"], "{lines:?}");
+}
+
+#[test]
+fn a_world_answers_from_the_server_and_its_centities() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let table = r#"{ "nodes": { "top": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/table/centity.json", table),
+        (
+            "modules/look/init.lua",
+            r#"
+local w = nf.worlds.default()
+print(w:name(), w:exists(), w:time_of_day(), w:is_day(), w:is_night(), w:day_count(), w:moon_phase(), w:weather())
+print(w:min_height(), w:max_height(), w:block(vector.create(1.5, 63.2, -0.5)):world():name(), w:border() ~= nil)
+local box = w:blocks(vector.create(9, 63, 0), vector.create(10, 64, 0), { what = "class" })
+print(box.size_x, box.size_y, box.size_z, table.concat(box.cells, ","))
+local f = w:flood(vector.create(0, 64, 0), { through = { "minecraft:air" }, bounds = { min = vector.create(0, 64, 0), max = vector.create(12, 64, 0) }, kinds = true })
+print(#f.positions, #f.edges, f.edge_kinds[1], f.stopped)
+local down = w:raycast(vector.create(0.5, 70, 0.5), vector.create(0, -1, 0), 20)
+print(down.block ~= nil, string.format("%.1f", down.distance), down.normal.y)
+local t = nf.centities.spawn("table", vector.create(3.5, 64, 0.5))
+local hit = w:raycast(vector.create(0.5, 64.5, 0.5), vector.create(1, 0, 0), 20)
+print(hit.centity == t, hit.node:name(), string.format("%.2f", hit.distance))
+local near = w:overlap_sphere(vector.create(3.5, 64.5, 0.5), 2, { entities = false })
+print(#near, near[1].centity == t, w:nearest(vector.create(3.5, 64.5, 0.5), 2).node:name())
+print(#w:centities(), #w:centities({ kind = "nope" }), #w:entities({ kind = "zombie", tag = "guard" }), #w:entities({ living = false }))
+print(w:game_rule("keep_inventory"), pcall(w.game_rule, w, "nope"))
+print(#nf.worlds.all(), nf.worlds.get("nether"))
+w:on("dusk", function() end)
+local b = w:block(vector.create(2, 63, 2))
+print(b:kind(), b:is_solid(), b:relative("up"):is_air(), b:relative(vector.create(0, 1, 0)) == b:relative("up"), b:position().y)
+print(b:set_state("stone", { update = false }), pcall(b.set_state, b, "minecraft:stone[facing=up]"))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let all = platform.take();
+    let lines = printed(&all);
+    assert!(!all.iter().any(|l| l.starts_with("warn")), "{all:?}");
+    assert_eq!(
+        lines,
+        [
+            "world\ttrue\t6000\ttrue\tfalse\t0\tfull_moon\tclear",
+            "-64\t320\tworld\ttrue",
+            "2\t2\t1\t2,2,0,2",
+            "10\t1\tminecraft:stone\tbounds",
+            "true\t6.0\t1",
+            "true\ttop\t3.00",
+            "1\ttrue\ttop",
+            "1\t0\t1\t0",
+            "true\tfalse\tmodules/look/init.lua:17: no game rule \"nope\" on this server",
+            "1\tnil",
+            "minecraft:stone\ttrue\ttrue\ttrue\t63",
+            "true\tfalse\tmodules/look/init.lua:22: state: minecraft:stone has no property \"facing\" (it has: none)",
+        ],
+        "{lines:?}"
+    );
+    assert!(
+        all.contains(&"set 2 63 2 minecraft:stone false".to_owned()),
+        "{all:?}"
+    );
 }

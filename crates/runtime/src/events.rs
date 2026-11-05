@@ -89,6 +89,20 @@ pub fn parse_uuid(text: &str) -> Option<Uuid> {
     u128::from_str_radix(&hex, 16).ok().map(Uuid)
 }
 
+/// An inventory's handle, keyed by what holds it (Kotlin's `InventoryKeys.of`).
+pub fn inventory_handle(inventory: &InventoryRef) -> handles::Inventory {
+    let holder = match inventory {
+        InventoryRef::Player(p) => format!("player/{}", uuid_text(&p.player)),
+        InventoryRef::EnderChest(p) => format!("ender_chest/{}", uuid_text(&p.player)),
+        InventoryRef::Storage(s) => {
+            format!("storage/{}/{}/{}", uuid_text(&s.player), s.size, s.name)
+        }
+        InventoryRef::Entity(e) => format!("entity/{}", uuid_text(&e.entity)),
+        InventoryRef::Block(b) => format!("block/{}/{}/{}/{}", b.x, b.y, b.z, b.world),
+    };
+    handles::Inventory { holder }
+}
+
 /// A block's position as a `Block` handle keys on it (Kotlin's `Locations.pack`).
 pub fn pack(x: i32, y: i32, z: i32) -> i64 {
     ((i64::from(x) & 0x3FF_FFFF) << 38)
@@ -209,16 +223,7 @@ impl EventSession for Running<'_, '_> {
     }
 
     fn inventory(&self, inventory: &InventoryRef) -> handles::Inventory {
-        let holder = match inventory {
-            InventoryRef::Player(p) => format!("player/{}", uuid_text(&p.player)),
-            InventoryRef::EnderChest(p) => format!("ender_chest/{}", uuid_text(&p.player)),
-            InventoryRef::Storage(s) => {
-                format!("storage/{}/{}/{}", uuid_text(&s.player), s.size, s.name)
-            }
-            InventoryRef::Entity(e) => format!("entity/{}", uuid_text(&e.entity)),
-            InventoryRef::Block(b) => format!("block/{}/{}/{}/{}", b.x, b.y, b.z, b.world),
-        };
-        handles::Inventory { holder }
+        inventory_handle(inventory)
     }
 
     fn location(&self, location: &Location) -> values::Location {

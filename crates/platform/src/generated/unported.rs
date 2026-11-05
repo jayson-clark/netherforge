@@ -5363,19 +5363,19 @@ impl WorldOps for Unported {
         unported("WorldOps::set_game_rule")
     }
 
-    fn spawn_limit(&self, _: String, _: external::SpawnCategory) -> Option<i32> {
+    fn spawn_limit(&self, _: String, _: netherforge_format::manifest::SpawnCategory) -> Option<i32> {
         unported("WorldOps::spawn_limit")
     }
 
-    fn set_spawn_limit(&self, _: String, _: external::SpawnCategory, _: i32) -> bool {
+    fn set_spawn_limit(&self, _: String, _: netherforge_format::manifest::SpawnCategory, _: i32) -> bool {
         unported("WorldOps::set_spawn_limit")
     }
 
-    fn spawn_interval(&self, _: String, _: external::SpawnCategory) -> Option<i32> {
+    fn spawn_interval(&self, _: String, _: netherforge_format::manifest::SpawnCategory) -> Option<i32> {
         unported("WorldOps::spawn_interval")
     }
 
-    fn set_spawn_interval(&self, _: String, _: external::SpawnCategory, _: i32) -> bool {
+    fn set_spawn_interval(&self, _: String, _: netherforge_format::manifest::SpawnCategory, _: i32) -> bool {
         unported("WorldOps::set_spawn_interval")
     }
 
@@ -5503,19 +5503,19 @@ pub trait FakeWorldOps {
         <Unported as WorldOps>::set_game_rule(&Unported, world, rule, value)
     }
 
-    fn spawn_limit(&self, world: String, category: external::SpawnCategory) -> Option<i32> {
+    fn spawn_limit(&self, world: String, category: netherforge_format::manifest::SpawnCategory) -> Option<i32> {
         <Unported as WorldOps>::spawn_limit(&Unported, world, category)
     }
 
-    fn set_spawn_limit(&self, world: String, category: external::SpawnCategory, limit: i32) -> bool {
+    fn set_spawn_limit(&self, world: String, category: netherforge_format::manifest::SpawnCategory, limit: i32) -> bool {
         <Unported as WorldOps>::set_spawn_limit(&Unported, world, category, limit)
     }
 
-    fn spawn_interval(&self, world: String, category: external::SpawnCategory) -> Option<i32> {
+    fn spawn_interval(&self, world: String, category: netherforge_format::manifest::SpawnCategory) -> Option<i32> {
         <Unported as WorldOps>::spawn_interval(&Unported, world, category)
     }
 
-    fn set_spawn_interval(&self, world: String, category: external::SpawnCategory, ticks: i32) -> bool {
+    fn set_spawn_interval(&self, world: String, category: netherforge_format::manifest::SpawnCategory, ticks: i32) -> bool {
         <Unported as WorldOps>::set_spawn_interval(&Unported, world, category, ticks)
     }
 
@@ -5641,19 +5641,19 @@ impl<T: FakeWorldOps> WorldOps for T {
         FakeWorldOps::set_game_rule(self, world, rule, value)
     }
 
-    fn spawn_limit(&self, world: String, category: external::SpawnCategory) -> Option<i32> {
+    fn spawn_limit(&self, world: String, category: netherforge_format::manifest::SpawnCategory) -> Option<i32> {
         FakeWorldOps::spawn_limit(self, world, category)
     }
 
-    fn set_spawn_limit(&self, world: String, category: external::SpawnCategory, limit: i32) -> bool {
+    fn set_spawn_limit(&self, world: String, category: netherforge_format::manifest::SpawnCategory, limit: i32) -> bool {
         FakeWorldOps::set_spawn_limit(self, world, category, limit)
     }
 
-    fn spawn_interval(&self, world: String, category: external::SpawnCategory) -> Option<i32> {
+    fn spawn_interval(&self, world: String, category: netherforge_format::manifest::SpawnCategory) -> Option<i32> {
         FakeWorldOps::spawn_interval(self, world, category)
     }
 
-    fn set_spawn_interval(&self, world: String, category: external::SpawnCategory, ticks: i32) -> bool {
+    fn set_spawn_interval(&self, world: String, category: netherforge_format::manifest::SpawnCategory, ticks: i32) -> bool {
         FakeWorldOps::set_spawn_interval(self, world, category, ticks)
     }
 

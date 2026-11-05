@@ -1571,6 +1571,78 @@ fn nearest_hitbox(
     best
 }
 
+/// What a ray hit among the centities: `instance`'s node `index`, where in the world, the face's normal and how
+/// far along.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HitboxHit {
+    pub instance: Uuid,
+    pub index: usize,
+    pub position: Vec3,
+    pub normal: Vec3,
+    pub distance: f64,
+}
+
+/// The first centity hitbox a ray in `world` from `origin` along the unit `direction` hits within
+/// `max_distance`, tested with the shapes clicks are (Kotlin's `CentityClicks.raycast`); instances whose chunk
+/// isn't loaded aren't hit.
+pub fn raycast(
+    centities: &mut super::Centities,
+    platform: &dyn netherforge_platform::Platform,
+    world: &str,
+    origin: Vec3,
+    direction: Vec3,
+    max_distance: f64,
+) -> Option<HitboxHit> {
+    let game = platform.game();
+    let end = origin + direction * max_distance;
+    let region = netherforge_format::math::BoundingBox {
+        min: Vec3(
+            origin.0.min(end.0),
+            origin.1.min(end.1),
+            origin.2.min(end.2),
+        ),
+        max: Vec3(
+            origin.0.max(end.0),
+            origin.1.max(end.1),
+            origin.2.max(end.2),
+        ),
+    };
+    let mut best: Option<HitboxHit> = None;
+    for id in centities.near(game, world, &region) {
+        let Some(instance) = centities.get_mut(id) else {
+            continue;
+        };
+        if instance.removed
+            || instance.anchor().world != world
+            || !super::Centities::loaded(platform, instance)
+        {
+            continue;
+        }
+        let anchor = instance.anchor().clone();
+        let from = Vec3(
+            origin.0 - anchor.x,
+            origin.1 - anchor.y,
+            origin.2 - anchor.z,
+        );
+        let reach = best.as_ref().map_or(max_distance, |b| b.distance);
+        let Some((index, hit)) = nearest_hitbox(game, instance, from, direction, reach) else {
+            continue;
+        };
+        if best.as_ref().is_some_and(|b| hit.distance >= b.distance) {
+            continue;
+        }
+        let at = from + direction * hit.distance;
+        best = Some(HitboxHit {
+            instance: id,
+            index,
+            position: Vec3(at.0 + anchor.x, at.1 + anchor.y, at.2 + anchor.z),
+            normal: hit.normal,
+            distance: hit.distance,
+        });
+    }
+    best
+}
+
 /// Where an instance is: its anchor, facing its yaw.
 fn location_of(instance: &Instance) -> values::Location {
     let at = instance.anchor();

@@ -47,10 +47,6 @@ pub struct ScreenFacing(pub Dynamic);
 #[derive(Clone, Debug, PartialEq)]
 pub struct RecipeFile(pub Dynamic);
 
-/// format's `project` `SpawnCategory`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct SpawnCategory(pub Dynamic);
-
 /// format's `particle` `SpawnData`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SpawnData(pub Dynamic);

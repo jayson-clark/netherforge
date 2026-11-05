@@ -15,6 +15,7 @@ use netherforge_format::manifest::Requires;
 use netherforge_format::requirement::Requirement;
 use netherforge_luau::{Host, ScopeId};
 
+pub mod block;
 pub mod centity;
 pub mod events;
 pub mod images;
@@ -26,6 +27,7 @@ pub mod session;
 pub mod shared;
 pub mod stats;
 pub mod store;
+pub mod world;
 
 pub use modules::{Modules, Owner, Project};
 pub use scripts::{Delivered, Log, MAX_ERRORS, Report, Scripts, Target};
@@ -60,6 +62,8 @@ struct Api {
     centities: Option<centity::api::CentityContext>,
     /// `nf.images` and `Image`, with them.
     images: Option<images::ImagesApi>,
+    /// `World` and `nf.worlds`, with them.
+    worlds: Option<world::WorldContext>,
 }
 
 impl Runtime for Api {
@@ -154,6 +158,24 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn world(&self) -> &dyn netherforge_api::api::WorldApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn block(&self) -> &dyn netherforge_api::api::BlockApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn nf_worlds(&self) -> &dyn netherforge_api::api::NfWorldsApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
 }
 
 /// A room: its Luau state and its scripts.
@@ -174,6 +196,9 @@ impl Room {
         let images = shared.as_ref().map(|shared| images::ImagesApi {
             images: shared.images.clone(),
         });
+        let worlds = shared
+            .as_ref()
+            .map(|shared| world::WorldContext::new(shared.clone(), scripts.clone()));
         let centities = shared.map(|shared| {
             centity::api::CentityContext::install_liveness(&shared, &scripts);
             centity::api::CentityContext::new(shared, scripts.clone())
@@ -183,6 +208,7 @@ impl Room {
             grants,
             centities,
             images,
+            worlds,
         };
         netherforge_api::install(&host, Rc::new(api))?;
         Ok(Room { host, scripts })

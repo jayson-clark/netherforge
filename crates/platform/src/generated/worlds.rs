@@ -294,16 +294,16 @@ pub trait WorldOps {
 
     /// The mob cap per player for [category] in this world: its own setting, or the server's when it has none.
     /// Null when the world doesn't exist.
-    fn spawn_limit(&self, world: String, category: external::SpawnCategory) -> Option<i32>;
+    fn spawn_limit(&self, world: String, category: netherforge_format::manifest::SpawnCategory) -> Option<i32>;
 
     /// Sets the world's own mob cap for [category]; a negative [limit] goes back to the server's. False when the world doesn't exist.
-    fn set_spawn_limit(&self, world: String, category: external::SpawnCategory, limit: i32) -> bool;
+    fn set_spawn_limit(&self, world: String, category: netherforge_format::manifest::SpawnCategory, limit: i32) -> bool;
 
     /// Ticks between spawn attempts for [category] in this world: its own setting, or the server's. Null when the world doesn't exist.
-    fn spawn_interval(&self, world: String, category: external::SpawnCategory) -> Option<i32>;
+    fn spawn_interval(&self, world: String, category: netherforge_format::manifest::SpawnCategory) -> Option<i32>;
 
     /// Sets the world's own ticks between spawn attempts for [category]; a negative [ticks] goes back to the server's. False when the world doesn't exist.
-    fn set_spawn_interval(&self, world: String, category: external::SpawnCategory, ticks: i32) -> bool;
+    fn set_spawn_interval(&self, world: String, category: netherforge_format::manifest::SpawnCategory, ticks: i32) -> bool;
 
     /// Whether the chunk (in chunk coordinates) is loaded: whether its blocks can be read now.
     fn is_chunk_loaded(&self, world: String, chunk_x: i32, chunk_z: i32) -> bool;

@@ -6,6 +6,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
+use netherforge_api::handles::{self, Handle};
 use netherforge_format::font::DefaultFontFile;
 use netherforge_platform::Platform;
 
@@ -43,6 +44,9 @@ pub struct Shared {
     pub stats: RefCell<crate::stats::StatSheets>,
     /// The project's modules, while the session runs: what a resource's script requires through.
     pub modules: RefCell<Option<Modules>>,
+    /// Handles pushed as their real class (`classed`), held until the tick ends so the class stays with them
+    /// until the script has its value.
+    pub classed: RefCell<Vec<mlua::AnyUserData>>,
 }
 
 impl Shared {
@@ -61,7 +65,49 @@ impl Shared {
             physics: RefCell::default(),
             stats: RefCell::default(),
             modules: RefCell::default(),
+            classed: RefCell::default(),
         })
+    }
+
+    /// The entity `info` describes as the handle the spec's types say (`Entity`), made the class it is
+    /// (Kotlin's `entityHandle`): a player's, a mob's, a dropped item's... A handle is one value per thing, so
+    /// the script gets the value pushed here, of that class.
+    pub fn entity(
+        &self,
+        lua: &mlua::Lua,
+        info: &netherforge_platform::EntityInfo,
+    ) -> handles::Entity {
+        use netherforge_platform::EntityCategory;
+        let id = crate::events::uuid_text(&info.id);
+        let classed = if info.player.is_some() {
+            Handle::Player(handles::Player { id: id.clone() })
+        } else {
+            match info.category {
+                EntityCategory::Mob => Handle::Mob(handles::Mob { id: id.clone() }),
+                EntityCategory::Mannequin => {
+                    Handle::Mannequin(handles::Mannequin { id: id.clone() })
+                }
+                EntityCategory::Living => Handle::Living(handles::Living { id: id.clone() }),
+                EntityCategory::DroppedItem => {
+                    Handle::DroppedItem(handles::DroppedItem { id: id.clone() })
+                }
+                EntityCategory::Other => return handles::Entity { id },
+            }
+        };
+        if let Ok(pushed) = netherforge_api::handle::push_any(lua, &classed) {
+            self.classed.borrow_mut().push(pushed);
+        }
+        handles::Entity { id }
+    }
+
+    /// The entity `id` as its class, when the server knows it; an `Entity` otherwise.
+    pub fn entity_by_id(&self, lua: &mlua::Lua, id: netherforge_platform::Uuid) -> handles::Entity {
+        match self.platform.world_entities().info(id) {
+            Some(info) => self.entity(lua, &info),
+            None => handles::Entity {
+                id: crate::events::uuid_text(&id),
+            },
+        }
     }
 
     /// `f` with the centities and how their displays are drawn (text measured with the project's font).

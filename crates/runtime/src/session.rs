@@ -405,6 +405,7 @@ impl<'a> Session<'a> {
         }
         self.released();
         self.report();
+        self.shared.classed.borrow_mut().clear();
     }
 
     /// Reads the project again after `changed` (project paths) changed, and
