@@ -13,7 +13,7 @@ indexmap.workspace = true
 mlua.workspace = true
 netherforge-luau = { path = "../luau" }
 netherforge-api = { path = "../api" }
-netherforge-format = { path = "../format" }
+netherforge-format = { path = "../format", features = ["bridge-auth"] }
 netherforge-platform = { path = "../platform" }
 serde.workspace = true
 serde_json.workspace = true

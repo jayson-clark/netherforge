@@ -22,6 +22,7 @@ pub mod block_mining;
 pub mod border;
 pub mod bossbar;
 pub mod bots;
+pub mod bridge;
 pub mod centity;
 pub mod commands;
 pub mod config;
