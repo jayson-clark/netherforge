@@ -113,6 +113,10 @@ pub struct Config {
     pub files: crate::files::FilesConfig,
     /// `resource-pack:` in `config.yml`: where the pack is served from.
     pub pack: crate::packs::PackConfig,
+    /// `screens:` in `config.yml`.
+    pub screens: crate::screen::ScreensConfig,
+    /// The project's files' bytes while scripts run (pictures, font files): the adapter's reader of the disk.
+    pub bytes: Option<crate::screen::ProjectBytes>,
 }
 
 /// Why a project can't run: what the log says, and the problem to report if format didn't.
@@ -212,6 +216,11 @@ impl<'a> Session<'a> {
         let shared = Shared::new(platform.clone(), store);
         shared.schedules.borrow_mut().now = config.wall_clock;
         shared.packs.borrow_mut().config = config.pack.clone();
+        {
+            let mut screens = shared.screens.borrow_mut();
+            screens.config = config.screens;
+            screens.read = config.bytes.clone();
+        }
         if let Some(root) = &config.data_dir {
             *shared.files.borrow_mut() =
                 Some(crate::files::ScriptFiles::new(root.clone(), config.files));
@@ -740,6 +749,10 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         // After centities and particle effects, as Kotlin's draws in the effects' phase.
         Box::new(crate::huds::HudsService {
             shared: shared.clone(),
+        }),
+        Box::new(crate::screen::ScreensService {
+            shared: shared.clone(),
+            scripts: Default::default(),
         }),
         Box::new(crate::sky::SkiesService {
             shared: shared.clone(),

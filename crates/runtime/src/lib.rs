@@ -48,6 +48,7 @@ pub mod player;
 pub mod project_items;
 pub mod recipes;
 pub mod schedule;
+pub mod screen;
 pub mod scripts;
 pub mod server;
 pub mod session;
@@ -528,6 +529,18 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_screens(&self) -> &dyn netherforge_api::api::NfScreensApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn screen(&self) -> &dyn netherforge_api::api::ScreenApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
     fn hud(&self) -> &dyn netherforge_api::api::HudApi {
         match &self.worlds {
             Some(w) => w,
@@ -638,6 +651,7 @@ impl Room {
             dialog::DialogContext::install_liveness(&shared, &scripts);
             particles::ParticlesContext::install_liveness(&shared, &scripts);
             custom_blocks::BlocksContext::install_liveness(&shared, &scripts);
+            screen::ScreensContext::install_liveness(&shared, &scripts);
             centity::api::CentityContext::new(shared, scripts.clone())
         });
         let nf = NfContext {

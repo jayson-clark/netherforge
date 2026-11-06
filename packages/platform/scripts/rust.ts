@@ -45,6 +45,7 @@ const RUST_EXTERNAL: Record<string, { path: string; interface?: boolean }> = {
   DialogFile: { path: 'netherforge_format::kind::dialog::DialogFile' },
   RecipeFile: { path: 'netherforge_format::kind::recipe::RecipeFile' },
   BlockCarrier: { path: 'netherforge_format::kind::block::BlockCarrier' },
+  ScreenFacing: { path: 'netherforge_format::kind::screen::ScreenFacing' },
   BotState: { path: 'netherforge_format::bridge::BotState' },
   BotPosition: { path: 'netherforge_format::bridge::BotPosition' },
   BotPackAnswer: { path: 'netherforge_format::bridge::BotPackAnswer' },

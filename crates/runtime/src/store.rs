@@ -468,6 +468,88 @@ impl Store {
     }
 }
 
+/// The numbers screens' maps keep for good (Kotlin's `Store.ScreenMaps`): a project screen's, and a keyed script
+/// screen's, so a map item or frame of one shows it again after a restart; and the next number to give, past every
+/// one ever given, so none is given twice.
+impl Store {
+    /// Every kept number, by (namespace, screen key), each by its tile's stable number.
+    pub fn screen_maps(&self) -> BTreeMap<(String, String), BTreeMap<i64, i64>> {
+        self.commit();
+        let Ok(mut statement) = self
+            .connection
+            .prepare("SELECT namespace, screen, tile, map FROM screen_maps")
+        else {
+            return BTreeMap::new();
+        };
+        let mut out: BTreeMap<(String, String), BTreeMap<i64, i64>> = BTreeMap::new();
+        let rows = statement.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, i64>(2)?,
+                r.get::<_, i64>(3)?,
+            ))
+        });
+        for (namespace, screen, tile, map) in rows.into_iter().flatten().flatten() {
+            out.entry((namespace, screen))
+                .or_default()
+                .insert(tile, map);
+        }
+        out
+    }
+
+    /// The next map number screens may take, if one was kept.
+    pub fn screen_map_next(&self) -> Option<i64> {
+        self.commit();
+        self.connection
+            .query_row("SELECT next FROM screen_map_next WHERE id = 0", [], |r| {
+                r.get(0)
+            })
+            .ok()
+    }
+
+    pub fn set_screen_map_next(&self, next: i64) {
+        self.stage(
+            "screen_map_next".to_owned(),
+            Box::new(move |c| {
+                c.execute(
+                    "INSERT INTO screen_map_next (id, next) VALUES (0, ?1) ON CONFLICT (id) DO UPDATE SET next = excluded.next",
+                    params![next],
+                )?;
+                Ok(())
+            }),
+        );
+    }
+
+    pub fn put_screen_map(&self, namespace: &str, screen: &str, tile: i64, map: i64) {
+        let (namespace, screen) = (namespace.to_owned(), screen.to_owned());
+        self.stage(
+            format!("screen_maps {namespace} {screen} {tile}"),
+            Box::new(move |c| {
+                c.execute(
+                    "INSERT INTO screen_maps (namespace, screen, tile, map) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (namespace, screen, tile) DO UPDATE SET map = excluded.map",
+                    params![namespace, screen, tile, map],
+                )?;
+                Ok(())
+            }),
+        );
+    }
+
+    pub fn forget_screen_map(&self, namespace: &str, screen: &str, tile: i64) {
+        let (namespace, screen) = (namespace.to_owned(), screen.to_owned());
+        self.stage(
+            format!("screen_maps {namespace} {screen} {tile}"),
+            Box::new(move |c| {
+                c.execute(
+                    "DELETE FROM screen_maps WHERE namespace = ?1 AND screen = ?2 AND tile = ?3",
+                    params![namespace, screen, tile],
+                )?;
+                Ok(())
+            }),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

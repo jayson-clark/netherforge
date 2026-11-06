@@ -147,7 +147,7 @@ impl Default for PackConfig {
 pub const LOADED: &str = "loaded";
 
 /// Java's `UUID.nameUUIDFromBytes`: a version 3 UUID, MD5 of the bytes.
-fn name_uuid(bytes: &[u8]) -> Uuid {
+pub fn name_uuid(bytes: &[u8]) -> Uuid {
     use md5::Digest as _;
     let mut hash: [u8; 16] = md5::Md5::digest(bytes).into();
     hash[6] = (hash[6] & 0x0f) | 0x30;

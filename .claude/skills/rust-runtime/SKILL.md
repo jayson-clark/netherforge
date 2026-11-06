@@ -707,6 +707,25 @@ the files' with a UUID id and an owner scope, gone with that scope (`scope_relea
 `nf.dialogs.get` and `open_dialog` by name find only the project's. Not yet: the runtime's own dialogs
 (`/nf settings`).
 
+## Screens (`crates/runtime/src/screen/`)
+
+Kotlin's `Screens`, `ScreenState`, `Canvas`, `Raster`, `ScreenText`, `ScreenFont`, `ScreenImages`, `Placement`,
+`ScreenFrames`, `MapSending` and `ScreenImpls`. `canvas.rs` is `Canvas` (a map colour a pixel, each map's changed
+rectangle) and the shapes, line for line; `text.rs` fonts and text (the game's map font as the server has it, a
+file's pixels, a bitmap grid, or TrueType rasterised by `fontdue` where Kotlin used AWT, so a TrueType font's pixels
+differ a little; MiniMessage through format's `minimessage::pieces`); `mod.rs` the rest. A screen's maps are numbered
+from `MAP_BASE`; a project screen's and a keyed script screen's are kept in the store's `screen_maps` (with
+`screen_map_next`, so none is given twice), the same tables as Kotlin's. Each tick (in the service's turn): frames
+hung again where missing (every 20 ticks a check), who sees each worked out (every 10), and each viewer sent what
+changed of the canvas they see, within `ScreensConfig::bytes_per_tick`, starting from another screen and map each
+tick. A player's own view (`for_player`) is a canvas of their own until `release`. Pictures are a pack's textures
+(`<pack>/<path>`), decoded by the `image` crate, scaled by format's `Pixels::resized`, dithered by format's
+`Dither` into the game's palette (`GameData::map_colors`), the last 32 kept. Files are read while scripts run
+through `Config::bytes` (`ProjectBytes`, a `'static` reader the adapter gives from disk; none, and pictures and font
+files can't be read), since the session's source is only borrowed. `ScreenFacing` is format's in the Platform's Rust
+types. Not yet: videos and playback (`play`, `playback`, `Playback`), aim (`looking_at`, clicks, `hover`, `leave`),
+the per-scope counts for `/nf scripts`.
+
 ## HUDs (`crates/runtime/src/huds.rs`)
 
 Kotlin's `Huds` and `HudImpl`: each online player's `HudState` (format's), drawn by format's `hud::compose` per built

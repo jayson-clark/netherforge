@@ -44,6 +44,8 @@ pub struct Shared {
     pub names: RefCell<netherforge_format::project::Names>,
     /// The skies over worlds and players.
     pub skies: RefCell<crate::sky::Skies>,
+    /// The screens and what they draw with.
+    pub screens: RefCell<crate::screen::Screens>,
     /// Every online player's HUD.
     pub huds: RefCell<crate::huds::Huds>,
     /// The resource pack as last built, and the characters it draws glyphs and skins with.
@@ -104,6 +106,7 @@ impl Shared {
             schedules: RefCell::default(),
             names: RefCell::default(),
             skies: RefCell::default(),
+            screens: RefCell::default(),
             huds: RefCell::default(),
             packs: RefCell::default(),
             files: RefCell::default(),

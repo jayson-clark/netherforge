@@ -19,7 +19,7 @@ pub trait ScreenOps {
     /// facing [facing], stamped with [tag]: nothing can break, turn or empty it, and it needs nothing behind it.
     /// It isn't saved with its chunk (the runtime hangs it again when the chunk comes back). Null when it can't
     /// (the world isn't loaded).
-    fn hang(&self, at: Location, facing: external::ScreenFacing, map: i32, glowing: bool, tag: EntityTag) -> Option<Uuid>;
+    fn hang(&self, at: Location, facing: netherforge_format::kind::screen::ScreenFacing, map: i32, glowing: bool, tag: EntityTag) -> Option<Uuid>;
 
     /// A filled map item showing map [map].
     fn map_item(&self, map: i32) -> ItemData;

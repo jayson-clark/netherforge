@@ -3919,7 +3919,7 @@ impl ScreenOps for Unported {
         unported("ScreenOps::send_map")
     }
 
-    fn hang(&self, _: Location, _: external::ScreenFacing, _: i32, _: bool, _: EntityTag) -> Option<Uuid> {
+    fn hang(&self, _: Location, _: netherforge_format::kind::screen::ScreenFacing, _: i32, _: bool, _: EntityTag) -> Option<Uuid> {
         unported("ScreenOps::hang")
     }
 
@@ -3939,7 +3939,7 @@ pub trait FakeScreenOps {
         <Unported as ScreenOps>::send_map(&Unported, player, map, x, y, width, height, colors)
     }
 
-    fn hang(&self, at: Location, facing: external::ScreenFacing, map: i32, glowing: bool, tag: EntityTag) -> Option<Uuid> {
+    fn hang(&self, at: Location, facing: netherforge_format::kind::screen::ScreenFacing, map: i32, glowing: bool, tag: EntityTag) -> Option<Uuid> {
         <Unported as ScreenOps>::hang(&Unported, at, facing, map, glowing, tag)
     }
 
@@ -3957,7 +3957,7 @@ impl<T: FakeScreenOps> ScreenOps for T {
         FakeScreenOps::send_map(self, player, map, x, y, width, height, colors)
     }
 
-    fn hang(&self, at: Location, facing: external::ScreenFacing, map: i32, glowing: bool, tag: EntityTag) -> Option<Uuid> {
+    fn hang(&self, at: Location, facing: netherforge_format::kind::screen::ScreenFacing, map: i32, glowing: bool, tag: EntityTag) -> Option<Uuid> {
         FakeScreenOps::hang(self, at, facing, map, glowing, tag)
     }
 
