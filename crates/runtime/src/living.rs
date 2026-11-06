@@ -2,20 +2,19 @@
 //! status effects and equipment; a mob's target and AI; a mannequin's look. Everything answers nil or false
 //! while the entity isn't in the world.
 //!
-//! Not yet: a mob's walking (`move_to`, `stop_pathing`) and goals, with mob goals.
+//! A mob's walks and goals are `crate::mob`'s.
 
 use mlua::Function;
 use netherforge_api::api::{LivingApi, MannequinApi, MobApi};
 use netherforge_api::handles::{self, Handle};
-use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, shapes, unions, values};
 use netherforge_format::canonical::name_of;
 use netherforge_format::game::{self, Registry};
 use netherforge_format::item::AttributeOperation;
 use netherforge_platform::{
-    AttributeModifierData, EntityFlag, EntityNumber, MannequinLook, MannequinPose, MannequinSkin,
-    MannequinSkinDefault, MannequinSkinPlayer, MannequinSkinTexture, SkinPart, SkinTexture,
-    StatusEffectData, Uuid,
+    AttributeModifierData, EntityFlag, EntityNumber, GoalControl, MannequinLook, MannequinPose,
+    MannequinSkin, MannequinSkinDefault, MannequinSkinPlayer, MannequinSkinTexture, SkinPart,
+    SkinTexture, StatusEffectData, Uuid,
 };
 
 use crate::Target;
@@ -24,6 +23,16 @@ use crate::world::GameContext;
 
 fn err(message: impl Into<String>) -> ApiError {
     ApiError(message.into())
+}
+
+/// A goal key a script gave to find goals by: a key without a namespace is the game's.
+fn goal_key(key: &str, name: &str) -> ApiResult<String> {
+    if !game::is_id(key) {
+        return Err(err(format!(
+            "{name}: \"{key}\" isn't a goal key: lowercase letters, digits, _, -, . and /, with a namespace or not"
+        )));
+    }
+    Ok(game::normalize(key))
 }
 
 const OPERATIONS: [AttributeOperation; 3] = [
@@ -438,11 +447,47 @@ impl MobApi for GameContext {
         target: unions::LocationOrVec3OrEntity,
         options: Option<shapes::PathOptions>,
     ) -> ApiResult<bool> {
-        <Unported as MobApi>::move_to(&Unported, this, target, options)
+        let speed = options.and_then(|o| o.speed).unwrap_or(1.0);
+        if !(speed > 0.0 && speed.is_finite()) {
+            return Err(err(format!(
+                "options.speed must be more than 0, not {speed}"
+            )));
+        }
+        let Some(id) = parse_uuid(&this.id) else {
+            return Ok(false);
+        };
+        let entities = self.shared.platform.world_entities();
+        let Some(here) = entities.info(id).map(|i| i.location) else {
+            return Ok(false);
+        };
+        let mobs = &self.shared.mobs;
+        let (world, position) = match target {
+            unions::LocationOrVec3OrEntity::Location(location) => {
+                (location.world.name, location.position)
+            }
+            unions::LocationOrVec3OrEntity::Vec3(position) => (here.world.clone(), position),
+            unions::LocationOrVec3OrEntity::Entity(entity) => {
+                let Some(other) = parse_uuid(&entity.id).filter(|o| *o != id) else {
+                    return Ok(false);
+                };
+                if entities.info(other).map(|i| i.location.world) != Some(here.world) {
+                    return Ok(false);
+                }
+                return Ok(mobs.follow(id, other, speed));
+            }
+        };
+        if world != here.world {
+            return Ok(false);
+        }
+        Ok(mobs.move_to(
+            id,
+            netherforge_format::math::Vec3(position.x, position.y, position.z),
+            speed,
+        ))
     }
 
     fn stop_pathing(&self, this: &handles::Mob) -> ApiResult<bool> {
-        <Unported as MobApi>::stop_pathing(&Unported, this)
+        Ok(parse_uuid(&this.id).is_some_and(|id| self.shared.mobs.stop_walk(id)))
     }
 
     fn has_path(&self, this: &handles::Mob) -> ApiResult<bool> {
@@ -460,11 +505,30 @@ impl MobApi for GameContext {
     }
 
     fn goals(&self, this: &handles::Mob) -> ApiResult<Option<Vec<shapes::MobGoal>>> {
-        <Unported as MobApi>::goals(&Unported, this)
+        let Some(mut goals) = parse_uuid(&this.id).and_then(|id| self.shared.mobs.goals(id)) else {
+            return Ok(None);
+        };
+        goals.sort_by(|a, b| a.key.cmp(&b.key).then(a.priority.cmp(&b.priority)));
+        Ok(Some(
+            goals
+                .into_iter()
+                .map(|goal| shapes::MobGoal {
+                    key: goal.key,
+                    priority: i64::from(goal.priority),
+                    controls: GoalControl::ALL
+                        .iter()
+                        .filter(|c| goal.controls.contains(c))
+                        .map(|c| c.name().to_lowercase())
+                        .collect(),
+                    running: goal.running,
+                })
+                .collect(),
+        ))
     }
 
     fn remove_goal(&self, this: &handles::Mob, key: String) -> ApiResult<bool> {
-        <Unported as MobApi>::remove_goal(&Unported, this, key)
+        let goal = goal_key(&key, "key")?;
+        Ok(parse_uuid(&this.id).is_some_and(|id| self.shared.mobs.remove(id, goal)))
     }
 
     fn clear_goals(
@@ -472,7 +536,17 @@ impl MobApi for GameContext {
         this: &handles::Mob,
         options: Option<shapes::GoalClearOptions>,
     ) -> ApiResult<bool> {
-        <Unported as MobApi>::clear_goals(&Unported, this, options)
+        let keep = options
+            .and_then(|o| o.keep)
+            .unwrap_or_default()
+            .iter()
+            .enumerate()
+            .map(|(i, key)| goal_key(key, &format!("options.keep[{}]", i + 1)))
+            .collect::<ApiResult<Vec<String>>>()?;
+        let mut keep = keep;
+        keep.sort();
+        keep.dedup();
+        Ok(parse_uuid(&this.id).is_some_and(|id| self.shared.mobs.clear(id, keep)))
     }
 
     fn add_goal(
@@ -481,7 +555,58 @@ impl MobApi for GameContext {
         id: String,
         definition: shapes::GoalDefinition,
     ) -> ApiResult<bool> {
-        <Unported as MobApi>::add_goal(&Unported, this, id, definition)
+        if !game::is_id(&id) {
+            return Err(err(format!(
+                "\"{id}\" isn't a goal id: lowercase letters, digits, _, -, . and /"
+            )));
+        }
+        let key = self.own_id(&id, "goal")?;
+        let priority = i32::try_from(definition.priority).map_err(|_| {
+            err(format!(
+                "definition.priority is too big: {}",
+                definition.priority
+            ))
+        })?;
+        let names = definition.controls.unwrap_or_default();
+        let mut controls = Vec::new();
+        for (i, name) in names.iter().enumerate() {
+            let control = GoalControl::ALL
+                .iter()
+                .find(|c| c.name().to_lowercase() == *name)
+                .ok_or_else(|| {
+                    err(format!(
+                        "definition.controls[{}] must be \"move\", \"look\", \"jump\" or \"target\", not \"{name}\"",
+                        i + 1
+                    ))
+                })?;
+            if controls.contains(control) {
+                return Err(err("definition.controls names a control twice"));
+            }
+            controls.push(*control);
+        }
+        if controls.contains(&GoalControl::Target) && controls.len() > 1 {
+            return Err(err(
+                "a goal that claims \"target\" is a targeting goal, so it can't claim anything else",
+            ));
+        }
+        let Some(mob) = parse_uuid(&this.id) else {
+            return Ok(false);
+        };
+        let scope = self.running_scope("Mob:add_goal")?;
+        Ok(self.shared.mobs.add(
+            scope,
+            mob,
+            key,
+            priority,
+            controls,
+            crate::mob::Callbacks {
+                should_start: definition.should_start,
+                should_continue: definition.should_continue,
+                start: definition.start,
+                tick: definition.tick,
+                stop: definition.stop,
+            },
+        ))
     }
 
     fn on(

@@ -111,11 +111,14 @@ pub struct Shared {
     pub entities: RefCell<crate::entity::EntityState>,
     /// Entities scripts removed since the session last looked: gone for good.
     pub gone: RefCell<Vec<netherforge_platform::Uuid>>,
+    /// Mobs' walks (`mob:move_to`) and the goals scripts added.
+    pub mobs: Rc<crate::mob::Mobs>,
 }
 
 impl Shared {
     pub fn new(platform: Rc<dyn Platform>, store: Rc<crate::store::Store>) -> Rc<Shared> {
         Rc::new(Shared {
+            mobs: crate::mob::Mobs::new(platform.clone()),
             platform,
             store,
             data: RefCell::default(),

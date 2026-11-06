@@ -44,6 +44,7 @@ pub mod java_time;
 pub mod living;
 pub mod loot;
 pub mod menu;
+pub mod mob;
 pub mod modules;
 pub mod names;
 pub mod network;

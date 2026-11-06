@@ -1058,6 +1058,9 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
             shared: shared.clone(),
             host: Default::default(),
         }),
+        Box::new(crate::mob::MobsService {
+            mobs: shared.mobs.clone(),
+        }),
         Box::new(crate::project_items::ItemsService {
             shared: shared.clone(),
             scripts: Default::default(),
