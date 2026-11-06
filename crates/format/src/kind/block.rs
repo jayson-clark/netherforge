@@ -214,6 +214,18 @@ impl BlockFile {
     pub fn break_sound(&self) -> String {
         format!("minecraft:block.{}.break", self.sound())
     }
+
+    pub fn hardness_or_default(&self) -> f64 {
+        self.hardness.unwrap_or(DEFAULT_HARDNESS)
+    }
+
+    pub fn requires_tool_or_default(&self) -> bool {
+        self.requires_tool.unwrap_or(false)
+    }
+
+    pub fn falls_or_default(&self) -> bool {
+        self.falls.unwrap_or(false)
+    }
 }
 
 impl Document for BlockFile {

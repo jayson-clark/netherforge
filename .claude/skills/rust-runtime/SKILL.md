@@ -728,10 +728,29 @@ is raised on it every `tick` ticks per placed block. `block:custom()` is the `Cu
 `ChunkGrid` is hand-written in the platform crate (`chunk_grid.rs`): the Platform generator writes a record named
 in its `HAND_WRITTEN` as a re-export, since its Kotlin class keeps its state private.
 
-Not yet (the next slices): breaking with drops (`block_break`, explosions, `break_naturally`), clicks and placing
-from items, picking, pistons, falling, the game's blocks' rules (`game_blocks/`), mining (`BlockMining`), pinning a
-block's record for its `block:data()` table, and leaves adopted in a chunk generated while the project runs comes
-with chunk loads' `generated` (already passed through).
+**Breaking and the rest** (Kotlin's `CustomBlocks` whole, but `block:data()`): a player's break of one of the
+project's blocks is the runtime's (`ServerEvents::block_break` answers `None`, cancelling the server's): its drops
+(its loot table for the tool, nothing for a tool it requires and isn't, nothing in creative) go through the held
+item's `break_block`, the block's `break`, the world's and `nf`'s `block_break`, then it goes with the game's break
+particles and its sound. A game block with a rule (`game_blocks/`, format's `game_block::resolve`) drops the rule's
+table instead of the game's. `break_naturally`, explosions (what scripts left breaking, each with the yield's
+chance) and the world breaking a ruled block (`world_broke`) roll the same tables. Pistons don't move one. A click
+on one raises its `click`; a right click with an item whose `block` places one puts it on the clicked face, facing
+the player, after its `place` handlers, and takes one from the hand. Picking finds the stack that places it. A block
+that `falls` drops as the server's falling block when its neighbour changes (`block_updated`, a tick later), is
+taken up where it lands (`falling_landed`), and drops its table if it never lands. Event payloads hand a script a
+`CustomBlock` where the project's block is (`Running::block` pushes that class, kept in `Shared::classed`). The
+server is told which states fall and which game blocks drop (`BlockOps::watch`) only when that changes.
+
+**Mining** (`block_mining.rs`, Kotlin's `BlockMining`, in `Shared::mining`): the server mines the project's blocks
+and ruled game blocks. A hit (`block_start_break`, before scripts) turns the player's `block_break_speed` down a
+millionfold so their game never finishes; each tick counts the server's progress (divided back out) times how much
+faster the block is than its carrier, shows the cracks, and at the end breaks it as theirs (`BlockOps::break_as`).
+The server's break raises its own event synchronously, which comes back into the blocks, so `mine` hands back the
+breaks it finished and the tick does them once nothing is borrowed (`after_break`). Looking at one slows a player
+before the hit; the modifier is cleared on join, since the server saves it.
+
+Not yet: pinning a block's record for its `block:data()` table, and the editor's view of the blocks' problems.
 
 ## Recipes (`crates/runtime/src/recipes.rs`)
 

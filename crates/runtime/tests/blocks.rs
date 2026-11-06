@@ -57,6 +57,17 @@ struct Fake {
     legends: RefCell<HashMap<(i32, i32), String>>,
     /// The chunks loaded: only chunk (0, 0).
     loaded: RefCell<Vec<(i32, i32)>>,
+    /// What Alex holds, by slot.
+    held: RefCell<HashMap<String, netherforge_platform::ItemData>>,
+    /// Whether the falling block entity is in the world.
+    falling: RefCell<bool>,
+}
+
+fn alex() -> netherforge_platform::PlayerRef {
+    netherforge_platform::PlayerRef {
+        uuid: netherforge_platform::Uuid(77),
+        name: "Alex".into(),
+    }
 }
 
 impl Fake {
@@ -93,9 +104,107 @@ impl netherforge_platform::FakeTeamOps for Fake {
     fn clear_below_names(&self) {}
 }
 
+/// Alex, offline to everything that asks who's online, but there for what asks about them by UUID.
 impl netherforge_platform::FakePlayerOps for Fake {
     fn online(&self) -> Vec<netherforge_platform::PlayerRef> {
         Vec::new()
+    }
+    fn get(&self, uuid: netherforge_platform::Uuid) -> Option<netherforge_platform::PlayerRef> {
+        (uuid == alex().uuid).then(alex)
+    }
+    fn game_mode(&self, _: netherforge_platform::Uuid) -> Option<String> {
+        Some("survival".into())
+    }
+    fn location(&self, _: netherforge_platform::Uuid) -> Option<netherforge_platform::Location> {
+        Some(netherforge_platform::Location {
+            world: "world".into(),
+            x: 5.5,
+            y: 64.0,
+            z: 0.5,
+            yaw: 0.0,
+            pitch: 0.0,
+        })
+    }
+}
+
+/// What Alex holds, items dropped, and what's falling.
+impl netherforge_platform::FakeWorldEntityOps for Fake {
+    fn equipment(
+        &self,
+        _: netherforge_platform::Uuid,
+        slot: String,
+    ) -> Option<netherforge_platform::ItemData> {
+        self.held.borrow().get(&slot).cloned()
+    }
+    fn set_equipment(
+        &self,
+        _: netherforge_platform::Uuid,
+        slot: String,
+        item: Option<netherforge_platform::ItemData>,
+    ) -> bool {
+        self.lines.borrow_mut().push(format!(
+            "held {slot} {}",
+            item.as_ref().map_or("nothing".to_owned(), |i| format!(
+                "{}x{}",
+                i.def.item.clone().unwrap_or(i.def.kind.clone()),
+                i.def.count.unwrap_or(1)
+            ))
+        ));
+        match item {
+            Some(item) => self.held.borrow_mut().insert(slot, item),
+            None => self.held.borrow_mut().remove(&slot),
+        };
+        true
+    }
+    fn spawn_item(
+        &self,
+        _: String,
+        at: netherforge_format::math::Vec3,
+        item: netherforge_platform::ItemData,
+    ) -> Option<netherforge_platform::Uuid> {
+        self.lines.borrow_mut().push(format!(
+            "dropped {}x{} at {} {} {}",
+            item.def.kind,
+            item.def.count.unwrap_or(1),
+            at.0,
+            at.1,
+            at.2
+        ));
+        Some(netherforge_platform::Uuid(9))
+    }
+    /// The one falling block, while it falls.
+    fn info(&self, id: netherforge_platform::Uuid) -> Option<netherforge_platform::EntityInfo> {
+        (id == netherforge_platform::Uuid(500) && *self.falling.borrow()).then(|| {
+            netherforge_platform::EntityInfo {
+                id,
+                kind: "minecraft:falling_block".into(),
+                location: netherforge_platform::Location {
+                    world: "world".into(),
+                    x: 9.5,
+                    y: 65.0,
+                    z: 9.5,
+                    yaw: 0.0,
+                    pitch: 0.0,
+                },
+                category: netherforge_platform::EntityCategory::Other,
+                player: None,
+                tags: Vec::new(),
+            }
+        })
+    }
+}
+
+impl netherforge_platform::FakeSoundOps for Fake {
+    fn play(
+        &self,
+        _: String,
+        _: netherforge_format::math::Vec3,
+        sound: netherforge_platform::SoundPlay,
+    ) -> bool {
+        self.lines
+            .borrow_mut()
+            .push(format!("sound {}", sound.sound));
+        true
     }
 }
 
@@ -111,6 +220,9 @@ impl netherforge_platform::FakeWorldOps for Fake {
     }
     fn loaded_chunks(&self, _: String) -> Vec<(i32, i32)> {
         self.loaded.borrow().clone()
+    }
+    fn heights(&self, _: String) -> Option<(i32, i32)> {
+        Some((-64, 320))
     }
 }
 
@@ -193,6 +305,106 @@ impl netherforge_platform::FakeBlockOps for Fake {
     fn freeze(&self, _: netherforge_format::kind::block::BlockCarrier) -> bool {
         true
     }
+    fn watch(&self, _: Vec<String>, falling: Vec<String>) {
+        self.lines
+            .borrow_mut()
+            .push(format!("watch falling {}", falling.len()));
+    }
+    fn can_place(&self, _: String, _: i32, _: i32, _: i32, _: String) -> bool {
+        true
+    }
+    fn place(
+        &self,
+        _: netherforge_platform::Uuid,
+        world: String,
+        x: i32,
+        y: i32,
+        z: i32,
+        state: String,
+        _: netherforge_platform::BlockVector,
+        _: String,
+    ) -> bool {
+        netherforge_platform::FakeBlockOps::set(self, world, x, y, z, state, true)
+    }
+    /// A note block is 0.8 hard, everything else 1.5; a bare hand mines at speed 1.
+    fn hardness(&self, state: String) -> Option<f64> {
+        Some(if state.starts_with("minecraft:note_block") {
+            0.8
+        } else {
+            1.5
+        })
+    }
+    fn break_speed(&self, _: Option<netherforge_platform::ItemData>, _: String) -> Option<f64> {
+        Some(1.0)
+    }
+    /// What a tick of mining makes with the speed turned down a millionfold: a tenth, before it's divided back out.
+    fn break_progress(
+        &self,
+        _: netherforge_platform::Uuid,
+        _: String,
+        _: i32,
+        _: i32,
+        _: i32,
+    ) -> Option<f64> {
+        Some(0.1e-6)
+    }
+    fn show_breaking(
+        &self,
+        _: netherforge_platform::Uuid,
+        _: String,
+        _: i32,
+        _: i32,
+        _: i32,
+        stage: i32,
+    ) {
+        self.lines.borrow_mut().push(format!("cracks {stage}"));
+    }
+    fn break_as(&self, _: netherforge_platform::Uuid, _: String, x: i32, y: i32, z: i32) -> bool {
+        self.lines
+            .borrow_mut()
+            .push(format!("break_as {x} {y} {z}"));
+        true
+    }
+    fn targeted(&self, _: netherforge_platform::Uuid) -> Option<netherforge_platform::BlockRef> {
+        None
+    }
+
+    /// A block falls when there's air under it: it's gone from where it was, an entity now.
+    fn fall(&self, _: String, x: i32, y: i32, z: i32) -> Option<netherforge_platform::Uuid> {
+        if self.state((x, y - 1, z)).is_some() {
+            return None;
+        }
+        self.states.borrow_mut().remove(&(x, y, z));
+        *self.falling.borrow_mut() = true;
+        Some(netherforge_platform::Uuid(500))
+    }
+}
+
+/// Alex's break speed, said as it changes.
+impl netherforge_platform::FakeAttributeOps for Fake {
+    fn add_modifier(
+        &self,
+        _: netherforge_platform::Uuid,
+        attribute: String,
+        modifier: netherforge_platform::AttributeModifierData,
+    ) -> bool {
+        self.lines.borrow_mut().push(format!(
+            "modifier {attribute} {} {}",
+            modifier.id, modifier.amount
+        ));
+        true
+    }
+    fn remove_modifier(
+        &self,
+        _: netherforge_platform::Uuid,
+        attribute: String,
+        modifier: String,
+    ) -> bool {
+        self.lines
+            .borrow_mut()
+            .push(format!("unmodified {attribute} {modifier}"));
+        true
+    }
 }
 
 fn default_snapshot() -> BlockSnapshot {
@@ -218,6 +430,15 @@ impl FakePlatform for Fake {
         self
     }
     fn blocks(&self) -> &dyn netherforge_platform::BlockOps {
+        self
+    }
+    fn world_entities(&self) -> &dyn netherforge_platform::WorldEntityOps {
+        self
+    }
+    fn sounds(&self) -> &dyn netherforge_platform::SoundOps {
+        self
+    }
+    fn attributes(&self) -> &dyn netherforge_platform::AttributeOps {
         self
     }
     fn game(&self) -> &dyn GameData {
@@ -439,4 +660,255 @@ end)
     assert_eq!(look(), ["nil\tnil"]);
     session.chunk_loaded("world", 1, 0, false);
     assert_eq!(look(), ["ruby_ore\truby_ore"]);
+}
+
+fn at_ref(x: i32, y: i32, z: i32, state: &str) -> netherforge_platform::BlockRef {
+    netherforge_platform::BlockRef {
+        world: "world".into(),
+        x,
+        y,
+        z,
+        id: state.split('[').next().unwrap_or(state).into(),
+        state: state.into(),
+    }
+}
+
+#[test]
+fn blocks_break_with_their_drops_place_from_items_and_fall() {
+    use netherforge_platform::{ClickButton, PlatformEvents, game_event};
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::new());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "blocks/ruby_ore/block.json",
+            r#"{ "drops": "ore", "script": { "file": "script.lua" } }"#,
+        ),
+        (
+            "blocks/ruby_ore/script.lua",
+            r#"
+this:on("break", function(e) print("break", e.player:name(), #e.drops, e.drops[1].kind, e.block:custom():id()); table.insert(e.drops, { kind = "minecraft:coal" }) end)
+this:on("place", function(e) print("place", e.player:name(), e.item.item, e.facing) end)
+"#,
+        ),
+        ("blocks/sand_block/block.json", r#"{ "falls": true }"#),
+        (
+            "loot/ore.json",
+            r#"{ "pools": { "main": { "entries": [ { "type": "item", "item": { "kind": "minecraft:diamond" } } ] } } }"#,
+        ),
+        (
+            "items/ore_item/item.json",
+            r#"{ "kind": "minecraft:stone", "block": "ruby_ore" }"#,
+        ),
+        (
+            "modules/build/init.lua",
+            r#"
+local w = nf.worlds.default()
+nf.blocks.get("ruby_ore"):place({ world = w, position = vector.create(1, 64, 1) })
+nf.blocks.get("ruby_ore"):place({ world = w, position = vector.create(2, 64, 1) })
+nf.blocks.get("sand_block"):place({ world = w, position = vector.create(9, 70, 9) })
+"#,
+        ),
+    ]);
+    platform
+        .states
+        .borrow_mut()
+        .insert((5, 63, 5), "minecraft:stone".into());
+    platform
+        .states
+        .borrow_mut()
+        .insert((9, 60, 9), "minecraft:stone".into());
+    let events = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let started = platform.take();
+    assert!(
+        !started
+            .iter()
+            .any(|l| l.starts_with("warn") || l.starts_with("error")),
+        "{started:?}"
+    );
+    let ore = platform.state((1, 64, 1)).expect("placed");
+    let sand = platform.state((9, 70, 9)).expect("placed");
+
+    // Alex breaks one: the server's break is cancelled, and the runtime's drops what the block's handler left.
+    let answer = events.block_break(alex(), at_ref(1, 64, 1, &ore), Box::new(Vec::new), 0);
+    assert!(answer.is_none());
+    assert_eq!(platform.state((1, 64, 1)), None);
+    events.tick();
+    let broke = platform.take();
+    assert_eq!(
+        printed(&broke),
+        ["break\tAlex\t1\tminecraft:diamond\truby_ore"]
+    );
+    let effects: Vec<&String> = broke
+        .iter()
+        .filter(|l| l.starts_with("dropped") || l.starts_with("sound"))
+        .collect();
+    assert_eq!(
+        effects,
+        [
+            "sound minecraft:block.stone.break",
+            "dropped minecraft:diamondx1 at 1.5 64.5 1.5",
+            "dropped minecraft:coalx1 at 1.5 64.5 1.5",
+        ]
+    );
+
+    // A right click with the item that places it puts it on the face clicked, and takes one from the hand.
+    let mut held = netherforge_platform::ItemData {
+        def: netherforge_format::item::ItemDef {
+            kind: "minecraft:stone".into(),
+            item: Some("ore_item".into()),
+            count: Some(2),
+            ..Default::default()
+        },
+        raw: None,
+        look: None,
+    };
+    let cancelled = events.player_interact(
+        alex(),
+        ClickButton::Right,
+        Some(at_ref(5, 63, 5, "minecraft:stone")),
+        Some("up".into()),
+        Some(held.clone()),
+        "main_hand".into(),
+    );
+    assert!(cancelled);
+    assert_eq!(platform.state((5, 64, 5)).as_deref(), Some(ore.as_str()));
+    events.tick();
+    let placed = platform.take();
+    assert_eq!(printed(&placed), ["place\tAlex\tore_item\tnil"]);
+    assert!(
+        placed.contains(&"held main_hand ore_itemx1".to_owned()),
+        "{placed:?}"
+    );
+
+    // Picking it finds the stack that places it.
+    held.def.count = Some(1);
+    let pick = events.pick_block(alex(), at_ref(5, 64, 5, &ore), vec![None, Some(held)]);
+    assert_eq!(pick.and_then(|p| p.slot), Some(1));
+
+    // A piston doesn't move it; an explosion breaks it with its drops.
+    let pushed = events.game().piston_extend(&mut game_event::Piston {
+        block: at_ref(4, 64, 5, "minecraft:piston"),
+        direction: "east".into(),
+        sticky: false,
+        blocks: vec![at_ref(5, 64, 5, &ore)],
+    });
+    assert!(pushed);
+    let exploded = events.game().block_explode(&mut game_event::Explode {
+        entity: None,
+        block: None,
+        state: None,
+        location: netherforge_platform::Location {
+            world: "world".into(),
+            x: 2.0,
+            y: 64.0,
+            z: 1.0,
+            yaw: 0.0,
+            pitch: 0.0,
+        },
+        blocks: Box::new({
+            let ore = ore.clone();
+            move || vec![at_ref(2, 64, 1, &ore)]
+        }),
+        breaks_blocks: true,
+        r#yield: 1.0,
+    });
+    assert!(!exploded);
+    assert_eq!(platform.state((2, 64, 1)), None);
+    assert!(
+        platform
+            .take()
+            .contains(&"dropped minecraft:diamondx1 at 2.5 64.5 1.5".to_owned())
+    );
+
+    // The sand block had nothing under it: at the first tick it fell, and where it lands it's itself again.
+    assert_eq!(platform.state((9, 70, 9)), None);
+    platform
+        .states
+        .borrow_mut()
+        .insert((9, 61, 9), sand.clone());
+    events.falling_landed(netherforge_platform::Uuid(500), at_ref(9, 61, 9, &sand));
+    let session = events.session();
+    assert_eq!(
+        session
+            .shared()
+            .blocks
+            .borrow()
+            .at("world", 9, 61, 9)
+            .as_deref(),
+        Some("sand_block")
+    );
+    assert_eq!(session.shared().blocks.borrow().at("world", 9, 70, 9), None);
+}
+
+#[test]
+fn the_server_mines_a_block_and_breaks_it_as_the_players() {
+    use netherforge_platform::{PlatformEvents, game_event};
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::new());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("blocks/ruby_ore/block.json", r#"{ "hardness": 1.5 }"#),
+        ("blocks/glass/block.json", r#"{ "hardness": -1 }"#),
+        (
+            "modules/build/init.lua",
+            r#"
+local w = nf.worlds.default()
+nf.blocks.get("ruby_ore"):place({ world = w, position = vector.create(1, 64, 1) })
+nf.blocks.get("glass"):place({ world = w, position = vector.create(2, 64, 1) })
+"#,
+        ),
+    ]);
+    let events = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    platform.take();
+    let ore = platform.state((1, 64, 1)).expect("placed");
+    let glass = platform.state((2, 64, 1)).expect("placed");
+    // Glass nobody can break: the hit is refused.
+    let refused = events
+        .game()
+        .block_start_break(&mut game_event::BlockStartBreak {
+            player: alex(),
+            block: at_ref(2, 64, 1, &glass),
+            item: None,
+            instant: false,
+        });
+    assert!(refused);
+    // The ore is a note block's 0.8 against its 1.5: each tick makes a tenth times 0.8 / 1.5 of a break.
+    let started = events
+        .game()
+        .block_start_break(&mut game_event::BlockStartBreak {
+            player: alex(),
+            block: at_ref(1, 64, 1, &ore),
+            item: None,
+            instant: false,
+        });
+    assert!(!started);
+    assert_eq!(
+        platform.take(),
+        ["modifier minecraft:block_break_speed demo:mining -0.999999"]
+    );
+    for _ in 0..19 {
+        events.tick();
+    }
+    let mined: Vec<String> = platform
+        .take()
+        .into_iter()
+        .filter(|l| l.starts_with("cracks") || l.starts_with("break_as"))
+        .collect();
+    assert_eq!(
+        mined,
+        [
+            "cracks 0",
+            "cracks 1",
+            "cracks 2",
+            "cracks 3",
+            "cracks 4",
+            "cracks 5",
+            "cracks 6",
+            "cracks 7",
+            "cracks 8",
+            "cracks -1",
+            "break_as 1 64 1"
+        ]
+    );
 }

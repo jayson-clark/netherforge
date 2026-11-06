@@ -47,6 +47,23 @@ impl GameBlockFile {
     }
 }
 
+/// The game's blocks `files` give rules to, by block id, each to the file (by id, the first in id order) whose
+/// rules it takes (Kotlin's `GameBlocks.resolve`). A tag is resolved by `game`; an entry that isn't an id is left out.
+pub fn resolve(
+    files: &std::collections::BTreeMap<String, GameBlockFile>,
+    game: Option<&dyn GameData>,
+) -> std::collections::BTreeMap<String, String> {
+    let mut out = std::collections::BTreeMap::new();
+    for (id, file) in files {
+        for entry in &file.blocks {
+            for block in expand(entry, game) {
+                out.entry(block).or_insert_with(|| id.clone());
+            }
+        }
+    }
+    out
+}
+
 /// The block ids `entry` (an id or a `#tag`) names, namespaced: none for one
 /// that isn't an id, or a tag the game doesn't have (or isn't known).
 pub fn expand(entry: &str, game: Option<&dyn GameData>) -> BTreeSet<String> {

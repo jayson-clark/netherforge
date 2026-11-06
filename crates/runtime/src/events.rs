@@ -247,10 +247,29 @@ impl EventSession for Running<'_, '_> {
         handles::Mob { id: uuid_text(id) }
     }
 
+    /// The block, its value a `CustomBlock`'s when the project's block is there (Kotlin's `blockAs`).
     fn block(&self, block: &BlockRef) -> handles::Block {
+        let position = pack(block.x, block.y, block.z);
+        let shared = self.session.shared();
+        let custom = shared
+            .blocks
+            .borrow()
+            .at(&block.world, block.x, block.y, block.z)
+            .is_some();
+        if custom
+            && let Ok(pushed) = netherforge_api::handle::push_any(
+                self.room().host().lua(),
+                &netherforge_api::handles::Handle::CustomBlock(handles::CustomBlock {
+                    world: block.world.clone(),
+                    position,
+                }),
+            )
+        {
+            shared.classed.borrow_mut().push(pushed);
+        }
         handles::Block {
             world: block.world.clone(),
-            position: pack(block.x, block.y, block.z),
+            position,
         }
     }
 
@@ -352,6 +371,23 @@ impl EventSession for Running<'_, '_> {
     }
 }
 
+impl Running<'_, '_> {
+    fn blocks(&self) -> crate::custom_blocks::BlocksContext {
+        crate::custom_blocks::BlocksContext {
+            shared: self.session.shared().clone(),
+            scripts: self.room().scripts().clone(),
+        }
+    }
+
+    fn exploded(&self, event: &netherforge_platform::game_event::Explode, cancelled: bool) {
+        if cancelled || !event.breaks_blocks || !self.session.shared().blocks.borrow().explodable()
+        {
+            return;
+        }
+        self.blocks().exploded(&(event.blocks)(), event.r#yield);
+    }
+}
+
 /// What the session's services do around the server's events (Kotlin's `RuntimeGameEvents`): they hear of a join
 /// before scripts and of a quit after, keep a chunk's centities once its scripts have had it, and physics reads
 /// again the blocks a placement changed.
@@ -381,6 +417,65 @@ impl Around for Running<'_, '_> {
     ) {
         raise(event);
         self.session.chunk_unloading(&event.world, event.x, event.z);
+    }
+
+    /// What mining one of the project's blocks takes is set before scripts hear of it (they may then make it
+    /// instant, or stop it).
+    fn block_start_break(
+        &self,
+        event: &mut netherforge_platform::game_event::BlockStartBreak,
+        raise: &dyn Fn(&mut netherforge_platform::game_event::BlockStartBreak) -> bool,
+    ) -> bool {
+        let shared = self.session.shared().clone();
+        let refused = {
+            let blocks = shared.blocks.borrow();
+            shared
+                .mining
+                .borrow_mut()
+                .started_breaking(&*shared.platform, &*blocks, event)
+        };
+        raise(event) || refused
+    }
+
+    /// A block of the project's doesn't go with a piston.
+    fn piston_extend(
+        &self,
+        event: &mut netherforge_platform::game_event::Piston,
+        raise: &dyn Fn(&mut netherforge_platform::game_event::Piston) -> bool,
+    ) -> bool {
+        let held = self.blocks().pushes(&event.blocks);
+        raise(event) || held
+    }
+
+    fn piston_retract(
+        &self,
+        event: &mut netherforge_platform::game_event::Piston,
+        raise: &dyn Fn(&mut netherforge_platform::game_event::Piston) -> bool,
+    ) -> bool {
+        let held = self.blocks().pushes(&event.blocks);
+        raise(event) || held
+    }
+
+    /// What scripts left breaking, the project's blocks (and the game's with drops of the project's) break with
+    /// their drops.
+    fn entity_explode(
+        &self,
+        event: &mut netherforge_platform::game_event::Explode,
+        raise: &dyn Fn(&mut netherforge_platform::game_event::Explode) -> bool,
+    ) -> bool {
+        let cancelled = raise(event);
+        self.exploded(event, cancelled);
+        cancelled
+    }
+
+    fn block_explode(
+        &self,
+        event: &mut netherforge_platform::game_event::Explode,
+        raise: &dyn Fn(&mut netherforge_platform::game_event::Explode) -> bool,
+    ) -> bool {
+        let cancelled = raise(event);
+        self.exploded(event, cancelled);
+        cancelled
     }
 
     fn chunk_load(

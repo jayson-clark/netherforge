@@ -72,6 +72,34 @@ pub struct ProjectItems {
 }
 
 impl ProjectItems {
+    /// The project block a stack places (its item's `block`), as the project names it; none for a stack that
+    /// places none.
+    pub fn block_of(&self, stack: &ItemData) -> Option<String> {
+        let id = self.id_of(stack.def.item.as_deref()?)?;
+        let block = self.records.get(&id)?.file.block.as_deref()?;
+        Some(netherforge_format::reference::resolve_any(&self.home, block)?.relative_to(&self.home))
+    }
+
+    /// The project item that places block `block`, the first by id when several do.
+    pub fn placing(&self, block: &str) -> Option<String> {
+        let mut ids: Vec<&String> = self.records.keys().collect();
+        ids.sort();
+        ids.into_iter()
+            .find(|id| {
+                self.records[*id]
+                    .file
+                    .block
+                    .as_deref()
+                    .and_then(|b| {
+                        netherforge_format::reference::resolve_any(&self.home, b)
+                            .map(|k| k.relative_to(&self.home))
+                    })
+                    .as_deref()
+                    == Some(block)
+            })
+            .cloned()
+    }
+
     /// The id of the project item `reference` names, as a file or a script writes it (`ruby`) or a stack
     /// carries it (`shop:ruby`), or none when it names none of the items running.
     pub fn id_of(&self, reference: &str) -> Option<String> {
@@ -352,7 +380,7 @@ impl ItemContext {
     }
 
     /// Every online player's own inventory.
-    fn refresh_online(&self) {
+    pub(crate) fn refresh_online(&self) {
         for player in self.platform().players().online() {
             self.refresh(player.uuid);
         }

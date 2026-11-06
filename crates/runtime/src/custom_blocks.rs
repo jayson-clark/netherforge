@@ -29,8 +29,13 @@ use netherforge_api::{ApiError, ApiResult, Caller, codecs, shapes, values};
 use netherforge_format::Problem;
 use netherforge_format::kind::block::{BlockCarrier, BlockFacing, BlockFile, BlockRotation};
 use netherforge_format::kind::carriers::{self, Plan};
+use netherforge_format::kind::game_block::GameBlockFile;
+use netherforge_format::math::Vec3;
 use netherforge_luau::ScopeId;
-use netherforge_platform::{ChunkGrid, Location, Platform, Uuid};
+use netherforge_platform::{
+    BlockRef, BlockVector, ChunkGrid, ItemData, Location, ParticleSpawn, PickAnswer, Platform,
+    PlayerRef, SoundPlay, Uuid,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::Room;
@@ -59,7 +64,7 @@ struct Record {
     facing: Option<String>,
 }
 
-fn facing_name(facing: BlockFacing) -> &'static str {
+pub fn facing_name(facing: BlockFacing) -> &'static str {
     match facing {
         BlockFacing::North => "north",
         BlockFacing::East => "east",
@@ -175,6 +180,14 @@ pub struct CustomBlocks {
     chunks: HashMap<ChunkKey, ChunkBlocks>,
     ticking: IndexSet<ChunkKey>,
     sweep_queue: VecDeque<ChunkKey>,
+    /// The game's blocks the project has rules for, by block id: the rule's file id and the file.
+    game_rules: BTreeMap<String, (String, GameBlockFile)>,
+    /// The project's blocks falling now, by their falling block entity: what it is, and where it was last seen.
+    falling: HashMap<Uuid, (String, String, Vec3)>,
+    /// Blocks to see about falling at the next tick, as the game looks a tick after a neighbour changes.
+    pending_falls: IndexSet<(String, At)>,
+    /// What the server was last told to watch: the game's blocks with drops, and the states that fall.
+    watched: (Vec<String>, Vec<String>),
     /// Each chunk's fingerprint the last time the sweep reconciled it.
     swept: HashMap<ChunkKey, i64>,
     problems: Vec<Problem>,
@@ -272,6 +285,11 @@ impl CustomBlocks {
         (number != 0).then(|| self.names[usize::from(number) - 1].clone())
     }
 
+    /// Whether the project's blocks are in play: the server holds every carrier the plan uses still.
+    pub fn is_usable(&self) -> bool {
+        self.usable()
+    }
+
     /// Whether any block of the project's is placed in a loaded chunk.
     pub fn any_placed(&self) -> bool {
         !self.chunks.is_empty()
@@ -326,6 +344,79 @@ impl CustomBlocks {
     pub fn problems(&self) -> Vec<Problem> {
         self.problems.clone()
     }
+}
+
+impl CustomBlocks {
+    /// The project's rule for the game's block `state` is a state of.
+    fn game_rule(&self, state: &str) -> Option<&(String, GameBlockFile)> {
+        if self.game_rules.is_empty() {
+            return None;
+        }
+        self.game_rules
+            .get(state.split('[').next().unwrap_or(state))
+    }
+
+    /// Every state `name` is held in.
+    fn states_of(&self, name: &str) -> Vec<String> {
+        self.plan
+            .as_ref()
+            .map_or_else(Vec::new, |p| p.states_of(name))
+    }
+
+    fn falls(&self, name: &str) -> bool {
+        self.defs
+            .get(name)
+            .is_some_and(|d| d.file.falls_or_default())
+    }
+
+    /// Whether an explosion's blocks are worth looking at: any of the project's are placed, or it has drops for the game's.
+    pub fn explodable(&self) -> bool {
+        self.any_placed() || self.game_rules.values().any(|(_, f)| f.drops.is_some())
+    }
+}
+
+impl crate::block_mining::Mined for CustomBlocks {
+    fn usable(&self) -> bool {
+        CustomBlocks::usable(self)
+    }
+    fn placed(&self, world: &str, x: i32, y: i32, z: i32) -> Option<String> {
+        self.at(world, x, y, z)
+    }
+    fn block_file(&self, name: &str) -> Option<BlockFile> {
+        self.defs.get(name).map(|d| d.file.clone())
+    }
+    fn game_rule(&self, state: &str) -> Option<GameBlockFile> {
+        CustomBlocks::game_rule(self, state).map(|(_, f)| f.clone())
+    }
+}
+
+const AIR: &str = "minecraft:air";
+const CREATIVE: &str = "creative";
+const MAIN_HAND: &str = "main_hand";
+/// How the game plays a block's sound when it's placed or broken: (its volume + 1) / 2, its pitch × 0.8, for 1 and 1.
+const GAME_VOLUME: f64 = 1.0;
+const GAME_PITCH: f64 = 0.8;
+/// The particle a breaking block throws up, which draws the block's own model's particle texture.
+const BLOCK_PARTICLE: &str = "minecraft:block";
+/// How steeply a player looks down (or up) to place a block that turns every way facing up (or down): 45°.
+const STEEP: f64 = 45.0;
+
+fn centre(at: At) -> Vec3 {
+    Vec3(
+        f64::from(at.0) + 0.5,
+        f64::from(at.1) + 0.5,
+        f64::from(at.2) + 0.5,
+    )
+}
+
+/// A player's right click on a block's face with an item in a hand.
+#[derive(Clone, Copy)]
+pub struct Click<'a> {
+    pub player: &'a PlayerRef,
+    pub against: &'a BlockRef,
+    pub face: &'a str,
+    pub item: &'a ItemData,
+    pub hand: &'a str,
 }
 
 /// What a reconcile leaves to do once the blocks are let go: centities to spawn for blocks and to remove.
@@ -758,6 +849,9 @@ impl BlocksContext {
             if tick.is_some() {
                 blocks.ticking.insert(key);
             }
+            if blocks.falls(name) {
+                blocks.pending_falls.insert((world.to_owned(), at));
+            }
             (was, blocks.recorded(name), tick)
         };
         let _ = tick;
@@ -1059,6 +1153,758 @@ impl BlocksContext {
         }
     }
 
+    fn creative(&self, player: Uuid) -> bool {
+        self.platform().players().game_mode(player).as_deref() == Some(CREATIVE)
+    }
+
+    fn game(&self) -> GameContext {
+        GameContext::new(self.shared.clone(), self.scripts.clone())
+    }
+
+    /// A loot table rolled where a block broke, for `player` and `tool` when someone broke it; a mistake in the
+    /// table is logged as `who`'s, and drops nothing.
+    fn roll(
+        &self,
+        drops: Option<&str>,
+        who: &str,
+        world: &str,
+        at: At,
+        player: Option<Uuid>,
+        tool: Option<ItemData>,
+    ) -> Vec<ItemData> {
+        let Some(table) = drops else {
+            return Vec::new();
+        };
+        let home = self.shared.centities.borrow().home().to_owned();
+        let Some(table) = netherforge_format::reference::resolve_any(&home, table) else {
+            return Vec::new();
+        };
+        let table = table.relative_to(&home);
+        let roll = crate::loot::LootRoll {
+            player,
+            tool,
+            location: Some(Location {
+                world: world.to_owned(),
+                x: f64::from(at.0) + 0.5,
+                y: f64::from(at.1) + 0.5,
+                z: f64::from(at.2) + 0.5,
+                yaw: 0.0,
+                pitch: 0.0,
+            }),
+            ..Default::default()
+        };
+        let mut seed = [0u8; 8];
+        getrandom::fill(&mut seed).expect("the system has randomness");
+        match self
+            .game()
+            .roll_loot(&table, &roll, i64::from_le_bytes(seed))
+        {
+            Ok(items) => items,
+            Err(e) => {
+                self.platform()
+                    .log()
+                    .warn(format!("{who}'s drops: {}", e.0));
+                Vec::new()
+            }
+        }
+    }
+
+    /// What breaking block `name` drops: its loot table rolled for the player and the tool, nothing for a tool it
+    /// needs and isn't.
+    pub fn roll_drops(
+        &self,
+        name: &str,
+        world: &str,
+        at: At,
+        player: Option<Uuid>,
+        tool: Option<ItemData>,
+    ) -> Vec<ItemData> {
+        let Some(file) = self
+            .shared
+            .blocks
+            .borrow()
+            .defs
+            .get(name)
+            .map(|d| d.file.clone())
+        else {
+            return Vec::new();
+        };
+        if file.requires_tool_or_default()
+            && !self.shared.mining.borrow_mut().right_tool(
+                self.platform(),
+                file.tool,
+                tool.as_ref(),
+            )
+        {
+            return Vec::new();
+        }
+        self.roll(
+            file.drops.as_deref(),
+            &format!("Block {name}"),
+            world,
+            at,
+            player,
+            tool,
+        )
+    }
+
+    fn roll_game(
+        &self,
+        state: &str,
+        world: &str,
+        at: At,
+        player: Option<Uuid>,
+        tool: Option<ItemData>,
+    ) -> Vec<ItemData> {
+        let Some((id, file)) = self.shared.blocks.borrow().game_rule(state).cloned() else {
+            return Vec::new();
+        };
+        self.roll(
+            file.drops.as_deref(),
+            &format!("Game block {id}"),
+            world,
+            at,
+            player,
+            tool,
+        )
+    }
+
+    fn spawn_items(&self, world: &str, at: Vec3, items: Vec<ItemData>) {
+        for item in items {
+            self.platform()
+                .world_entities()
+                .spawn_item(world.to_owned(), at, item);
+        }
+    }
+
+    /// The sound of a block placed or broken, for everyone near it: `own`, one of the project's, else the game's.
+    fn sound(&self, world: &str, at: Vec3, own: Option<&str>, game: String) {
+        let play = match own {
+            Some(own) => {
+                let names = self.shared.names.borrow();
+                let home = self.shared.centities.borrow().home().to_owned();
+                let calling = crate::names::Calling {
+                    names: &names,
+                    from: home,
+                };
+                let Ok(id) = crate::effects::sound_id(self.platform(), &calling, own) else {
+                    return;
+                };
+                SoundPlay {
+                    sound: id,
+                    category: "block".into(),
+                    volume: 1.0,
+                    pitch: 1.0,
+                }
+            }
+            None => SoundPlay {
+                sound: game,
+                category: "block".into(),
+                volume: GAME_VOLUME,
+                pitch: GAME_PITCH,
+            },
+        };
+        self.platform().sounds().play(world.to_owned(), at, play);
+    }
+
+    /// Removes a block: forgotten, its state set to air, with the sound and particles of breaking (`effects`), and
+    /// `drops` dropped.
+    fn remove(&self, world: &str, at: At, name: &str, drops: Vec<ItemData>, effects: bool) {
+        let (state, file) = {
+            let blocks = self.shared.blocks.borrow();
+            (
+                blocks.state_of(name, None),
+                blocks.defs.get(name).map(|d| d.file.clone()),
+            )
+        };
+        self.forget(world, at.0, at.1, at.2);
+        self.platform()
+            .blocks()
+            .set(world.to_owned(), at.0, at.1, at.2, AIR.into(), true);
+        if effects && let Some(file) = &file {
+            if let Some(state) = state {
+                crate::effects::send(
+                    self.platform(),
+                    world,
+                    ParticleSpawn {
+                        particle: BLOCK_PARTICLE.into(),
+                        position: centre(at),
+                        count: 24,
+                        offset: Vec3(0.25, 0.25, 0.25),
+                        speed: 0.0,
+                        data: Some(
+                            netherforge_format::kind::particle::sample::SpawnData::Block { state },
+                        ),
+                        force: false,
+                    },
+                    None,
+                );
+            }
+            let own = file.sounds.as_ref().and_then(|s| s.destroy.clone());
+            self.sound(world, centre(at), own.as_deref(), file.break_sound());
+        }
+        self.spawn_items(world, centre(at), drops);
+    }
+
+    /// Breaks the block at a position as `break_naturally` does: its drops rolled for `tool`, and gone. False when
+    /// it isn't one of the project's blocks, or one of the game's with drops of the project's (the game breaks the
+    /// rest).
+    pub fn break_naturally(
+        &self,
+        world: &str,
+        x: i32,
+        y: i32,
+        z: i32,
+        tool: Option<ItemData>,
+    ) -> bool {
+        let at = (x, y, z);
+        let name = self.shared.blocks.borrow().at(world, x, y, z);
+        let Some(name) = name else {
+            let ops = self.platform().blocks();
+            let Some(state) = ops.get(world.to_owned(), x, y, z).map(|s| s.state) else {
+                return false;
+            };
+            let Some((_, rule)) = self
+                .shared
+                .blocks
+                .borrow()
+                .game_rule(&state)
+                .filter(|(_, f)| f.drops.is_some())
+                .cloned()
+            else {
+                return false;
+            };
+            let harvests = self.shared.mining.borrow_mut().game_harvests(
+                self.platform(),
+                &rule,
+                &state,
+                tool.as_ref(),
+            );
+            let drops = if harvests == Some(false) {
+                Vec::new()
+            } else {
+                self.roll_game(&state, world, at, None, tool)
+            };
+            ops.set(world.to_owned(), x, y, z, AIR.into(), true);
+            ops.show_broken(None, world.to_owned(), x, y, z, state);
+            self.spawn_items(world, centre(at), drops);
+            return true;
+        };
+        if !self.shared.blocks.borrow().has(&name) {
+            return false;
+        }
+        let drops = self.roll_drops(&name, world, at, None, tool);
+        self.remove(world, at, &name, drops, true);
+        true
+    }
+
+    /// What a player breaking the game's block `block` drops, when the project has a rule for it: the rule's loot
+    /// table for their tool, nothing for a tool the rule needs and it isn't, or none for the game's own drops.
+    pub fn game_drops(&self, player: &PlayerRef, block: &BlockRef) -> Option<Vec<ItemData>> {
+        let (_, rule) = self
+            .shared
+            .blocks
+            .borrow()
+            .game_rule(&block.state)
+            .cloned()?;
+        if self.creative(player.uuid) {
+            return None;
+        }
+        let tool = self
+            .platform()
+            .world_entities()
+            .equipment(player.uuid, MAIN_HAND.into());
+        let harvests = self.shared.mining.borrow_mut().game_harvests(
+            self.platform(),
+            &rule,
+            &block.state,
+            tool.as_ref(),
+        );
+        if harvests == Some(false) && (rule.drops.is_some() || rule.requires_tool == Some(true)) {
+            return Some(Vec::new());
+        }
+        rule.drops.as_ref()?;
+        Some(self.roll_game(
+            &block.state,
+            &block.world,
+            (block.x, block.y, block.z),
+            Some(player.uuid),
+            tool,
+        ))
+    }
+
+    /// The world broke the game's block `block` itself: the rule's loot table, rolled with no player or tool;
+    /// none for the game's own.
+    pub fn world_broke(&self, block: &BlockRef) -> Option<Vec<ItemData>> {
+        self.shared
+            .blocks
+            .borrow()
+            .game_rule(&block.state)
+            .filter(|(_, f)| f.drops.is_some())?;
+        Some(self.roll_game(
+            &block.state,
+            &block.world,
+            (block.x, block.y, block.z),
+            None,
+            None,
+        ))
+    }
+
+    /// The project's block a player is breaking at `block`, with what it drops for them (nothing in creative),
+    /// when it's one of the project's: the break is the runtime's from here (the adapter cancels the server's).
+    pub fn breaking(
+        &self,
+        player: &PlayerRef,
+        block: &BlockRef,
+    ) -> Option<(String, Vec<ItemData>, bool)> {
+        let name = {
+            let blocks = self.shared.blocks.borrow();
+            if !blocks.usable() {
+                return None;
+            }
+            let name = blocks.at(&block.world, block.x, block.y, block.z)?;
+            blocks.has(&name).then_some(name)?
+        };
+        let creative = self.creative(player.uuid);
+        let tool = self
+            .platform()
+            .world_entities()
+            .equipment(player.uuid, MAIN_HAND.into());
+        let drops = if creative {
+            Vec::new()
+        } else {
+            self.roll_drops(
+                &name,
+                &block.world,
+                (block.x, block.y, block.z),
+                Some(player.uuid),
+                tool,
+            )
+        };
+        Some((name, drops, creative))
+    }
+
+    /// The end of a player's break of block `name`, unless a script replaced it meanwhile: it goes with `drops`.
+    pub fn broken(&self, player: &PlayerRef, block: &BlockRef, name: &str, drops: Vec<ItemData>) {
+        if self
+            .shared
+            .blocks
+            .borrow()
+            .at(&block.world, block.x, block.y, block.z)
+            .as_deref()
+            != Some(name)
+        {
+            return;
+        }
+        self.shared
+            .mining
+            .borrow_mut()
+            .stop_mining(self.platform(), player.uuid);
+        self.remove(&block.world, (block.x, block.y, block.z), name, drops, true);
+    }
+
+    /// An explosion breaks `blocks`; the project's, and the game's with drops of the project's, are its own to
+    /// break, with their drops (each with the chance `yield`, as the game's are).
+    pub fn exploded(&self, blocks: &[BlockRef], r#yield: f64) {
+        let chance = || {
+            let mut b = [0u8; 8];
+            getrandom::fill(&mut b).expect("the system has randomness");
+            ((u64::from_le_bytes(b) >> 11) as f64) / ((1u64 << 53) as f64) < r#yield
+        };
+        for block in blocks {
+            let at = (block.x, block.y, block.z);
+            let name = {
+                let custom = self.shared.blocks.borrow();
+                if custom.usable() {
+                    custom.at(&block.world, block.x, block.y, block.z)
+                } else {
+                    None
+                }
+            };
+            let Some(name) = name else {
+                let ruled = self
+                    .shared
+                    .blocks
+                    .borrow()
+                    .game_rule(&block.state)
+                    .is_some_and(|(_, f)| f.drops.is_some());
+                if !ruled {
+                    continue;
+                }
+                let drops = if chance() {
+                    self.roll_game(&block.state, &block.world, at, None, None)
+                } else {
+                    Vec::new()
+                };
+                // Gone before the explosion gets to it, so the game drops nothing of its own.
+                self.platform().blocks().set(
+                    block.world.clone(),
+                    block.x,
+                    block.y,
+                    block.z,
+                    AIR.into(),
+                    true,
+                );
+                self.spawn_items(&block.world, centre(at), drops);
+                continue;
+            };
+            if !self.shared.blocks.borrow().has(&name) {
+                continue;
+            }
+            let drops = if chance() {
+                self.roll_drops(&name, &block.world, at, None, None)
+            } else {
+                Vec::new()
+            };
+            self.remove(&block.world, at, &name, drops, false);
+        }
+    }
+
+    /// Pistons don't move a block of the project's. True refuses it.
+    pub fn pushes(&self, blocks: &[BlockRef]) -> bool {
+        let custom = self.shared.blocks.borrow();
+        custom.usable()
+            && blocks
+                .iter()
+                .any(|b| custom.at(&b.world, b.x, b.y, b.z).is_some())
+    }
+
+    /// The way a block `player` places faces: toward them, as a furnace or a chair does. Up at them when they look
+    /// down on it and it can face up (down, looking up at it); else back along where they look.
+    fn facing_toward(&self, player: Uuid, name: &str) -> Option<BlockFacing> {
+        let facings = self.shared.blocks.borrow().facings_of(name);
+        if facings.is_empty() {
+            return None;
+        }
+        let Some(at) = self.platform().players().location(player) else {
+            return Some(BlockFacing::North);
+        };
+        if facings.contains(&BlockFacing::Up) && at.pitch >= STEEP {
+            return Some(BlockFacing::Up);
+        }
+        if facings.contains(&BlockFacing::Down) && at.pitch <= -STEEP {
+            return Some(BlockFacing::Down);
+        }
+        // Where they look: yaw 0 is south, 90 west, 180 north, 270 east; the block faces back at them.
+        let yaw = (at.yaw % 360.0 + 360.0) % 360.0;
+        Some(match (((yaw + 45.0) / 90.0) as i32) % 4 {
+            0 => BlockFacing::North,
+            1 => BlockFacing::East,
+            2 => BlockFacing::South,
+            _ => BlockFacing::West,
+        })
+    }
+
+    /// A right click with an item that places block `name` against `click.against`'s face: placed unless `heard`
+    /// (the `place` handlers) cancels it, the server refuses it, or there's no room.
+    pub fn place_from_item(
+        &self,
+        click: &Click,
+        name: &str,
+        heard: impl FnOnce(handles::CustomBlock, Option<BlockFacing>) -> bool,
+    ) {
+        let Click {
+            player,
+            against,
+            face,
+            item,
+            hand,
+        } = *click;
+        let platform = self.platform();
+        let Some(file) = self
+            .shared
+            .blocks
+            .borrow()
+            .defs
+            .get(name)
+            .map(|d| d.file.clone())
+        else {
+            return;
+        };
+        let facing = self.facing_toward(player.uuid, name);
+        let Some(state) = self.shared.blocks.borrow().state_of(name, facing) else {
+            return;
+        };
+        let (dx, dy, dz) = match face {
+            "up" => (0, 1, 0),
+            "down" => (0, -1, 0),
+            "north" => (0, 0, -1),
+            "south" => (0, 0, 1),
+            "east" => (1, 0, 0),
+            _ => (-1, 0, 0),
+        };
+        let (x, y, z) = (against.x + dx, against.y + dy, against.z + dz);
+        let world = &against.world;
+        let Some((bottom, top)) = platform.worlds().heights(world.clone()) else {
+            return;
+        };
+        if y < bottom || y >= top {
+            return;
+        }
+        let Some(there) = platform.blocks().get(world.clone(), x, y, z) else {
+            return;
+        };
+        if !(there.air || there.liquid) {
+            return;
+        }
+        if !platform
+            .blocks()
+            .can_place(world.clone(), x, y, z, state.clone())
+        {
+            return;
+        }
+        if heard(
+            handles::CustomBlock {
+                world: world.clone(),
+                position: pack(x, y, z),
+            },
+            facing,
+        ) {
+            return;
+        }
+        let against_at = BlockVector {
+            x: against.x,
+            y: against.y,
+            z: against.z,
+        };
+        if !platform.blocks().place(
+            player.uuid,
+            world.clone(),
+            x,
+            y,
+            z,
+            state,
+            against_at,
+            hand.to_owned(),
+        ) {
+            return;
+        }
+        self.register(name, world, (x, y, z), facing);
+        let own = file.sounds.as_ref().and_then(|s| s.place.clone());
+        self.sound(world, centre((x, y, z)), own.as_deref(), file.place_sound());
+        if !self.creative(player.uuid) {
+            let count = item.def.count.unwrap_or(1);
+            let left = (count > 1).then(|| {
+                let mut left = item.clone();
+                left.def.count = Some(count - 1);
+                left
+            });
+            platform
+                .world_entities()
+                .set_equipment(player.uuid, hand.to_owned(), left);
+        }
+    }
+
+    /// A player picking `block` (the middle click). One of the project's blocks picks the item that places it, not
+    /// its carrier: one already in `inventory`, else in creative a new one, else nothing. None for any other block.
+    pub fn picking(
+        &self,
+        player: &PlayerRef,
+        block: &BlockRef,
+        inventory: &[Option<ItemData>],
+    ) -> Option<PickAnswer> {
+        let name = {
+            let blocks = self.shared.blocks.borrow();
+            if !blocks.usable() {
+                return None;
+            }
+            blocks.at(&block.world, block.x, block.y, block.z)?
+        };
+        let items = self.shared.items.borrow();
+        let slot = inventory
+            .iter()
+            .position(|s| s.as_ref().and_then(|s| items.block_of(s)).as_deref() == Some(&name));
+        if let Some(slot) = slot {
+            return Some(PickAnswer {
+                slot: Some(slot as i32),
+                item: None,
+            });
+        }
+        if !self.creative(player.uuid) {
+            return Some(PickAnswer {
+                slot: None,
+                item: None,
+            });
+        }
+        let placing = items.placing(&name);
+        drop(items);
+        let item = placing.and_then(|id| self.game().items().create(&id, None).ok());
+        Some(PickAnswer { slot: None, item })
+    }
+
+    /// Something beside `block` changed: one of the project's blocks that falls looks at what's under it next tick.
+    pub fn block_updated(&self, block: &BlockRef) {
+        let mut blocks = self.shared.blocks.borrow_mut();
+        if !blocks.usable() {
+            return;
+        }
+        if let Some(name) = blocks.at(&block.world, block.x, block.y, block.z)
+            && blocks.falls(&name)
+        {
+            blocks
+                .pending_falls
+                .insert((block.world.clone(), (block.x, block.y, block.z)));
+        }
+    }
+
+    /// A falling block of the project's lands as `block`: the block it was, placed there.
+    pub fn falling_landed(&self, entity: Uuid, block: &BlockRef) {
+        let landed = {
+            let mut blocks = self.shared.blocks.borrow_mut();
+            let Some((name, _, _)) = blocks.falling.remove(&entity) else {
+                return;
+            };
+            let holds = blocks.has(&name) && blocks.states_of(&name).contains(&block.state);
+            let facing = blocks.plan.as_ref().and_then(|p| p.facing_of(&block.state));
+            holds.then_some((name, facing))
+        };
+        if let Some((name, facing)) = landed {
+            self.register(&name, &block.world, (block.x, block.y, block.z), facing);
+        }
+    }
+
+    /// The blocks waiting to fall go down if nothing's under them, and a falling block that's gone without landing
+    /// drops its loot table where it was last seen, as sand drops itself.
+    fn fall(&self) {
+        let due: Vec<(String, At)> =
+            std::mem::take(&mut self.shared.blocks.borrow_mut().pending_falls)
+                .into_iter()
+                .collect();
+        for (world, at) in due {
+            let name = {
+                let blocks = self.shared.blocks.borrow();
+                blocks
+                    .at(&world, at.0, at.1, at.2)
+                    .filter(|n| blocks.falls(n))
+            };
+            let Some(name) = name else { continue };
+            let Some(entity) = self
+                .platform()
+                .blocks()
+                .fall(world.clone(), at.0, at.1, at.2)
+            else {
+                continue;
+            };
+            self.forget(&world, at.0, at.1, at.2);
+            self.shared.blocks.borrow_mut().falling.insert(
+                entity,
+                (
+                    name,
+                    world,
+                    Vec3(
+                        f64::from(at.0) + 0.5,
+                        f64::from(at.1),
+                        f64::from(at.2) + 0.5,
+                    ),
+                ),
+            );
+        }
+        let falling: Vec<Uuid> = self
+            .shared
+            .blocks
+            .borrow()
+            .falling
+            .keys()
+            .copied()
+            .collect();
+        for entity in falling {
+            if let Some(info) = self.platform().world_entities().info(entity) {
+                if let Some(was) = self.shared.blocks.borrow_mut().falling.get_mut(&entity) {
+                    was.1 = info.location.world.clone();
+                    was.2 = Vec3(info.location.x, info.location.y, info.location.z);
+                }
+                continue;
+            }
+            let Some((name, world, at)) = self.shared.blocks.borrow_mut().falling.remove(&entity)
+            else {
+                continue;
+            };
+            let drops = self
+                .shared
+                .blocks
+                .borrow()
+                .defs
+                .get(&name)
+                .and_then(|d| d.file.drops.clone());
+            let Some(drops) = drops else { continue };
+            // Whatever the tool rule says: nobody mined it, as the game drops sand that can't land.
+            let block = (
+                at.0.floor() as i32,
+                at.1.floor() as i32,
+                at.2.floor() as i32,
+            );
+            let items = self.roll(
+                Some(&drops),
+                &format!("Block {name}"),
+                &world,
+                block,
+                None,
+                None,
+            );
+            self.spawn_items(&world, at, items);
+        }
+    }
+
+    /// A tick of everyone mining: counted, and the breaks it finished done once the blocks are let go (the
+    /// server's break raises its own event, which comes back here).
+    fn mine(&self) {
+        let platform = self.platform();
+        let finished = {
+            let blocks = self.shared.blocks.borrow();
+            self.shared.mining.borrow_mut().mine(platform, &*blocks)
+        };
+        for done in finished {
+            let broke = platform.blocks().break_as(
+                done.player,
+                done.world.clone(),
+                done.at.0,
+                done.at.1,
+                done.at.2,
+            );
+            let blocks = self.shared.blocks.borrow();
+            self.shared
+                .mining
+                .borrow_mut()
+                .after_break(platform, &*blocks, done, broke);
+        }
+        let blocks = self.shared.blocks.borrow();
+        self.shared
+            .mining
+            .borrow_mut()
+            .watch_looks(platform, &*blocks);
+    }
+
+    /// Tells the server which of the world's own breaks and changes this service wants to hear of.
+    fn watch_world(&self) {
+        let (drops, falls) = {
+            let blocks = self.shared.blocks.borrow();
+            let drops: Vec<String> = blocks
+                .game_rules
+                .iter()
+                .filter(|(_, (_, f))| f.drops.is_some())
+                .map(|(id, _)| id.clone())
+                .collect();
+            let falls: Vec<String> = if blocks.usable() {
+                blocks
+                    .defs
+                    .iter()
+                    .filter(|(_, d)| d.file.falls_or_default())
+                    .flat_map(|(id, _)| blocks.states_of(id))
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            (drops, falls)
+        };
+        if self.shared.blocks.borrow().watched == (drops.clone(), falls.clone()) {
+            return;
+        }
+        self.shared.blocks.borrow_mut().watched = (drops.clone(), falls.clone());
+        self.platform().blocks().watch(drops, falls);
+    }
+
     /// Tells `scripts` which project block handles still name a block.
     pub fn install_liveness(shared: &Rc<Shared>, scripts: &crate::Scripts) {
         let weak: Weak<Shared> = Rc::downgrade(shared);
@@ -1216,6 +2062,22 @@ fn define(shared: &Shared, project: &Define) {
     blocks.held = held;
     blocks.plan = plan;
     blocks.problems = problems;
+    let rules: BTreeMap<String, GameBlockFile> = project
+        .project
+        .running::<GameBlockFile>()
+        .into_iter()
+        .map(|(id, f)| (id, f.clone()))
+        .collect();
+    // Tags are the game's to resolve: asked only when there are rules.
+    let resolved = match rules.is_empty() {
+        true => BTreeMap::new(),
+        false => netherforge_format::kind::game_block::resolve(&rules, Some(platform.game())),
+    };
+    blocks.game_rules = resolved
+        .into_iter()
+        .filter_map(|(block, id)| Some((block, (id.clone(), rules.get(&id)?.clone()))))
+        .collect();
+    shared.mining.borrow_mut().home = home;
 }
 
 /// The blocks service.
@@ -1247,13 +2109,14 @@ impl Service for BlocksService {
     }
 
     fn reloads(&self) -> &'static [&'static str] {
-        &[KIND]
+        &[KIND, "game_block"]
     }
 
     /// Before any script runs: a module's body may place blocks.
     fn start(&self, room: &Room, project: &Define) {
         *self.scripts.borrow_mut() = Some(room.scripts().clone());
         define(&self.shared, project);
+        self.context(room).watch_world();
     }
 
     /// Their scripts start once modules run; then every loaded chunk is read.
@@ -1263,27 +2126,62 @@ impl Service for BlocksService {
         for id in ids {
             context.start_script(&id);
         }
+        let (planned, ruled) = {
+            let blocks = self.shared.blocks.borrow();
+            (blocks.plan.is_some(), !blocks.game_rules.is_empty())
+        };
+        if planned || ruled {
+            for player in self.shared.platform.players().online() {
+                self.shared
+                    .mining
+                    .borrow_mut()
+                    .clear_slowed(&*self.shared.platform, player.uuid);
+            }
+        }
         if self.shared.blocks.borrow().usable() {
             context.reconcile_loaded();
         }
     }
 
-    fn tick(&self, room: &Room, _platform: &dyn Platform) {
-        if !self.shared.blocks.borrow().usable() {
+    fn tick(&self, room: &Room, platform: &dyn Platform) {
+        let (usable, ruled) = {
+            let blocks = self.shared.blocks.borrow();
+            (blocks.usable(), !blocks.game_rules.is_empty())
+        };
+        if !usable && !ruled {
+            // The project's blocks went (a reload): nobody mines one, or needs slowing.
+            self.shared.mining.borrow_mut().stop_all(platform);
             return;
         }
         let context = self.context(room);
+        context.mine();
+        if !usable {
+            return;
+        }
+        context.fall();
         context.tick_blocks();
         context.sweep();
     }
 
-    /// Each changed block's script restarts on its new file; then every chunk is read again under the new plan.
-    fn reload(&self, room: &Room, _kind: &str, ids: &BTreeSet<String>, project: &Define) {
+    /// Each changed block's script restarts on its new file; then every chunk is read again under the new plan. A
+    /// game block file's rules hold from the next block mined or broken.
+    fn reload(&self, room: &Room, kind: &str, ids: &BTreeSet<String>, project: &Define) {
         let context = self.context(room);
+        if kind == "game_block" {
+            define(&self.shared, project);
+            // Whoever mines one of them mines it by the rules it has now.
+            self.shared
+                .mining
+                .borrow_mut()
+                .stop_game_targets(&*self.shared.platform);
+            context.watch_world();
+            return;
+        }
         for id in ids {
             context.stop_script(id);
         }
         let before: HashSet<String> = self.shared.blocks.borrow().defs.keys().cloned().collect();
+        let states_before = self.shared.blocks.borrow().by_state.clone();
         define(&self.shared, project);
         let now = self.scripts_now();
         for id in ids {
@@ -1324,6 +2222,29 @@ impl Service for BlocksService {
                 context.reconcile(&world, x, z, false);
             }
         }
+        context.watch_world();
+        // Stacks whose canBreak or canPlaceOn names a block whose state moved break the wrong blocks until rewritten.
+        if self.shared.blocks.borrow().by_state != states_before {
+            context.game().items().refresh_online();
+        }
+    }
+
+    /// A modifier the server saved with the player from a session that ended mid-mine.
+    fn player_joined(&self, player: &PlayerRef) {
+        let ours = {
+            let blocks = self.shared.blocks.borrow();
+            blocks.plan.is_some() || !blocks.game_rules.is_empty()
+        };
+        if ours {
+            self.shared
+                .mining
+                .borrow_mut()
+                .clear_slowed(&*self.shared.platform, player.uuid);
+        }
+    }
+
+    fn player_quit(&self, player: &PlayerRef) {
+        self.shared.mining.borrow_mut().forget(player.uuid);
     }
 
     fn chunk_loaded(&self, world: &str, chunk_x: i32, chunk_z: i32, generated: bool) {
@@ -1347,11 +2268,16 @@ impl Service for BlocksService {
         self.shared.blocks.borrow().problems()
     }
 
-    fn stop(&self, room: &Room, _platform: &dyn Platform) {
+    fn stop(&self, room: &Room, platform: &dyn Platform) {
         let context = self.context(room);
         let ids = self.shared.blocks.borrow().ids();
         for id in ids {
             context.stop_script(&id);
+        }
+        self.shared.mining.borrow_mut().stop_all(platform);
+        let watched = std::mem::take(&mut self.shared.blocks.borrow_mut().watched);
+        if watched != (Vec::new(), Vec::new()) {
+            platform.blocks().watch(Vec::new(), Vec::new());
         }
         *self.shared.blocks.borrow_mut() = CustomBlocks::default();
     }

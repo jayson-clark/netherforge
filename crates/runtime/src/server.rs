@@ -102,6 +102,94 @@ fn items(s: &Running) -> crate::project_items::ItemContext {
     }
 }
 
+/// The project blocks' side of the running session.
+fn blocks(s: &Running) -> crate::custom_blocks::BlocksContext {
+    crate::custom_blocks::BlocksContext {
+        shared: s.session().shared().clone(),
+        scripts: s.room().scripts().clone(),
+    }
+}
+
+/// A click on `block`, once the item's and the player's handlers let it through: one on one of the project's
+/// blocks is heard by its block (`click`), and a right click with an item that places a block puts it on the face
+/// that was clicked (`place` on that block first). True cancels the click.
+fn block_click(
+    s: &Running,
+    player: &PlayerRef,
+    button: ClickButton,
+    block: Option<&BlockRef>,
+    face: Option<&str>,
+    item: Option<&ItemData>,
+    hand: &str,
+) -> bool {
+    let (Some(block), Some(face)) = (block, face) else {
+        return false;
+    };
+    let context = blocks(s);
+    let shared = s.session().shared().clone();
+    if !shared.blocks.borrow().is_usable() {
+        return false;
+    }
+    let here = shared
+        .blocks
+        .borrow()
+        .at(&block.world, block.x, block.y, block.z);
+    if let Some(name) = here.filter(|n| shared.blocks.borrow().has(n)) {
+        let stages = [(
+            "click",
+            Some(Handle::ProjectBlock(handles::ProjectBlock { id: name })),
+        )];
+        let clicked = raise(s, &stages, codecs::ProjectBlockClickEvent, || {
+            shapes::ProjectBlockClickEvent {
+                player: s.player(player),
+                block: handles::CustomBlock {
+                    world: block.world.clone(),
+                    position: crate::events::pack(block.x, block.y, block.z),
+                },
+                click: button.lua_name().to_owned(),
+                face: face.to_owned(),
+                item: item.map(|i| s.item(i)),
+                hand: hand.to_owned(),
+            }
+        });
+        if cancelled(clicked) {
+            return true;
+        }
+    }
+    if button != ClickButton::Right {
+        return false;
+    }
+    let Some(item) = item else { return false };
+    let Some(name) = shared.items.borrow().block_of(item) else {
+        return false;
+    };
+    let click = crate::custom_blocks::Click {
+        player,
+        against: block,
+        face,
+        item,
+        hand,
+    };
+    context.place_from_item(&click, &name, |placed, facing| {
+        let stages = [(
+            "place",
+            Some(Handle::ProjectBlock(handles::ProjectBlock {
+                id: name.clone(),
+            })),
+        )];
+        cancelled(raise(s, &stages, codecs::ProjectBlockPlaceEvent, || {
+            shapes::ProjectBlockPlaceEvent {
+                player: Some(s.player(player)),
+                block: placed,
+                item: Some(s.item(item)),
+                facing: facing.map(|f| crate::custom_blocks::facing_name(f).to_owned()),
+            }
+        }))
+    });
+    // A block-placing item places or is refused: it's never used as the item it is.
+    true
+}
+
 /// `stages` with the item's own stage first (`event` on the project item `item` is a stack of, if any).
 fn with_item<'s>(item: Option<Handle>, event: &'s str, stages: &[Stage<'s>]) -> Vec<Stage<'s>> {
     item.map(|h| (event, Some(h)))
@@ -182,11 +270,19 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
                 player: s.player(&player),
                 click: button.lua_name().to_owned(),
                 block: block.as_ref().map(|b| s.block(b)),
-                face,
+                face: face.clone(),
                 item: item.as_ref().map(|i| s.item(i)),
-                hand,
+                hand: hand.clone(),
             }
-        }))
+        })) || block_click(
+            &s,
+            &player,
+            button,
+            block.as_ref(),
+            face.as_deref(),
+            item.as_ref(),
+            &hand,
+        )
     }
 
     fn player_use_item(&self, player: PlayerRef, item: ItemData, hand: String) -> bool {
@@ -232,6 +328,49 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         let Some(s) = self.open() else {
             return Some(unchanged);
         };
+        let custom = blocks(&s);
+        // One of the project's blocks is broken by the runtime (its drops, its sounds, its scripts' say): the
+        // server's own break is cancelled.
+        if let Some((name, rolled, creative)) = custom.breaking(&player, &block) {
+            let stages = with_item(
+                items(&s).held_stage(player.uuid, "main_hand"),
+                "break_block",
+                &[
+                    (
+                        "break",
+                        Some(Handle::ProjectBlock(handles::ProjectBlock {
+                            id: name.clone(),
+                        })),
+                    ),
+                    ("block_break", Some(Handle::World(s.world(&block.world)))),
+                    ("block_break", None),
+                ],
+            );
+            let drops = if s.listening(&stages) {
+                let payload = shapes::BlockBreakEvent {
+                    player: s.player(&player),
+                    block: s.block(&block),
+                    state: block.state.clone(),
+                    drops: rolled.iter().map(|i| s.item(i)).collect(),
+                    experience: i64::from(experience),
+                };
+                let out = s.emit(&stages, codecs::BlockBreakEvent, payload)?;
+                if out.cancelled {
+                    return None;
+                }
+                match creative {
+                    true => Vec::new(),
+                    false => drops_back(&s, &out, "drops", &rolled).unwrap_or(rolled),
+                }
+            } else {
+                rolled
+            };
+            custom.broken(&player, &block, &name, drops);
+            s.session().block_changed(&block);
+            return None;
+        }
+        // One of the game's with rules of the project's drops what its rule says instead of the game's drops.
+        let ruled = custom.game_drops(&player, &block);
         let stages = with_item(
             items(&s).held_stage(player.uuid, "main_hand"),
             "break_block",
@@ -240,9 +379,12 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
                 ("block_break", None),
             ],
         );
-        let mut answer = unchanged;
+        let mut answer = DropsAnswer {
+            drops: ruled.clone(),
+            experience,
+        };
         if s.listening(&stages) {
-            let before = drops();
+            let before = ruled.clone().unwrap_or_else(drops);
             let payload = shapes::BlockBreakEvent {
                 player: s.player(&player),
                 block: s.block(&block),
@@ -255,7 +397,10 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
                 return None;
             }
             answer = DropsAnswer {
-                drops: drops_back(&s, &out, "drops", &before),
+                drops: match &ruled {
+                    Some(_) => Some(drops_back(&s, &out, "drops", &before).unwrap_or(before)),
+                    None => drops_back(&s, &out, "drops", &before),
+                },
                 experience: experience_back(&s, &out, "experience", experience),
             };
         }
@@ -263,23 +408,43 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         Some(answer)
     }
 
-    fn block_stop_break(&self, _player: PlayerRef, _block: BlockRef) {}
-
-    fn world_broke(&self, _block: BlockRef) -> Option<Vec<ItemData>> {
-        None
+    /// A player let go of the block they were mining, or looked away.
+    fn block_stop_break(&self, player: PlayerRef, block: BlockRef) {
+        let Some(s) = self.open() else { return };
+        let shared = s.session().shared().clone();
+        shared.mining.borrow_mut().stopped_breaking(
+            &*shared.platform,
+            &player,
+            &block.world,
+            (block.x, block.y, block.z),
+        );
     }
 
-    fn block_updated(&self, _block: BlockRef) {}
+    fn world_broke(&self, block: BlockRef) -> Option<Vec<ItemData>> {
+        let s = self.open()?;
+        blocks(&s).world_broke(&block)
+    }
 
-    fn falling_landed(&self, _entity: Uuid, _block: BlockRef) {}
+    fn block_updated(&self, block: BlockRef) {
+        if let Some(s) = self.open() {
+            blocks(&s).block_updated(&block);
+        }
+    }
+
+    fn falling_landed(&self, entity: Uuid, block: BlockRef) {
+        if let Some(s) = self.open() {
+            blocks(&s).falling_landed(entity, &block);
+        }
+    }
 
     fn pick_block(
         &self,
-        _player: PlayerRef,
-        _block: BlockRef,
-        _inventory: Vec<Option<ItemData>>,
+        player: PlayerRef,
+        block: BlockRef,
+        inventory: Vec<Option<ItemData>>,
     ) -> Option<PickAnswer> {
-        None
+        let s = self.open()?;
+        blocks(&s).picking(&player, &block, &inventory)
     }
 
     /// `player_death` on the player and `nf`, then `entity_death` on `nf` with what that left.

@@ -222,8 +222,12 @@ impl BlockApi for GameContext {
             None => None,
         };
         let (x, y, z) = unpack(this.position);
-        let broken =
-            self.shared
+        // One of the project's blocks, or one of the game's with drops of the project's, the runtime breaks.
+        let broken = self
+            .blocks()
+            .break_naturally(&this.world, x, y, z, tool.clone())
+            || self
+                .shared
                 .platform
                 .blocks()
                 .break_naturally(this.world.clone(), x, y, z, tool);
