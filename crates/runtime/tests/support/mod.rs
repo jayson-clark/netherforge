@@ -1477,6 +1477,25 @@ impl netherforge_platform::FakeBotOps for FakeBots {
     fn is_bot(&self, id: Uuid) -> bool {
         self.by_id(id).is_some()
     }
+    /// What a bot sees: where it stands, healthy, nothing open.
+    fn state(&self, name: String) -> netherforge_format::bridge::BotState {
+        let bot = self.by_name(&name).expect("a bot online");
+        serde_json::from_value(serde_json::json!({
+            "name": bot.name, "uuid": netherforge_runtime::events::uuid_text(&bot.id), "world": bot.at.world,
+            "x": bot.at.x, "y": bot.at.y, "z": bot.at.z, "yaw": 0.0, "pitch": 0.0, "onGround": true, "health": 20.0,
+            "food": 20, "gameMode": "survival", "dead": false, "sneaking": false, "sprinting": false,
+            "selectedSlot": 0, "inventory": [], "events": 0
+        }))
+        .expect("a state")
+    }
+    /// Nothing arrived.
+    fn events(&self, _: String, since: i32) -> netherforge_format::bridge::BotEvents {
+        netherforge_format::bridge::BotEvents {
+            events: Vec::new(),
+            next: since,
+            dropped: 0,
+        }
+    }
     fn act(&self, name: String, action: BotAction, aim: Option<BotAim>, done: Done<BotActResult>) {
         self.acted
             .borrow_mut()

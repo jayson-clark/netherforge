@@ -968,3 +968,65 @@ fn a_dev_server_whose_editor_is_gone_stops_itself() {
     assert!(platform.take().iter().any(|l| l.contains("has been gone")));
     bridge.stop();
 }
+
+/// Every request in format's recorded session (`testdata/bridge/session.ndjson`, what the editor's client is tested
+/// with too), sent by the editor to this server: each is answered once, with a result that reads as its method's
+/// type, or the error the recording has for it (its code), or a failure the server explains (`REQUEST_FAILED`: the
+/// fake's world isn't the recording's). Never an unknown method or unreadable params where the recording had none.
+#[test]
+fn every_request_the_recorded_session_sends_is_answered_as_its_method_says() {
+    let recorded = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../packages/format/testdata/bridge/session.ndjson"),
+    )
+    .unwrap();
+    let lines: Vec<Value> = recorded
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let platform = Rc::new(Fake::default());
+    let files = project();
+    let (bridge, events) = server(&platform, &files, &listener, |_| {});
+    let pump = || {
+        platform.bots.tick();
+        events.tick();
+    };
+    let editor = Editor::accept(&listener, None);
+    editor.hello(&pump);
+    let mut sent = 0;
+    for (at, line) in lines.iter().enumerate() {
+        let (Some(method), Some(id)) = (line["method"].as_str(), line.get("id")) else {
+            continue;
+        };
+        // The server's own requests, and the backend's (answered to it, not the UI).
+        if ["hello", "authenticate"].contains(&method)
+            || id.as_str().is_some_and(|i| i.starts_with("backend:"))
+        {
+            continue;
+        }
+        let recorded_error = lines[at + 1..]
+            .iter()
+            .find(|l| l.get("id") == Some(id) && l.get("method").is_none())
+            .and_then(|l| l["error"]["code"].as_i64());
+        let outcome = editor.request(
+            &pump,
+            method,
+            line.get("params").cloned().unwrap_or(Value::Null),
+        );
+        match outcome {
+            Ok(result) => assert!(
+                matches!(bridge::check_result(method, &result), Some(Ok(()))),
+                "{method}: {result}"
+            ),
+            Err((code, message)) => assert!(
+                Some(code) == recorded_error || code == bridge::REQUEST_FAILED,
+                "{method}: {code} {message}"
+            ),
+        }
+        sent += 1;
+    }
+    assert!(sent > 25, "{sent} requests");
+    bridge.stop();
+}
