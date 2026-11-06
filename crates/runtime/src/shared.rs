@@ -86,6 +86,8 @@ pub struct Shared {
     pub web: RefCell<crate::web::Web>,
     /// `nf.wasm`: the modules compiled, the instances and programs scripts hold, the owner's limits.
     pub wasm: RefCell<crate::wasm::Wasm>,
+    /// The plugins packages declared, and the placeholders scripts offer.
+    pub interop: RefCell<crate::interop::Interop>,
     /// The owner's values for each package's settings (`nf.config`).
     pub settings: RefCell<crate::settings::Settings>,
     /// `nf.network`: the plugin's link, the channels and maps scripts named, what waits for the hub.
@@ -147,6 +149,7 @@ impl Shared {
             wasm: RefCell::default(),
             network: RefCell::default(),
             settings: RefCell::default(),
+            interop: RefCell::default(),
             physics: RefCell::default(),
             stats: RefCell::default(),
             modules: RefCell::default(),

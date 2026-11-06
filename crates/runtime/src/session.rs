@@ -1017,6 +1017,11 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
             shared: shared.clone(),
             api: Default::default(),
         }),
+        // Before modules, so a module's body can register placeholders; stops after them, taking them off.
+        Box::new(crate::interop::InteropService {
+            shared: shared.clone(),
+            context: Default::default(),
+        }),
         // Stops after every script, failing what still waits on the hub.
         Box::new(crate::network::service::NetworkService {
             shared: shared.clone(),

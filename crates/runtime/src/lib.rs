@@ -36,6 +36,7 @@ pub mod files;
 pub mod http;
 pub mod huds;
 pub mod images;
+pub mod interop;
 pub mod inventory;
 pub mod items;
 pub mod living;
@@ -272,6 +273,8 @@ struct Api {
     wasm: Option<wasm::api::WasmApi>,
     /// `nf.network`, `NetworkChannel`, `NetworkMap`, `NetworkHold`.
     network: Option<network::service::NetworkContext>,
+    /// `nf.economy`, `nf.placeholders`.
+    interop: Option<interop::InteropContext>,
 }
 
 impl Runtime for Api {
@@ -725,6 +728,18 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_economy(&self) -> &dyn netherforge_api::api::NfEconomyApi {
+        match &self.interop {
+            Some(i) => i,
+            None => &Unported,
+        }
+    }
+    fn nf_placeholders(&self) -> &dyn netherforge_api::api::NfPlaceholdersApi {
+        match &self.interop {
+            Some(i) => i,
+            None => &Unported,
+        }
+    }
     fn nf_network(&self) -> &dyn netherforge_api::api::NfNetworkApi {
         match &self.network {
             Some(n) => n,
@@ -799,6 +814,10 @@ impl Room {
                 shared: game.shared.clone(),
                 scripts: scripts.clone(),
             });
+        let interop = worlds.as_ref().map(|game| interop::InteropContext {
+            shared: game.shared.clone(),
+            scripts: scripts.clone(),
+        });
         let images = shared.as_ref().map(|shared| images::ImagesApi {
             images: shared.images.clone(),
             http: http.clone(),
@@ -840,6 +859,7 @@ impl Room {
             web,
             wasm,
             network,
+            interop,
         };
         netherforge_api::install(&host, Rc::new(api))?;
         Ok(Room { host, scripts })
