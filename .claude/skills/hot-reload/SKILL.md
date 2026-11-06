@@ -265,6 +265,15 @@ self-contained),
 the session and builds a new one) and `ProjectSession.reload` (the
 semantics above).
 
+**On the Rust runtime** the same half is `crates/runtime/src/bridge/`
+(`client.rs`, `frames.rs`, `mod.rs` routing by thread, `requests.rs` the
+handlers and the bots extension) and `reload.rs` with `Session::reload`
+(the answer, `restart`); the rust-runtime skill's "Hot reload" and "The dev
+bridge" say how it differs inside. A new request is a case in
+`requests.rs` too (and, while both serve the bridge, in `BridgeService`),
+held by `crates/runtime/tests/bridge.rs`, which also replays every request
+of the recorded session against the Rust server.
+
 **Adding a request**: add it to the `protocol!` table in
 `crates/format/src/bridge/mod.rs` with its params and result types (and run
 `pnpm generate` for the editor's types), and, while the Kotlin plugin serves
@@ -363,6 +372,9 @@ What the plugin expects of the editor:
 - `format`: `BridgeTest` round-trips `packages/format/testdata/bridge/session.ndjson`
   on JVM and JS, reads every recorded message as its declared type, and
   checks the codec's answers to what isn't a message.
+- `crates/runtime`: `tests/bridge_client.rs`, `tests/bridge.rs` and
+  `tests/reload.rs` are the Kotlin tests below on the Rust runtime, and
+  `bridge.rs` replays the recorded session's requests.
 - `apps/plugin/runtime`: `BridgeTest` plays the editor over a real socket against
   the fake platform (the hello and a refused one, every request, unknown
   methods and bad params, batches, `ping` with the main thread held, a burst

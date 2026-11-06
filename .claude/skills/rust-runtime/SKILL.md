@@ -392,7 +392,8 @@ dead: body failed: … (modules/dead/init.lua:2). It's disabled until it's reloa
   `stop` take `&mut`.
 
 Not yet: the game's facts from the Platform (`external::GameData` is a placeholder, so format reads
-without them), reloading a package's files, the bridge to the editor, the debugger and the profiler. The policy is the session's:
+without them), the debugger and the profiler. Reloading (packages' files included) and the bridge: see "Hot reload" and
+"The dev bridge". The policy is the session's:
 see "Config, policy and the hub".
 
 ## The server's events (`crates/runtime/src/server.rs`)
@@ -998,7 +999,7 @@ requests are in flight; past that, `503` unread.
   the test follows a login up to its token request failing.
 - `verify_signature` is `encoding::hmac` and a constant-time comparison; `WebResponse:json` is `nf.json`'s codec.
 
-Not yet: `nf.test.request`/`oauth_token`, the bridge's view of routes.
+Not yet: the routes' listing, which is `/nf`'s (Kotlin's bridge has no routes request). (`nf.test.request`/`oauth_token`: done.)
 
 **The owner's pack store** (`pack_storage.rs`, Kotlin's `PackStorage`): S3-compatible, SigV4 by hand (held to an
 independent implementation's signature), ureq without the guard (the owner's endpoint), uploads one at a time on a
@@ -1166,7 +1167,8 @@ Kotlin's `OwnerSettings`; format's `SettingValues` is `settings::read_values`/`w
 `reload_settings` (what the bridge and `/nf settings` will call), which write the file (`Config::settings_dir`; none keeps values in
 memory), raise `setting_changed` to the package's own scopes that listen (`Scripts::raise_within`, `scopes_listening`), and restart
 the package's other scopes that read a changed setting through `Session::reload_kinds` (a reload by kind and id, split out of
-`reload`). Not yet: the bridge's `set_setting` and `settings_changed`, `/nf settings` and its dialog.
+`reload`). The bridge's `settings`/`set_setting`/`settings_changed` are done (`Settings::state`). Not yet: `/nf settings` and
+its dialog.
 
 ## Plugin interop (`crates/runtime/src/interop.rs`)
 
@@ -1204,8 +1206,87 @@ the runtime reaches it only through the Platform's `BotOps`, which the spec alre
   which calls these and forwards the rest to `BotOps` unchanged (the bridge's bots aren't held to `bots:`).
 
 Not yet: a bot leaving during a reload or as the session stops goes out while the session is borrowed mutably, so a quit the
-Platform raises synchronously then isn't heard (Paper handles a disconnect at the connection's next tick, after it); the
-bridge's extension itself; a Rust testkit `FakeBots` (each test file's fake has its own few lines of bots).
+Platform raises synchronously then isn't heard (Paper handles a disconnect at the connection's next tick, after it); a Rust
+testkit `FakeBots` (`tests/support`'s is the tests'). The bridge's extension is done (see "The dev bridge").
+
+## Hot reload (`crates/runtime/src/reload.rs`, `session.rs`)
+
+Kotlin's `ReloadBatch`, `NetherForgeRuntime.reload`/`reloadAll` and `StartupDatapackCheck`; the hot-reload skill has the
+per-resource semantics, which the Rust services already had. **`Session::reload(paths)` answers a `ReloadResult`.**
+
+- **Which resource a path is** is `reload::resource_of` (format's `classify`, a package's resource named `ns:id`, so a
+  package's own files reload as its resources; the WASM phase's "packages don't reload" is gone). Any package's
+  `netherforge.json`, the lock, or any save while the project doesn't run restarts the session whole (`reload_all`:
+  the whole package, no kind or id, `reattached` the live instances, the session's problems). `fonts/default.json` and
+  `client/vanilla.json` reload nothing and reach the services' `reloaded` as kinds `default_font` and `vanilla`.
+- **What else reloads** is asked of every service's `restarts` before anything unloads, kind by kind, a kind that gained
+  ids asked again (same kind allowed now): a module's reload adds every module and resource whose scope required it
+  (`ModulesService::restarts`, from `Modules::dependents` and the scope's `Owner`), the WASM module's its users. Kinds
+  reload in format's order, ids in the order asked (the answer's order).
+- **The answer** (`reload::outcomes`): each resource `ok` when no file of it has an error and no script failed while it
+  reloaded; its problems are its files' and those failures. Failures are collected by `Session::report` while a reload
+  runs (`Reported::collecting`, Kotlin's `Failures`) and given to the resource whose scope failed (`reload::owned_by`),
+  else the one whose file the error is in. **`reattached` is told on the side** (`Shared::reattached`, read from
+  `Shared::reloading` after): live instances on the new definition (centities, inert ones revived counted), windows
+  kept (menus), players whose stacks were rewritten (items), live effects moved (particle effects), players sent the
+  build (packs, with `PackBuild` as `pack`). A resource that exists with errors logs "kind:id has errors; it keeps
+  running the last good version".
+- **`restart`**: `StartupCheck` builds format's start-up datapack from the project as it reads and compares it with
+  `DatapackOps::started`, after a reload that touched a start-up kind (`STARTUP_KINDS`) or a whole one with any; stale is
+  `runtime.restart` in `Session::problems` and said once. A server that doesn't say its data pack format is never stale
+  (test fakes). Gaps: the game's datapack (`external::GameDatapack` is still a placeholder: none is used) and the refusal
+  on record (`DatapackRefusal`, a placeholder: the whole pack is compared), and the main world's generator going stale.
+- **A scope's `unload` handlers** now run as it closes (`Scripts::close` raises `nf`'s `unload` within the scope, if it's
+  live): the Rust runtime never raised it before, so reloads and stops ran no `nf.on("unload")`.
+
+## The dev bridge (`crates/runtime/src/bridge/`)
+
+Kotlin's `BridgeClient`, `FrameReader`, `BridgeService`, `BotsBridge` and `RuntimeLog`'s bridge half. The protocol's
+types are format's (`bridge/`), so the editor's generated TypeScript is what the Rust server speaks.
+
+- **The connection** (`client.rs`, `frames.rs`) is std threads and `TcpStream`, no async: a connection thread (connect,
+  the hello and both proofs with format's `auth`, then frames to `Events::frame`) and a writer thread per connection
+  draining one `Mutex<VecDeque>` queue (bounded 10 000, oldest dropped) with a `Condvar`. A stream item joins the batch
+  ending the queue without waking the writer, and the writer lingers 10 ms on a batch that ends the queue, so batching
+  doesn't depend on scheduling (`BridgeClientTest`'s slow burst holds it). Backoff sleeps are `park_timeout`, so `stop`
+  unparks; `stop` waits at most 2 s. The clock is injectable (`Settings::clock`) for the abandon test.
+- **Routing** (`mod.rs`'s `Inbound`, on the bridge's thread): format's `request(name)` table says the thread; params are
+  checked there (`reencode_params`: `-32602` "Invalid params for x: ..." with serde's words, not kotlinx's); `ping` and
+  `profiler_subscribe` are answered at once; every other request goes over an mpsc channel to the main thread with its
+  `Reply` (`Send`, answered once; a batch's replies fill slots and the last sends the array). The session isn't `Send`,
+  so **nothing touches it off the main thread**: `Bridge::run` (called first in `ServerEvents::tick`) answers what came,
+  and logs the connection's news (problems, a refusal, giving up and `shutdown_server`), which come over the same channel
+  since the Platform's log isn't `Send` either.
+- **Handlers** (`requests.rs`): one match over method names, each failure Kotlin's sentence (`Failure::request`); a
+  handler that panics is `-32603` and logged. `bots/join` and `bots/act` hand their `Reply` to `BotOps`'s callback and
+  answer when the platform calls it. A bot named by a request is checked against `BotOps::list` first ("no bot named
+  ..."), since the Rust `BotOps` can't throw. `save_structure` saves through `StructureOps::save` into `.nf/captures`
+  beside the data folder's `.nf/structures` (a temp folder without one), reads and deletes it. `settings` is
+  `Settings::state` (declaration order, each file relative to the server's folder); `set_setting` is
+  `Session::set_setting`, then `settings_changed`. `reload` borrows the session mutably (refused "the project is busy"
+  if something holds it), then sends `problems`, and `settings_changed` after a whole-package reload.
+- **The console**: the runtime's own log reaches the editor because the session runs on `Bridge::platform()`, a
+  `LogOver` (generated by packages/platform's Rust target: the adapter's platform with only `log` replaced) whose log is
+  the server's plus a `console` `Log` entry. Scripts' lines and failures go through `Shared::console` (`Console`, set by
+  `ServerEvents::attach_bridge`): the server's console gets the line `report` always wrote (on the inner log, so it's not
+  sent twice), the editor a `Log` with its `SourceRef` or a `ScriptError` with source and traceback.
+- **Unasked**: on connect `problems`, `settings_changed`, `status`; `status` and `problems` again once a second
+  (`STATUS_EVERY`) if they changed (Kotlin sends problems when one appears; the Rust bridge looks once a second).
+  Instances in `status` count inert records, as Kotlin's `count()` did.
+- **The debugger's hook** (`Debugger`, `Bridge::set_debugger`, `Bridge::dap`): `dap` notifications go to it on the bridge's
+  thread, its `refusal` refuses main-thread requests while paused, `detach` runs when the connection ends. Nothing
+  implements it yet (the next phase).
+- **Composition**: `Bridge::new(platform, BridgeConfig::of(&runtime_config, server_folder)?)` (`config::read` already took
+  `netherforge.bridge.port` and `NETHERFORGE_BRIDGE_TOKEN`), start the session on `bridge.platform()`,
+  `ServerEvents::new`, `attach_bridge`, `connect`; `Bridge::stop` as the plugin disables. The adapter does this once
+  the Java side exists.
+- **Tests**: `tests/bridge_client.rs` (Kotlin's `BridgeClientTest`), `tests/bridge.rs` (Kotlin's `BridgeTest`, plus every
+  request of format's recorded session replayed against the server and each answer held to its declared type, and every
+  notification it sent held to format's tables: what the editor's client is typed by), `tests/reload.rs`
+  (Kotlin's `ReloadTest`). They share `tests/support/` (the centities tests' fake, extracted).
+
+Not yet: the profiler stream (`profiler_subscribe` sets the flag; nothing samples), the debugger, `/nf reload`; the
+web routes' listing is `/nf`'s (Kotlin's bridge has no routes request).
 
 ## Mobs (`crates/runtime/src/mob.rs`)
 

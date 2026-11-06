@@ -61,6 +61,19 @@ pub struct BridgeConfig {
 }
 
 impl BridgeConfig {
+    /// The bridge `config::read` found (a dev server's port and token, from the editor's properties), for the project
+    /// it runs, in the server's folder `server_directory`; none on a server the editor didn't start.
+    pub fn of(
+        config: &crate::config::RuntimeConfig,
+        server_directory: PathBuf,
+    ) -> Option<BridgeConfig> {
+        let bridge = config.bridge.as_ref()?;
+        Some(BridgeConfig {
+            server_directory,
+            ..BridgeConfig::new(bridge.port, bridge.token.clone(), config.project.clone())
+        })
+    }
+
     pub fn new(port: u16, token: impl Into<String>, project: PathBuf) -> BridgeConfig {
         BridgeConfig {
             port,
