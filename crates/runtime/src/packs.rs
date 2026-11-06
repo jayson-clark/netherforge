@@ -11,7 +11,7 @@
 //! changed. Not yet: an S3 store (it waits for the HTTP client), and what the network knows a player loaded.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::io::{Read as _, Write as _};
+use std::io::Write as _;
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -174,8 +174,15 @@ pub struct PackServer {
     pub host: String,
     pub port: u16,
     packs: Served,
+    /// Where requests that aren't for a pack go: the web routes' door, while they're on.
+    web: WebSlot,
     stopping: Arc<AtomicBool>,
 }
+
+type WebSlot = Arc<Mutex<Option<Arc<crate::web::gate::WebGate>>>>;
+
+/// Requests answered at once, at most: past it a request is answered `503` without being read.
+const MAX_IN_FLIGHT: usize = 256;
 
 impl PackServer {
     pub fn start(bind: &str, port: u16) -> std::io::Result<PackServer> {
@@ -187,8 +194,10 @@ impl PackServer {
             address.ip().to_string()
         };
         let packs: Served = Arc::default();
+        let web: WebSlot = Arc::default();
         let stopping = Arc::new(AtomicBool::new(false));
-        let (served, stop) = (packs.clone(), stopping.clone());
+        let (served, stop, routes) = (packs.clone(), stopping.clone(), web.clone());
+        let in_flight = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         std::thread::Builder::new()
             .name("NetherForge HTTP server".into())
             .spawn(move || {
@@ -196,19 +205,39 @@ impl PackServer {
                     if stop.load(Ordering::SeqCst) {
                         break;
                     }
-                    let Ok(stream) = stream else { continue };
-                    let served = served.clone();
+                    let Ok(mut stream) = stream else { continue };
+                    if in_flight.load(Ordering::SeqCst) >= MAX_IN_FLIGHT {
+                        let busy = crate::web::gate::WebAnswer::text(
+                            503,
+                            "The server is busy: try again shortly.",
+                            &[("retry-after", "5")],
+                        );
+                        crate::web::gate::write_answer(&mut stream, &busy, false);
+                        continue;
+                    }
+                    let (served, routes, in_flight) =
+                        (served.clone(), routes.clone(), in_flight.clone());
+                    in_flight.fetch_add(1, Ordering::SeqCst);
                     let _ = std::thread::Builder::new()
                         .name("NetherForge HTTP request".into())
-                        .spawn(move || answer(stream, &served));
+                        .spawn(move || {
+                            answer(stream, &served, &routes);
+                            in_flight.fetch_sub(1, Ordering::SeqCst);
+                        });
                 }
             })?;
         Ok(PackServer {
             host,
             port: address.port(),
             packs,
+            web,
             stopping,
         })
+    }
+
+    /// Sends requests that aren't for a pack to `gate` (none: they're `404`).
+    pub fn set_web(&self, gate: Option<Arc<crate::web::gate::WebGate>>) {
+        *self.web.lock().unwrap_or_else(|e| e.into_inner()) = gate;
     }
 
     /// Serves `bytes` as pack `name`'s current build (`""`: the project's), keeping the one before it.
@@ -229,42 +258,41 @@ impl Drop for PackServer {
     }
 }
 
-/// One request: a pack's bytes, or 404 (405 for a method that isn't GET or HEAD).
-fn answer(mut stream: TcpStream, served: &Served) {
+/// One request: a pack's bytes (`/<sha1>.zip`), a web route's answer while web routes are on, or 404 (405 for a
+/// pack asked for with a method that isn't GET or HEAD).
+fn answer(mut stream: TcpStream, served: &Served, web: &WebSlot) {
     let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(10)));
-    let mut request = Vec::new();
-    let mut buffer = [0u8; 1024];
-    while !request.windows(4).any(|w| w == b"\r\n\r\n") && request.len() < 16 * 1024 {
-        match stream.read(&mut buffer) {
-            Ok(0) | Err(_) => break,
-            Ok(n) => request.extend_from_slice(&buffer[..n]),
-        }
+    let Some((method, target, headers, rest)) = crate::web::gate::read_head(&mut stream) else {
+        return;
+    };
+    let path = target.split('?').next().unwrap_or_default();
+    let name = path
+        .strip_prefix('/')
+        .and_then(|p| p.strip_suffix(".zip"))
+        .filter(|n| n.len() == 40 && n.bytes().all(|b| b.is_ascii_hexdigit()));
+    let gate = web.lock().ok().and_then(|g| g.clone());
+    if name.is_none()
+        && let Some(gate) = gate
+    {
+        gate.accept(stream, &method, &target, headers, rest);
+        return;
     }
-    let text = String::from_utf8_lossy(&request);
-    let mut line = text.lines().next().unwrap_or_default().split(' ');
-    let (method, path) = (
-        line.next().unwrap_or_default(),
-        line.next().unwrap_or_default(),
-    );
-    let name = path.strip_prefix('/').and_then(|p| p.strip_suffix(".zip"));
-    let bytes = name
-        .filter(|n| n.len() == 40 && n.bytes().all(|b| b.is_ascii_hexdigit()))
-        .and_then(|sha1| {
-            let packs = served.lock().ok()?;
-            packs.values().find_map(|builds| {
-                builds
-                    .iter()
-                    .find(|(s, _)| s == sha1)
-                    .map(|(_, b)| b.clone())
-            })
-        });
+    let bytes = name.and_then(|sha1| {
+        let packs = served.lock().ok()?;
+        packs.values().find_map(|builds| {
+            builds
+                .iter()
+                .find(|(s, _)| s == sha1)
+                .map(|(_, b)| b.clone())
+        })
+    });
     let head = |status: &str, length: Option<usize>| {
         let length = length.map_or(String::new(), |l| {
             format!("Content-Type: application/zip\r\nContent-Length: {l}\r\n")
         });
         format!("HTTP/1.1 {status}\r\n{length}Connection: close\r\n\r\n")
     };
-    let _ = match (method, bytes) {
+    let _ = match (method.as_str(), bytes) {
         ("GET" | "HEAD", None) => stream.write_all(head("404 Not Found", Some(0)).as_bytes()),
         ("GET", Some(bytes)) => stream
             .write_all(head("200 OK", Some(bytes.len())).as_bytes())
@@ -454,6 +482,11 @@ impl Packs {
         server.serve(sha1, bytes.clone(), name);
         let base = public.unwrap_or_else(|| format!("http://{}:{}", server.host, server.port));
         Some(format!("{}/{sha1}.zip", base.trim_end_matches('/')))
+    }
+
+    /// The plugin's HTTP server, if it's running.
+    pub fn server(&self) -> Option<&PackServer> {
+        self.server.as_ref()
     }
 
     /// The plugin's HTTP server, started if it isn't yet; none when it couldn't start (said once).

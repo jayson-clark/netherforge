@@ -123,6 +123,8 @@ pub struct Config {
     pub http: crate::http::HttpConfig,
     /// What stands in for the network's own answers (where names lead, where connections go): tests'.
     pub net: crate::http::api::NetHooks,
+    /// `web:` in `config.yml`: whether `nf.web` routes are served, and the owner's limits on them.
+    pub web: crate::web::gate::WebConfig,
 }
 
 /// Why a project can't run: what the log says, and the problem to report if format didn't.
@@ -227,6 +229,7 @@ impl<'a> Session<'a> {
             http.config = config.http.clone();
             http.hooks = config.net.clone();
         }
+        shared.web.borrow_mut().config = config.web.clone();
         {
             let mut screens = shared.screens.borrow_mut();
             screens.config = config.screens;
@@ -791,6 +794,11 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         Box::new(crate::http::api::HttpService {
             shared: shared.clone(),
             api: Default::default(),
+        }),
+        // After HTTP, so it stops first: a login's token request uses HTTP's client.
+        Box::new(crate::web::WebService {
+            shared: shared.clone(),
+            context: Default::default(),
         }),
         Box::new(crate::schedule::SchedulesService {
             shared: shared.clone(),

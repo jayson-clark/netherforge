@@ -82,6 +82,8 @@ pub struct Shared {
     pub spawner: RefCell<crate::centity::natural::Spawner>,
     /// `nf.http`: the owner's limits, the client, the rates, and the connections open.
     pub http: RefCell<crate::http::api::Http>,
+    /// `nf.web`: routes, the requests waiting on them, login flows.
+    pub web: RefCell<crate::web::Web>,
     /// The pictures scripts hold.
     pub images: Rc<crate::images::Images>,
     /// Nodes' rigid bodies.
@@ -135,6 +137,7 @@ impl Shared {
             spawner: RefCell::default(),
             images: Rc::default(),
             http: RefCell::default(),
+            web: RefCell::default(),
             physics: RefCell::default(),
             stats: RefCell::default(),
             modules: RefCell::default(),

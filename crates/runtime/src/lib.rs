@@ -60,6 +60,7 @@ pub mod stats;
 pub mod store;
 pub mod team;
 pub mod utilities;
+pub mod web;
 pub mod world;
 
 pub use modules::{Modules, Owner, Project};
@@ -249,6 +250,8 @@ struct Api {
     utilities: Option<utilities::UtilitiesContext>,
     /// `nf.http`, `HttpStream`, `WebSocket`.
     http: Option<http::api::HttpApi>,
+    /// `nf.web`, `Route`, `WebResponse`, `OAuthFlow`.
+    web: Option<web::api::WebApi>,
 }
 
 impl Runtime for Api {
@@ -660,6 +663,30 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_web(&self) -> &dyn netherforge_api::api::NfWebApi {
+        match &self.web {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn route(&self) -> &dyn netherforge_api::api::RouteApi {
+        match &self.web {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn webresponse(&self) -> &dyn netherforge_api::api::WebResponseApi {
+        match &self.web {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn oauthflow(&self) -> &dyn netherforge_api::api::OAuthFlowApi {
+        match &self.web {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
     fn nf_worlds(&self) -> &dyn netherforge_api::api::NfWorldsApi {
         match &self.worlds {
             Some(w) => w,
@@ -689,6 +716,13 @@ impl Room {
         let http = worlds.as_ref().map(|game| {
             http::api::HttpApi::install_liveness(&game.shared, &scripts);
             http::api::HttpApi {
+                game: game.clone(),
+                grants: grants.clone(),
+            }
+        });
+        let web = worlds.as_ref().map(|game| {
+            web::WebContext::install_liveness(&game.shared, &scripts);
+            web::api::WebApi {
                 game: game.clone(),
                 grants: grants.clone(),
             }
@@ -731,6 +765,7 @@ impl Room {
             utilities,
             worlds,
             http,
+            web,
         };
         netherforge_api::install(&host, Rc::new(api))?;
         Ok(Room { host, scripts })
