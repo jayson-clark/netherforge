@@ -8,9 +8,11 @@ mod host;
 pub mod json;
 mod limits;
 pub mod random;
+mod timing;
 
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use failure::{Failure, Location, Stop};
 pub use host::{Host, ScopeId, WeakHost, message_of, project_location as script_location};
 pub use limits::Limits;
 pub use mlua;
+pub use timing::{FunctionCost, ScopeCost};

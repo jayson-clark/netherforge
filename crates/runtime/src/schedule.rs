@@ -472,6 +472,18 @@ pub struct SchedulesService {
 }
 
 impl Service for SchedulesService {
+    fn costs(&self, scope: netherforge_luau::ScopeId) -> Vec<(&'static str, usize)> {
+        let count = self
+            .shared
+            .schedules
+            .borrow()
+            .entries
+            .values()
+            .filter(|e| e.scope == scope)
+            .count();
+        vec![("schedules", count)]
+    }
+
     fn name(&self) -> &'static str {
         "schedules"
     }
@@ -514,7 +526,7 @@ impl Service for SchedulesService {
             if let Some(id) = &id {
                 context.record(&namespace, id, now);
             }
-            if let Err(failure) = scripts.call_kept(scope, &callback, ()) {
+            if let Err(failure) = scripts.call_as("schedule", scope, &callback, ()) {
                 scripts.handler_failed(scope, "schedule", failure);
             }
         }

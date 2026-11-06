@@ -46,6 +46,10 @@ pub struct ServerEvents<'a> {
     ticks: std::cell::Cell<u64>,
     /// The dev bridge, on a dev server: its work runs at the start of each tick, its status after.
     bridge: RefCell<Option<Rc<crate::bridge::Bridge>>>,
+    /// The profiler, which outlives the session's runs: every session it runs hands it its ticks.
+    profiler: RefCell<Rc<crate::profile::Profiler>>,
+    /// What runs after each tick (`/nf`'s held work).
+    after_tick: RefCell<Option<Rc<dyn Fn()>>>,
 }
 
 /// How often the runtime looks whether the network's policy changed, or the hub a project waits for is here.
@@ -53,11 +57,45 @@ pub const POLICY_CHECK_TICKS: u64 = 20;
 
 impl<'a> ServerEvents<'a> {
     pub fn new(session: Session<'a>) -> ServerEvents<'a> {
-        ServerEvents {
+        let info = session.platform().info();
+        let profiler = Rc::new(crate::profile::Profiler::new(
+            std::path::PathBuf::from("profiles"),
+            format!(
+                "Minecraft {}, NetherForge {}",
+                info.minecraft_version, info.plugin_version
+            ),
+        ));
+        let events = ServerEvents {
             game: GameEventDispatch(Current(RefCell::new(session))),
             ticks: std::cell::Cell::new(0),
             bridge: RefCell::new(None),
+            profiler: RefCell::new(profiler.clone()),
+            after_tick: RefCell::new(None),
+        };
+        events.set_profiler(profiler);
+        events
+    }
+
+    /// The profiler every run of the session feeds: the adapter's, writing reports into the plugin's `profiles`
+    /// folder.
+    pub fn set_profiler(&self, profiler: Rc<crate::profile::Profiler>) {
+        let session = self.session();
+        profiler.set_log(session.platform_rc());
+        if let Some(bridge) = self.bridge() {
+            profiler.attach_bridge(bridge);
         }
+        session.set_profiler(Some(profiler.clone()));
+        *self.profiler.borrow_mut() = profiler;
+    }
+
+    /// What runs at the end of every tick, once nothing holds the session (`/nf`'s held work).
+    pub fn set_after_tick(&self, after: Option<Rc<dyn Fn()>>) {
+        *self.after_tick.borrow_mut() = after;
+    }
+
+    /// The profiler.
+    pub fn profiler(&self) -> Rc<crate::profile::Profiler> {
+        self.profiler.borrow().clone()
     }
 
     /// Runs the dev bridge with the server: what the editor asks is answered at the start of each tick, and scripts'
@@ -65,6 +103,7 @@ impl<'a> ServerEvents<'a> {
     /// lines reach the editor too.
     pub fn attach_bridge(&self, bridge: Rc<crate::bridge::Bridge>) {
         *self.session().shared().console.borrow_mut() = Some(bridge.console());
+        self.profiler().attach_bridge(bridge.clone());
         *self.bridge.borrow_mut() = Some(bridge);
     }
 
@@ -290,6 +329,21 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         }
         if let Some(bridge) = &bridge {
             bridge.tick(self);
+        }
+        // Reports written since: whoever asked for them is told.
+        self.profiler().poll();
+        // The end of `/nf shutdown`: the server is asked to stop.
+        let stop = self
+            .any()
+            .and_then(|s| s.shared().network.borrow_mut().stop_server.take());
+        if let Some(reason) = stop
+            && let Some(session) = self.any()
+        {
+            session.platform().shutdown_server(reason);
+        }
+        let after = self.after_tick.borrow().clone();
+        if let Some(after) = after {
+            after();
         }
     }
 

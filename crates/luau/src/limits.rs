@@ -23,6 +23,9 @@ pub struct Limits {
     /// The most a call's budget may be, whatever its script asks for; `None`:
     /// any.
     pub max_budget: Option<u64>,
+    /// How long one scope's code may run in a tick, every call in summed, before its timers and `tick` handlers
+    /// wait for the next tick (`performance.max-ms-per-tick`); zero turns it off.
+    pub max_tick: Duration,
 }
 
 impl Default for Limits {
@@ -34,6 +37,7 @@ impl Default for Limits {
             max_string_bytes: 16 * 1024 * 1024,
             max_work: 1e8,
             max_budget: None,
+            max_tick: Duration::ZERO,
         }
     }
 }

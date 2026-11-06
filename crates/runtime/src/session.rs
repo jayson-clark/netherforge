@@ -104,6 +104,17 @@ pub trait Service {
     fn problems(&self) -> Vec<Problem> {
         Vec::new()
     }
+
+    /// What `scope` owns here, counted for `/nf scripts`, by the word it's shown as (`effects`).
+    fn costs(&self, _scope: netherforge_luau::ScopeId) -> Vec<(&'static str, usize)> {
+        Vec::new()
+    }
+}
+
+/// A number as `config.yml` would say it: `10`, `2.5`.
+fn plain(n: f64) -> String {
+    let text = format!("{n}");
+    text.strip_suffix(".0").map_or(text.clone(), str::to_owned)
 }
 
 /// What the server's config says a session runs with (Kotlin's `RuntimeConfig`, as far as it's ported).
@@ -161,6 +172,12 @@ pub struct Config {
     /// What the Luau host holds scripts to: the defaults when none (a test run's are more generous, since a
     /// test's one call includes every tick it advances).
     pub limits: Option<Limits>,
+    /// `performance:` in `config.yml`: when a script is slow enough to warn about, and how long one scope's code
+    /// may run in a tick before its timers and `tick` handlers wait. None (a session made without the server's
+    /// config, as tests' are): no warnings and no per-tick limit.
+    pub performance: Option<crate::config::PerformanceConfig>,
+    /// The clock scripts' time limits, costs and the profiler read: the machine's when none (a test's moves by hand).
+    pub clock: Option<Rc<dyn netherforge_luau::Clock>>,
 }
 
 /// Why a project can't run: what the log says, and the problem to report if format didn't.
@@ -197,6 +214,26 @@ pub struct Session<'a> {
     require_hub: bool,
     /// Whether the server must restart for what it learns only as it starts.
     startup: std::cell::RefCell<crate::reload::StartupCheck>,
+    clock: Option<Rc<dyn netherforge_luau::Clock>>,
+    /// What each scope's code costs (`/nf scripts`, slow-script warnings), and the warnings already given.
+    costs: std::cell::RefCell<crate::costs::ScriptCosts>,
+    performance: Option<crate::config::PerformanceConfig>,
+    warned: std::cell::RefCell<Warned>,
+    /// The runtime's profiler, which outlives sessions (`ServerEvents` hands it over), and whether this run's Lua
+    /// state keeps per-function times for it now.
+    profiler: std::cell::RefCell<Option<Rc<crate::profile::Profiler>>>,
+    profiling: std::cell::Cell<bool>,
+    /// Server ticks this session has seen, across reloads: what the costs and the profiler count by.
+    ticks: std::cell::Cell<u64>,
+}
+
+/// What the costs have warned about: each slow script's last warning and how many like it were held back since,
+/// each scope's deferral, and the `script.slow` problems of scopes still running.
+#[derive(Default)]
+struct Warned {
+    slow: std::collections::HashMap<String, (u64, u32)>,
+    deferred: std::collections::HashMap<netherforge_luau::ScopeId, u64>,
+    problems: BTreeMap<netherforge_luau::ScopeId, Problem>,
 }
 
 /// How long the same runtime error stays quiet after it's logged: five seconds.
@@ -367,7 +404,14 @@ impl<'a> Session<'a> {
         }
         shared.tests.borrow_mut().harness = config.testing.clone();
         let mut session = Session {
-            limits: config.limits.clone().unwrap_or_default(),
+            limits: {
+                let mut limits = config.limits.clone().unwrap_or_default();
+                if let Some(p) = config.performance {
+                    limits.max_tick =
+                        std::time::Duration::from_secs_f64(p.max_tick_millis / 1000.0);
+                }
+                limits
+            },
             owner_policy: config.policy.clone(),
             policy_problem: config.policy_problem.clone(),
             policy: None,
@@ -388,6 +432,13 @@ impl<'a> Session<'a> {
             services: services(&shared),
             shared,
             reported: Default::default(),
+            costs: std::cell::RefCell::new(crate::costs::ScriptCosts::new(config.performance)),
+            performance: config.performance,
+            clock: config.clock.clone(),
+            warned: Default::default(),
+            profiler: Default::default(),
+            profiling: Default::default(),
+            ticks: Default::default(),
         };
         session.refuse();
         session.run();
@@ -522,9 +573,12 @@ impl<'a> Session<'a> {
             lower(self.rates.1, limits.http_requests_per_minute);
         let mut grants = grants(&self.project);
         grants.policy = self.policy.clone();
-        let room = match Host::new(self.limits_under_policy())
-            .and_then(|host| Room::with(host, grants, Some(self.shared.clone())))
-        {
+        let limits = self.limits_under_policy();
+        let host = match &self.clock {
+            Some(clock) => Host::with_clock(limits, clock.clone()),
+            None => Host::new(limits),
+        };
+        let room = match host.and_then(|host| Room::with(host, grants, Some(self.shared.clone()))) {
             Ok(room) => room,
             Err(e) => {
                 log.error(
@@ -544,6 +598,10 @@ impl<'a> Session<'a> {
             source: self.source,
             platform: &*self.platform,
         };
+        // The profiler's bookkeeping is on before any body runs, so bodies are timed too.
+        self.profiling.set(false);
+        let profiling = self.profiler().is_some_and(|p| p.active());
+        self.sync_profiling(room.host(), profiling);
         for service in &self.services {
             service.start(&room, &define);
         }
@@ -727,6 +785,11 @@ impl<'a> Session<'a> {
         &*self.platform
     }
 
+    /// The server it runs on, to keep.
+    pub fn platform_rc(&self) -> Rc<dyn Platform> {
+        self.platform.clone()
+    }
+
     /// What goes with the scopes that stopped since the last time (temporary centities).
     pub(crate) fn released(&self) {
         if let Some(room) = &self.room {
@@ -774,21 +837,278 @@ impl<'a> Session<'a> {
                     .flat_map(|p| p.check(&self.project)),
             )
             .chain(reported.problems.values().flatten().cloned())
+            .chain({
+                let mut warned = self.warned.borrow_mut();
+                if let Some(room) = &self.room {
+                    let live = room.scripts().live_scopes();
+                    warned.problems.retain(|scope, _| live.contains(scope));
+                }
+                warned.problems.values().cloned().collect::<Vec<_>>()
+            })
             .chain(self.services.iter().flat_map(|s| s.problems()))
             .chain(self.startup.borrow().problems())
             .collect()
     }
 
-    /// One server tick: each service in order, then what the scripts reported.
+    /// One server tick: the scripts' own (timers, async values, `tick` handlers), each service in order, then what
+    /// the scripts reported, then the accounts: what each scope cost, and the profiler's share (each step timed
+    /// while it measures).
     pub fn tick(&self) {
+        let tick = self.ticks.get() + 1;
+        self.ticks.set(tick);
         let Some(room) = &self.room else { return };
+        let host = room.host();
+        let profiler = self.profiler.borrow().clone();
+        let profiler = profiler.filter(|p| p.active());
+        self.sync_profiling(host, profiler.is_some());
+        let start = host.now();
+        let mut phases = indexmap::IndexMap::new();
         room.scripts().tick();
+        let mut at = host.now();
+        phases.insert("scripts".to_owned(), (at - start) as i64);
         for service in &self.services {
             service.tick(room, &*self.platform);
+            if let Some(p) = &profiler {
+                let now = host.now();
+                p.part(&format!("services/{}", service.name()), now - at);
+                at = now;
+            }
         }
         self.released();
         self.report();
         self.shared.classed.borrow_mut().clear();
+        let now = host.now();
+        phases.insert(
+            "services".to_owned(),
+            (now - (start + phases["scripts"] as u64)) as i64,
+        );
+        self.accounts(room, tick, profiler.as_deref());
+        let end = host.now();
+        phases.insert("accounts".to_owned(), (end - now) as i64);
+        if let Some(p) = &profiler {
+            p.tick(tick, end - start, phases);
+        }
+    }
+
+    /// Server ticks this session has seen.
+    pub fn ticks(&self) -> u64 {
+        self.ticks.get()
+    }
+
+    /// The runtime's profiler, which this session feeds from now on.
+    pub fn set_profiler(&self, profiler: Option<Rc<crate::profile::Profiler>>) {
+        *self.profiler.borrow_mut() = profiler;
+    }
+
+    /// The runtime's profiler, if it has one.
+    pub fn profiler(&self) -> Option<Rc<crate::profile::Profiler>> {
+        self.profiler.borrow().clone()
+    }
+
+    fn sync_profiling(&self, host: &netherforge_luau::Host, wanted: bool) {
+        if self.profiling.get() != wanted {
+            host.set_profiling(wanted);
+            self.profiling.set(wanted);
+        }
+    }
+
+    /// The end of a tick: what each scope cost (warnings for the slow and the deferred), and the profiler's share.
+    fn accounts(&self, room: &Room, tick: u64, profiler: Option<&crate::profile::Profiler>) {
+        let host = room.host();
+        let live = room.scripts().live_scopes();
+        let recorded = self.costs.borrow_mut().record(host, &live, tick);
+        for scope in recorded.deferred {
+            self.warn_deferred(room, scope, tick);
+        }
+        for slow in recorded.slow {
+            self.warn_slow(room, slow, tick);
+        }
+        if let Some(p) = profiler {
+            let scopes = self
+                .costs
+                .borrow()
+                .last_tick()
+                .iter()
+                .filter_map(|(id, cost)| {
+                    Some(netherforge_format::bridge::ScopeTime {
+                        scope: host.scope_title(*id)?,
+                        nanos: cost.nanos as i64,
+                        calls: cost.calls as i32,
+                        max: 0,
+                    })
+                })
+                .collect();
+            p.scopes(scopes);
+            if p.due(tick) {
+                self.drain_profile(room, p);
+            }
+        }
+    }
+
+    /// Hands the profiler what every function cost since the last time.
+    fn drain_profile(&self, room: &Room, profiler: &crate::profile::Profiler) {
+        if !self.profiling.get() {
+            return;
+        }
+        let host = room.host();
+        let calls: Vec<crate::profile::Call> = host
+            .take_profile()
+            .into_iter()
+            .filter_map(|c| {
+                let title = host.scope_title(c.scope)?;
+                Some(crate::profile::Call {
+                    script: crate::costs::script_label(&title),
+                    scope: title,
+                    kind: c.kind.clone(),
+                    // A script's body starts at no line of its own: it's its file.
+                    source: c.file.map(|file| netherforge_format::bridge::SourceRef {
+                        file,
+                        line: c
+                            .line
+                            .filter(|l| *l > 0 && c.kind != "load")
+                            .map(|l| l as i32),
+                    }),
+                    nanos: c.nanos as i64,
+                    calls: c.calls as i32,
+                    max: c.max as i64,
+                })
+            })
+            .collect();
+        host.forget_gone();
+        profiler.calls(&calls);
+    }
+
+    /// Hands the profiler what's pending now (before `/nf profile` starts recording, so it's not part of it).
+    pub fn drain_pending_profile(&self) {
+        if let (Some(room), Some(p)) = (&self.room, self.profiler()) {
+            self.drain_profile(room, &p);
+        }
+    }
+
+    /// A scope over its time: said in the log and the editor's console (at most once per `QUIET_TICKS` for one
+    /// script's place, how many like it held back said with the next), and a `script.slow` problem while it runs.
+    fn warn_slow(&self, room: &Room, slow: crate::costs::Slow, tick: u64) {
+        let Some(title) = room.host().scope_name(slow.scope) else {
+            return;
+        };
+        let label = crate::costs::script_label(&title);
+        let owner_file = self
+            .shared
+            .modules
+            .borrow()
+            .as_ref()
+            .and_then(|m| m.owner(slow.scope))
+            .and_then(|o| match o {
+                Owner::Script(file) => Some(file),
+                Owner::Module(_) => None,
+            });
+        let file = slow.at.as_ref().map(|a| a.chunk.clone()).or(owner_file);
+        let line = slow.at.as_ref().map(|a| a.line).filter(|l| *l > 0);
+        let source = file
+            .as_ref()
+            .map(|f| netherforge_format::bridge::SourceRef {
+                file: f.clone(),
+                line: line.map(|l| l as i32),
+            });
+        let place = source.as_ref().map_or(String::new(), |s| match s.line {
+            Some(l) => format!(" (slowest: {}:{l})", s.file),
+            None => format!(" (slowest: {})", s.file),
+        });
+        let limit = plain(self.performance.map_or(0.0, |p| p.warn_millis));
+        let key = format!("{label}|{file:?}|{line:?}");
+        let mut warned = self.warned.borrow_mut();
+        let (last, held) = warned.slow.get(&key).copied().unwrap_or((0, 0));
+        if last == 0 || tick - last >= crate::costs::QUIET_TICKS {
+            warned.slow.insert(key, (tick, 0));
+            let more = if held > 0 {
+                format!(" (and {held} more like it)")
+            } else {
+                String::new()
+            };
+            let message = format!(
+                "{label} is slow: {:.1} ms a tick on average over the last {} ticks, over the {limit} ms limit; see /nf scripts",
+                slow.average_millis, slow.ticks
+            );
+            match self.shared.console.borrow().clone() {
+                Some(console) => console.script_error(
+                    format!("{message}{place}{more}"),
+                    format!("{message}{more}"),
+                    source.clone(),
+                    None,
+                ),
+                None => self.platform.log().warn(format!("{message}{place}{more}")),
+            }
+        } else {
+            warned.slow.insert(key, (last, held + 1));
+        }
+        let problem = netherforge_format::codes::SCRIPT_SLOW.at(
+            file.as_deref().unwrap_or("modules"),
+            format!("{label} takes more than {limit} ms a tick; see /nf scripts"),
+            None,
+        );
+        warned
+            .problems
+            .insert(slow.scope, Problem { line, ..problem });
+    }
+
+    /// A scope's timers or `tick` handlers waited for the next tick, its code over `performance.max-ms-per-tick`:
+    /// said at most once per `QUIET_TICKS` per scope.
+    fn warn_deferred(&self, room: &Room, scope: netherforge_luau::ScopeId, tick: u64) {
+        let mut warned = self.warned.borrow_mut();
+        if warned
+            .deferred
+            .get(&scope)
+            .is_some_and(|last| tick - last < crate::costs::QUIET_TICKS)
+        {
+            return;
+        }
+        warned.deferred.insert(scope, tick);
+        let label = room
+            .host()
+            .scope_name(scope)
+            .map_or_else(|| "a script".to_owned(), |t| crate::costs::script_label(&t));
+        let limit = plain(self.performance.map_or(0.0, |p| p.max_tick_millis));
+        self.platform.log().warn(format!(
+            "{label} ran more than {limit} ms in a tick, so its timers and tick handlers waited for the next; it may schedule more than the server can run a tick (see /nf scripts)"
+        ));
+    }
+
+    /// Every live scope's costs (`/nf scripts`), the most expensive first: its window's numbers, what it holds
+    /// here, every service's counts of what it owns, and the bytes its script's memory key holds.
+    pub fn costs(&self) -> Vec<crate::costs::Entry> {
+        let Some(room) = &self.room else {
+            return Vec::new();
+        };
+        let host = room.host();
+        let scripts = room.scripts();
+        let costs = self.costs.borrow();
+        let entries = scripts
+            .live_scopes()
+            .into_iter()
+            .map(|scope| {
+                let (average_millis, max_millis, calls) = costs.of(scope);
+                let (subscriptions, tasks) = scripts.held(scope);
+                let mut counts = vec![(
+                    "waits",
+                    netherforge_api::pending::waiting(host.lua(), scope),
+                )];
+                for service in &self.services {
+                    counts.extend(service.costs(scope));
+                }
+                crate::costs::Entry {
+                    scope,
+                    title: host.scope_name(scope).unwrap_or_default(),
+                    average_millis,
+                    max_millis,
+                    calls,
+                    subscriptions,
+                    tasks,
+                    counts,
+                    bytes: host.scope_memory(scope).unwrap_or(0),
+                }
+            })
+            .collect();
+        crate::costs::sorted(entries)
     }
 
     /// Stops the run and starts it again from the files, as a change to `netherforge.json` does.
@@ -1033,6 +1353,46 @@ impl<'a> Session<'a> {
         Ok(changed)
     }
 
+    /// Sets several of package `namespace`'s settings at once (each JSON, or none for its default), writes the file
+    /// and tells the scripts: the names whose value changed (the settings dialog's Save).
+    pub fn set_settings(
+        &mut self,
+        namespace: &str,
+        values: Vec<(String, Option<serde_json::Value>)>,
+    ) -> Result<Vec<String>, String> {
+        let changes = self
+            .shared
+            .settings
+            .borrow_mut()
+            .set_all(namespace, values)?;
+        let names = changes.iter().map(|c| c.setting.clone()).collect();
+        self.announce(namespace, changes);
+        Ok(names)
+    }
+
+    /// Saves every saved table that changed and every centity's place, staged and committed, so what the store
+    /// shows is now (`/nf data`, as the world saving would).
+    pub fn save_data(&self) {
+        let Some(room) = &self.room else { return };
+        let host = room.host();
+        for owner in crate::data::ScriptData::owners(&self.shared) {
+            crate::data::ScriptData::save(&self.shared, host, &owner);
+        }
+        self.shared
+            .centities
+            .borrow_mut()
+            .save_placements(&self.shared.store);
+        self.shared.store.commit();
+    }
+
+    /// Saves `owner`'s saved table now, if it has one.
+    pub fn save_data_of(&self, owner: &crate::data::Owner) {
+        if let Some(room) = &self.room {
+            crate::data::ScriptData::save(&self.shared, room.host(), owner);
+            self.shared.store.commit();
+        }
+    }
+
     /// Reads every package's settings file again (after the owner edited one by hand) and tells the scripts: how
     /// many settings changed.
     pub fn reload_settings(&mut self) -> usize {
@@ -1155,6 +1515,13 @@ impl<'a> Session<'a> {
         // What the services staged as they stopped is written before anything else opens the store.
         self.shared.store.flush();
         self.shared.tests.borrow_mut().clear();
+        // A full reload: what this Lua state measured goes to the profiler before it closes.
+        if let (Some(room), Some(p)) = (&self.room, self.profiler()) {
+            self.drain_profile(room, &p);
+        }
+        self.profiling.set(false);
+        self.costs.borrow_mut().clear();
+        self.warned.borrow_mut().problems.clear();
         self.room = None;
         self.services = services(&self.shared);
     }

@@ -67,6 +67,16 @@ pub struct Commands {
     declared: IndexMap<String, Declared>,
 }
 
+impl Commands {
+    /// Every command declared, by name, with the scope of the module that declared it.
+    pub fn all(&self) -> Vec<(String, ScopeId)> {
+        self.declared
+            .iter()
+            .map(|(name, d)| (name.clone(), d.scope))
+            .collect()
+    }
+}
+
 const RESERVED: &[&str] = &["nf", "netherforge"];
 
 fn is_command_name(name: &str) -> bool {
@@ -381,6 +391,7 @@ impl CommandHandler for Handler {
         let Ok(event) = event(&lua, &*sender, name, &label, &input.text, arguments) else {
             return;
         };
+        scripts.host().next_kind("command");
         if let Err(failure) = scripts.call(scope, handler, event) {
             let message = failure.to_string();
             scripts.handler_failed(scope, &format!("/{name}"), failure);
@@ -433,7 +444,12 @@ impl CommandHandler for Handler {
             return none;
         };
         let what = format!("completing /{} <{}>", self.name, argument.syntax.name);
-        let answer = match scripts.call_kept(scope, complete, (event, request.partial.clone())) {
+        let answer = match scripts.call_as(
+            "complete",
+            scope,
+            complete,
+            (event, request.partial.clone()),
+        ) {
             Ok(answer) => answer,
             Err(failure) => {
                 scripts.handler_failed(scope, &what, failure);

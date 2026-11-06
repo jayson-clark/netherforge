@@ -8,6 +8,7 @@ use mlua::{FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Value, 
 use crate::clock::{Clock, SystemClock};
 use crate::failure::{Failure, Location, Stop};
 use crate::limits::Limits;
+use crate::timing::{FunctionCost, ScopeCost, Timing};
 
 /// What scripts get from Luau itself. A whitelist: anything not named here
 /// (`os`, `debug`, `getfenv`, `setfenv`, `loadstring`, `require`,
@@ -86,6 +87,14 @@ struct Frame {
     deadline: u64,
     stop: Option<Stop>,
     location: Option<Location>,
+    /// When it opened, by the host's clock, and what the frames nested in it took.
+    started: u64,
+    nested: u64,
+    /// What it runs, when its caller said (`Host::next_kind`).
+    kind: Option<String>,
+    /// Which call in it is, so a debugger's step knows its own.
+    #[allow(dead_code)]
+    serial: u64,
 }
 
 struct Guard {
@@ -93,9 +102,18 @@ struct Guard {
     clock: Rc<dyn Clock>,
     frames: Vec<Frame>,
     since_clock: u32,
+    /// Time the debugger held the state paused, left out of every reading of the clock.
+    paused: u64,
+    timing: Timing,
+    serials: u64,
 }
 
 impl Guard {
+    /// The clock, less the time spent paused.
+    fn now(&self) -> u64 {
+        self.clock.nanos().saturating_sub(self.paused)
+    }
+
     /// One interrupt: charges the running frame, and says whether to stop it.
     fn interrupt(&mut self) -> Option<&mut Frame> {
         let clock_every = self.limits.clock_every;
@@ -104,11 +122,7 @@ impl Guard {
         if read_clock {
             self.since_clock = 0;
         }
-        let now = if read_clock {
-            Some(self.clock.nanos())
-        } else {
-            None
-        };
+        let now = if read_clock { Some(self.now()) } else { None };
         let deadline = self.limits.deadline;
         let frame = self.frames.last_mut()?;
         if frame.stop.is_none() {
@@ -141,6 +155,8 @@ struct Inner {
     categories: RefCell<Categories>,
     next_scope: RefCell<u32>,
     blamed: RefCell<Option<ScopeId>>,
+    /// The names of scopes closed while the profiler was on, until it takes what they ran.
+    gone: RefCell<HashMap<ScopeId, String>>,
 }
 
 /// A Luau state and the scopes in it: one per room. Cheap to clone; a clone
@@ -171,6 +187,9 @@ impl Host {
             clock,
             frames: Vec::new(),
             since_clock: 0,
+            paused: 0,
+            timing: Timing::default(),
+            serials: 0,
         }));
         // The caps go into the real `string` and `table` before they're made
         // read-only, so the string metatable (`("x"):rep(n)`) reaches them too.
@@ -244,6 +263,7 @@ impl Host {
             }),
             next_scope: RefCell::new(0),
             blamed: RefCell::new(None),
+            gone: RefCell::new(HashMap::new()),
         })))
     }
 
@@ -343,11 +363,24 @@ impl Host {
 
     /// Forgets a scope. What it held is collected once nothing else holds it.
     pub fn close_scope(&self, id: ScopeId) {
-        self.0.scopes.borrow_mut().remove(&id);
+        let closed = self.0.scopes.borrow_mut().remove(&id);
+        let mut guard = self.0.guard.borrow_mut();
+        guard.timing.forget(id);
+        if guard.timing.profiling()
+            && let Some(scope) = closed
+        {
+            self.0.gone.borrow_mut().insert(id, scope.name);
+        }
     }
 
     pub fn scope_name(&self, id: ScopeId) -> Option<String> {
         self.0.scopes.borrow().get(&id).map(|s| s.name.clone())
+    }
+
+    /// A scope's name, or, while the profiler is on, the name of one closed since it last took what scopes ran.
+    pub fn scope_title(&self, id: ScopeId) -> Option<String> {
+        self.scope_name(id)
+            .or_else(|| self.0.gone.borrow().get(&id).cloned())
     }
 
     /// A scope's environment: its globals, over the shared base.
@@ -393,11 +426,14 @@ impl Host {
                 .limits
                 .max_budget
                 .map_or(budget, |most| budget.min(most));
-            let now = guard.clock.nanos();
+            let now = guard.now();
             let own = now.saturating_add(guard.limits.deadline.as_nanos() as u64);
             let parent = guard.frames.last();
             let deadline = parent.map_or(own, |p| p.deadline.min(own));
             let parent_category = parent.map_or(HOST_CATEGORY, |p| p.category);
+            let kind = guard.timing.next_kind.take();
+            guard.serials += 1;
+            let serial = guard.serials;
             guard.frames.push(Frame {
                 scope,
                 category,
@@ -406,6 +442,10 @@ impl Host {
                 deadline,
                 stop: None,
                 location: None,
+                started: now,
+                nested: 0,
+                kind,
+                serial,
             });
             parent_category
         };
@@ -415,10 +455,15 @@ impl Host {
 
         let frame = {
             let mut guard = self.0.guard.borrow_mut();
-            let frame = guard.frames.pop().expect("the call's frame is still there");
+            let mut frame = guard.frames.pop().expect("the call's frame is still there");
+            let now = guard.now();
+            let elapsed = now.saturating_sub(frame.started);
             if let Some(parent) = guard.frames.last_mut() {
                 parent.used = parent.used.saturating_add(frame.used);
+                parent.nested = parent.nested.saturating_add(elapsed);
             }
+            let own = elapsed.saturating_sub(frame.nested);
+            guard.timing.close(scope, f, own, frame.kind.take());
             frame
         };
         if let Some(stop) = frame.stop {
@@ -525,6 +570,76 @@ impl Host {
     /// runtime stops it at the end of the tick.
     pub fn take_blamed(&self) -> Option<ScopeId> {
         self.0.blamed.borrow_mut().take()
+    }
+
+    /// The host's clock: the injected one, less the time a debugger held the state paused. What every time limit
+    /// and cost reads, and what the profiler should time the tick with, so a paused tick isn't a slow one.
+    pub fn now(&self) -> u64 {
+        self.0.guard.borrow().now()
+    }
+
+    /// `nanos` passed while a debugger held the state paused: left out of the clock from now on.
+    pub fn add_paused(&self, nanos: u64) {
+        let mut guard = self.0.guard.borrow_mut();
+        guard.paused = guard.paused.saturating_add(nanos);
+    }
+
+    /// What the next call in runs, for the profiler: `tick`, an event's name, `timer`, `task`, `command`.
+    pub fn next_kind(&self, kind: &str) {
+        self.0.guard.borrow_mut().timing.next_kind = Some(kind.to_owned());
+    }
+
+    /// What each scope's code took since the last time, by scope (only scopes that ran). Once a tick: it also
+    /// starts the tick over for `over_tick`. `rotate` starts a new window for the slowest calls (`hot_spot`).
+    pub fn take_costs(&self, rotate: bool) -> HashMap<ScopeId, ScopeCost> {
+        self.0.guard.borrow_mut().timing.take_costs(rotate)
+    }
+
+    /// Where `scope`'s slowest recent call's function starts (its file and line), when that's project code.
+    pub fn hot_spot(&self, scope: ScopeId) -> Option<Location> {
+        let f = self.0.guard.borrow().timing.hot_spot(scope)?;
+        let info = f.info();
+        let chunk = info.source.as_deref()?.strip_prefix('@')?.to_owned();
+        // A body (Luau's main function) is its file, at no line of its own: line 0.
+        let line = if info.what == "main" {
+            0
+        } else {
+            info.line_defined.unwrap_or(0) as u32
+        };
+        Some(Location { chunk, line })
+    }
+
+    /// Whether `scope`'s code already ran its tick's worth (`Limits::max_tick`), so a timer or `tick` handler of
+    /// its own waits for the next tick; one that is is marked deferred, for `take_deferred`.
+    pub fn over_tick(&self, scope: ScopeId) -> bool {
+        let mut guard = self.0.guard.borrow_mut();
+        let limit = guard.limits.max_tick.as_nanos() as u64;
+        guard.timing.over_tick(scope, limit)
+    }
+
+    /// The scopes whose timers or `tick` handlers waited since the last time.
+    pub fn take_deferred(&self) -> Vec<ScopeId> {
+        self.0.guard.borrow_mut().timing.take_deferred()
+    }
+
+    /// Turns the profiler's per-function times on or off; off forgets what it kept.
+    pub fn set_profiling(&self, on: bool) {
+        self.0.guard.borrow_mut().timing.set_profiling(on);
+        if !on {
+            self.0.gone.borrow_mut().clear();
+        }
+    }
+
+    /// Forgets the names of scopes closed since the profiler last took what they ran (`scope_title`).
+    pub fn forget_gone(&self) {
+        self.0.gone.borrow_mut().clear();
+    }
+
+    /// What each function cost each scope since the last time, while the profiler was on.
+    pub fn take_profile(&self) -> Vec<FunctionCost> {
+        // Taken out first: saying where a function starts reads Luau, which mustn't happen under the guard's borrow.
+        let functions = self.0.guard.borrow_mut().timing.take_functions();
+        crate::timing::resolve(functions)
     }
 
     fn blame(&self) {

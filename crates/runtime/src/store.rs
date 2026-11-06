@@ -15,7 +15,7 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
@@ -196,6 +196,103 @@ impl Store {
     fn settled(&self) -> MutexGuard<'_, Connection> {
         self.flush();
         self.connection.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    // ---- looking inside (`/nf data`) ----
+
+    /// The file it's kept in, if it isn't in memory.
+    pub fn file(&self) -> Option<PathBuf> {
+        let c = self.connection.lock().unwrap_or_else(|e| e.into_inner());
+        c.path().filter(|p| !p.is_empty()).map(PathBuf::from)
+    }
+
+    /// The tables there are (the migrations' record included), by name.
+    pub fn table_names(&self) -> Vec<String> {
+        tables(&self.settled())
+    }
+
+    /// Every table and how many rows it has, by namespace too where its rows say whose they are, once what's staged
+    /// is written.
+    pub fn sizes(&self) -> Vec<TableSize> {
+        let c = self.settled();
+        tables(&c)
+            .into_iter()
+            .map(|table| {
+                let rows: i64 = c
+                    .query_row(&format!("SELECT count(*) FROM \"{table}\""), [], |r| r.get(0))
+                    .unwrap_or(0);
+                let mut by_namespace = Vec::new();
+                if columns(&c, &table).iter().any(|n| n == "namespace")
+                    && let Ok(mut statement) = c.prepare(&format!(
+                        "SELECT namespace, count(*) FROM \"{table}\" GROUP BY namespace ORDER BY namespace"
+                    ))
+                    && let Ok(found) = statement
+                        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+                {
+                    by_namespace = found.flatten().collect();
+                }
+                TableSize {
+                    table,
+                    rows,
+                    by_namespace,
+                }
+            })
+            .collect()
+    }
+
+    /// Up to `limit` of `table`'s rows, each column's value as text (null as `null`), and how many there are in all.
+    #[allow(clippy::type_complexity)]
+    pub fn rows(
+        &self,
+        table: &str,
+        limit: usize,
+    ) -> Result<(Vec<Vec<(String, String)>>, i64), String> {
+        let c = self.settled();
+        if !tables(&c).iter().any(|t| t == table) {
+            return Err(format!("there's no table \"{table}\" in the store"));
+        }
+        let total: i64 = c
+            .query_row(&format!("SELECT count(*) FROM \"{table}\""), [], |r| {
+                r.get(0)
+            })
+            .map_err(|e| e.to_string())?;
+        let mut statement = c
+            .prepare(&format!(
+                "SELECT * FROM \"{table}\" ORDER BY rowid LIMIT ?1"
+            ))
+            .map_err(|e| e.to_string())?;
+        let names: Vec<String> = statement
+            .column_names()
+            .iter()
+            .map(|n| n.to_string())
+            .collect();
+        let rows = statement
+            .query_map(params![limit as i64], |r| {
+                Ok(names
+                    .iter()
+                    .enumerate()
+                    .map(|(i, name)| (name.clone(), text_of(r.get_ref(i).ok())))
+                    .collect::<Vec<_>>())
+            })
+            .map_err(|e| e.to_string())?
+            .flatten()
+            .collect();
+        Ok((rows, total))
+    }
+
+    /// Writes every table, every row, into `file` as JSON (saved tables' values as the JSON they are), on the
+    /// store's lane after what's staged is written; `done` hears the file or why it couldn't be, on that lane.
+    pub fn export(
+        &self,
+        file: PathBuf,
+        done: impl FnOnce(Result<PathBuf, String>) + Send + 'static,
+    ) {
+        self.commit();
+        let connection = self.connection.clone();
+        self.lane.submit(move || {
+            let c = connection.lock().unwrap_or_else(|e| e.into_inner());
+            done(export(&c, &file).map(|()| file));
+        });
     }
 
     /// What went wrong writing since the last call.
@@ -803,4 +900,113 @@ mod tests {
         store.commit();
         assert!(store.instances().is_empty());
     }
+}
+
+/// A table's size, for `/nf data`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TableSize {
+    pub table: String,
+    pub rows: i64,
+    pub by_namespace: Vec<(String, i64)>,
+}
+
+fn tables(c: &Connection) -> Vec<String> {
+    let Ok(mut statement) = c.prepare(
+        "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    ) else {
+        return Vec::new();
+    };
+    statement
+        .query_map([], |r| r.get::<_, String>(0))
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default()
+}
+
+fn columns(c: &Connection, table: &str) -> Vec<String> {
+    let Ok(mut statement) = c.prepare("SELECT name FROM pragma_table_info(?1)") else {
+        return Vec::new();
+    };
+    statement
+        .query_map(params![table], |r| r.get::<_, String>(0))
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default()
+}
+
+fn text_of(value: Option<rusqlite::types::ValueRef<'_>>) -> String {
+    use rusqlite::types::ValueRef;
+    match value {
+        None | Some(ValueRef::Null) => "null".into(),
+        Some(ValueRef::Integer(n)) => n.to_string(),
+        Some(ValueRef::Real(n)) => n.to_string(),
+        Some(ValueRef::Text(t)) => String::from_utf8_lossy(t).into_owned(),
+        Some(ValueRef::Blob(b)) => format!("({} bytes)", b.len()),
+    }
+}
+
+/// The columns holding a saved table's JSON.
+const JSON_COLUMNS: &[&str] = &[
+    "centity_data.value",
+    "player_data.value",
+    "named_data.value",
+];
+
+fn export(c: &Connection, file: &Path) -> Result<(), String> {
+    use rusqlite::types::ValueRef;
+    use serde_json::{Map, Value};
+    let mut all = Map::new();
+    for table in tables(c) {
+        let mut statement = c
+            .prepare(&format!("SELECT * FROM \"{table}\" ORDER BY rowid"))
+            .map_err(|e| e.to_string())?;
+        let names: Vec<String> = statement
+            .column_names()
+            .iter()
+            .map(|n| n.to_string())
+            .collect();
+        let rows: Vec<Value> = statement
+            .query_map([], |r| {
+                let mut row = Map::new();
+                for (i, name) in names.iter().enumerate() {
+                    let value = match r.get_ref(i)? {
+                        ValueRef::Null => Value::Null,
+                        ValueRef::Text(t) => {
+                            let text = String::from_utf8_lossy(t).into_owned();
+                            if JSON_COLUMNS.contains(&format!("{table}.{name}").as_str()) {
+                                serde_json::from_str(&text).unwrap_or(Value::String(text))
+                            } else {
+                                Value::String(text)
+                            }
+                        }
+                        ValueRef::Integer(n) => Value::from(n),
+                        ValueRef::Real(n) if n.fract() == 0.0 && n.abs() < 9.0e15 => {
+                            Value::from(n as i64)
+                        }
+                        ValueRef::Real(n) => Value::from(n),
+                        ValueRef::Blob(b) => Value::String(format!("({} bytes)", b.len())),
+                    };
+                    row.insert(name.clone(), value);
+                }
+                Ok(Value::Object(row))
+            })
+            .map_err(|e| e.to_string())?
+            .flatten()
+            .collect();
+        all.insert(table, Value::Array(rows));
+    }
+    let store = c.path().unwrap_or_default().to_owned();
+    let export = serde_json::json!({
+        "store": store,
+        "exported": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        "tables": Value::Object(all),
+    });
+    if let Some(parent) = file.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let temp = file.with_file_name(format!(
+        "{}.tmp",
+        file.file_name().unwrap_or_default().to_string_lossy()
+    ));
+    let text = serde_json::to_string_pretty(&export).map_err(|e| e.to_string())?;
+    std::fs::write(&temp, text).map_err(|e| e.to_string())?;
+    std::fs::rename(&temp, file).map_err(|e| e.to_string())
 }

@@ -118,7 +118,7 @@ impl ScriptData {
 
     /// Encodes and saves `owner`'s table if it changed since it was last saved: the text it encoded to, or
     /// none when it couldn't be encoded.
-    fn save(shared: &Shared, host: &Host, owner: &Owner) -> Option<String> {
+    pub fn save(shared: &Shared, host: &Host, owner: &Owner) -> Option<String> {
         let (live, label) = {
             let data = shared.data.borrow();
             let table = data.tables.get(owner)?;
@@ -166,7 +166,7 @@ impl ScriptData {
     }
 
     /// The owners of every table, for a pass over them.
-    fn owners(shared: &Shared) -> Vec<Owner> {
+    pub fn owners(shared: &Shared) -> Vec<Owner> {
         shared.data.borrow().tables.keys().cloned().collect()
     }
 

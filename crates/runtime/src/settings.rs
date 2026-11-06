@@ -292,7 +292,7 @@ impl Settings {
 
     /// Puts `values` in place at once (each already read by its setting, or none for its default), writes the file
     /// once, and gives what changed.
-    fn set_all(
+    pub fn set_all(
         &mut self,
         namespace: &str,
         values: Vec<(String, Option<Value>)>,

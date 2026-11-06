@@ -916,6 +916,13 @@ fn files(project: &Define) -> BTreeMap<String, Option<String>> {
 }
 
 impl Service for CutscenesService {
+    fn costs(&self, scope: netherforge_luau::ScopeId) -> Vec<(&'static str, usize)> {
+        vec![(
+            "cutscenes",
+            self.shared.cutscenes.borrow().count_owned(scope),
+        )]
+    }
+
     fn name(&self) -> &'static str {
         "cutscenes"
     }

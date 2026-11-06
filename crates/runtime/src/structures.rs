@@ -1058,6 +1058,10 @@ impl StructuresService {
 }
 
 impl Service for StructuresService {
+    fn costs(&self, scope: netherforge_luau::ScopeId) -> Vec<(&'static str, usize)> {
+        vec![("gradual", self.shared.structures.borrow().count(scope))]
+    }
+
     fn name(&self) -> &'static str {
         "structures"
     }

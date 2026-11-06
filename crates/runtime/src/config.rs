@@ -212,6 +212,7 @@ pub fn read(
         screens: screens(section(settings, "screens")),
         databases: databases(section(settings, "databases")),
         worlds: worlds(section(settings, "worlds"), server),
+        performance: Some(performance),
         ..Config::default()
     };
     session.pack.state_dir = Some(plugin_folder.to_owned());

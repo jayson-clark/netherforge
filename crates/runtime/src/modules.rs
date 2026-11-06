@@ -132,6 +132,24 @@ struct Inner {
     requires: RefCell<HashMap<ScopeId, BTreeSet<String>>>,
 }
 
+/// How a module is doing: running, its body failed (until it's reloaded), or not started.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ModuleStatus {
+    Running,
+    Failed,
+    Idle,
+}
+
+impl ModuleStatus {
+    pub fn label(self) -> &'static str {
+        match self {
+            ModuleStatus::Running => "running",
+            ModuleStatus::Failed => "failed",
+            ModuleStatus::Idle => "idle",
+        }
+    }
+}
+
 /// A room's modules. Cheap to clone: a clone is the same modules.
 #[derive(Clone)]
 pub struct Modules(Rc<Inner>);
@@ -141,6 +159,20 @@ fn mistake(message: impl Into<String>) -> mlua::Error {
 }
 
 impl Modules {
+    /// Every module of the tree, by id (a package's `ns:id`), in name order.
+    pub fn ids(&self) -> Vec<String> {
+        self.0.project.borrow().modules().into_iter().collect()
+    }
+
+    /// How module `id` is doing (`/nf modules`).
+    pub fn status(&self, id: &str) -> ModuleStatus {
+        match self.0.modules.borrow().get(id) {
+            None => ModuleStatus::Idle,
+            Some(scope) if self.0.scripts.live(*scope) => ModuleStatus::Running,
+            Some(_) => ModuleStatus::Failed,
+        }
+    }
+
     /// The modules of `project`, whose scopes' calls get `budget` steps.
     pub fn new(scripts: Scripts, project: Project, budget: u64) -> Modules {
         Modules(Rc::new(Inner {
@@ -594,6 +626,7 @@ impl Modules {
         let f: Function = host.load(owner, path, &source)?;
         let key = (owner, path.to_owned());
         self.0.loading.borrow_mut().insert(key.clone());
+        host.next_kind("load");
         let result = host.invoke::<Value>(owner, self.0.budget, &f, ());
         self.0.loading.borrow_mut().remove(&key);
         let value = result?;

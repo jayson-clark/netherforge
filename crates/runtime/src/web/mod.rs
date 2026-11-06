@@ -259,7 +259,10 @@ impl WebContext {
                     );
                     return;
                 };
-                if let Err(failure) = self.scripts.call_kept(scope, &handler, (request, response)) {
+                if let Err(failure) =
+                    self.scripts
+                        .call_as("route", scope, &handler, (request, response))
+                {
                     self.scripts.handler_failed(scope, &what, failure);
                     self.shared.web.borrow_mut().finish(
                         waiting,
@@ -427,6 +430,16 @@ pub struct WebService {
 }
 
 impl Service for WebService {
+    fn costs(&self, scope: netherforge_luau::ScopeId) -> Vec<(&'static str, usize)> {
+        let web = self.shared.web.borrow();
+        let routes = web
+            .routes
+            .values()
+            .filter(|r| r.scope == Some(scope))
+            .count();
+        vec![("routes", routes), ("logins", web.flows.count_owned(scope))]
+    }
+
     fn name(&self) -> &'static str {
         "web routes"
     }

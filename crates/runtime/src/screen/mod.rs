@@ -2308,6 +2308,22 @@ fn folders(project: &Define, kind: &str) -> BTreeMap<String, String> {
 }
 
 impl Service for ScreensService {
+    fn costs(&self, scope: netherforge_luau::ScopeId) -> Vec<(&'static str, usize)> {
+        let screens = self.shared.screens.borrow();
+        let count = screens
+            .screens
+            .values()
+            .filter(|s| s.owner == Some(scope) && !s.removed)
+            .count();
+        let videos = screens
+            .videos
+            .playbacks
+            .values()
+            .filter(|p| p.owner == Some(scope))
+            .count();
+        vec![("screens", count), ("videos", videos)]
+    }
+
     fn name(&self) -> &'static str {
         "screens"
     }

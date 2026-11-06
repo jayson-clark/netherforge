@@ -890,6 +890,13 @@ pub struct HttpService {
 }
 
 impl Service for HttpService {
+    fn costs(&self, scope: netherforge_luau::ScopeId) -> Vec<(&'static str, usize)> {
+        vec![(
+            "connections",
+            self.shared.http.borrow().connections.count_owned(scope),
+        )]
+    }
+
     fn name(&self) -> &'static str {
         "http"
     }

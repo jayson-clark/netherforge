@@ -66,7 +66,26 @@ pub struct Dialogs {
     scripts: BTreeMap<String, String>,
     /// The project dialog on each player's screen, as far as anything has told us.
     open: HashMap<Uuid, Opening>,
+    /// A dialog the runtime itself shows (`/nf settings`) on each player's screen: it answers its presses, not a
+    /// script.
+    runtime: HashMap<Uuid, RuntimeDialog>,
     home: String,
+}
+
+/// A dialog the runtime built for one showing and answers itself (Kotlin's `Dialogs.RuntimeDialog`): `pressed`
+/// hears the dialog's id, the button and the answers.
+#[derive(Clone)]
+pub struct RuntimeDialog {
+    pub spec: DialogSpec,
+    #[allow(clippy::type_complexity)]
+    pub pressed: Rc<dyn Fn(&PlayerRef, &str, &str, &HashMap<String, Dynamic>)>,
+}
+
+impl RuntimeDialog {
+    /// Whether `dialog` is this one or one its list offers.
+    fn has(&self, dialog: &str) -> bool {
+        self.spec.id == dialog || self.spec.listed.iter().any(|l| l.id == dialog)
+    }
 }
 
 impl Dialogs {
@@ -305,6 +324,11 @@ impl DialogContext {
 
     /// The server is about to take `player`'s dialog away: `close` for the one we know they have.
     fn closed_by_server(&self, player: &PlayerRef) {
+        self.shared
+            .dialogs
+            .borrow_mut()
+            .runtime
+            .remove(&player.uuid);
         let opening = self.shared.dialogs.borrow_mut().open.remove(&player.uuid);
         let Some(opening) = opening else { return };
         if self
@@ -350,6 +374,24 @@ impl DialogContext {
         true
     }
 
+    /// Puts a dialog the runtime answers itself on `player`'s screen (`/nf settings`).
+    pub fn show_runtime(&self, player: &PlayerRef, dialog: RuntimeDialog) -> bool {
+        self.closed_by_server(player);
+        if !self
+            .platform()
+            .dialogs()
+            .show(player.uuid, dialog.spec.clone())
+        {
+            return false;
+        }
+        self.shared
+            .dialogs
+            .borrow_mut()
+            .runtime
+            .insert(player.uuid, dialog);
+        true
+    }
+
     /// Takes whatever dialog is on `player`'s screen away; a project dialog's `close` handlers hear it.
     pub fn close(&self, player: &PlayerRef) -> bool {
         self.closed_by_server(player);
@@ -358,6 +400,17 @@ impl DialogContext {
 
     /// `player` left `dialog` through its exit action (escape, or the exit button).
     pub fn closed(&self, player: &PlayerRef, dialog: &str, registry: bool) {
+        {
+            let mut dialogs = self.shared.dialogs.borrow_mut();
+            if dialogs
+                .runtime
+                .get(&player.uuid)
+                .is_some_and(|d| d.has(dialog))
+            {
+                dialogs.runtime.remove(&player.uuid);
+                return;
+            }
+        }
         let on_screen = {
             let dialogs = self.shared.dialogs.borrow();
             dialogs.on_screen(dialogs.open.get(&player.uuid), dialog)
@@ -385,6 +438,18 @@ impl DialogContext {
         values: HashMap<String, Dynamic>,
         registry: bool,
     ) {
+        // The runtime's own dialog answers its presses itself; a press closes it.
+        let runtime = {
+            let mut dialogs = self.shared.dialogs.borrow_mut();
+            match dialogs.runtime.get(&player.uuid) {
+                Some(d) if d.has(dialog) => dialogs.runtime.remove(&player.uuid),
+                _ => None,
+            }
+        };
+        if let Some(runtime) = runtime {
+            (runtime.pressed)(player, dialog, button, &values);
+            return;
+        }
         let (on_screen, closes, known, context) = {
             let dialogs = self.shared.dialogs.borrow();
             let opening = dialogs.open.get(&player.uuid);

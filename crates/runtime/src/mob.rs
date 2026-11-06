@@ -126,7 +126,7 @@ impl LuaGoal {
             }),
         )
         .ok()?;
-        match scripts.call_kept(self.scope, f, mob) {
+        match scripts.call_as("goal", self.scope, f, mob) {
             Ok(value) => Some(value),
             Err(failure) => {
                 if self.live() {
@@ -637,6 +637,10 @@ pub struct MobsService {
 }
 
 impl Service for MobsService {
+    fn costs(&self, scope: netherforge_luau::ScopeId) -> Vec<(&'static str, usize)> {
+        vec![("goals", self.mobs.count_owned(scope))]
+    }
+
     fn name(&self) -> &'static str {
         "mobs"
     }

@@ -235,6 +235,47 @@ pub fn is_reserved(full: &str) -> bool {
 }
 
 impl Grants {
+    /// What it allows, as `/nf network` says it: `shop, owns shop:*, sends to lobby`.
+    pub fn describe(&self) -> String {
+        let mut out = self.role.clone();
+        if self.trusted {
+            return out;
+        }
+        if !self.owns.is_empty() {
+            out.push_str(", owns ");
+            out.push_str(&self.owns.join(", "));
+        }
+        if !self.shares.is_empty() {
+            out.push_str(", shared ");
+            let shares: Vec<String> = self
+                .shares
+                .iter()
+                .map(|s| {
+                    let mut access = s.access.clone();
+                    access.sort_by_key(|a| *a as u8);
+                    let words: Vec<&str> = access.iter().map(|a| a.word()).collect();
+                    format!("{}({})", s.name, words.join("+"))
+                })
+                .collect();
+            out.push_str(&shares.join(", "));
+        }
+        if !self.presence {
+            out.push_str(", no presence");
+        }
+        if let Some(to) = &self.send_to {
+            out.push_str(", sends to ");
+            out.push_str(&if to.is_empty() {
+                "nowhere".to_owned()
+            } else {
+                to.join(", ")
+            });
+        }
+        if self.moderation {
+            out.push_str(", moderates");
+        }
+        out
+    }
+
     pub fn trusted() -> Grants {
         Grants {
             role: "trusted".into(),

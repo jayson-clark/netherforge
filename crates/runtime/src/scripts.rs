@@ -498,6 +498,29 @@ impl Scripts {
         WeakScripts(Rc::downgrade(&self.0))
     }
 
+    /// Every scope that still runs, oldest first.
+    pub fn live_scopes(&self) -> Vec<ScopeId> {
+        let state = self.0.state.borrow();
+        let mut scopes: Vec<ScopeId> = state
+            .scopes
+            .iter()
+            .filter(|(_, s)| !s.disabled)
+            .map(|(id, _)| *id)
+            .collect();
+        scopes.sort();
+        scopes
+    }
+
+    /// What `scope` holds here: its subscriptions and its tasks (`/nf scripts`).
+    pub fn held(&self, scope: ScopeId) -> (usize, usize) {
+        self.0
+            .state
+            .borrow()
+            .scopes
+            .get(&scope)
+            .map_or((0, 0), |s| (s.subs.len(), s.tasks.len()))
+    }
+
     pub fn live(&self, scope: ScopeId) -> bool {
         self.0
             .state
@@ -540,6 +563,18 @@ impl Scripts {
                 state.due.remove(&(due, id));
                 id
             };
+            // A scope that already ran its tick's worth has its timers wait for the next tick.
+            let scope = self.0.state.borrow().timers.get(&next).map(|t| t.scope);
+            if let Some(scope) = scope
+                && self.host().over_tick(scope)
+            {
+                let mut state = self.0.state.borrow_mut();
+                if let Some(timer) = state.timers.get_mut(&next) {
+                    timer.due = now + 1;
+                }
+                state.due.insert((now + 1, next), ());
+                continue;
+            }
             self.run_timer(next, now);
         }
     }
@@ -578,11 +613,13 @@ impl Scripts {
                 self.wake(task, Wait::Timer(token), MultiValue::new())
             }
             TimerKind::Once(f) => {
+                self.host().next_kind("timer");
                 if let Err(failure) = self.call(scope, &f, ()) {
                     self.report(scope, "timer", failure, false);
                 }
             }
             TimerKind::Every(f, _) => {
+                self.host().next_kind("timer");
                 let result = self.call(scope, &f, ());
                 let mut state = self.0.state.borrow_mut();
                 let Some(timer) = state.timers.get_mut(&id) else {
@@ -630,6 +667,21 @@ impl Scripts {
         }
         let budget = self.budget(scope);
         self.host().invoke::<Value>(scope, budget, f, args)
+    }
+
+    /// `call_kept`, timed by the profiler as a call of `kind` (`goal`, `command`, `complete`).
+    pub fn call_as<A: mlua::IntoLuaMulti>(
+        &self,
+        kind: &str,
+        scope: ScopeId,
+        f: &Function,
+        args: A,
+    ) -> Result<Value, Failure> {
+        if !self.live(scope) {
+            return Ok(Value::Nil);
+        }
+        self.host().next_kind(kind);
+        self.call_kept(scope, f, args)
     }
 
     /// A function a service called for `scope` failed: reported as a handler's failure is.
@@ -948,7 +1000,7 @@ impl Scripts {
     fn run_handlers(&self, ids: &[u64], ev: &Table, view: &Table) {
         let tick = self.tick_count();
         for &id in ids {
-            let (scope, handler, once, what) = {
+            let (scope, handler, once, what, event) = {
                 let state = self.0.state.borrow();
                 let Some(sub) = state.subs.get(&id) else {
                     continue;
@@ -956,6 +1008,11 @@ impl Scripts {
                 if let Some((rate, phase)) = sub.every
                     && !(tick + phase).is_multiple_of(rate)
                 {
+                    continue;
+                }
+                // A scope that already ran its tick's worth has its `tick` handlers wait for the next (no other
+                // event waits: what it's told of happened now).
+                if sub.event == "tick" && self.host().over_tick(sub.scope) {
                     continue;
                 }
                 let on = if sub.class == "nf" {
@@ -968,11 +1025,13 @@ impl Scripts {
                     sub.handler.clone(),
                     sub.once,
                     format!("{} handler{on}", sub.event),
+                    sub.event.clone(),
                 )
             };
             if once {
                 self.unsubscribe(id);
             }
+            self.host().next_kind(&event);
             let result = self.call(scope, &handler, ev.clone());
             match result {
                 Ok(()) => {
@@ -1137,6 +1196,7 @@ impl Scripts {
         let mut args = vec![Value::Thread(thread.clone())];
         args.extend(values);
         let budget = self.budget(scope);
+        self.host().next_kind("task");
         let result = self.host().invoke::<MultiValue>(
             scope,
             budget,
@@ -1262,6 +1322,7 @@ impl Scripts {
                         continue;
                     };
                     let budget = self.budget(scope);
+                    host.next_kind("callback");
                     if let Err(failure) =
                         host.invoke::<()>(scope, budget, &callback, (it.value, it.err))
                     {

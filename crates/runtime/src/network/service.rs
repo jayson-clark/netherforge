@@ -115,6 +115,18 @@ pub struct Network {
 }
 
 impl Network {
+    /// The channels and maps this session listens to now (`/nf network`): the hub's own maps (bans, mutes) are the
+    /// server's, not its scripts'.
+    pub fn listening(&self) -> (Vec<String>, Vec<String>) {
+        let (channels, maps) = self.listened.clone().unwrap_or_default();
+        (
+            channels,
+            maps.into_iter()
+                .filter(|m| !super::protocol::is_reserved(m))
+                .collect(),
+        )
+    }
+
     pub fn link(&self) -> Option<Rc<NetworkLink>> {
         self.link.clone()
     }

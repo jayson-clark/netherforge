@@ -1233,6 +1233,17 @@ impl WasmService {
 }
 
 impl Service for WasmService {
+    fn costs(&self, scope: netherforge_luau::ScopeId) -> Vec<(&'static str, usize)> {
+        let wasm = self.shared.wasm.borrow();
+        let instances = wasm
+            .instances
+            .values()
+            .filter(|i| i.owner == scope && !i.closed())
+            .count();
+        let programs = wasm.programs.values().filter(|p| p.owner == scope).count();
+        vec![("wasm instances", instances), ("wasm programs", programs)]
+    }
+
     fn name(&self) -> &'static str {
         "wasm"
     }

@@ -90,6 +90,11 @@ pub struct Flows {
 }
 
 impl Flows {
+    /// How many logins `scope` has under way (`/nf scripts`' count).
+    pub fn count_owned(&self, scope: ScopeId) -> usize {
+        self.flows.values().filter(|f| f.scope == scope).count()
+    }
+
     pub fn find(&self, number: i64) -> Option<&Flow> {
         self.flows.get(&number)
     }

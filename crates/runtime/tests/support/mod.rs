@@ -479,6 +479,14 @@ impl netherforge_platform::FakePlayerOps for Fake {
         online.extend(self.bots.online.borrow().iter().map(FakeBot::player));
         online
     }
+    fn teleport(&self, uuid: Uuid, to: Location) -> bool {
+        if uuid != Uuid(77) {
+            return false;
+        }
+        self.call(format!("teleport Alex {}", at(&to)));
+        *self.player.borrow_mut() = Some(to);
+        true
+    }
     fn location(&self, uuid: Uuid) -> Option<Location> {
         if let Some(bot) = self.bots.by_id(uuid) {
             return Some(bot.at);
@@ -1176,7 +1184,92 @@ impl netherforge_platform::FakeStructureOps for Fake {
     fn forget(&self, _: std::path::PathBuf) {}
 }
 
+/// MiniMessage's escape, as the adapter's would: a tag's `<` shown as written.
+impl netherforge_platform::FakeTextOps for Fake {
+    fn escape(&self, text: String) -> String {
+        text.replace('<', "\\<")
+    }
+}
+
+/// Runs `line` (`nf scripts all`) as `player` (none: the console), as the server would a command whose one
+/// argument is the rest of the line: what it replied.
+pub fn command(platform: &Fake, player: Option<PlayerRef>, line: &str) -> Vec<String> {
+    let (name, rest) = line.split_once(' ').unwrap_or((line, ""));
+    let handler = {
+        let commands = platform.commands.borrow();
+        let found = commands
+            .values()
+            .find(|(spec, _)| spec.name == name || spec.aliases.iter().any(|a| a == name))
+            .map(|(_, handler)| handler.clone());
+        found.unwrap_or_else(|| panic!("no command /{name}"))
+    };
+    let sender = std::rc::Rc::new(TestSender {
+        player,
+        allowed: true,
+        replies: RefCell::default(),
+    });
+    let mut arguments = std::collections::HashMap::new();
+    if !rest.is_empty() {
+        arguments.insert(
+            "arguments".to_owned(),
+            netherforge_platform::ArgumentValue::Text(netherforge_platform::ArgumentValueText {
+                text: rest.to_owned(),
+            }),
+        );
+    }
+    handler.run(
+        sender.clone(),
+        name.to_owned(),
+        netherforge_platform::CommandInput {
+            path: Vec::new(),
+            arguments,
+            text: rest.to_owned(),
+        },
+    );
+    sender.replies.take()
+}
+
+/// What completing `line` (`nf spawn `) offers.
+pub fn complete(platform: &Fake, line: &str) -> Vec<String> {
+    let (name, rest) = line.split_once(' ').unwrap_or((line, ""));
+    let handler = {
+        let commands = platform.commands.borrow();
+        let found = commands
+            .values()
+            .find(|(spec, _)| spec.name == name || spec.aliases.iter().any(|a| a == name))
+            .map(|(_, handler)| handler.clone());
+        found.unwrap_or_else(|| panic!("no command /{name}"))
+    };
+    let sender = std::rc::Rc::new(TestSender {
+        player: None,
+        allowed: true,
+        replies: RefCell::default(),
+    });
+    handler
+        .suggest(
+            sender,
+            netherforge_platform::SuggestionRequest {
+                path: Vec::new(),
+                argument: "arguments".into(),
+                arguments: std::collections::HashMap::new(),
+                partial: rest.to_owned(),
+            },
+        )
+        .suggestions
+}
+
+/// Alex, as a command's sender.
+pub fn alex() -> PlayerRef {
+    PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    }
+}
+
 impl FakePlatform for Fake {
+    fn text(&self) -> &dyn netherforge_platform::TextOps {
+        self
+    }
     fn world_manager(&self) -> &dyn netherforge_platform::WorldManagerOps {
         self
     }

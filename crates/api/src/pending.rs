@@ -130,3 +130,10 @@ pub fn cancel(lua: &Lua, id: u64) -> bool {
     lua.app_data_mut::<Waits>()
         .is_some_and(|mut w| w.waits.remove(&id).is_some())
 }
+
+/// How many waits `scope` has that haven't been delivered (`/nf scripts`' "waits").
+pub fn waiting(lua: &Lua, scope: ScopeId) -> usize {
+    lua.app_data_ref::<Waits>().map_or(0, |w| {
+        w.waits.values().filter(|w| w.scope == Some(scope)).count()
+    })
+}

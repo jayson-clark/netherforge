@@ -64,6 +64,16 @@ pub struct Placeholders {
     expansions: Vec<Rc<Expansion>>,
 }
 
+impl Placeholders {
+    /// How many placeholders `scope` provides (`/nf scripts`' count).
+    pub fn count_owned(&self, scope: ScopeId) -> usize {
+        self.expansions
+            .iter()
+            .filter(|e| e.scope == scope && e.live.get())
+            .count()
+    }
+}
+
 /// What `Shared::interop` holds.
 #[derive(Default)]
 pub struct Interop {
@@ -318,6 +328,13 @@ pub struct InteropService {
 }
 
 impl Service for InteropService {
+    fn costs(&self, scope: netherforge_luau::ScopeId) -> Vec<(&'static str, usize)> {
+        vec![(
+            "placeholders",
+            self.shared.interop.borrow().placeholders.count_owned(scope),
+        )]
+    }
+
     fn name(&self) -> &'static str {
         "plugins"
     }
