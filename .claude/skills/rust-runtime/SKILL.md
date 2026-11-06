@@ -1075,8 +1075,67 @@ the proxy, the standalone hub) **stays Kotlin**: the Rust runtime is a client of
 
 Not yet: `network.wait-for-hub-seconds` and `require-hub` (the session doesn't wait for a welcome; the policy the hub sends isn't
 applied), `/nf network`, `/nf drain`, `/nf shutdown`, metrics (`sent_by_package`/`heard_by_package` are counted), the bundle and pack
-sharing parts (`keeps_packs`, `PackLoaded`), the adapter's watched events (chat is held back only if the adapter forwards it), and
-`nf.test.network_*` (the local hub has what they need: peers, `accept_joins`, `reports`).
+sharing parts (`keeps_packs`, `PackLoaded`), and the adapter's watched events (chat is held back only if the adapter forwards it).
+`nf.test.network_*` is ported: see Script test runs.
+
+## Script test runs (`crates/runtime/src/testing/`)
+
+Kotlin's `testing/ScriptTests`, `TestHarness`, `NfTestImpl` and the test runner's `ScriptTestRunner`, `Events` and `Reports`.
+
+- **`nf.test` exists only in a test run.** The generator writes `TEST_ONLY` (the spec's `testOnly` namespaces) beside `BINDINGS`,
+  and `bind.rs`'s lookup answers `nil` for one unless `Runtime::testing()`; the runtime's `Api` says so when the session was given
+  a harness (`session::Config::testing`, an `Rc<dyn TestHarness>`). The harness is the fake server's: `tick` (the runtime's
+  `PlatformEvents::tick`, then its scheduler and world), `join`, `shown`, and `events` (the session's `PlatformEvents`, for clicks,
+  keys and joins as the server raises them). It reaches the session through its `ServerEvents`, so a runner keeps its project
+  `'static` (leaked once per run) and the events in an `Rc`; the session never holds the harness's server.
+- **Test files and cases** (`mod.rs`, Kotlin's `ScriptTests`): `Session::test_files` (`*_test.lua`, not a package's),
+  `load_tests(file)` runs one in a scope of its own as a resource's script runs (`Modules::quiet_script`: `require` reaches the
+  project's modules and the files beside it, the budget is format's `DEFAULT_BUDGET`, and a failing body isn't reported: the runner
+  says it), told its scope before the body so `nf.test.case` knows it's the file's own code. `run_test(name)` calls the case as that
+  scope's code, then reports what its handlers set off. A test fails at its own line; a script's error while it ran (or as the
+  project started) errors it: `Session::report` keeps, in a test run, each `ScriptError` the editor's console would get (Kotlin's
+  words, `{label}: {what} failed: {message}`) and each logged line with its place, which `take_test_record` hands the runner.
+- **The test tick** (`api.rs`, `advance`): each tick waits up to ten seconds for what scripts started on other threads
+  (`Wasm::quiet`: the pool idle, every program done or waiting), joins the players the network sent here, then runs **detached**
+  (`Host::detached`: the test's frames are set aside, so a call in that tick has its own budget and time limit and nothing is charged
+  to the test): first what waits for the main thread's next turn (requests for `nf.test.http`, stand-ins' answers, the test's other
+  servers answering), then the harness's tick. A request nobody answered fails the test at the `advance` (`take_unanswered`), or
+  when the test ends. A test's own call includes every tick it advances, so a runner gives the host a long `deadline`
+  (`Config::limits`; Kotlin's 120 s).
+- **`nf.test.raise`** reads its payload with the event shape's codec and raises it along the server's path: the generator's
+  `raisable.rs` (from `raisable.ts`, Kotlin's `RaisableEvents`) names each `nf` event's first stage (a class's event on the handle in
+  a payload field, or the world of a `Block` or `Location` in it). `nf.test.terrain` is the prelude's Luau, compiled once per state.
+- **HTTP** (Kotlin's `answeredInTest` and `TestConnections`): a request is checked as on a server (the package declares the host, the
+  rate, a literal address's rules with `nf.test.allow_private`'s stand-ins for the owner's `http.allow-private`; a test run resolves
+  no name, `localhost` is this machine), then queued (`Tests::queued`) for the handler, called with `{ method, url, headers, body }`
+  as the test's code; its answer must be `{ status, headers, body }`. Connections (`Connections::testing`) get a `Far` instead of a
+  thread: `accept`, `receive` and `disconnect` push into the connection's own `Sink` (`try_message`, never waiting: a full queue is
+  the test's error) through the same splitter and byte count, and every connection is kept with what scripts sent on it.
+  `nf.test.request` routes a `WebCall` through the session's routes and ticks until it's answered; a test run's web base is the
+  owner's `public-url` or `http://localhost` and nothing is served. An OAuth flow's token endpoint isn't called: `Flow::test_token`
+  or `{ access_token = "test-token", token_type = "Bearer" }` answers.
+- **WebAssembly stand-ins** (Kotlin's `WasmStandIns`): `Wasm::stubs` by the server's name; `instantiate` makes a `StandIn` (counted
+  against `max-instances-per-package`), `call`/`call_text` and `run` are answered by the stub's functions at the next turn
+  (`Tests::later`) with arguments read through JSON, and a started program has no thread: its `ProgramShared` is quiet from the
+  start, and each tick `answer_stand_ins` takes what was sent (`take_sent`), pushes what `input` printed, and its end once its input
+  closed. Nothing of a stand-in reaches wasmtime.
+- **The test's network** is the local hub as `test` (`Config::network.alone`, ready at once), accepting joins. Its other servers are
+  `TestPeer`s kept by name; `network_answer` listens for the peer and answers its requests before each tick; `network_request` sends
+  one and ticks until the reply; `network_send` places the player on the peer, sends them here and joins them through the harness.
+  Test players' UUIDs are `testing::player_id` (Java's `nameUUIDFromBytes`, as Kotlin's fake server makes them), which a harness
+  must use too, since the hub names them before they join. `network_role` has the hub welcome this server again with the role's
+  grants (`LocalHub::rejoin_here`; the presets are Kotlin's `Grants.preset`): the server's own checks hold its scripts to them, the
+  stand-in hub doesn't. `nf.test.network_publish("admin:<client>", ...)` is `LocalHub::admin_publish`.
+- **The runner** (`runner.rs`): `Runner` over a `TestServer` the caller starts fresh for every test (the first test of a file runs on
+  the server that found its names); a project that doesn't start is `Refused`. Its `TestEvent`s are Kotlin's JSON line for line
+  (`{"event":"result",...}`, null and empty fields left out), `TextReport` its text, `junit` its XML. Tracebacks lose Luau's `[C]`
+  frames and the shim's.
+- Found on the way: the host's shim turned a binding that returns nothing into one `nil` (`pcall(f)` gave `true, nil`); it passes on
+  as many values as there are now.
+
+Not yet: the runner's executable (the Kotlin `NetherForgeTest` jar stays what `netherforge test` runs until a Rust fake platform, the
+testkit's, exists: the Rust tests' fakes are each test file's own), the game data a run is checked against, `nf.test.shown`'s views
+(the harness's), and bots (`nf.bots` in a test is the bots phase's).
 
 ## Server-owner settings (`crates/runtime/src/settings.rs`)
 
