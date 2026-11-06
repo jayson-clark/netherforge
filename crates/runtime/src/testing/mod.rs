@@ -22,6 +22,12 @@ pub mod runner;
 /// What names a test file.
 pub const SUFFIX: &str = "_test.lua";
 
+/// A test player's UUID from their name, as a test server makes it (Java's `UUID.nameUUIDFromBytes`, as Kotlin's fake
+/// server does): the network's other servers name them by it before they join here.
+pub fn player_id(name: &str) -> Uuid {
+    crate::packs::name_uuid(name.as_bytes())
+}
+
 /// What a test run gives the runtime: the fake server's clock, who is on it, and its events. Set as
 /// `Config::testing` by a script test runner; a server never has one, which is why `nf.test` doesn't exist there.
 pub trait TestHarness {
@@ -94,6 +100,13 @@ pub struct Tests {
     pub allowances: Vec<crate::http::PrivateAllowance>,
     /// Requests scripts made, for the test's handler to answer at the next tick.
     pub(crate) queued: Vec<Queued>,
+    /// What else waits for the main thread's next turn, before the next tick (a WebAssembly stand-in's answer).
+    pub(crate) later: Vec<Box<dyn FnOnce()>>,
+    /// The test's other servers in its network, by name.
+    pub(crate) peers: IndexMap<String, Rc<crate::network::local::TestPeer>>,
+    /// How each of them answers requests on a channel (`nf.test.network_answer`): by server and full channel name,
+    /// the test's scope and callback.
+    pub(crate) peer_answers: IndexMap<(String, String), (ScopeId, Function)>,
     /// Why each request the test left unanswered failed it, in order; `reported` of them already raised.
     pub(crate) unanswered: Vec<String>,
     pub(crate) reported: usize,
@@ -146,6 +159,9 @@ impl Tests {
         self.http = None;
         self.allowances.clear();
         self.queued.clear();
+        self.later.clear();
+        self.peers.clear();
+        self.peer_answers.clear();
         self.unanswered.clear();
         self.reported = 0;
     }
@@ -389,6 +405,60 @@ pub(crate) fn answer_queued(shared: &crate::Shared, scripts: &crate::Scripts) {
     for request in queued {
         let reply = answer(shared, scripts, &request.call);
         (request.done)(reply);
+    }
+    let later = std::mem::take(&mut shared.tests.borrow_mut().later);
+    for job in later {
+        job();
+    }
+    answer_peers(shared, scripts);
+}
+
+/// The test's other servers answer the requests they were asked on channels the test answers for them.
+fn answer_peers(shared: &crate::Shared, scripts: &crate::Scripts) {
+    let peers: Vec<Rc<crate::network::local::TestPeer>> =
+        shared.tests.borrow().peers.values().cloned().collect();
+    for peer in peers {
+        let asked: Vec<(i64, String, String, serde_json::Value)> = {
+            let tests = shared.tests.borrow();
+            let mut log = peer.log.borrow_mut();
+            let mut kept = std::collections::VecDeque::new();
+            let mut asked = Vec::new();
+            for request in log.requests.drain(..) {
+                if tests
+                    .peer_answers
+                    .contains_key(&(peer.name.clone(), request.1.clone()))
+                {
+                    asked.push(request);
+                } else {
+                    kept.push_back(request);
+                }
+            }
+            log.requests = kept;
+            asked
+        };
+        for (id, channel, from, value) in asked {
+            let answerer = shared
+                .tests
+                .borrow()
+                .peer_answers
+                .get(&(peer.name.clone(), channel))
+                .cloned();
+            let Some((scope, callback)) = answerer else {
+                continue;
+            };
+            let host = scripts.host();
+            let lua = host.lua();
+            let given = crate::network::service::NetworkContext::to_lua(lua, Some(&value))
+                .unwrap_or(mlua::Value::Nil);
+            let (value, error) = match scripts.call_kept(scope, &callback, (given, from)) {
+                Ok(answer) => match json_of(&host, &answer, "the answer") {
+                    Ok(value) => (value, None),
+                    Err(why) => (None, Some(why)),
+                },
+                Err(failure) => (None, Some(failure.to_string())),
+            };
+            peer.send(crate::network::protocol::ServerFrame::Reply { id, value, error });
+        }
     }
 }
 

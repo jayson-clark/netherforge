@@ -53,6 +53,10 @@ impl netherforge_platform::FakePlayerOps for Fake {
             .find(|p| p.uuid == uuid)
             .cloned()
     }
+    fn kick(&self, uuid: Uuid, _: Option<String>) -> bool {
+        self.online.borrow_mut().retain(|p| p.uuid != uuid);
+        true
+    }
 }
 
 impl netherforge_platform::FakeWorldEntityOps for Fake {
@@ -102,6 +106,7 @@ impl FakePlatform for Fake {
 struct Files {
     names: BTreeSet<String>,
     texts: BTreeMap<String, String>,
+    bytes: BTreeMap<String, Vec<u8>>,
 }
 
 impl ProjectSource for Files {
@@ -111,12 +116,29 @@ impl ProjectSource for Files {
     fn read(&self, path: &str) -> Option<String> {
         self.texts.get(path).cloned()
     }
+    fn bytes(&self, path: &str) -> Option<Vec<u8>> {
+        self.bytes
+            .get(path)
+            .cloned()
+            .or_else(|| self.texts.get(path).map(|t| t.clone().into_bytes()))
+    }
+    fn reads_wasm(&self) -> bool {
+        true
+    }
+    fn wasm(&self, path: &str) -> Option<netherforge_format::wasm::WasmInfo> {
+        Some(netherforge_format::wasm::read(self.bytes.get(path)?))
+    }
 }
 
 const MANIFEST: &str = r#"{ "formatVersion": 1, "name": "Test", "namespace": "test", "version": "1.0.0", "minecraft": "26.3" }"#;
 
 /// A project of `files` (the manifest added), kept for the run: a test server's session borrows it.
 fn project(files: &[(&str, &str)]) -> &'static Files {
+    project_with(files, &[])
+}
+
+/// `project`, with files of bytes too.
+fn project_with(files: &[(&str, &str)], binary: &[(&str, Vec<u8>)]) -> &'static Files {
     let mut texts: BTreeMap<String, String> = files
         .iter()
         .map(|(p, t)| (p.to_string(), t.to_string()))
@@ -124,9 +146,14 @@ fn project(files: &[(&str, &str)]) -> &'static Files {
     texts
         .entry("netherforge.json".into())
         .or_insert_with(|| MANIFEST.into());
+    let bytes: BTreeMap<String, Vec<u8>> = binary
+        .iter()
+        .map(|(p, b)| (p.to_string(), b.clone()))
+        .collect();
     Box::leak(Box::new(Files {
-        names: texts.keys().cloned().collect(),
+        names: texts.keys().chain(bytes.keys()).cloned().collect(),
         texts,
+        bytes,
     }))
 }
 
@@ -134,13 +161,6 @@ fn project(files: &[(&str, &str)]) -> &'static Files {
 struct Harness {
     platform: Rc<Fake>,
     events: RefCell<Weak<ServerEvents<'static>>>,
-}
-
-fn uuid_of(name: &str) -> Uuid {
-    Uuid(
-        name.bytes()
-            .fold(7u128, |h, b| h.wrapping_mul(31).wrapping_add(b as u128)),
-    )
 }
 
 impl TestHarness for Harness {
@@ -161,7 +181,7 @@ impl TestHarness for Harness {
             return Some(p.clone());
         }
         let player = PlayerRef {
-            uuid: uuid_of(name),
+            uuid: netherforge_runtime::testing::player_id(name),
             name: name.into(),
         };
         self.platform.online.borrow_mut().push(player.clone());
@@ -892,6 +912,311 @@ nf.test.case("a declined login fails, and a route can't take a flow's path", fun
   assert(site.failed[1] == "the service said access_denied", tostring(site.failed[1]))
   assert(not pcall(nf.web.route, "GET", "/oauth/example/callback", function() end))
   assert(not pcall(nf.web.oauth, { name = "x", authorize_url = "https://a.b/", token_url = "https://undeclared.example/t", client_id = "c" }))
+end)
+"#,
+        ),
+    ]));
+}
+
+/// A library adding two numbers.
+fn library() -> Vec<u8> {
+    wat::parse_str(
+        r#"(module (func (export "add") (param i32 i32) (result i32) (i32.add (local.get 0) (local.get 1))))"#,
+    )
+    .unwrap()
+}
+
+/// A program that answers each line it reads with `echo: <line>`, and exits with 0 at the end of its input.
+fn echo() -> Vec<u8> {
+    wat::parse_str(
+        r#"
+    (module
+      (import "wasi_snapshot_preview1" "fd_read" (func $fd_read (param i32 i32 i32 i32) (result i32)))
+      (import "wasi_snapshot_preview1" "fd_write" (func $fd_write (param i32 i32 i32 i32) (result i32)))
+      (memory (export "memory") 1)
+      (data (i32.const 24) "\n")
+      (data (i32.const 100) "echo: ")
+      (func (export "_start")
+        (local $n i32)
+        (loop $next
+          (i32.store (i32.const 0) (i32.const 16))
+          (i32.store (i32.const 4) (i32.const 1))
+          (drop (call $fd_read (i32.const 0) (i32.const 0) (i32.const 1) (i32.const 8)))
+          (if (i32.eqz (i32.load (i32.const 8))) (then (return)))
+          (if (i32.eq (i32.load8_u (i32.const 16)) (i32.const 10))
+            (then
+              (i32.store (i32.const 32) (i32.const 100)) (i32.store (i32.const 36) (i32.const 6))
+              (i32.store (i32.const 40) (i32.const 200)) (i32.store (i32.const 44) (local.get $n))
+              (i32.store (i32.const 48) (i32.const 24)) (i32.store (i32.const 52) (i32.const 1))
+              (drop (call $fd_write (i32.const 1) (i32.const 32) (i32.const 3) (i32.const 8)))
+              (local.set $n (i32.const 0))
+              (br $next)))
+          (i32.store8 (i32.add (i32.const 200) (local.get $n)) (i32.load8_u (i32.const 16)))
+          (local.set $n (i32.add (local.get $n) (i32.const 1)))
+          (br $next)))
+    )
+    "#,
+    )
+    .unwrap()
+}
+
+#[test]
+fn modules_really_run_in_a_test_and_a_test_can_stand_in_for_one() {
+    let manifest = manifest(r#"{ "wasm": true }"#);
+    all_pass(project_with(
+        &[
+            ("netherforge.json", &manifest),
+            (
+                "modules/engine/init.lua",
+                r#"
+local M = { said = {} }
+function M.start()
+  M.program = nf.wasm.start("echo")
+  M.program:on("output", function(event) table.insert(M.said, event.line) end)
+  M.program:on("end", function(event) M.ended = event.reason .. " " .. tostring(event.exit_code) end)
+end
+return M
+"#,
+            ),
+            (
+                "tests/engine_test.lua",
+                r#"
+local engine = require("engine")
+
+nf.test.case("a real module answers, a tick after it's asked", function()
+  local answer
+  nf.task(function()
+    local math = nf.wasm.instantiate("math")
+    answer = math:call("add", { 2, 3 })[1]
+  end)
+  nf.test.advance(3)
+  assert(answer == 5, tostring(answer))
+  engine.start()
+  engine.program:send("hello")
+  nf.test.advance(1)
+  assert(engine.said[1] == "echo: hello", tostring(engine.said[1]))
+end)
+
+nf.test.case("a stand-in answers in its place", function()
+  nf.test.stub_wasm("echo", {
+    input = function(line) return { "stub: " .. line, "again" } end,
+  })
+  nf.test.stub_wasm("math", {
+    functions = { add = function(arguments) return { arguments[1] * 100 } end, name = function() return "stub" end },
+    run = function(options) return { exit_code = 7, stdout = options.stdin, stderr = "" } end,
+  })
+  engine.start()
+  engine.program:send("hello")
+  nf.test.advance(2)
+  assert(engine.said[1] == "stub: hello" and engine.said[2] == "again", table.concat(engine.said, "|"))
+  engine.program:close_input()
+  nf.test.advance(2)
+  assert(engine.ended == "exited 0", tostring(engine.ended))
+
+  local got = {}
+  nf.task(function()
+    local math = nf.wasm.instantiate("math")
+    got.sum = math:call("add", { 2, 3 })[1]
+    got.name = math:call_text("name")
+    got.missing = select(2, math:call("nope"))
+    got.run = nf.wasm.run("math", { stdin = "in" })
+  end)
+  nf.test.advance(6)
+  assert(got.sum == 200, tostring(got.sum))
+  assert(got.name == "stub", tostring(got.name))
+  assert(got.missing:find("has no function"), tostring(got.missing))
+  assert(got.run.exit_code == 7 and got.run.stdout == "in")
+
+  -- Stand-ins count against the owner's limits as the modules they stand in for do.
+  local refused
+  nf.task(function()
+    for _ = 1, 9 do
+      local instance, err = nf.wasm.instantiate("math")
+      if not instance then refused = err break end
+    end
+  end)
+  nf.test.advance(20)
+  assert(refused and refused:find("max%-instances%-per%-package"), tostring(refused))
+end)
+"#,
+            ),
+        ],
+        &[
+            ("wasm/math/module.wasm", library()),
+            ("wasm/echo/module.wasm", echo()),
+        ],
+    ));
+}
+
+#[test]
+fn a_test_plays_the_other_servers_of_a_network_of_its_own() {
+    let manifest = manifest(r#"{ "network": true }"#);
+    all_pass(project(&[
+        ("netherforge.json", &manifest),
+        (
+            "modules/net/init.lua",
+            r#"
+local M = { heard = {}, arrived = {}, players = {}, changes = {} }
+nf.network.channel("chat"):on("message", function(event)
+  table.insert(M.heard, event.server .. ":" .. event.value)
+end)
+nf.network.channel("prices"):on("request", function(event)
+  event.reply = { item = event.value, price = 42, asker = event.server }
+end)
+M.scores = nf.network.map("scores")
+M.scores:on("change", function(event)
+  table.insert(M.changes, event.key .. "=" .. tostring(event.value) .. " by " .. tostring(event.server))
+end)
+nf.on("player_arrive", function(event)
+  table.insert(M.arrived, event.player:name() .. " from " .. event.from .. " " .. event.data.kit)
+end)
+nf.on("network_player_join", function(event)
+  table.insert(M.players, event.player.name .. "@" .. tostring(event.player.server))
+end)
+return M
+"#,
+        ),
+        (
+            "tests/net_test.lua",
+            r#"
+local net = require("net")
+
+nf.test.case("messages go both ways", function()
+  assert(nf.network.server_name() == "test" and nf.network.is_connected())
+  nf.test.network_server("lobby")
+  nf.test.network_received("lobby", "chat")
+  nf.test.advance(1)
+  nf.test.network_publish("lobby", "chat", "hi")
+  nf.test.advance(1)
+  assert(net.heard[1] == "lobby:hi", tostring(net.heard[1]))
+  assert(nf.network.channel("chat"):publish("hello"))
+  nf.test.advance(1)
+  local got = nf.test.network_received("lobby", "chat")
+  assert(#got == 2 and got[1].value == "hi" and got[1].server == "lobby")
+  assert(got[2].value == "hello" and got[2].server == "test" and got[2].channel == "chat")
+  assert(net.heard[2] == "test:hello", tostring(net.heard[2]))
+end)
+
+nf.test.case("an admin client publishes as the hub delivers it", function()
+  nf.test.network_server("lobby")
+  nf.test.advance(1)
+  nf.test.network_publish("admin:platform", "chat", "from the service")
+  nf.test.network_publish("lobby", "chat", "from a server")
+  nf.test.advance(1)
+  assert(net.heard[1] == "admin:platform:from the service", tostring(net.heard[1]))
+  assert(net.heard[2] == "lobby:from a server", tostring(net.heard[2]))
+  assert(not pcall(nf.test.network_publish, "admin:not an id", "chat", 1))
+end)
+
+nf.test.case("requests go both ways", function()
+  nf.test.network_server("bank")
+  nf.test.network_answer("bank", "balance", function(name, server) return name .. " has 100, " .. server end)
+  local answer, err
+  nf.task(function() answer, err = nf.network.channel("balance"):request("bank", "ann") end)
+  nf.test.advance(3)
+  assert(answer == "ann has 100, test", tostring(answer) .. " " .. tostring(err))
+  local quote = nf.test.network_request("bank", "prices", "diamond")
+  assert(quote.item == "diamond" and quote.price == 42 and quote.asker == "bank")
+  assert(not pcall(nf.test.network_request, "bank", "nothing", 1))
+end)
+
+nf.test.case("maps are shared", function()
+  nf.test.network_server("lobby")
+  nf.test.advance(2)
+  assert(net.scores:is_ready())
+  nf.test.network_write("lobby", "scores", "ann", 5)
+  nf.test.advance(1)
+  assert(net.scores:get("ann") == 5)
+  assert(net.changes[1] == "ann=5 by lobby", tostring(net.changes[1]))
+  local total
+  nf.task(function() total = net.scores:add("ann", 2) end)
+  nf.test.advance(2)
+  assert(total == 7 and net.scores:get("ann") == 7)
+end)
+
+nf.test.case("a group's instances share players out", function()
+  nf.test.network_server("arena-1", { group = "arena", capacity = 1 })
+  nf.test.network_server("arena-2", { group = "arena", capacity = 1 })
+  nf.test.advance(1)
+  assert(nf.network.group() == "test")
+  local groups = {}
+  for _, group in ipairs(nf.network.groups()) do groups[group.name] = group end
+  assert(#groups.arena.instances == 2 and groups.arena.capacity == 2, tostring(#groups.arena.instances))
+  local ann = nf.test.player("Ann")
+  local server, err
+  nf.task(function() server, err = nf.network.send_player(ann, { group = "arena" }) end)
+  nf.test.advance(2)
+  assert(server == "arena-1", tostring(err))
+end)
+
+nf.test.case("players come and go, and are sent both ways", function()
+  nf.test.network_join("lobby", "Bob")
+  nf.test.advance(1)
+  assert(net.players[1] == "Bob@lobby", tostring(net.players[1]))
+  local ann = nf.test.network_send("lobby", "Ann", { kit = "archer" })
+  nf.test.advance(1)
+  assert(net.arrived[1] == "Ann from lobby archer", tostring(net.arrived[1]))
+  assert(nf.network.find_player("Ann").server == "test")
+  local moved, err
+  nf.task(function() moved, err = nf.network.send_player(ann, "lobby") end)
+  nf.test.advance(2)
+  assert(moved == "lobby", tostring(err))
+  assert(#nf.players.online() == 0, "sent away, they left this server")
+  assert(nf.network.find_player("Ann").server == "lobby")
+  nf.test.network_quit("Bob")
+  nf.test.advance(1)
+  assert(nf.network.find_player("Bob") == nil)
+end)
+"#,
+        ),
+    ]));
+}
+
+#[test]
+fn a_test_plays_a_group_starting_holds_this_server_to_a_role_and_moderates() {
+    let manifest = manifest(r#"{ "network": true, "moderation": true }"#);
+    all_pass(project(&[
+        ("netherforge.json", &manifest),
+        (
+            "tests/net_test.lua",
+            r#"
+nf.test.case("a player waits for the arena to start, then goes", function()
+  nf.test.network_server("arena-1", { group = "arena", state = "starting" })
+  local ann = nf.test.player("Ann")
+  local went, place
+  nf.task(function()
+    went = nf.network.send_player(ann, { group = "arena", wait = 30, on_wait = function(p) place = p end })
+  end)
+  nf.test.advance(2)
+  assert(went == nil and place == 1, tostring(place))
+  nf.test.network_status("arena-1", { state = "ready" })
+  nf.test.advance(2)
+  assert(went == "arena-1", tostring(went))
+end)
+
+nf.test.case("a standard server is held to its role", function()
+  nf.test.network_role({ role = "standard", owns = { "other" } })
+  nf.test.advance(1)
+  assert(nf.network.server_role().role == "standard")
+  local ok, err = pcall(function() nf.network.channel("chat"):publish("hi") end)
+  assert(not ok and err:find("network.forbidden"), tostring(err))
+  assert(not pcall(nf.test.network_role, { role = "nobody" }))
+  assert(not pcall(nf.test.network_role, { role = "standard", shares = { "nope" } }))
+end)
+
+nf.test.case("bans, mutes and reports go to the network's hub", function()
+  nf.test.network_server("lobby")
+  nf.test.network_join("lobby", "Bea")
+  nf.test.advance(1)
+  local banned
+  nf.task(function() banned = nf.network.ban("Bea", { reason = "griefing" }) end)
+  nf.test.advance(2)
+  assert(banned == true)
+  assert(nf.network.is_banned("Bea"))
+  nf.network.report("Bea", "rude", { said = "x" })
+  nf.test.advance(1)
+  local reports = nf.test.network_reports()
+  assert(#reports == 1 and reports[1].player == "Bea" and reports[1].details.said == "x")
 end)
 "#,
         ),

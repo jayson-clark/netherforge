@@ -834,7 +834,10 @@ impl Room {
         let test = worlds
             .as_ref()
             .filter(|game| game.shared.tests.borrow().harness.is_some())
-            .map(|game| testing::api::TestContext { game: game.clone() });
+            .map(|game| testing::api::TestContext {
+                game: game.clone(),
+                statuses: Default::default(),
+            });
         let images = shared.as_ref().map(|shared| images::ImagesApi {
             images: shared.images.clone(),
             http: http.clone(),

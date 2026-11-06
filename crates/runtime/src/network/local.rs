@@ -353,6 +353,9 @@ struct Hub {
     /// Whether players may be sent here: a test that joins them as they'd arrive (`nf.test`'s join).
     joins_here: bool,
     joins: Vec<(String, String)>,
+    /// What this server's credential grants it, once a test has it join as a role (`nf.test.network_role`); trusted
+    /// until then.
+    here_grants: Option<protocol::Grants>,
     started: Instant,
     /// What the hub's clock reads beyond the real one: a test's.
     skew: i64,
@@ -585,7 +588,10 @@ impl Hub {
             servers: self.servers(),
             players: self.players.values().cloned().collect(),
             max_value_bytes: self.limits.max_value_bytes,
-            grants: protocol::Grants::trusted(),
+            grants: match &self.here_grants {
+                Some(grants) if name == self.here => grants.clone(),
+                _ => protocol::Grants::trusted(),
+            },
             policy: None,
             keeps_packs: false,
         };
@@ -1521,6 +1527,7 @@ impl LocalHub {
                 kicks: Vec::new(),
                 joins_here: false,
                 joins: Vec::new(),
+                here_grants: None,
                 started: Instant::now(),
                 skew: 0,
                 unix_base: std::time::SystemTime::now()
@@ -1673,6 +1680,48 @@ impl LocalHub {
     /// The players sent here since the last time, by UUID and name, to join.
     pub fn take_joins(&self) -> Vec<(String, String)> {
         std::mem::take(&mut self.hub.borrow_mut().joins)
+    }
+
+    /// This server joins again with a credential of `grants` (a test's `nf.test.network_role`): its welcome says them,
+    /// and its scripts are held to them from then on. The hub stand-in itself doesn't hold this server's frames to them:
+    /// the server's own checks do (`forbid`).
+    pub fn rejoin_here(&self, grants: protocol::Grants) {
+        let mut hub = self.hub.borrow_mut();
+        let here = hub.here.clone();
+        let Some((sink, state)) = hub.sessions.get(&here).map(|s| (s.sink.clone(), s.state)) else {
+            return;
+        };
+        hub.here_grants = Some(grants);
+        hub.open(&here, sink, None, None, state);
+        drop(hub);
+        self.after();
+    }
+
+    /// The admin API's client `client` publishes `value` on `channel` (a full name) to every server listening, as the
+    /// hub delivers it (from `admin:<client>`): none when sent, else why not.
+    pub fn admin_publish(&self, client: &str, channel: &str, value: Value) -> Option<String> {
+        if !is_full(channel) {
+            return Some(format!("\"{channel}\" isn't a channel"));
+        }
+        let hub = self.hub.borrow();
+        let size = protocol::size(Some(&value));
+        if size > hub.limits.max_value_bytes as usize {
+            return Some(format!(
+                "a message on \"{channel}\" is {size} bytes, over the network's limit of {}",
+                hub.limits.max_value_bytes
+            ));
+        }
+        let message = HubFrame::Message {
+            channel: channel.into(),
+            from: format!("admin:{client}"),
+            value,
+        };
+        for session in hub.sessions.values() {
+            if session.channels.contains(channel) {
+                deliver(&session.sink, message.clone());
+            }
+        }
+        None
     }
 
     /// What scripts reported, newest first.

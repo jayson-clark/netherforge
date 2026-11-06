@@ -214,6 +214,16 @@ pub struct Program {
     pub shared: Arc<ProgramShared>,
     /// Set once its end has been handed to scripts.
     pub ended: bool,
+    /// A test's stand-in answers it (`nf.test.stub_wasm`): nothing runs, and its end was queued once its input closed.
+    pub stand_in: Option<bool>,
+}
+
+/// A stand-in instance, in a test run: the test's functions answer for module `key`. It holds nothing.
+#[derive(Clone, Debug)]
+pub struct StandIn {
+    pub owner: ScopeId,
+    pub namespace: String,
+    pub key: String,
 }
 
 /// What reads a project file's bytes by project path (a package's `ns:path`), and where one is on disk.
@@ -246,6 +256,11 @@ pub struct Wasm {
     pub instantiating: HashMap<String, usize>,
     /// What the engine said as it was made (no compiler on this machine), for the log.
     pub warnings: Vec<String>,
+    /// What a test run stands in for modules with (`nf.test.stub_wasm`), by the server's name: the test's scope and
+    /// its functions, which answer in the module's place on the main thread. Nothing of a stand-in reaches wasmtime.
+    pub stubs: HashMap<String, (ScopeId, netherforge_api::shapes::TestWasmStub)>,
+    /// The stand-in instances scripts hold.
+    pub stand_ins: IndexMap<i64, StandIn>,
 }
 
 /// Where a job runs: the pool, or an instance's lane over it.
@@ -392,6 +407,12 @@ impl Wasm {
             .filter(|i| i.namespace == namespace && !i.closed())
             .count()
             + self.instantiating.get(namespace).copied().unwrap_or(0)
+            // Stand-ins count as the modules they stand in for do.
+            + self
+                .stand_ins
+                .values()
+                .filter(|s| s.namespace == namespace)
+                .count()
     }
 
     /// Whether nothing given to the pool is queued or running, and every program can go no further on its own:

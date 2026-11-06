@@ -1561,6 +1561,12 @@ impl Service for NetworkService {
                 network.mirror(protocol::BANS);
                 network.mirror(protocol::MUTES);
             }
+            // A test's other servers may send players here: the test joins them as they'd arrive.
+            if self.shared.tests.borrow().harness.is_some()
+                && let Some(hub) = link.local()
+            {
+                hub.accept_joins();
+            }
             // Everyone already here (a reload) is this server's in a local network.
             for player in self.shared.platform.players().online() {
                 self.shared

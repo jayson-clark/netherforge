@@ -61,7 +61,7 @@ impl WasmApi {
     }
 
     /// The module `name` names (resolved in the calling package), as the server names it; recorded as `scope`'s.
-    fn resolve(&self, scope: ScopeId, name: &str, what: &str) -> ApiResult<String> {
+    pub(crate) fn resolve(&self, scope: ScopeId, name: &str, what: &str) -> ApiResult<String> {
         let from = self.namespace(scope);
         let key = {
             let names = self.shared().names.borrow();
@@ -205,6 +205,136 @@ impl WasmApi {
         }))
     }
 
+    // ---- a test's stand-ins (`nf.test.stub_wasm`) ------------------------------------------------------------
+
+    /// Whether module `key` is stood in for now.
+    fn standing_in(&self, key: &str) -> bool {
+        self.shared().wasm.borrow().stubs.contains_key(key)
+    }
+
+    /// `answer`, made at the next turn of the main thread (before the next tick, as the test's code) from what stands
+    /// in for module `key` now; an error when the stand-in has gone.
+    fn stood_in<T: 'static>(
+        &self,
+        key: &str,
+        answer: impl FnOnce(&crate::Scripts, ScopeId, &shapes::TestWasmStub) -> Result<T, String>
+        + 'static,
+    ) -> crate::http::Reply<T> {
+        let (send, receive) = std::sync::mpsc::channel();
+        let (shared, scripts, key) = (
+            Rc::downgrade(self.shared()),
+            self.game.scripts.clone(),
+            key.to_owned(),
+        );
+        self.shared()
+            .tests
+            .borrow_mut()
+            .later
+            .push(Box::new(move || {
+                let Some(shared) = shared.upgrade() else {
+                    return;
+                };
+                let stub = shared.wasm.borrow().stubs.get(&key).cloned();
+                let _ = send.send(match stub {
+                    None => Err(format!("the stand-in for module \"{key}\" is gone")),
+                    Some((scope, stub)) => answer(&scripts, scope, &stub),
+                });
+            }));
+        crate::http::Reply(receive)
+    }
+
+    /// A stand-in instance's call of `name` with `arguments`: what the stand-in's function of that name answers.
+    fn stand_in_call(
+        &self,
+        stand_in: &super::StandIn,
+        name: &str,
+        arguments: &Value,
+    ) -> ApiResult<crate::http::Reply<Value>> {
+        let host = self.game.scripts.host();
+        let arguments = crate::testing::json_of(&host, arguments, "args").map_err(ApiError)?;
+        let (key, name) = (stand_in.key.clone(), name.to_owned());
+        Ok(self.stood_in(&stand_in.key, move |scripts, scope, stub| {
+            let Some(function) = stub.functions.as_ref().and_then(|f| f.get(&name)) else {
+                return Err(format!(
+                    "the stand-in for module \"{key}\" has no function \"{name}\""
+                ));
+            };
+            let lua = scripts.host().lua().clone();
+            let arguments = match &arguments {
+                Some(json) => {
+                    netherforge_luau::json::to_lua(&lua, json, &netherforge_luau::json::NoTags)
+                        .map_err(|e| e.to_string())?
+                }
+                None => Value::Nil,
+            };
+            stub_answer(
+                scripts,
+                scope,
+                function,
+                arguments,
+                &format!("functions.{name}"),
+            )
+        }))
+    }
+
+    /// A stand-in program's lines sent since the last tick, answered by its `input`; its end once its input closed.
+    fn answer_stand_ins(&self) {
+        let stood: Vec<(i64, handles::WasmProcess, Arc<ProgramShared>)> = {
+            let wasm = self.shared().wasm.borrow();
+            wasm.programs
+                .values()
+                .filter(|p| p.stand_in == Some(false) && !p.ended)
+                .map(|p| (p.number, p.handle.clone(), p.shared.clone()))
+                .collect()
+        };
+        for (number, handle, shared) in stood {
+            let (lines, finished) = shared.take_sent();
+            let stub = self
+                .shared()
+                .wasm
+                .borrow()
+                .stubs
+                .get(&handle.module)
+                .cloned();
+            let Some((scope, stub)) = stub else { continue };
+            for line in lines {
+                let Some(input) = &stub.input else { continue };
+                let process =
+                    netherforge_api::handle::push(self.game.scripts.host().lua(), &handle)
+                        .map(Value::UserData)
+                        .unwrap_or(Value::Nil);
+                match stub_lines(&self.game.scripts, scope, input, line, process) {
+                    Ok(printed) => {
+                        for text in printed {
+                            shared.push(ProgramOutput::Line {
+                                text,
+                                stream: "stdout",
+                            });
+                        }
+                    }
+                    Err(why) => {
+                        shared.push(ProgramOutput::Ended {
+                            reason: ProgramEnd::Failed,
+                            exit_code: None,
+                            detail: Some(why),
+                        });
+                    }
+                }
+            }
+            if finished
+                && let Some(program) = self.shared().wasm.borrow_mut().programs.get_mut(&number)
+                && program.stand_in == Some(false)
+            {
+                program.stand_in = Some(true);
+                shared.push(ProgramOutput::Ended {
+                    reason: ProgramEnd::Exited,
+                    exit_code: Some(0),
+                    detail: None,
+                });
+            }
+        }
+    }
+
     /// Hands each program's lines to scripts, up to `lines-per-tick` each, then its end.
     pub fn deliver(&self) {
         let (numbers, per_tick) = {
@@ -335,6 +465,9 @@ impl WasmApi {
             instance.close();
             wasm.instances.shift_remove(&instance.number);
         }
+        wasm.stand_ins.retain(|_, s| !which(s.owner));
+        // A test's scope closed: what it stood in with goes.
+        wasm.stubs.retain(|_, (scope, _)| !which(*scope));
         for scopes in wasm.users.values_mut() {
             scopes.retain(|s| !which(*s));
         }
@@ -347,9 +480,10 @@ impl WasmApi {
             let shared = weak.upgrade()?;
             let wasm = shared.wasm.try_borrow().ok()?;
             match handle {
-                Handle::WasmInstance(h) => {
-                    Some(wasm.instances.get(&h.number).is_some_and(|i| !i.closed()))
-                }
+                Handle::WasmInstance(h) => Some(
+                    wasm.instances.get(&h.number).is_some_and(|i| !i.closed())
+                        || wasm.stand_ins.contains_key(&h.number),
+                ),
                 Handle::WasmProcess(h) => Some(wasm.programs.contains_key(&h.number)),
                 _ => None,
             }
@@ -423,6 +557,28 @@ impl NfWasmApi for WasmApi {
     ) -> ApiResult<Pending<handles::WasmInstance>> {
         let key = self.resolve(caller.scope, &module, "nf.wasm.instantiate")?;
         let namespace = self.namespace(caller.scope);
+        if self.standing_in(&key) {
+            // Made at the next tick, as a real one is later; it holds nothing, but counts as one.
+            let mut wasm = self.shared().wasm.borrow_mut();
+            let most = wasm.config.max_instances_per_package;
+            if wasm.held_by(&namespace) >= most {
+                return Ok(refused(format!(
+                    "package \"{namespace}\" already holds {most} WebAssembly instances, the server's limit (wasm.max-instances-per-package in config.yml): close some"
+                )));
+            }
+            let number = wasm.next_number();
+            wasm.stand_ins.insert(
+                number,
+                super::StandIn {
+                    owner: caller.scope,
+                    namespace,
+                    key,
+                },
+            );
+            return Ok(Box::pin(
+                async move { Ok(handles::WasmInstance { number }) },
+            ));
+        }
         let mut wasm = self.shared().wasm.borrow_mut();
         let most = wasm.config.max_instances_per_package;
         if wasm.held_by(&namespace) >= most {
@@ -517,6 +673,43 @@ impl NfWasmApi for WasmApi {
             environment: None,
         });
         let environment = Self::environment(options.environment)?;
+        if self.standing_in(&key) {
+            let (stdin, arguments) = (options.stdin, options.arguments.unwrap_or_default());
+            let reply = self.stood_in(&key, move |scripts, scope, stub| {
+                let Some(run) = &stub.run else {
+                    return Err("the stand-in has no run".into());
+                };
+                let lua = scripts.host().lua().clone();
+                let given = (|| -> mlua::Result<mlua::Table> {
+                    let given = lua.create_table()?;
+                    if let Some(stdin) = &stdin {
+                        given.raw_set("stdin", stdin.as_str())?;
+                    }
+                    given.raw_set("arguments", lua.create_sequence_from(arguments.iter().map(String::as_str))?)?;
+                    let table = lua.create_table()?;
+                    for (name, value) in &environment {
+                        table.raw_set(name.as_str(), value.as_str())?;
+                    }
+                    given.raw_set("environment", table)?;
+                    Ok(given)
+                })()
+                .map_err(|e| e.to_string())?;
+                let answer = match scripts.call_kept(scope, run, given) {
+                    Ok(answer) => answer,
+                    Err(failure) => return Err(format!("the stand-in's run failed: {failure}")),
+                };
+                if answer.is_nil() {
+                    return Err(
+                        "the stand-in's run returned nothing: return { exit_code = 0, stdout = \"\", stderr = \"\" }"
+                            .into(),
+                    );
+                }
+                codecs::WasmRunResult
+                    .read(&lua, answer, "stub.run")
+                    .map_err(|e| format!("the stand-in's run failed: {e}"))
+            });
+            return Ok(Box::pin(async move { reply.await.map_err(ApiError) }));
+        }
         let namespace = self.namespace(caller.scope);
         let mut wasm = self.shared().wasm.borrow_mut();
         let compile = wasm.compiled.get(&key).cloned();
@@ -587,6 +780,7 @@ impl NfWasmApi for WasmApi {
         let environment = Self::environment(options.environment)?;
         let arguments = options.arguments.unwrap_or_default();
         let namespace = self.namespace(caller.scope);
+        let stand_in = self.standing_in(&key);
         let mut wasm = self.shared().wasm.borrow_mut();
         let number = wasm.next_number();
         let handle = handles::WasmProcess {
@@ -625,10 +819,18 @@ impl NfWasmApi for WasmApi {
                 key: key.clone(),
                 shared: shared.clone(),
                 ended: false,
+                stand_in: stand_in.then_some(false),
             },
         );
         if let Some(why) = refusal {
             shared.ended(ProgramEnd::Limit, None, Some(why));
+            return Ok(handle);
+        }
+        if stand_in {
+            // Nothing runs: the test's `input` answers what it's sent, each tick. It can go no further on its own.
+            shared
+                .finished
+                .store(true, std::sync::atomic::Ordering::SeqCst);
             return Ok(handle);
         }
         if let Err(e) = threads {
@@ -755,14 +957,14 @@ fn run_program(
 
 impl WasmInstanceApi for WasmApi {
     fn module(&self, this: &handles::WasmInstance) -> ApiResult<String> {
-        let key = self
-            .shared()
-            .wasm
-            .borrow()
-            .instances
-            .get(&this.number)
-            .map(|i| i.key.clone())
-            .ok_or_else(|| err("the instance's script has unloaded"))?;
+        let key = {
+            let wasm = self.shared().wasm.borrow();
+            wasm.instances
+                .get(&this.number)
+                .map(|i| i.key.clone())
+                .or_else(|| wasm.stand_ins.get(&this.number).map(|s| s.key.clone()))
+        }
+        .ok_or_else(|| err("the instance's script has unloaded"))?;
         Ok(self.spell(&key))
     }
 
@@ -772,6 +974,20 @@ impl WasmInstanceApi for WasmApi {
         name: String,
         arguments: Value,
     ) -> ApiResult<Pending<Vec<Value>>> {
+        let stand_in = self
+            .shared()
+            .wasm
+            .borrow()
+            .stand_ins
+            .get(&this.number)
+            .cloned();
+        if let Some(stand_in) = stand_in {
+            let reply = self.stand_in_call(&stand_in, &name, &arguments)?;
+            return Ok(Box::pin(async move {
+                let answer = reply.await.map_err(ApiError)?;
+                stub_values(answer, &name).map_err(ApiError)
+            }));
+        }
         let reply = WasmApi::call(self, this, &name, &arguments, false)?;
         let lua = self.game.scripts.host().lua().weak();
         Ok(Box::pin(async move {
@@ -801,6 +1017,25 @@ impl WasmInstanceApi for WasmApi {
         name: String,
         arguments: Value,
     ) -> ApiResult<Pending<String>> {
+        let stand_in = self
+            .shared()
+            .wasm
+            .borrow()
+            .stand_ins
+            .get(&this.number)
+            .cloned();
+        if let Some(stand_in) = stand_in {
+            let reply = self.stand_in_call(&stand_in, &name, &arguments)?;
+            return Ok(Box::pin(async move {
+                match reply.await.map_err(ApiError)? {
+                    Value::String(text) => Ok(text.to_string_lossy()),
+                    other => Err(err(format!(
+                        "the stand-in's {name} returned {}, not text",
+                        stub_kind(&other)
+                    ))),
+                }
+            }));
+        }
         let reply = WasmApi::call(self, this, &name, &arguments, true)?;
         Ok(Box::pin(async move {
             match reply.await.map_err(ApiError)? {
@@ -811,6 +1046,16 @@ impl WasmInstanceApi for WasmApi {
     }
 
     fn close(&self, this: &handles::WasmInstance) -> ApiResult<bool> {
+        if self
+            .shared()
+            .wasm
+            .borrow_mut()
+            .stand_ins
+            .shift_remove(&this.number)
+            .is_some()
+        {
+            return Ok(true);
+        }
         let instance = self
             .shared()
             .wasm
@@ -1053,6 +1298,7 @@ impl Service for WasmService {
             ));
         }
         if programs && let Some(api) = self.api() {
+            api.answer_stand_ins();
             api.deliver();
         }
     }
@@ -1103,5 +1349,78 @@ impl Service for WasmService {
                 )
             })
             .collect()
+    }
+}
+
+/// What a stand-in's function returned when called with `arguments`, as the test's code; its failure named `what`.
+fn stub_answer(
+    scripts: &crate::Scripts,
+    scope: ScopeId,
+    function: &Function,
+    arguments: Value,
+    what: &str,
+) -> Result<Value, String> {
+    if !scripts.is_live(scope) {
+        return Err("the test that stood in for the module has ended".into());
+    }
+    scripts
+        .call_kept(scope, function, arguments)
+        .map_err(|failure| format!("the stand-in's {what} failed: {failure}"))
+}
+
+/// The lines a stand-in program's `input` printed for `line`.
+fn stub_lines(
+    scripts: &crate::Scripts,
+    scope: ScopeId,
+    input: &Function,
+    line: String,
+    process: Value,
+) -> Result<Vec<String>, String> {
+    if !scripts.is_live(scope) {
+        return Err("the test that stood in for the module has ended".into());
+    }
+    let answer = scripts
+        .call_kept(scope, input, (line, process))
+        .map_err(|failure| format!("the stand-in's input failed: {failure}"))?;
+    match answer {
+        Value::Nil => Ok(Vec::new()),
+        Value::Table(lines) => lines
+            .sequence_values::<Value>()
+            .map(|v| match v {
+                Ok(Value::String(s)) => Ok(s.to_string_lossy()),
+                _ => {
+                    Err("the stand-in's input returned something that isn't a list of lines".into())
+                }
+            })
+            .collect(),
+        _ => Err("the stand-in's input returned something that isn't a list of lines".into()),
+    }
+}
+
+/// A stand-in function's answer as `call` gives it: a list of numbers.
+fn stub_values(answer: Value, name: &str) -> Result<Vec<Value>, String> {
+    let Value::Table(list) = answer else {
+        return Err(format!(
+            "the stand-in's {name} returned {}, not a list of results",
+            stub_kind(&answer)
+        ));
+    };
+    list.sequence_values::<Value>()
+        .map(|v| match v {
+            Ok(n @ (Value::Integer(_) | Value::Number(_))) => Ok(n),
+            _ => Err(format!(
+                "the stand-in's {name} returned a result that isn't a number"
+            )),
+        })
+        .collect()
+}
+
+/// What a stand-in's answer is, for a mistake.
+fn stub_kind(answer: &Value) -> &'static str {
+    match answer {
+        Value::Nil => "nothing",
+        Value::String(_) => "text",
+        Value::Table(_) => "a table",
+        _ => "a value",
     }
 }

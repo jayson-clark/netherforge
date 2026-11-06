@@ -163,6 +163,25 @@ impl ProgramShared {
         self.release(usize::MAX / 2);
     }
 
+    /// What scripts sent and nothing read yet, taken (a stand-in's input), and whether its input has closed.
+    pub fn take_sent(&self) -> (Vec<String>, bool) {
+        let mut input = lock(&self.input);
+        let lines = input
+            .lines
+            .drain(..)
+            .map(|mut l| {
+                l.pop();
+                String::from_utf8_lossy(&l).into_owned()
+            })
+            .collect();
+        (lines, input.finished)
+    }
+
+    /// Hands `output` to the main thread as it is (a stand-in's: it runs there, so nothing waits for room).
+    pub fn push(&self, output: ProgramOutput) {
+        lock(&self.output).push_back(output);
+    }
+
     /// Whether it can go no further on its own: done, waiting for scripts to take its lines, or waiting for input
     /// when none has been sent. What a test run waits on.
     pub fn quiet(&self) -> bool {

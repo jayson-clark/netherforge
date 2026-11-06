@@ -267,6 +267,15 @@ impl<'a> Session<'a> {
         }
         shared.web.borrow_mut().config = config.web.clone();
         shared.settings.borrow_mut().directory = config.settings_dir.clone();
+        // A script test's server is a network of its own, `test`, whose other servers the test plays.
+        let mut network_config = config.network.clone();
+        if config.testing.is_some() && network_config.alone.is_none() && !network_config.enabled {
+            network_config.alone = Some(crate::network::link::TEST_NETWORK.into());
+        }
+        let config = Config {
+            network: network_config,
+            ..config
+        };
         {
             let mut network = shared.network.borrow_mut();
             network.config = config.network.clone();
