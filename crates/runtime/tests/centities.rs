@@ -47,6 +47,8 @@ impl netherforge_format::game::GameData for NoFacts {
 }
 
 struct Fake {
+    /// Alex's inventory: nine slots.
+    inventory: RefCell<Vec<Option<netherforge_platform::ItemData>>>,
     /// Each scoreboard team's entries.
     teams: RefCell<BTreeMap<String, Vec<String>>>,
     game: NoFacts,
@@ -64,6 +66,7 @@ struct Fake {
 impl Default for Fake {
     fn default() -> Fake {
         Fake {
+            inventory: RefCell::new(vec![None; 9]),
             teams: RefCell::new(BTreeMap::from([
                 ("nf.stale".to_owned(), Vec::new()),
                 ("red".to_owned(), Vec::new()),
@@ -217,6 +220,20 @@ impl netherforge_platform::FakeWorldEntityOps for Fake {
         Vec::new()
     }
     fn info(&self, id: Uuid) -> Option<netherforge_platform::EntityInfo> {
+        if id == Uuid(77) {
+            let location = self.player.borrow().clone()?;
+            return Some(netherforge_platform::EntityInfo {
+                id,
+                kind: "minecraft:player".into(),
+                location,
+                category: netherforge_platform::EntityCategory::Living,
+                player: Some(PlayerRef {
+                    uuid: id,
+                    name: "Alex".into(),
+                }),
+                tags: Vec::new(),
+            });
+        }
         self.list("world".into()).into_iter().find(|e| e.id == id)
     }
     /// One zombie, standing at (5, 64, 5).
@@ -696,6 +713,60 @@ impl netherforge_platform::FakeBorderOps for Fake {
     }
 }
 
+/// Alex's own inventory, and nothing else.
+impl netherforge_platform::FakeInventoryOps for Fake {
+    fn kind(&self, r#ref: netherforge_platform::InventoryRef) -> Option<String> {
+        matches!(r#ref, netherforge_platform::InventoryRef::Player(_)).then(|| "player".into())
+    }
+    fn size(&self, r#ref: netherforge_platform::InventoryRef) -> Option<i32> {
+        self.kind(r#ref).map(|_| 9)
+    }
+    fn contents(
+        &self,
+        _: netherforge_platform::InventoryRef,
+    ) -> Option<Vec<Option<netherforge_platform::ItemData>>> {
+        Some(self.inventory.borrow().clone())
+    }
+    fn contents_with_filter(
+        &self,
+        r#ref: netherforge_platform::InventoryRef,
+        _: netherforge_platform::StackFilter,
+    ) -> Option<Vec<Option<netherforge_platform::ItemData>>> {
+        self.contents(r#ref)
+    }
+    fn item(
+        &self,
+        _: netherforge_platform::InventoryRef,
+        slot: i32,
+    ) -> Option<netherforge_platform::ItemData> {
+        self.inventory.borrow()[slot as usize].clone()
+    }
+    fn set_item(
+        &self,
+        _: netherforge_platform::InventoryRef,
+        slot: i32,
+        item: Option<netherforge_platform::ItemData>,
+    ) -> bool {
+        self.inventory.borrow_mut()[slot as usize] = item;
+        true
+    }
+    /// Into the first empty slot, whole.
+    fn add(
+        &self,
+        _: netherforge_platform::InventoryRef,
+        item: netherforge_platform::ItemData,
+    ) -> Option<i32> {
+        let mut slots = self.inventory.borrow_mut();
+        match slots.iter_mut().find(|s| s.is_none()) {
+            Some(slot) => {
+                *slot = Some(item);
+                Some(0)
+            }
+            None => Some(item.def.count.unwrap_or(1)),
+        }
+    }
+}
+
 impl netherforge_platform::FakePermissionOps for Fake {
     fn apply(&self, player: Uuid, nodes: std::collections::HashMap<String, bool>) {
         let mut nodes: Vec<String> = nodes.into_iter().map(|(n, v)| format!("{n}={v}")).collect();
@@ -746,6 +817,9 @@ impl FakePlatform for Fake {
         self
     }
     fn borders(&self) -> &dyn netherforge_platform::BorderOps {
+        self
+    }
+    fn inventories(&self) -> &dyn netherforge_platform::InventoryOps {
         self
     }
     fn player_list(&self) -> &dyn netherforge_platform::PlayerListOps {
@@ -1967,7 +2041,7 @@ fn alex() -> netherforge_platform::PlayerRef {
 fn stack(item: &str) -> netherforge_platform::ItemData {
     netherforge_platform::ItemData {
         def: netherforge_format::item::ItemDef {
-            item: Some(item.into()),
+            kind: item.into(),
             ..Default::default()
         },
         raw: None,
@@ -1987,7 +2061,7 @@ fn the_servers_own_events_reach_scripts_and_their_answers_go_back() {
             r#"
 nf.on("player_interact", function(e) print("interact", e.click, e.block ~= nil, e.face, e.hand); e:cancel() end)
 nf.on("block_break", function(e)
-    print("break", e.state, #e.drops, e.drops[1].item, e.experience)
+    print("break", e.state, #e.drops, e.drops[1].kind, e.experience)
     e.drops = {}
     e.experience = 7
 end)
@@ -2886,5 +2960,49 @@ print(select(2, pcall(border.set_size, border, 0)))
         calls.contains(&"border size 500 over 200".to_owned())
             && calls.contains(&"border damage 1 5".to_owned()),
         "{calls:?}"
+    );
+}
+
+#[test]
+fn an_inventory_gives_counts_finds_and_takes_matching_stacks() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/bag/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local bag = alex:inventory()
+print(bag:kind(), bag:size(), bag:holder() == alex)
+bag:add_item({ kind = "minecraft:bread", count = 5 })
+bag:add_item({ kind = "minecraft:emerald", count = 3, data = { coin = true, mint = "x" } })
+bag:set_item(4, { kind = "minecraft:bread", count = 2 })
+print(bag:count_item("bread"), bag:count_item({ data = { coin = true } }), bag:first_slot("emerald"), bag:has_item("bread", 8))
+print(bag:remove_item("bread", 6), bag:count_item("bread"), bag:item(4).count, bag:item(0))
+print(pcall(bag.item, bag, 9))
+print(pcall(bag.remove_item, bag, { colour = 1 }))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    let lines = printed(&calls);
+    assert_eq!(
+        lines[..4],
+        [
+            "player\t9\ttrue",
+            "7\t3\t1\tfalse",
+            "6\t1\t1\tnil",
+            "false\tmodules/bag/init.lua:10: slot 9 is outside this inventory: it has 9 slots, 0 to 8",
+        ],
+        "{lines:?}"
+    );
+    assert!(
+        lines[4].starts_with(
+            "false\tmodules/bag/init.lua:11: bad argument 'match' (unknown field `colour`"
+        ),
+        "{lines:?}"
     );
 }

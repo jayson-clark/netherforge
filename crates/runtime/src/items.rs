@@ -119,6 +119,192 @@ pub fn from_value(item: &values::Item, at: &str, game: &dyn GameData) -> Result<
     })
 }
 
+/// Which stacks `inventory:remove_item` and friends pick (Kotlin's `ItemMatch`): an item kind, or a partial item
+/// that matches a stack when every field it gives matches. Fields compare as a script reads them (`to_value`'s
+/// table); `data` matches as a subset, so `{ data = { coin = true } }` finds coins whatever else they carry.
+#[derive(Clone, Debug)]
+pub struct ItemMatch {
+    kind: Option<String>,
+    fields: Map<String, Value>,
+    data: Option<Value>,
+}
+
+impl ItemMatch {
+    /// A match a script gave (`string|ItemMatch`, as the codec's JSON): a kind the server doesn't have, or a
+    /// field items don't have, is an error at `at`.
+    pub fn of(
+        given: &values::ItemMatch,
+        at: &str,
+        game: &dyn GameData,
+    ) -> Result<ItemMatch, String> {
+        let parsed: Value =
+            serde_json::from_str(&given.0).map_err(|e| format!("bad argument '{at}' ({e})"))?;
+        match parsed {
+            Value::String(kind) => {
+                let id = netherforge_format::game::normalize(&kind);
+                if game.lacks(Registry::Item, &id) {
+                    return Err(format!(
+                        "bad argument '{at}' (the server has no item \"{kind}\")"
+                    ));
+                }
+                Ok(ItemMatch {
+                    kind: Some(id),
+                    fields: Map::new(),
+                    data: None,
+                })
+            }
+            Value::Object(table) => {
+                let given: Vec<String> = table.keys().cloned().collect();
+                // Read as an item is, but partial: nothing it needs.
+                let def: ItemDef =
+                    serde_json::from_value(respell(Value::Object(table.clone()), &camel)).map_err(
+                        |e| format!("bad argument '{at}' ({})", lua_spelling(&e.to_string())),
+                    )?;
+                if !def.kind.is_empty()
+                    && game.lacks(
+                        Registry::Item,
+                        &netherforge_format::game::normalize(&def.kind),
+                    )
+                {
+                    return Err(format!(
+                        "bad argument '{at}' (the server has no item \"{}\")",
+                        def.kind
+                    ));
+                }
+                let written = written(&ItemData {
+                    def: def.clone(),
+                    raw: None,
+                    look: None,
+                });
+                let fields = given
+                    .iter()
+                    .filter(|k| !["kind", "data", "count", "raw"].contains(&k.as_str()))
+                    .map(|k| (k.clone(), written.get(k).cloned().unwrap_or(Value::Null)))
+                    .collect();
+                Ok(ItemMatch {
+                    kind: given
+                        .iter()
+                        .any(|k| k == "kind")
+                        .then(|| netherforge_format::game::normalize(&def.kind)),
+                    fields,
+                    data: given.iter().any(|k| k == "data").then(|| {
+                        serde_json::to_value(def.data.unwrap_or_default()).unwrap_or(Value::Null)
+                    }),
+                })
+            }
+            _ => Err(format!(
+                "bad argument '{at}' (a match is an item kind or a table like {{ kind = \"minecraft:paper\" }})"
+            )),
+        }
+    }
+
+    /// What a stack must be to be worth reading in full: its kind and project item, when the match gives them.
+    pub fn filter(&self) -> netherforge_platform::StackFilter {
+        netherforge_platform::StackFilter {
+            kind: self.kind.clone(),
+            item: self
+                .fields
+                .get("item")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+        }
+    }
+
+    pub fn matches(&self, item: &ItemData) -> bool {
+        if let Some(kind) = &self.kind
+            && netherforge_format::game::normalize(&item.def.kind) != *kind
+        {
+            return false;
+        }
+        if self.fields.is_empty() && self.data.is_none() {
+            return true;
+        }
+        let written = written(item);
+        if self
+            .fields
+            .iter()
+            .any(|(k, v)| written.get(k).unwrap_or(&Value::Null) != v)
+        {
+            return false;
+        }
+        match &self.data {
+            Some(data) => subset(
+                data,
+                &serde_json::to_value(item.def.data.clone().unwrap_or_default())
+                    .unwrap_or(Value::Null),
+            ),
+            None => true,
+        }
+    }
+
+    /// How many of `contents`' items match.
+    pub fn count(&self, contents: &[Option<ItemData>]) -> i64 {
+        contents
+            .iter()
+            .flatten()
+            .filter(|i| self.matches(i))
+            .map(|i| i64::from(i.def.count.unwrap_or(1)))
+            .sum()
+    }
+
+    /// The first slot holding a match.
+    pub fn first(&self, contents: &[Option<ItemData>]) -> Option<usize> {
+        contents
+            .iter()
+            .position(|i| i.as_ref().is_some_and(|i| self.matches(i)))
+    }
+
+    /// Takes up to `limit` (every one, for none) matching items from `contents`, first slot first, writing each
+    /// changed slot with `write`: how many it took.
+    pub fn remove(
+        &self,
+        contents: &[Option<ItemData>],
+        limit: Option<i64>,
+        mut write: impl FnMut(usize, Option<ItemData>),
+    ) -> i64 {
+        let mut left = limit.unwrap_or(i64::MAX);
+        let mut taken = 0;
+        for (slot, item) in contents.iter().enumerate() {
+            if left <= 0 {
+                break;
+            }
+            let Some(item) = item.as_ref().filter(|i| self.matches(i)) else {
+                continue;
+            };
+            let count = i64::from(item.def.count.unwrap_or(1));
+            let take = count.min(left);
+            let rest = (take < count).then(|| {
+                let mut rest = item.clone();
+                rest.def.count = Some((count - take) as i32);
+                rest
+            });
+            write(slot, rest);
+            left -= take;
+            taken += take;
+        }
+        taken
+    }
+}
+
+/// A stack as a script reads it, as a JSON object.
+fn written(item: &ItemData) -> Map<String, Value> {
+    match serde_json::from_str(&to_value(item).0) {
+        Ok(Value::Object(map)) => map,
+        _ => Map::new(),
+    }
+}
+
+/// Whether every key of `part` is in `whole` with the same value, objects compared the same way all the way down.
+fn subset(part: &Value, whole: &Value) -> bool {
+    match (part, whole) {
+        (Value::Object(part), Value::Object(whole)) => part
+            .iter()
+            .all(|(k, v)| whole.get(k).is_some_and(|w| subset(v, w))),
+        (Value::Object(_), _) => false,
+        _ => part == whole,
+    }
+}
+
 /// serde's message, its field names in Lua's spelling (`unknown field `hideTooltp``).
 fn lua_spelling(message: &str) -> String {
     let mut out = String::new();

@@ -25,6 +25,7 @@ pub mod effects;
 pub mod entity;
 pub mod events;
 pub mod images;
+pub mod inventory;
 pub mod items;
 pub mod living;
 pub mod modules;
@@ -435,6 +436,12 @@ impl LuaApi for Api {
         }
     }
     fn worldborder(&self) -> &dyn netherforge_api::api::WorldBorderApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn inventory(&self) -> &dyn netherforge_api::api::InventoryApi {
         match &self.worlds {
             Some(w) => w,
             None => &Unported,

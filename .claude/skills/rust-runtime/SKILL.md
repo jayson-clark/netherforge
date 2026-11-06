@@ -508,6 +508,10 @@ spawner forgets them), `world_saving`, `chunk_unloading`, `block_changed` (physi
   dropped item; Kotlin's `entityHandle`), and a handle is one value per thing, so the script's value has that
   class. The pushed value is held until the tick ends (`Shared::classed`) so the weak cache can't drop it first.
 - A world's spawn category is format's `SpawnCategory` (the Platform spec's external, now real).
+- `Inventory` (`inventory.rs`) is a real inventory by its key (`events::inventory_ref`, `inventory_handle`'s
+  inverse). Taking, counting and finding go through `items::ItemMatch` (Kotlin's `ItemMatch`/`ItemSlots`): a kind,
+  or a partial item whose given fields compare as a script reads them, `data` as a subset. Not yet, with menus:
+  a storage's viewers and pushing a storage's changes to menu slots.
 - `WorldBorder` (`border.rs`) is a world's border or a player's own (`world:border()`, `player:border()`), read
   and set through `BorderOps` with Kotlin's limits.
 - `set_block` and `fill_blocks` (at most 32768, loaded chunks only) write canonical states. `spawn_entity` checks
