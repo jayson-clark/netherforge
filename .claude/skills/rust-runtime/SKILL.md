@@ -422,8 +422,7 @@ each with the compiler it needs.
 ## Centities (`crates/runtime/src/centity`)
 
 Kotlin's centity package, whole: every `Centity`, `Node`, `nf.centities`, `nf.spawning`, `Image` and
-`nf.images` function is implemented (`Unported` is used for none of them but `nf.images.download`, which
-waits for HTTP).
+`nf.images` function is implemented (`nf.images.download` through HTTP's `fetch`: see HTTP).
 
 **Instances** (`instance.rs`): per-node state in vectors aligned with the definition's nodes (format's
 `CompiledCentity`, parents first; script-added nodes after the declared ones, `declared` keeping the file's),
@@ -788,8 +787,8 @@ send replaces whatever else they had); `onDemand` packs are pushed and popped by
 an error for a pack that isn't `onDemand`) and resent when rebuilt. Ids are Java's `UUID.nameUUIDFromBytes` (MD5,
 `md-5`). What a client says (`PlatformEvents::resource_pack_status`) is kept for our packs only and raised as the
 player's `resource_pack_status`, then `nf`'s. `nf.packs.rebuild` reads the packs again from disk at the end of the
-tick (`Session::rebuild_packs`, from `ServerEvents::tick` once nothing runs). `Player` is whole now. Not yet: an S3
-store (with the HTTP client), what the network knows a player loaded, `PackConfig` read from `config.yml`.
+tick (`Session::rebuild_packs`, from `ServerEvents::tick` once nothing runs). `Player` is whole now. The owner's S3 store is under
+Web routes. Not yet: what the network knows a player loaded, `PackConfig` read from `config.yml`.
 
 ## Files (`crates/runtime/src/files.rs`)
 
@@ -920,6 +919,69 @@ stopping one). The store's `cutscene_states` table (`Store::cutscene_states`/`pu
 with Kotlin's warning, before scripts hear the join. `Session::stop` now reports what scripts said while services
 stopped (a cutscene's `end` handler at `unloaded`), which used to be dropped. Not yet: `/nf scripts`' per-scope
 count (`count_owned` is there; no service has that hook yet).
+
+## HTTP (`crates/runtime/src/http/`)
+
+Kotlin's `http/` and `NfHttpImpl`, `ConnectionImpls`; the plugin-capabilities skill is the design. **ureq** (blocking,
+HTTP/1.1, rustls with the platform's trust through `rustls-platform-verifier`, ring as the provider) is the client:
+nothing in the runtime is async, and a blocking client on threads of its own keeps network work off the main thread.
+`nf.http.request`'s checks are on the main thread (`api.rs`: URL, method, headers, body size, the host requirement
+through `Grants::check`, the rates), the request runs on `Workers` (four threads, made on the first request, gone with the
+session), and its value is a `Reply` future (an `mpsc` receiver) that `pending::deliver` polls at the tick boundary like
+every async value. `Shared::http` is the session's `Http`: the owner's `HttpConfig`, the `Fetcher`, the rates, the
+connections. `HttpService` (registered late, so it stops after every script) delivers what connections heard each tick,
+ends a released scope's `unloaded`, and closes the client in `stop` (`Agent::shutdown` ends what's in flight).
+
+- **The guard is ureq's `Resolver`** (`fetch.rs`'s `Guard`): ureq asks it for every connection, an address in the URL
+  included, so one place resolves a name once (the injectable `resolve`), judges every address (`guard.rs`, Kotlin's
+  `AddressGuard` byte for byte, an IPv4-mapped v6 address judged as the v4 one as Java does), and hands ureq exactly
+  those. An agent per set of allowed hosts (an allowance's port decides), so a pooled connection made under one
+  package's allowance is never another call's. No proxy (`proxy(None)`: ureq reads the environment's otherwise), no
+  redirects (followed hop by hop in `Fetcher::fetch`, Kotlin's rules), the body read in a bounded loop after gzip.
+- **A URL is read by WHATWG rules** (the `url` crate), so `http://127.1/` is 127.0.0.1 and judged as loopback; Kotlin
+  refused such spellings unread because the JDK and OkHttp could disagree. What's judged is what's connected to either
+  way; a written address that doesn't parse plainly (`guard::literal`) is still refused.
+- **Tests' stand-ins** are `session::Config::net` (`NetHooks`): `resolve`, `dial` (where a judged address really
+  connects: a public name to a local server, as Kotlin's `SocketFactory` did) and `own` (this machine's addresses,
+  otherwise `if-addrs`, cached a minute).
+- **Connections** (`connections.rs`): a thread each, talking to the main thread only through its `Sink` (a queue, a
+  room of permits for backpressure, `ended` heard once). The pass (`HttpApi::pass`) takes one `Heard` at a time out of
+  the connections and raises it with nothing borrowed. Streams are ureq on an agent per hop with no pool (`close` shuts
+  it down, which ends a read in progress); their bytes are counted as the body is read (after gzip: Kotlin counted on
+  the wire). WebSockets are tungstenite over a socket the guard chose (rustls for `wss`, the wire counted under TLS), read
+  with a 50 ms timeout so the same thread writes what scripts send, pinged every 30 s, message and frame capped at
+  `max-message-bytes`.
+- `nf.images.download` is `HttpApi::fetch` with a decode on the worker; the picture is held on the main thread when the
+  value is delivered.
+
+Not yet: script test runs (`nf.test.http`, `allow_private`, the test transport: they come with `nf.test`), `/nf
+requires`' listing, `HttpConfig`/`WebConfig` read from `config.yml`, HTTP/2 (ureq has none).
+
+## Web routes (`crates/runtime/src/web/`)
+
+Kotlin's `web/` and `NfWebImpl`. **The listener is the pack server** (`PackServer`): its request threads parse the head
+with `httparse` (`gate::read_head`); a path that isn't `/<sha1>.zip` goes to the `WebGate` set on it (`set_web`) while web
+routes are on (`WebService::start` starts the listener even when packs aren't sent), else `404`. The gate refuses on the
+listener's thread (414, 429, 413 by `Content-Length` or by reading no further, a chunked body decoded within the limit),
+queues an `Arc<WebCall>`, and the request's own thread waits on the call's channel and writes the answer. At most 256
+requests are in flight; past that, `503` unread.
+
+- **Routing** (`WebContext`, Kotlin's `WebRoutes`) runs in the web service's tick, 32 calls at most: no borrow of
+  `Shared::web` is held while a handler runs, the handler is called through `Scripts::call_kept` (a stopped scope: `503`,
+  a failure: reported with the route's name and `500`). A route answers by `Answerer::Script` or, for a login flow,
+  `Answerer::Login` (no closures kept: the flow's number). `runtime.web-disabled` is the service's problem for each
+  package declaring `requires.web` while routes are off.
+- **Logins** (`oauth.rs`, Kotlin's `OAuthFlows` with the confirm page): the token request runs on HTTP's workers through
+  the same `Fetcher`, and its answer is polled in the web service's tick. The real exchange isn't tested (it needs HTTPS);
+  the test follows a login up to its token request failing.
+- `verify_signature` is `encoding::hmac` and a constant-time comparison; `WebResponse:json` is `nf.json`'s codec.
+
+Not yet: `nf.test.request`/`oauth_token`, the bridge's view of routes.
+
+**The owner's pack store** (`pack_storage.rs`, Kotlin's `PackStorage`): S3-compatible, SigV4 by hand (held to an
+independent implementation's signature), ureq without the guard (the owner's endpoint), uploads one at a time on a
+`Lane` thread; `Packs::uploads_done` (the packs service's tick) marks what's stored and sends it. A key's prefix is encoded
+in the public URL too (Kotlin's left spaces in it).
 
 ## Project items (`crates/runtime/src/project_items.rs`)
 
