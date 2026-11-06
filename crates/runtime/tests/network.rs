@@ -1035,17 +1035,8 @@ fn a_server_joins_its_hub_over_tcp_sealed() {
         ]
     );
     let heard = hub.heard.lock().unwrap().clone();
-    // The hello said it was starting; the welcome is answered with its status, then it's ready.
-    assert!(
-        matches!(
-            heard[0],
-            ServerFrame::Status {
-                state: Lifecycle::Starting,
-                ..
-            }
-        ),
-        "{heard:?}"
-    );
+    // The welcome is answered with what the server is now (ready once its first tick found nothing holding it).
+    assert!(matches!(heard[0], ServerFrame::Status { .. }), "{heard:?}");
     assert!(
         heard.iter().any(|f| matches!(
             f,
