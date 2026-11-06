@@ -50,6 +50,8 @@ pub struct ServerEvents<'a> {
     profiler: RefCell<Rc<crate::profile::Profiler>>,
     /// What runs after each tick (`/nf`'s held work).
     after_tick: RefCell<Option<Rc<dyn Fn()>>>,
+    /// The debugger, on a dev server: it outlives the session's runs.
+    debugger: RefCell<Option<std::sync::Arc<crate::debug::Debugger>>>,
 }
 
 /// How often the runtime looks whether the network's policy changed, or the hub a project waits for is here.
@@ -71,6 +73,7 @@ impl<'a> ServerEvents<'a> {
             bridge: RefCell::new(None),
             profiler: RefCell::new(profiler.clone()),
             after_tick: RefCell::new(None),
+            debugger: RefCell::new(None),
         };
         events.set_profiler(profiler);
         events
@@ -104,7 +107,26 @@ impl<'a> ServerEvents<'a> {
     pub fn attach_bridge(&self, bridge: Rc<crate::bridge::Bridge>) {
         *self.session().shared().console.borrow_mut() = Some(bridge.console());
         self.profiler().attach_bridge(bridge.clone());
+        let debugger =
+            crate::debug::Debugger::new(bridge.dap_sender(), Some(bridge.config().project.clone()));
+        bridge.set_debugger(Some(debugger.clone()));
+        self.attach_debugger(debugger);
         *self.bridge.borrow_mut() = Some(bridge);
+    }
+
+    /// Runs `debugger` with every Lua state the session runs (the dev bridge's; tests hand one in directly).
+    pub fn attach_debugger(&self, debugger: std::sync::Arc<crate::debug::Debugger>) {
+        let installed = debugger.clone();
+        self.session()
+            .set_on_host(Some(Rc::new(move |host, shared| {
+                crate::debug::HostHandler::install(&installed, host, shared);
+            })));
+        *self.debugger.borrow_mut() = Some(debugger);
+    }
+
+    /// The debugger, on a dev server.
+    pub fn debugger(&self) -> Option<std::sync::Arc<crate::debug::Debugger>> {
+        self.debugger.borrow().clone()
     }
 
     /// The dev bridge, when there's one.
@@ -305,6 +327,13 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         let bridge = self.bridge.borrow().clone();
         if let Some(bridge) = &bridge {
             bridge.run(self);
+        }
+        // What the editor configured since: breakpoints, break on errors, a pause.
+        let debugger = self.debugger.borrow().clone();
+        if let (Some(debugger), Some(session)) = (debugger, self.any())
+            && let Some(room) = session.room()
+        {
+            debugger.sync(room.host(), false);
         }
         let wanted = match self.any() {
             Some(session) => {

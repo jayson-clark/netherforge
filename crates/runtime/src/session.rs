@@ -225,6 +225,8 @@ pub struct Session<'a> {
     profiling: std::cell::Cell<bool>,
     /// Server ticks this session has seen, across reloads: what the costs and the profiler count by.
     ticks: std::cell::Cell<u64>,
+    /// Told of each new Lua state before any script runs in it (the debugger, which outlives sessions).
+    on_host: std::cell::RefCell<Option<OnHost>>,
 }
 
 /// What the costs have warned about: each slow script's last warning and how many like it were held back since,
@@ -235,6 +237,9 @@ struct Warned {
     deferred: std::collections::HashMap<netherforge_luau::ScopeId, u64>,
     problems: BTreeMap<netherforge_luau::ScopeId, Problem>,
 }
+
+/// What hears of each new Lua state a session makes, before any script runs in it.
+pub type OnHost = Rc<dyn Fn(&Host, &Rc<Shared>)>;
 
 /// How long the same runtime error stays quiet after it's logged: five seconds.
 pub const ERROR_QUIET_TICKS: u64 = 100;
@@ -439,6 +444,7 @@ impl<'a> Session<'a> {
             profiler: Default::default(),
             profiling: Default::default(),
             ticks: Default::default(),
+            on_host: Default::default(),
         };
         session.refuse();
         session.run();
@@ -598,6 +604,11 @@ impl<'a> Session<'a> {
             source: self.source,
             platform: &*self.platform,
         };
+        // The debugger knows what to stop at before any body runs, so breakpoints in a body hold on a full reload.
+        let on_host = self.on_host.borrow().clone();
+        if let Some(on_host) = on_host {
+            on_host(room.host(), &self.shared);
+        }
         // The profiler's bookkeeping is on before any body runs, so bodies are timed too.
         self.profiling.set(false);
         let profiling = self.profiler().is_some_and(|p| p.active());
@@ -893,6 +904,14 @@ impl<'a> Session<'a> {
     /// Server ticks this session has seen.
     pub fn ticks(&self) -> u64 {
         self.ticks.get()
+    }
+
+    /// What hears of each new Lua state before any script runs in it (and of this one now, if it runs).
+    pub fn set_on_host(&self, on_host: Option<OnHost>) {
+        if let (Some(f), Some(room)) = (&on_host, &self.room) {
+            f(room.host(), &self.shared);
+        }
+        *self.on_host.borrow_mut() = on_host;
     }
 
     /// The runtime's profiler, which this session feeds from now on.

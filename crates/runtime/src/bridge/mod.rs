@@ -10,8 +10,8 @@
 //!
 //! **The debugger's hook.** `dap` notifications go to the [`Debugger`] set with [`Bridge::set_debugger`], on the
 //! bridge's thread, so they're heard while a breakpoint holds the main thread; while it holds it, a main-thread request
-//! is refused at once with the debugger's sentence, and when the connection ends the debugger detaches. There's no
-//! debugger yet (the next phase): with none, `dap` is ignored.
+//! is refused at once with the debugger's sentence, and when the connection ends the debugger detaches. With none,
+//! `dap` is ignored (`crate::debug::Debugger` is set by `ServerEvents::attach_bridge`).
 //!
 //! **What the editor hears unasked**: the console (every line the runtime logs, through [`Bridge::platform`]'s log,
 //! and scripts' lines and errors as themselves, through [`Console`]), `problems` (on connect, after every reload, and
@@ -101,7 +101,7 @@ pub trait Console {
     );
 }
 
-/// The debugger, as the bridge reaches it (the next phase's): DAP messages in, whether it holds the main thread, and
+/// The debugger, as the bridge reaches it (`crate::debug::Debugger`): DAP messages in, whether it holds the main thread, and
 /// letting go when the editor does. Called on the bridge's thread.
 pub trait Debugger: Send + Sync {
     /// One Debug Adapter Protocol message from the editor.
@@ -540,9 +540,19 @@ impl Bridge {
         self.profiler.load(Ordering::SeqCst)
     }
 
-    /// The debugger `dap` notifications go to (the next phase's).
+    /// The debugger `dap` notifications go to.
     pub fn set_debugger(&self, debugger: Option<Arc<dyn Debugger>>) {
         *self.debugger.lock().unwrap() = debugger;
+    }
+
+    /// What sends the debugger's DAP messages from any thread (`dap`'s, for the debugger to keep).
+    pub fn dap_sender(&self) -> crate::debug::Send {
+        let client = self.client.clone();
+        Arc::new(move |message: Value| {
+            if client.connected() {
+                client.notify::<bridge::Dap>(&bridge::Json(message));
+            }
+        })
     }
 
     /// Sends one of the debugger's DAP messages, only to an editor that's connected: a DAP session is the

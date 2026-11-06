@@ -29,14 +29,10 @@ struct Server {
 }
 
 fn temp(name: &str) -> std::path::PathBuf {
-    std::env::temp_dir().join(format!(
-        "nf-{name}-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ))
+    std::env::temp_dir().join(format!("nf-{name}-{}-{}", std::process::id(), {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    }))
 }
 
 /// A server running `files` on a clock that moves 1 ms each read; `config` as given, the clock added.

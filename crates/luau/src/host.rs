@@ -79,13 +79,13 @@ impl Categories {
 }
 
 /// A call into a script: what it may spend and what it has.
-struct Frame {
+pub(crate) struct Frame {
     scope: ScopeId,
     category: u8,
     budget: u64,
     used: u64,
     deadline: u64,
-    stop: Option<Stop>,
+    pub(crate) stop: Option<Stop>,
     location: Option<Location>,
     /// When it opened, by the host's clock, and what the frames nested in it took.
     started: u64,
@@ -93,17 +93,16 @@ struct Frame {
     /// What it runs, when its caller said (`Host::next_kind`).
     kind: Option<String>,
     /// Which call in it is, so a debugger's step knows its own.
-    #[allow(dead_code)]
-    serial: u64,
+    pub(crate) serial: u64,
 }
 
-struct Guard {
+pub(crate) struct Guard {
     limits: Limits,
-    clock: Rc<dyn Clock>,
-    frames: Vec<Frame>,
+    pub(crate) clock: Rc<dyn Clock>,
+    pub(crate) frames: Vec<Frame>,
     since_clock: u32,
     /// Time the debugger held the state paused, left out of every reading of the clock.
-    paused: u64,
+    pub(crate) paused: u64,
     timing: Timing,
     serials: u64,
 }
@@ -157,6 +156,10 @@ struct Inner {
     blamed: RefCell<Option<ScopeId>>,
     /// The names of scopes closed while the profiler was on, until it takes what they ran.
     gone: RefCell<HashMap<ScopeId, String>>,
+    /// The debugger's state, and what a call in runs through while it breaks on errors.
+    debug: Rc<crate::debug::DebugState>,
+    catching: Function,
+    error_handler: Function,
 }
 
 /// A Luau state and the scopes in it: one per room. Cheap to clone; a clone
@@ -250,7 +253,24 @@ impl Host {
                     .get::<Table>("coroutine")?
                     .get::<Function>("isyieldable")?,
             ))?;
+        let debug = crate::debug::DebugState::install(&lua, &guard)?;
+        let catching: Function = lua
+            .load(crate::debug::CATCHING)
+            .set_name("=nf/catching")
+            .set_compiler(mlua::chunk::Compiler::new().set_debug_level(0))
+            .call((
+                lua.globals().get::<Function>("xpcall")?,
+                lua.globals().get::<Function>("error")?,
+                lua.globals()
+                    .get::<Table>("table")?
+                    .get::<Function>("pack")?,
+                lua.globals().get::<Function>("unpack")?,
+            ))?;
+        let error_handler = debug.error_handler(&lua)?;
         Ok(Host(Rc::new(Inner {
+            debug,
+            catching,
+            error_handler,
             lua,
             guard,
             shim,
@@ -396,6 +416,8 @@ impl Host {
             .lua
             .load(source)
             .set_name(format!("@{chunk}"))
+            // Locals' and upvalues' names, for the debugger; nothing at run time.
+            .set_compiler(mlua::chunk::Compiler::new().set_debug_level(2))
             .set_environment(env)
             .into_function()
             .map_err(|e| failure_of(&e))
@@ -450,7 +472,16 @@ impl Host {
             parent_category
         };
         set_memory_category(&self.0.lua, category);
-        let result = f.call::<R>(args);
+        let result = if self.0.debug.errors_on() {
+            // Breaking on errors: through `xpcall`, whose handler stops where the error happened.
+            args.into_lua_multi(&self.0.lua).and_then(|mut args| {
+                args.push_front(Value::Function(f.clone()));
+                args.push_front(Value::Function(self.0.error_handler.clone()));
+                self.0.catching.call::<R>(args)
+            })
+        } else {
+            f.call::<R>(args)
+        };
         set_memory_category(&self.0.lua, parent_category);
 
         let frame = {
@@ -570,6 +601,22 @@ impl Host {
     /// runtime stops it at the end of the tick.
     pub fn take_blamed(&self) -> Option<ScopeId> {
         self.0.blamed.borrow_mut().take()
+    }
+
+    /// The runtime's debugger, which the host asks what to do once a script stops.
+    pub fn set_debug_handler(&self, handler: Option<Rc<dyn crate::debug::DebugHandler>>) {
+        self.0.debug.set_handler(handler);
+    }
+
+    /// Attaches the debugger (if it wasn't) with what to stop at; a pause stops at the next line any script runs.
+    /// Taken at the next call in.
+    pub fn debug_configure(&self, config: crate::debug::DebugConfig) {
+        self.0.debug.configure(config);
+    }
+
+    /// Forgets the debugger: nothing to stop at, no step, nothing stepping.
+    pub fn debug_detach(&self) {
+        self.0.debug.detach();
     }
 
     /// The host's clock: the injected one, less the time a debugger held the state paused. What every time limit

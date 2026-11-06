@@ -3,6 +3,7 @@
 //! memory. The design is the rust-runtime skill's "The host".
 
 mod clock;
+pub mod debug;
 mod failure;
 mod host;
 pub mod json;

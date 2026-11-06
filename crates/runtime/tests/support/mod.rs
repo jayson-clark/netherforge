@@ -1266,8 +1266,18 @@ pub fn alex() -> PlayerRef {
     }
 }
 
+/// The server held alive while the debugger pauses it: said in the calls.
+impl netherforge_platform::FakePauseOps for Fake {
+    fn hold(&self, message: String) {
+        self.call(format!("hold {message}"));
+    }
+}
+
 impl FakePlatform for Fake {
     fn text(&self) -> &dyn netherforge_platform::TextOps {
+        self
+    }
+    fn pause(&self) -> &dyn netherforge_platform::PauseOps {
         self
     }
     fn world_manager(&self) -> &dyn netherforge_platform::WorldManagerOps {

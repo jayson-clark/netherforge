@@ -21,14 +21,10 @@ fn server(files: &[(&str, &str)]) -> (Rc<Fake>, Rc<ServerEvents<'static>>, std::
     let files: &'static Files = Box::leak(Box::new(Files::new(&all)));
     let session = Session::start(platform.clone(), files, &NoPackages);
     let events = Rc::new(ServerEvents::new(session));
-    let state = std::env::temp_dir().join(format!(
-        "nf-admin-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
+    let state = std::env::temp_dir().join(format!("nf-admin-{}-{}", std::process::id(), {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    }));
     AdminCommand::register(&events, state.clone()).expect("registered");
     (platform, events, state)
 }
