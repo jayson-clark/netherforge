@@ -126,6 +126,120 @@ impl SettingDef {
     }
 }
 
+impl SettingDef {
+    /// Reads words typed (`/nf settings set`, a dialog's text box) as this setting takes them.
+    pub fn parse(&self, text: &str) -> SettingRead {
+        let trimmed = text.trim();
+        let number = || trimmed.parse::<f64>().ok();
+        match self {
+            SettingDef::Boolean { .. } => match trimmed.to_lowercase().as_str() {
+                "true" | "on" | "yes" => SettingRead::Ok(Value::Bool(true)),
+                "false" | "off" | "no" => SettingRead::Ok(Value::Bool(false)),
+                _ => SettingRead::Bad(format!("\"{trimmed}\" isn't {}", self.expects())),
+            },
+            SettingDef::Integer { min, max, .. } => {
+                let Some(n) = number() else {
+                    return SettingRead::Bad(format!("\"{trimmed}\" isn't {}", self.expects()));
+                };
+                let value = n as i64;
+                if !n.is_finite() || value as f64 != n {
+                    return SettingRead::Bad(format!("{trimmed} isn't {}", self.expects()));
+                }
+                if min.is_some_and(|m| value < m) || max.is_some_and(|m| value > m) {
+                    return SettingRead::Bad(format!("{value} isn't {}", self.expects()));
+                }
+                SettingRead::Ok(Value::from(value))
+            }
+            SettingDef::Number { .. } => match number() {
+                Some(n) if n.is_finite() => self.read(&Value::from(n)),
+                Some(n) => SettingRead::Bad(format!("{n} isn't {}", self.expects())),
+                None => SettingRead::Bad(format!("\"{trimmed}\" isn't {}", self.expects())),
+            },
+            SettingDef::String { .. } => SettingRead::Ok(Value::from(text)),
+            SettingDef::Choice { choices, .. } => {
+                if choices.iter().any(|c| c == text) {
+                    SettingRead::Ok(Value::from(text))
+                } else {
+                    SettingRead::Bad(format!("\"{text}\" isn't {}", self.expects()))
+                }
+            }
+        }
+    }
+
+    /// A value `read` accepted, as people read it: `true`, `12`, `0.5`, `easy`.
+    pub fn show(&self, json: &Value) -> String {
+        match json {
+            Value::String(s) => s.clone(),
+            Value::Number(n) => n.as_f64().map_or_else(|| n.to_string(), format_number),
+            other => other.to_string(),
+        }
+    }
+}
+
+/// A key of a server's values file that doesn't fit: `unknown` when no setting has its name, else a value of the
+/// wrong kind.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ValueProblem {
+    pub setting: String,
+    pub message: String,
+    pub unknown: bool,
+}
+
+/// What a server's values file for one package read as (`SettingValues.Read`): the owner's values that fit, everything
+/// the file holds, and what didn't fit.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ValuesRead {
+    pub values: serde_json::Map<String, Value>,
+    pub file: serde_json::Map<String, Value>,
+    pub problems: Vec<ValueProblem>,
+}
+
+/// Reads a server's values file (`plugins/NetherForge/settings/<namespace>.json`) against the package's declared
+/// settings; none when it isn't a JSON object (`SettingValues.read`). Everything it holds is kept, what doesn't fit
+/// too, so writing it back drops nothing the owner wrote.
+pub fn read_values<'a>(
+    text: &str,
+    declared: impl Fn(&str) -> Option<&'a SettingDef>,
+) -> Option<ValuesRead> {
+    let Ok(Value::Object(file)) = serde_json::from_str::<Value>(text) else {
+        return None;
+    };
+    let mut read = ValuesRead::default();
+    for (name, value) in &file {
+        let Some(setting) = declared(name) else {
+            read.problems.push(ValueProblem {
+                setting: name.clone(),
+                message: format!("there's no setting \"{name}\""),
+                unknown: true,
+            });
+            continue;
+        };
+        match setting.read(value) {
+            SettingRead::Ok(json) => {
+                read.values.insert(name.clone(), json);
+            }
+            SettingRead::Bad(message) => read.problems.push(ValueProblem {
+                setting: name.clone(),
+                message,
+                unknown: false,
+            }),
+        }
+    }
+    read.file = file;
+    Some(read)
+}
+
+/// A values file holding `values`, canonical: keys sorted, numbers as everywhere (`SettingValues.write`).
+pub fn write_values(values: &serde_json::Map<String, Value>) -> String {
+    let mut keys: Vec<&String> = values.keys().collect();
+    keys.sort();
+    let sorted: serde_json::Map<String, Value> = keys
+        .into_iter()
+        .map(|k| (k.clone(), values[k].clone()))
+        .collect();
+    format!("{}\n", crate::json::print(&Value::Object(sorted)))
+}
+
 /// Checks the manifest's `settings` (`SettingsValidator.validate`).
 pub fn validate<'a>(
     settings: impl Iterator<Item = (&'a str, &'a SettingDef)>,

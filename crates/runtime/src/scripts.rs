@@ -807,7 +807,43 @@ impl Scripts {
             })
             .map(|(t, e)| (t.clone(), (*e).to_owned()))
             .collect();
-        self.deliver_path(&stages, payload, spec, false, precancelled)
+        self.deliver_path(&stages, payload, spec, false, precancelled, None)
+    }
+
+    /// Raises built-in `event` on `target` for only the scopes `only` keeps (Kotlin's `emitTo`: a package's own
+    /// scripts hearing its `setting_changed`).
+    pub fn raise_within(
+        &self,
+        target: &Target,
+        event: &str,
+        payload: Table,
+        only: &dyn Fn(ScopeId) -> bool,
+    ) -> Delivered {
+        let spec = events::of(class_of(target), event);
+        self.deliver_path(
+            &[(target.clone(), event.to_owned())],
+            payload,
+            spec,
+            false,
+            false,
+            Some(only),
+        )
+    }
+
+    /// The scopes with a handler for `event` on `target`.
+    pub fn scopes_listening(
+        &self,
+        target: &Target,
+        event: &str,
+    ) -> std::collections::HashSet<ScopeId> {
+        let state = self.0.state.borrow();
+        state
+            .listeners
+            .get(&(key_of(target), event.to_owned()))
+            .into_iter()
+            .flatten()
+            .filter_map(|id| state.subs.get(id).map(|s| s.scope))
+            .collect()
     }
 
     fn deliver(
@@ -824,6 +860,7 @@ impl Scripts {
             spec,
             custom,
             false,
+            None,
         )
     }
 
@@ -834,17 +871,21 @@ impl Scripts {
         spec: Option<&'static EventType>,
         custom: bool,
         precancelled: bool,
+        only: Option<&dyn Fn(ScopeId) -> bool>,
     ) -> Delivered {
         let listened: Vec<(Target, String, Vec<u64>)> = {
             let state = self.0.state.borrow();
             stages
                 .iter()
                 .filter_map(|(target, event)| {
-                    let ids = state
+                    let mut ids = state
                         .listeners
                         .get(&(key_of(target), event.clone()))
                         .cloned()
                         .unwrap_or_default();
+                    if let Some(only) = only {
+                        ids.retain(|id| state.subs.get(id).is_some_and(|s| only(s.scope)));
+                    }
                     (!ids.is_empty()).then(|| (target.clone(), event.clone(), ids))
                 })
                 .collect()

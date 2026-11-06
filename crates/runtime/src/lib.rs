@@ -56,6 +56,7 @@ pub mod screen;
 pub mod scripts;
 pub mod server;
 pub mod session;
+pub mod settings;
 pub mod shared;
 pub mod sky;
 pub mod stats;
@@ -228,7 +229,19 @@ impl NfApi for NfContext {
     }
 
     fn config(&self, caller: &Caller, name: String) -> ApiResult<Value> {
-        NfApi::config(&self.scripts, caller, name)
+        let Some(shared) = &self.shared else {
+            return NfApi::config(&self.scripts, caller, name);
+        };
+        let namespace = self
+            .scripts
+            .namespace(caller.scope)
+            .unwrap_or_else(|| self.grants.home.clone());
+        let value = shared
+            .settings
+            .borrow_mut()
+            .config(caller.scope, &namespace, &name)
+            .map_err(ApiError)?;
+        Ok(settings::to_lua(self.scripts.host().lua(), &value))
     }
 
     fn instructions_left(&self, caller: &Caller) -> ApiResult<i64> {

@@ -134,6 +134,9 @@ pub struct Config {
     pub wasm: crate::wasm::WasmConfig,
     /// `network:` in `config.yml`, and whether this is a network of its own (a dev server's, a test's).
     pub network: crate::network::NetworkConfig,
+    /// `<plugin folder>/settings`, where the owner's values for packages' settings are kept: none keeps them in
+    /// memory only.
+    pub settings_dir: Option<std::path::PathBuf>,
     /// The plugin's link to its network, which outlives every session: none, and the session makes one from
     /// `network` (and stops it with itself).
     pub network_link: Option<crate::network::Link>,
@@ -242,6 +245,7 @@ impl<'a> Session<'a> {
             http.hooks = config.net.clone();
         }
         shared.web.borrow_mut().config = config.web.clone();
+        shared.settings.borrow_mut().directory = config.settings_dir.clone();
         {
             let mut network = shared.network.borrow_mut();
             network.config = config.network.clone();
@@ -584,7 +588,19 @@ impl<'a> Session<'a> {
                 by_kind.entry(kind).or_default().insert(id);
             }
         }
-        let room = self.room.as_ref().expect("running");
+        let vanilla = changed.iter().any(|p| p == "client/vanilla.json");
+        self.reload_kinds(by_kind, vanilla);
+    }
+
+    /// Reloads the resources `by_kind` names (and what goes with them), the project as it read last.
+    fn reload_kinds(
+        &mut self,
+        mut by_kind: BTreeMap<&'static str, BTreeSet<String>>,
+        vanilla: bool,
+    ) {
+        let Some(room) = self.room.as_ref() else {
+            return;
+        };
         // What else goes with them (the scripts that ran a WebAssembly module), asked before anything unloads.
         let asked: Vec<(&'static str, BTreeSet<String>)> =
             by_kind.iter().map(|(k, ids)| (*k, ids.clone())).collect();
@@ -622,7 +638,7 @@ impl<'a> Session<'a> {
             }
         }
         let mut kinds: BTreeSet<&str> = by_kind.iter().map(|(k, _)| *k).collect();
-        if changed.iter().any(|p| p == "client/vanilla.json") {
+        if vanilla {
             kinds.insert("vanilla");
         }
         for service in &self.services {
@@ -630,6 +646,146 @@ impl<'a> Session<'a> {
         }
         self.released();
         self.report();
+    }
+
+    // ---- the owner's settings -----------------------------------------------------------
+
+    /// Sets package `namespace`'s setting `name` to `value` (JSON; none or null puts it back to its default), writes
+    /// the owner's file and tells the scripts: whether its value changed, or why it can't be set.
+    pub fn set_setting(
+        &mut self,
+        namespace: &str,
+        name: &str,
+        value: Option<&serde_json::Value>,
+    ) -> Result<bool, String> {
+        let changes = self
+            .shared
+            .settings
+            .borrow_mut()
+            .set(namespace, name, value)?;
+        let changed = !changes.is_empty();
+        self.announce(namespace, changes);
+        Ok(changed)
+    }
+
+    /// `set_setting`, from words typed (`/nf settings set`, a dialog's text box).
+    pub fn set_setting_text(
+        &mut self,
+        namespace: &str,
+        name: &str,
+        text: &str,
+    ) -> Result<bool, String> {
+        let changes = self
+            .shared
+            .settings
+            .borrow_mut()
+            .set_text(namespace, name, text)?;
+        let changed = !changes.is_empty();
+        self.announce(namespace, changes);
+        Ok(changed)
+    }
+
+    /// Reads every package's settings file again (after the owner edited one by hand) and tells the scripts: how
+    /// many settings changed.
+    pub fn reload_settings(&mut self) -> usize {
+        let log = self.platform.log();
+        let all = self.shared.settings.borrow_mut().reload(&|m| log.warn(m));
+        let mut count = 0;
+        for (namespace, changes) in all {
+            count += changes.len();
+            self.announce(&namespace, changes);
+        }
+        count
+    }
+
+    /// Tells package `namespace`'s scripts about `changes`: `setting_changed` to those that listen, a restart for
+    /// those that read a changed setting and don't.
+    fn announce(&mut self, namespace: &str, changes: Vec<crate::settings::Change>) {
+        use netherforge_api::codec::Codec;
+        if changes.is_empty() {
+            return;
+        }
+        let Some(room) = self.room.as_ref() else {
+            return;
+        };
+        let scripts = room.scripts().clone();
+        let home = self.project.namespace().to_owned();
+        let of_package = |scope: netherforge_luau::ScopeId| {
+            scripts.namespace(scope).unwrap_or_else(|| home.clone()) == namespace
+        };
+        // Who handles it themselves is asked before anyone hears it, so a handler's own changes don't count.
+        let listening = scripts.scopes_listening(&crate::scripts::Target::Nf, "setting_changed");
+        let lua = scripts.host().lua().clone();
+        let log = self.platform.log();
+        for change in &changes {
+            let Ok(definition) = self
+                .shared
+                .settings
+                .borrow()
+                .definition(namespace, &change.setting)
+            else {
+                continue;
+            };
+            log.info(format!(
+                "Setting {namespace}:{} is now {} (was {})",
+                change.setting,
+                definition.show(&change.now),
+                definition.show(&change.was)
+            ));
+            let payload = netherforge_api::codecs::SettingChangedEvent.push(
+                &lua,
+                netherforge_api::shapes::SettingChangedEvent {
+                    setting: change.setting.clone(),
+                    value: crate::settings::to_lua(&lua, &change.now),
+                    previous: crate::settings::to_lua(&lua, &change.was),
+                },
+            );
+            if let Ok(mlua::Value::Table(fields)) = payload {
+                scripts.raise_within(
+                    &crate::scripts::Target::Nf,
+                    "setting_changed",
+                    fields,
+                    &|scope| listening.contains(&scope) && of_package(scope),
+                );
+            }
+        }
+        let names: HashSet<String> = changes.iter().map(|c| c.setting.clone()).collect();
+        let stale: Vec<netherforge_luau::ScopeId> = self
+            .shared
+            .settings
+            .borrow()
+            .readers(&names)
+            .into_iter()
+            .filter(|scope| of_package(*scope) && !listening.contains(scope))
+            .collect();
+        let Some(modules) = self.shared.modules.borrow().clone() else {
+            return;
+        };
+        let mut by_kind: BTreeMap<&'static str, BTreeSet<String>> = BTreeMap::new();
+        for scope in stale {
+            match modules.owner(scope) {
+                Some(Owner::Module(id)) => {
+                    by_kind.entry("module").or_default().insert(id);
+                }
+                Some(Owner::Script(file)) => {
+                    if let Some(found) = netherforge_format::kinds::classify(&file)
+                        && let (Some(kind), Some(id), None) = (found.kind, found.id, found.package)
+                    {
+                        by_kind.entry(kind).or_default().insert(id);
+                    }
+                }
+                None => {}
+            }
+        }
+        if by_kind.is_empty() {
+            return;
+        }
+        let each: Vec<String> = by_kind
+            .iter()
+            .flat_map(|(k, ids)| ids.iter().map(move |id| format!("{k}:{id}")))
+            .collect();
+        log.info(format!("Restarting what read it: {}", each.join(", ")));
+        self.reload_kinds(by_kind, false);
     }
 
     /// The project's packs read again from disk and rebuilt (`nf.packs.rebuild`), when a script asked for it.
@@ -755,6 +911,10 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
     // Centities are defined before modules start: a module's body may spawn one. Their instances' scripts
     // stop before the modules they require do.
     vec![
+        // Before any script runs, so a module's body reads its settings.
+        Box::new(crate::settings::SettingsService {
+            shared: shared.clone(),
+        }),
         // Saved tables stop last, after every script's unload has had them.
         Box::new(crate::data::DataService {
             shared: shared.clone(),
