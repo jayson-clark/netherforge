@@ -639,3 +639,125 @@ fn check_kind(stack: &ItemDef, at: &str, cx: &crate::project::Across, sink: &mut
         );
     }
 }
+
+/// The rules for stacks of project items (`items/<id>/item.json`), shared by every platform so the server and
+/// the tests' fake agree (Kotlin's `ProjectItems`). A stack names its item by id (`ItemDef::item`) and carries
+/// that id, plus a [`project_items::hash`] of the look it was given; the definition fills in what a stack leaves
+/// out ([`project_items::resolve`]); when the definition changes, a stack whose hash is stale is rewritten to the
+/// new look the next time the server sees it ([`project_items::restyle`]).
+pub mod project_items {
+    use super::ItemDef;
+
+    /// `def` as a stack of the project item whose look is `look`: every field `def` sets wins, the look fills
+    /// in the rest, and the kind is always the look's.
+    pub fn resolve(def: &ItemDef, look: &ItemDef) -> ItemDef {
+        let def = def.clone();
+        let look = look.clone();
+        ItemDef {
+            kind: look.kind,
+            item: def.item,
+            count: def.count,
+            name: def.name.or(look.name),
+            lore: def.lore.or(look.lore),
+            enchantments: def.enchantments.or(look.enchantments),
+            glint: def.glint.or(look.glint),
+            hide_tooltip: def.hide_tooltip.or(look.hide_tooltip),
+            unbreakable: def.unbreakable.or(look.unbreakable),
+            damage: def.damage,
+            item_model: def.item_model.or(look.item_model),
+            invisible: def.invisible.or(look.invisible),
+            tooltip_style: def.tooltip_style.or(look.tooltip_style),
+            equipment: def.equipment.or(look.equipment),
+            color: def.color.or(look.color),
+            profile: def.profile.or(look.profile),
+            max_stack_size: def.max_stack_size.or(look.max_stack_size),
+            rarity: def.rarity.or(look.rarity),
+            attribute_modifiers: def.attribute_modifiers.or(look.attribute_modifiers),
+            can_break: def.can_break.or(look.can_break),
+            can_place_on: def.can_place_on.or(look.can_place_on),
+            hidden_tooltip_components: def
+                .hidden_tooltip_components
+                .or(look.hidden_tooltip_components),
+            food: def.food.or(look.food),
+            cooldown: def.cooldown.or(look.cooldown),
+            hold: def.hold.or(look.hold),
+            use_effects: def.use_effects.or(look.use_effects),
+            map: def.map,
+            data: def.data,
+        }
+    }
+
+    /// A stack `old` of project item `item`, rewritten to its definition's new `look`: it takes the look whole,
+    /// and keeps what belongs to the stack itself, its count, damage and script data. Its enchantments stay too
+    /// when the look sets none, so a sword enchanted at a table keeps them.
+    pub fn restyle(old: &ItemDef, item: &str, look: &ItemDef) -> ItemDef {
+        ItemDef {
+            item: Some(item.to_owned()),
+            count: old.count,
+            damage: old.damage,
+            map: old.map,
+            data: old.data.clone(),
+            enchantments: look
+                .enchantments
+                .clone()
+                .or_else(|| old.enchantments.clone()),
+            ..look.clone()
+        }
+    }
+
+    /// What a stack records as the look it was given: FNV-1a over `look`'s canonical JSON (as its file writes
+    /// it, newline and all), as 16 hex digits, the same on every platform. A stack recording another one is out of date.
+    pub fn hash(look: &ItemDef) -> String {
+        const OFFSET: u64 = 0xcbf29ce484222325;
+        const PRIME: u64 = 0x100000001b3;
+        let text = crate::canonical::write(look);
+        let mut hash = OFFSET;
+        for byte in text.bytes() {
+            hash = (hash ^ u64::from(byte)).wrapping_mul(PRIME);
+        }
+        format!("{hash:016x}")
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn look() -> ItemDef {
+            ItemDef {
+                kind: "minecraft:paper".into(),
+                name: Some("<red>Ruby".into()),
+                lore: Some(vec!["warm".into()]),
+                item_model: Some("ui/ruby".into()),
+                ..ItemDef::default()
+            }
+        }
+
+        #[test]
+        fn the_look_hash_is_the_kotlin_runtimes() {
+            assert_eq!(hash(&look()), "57de5b37a80a39de");
+            let renamed = ItemDef {
+                name: Some("<red>Ruby!".into()),
+                ..look()
+            };
+            assert_ne!(hash(&look()), hash(&renamed));
+        }
+
+        #[test]
+        fn a_stack_takes_the_look_where_it_says_nothing() {
+            let stack = ItemDef {
+                item: Some("ruby".into()),
+                count: Some(3),
+                lore: Some(vec!["50 coins".into()]),
+                ..ItemDef::default()
+            };
+            let resolved = resolve(&stack, &look());
+            assert_eq!(resolved.kind, "minecraft:paper");
+            assert_eq!(resolved.name.as_deref(), Some("<red>Ruby"));
+            assert_eq!(resolved.lore, Some(vec!["50 coins".to_owned()]));
+            assert_eq!(resolved.count, Some(3));
+            let restyled = restyle(&resolved, "ruby", &look());
+            assert_eq!(restyled.lore, Some(vec!["warm".to_owned()]));
+            assert_eq!(restyled.count, Some(3));
+        }
+    }
+}

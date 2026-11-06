@@ -37,6 +37,7 @@ pub mod modules;
 pub mod names;
 pub mod permissions;
 pub mod player;
+pub mod project_items;
 pub mod schedule;
 pub mod scripts;
 pub mod server;
@@ -407,6 +408,18 @@ impl LuaApi for Api {
     fn nf_text(&self) -> &dyn netherforge_api::api::NfTextApi {
         match &self.utilities {
             Some(u) => u,
+            None => &Unported,
+        }
+    }
+    fn nf_items(&self) -> &dyn netherforge_api::api::NfItemsApi {
+        match &self.worlds {
+            Some(g) => g,
+            None => &Unported,
+        }
+    }
+    fn projectitem(&self) -> &dyn netherforge_api::api::ProjectItemApi {
+        match &self.worlds {
+            Some(g) => g,
             None => &Unported,
         }
     }

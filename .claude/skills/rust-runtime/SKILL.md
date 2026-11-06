@@ -704,6 +704,18 @@ the files' with a UUID id and an owner scope, gone with that scope (`scope_relea
 `nf.dialogs.get` and `open_dialog` by name find only the project's. Not yet: the runtime's own dialogs
 (`/nf settings`).
 
+## Project items (`crates/runtime/src/project_items.rs`)
+
+Kotlin's `item/Items.kt`: one record per `items/<id>/item.json` with its look and the look's hash (format's
+`item::project_items`: `resolve`, `restyle`, `hash`, held to Kotlin's fixed hash; the canonical text hashed ends
+with its newline). Each item's one script starts once modules run (`this` the `ProjectItem`), so a module's body
+runs before any item's handlers exist. `nf.items.create` resolves overrides over the look and runs `render`.
+`ServerEvents` puts the item's stage first on use, interact, consume, drop, pickup (then the inventory is
+refreshed next tick), and the held item's on break, hit (attacks only) and interact-entity; `item_viewing` /
+`item_viewed` run `view` then `item_view`, nil when a handler failed (`Scripts::handler_failures`). Views are sent
+again at the end of a tick (`player:refresh_items`), everyone's when a session starts. Not yet: `Platform::bind`
+(the platform's lookups, `ProjectItems::look`), an item's `block`, recipes.
+
 ## Commands (`crates/runtime/src/commands.rs`)
 
 Kotlin's `ProjectCommands`, `CommandDefinitions` and `ArgumentValues`: `nf.commands.register` (modules only:

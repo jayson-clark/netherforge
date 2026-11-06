@@ -167,6 +167,8 @@ struct State {
     due: BTreeMap<(u64, u64), ()>,
     tasks: HashMap<u64, Task>,
     reports: Vec<Report>,
+    /// How many failures have been reported, ever: whether one happened during a call is a change in it.
+    failures: u64,
     logs: Vec<Log>,
     /// Ids of waits handed to running tasks, which they're woken with.
     next_token: u64,
@@ -442,8 +444,16 @@ impl Scripts {
         std::mem::take(&mut self.0.state.borrow_mut().reports)
     }
 
+    /// How many failures have been reported so far (Kotlin's `handlerFailures`): a handler failed during a
+    /// call when it changed.
+    pub fn handler_failures(&self) -> u64 {
+        self.0.state.borrow().failures
+    }
+
     fn report(&self, scope: ScopeId, what: impl Into<String>, failure: Failure, gave_up: bool) {
-        self.0.state.borrow_mut().reports.push(Report {
+        let mut state = self.0.state.borrow_mut();
+        state.failures += 1;
+        state.reports.push(Report {
             scope,
             what: what.into(),
             failure,

@@ -94,6 +94,22 @@ fn cancelled(out: Option<Emitted>) -> bool {
     out.is_some_and(|out| out.cancelled)
 }
 
+/// The project items' side of the running session.
+fn items(s: &Running) -> crate::project_items::ItemContext {
+    crate::project_items::ItemContext {
+        shared: s.session().shared().clone(),
+        scripts: s.room().scripts().clone(),
+    }
+}
+
+/// `stages` with the item's own stage first (`event` on the project item `item` is a stack of, if any).
+fn with_item<'s>(item: Option<Handle>, event: &'s str, stages: &[Stage<'s>]) -> Vec<Stage<'s>> {
+    item.map(|h| (event, Some(h)))
+        .into_iter()
+        .chain(stages.iter().cloned())
+        .collect()
+}
+
 fn player_stage<'s>(s: &Running, event: &'s str, player: &PlayerRef) -> Stage<'s> {
     (event, Some(Handle::Player(s.player(player))))
 }
@@ -128,15 +144,19 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
     }
 
     fn item_rendered(&self, stack: ItemData) -> ItemData {
-        stack
+        match self.open() {
+            Some(s) => items(&s).render(stack),
+            None => stack,
+        }
     }
 
-    fn item_viewing(&self, _reference: Option<String>) -> bool {
-        false
+    fn item_viewing(&self, reference: Option<String>) -> bool {
+        self.open()
+            .is_some_and(|s| items(&s).viewing(reference.as_deref()))
     }
 
-    fn item_viewed(&self, _player: Uuid, _stack: ItemData) -> Option<ItemView> {
-        None
+    fn item_viewed(&self, player: Uuid, stack: ItemData) -> Option<ItemView> {
+        self.open().and_then(|s| items(&s).view(player, &stack))
     }
 
     fn player_interact(
@@ -149,10 +169,14 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         hand: String,
     ) -> bool {
         let Some(s) = self.open() else { return false };
-        let stages = [
-            player_stage(&s, "interact", &player),
-            ("player_interact", None),
-        ];
+        let stages = with_item(
+            items(&s).stage(item.as_ref()),
+            "interact",
+            &[
+                player_stage(&s, "interact", &player),
+                ("player_interact", None),
+            ],
+        );
         cancelled(raise(&s, &stages, codecs::PlayerInteractEvent, || {
             shapes::PlayerInteractEvent {
                 player: s.player(&player),
@@ -167,10 +191,14 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
 
     fn player_use_item(&self, player: PlayerRef, item: ItemData, hand: String) -> bool {
         let Some(s) = self.open() else { return false };
-        let stages = [
-            player_stage(&s, "use_item", &player),
-            ("player_use_item", None),
-        ];
+        let stages = with_item(
+            items(&s).stage(Some(&item)),
+            "use",
+            &[
+                player_stage(&s, "use_item", &player),
+                ("player_use_item", None),
+            ],
+        );
         cancelled(raise(&s, &stages, codecs::PlayerUseItemEvent, || {
             shapes::PlayerUseItemEvent {
                 player: s.player(&player),
@@ -180,8 +208,14 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         }))
     }
 
-    fn draws_without_ammo(&self, _item: ItemData) -> bool {
-        false
+    fn draws_without_ammo(&self, item: ItemData) -> bool {
+        self.open().is_some_and(|s| {
+            s.session()
+                .shared()
+                .items
+                .borrow()
+                .draws_without_ammo(&item)
+        })
     }
 
     fn block_break(
@@ -198,10 +232,14 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         let Some(s) = self.open() else {
             return Some(unchanged);
         };
-        let stages = [
-            ("block_break", Some(Handle::World(s.world(&block.world)))),
-            ("block_break", None),
-        ];
+        let stages = with_item(
+            items(&s).held_stage(player.uuid, "main_hand"),
+            "break_block",
+            &[
+                ("block_break", Some(Handle::World(s.world(&block.world)))),
+                ("block_break", None),
+            ],
+        );
         let mut answer = unchanged;
         if s.listening(&stages) {
             let before = drops();
@@ -315,10 +353,14 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
 
     fn player_drop_item(&self, player: PlayerRef, item: ItemData) -> bool {
         let Some(s) = self.open() else { return false };
-        let stages = [
-            player_stage(&s, "drop_item", &player),
-            ("player_drop_item", None),
-        ];
+        let stages = with_item(
+            items(&s).stage(Some(&item)),
+            "drop",
+            &[
+                player_stage(&s, "drop_item", &player),
+                ("player_drop_item", None),
+            ],
+        );
         cancelled(raise(&s, &stages, codecs::PlayerItemEvent, || {
             shapes::PlayerItemEvent {
                 player: s.player(&player),
@@ -329,11 +371,15 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
 
     fn player_pickup_item(&self, player: PlayerRef, item: ItemData, entity: Uuid) -> bool {
         let Some(s) = self.open() else { return false };
-        let stages = [
-            player_stage(&s, "pickup_item", &player),
-            ("player_pickup_item", None),
-        ];
-        cancelled(raise(&s, &stages, codecs::PlayerPickupItemEvent, || {
+        let stages = with_item(
+            items(&s).stage(Some(&item)),
+            "pickup",
+            &[
+                player_stage(&s, "pickup_item", &player),
+                ("player_pickup_item", None),
+            ],
+        );
+        let stopped = cancelled(raise(&s, &stages, codecs::PlayerPickupItemEvent, || {
             shapes::PlayerPickupItemEvent {
                 player: s.player(&player),
                 item: s.item(&item),
@@ -341,15 +387,24 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
                     id: crate::events::uuid_text(&entity),
                 },
             }
-        }))
+        }));
+        // What they picked up may be a stack from before an item changed: it's in their inventory by the next tick.
+        if !stopped {
+            items(&s).refresh_soon(player.uuid);
+        }
+        stopped
     }
 
     fn player_consume_item(&self, player: PlayerRef, item: ItemData) -> bool {
         let Some(s) = self.open() else { return false };
-        let stages = [
-            player_stage(&s, "consume_item", &player),
-            ("player_consume_item", None),
-        ];
+        let stages = with_item(
+            items(&s).stage(Some(&item)),
+            "consume",
+            &[
+                player_stage(&s, "consume_item", &player),
+                ("player_consume_item", None),
+            ],
+        );
         cancelled(raise(&s, &stages, codecs::PlayerItemEvent, || {
             shapes::PlayerItemEvent {
                 player: s.player(&player),
@@ -406,10 +461,18 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
             return Some(amount);
         };
         let target = s.entity(&entity);
-        let stages = [
-            ("damage", Some(Handle::Entity(target.clone()))),
-            ("entity_damage", None),
-        ];
+        // A weapon's item hears its hit first.
+        let weapon = attacker
+            .filter(|_| matches!(cause.as_str(), "entity_attack" | "entity_sweep_attack"))
+            .and_then(|a| items(&s).held_stage(a, "main_hand"));
+        let stages = with_item(
+            weapon,
+            "hit",
+            &[
+                ("damage", Some(Handle::Entity(target.clone()))),
+                ("entity_damage", None),
+            ],
+        );
         let Some(out) = raise(&s, &stages, codecs::EntityDamageEvent, || {
             shapes::EntityDamageEvent {
                 entity: target.clone(),
@@ -479,11 +542,11 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
     fn player_interact_entity(&self, player: PlayerRef, entity: Uuid, hand: String) -> bool {
         let Some(s) = self.open() else { return false };
         let target = s.entity(&entity);
-        let stages = [
-            ("interact", Some(Handle::Entity(target.clone()))),
-            player_stage(&s, "interact_entity", &player),
-            ("player_interact_entity", None),
-        ];
+        let held = items(&s).held_stage(player.uuid, &hand);
+        let mut stages = vec![("interact", Some(Handle::Entity(target.clone())))];
+        stages.extend(held.map(|h| ("interact_entity", Some(h))));
+        stages.push(player_stage(&s, "interact_entity", &player));
+        stages.push(("player_interact_entity", None));
         cancelled(raise(
             &s,
             &stages,

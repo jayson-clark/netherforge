@@ -942,6 +942,20 @@ impl netherforge_platform::FakeCommandOps for Fake {
     }
 }
 
+/// Stacks rewritten to their item's look: none are stale here.
+impl netherforge_platform::FakeProjectItemOps for Fake {
+    fn refresh(&self, _: netherforge_platform::InventoryRef) -> i32 {
+        0
+    }
+}
+
+/// Stacks sent again as they look to a player: nothing to send in the fake.
+impl netherforge_platform::FakeItemViewOps for Fake {
+    fn refresh(&self, _: Uuid) -> bool {
+        true
+    }
+}
+
 /// Whoever runs a command in a test: its replies go in the fake's calls.
 struct TestSender {
     player: Option<PlayerRef>,
@@ -980,6 +994,12 @@ impl netherforge_platform::CommandSender for TestSender {
 
 impl FakePlatform for Fake {
     fn commands(&self) -> &dyn netherforge_platform::CommandOps {
+        self
+    }
+    fn project_items(&self) -> &dyn netherforge_platform::ProjectItemOps {
+        self
+    }
+    fn item_views(&self) -> &dyn netherforge_platform::ItemViewOps {
         self
     }
     fn info(&self) -> ServerInfo {
@@ -3910,4 +3930,76 @@ print(nf.commands.register("boom", function() error("kaboom") end))
         "{stopped:?}"
     );
     assert!(platform.commands.borrow().is_empty());
+}
+
+#[test]
+fn a_project_item_makes_stacks_and_hears_its_own_use_first() {
+    use netherforge_platform::PlatformEvents;
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let ruby = r#"{ "kind": "minecraft:emerald", "name": "<red>Ruby", "properties": { "worth": 5 }, "script": { "file": "script.lua" } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("items/ruby/item.json", ruby),
+        (
+            "items/ruby/script.lua",
+            r#"
+this:on("use", function(e) print("item use", e.item.item, e.hand); e:cancel() end)
+this:on("render", function(e) e.lore = { "worth " .. this:properties().worth } end)
+this:on("view", function(e) e.display_name = "<gold>Ruby for " .. e.player:name() end)
+"#,
+        ),
+        (
+            "modules/give/init.lua",
+            r#"
+nf.on("player_use_item", function(e) print("nf use", e.cancelled) end)
+nf.task(function()
+  nf.wait(1)
+  local stack = nf.items.create("ruby", { count = 3 })
+  print(stack.kind, stack.item, stack.count, stack.name, stack.lore[1])
+  print(nf.items.id(stack), nf.items.id({ kind = "minecraft:stone" }), #nf.items.all(), nf.items.get("ruby"):exists(), nf.items.get("nope"))
+  print(nf.items.get("ruby"):create().count, pcall(nf.items.create, "nope"))
+end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    server.tick();
+    server.tick();
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "minecraft:emerald\truby\t3\t<red>Ruby\tworth 5",
+            "ruby\tnil\t1\ttrue\tnil",
+            "1\tfalse\tmodules/give/init.lua:8: there's no item \"nope\" (items/nope)",
+        ],
+        "{calls:?}"
+    );
+    let alex = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let stack = netherforge_platform::ItemData {
+        def: netherforge_format::item::ItemDef {
+            kind: "minecraft:emerald".into(),
+            item: Some("ruby".into()),
+            count: Some(1),
+            ..Default::default()
+        },
+        raw: None,
+        look: None,
+    };
+    assert!(server.player_use_item(alex.clone(), stack.clone(), "main_hand".into()));
+    assert!(server.item_viewing(Some("demo:ruby".into())));
+    assert!(!server.item_viewing(Some("demo:other".into())));
+    let view = server.item_viewed(Uuid(77), stack).expect("a view");
+    assert_eq!(view.name.as_deref(), Some("<gold>Ruby for Alex"));
+    server.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        ["item use\truby\tmain_hand", "nf use\ttrue"]
+    );
 }

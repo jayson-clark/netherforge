@@ -954,8 +954,13 @@ impl PlayerApi for GameContext {
     fn menu(&self, this: &handles::Player) -> ApiResult<Option<handles::Menu>> {
         Ok(self.menu_of(this))
     }
+    /// Only queued: the stacks go at the end of the tick, when the game has settled what each window shows.
     fn refresh_items(&self, this: &handles::Player) -> ApiResult<bool> {
-        <Unported as PlayerApi>::refresh_items(&Unported, this)
+        let Some(id) = self.player_online(this) else {
+            return Ok(false);
+        };
+        self.items().refresh_view(id);
+        Ok(true)
     }
     fn close_menu(&self, this: &handles::Player) -> ApiResult<bool> {
         Ok(self.close_menu_of(this))
