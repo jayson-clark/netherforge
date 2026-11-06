@@ -1471,6 +1471,7 @@ dependencies = [
  "netherforge-luau",
  "netherforge-platform",
  "rapier3d-f64",
+ "ring",
  "rusqlite",
  "rustls",
  "rustls-platform-verifier",

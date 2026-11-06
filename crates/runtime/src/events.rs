@@ -410,6 +410,29 @@ impl Around for Running<'_, '_> {
         self.session.player_quit(&event.player);
     }
 
+    /// A player muted across the network says nothing, whatever scripts would do: they're told why.
+    fn player_chat(
+        &self,
+        event: &mut netherforge_platform::game_event::PlayerChat,
+        raise: &dyn Fn(&mut netherforge_platform::game_event::PlayerChat) -> bool,
+    ) -> bool {
+        let muted = self
+            .session
+            .shared()
+            .network
+            .borrow()
+            .muted(event.player.uuid);
+        if let Some(why) = muted {
+            self.session
+                .shared()
+                .platform
+                .players()
+                .message(event.player.uuid, why);
+            return true;
+        }
+        raise(event)
+    }
+
     fn chunk_unload(
         &self,
         event: &mut netherforge_platform::game_event::Chunk,

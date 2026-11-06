@@ -43,6 +43,7 @@ pub mod loot;
 pub mod menu;
 pub mod modules;
 pub mod names;
+pub mod network;
 pub mod pack_storage;
 pub mod packs;
 pub mod particles;
@@ -256,6 +257,8 @@ struct Api {
     web: Option<web::api::WebApi>,
     /// `nf.wasm`, `WasmInstance`, `WasmProcess`.
     wasm: Option<wasm::api::WasmApi>,
+    /// `nf.network`, `NetworkChannel`, `NetworkMap`, `NetworkHold`.
+    network: Option<network::service::NetworkContext>,
 }
 
 impl Runtime for Api {
@@ -709,6 +712,30 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_network(&self) -> &dyn netherforge_api::api::NfNetworkApi {
+        match &self.network {
+            Some(n) => n,
+            None => &Unported,
+        }
+    }
+    fn networkchannel(&self) -> &dyn netherforge_api::api::NetworkChannelApi {
+        match &self.network {
+            Some(n) => n,
+            None => &Unported,
+        }
+    }
+    fn networkmap(&self) -> &dyn netherforge_api::api::NetworkMapApi {
+        match &self.network {
+            Some(n) => n,
+            None => &Unported,
+        }
+    }
+    fn networkhold(&self) -> &dyn netherforge_api::api::NetworkHoldApi {
+        match &self.network {
+            Some(n) => n,
+            None => &Unported,
+        }
+    }
     fn nf_worlds(&self) -> &dyn netherforge_api::api::NfWorldsApi {
         match &self.worlds {
             Some(w) => w,
@@ -753,6 +780,12 @@ impl Room {
             wasm::api::WasmApi::install_liveness(&game.shared, &scripts);
             wasm::api::WasmApi { game: game.clone() }
         });
+        let network = worlds
+            .as_ref()
+            .map(|game| network::service::NetworkContext {
+                shared: game.shared.clone(),
+                scripts: scripts.clone(),
+            });
         let images = shared.as_ref().map(|shared| images::ImagesApi {
             images: shared.images.clone(),
             http: http.clone(),
@@ -793,6 +826,7 @@ impl Room {
             http,
             web,
             wasm,
+            network,
         };
         netherforge_api::install(&host, Rc::new(api))?;
         Ok(Room { host, scripts })

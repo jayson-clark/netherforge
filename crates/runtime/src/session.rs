@@ -132,6 +132,11 @@ pub struct Config {
     pub web: crate::web::gate::WebConfig,
     /// `wasm:` in `config.yml`: the owner's limits on `nf.wasm`.
     pub wasm: crate::wasm::WasmConfig,
+    /// `network:` in `config.yml`, and whether this is a network of its own (a dev server's, a test's).
+    pub network: crate::network::NetworkConfig,
+    /// The plugin's link to its network, which outlives every session: none, and the session makes one from
+    /// `network` (and stops it with itself).
+    pub network_link: Option<crate::network::Link>,
 }
 
 /// Why a project can't run: what the log says, and the problem to report if format didn't.
@@ -237,6 +242,14 @@ impl<'a> Session<'a> {
             http.hooks = config.net.clone();
         }
         shared.web.borrow_mut().config = config.web.clone();
+        {
+            let mut network = shared.network.borrow_mut();
+            network.config = config.network.clone();
+            network.link = Some(match &config.network_link {
+                Some(link) => link.0.clone(),
+                None => crate::network::NetworkLink::new(config.network.clone()),
+            });
+        }
         {
             let mut wasm = shared.wasm.borrow_mut();
             wasm.config = config.wasm.clone();
@@ -843,6 +856,11 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         Box::new(crate::wasm::api::WasmService {
             shared: shared.clone(),
             api: Default::default(),
+        }),
+        // Stops after every script, failing what still waits on the hub.
+        Box::new(crate::network::service::NetworkService {
+            shared: shared.clone(),
+            context: Default::default(),
         }),
         Box::new(crate::schedule::SchedulesService {
             shared: shared.clone(),

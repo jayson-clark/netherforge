@@ -40,6 +40,8 @@ httparse = "1"
 url = "2"
 encoding_rs = "0.8"
 if-addrs = "0.15"
+# nf.network: a connection's sealed lines (AES-256-GCM), as the hub seals them.
+ring = "0.17"
 # nf.wasm: compiled by Cranelift (or Pulley, its interpreter, with wasm.compile off); epochs stop calls on time.
 wasmtime = { version = "41", default-features = false, features = ["runtime", "cranelift", "pulley", "std"] }
 
