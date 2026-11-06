@@ -3623,3 +3623,46 @@ nf.task(function() nf.wait(1); print("removed", t:remove(), t:exists(), menu:exi
     );
     assert!(after.contains(&"window destroyed".to_owned()), "{after:?}");
 }
+
+#[test]
+fn encoding_and_crypto_write_what_the_kotlin_runtime_wrote() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/enc/init.lua",
+            r#"
+local e, c = nf.encoding, nf.crypto
+print(e.url_encode("a b/c~é"), e.url_decode("a%20b%2Fc+"), e.url_decode("%zz"))
+print(e.form_encode({ name = "Steve Jobs", n = 2, half = 0.5, ok = true, metadata = { player = "x" }, items = { "a", "b" }, none = {} }))
+print(pcall(e.form_encode, { "a" }))
+print(pcall(e.form_encode, { f = print }))
+local form = e.form_decode("a=1&b=x+y&a=2&c")
+print(form.a, form.b, form.c, e.form_decode("a=%"))
+print(e.base64_encode("hi?>"), e.base64_encode("hi?>", { url_safe = true, padding = false }), e.base64_decode("aGk_Pg"), e.base64_decode("!!"))
+print(e.hex_encode("Hi"), e.hex_decode("4869"), e.hex_decode("486"), e.hex_decode("zz"))
+print(c.hash("abc"))
+print(c.hash("abc", { algorithm = "sha1" }), c.hash("abc", { encoding = "base64" }))
+print(c.sign("The quick brown fox jumps over the lazy dog", { secret = "key" }))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "a%20b%2Fc~%C3%A9\ta b/c+\tnil",
+            "half=0.5&items%5B0%5D=a&items%5B1%5D=b&metadata%5Bplayer%5D=x&n=2&name=Steve+Jobs&ok=true",
+            "false\tmodules/enc/init.lua:5: bad argument 'fields' (a form's names are strings: a table of them expected, got a list)",
+            "false\tmodules/enc/init.lua:6: fields.f: a function can't be put in a form",
+            "1\tx y\t\tnil",
+            "aGk/Pg==\taGk_Pg\thi?>\tnil",
+            "4869\tHi\tnil\tnil",
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            "a9993e364706816aba3e25717850c26c9cd0d89d\tungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=",
+            "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8",
+        ]
+    );
+}

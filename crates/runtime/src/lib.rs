@@ -24,6 +24,7 @@ pub mod data;
 pub mod definitions;
 pub mod dialog;
 pub mod effects;
+pub mod encoding;
 pub mod entity;
 pub mod events;
 pub mod images;
@@ -407,6 +408,12 @@ impl LuaApi for Api {
             Some(u) => u,
             None => &Unported,
         }
+    }
+    fn nf_encoding(&self) -> &dyn netherforge_api::api::NfEncodingApi {
+        &crate::encoding::Encoding
+    }
+    fn nf_crypto(&self) -> &dyn netherforge_api::api::NfCryptoApi {
+        &crate::encoding::Encoding
     }
     fn nf_bossbars(&self) -> &dyn netherforge_api::api::NfBossbarsApi {
         match &self.worlds {

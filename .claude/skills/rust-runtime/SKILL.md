@@ -623,6 +623,11 @@ steps that same tick. Not yet: the refusal's own words (`DatapackOps::refused` i
 - `nf.json` encodes and decodes with the saved tables' handle tags; text that isn't JSON decodes to nil.
 - `nf.server.unix_time` reads the same wall clock schedules do (a session's `Config` can fix it).
 - Not yet: `nf.time.format`/`parse` (Java's pattern language), `nf.text.glyph`/`space` (the built pack).
+- `nf.encoding` and `nf.crypto` (`encoding.rs`, Kotlin's `EncodingImpls.kt`): over a text's UTF-8 bytes, nil
+  for bytes that aren't UTF-8; RustCrypto's `sha1`/`sha2`/`hmac`. A form is walked raw (no metamethod runs), its
+  keys sorted, a whole number written as an integer and any other in plain decimal (Rust's `{}` never writes an
+  exponent, as `BigDecimal.toPlainString` didn't). The walk isn't charged to the script, where Kotlin's was
+  (`meter`).
 
 ## Boss bars and sidebars (`crates/runtime/src/bossbar.rs`)
 
