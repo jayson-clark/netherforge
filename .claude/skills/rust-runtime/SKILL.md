@@ -1037,6 +1037,63 @@ Not yet: `nf.test.stub_wasm` and the test tick's `settle` (with `nf.test`; `Wasm
 set it), an `i64` argument past 2^53 (a string there is text), and a package's module reloading (the session doesn't
 reload packages' files yet).
 
+## Server networks (`crates/runtime/src/network/`)
+
+Kotlin's `network/` and `NetworkImpls`; the plugin-capabilities skill's Networks section is the design. The hub (`packages/network`,
+the proxy, the standalone hub) **stays Kotlin**: the Rust runtime is a client of its protocol, so the wire is Kotlin's byte for byte.
+
+- **The protocol** (`protocol.rs`, `seal.rs`): `HubFrame`/`ServerFrame` as serde enums tagged `"t"`, every field at its default left
+  out and every null too (kotlinx's `encodeDefaults = false`, `explicitNulls = false`), so what this side writes is exactly what a
+  Kotlin server writes. Proxies' frames aren't here (a line this side doesn't know is ignored, as the hub's unknown keys are). The
+  proof is HMAC-SHA256 (`hmac`), a channel HKDF-SHA256 and AES-256-GCM (`ring`), the nonce four zero bytes and a line count.
+  **`packages/network/testdata/session.json`** is two recorded connections written by Kotlin (`RecordedSessionTest`,
+  `UPDATE_GOLDEN=1`): every frame kind a server sends or hears, the proof, and each sealed line; the Rust test reads each frame and
+  writes it back identically, and seals each line to the same bytes. A frame added to the protocol must be recorded (the test counts
+  the kinds). Prettier is kept off the file (`.prettierignore`): Kotlin's printer owns it.
+- **The link** (`link.rs`, Kotlin's `NetworkLink`) is the plugin's: `session::Config::network_link` hands one to every session (a
+  `Link`), or the session makes its own from `Config::network`. `NetworkLink::start` is once (a reload or a whole restart finds it
+  started), its state is the main thread's (`RefCell`), and what its threads hear goes through an `Inbox` (a bounded queue for a
+  remote link: its reader waits for room, which stops it reading the socket). Ids are one sequence for its life. Modes as Kotlin's:
+  remote (`network.enabled` with no `problem()`), local (`NetworkConfig::alone`: `dev`, `test`), off.
+- **The client** (`client.rs`, `HubClient`): a dial thread (backoff from half a second to ten, woken by `stop`), the handshake, a
+  reader, and a writer thread that seals what's queued and pings after 15 s of quiet; `stop` shuts the socket and closes the inbox
+  (a reader waiting for room lets go). The lifecycle the hello says is an atomic the thread reads (`SharedLifecycle`).
+- **The local network's hub** (`local.rs`, `LocalHub`): there's no Rust hub, so this is the hub's rules for one process, written for
+  it: presence (this server's players, joined and quit through the session's hooks), servers' states, channels, requests routed under
+  the hub's own ids with its timeout, `SharedMaps` (expiry, each package's keys and bytes), moderation's maps and reports, sends
+  (servers, groups by balance and room, sends that wait, positions, a stopping server evacuated to `lobby`). Everything is trusted:
+  credentials and grants are the real hub's. What a frame sets off reaches this server's inbox as it's sent; players are moved after
+  the frame (the hub's `later`): one moved off this server is kicked (`take_kicks`, done by the service with the Platform), and one
+  sent here fails ("a network of its own") unless a test `accept_joins` and joins them itself (`take_joins`, Kotlin's `joinHere`). The
+  test's other servers are `TestPeer`s (a `PeerLog` of what they heard); `advance` moves the hub's clock.
+- **The session's side** (`service.rs`, Kotlin's `Network`, in `Shared::network`): channels and maps named, what waits (each a
+  `Reply` future over an `mpsc` channel, completed as the hub's answer is drained, delivered at the next tick boundary), arrivals
+  the tick after a join, `hold_ready` and the lifecycle, idle, `/nf shutdown`'s steps (`begin_shutdown`; the server's stop is left in
+  `Network::stop_server`). There's no `Scripts.counting` hook: what the session listens to is worked out every tick and sent when it
+  changed. A muted player's chat is held back in `events.rs`'s `Around::player_chat`.
+- Not as Kotlin: "Ready N seconds after…" is logged only in a network; a server's start time is the link's creation (the plugin's).
+
+Not yet: `network.wait-for-hub-seconds` and `require-hub` (the session doesn't wait for a welcome; the policy the hub sends isn't
+applied), `/nf network`, `/nf drain`, `/nf shutdown`, metrics (`sent_by_package`/`heard_by_package` are counted), the bundle and pack
+sharing parts (`keeps_packs`, `PackLoaded`), the adapter's watched events (chat is held back only if the adapter forwards it), and
+`nf.test.network_*` (the local hub has what they need: peers, `accept_joins`, `reports`).
+
+## Server-owner settings (`crates/runtime/src/settings.rs`)
+
+Kotlin's `OwnerSettings`; format's `SettingValues` is `settings::read_values`/`write_values`, with `SettingDef::parse`/`show`.
+`nf.config` reads `Shared::settings` (remembered per scope); the owner's changes are `Session::set_setting`, `set_setting_text` and
+`reload_settings` (what the bridge and `/nf settings` will call), which write the file (`Config::settings_dir`; none keeps values in
+memory), raise `setting_changed` to the package's own scopes that listen (`Scripts::raise_within`, `scopes_listening`), and restart
+the package's other scopes that read a changed setting through `Session::reload_kinds` (a reload by kind and id, split out of
+`reload`). Not yet: the bridge's `set_setting` and `settings_changed`, `/nf settings` and its dialog.
+
+## Plugin interop (`crates/runtime/src/interop.rs`)
+
+Kotlin's `interop/` and `NfEconomyImpl`/`NfPlaceholdersImpl`: `nf.economy` (Vault, looked up at each call) and `nf.placeholders`.
+The declared plugins the server lacks are `runtime.plugin-missing`, looked at as the session starts, on the first tick and on any
+tick after `plugins_changed`. The Platform takes a placeholder resolver as an `Rc`, so it's asked on the main thread only; answering
+other threads from the last answer (Kotlin's resolver did it itself) is the adapter glue's job.
+
 ## Project items (`crates/runtime/src/project_items.rs`)
 
 Kotlin's `item/Items.kt`: one record per `items/<id>/item.json` with its look and the look's hash (format's
