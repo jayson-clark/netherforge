@@ -18,6 +18,8 @@ use crate::problem::{ProblemSink, codes};
 pub const GRID: usize = 3;
 pub const MOST_INGREDIENTS: usize = GRID * GRID;
 pub const MAX_STATION_RANGE: i32 = 16;
+/// How far round a `station` recipe looks for its stations when it doesn't say (`stationRange`).
+pub const DEFAULT_STATION_RANGE: i32 = 4;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -141,6 +143,13 @@ pub struct Material {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 1), extend("x-problem" = "recipe.ingredients"))]
     pub count: Option<i32>,
+}
+
+impl Material {
+    /// How many it takes: one when it doesn't say.
+    pub fn count_or_default(&self) -> i32 {
+        self.count.unwrap_or(1)
+    }
 }
 
 /// An item id (`"minecraft:stick"`), a tag (`"#minecraft:planks"`), or a
@@ -273,6 +282,16 @@ pub fn check_ingredient(
 }
 
 impl RecipeFile {
+    /// How far round it looks for its stations.
+    pub fn station_range_or_default(&self) -> i32 {
+        self.station_range.unwrap_or(DEFAULT_STATION_RANGE)
+    }
+
+    /// Whether the game makes it (every type but `station`, which scripts make).
+    pub fn in_game(&self) -> bool {
+        self.kind != RecipeType::Station
+    }
+
     /// Every ingredient, with where it is.
     pub fn ingredients(&self) -> Vec<(String, &Ingredient)> {
         let mut out = Vec::new();

@@ -77,7 +77,7 @@ pub struct ItemView {
 #[derive(Clone, Debug, PartialEq)]
 pub struct RecipeSpec {
     pub id: String,
-    pub file: external::RecipeFile,
+    pub file: netherforge_format::kind::recipe::RecipeFile,
 }
 
 /// The project's recipes on the server.

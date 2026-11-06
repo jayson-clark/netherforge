@@ -992,6 +992,25 @@ impl netherforge_platform::CommandSender for TestSender {
     }
 }
 
+/// The server's recipes: each call said.
+impl netherforge_platform::FakeRecipeOps for Fake {
+    fn add(&self, recipe: netherforge_platform::RecipeSpec) -> bool {
+        self.call(format!("recipe add {}", recipe.id));
+        true
+    }
+    fn remove(&self, id: String) -> bool {
+        self.call(format!("recipe remove {id}"));
+        true
+    }
+    fn resend(&self) {
+        self.call("recipe resend".into());
+    }
+    fn discover(&self, player: Uuid, recipe: String) -> bool {
+        self.call(format!("recipe discover {} {recipe}", player.0));
+        true
+    }
+}
+
 /// The game's one loot table: a diamond, as many as the seed is odd (one or two).
 impl netherforge_platform::FakeLootOps for Fake {
     fn exists(&self, table: String) -> bool {
@@ -1015,6 +1034,9 @@ impl FakePlatform for Fake {
         self
     }
     fn loot(&self) -> &dyn netherforge_platform::LootOps {
+        self
+    }
+    fn recipes(&self) -> &dyn netherforge_platform::RecipeOps {
         self
     }
     fn project_items(&self) -> &dyn netherforge_platform::ProjectItemOps {
@@ -4241,4 +4263,112 @@ print(nf.loot.fill("treasure", pouch, { seed = 7 }), pouch:count_item("minecraft
         ],
         "{calls:?}"
     );
+}
+
+#[test]
+fn recipes_go_to_the_server_and_station_recipes_are_crafted_from_the_inventory() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    {
+        let mut slots = platform.inventory.borrow_mut();
+        let mut sticks = stack("minecraft:stick");
+        sticks.def.count = Some(5);
+        slots[0] = Some(sticks);
+    }
+    let torch = r#"{ "type": "shapeless", "ingredients": ["minecraft:stick", "minecraft:coal"], "result": { "kind": "minecraft:torch", "count": 4 } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("recipes/torch.json", torch),
+        (
+            "modules/forge/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+nf.recipes.register("staff", {
+  type = "station",
+  materials = { { ingredient = "minecraft:stick", count = 2 } },
+  stations = { "minecraft:stone" },
+  result = { kind = "minecraft:blaze_rod" },
+})
+nf.recipes.register("altar", {
+  type = "station",
+  materials = { { ingredient = "minecraft:stick" } },
+  stations = { "minecraft:crafting_table" },
+  result = { kind = "minecraft:gold_ingot" },
+})
+print(table.concat(nf.recipes.all(), " "))
+print(pcall(nf.recipes.register, "torch", { type = "station", materials = { { ingredient = "minecraft:stick" } }, result = { kind = "minecraft:stone" } }))
+print(pcall(nf.recipes.register, "Bad Id", { type = "station", result = { kind = "minecraft:stone" } }))
+print(pcall(nf.recipes.register, "x", { type = "station", colour = 1, result = { kind = "minecraft:stone" } }))
+print(pcall(nf.recipes.register, "x", { type = "station", materials = { { ingredient = { item = "ruby" } } }, result = { kind = "minecraft:stone" } }))
+print(pcall(nf.recipes.remove, "torch"))
+local staff = nf.recipes.get("staff")
+print(staff.id, staff.result.kind, staff.materials[1].kind, staff.materials[1].count, staff.station_range, nf.recipes.get("torch"))
+local function offered(options)
+  local out = {}
+  for _, r in nf.recipes.available(alex, options) do table.insert(out, r.id .. "x" .. r.times) end
+  return table.concat(out, " ")
+end
+print(offered(), offered({ all = true }), offered({ stations = { "minecraft:crafting_table" } }))
+nf.on("recipe_craft", function(e) e.result = { kind = "minecraft:blaze_rod", name = "Staff of " .. e.player:name() } end)
+print(nf.recipes.craft(alex, "staff", { times = 5 }), nf.recipes.craft(alex, "altar"), pcall(nf.recipes.craft, alex, "torch"))
+local inv = alex:inventory()
+print(inv:count_item("minecraft:stick"), inv:count_item("minecraft:blaze_rod"), inv:item(2).name)
+print(alex:discover_recipe("torch"), alex:discover_recipe("minecraft:bread"), pcall(alex.discover_recipe, alex, "torh"))
+print(nf.recipes.remove("altar"), nf.recipes.remove("altar"))
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "torch altar staff",
+            "false\tmodules/forge/init.lua:16: recipe \"torch\" is recipes/torch.json's; pick another id",
+            "false\tmodules/forge/init.lua:17: \"Bad Id\" isn't a usable recipe id (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+            "false\tmodules/forge/init.lua:18: unknown field 'definition.colour' (fields: addition, base, category, cooking_time, experience, group, ingredient, ingredients, key, materials, pattern, result, station_range, stations, template, type)",
+            "false\tmodules/forge/init.lua:19: definition.materials[1].ingredient: there's no item \"ruby\"",
+            "false\tmodules/forge/init.lua:20: recipe \"torch\" is recipes/torch.json's; delete the file to remove it",
+            "staff\tminecraft:blaze_rod\tminecraft:stick\t2\t4\tnil",
+            "staffx2\taltarx0 staffx2\taltarx5 staffx2",
+            "2\t0\tfalse\tmodules/forge/init.lua:30: recipe \"torch\" isn't a station recipe: the game makes it",
+            "1\t2\tStaff of Alex",
+            "true\ttrue\tfalse\tmodules/forge/init.lua:33: the project has no recipe \"torh\" (it has: torch, altar, staff)",
+            "true\tfalse",
+        ],
+        "{calls:?}"
+    );
+    let server: Vec<&String> = calls.iter().filter(|c| c.starts_with("recipe")).collect();
+    assert_eq!(
+        server,
+        [
+            "recipe add torch",
+            "recipe discover 77 torch",
+            "recipe discover 77 minecraft:bread",
+        ]
+    );
+    session.tick();
+    assert_eq!(
+        platform
+            .take()
+            .iter()
+            .filter(|c| c.starts_with("recipe"))
+            .collect::<Vec<_>>(),
+        ["recipe resend"]
+    );
+    // The module reloads registering nothing: what it registered went with its old scope.
+    files.write(
+        "modules/forge/init.lua",
+        r#"print(table.concat(nf.recipes.all(), " "))"#,
+    );
+    session.reload(&["modules/forge/init.lua".to_owned()]);
+    assert_eq!(printed(&platform.take()), ["torch"]);
+    // The session ends, and the file's recipe goes with it.
+    drop(session);
+    let after: Vec<String> = platform
+        .take()
+        .into_iter()
+        .filter(|c| c.starts_with("recipe"))
+        .collect();
+    assert_eq!(after, ["recipe remove torch", "recipe resend"]);
 }

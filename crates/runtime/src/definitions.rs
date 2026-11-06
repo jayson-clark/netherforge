@@ -11,6 +11,7 @@ use netherforge_format::document::{Context, load};
 use netherforge_format::game::GameData;
 use netherforge_format::kind::dialog::DialogFile;
 use netherforge_format::kind::menu::MenuFile;
+use netherforge_format::kind::recipe::RecipeFile;
 use netherforge_format::problem::{Problem, Severity};
 use netherforge_luau::Host;
 use serde_json::{Map, Value as Json};
@@ -160,6 +161,81 @@ fn slots_of(lua: &mlua::Lua, value: Value, game: &dyn GameData) -> ApiResult<Map
         .into_iter()
         .map(|(i, slot)| (i.to_string(), slot))
         .collect())
+}
+
+/// The keys a recipe definition takes, in Lua spelling, and those whose values are lists.
+const RECIPE_KEYS: &[&str] = &[
+    "type",
+    "pattern",
+    "key",
+    "ingredients",
+    "ingredient",
+    "template",
+    "base",
+    "addition",
+    "result",
+    "experience",
+    "cooking_time",
+    "group",
+    "category",
+    "materials",
+    "stations",
+    "station_range",
+];
+const RECIPE_LISTS: &[&str] = &["pattern", "ingredients", "materials", "stations"];
+
+/// The recipe `definition` describes, validated as `recipes/<id>.json` would be. Its `result` is read as every
+/// item a script hands over is.
+pub fn recipe_from(
+    host: &Host,
+    definition: &Value,
+    game: &dyn GameData,
+    names: &Calling,
+) -> ApiResult<RecipeFile> {
+    let mut table = table_json(
+        host,
+        definition,
+        "{ type = \"shapeless\", ingredients = { ... }, result = { ... } }",
+    )?;
+    if let Some(key) = table.keys().find(|k| !RECIPE_KEYS.contains(&k.as_str())) {
+        let mut known = RECIPE_KEYS.to_vec();
+        known.sort_unstable();
+        return Err(err(format!(
+            "unknown field '{ROOT}.{key}' (fields: {})",
+            known.join(", ")
+        )));
+    }
+    let Some(result) = table.remove("result") else {
+        return Err(err(format!(
+            "{ROOT}.result: a recipe needs a result, an Item"
+        )));
+    };
+    let place = format!("{ROOT}.result");
+    let result =
+        crate::items::from_value(&values::Item(result.to_string()), &place, game).map_err(err)?;
+    let mut fields: Map<String, Json> = table
+        .into_iter()
+        .map(|(key, value)| {
+            // An empty Lua table reads as an empty object; for a list, it's the empty list.
+            let value = match value {
+                Json::Object(m) if m.is_empty() && RECIPE_LISTS.contains(&key.as_str()) => {
+                    Json::Array(Vec::new())
+                }
+                other => other,
+            };
+            (camel(&key), value)
+        })
+        .collect();
+    fields.insert(
+        "result".into(),
+        serde_json::to_value(&result.def).map_err(|e| err(e.to_string()))?,
+    );
+    let named = names.definition(
+        netherforge_format::schema::of::<RecipeFile>(),
+        &Json::Object(fields),
+        &lua_path,
+    )?;
+    checked::<RecipeFile>(&named, game)
 }
 
 /// `json`, a file of kind `T`, parsed and validated as the file would be; the first error is the script's.

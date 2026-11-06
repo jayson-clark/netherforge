@@ -43,6 +43,7 @@ const RUST_EXTERNAL: Record<string, { path: string; interface?: boolean }> = {
   SpawnData: { path: 'netherforge_format::kind::particle::sample::SpawnData' },
   MenuType: { path: 'netherforge_format::kind::menu::MenuType' },
   DialogFile: { path: 'netherforge_format::kind::dialog::DialogFile' },
+  RecipeFile: { path: 'netherforge_format::kind::recipe::RecipeFile' },
   BotState: { path: 'netherforge_format::bridge::BotState' },
   BotPosition: { path: 'netherforge_format::bridge::BotPosition' },
   BotPackAnswer: { path: 'netherforge_format::bridge::BotPackAnswer' },

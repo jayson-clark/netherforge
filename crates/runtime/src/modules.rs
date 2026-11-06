@@ -289,6 +289,15 @@ impl Modules {
         self.module(id)
     }
 
+    /// Closes module `id`'s scope, if it runs: the first half of a reload, so what goes with the scope goes
+    /// before the new version's body runs.
+    pub fn unload(&self, id: &str) {
+        let scope = self.0.modules.borrow().get(id).copied();
+        if let Some(scope) = scope {
+            self.close(scope);
+        }
+    }
+
     /// The module scope `scope` is, if it's one.
     pub fn owner(&self, scope: ScopeId) -> Option<Owner> {
         self.0.owners.borrow().get(&scope).cloned()

@@ -60,6 +60,10 @@ pub trait Service {
     /// One tick.
     fn tick(&self, _room: &Room, _platform: &dyn Platform) {}
     /// The resources of `kind` (one it reloads) that changed, by id, the project as it reads now.
+    /// The first half of a reload of `ids`: stops what's about to be replaced, so the scopes that go are
+    /// released to every service before anything new runs (Kotlin releases a scope as it closes).
+    fn unload(&self, _room: &Room, _kind: &str, _ids: &BTreeSet<String>) {}
+
     fn reload(&self, _room: &Room, _kind: &str, _ids: &BTreeSet<String>, _project: &Define) {}
     /// Stops it: everything it holds goes.
     fn stop(&self, _room: &Room, _platform: &dyn Platform) {}
@@ -505,6 +509,12 @@ impl<'a> Session<'a> {
         }
         for (kind, ids) in &by_kind {
             if let Some(service) = self.services.iter().find(|s| s.reloads().contains(kind)) {
+                service.unload(room, kind, ids);
+            }
+        }
+        self.released();
+        for (kind, ids) in &by_kind {
+            if let Some(service) = self.services.iter().find(|s| s.reloads().contains(kind)) {
                 service.reload(room, kind, ids, &define);
             }
         }
@@ -636,6 +646,10 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
             shared: shared.clone(),
             scripts: Default::default(),
         }),
+        // After items: a recipe's project items are built from their looks.
+        Box::new(crate::recipes::RecipesService {
+            shared: shared.clone(),
+        }),
         Box::new(crate::loot::LootService {
             shared: shared.clone(),
         }),
@@ -665,6 +679,7 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         Box::new(ModulesService {
             shared: shared.clone(),
             modules: Default::default(),
+            again: Default::default(),
         }),
     ]
 }
@@ -910,6 +925,8 @@ fn grants(project: &Loaded) -> crate::Grants {
 struct ModulesService {
     shared: Rc<Shared>,
     modules: std::cell::RefCell<Option<Modules>>,
+    /// The modules a reload's first half closed, which its second half starts again.
+    again: std::cell::RefCell<Vec<String>>,
 }
 
 /// The project's Lua the room runs, its packages' included: every Lua file by project path (a package's at its
@@ -989,12 +1006,38 @@ impl Service for ModulesService {
         modules.start();
     }
 
-    fn reload(&self, _room: &Room, _kind: &str, ids: &BTreeSet<String>, project: &Define) {
+    /// Each changed module's scope closes, and every module's that required one.
+    fn unload(&self, _room: &Room, _kind: &str, ids: &BTreeSet<String>) {
+        let Some(modules) = self.modules.borrow().clone() else {
+            return;
+        };
+        let again = self.again(&modules, ids);
+        for id in &again {
+            modules.unload(id);
+        }
+        *self.again.borrow_mut() = again;
+    }
+
+    fn reload(&self, _room: &Room, _kind: &str, _ids: &BTreeSet<String>, project: &Define) {
         let Some(modules) = self.modules.borrow().clone() else {
             return;
         };
         let lua = lua_of(project);
-        // Each changed module, then every module that required one, once.
+        for id in self.again.take() {
+            // A module that's gone, or now has errors, stops; its failures are in the reports.
+            let _ = modules.reload(&id, lua.clone());
+        }
+    }
+
+    fn stop(&self, _room: &Room, _platform: &dyn Platform) {
+        *self.modules.borrow_mut() = None;
+        *self.shared.modules.borrow_mut() = None;
+    }
+}
+
+impl ModulesService {
+    /// Each changed module, then every module that required one, once.
+    fn again(&self, modules: &Modules, ids: &BTreeSet<String>) -> Vec<String> {
         let mut again: Vec<String> = ids.iter().cloned().collect();
         for id in ids {
             for scope in modules.dependents(id) {
@@ -1005,14 +1048,6 @@ impl Service for ModulesService {
                 }
             }
         }
-        for id in again {
-            // A module that's gone, or now has errors, stops; its failures are in the reports.
-            let _ = modules.reload(&id, lua.clone());
-        }
-    }
-
-    fn stop(&self, _room: &Room, _platform: &dyn Platform) {
-        *self.modules.borrow_mut() = None;
-        *self.shared.modules.borrow_mut() = None;
+        again
     }
 }

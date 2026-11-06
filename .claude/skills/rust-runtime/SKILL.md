@@ -360,7 +360,10 @@ Kotlin's words), otherwise its services started in a `Room`, ticked, reloaded an
 - **Services are one list** (`services()`): a `Service` starts, ticks and hears every hook in
   registration order, stops in reverse, and a kind of resource reloads through the one service whose
   `reloads()` names it. `reload(changed paths)` reads the project again and hands each changed kind's
-  ids to its service; a change to `netherforge.json` or the lock restarts the session whole.
+  ids to its service; a change to `netherforge.json` or the lock restarts the session whole. A reload has two
+  halves: every changed kind's service `unload`s first (modules close their scopes, and their dependents'), the
+  released scopes go to every service, then each `reload`s. So a module's new body never sees what its old scope
+  made (Kotlin releases a scope as it closes).
 - **Modules** are the first service: every module of the tree (the packages' included) with an
   `init.lua` starts in a scope of its own (`Modules`), and one that changed restarts from its new
   files with every module that required it.
@@ -703,6 +706,19 @@ checks; the first error is the script's, at its Lua path (`definition.inputs[1].
 the files' with a UUID id and an owner scope, gone with that scope (`scope_released`, its handlers dropped).
 `nf.dialogs.get` and `open_dialog` by name find only the project's. Not yet: the runtime's own dialogs
 (`/nf settings`).
+
+## Recipes (`crates/runtime/src/recipes.rs`)
+
+Kotlin's `Recipes`, `StationCrafting` and `NfRecipesImpl`: the running `recipes/<id>.json` and those scripts register
+(`nf.recipes.register`, read by `definitions::recipe_from` as `nf.dialogs.create`'s are: snake_case keys, `result` an
+`Item`, checked by format's own load, every project item it names there), the latter going with their scope. A game
+recipe goes to the server at once (`RecipeOps::add`, with format's `RecipeFile`: the Platform spec's external, now
+real) and to players once a tick (`resend`); a `station` recipe is never sent. `available` and `craft` read one box
+of blocks per chunk column round the player (or `near`) for the stations (ids, `#tags`, `a|b` choices; `stations`
+counts more as near), count the materials in the player's inventory (a project item's stacks only for it), take them
+and give the result, dropping what doesn't fit; with `recipe_craft` heard, each making's result goes through it.
+`player:discover_recipe` and friends: a bare id must be a project recipe. Not yet: project blocks as stations (with
+custom blocks), recipes rebuilt when a project item they name changes (Kotlin's `follows`).
 
 ## Loot tables (`crates/runtime/src/loot.rs`)
 

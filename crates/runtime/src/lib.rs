@@ -40,6 +40,7 @@ pub mod particles;
 pub mod permissions;
 pub mod player;
 pub mod project_items;
+pub mod recipes;
 pub mod schedule;
 pub mod scripts;
 pub mod server;
@@ -516,6 +517,12 @@ impl LuaApi for Api {
         }
     }
     fn button(&self) -> &dyn netherforge_api::api::ButtonApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn nf_recipes(&self) -> &dyn netherforge_api::api::NfRecipesApi {
         match &self.worlds {
             Some(w) => w,
             None => &Unported,

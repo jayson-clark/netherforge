@@ -35,10 +35,6 @@ pub struct CompiledTerrain(pub Dynamic);
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScreenFacing(pub Dynamic);
 
-/// format's `recipe` `RecipeFile`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct RecipeFile(pub Dynamic);
-
 /// format's `datapack` `GameDatapack`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GameDatapack(pub Dynamic);

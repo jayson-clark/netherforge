@@ -869,13 +869,13 @@ impl PlayerApi for GameContext {
         Ok(Some(i64::from(left)))
     }
     fn discover_recipe(&self, this: &handles::Player, recipe: String) -> ApiResult<bool> {
-        <Unported as PlayerApi>::discover_recipe(&Unported, this, recipe)
+        self.recipe_book(this, &recipe, |ops, uuid, id| ops.discover(uuid, id))
     }
     fn undiscover_recipe(&self, this: &handles::Player, recipe: String) -> ApiResult<bool> {
-        <Unported as PlayerApi>::undiscover_recipe(&Unported, this, recipe)
+        self.recipe_book(this, &recipe, |ops, uuid, id| ops.undiscover(uuid, id))
     }
     fn has_discovered_recipe(&self, this: &handles::Player, recipe: String) -> ApiResult<bool> {
-        <Unported as PlayerApi>::has_discovered_recipe(&Unported, this, recipe)
+        self.recipe_book(this, &recipe, |ops, uuid, id| ops.has_discovered(uuid, id))
     }
     fn grant_advancement(
         &self,
