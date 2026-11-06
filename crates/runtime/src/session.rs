@@ -1040,6 +1040,8 @@ impl<'a> Session<'a> {
         }
         // What the scripts said as they were stopped (an `end` handler of a cutscene that unloaded) is still told.
         self.report();
+        // What the services staged as they stopped is written before anything else opens the store.
+        self.shared.store.flush();
         self.shared.tests.borrow_mut().clear();
         self.room = None;
         self.services = services(&self.shared);

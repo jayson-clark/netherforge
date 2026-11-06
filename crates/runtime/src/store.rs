@@ -8,12 +8,16 @@
 //! written once, as it ended. A write that fails is rolled back alone (a savepoint each) and said in the log;
 //! the rest of its batch is written.
 //!
-//! Not yet: the store's own lane (Kotlin writes on a worker thread; here the commit is the main thread's, a
-//! transaction a tick) and moving a file that isn't a database aside.
+//! **The store has its own lane**: a commit is written there, off the main thread, as Kotlin's is; a read (rare: a
+//! table asked for the first time, start-up) waits for the commits before it, so it sees every write staged before it.
+//!
+//! Not yet: moving a file that isn't a database aside, and carrying a batch that couldn't be committed to the next.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 use indexmap::IndexMap;
 use netherforge_platform::{Location, Uuid};
@@ -49,14 +53,21 @@ pub struct InstanceRecord {
     pub orphans: Vec<Uuid>,
 }
 
-type Write = Box<dyn Fn(&Connection) -> rusqlite::Result<()>>;
+type Write = Box<dyn Fn(&Connection) -> rusqlite::Result<()> + Send>;
+
+/// How many commits the lane hasn't finished, and the signal it gives as each does.
+type Pending = Arc<(Mutex<u64>, Condvar)>;
 
 pub struct Store {
-    connection: Connection,
+    /// Used on the lane for commits, and on the main thread for its rare reads once the lane has caught up.
+    connection: Arc<Mutex<Connection>>,
     staged: RefCell<IndexMap<String, Write>>,
     /// What went wrong writing, for the log: taken by whoever logs.
-    failures: RefCell<Vec<String>>,
-    written: std::cell::Cell<u64>,
+    failures: Arc<Mutex<Vec<String>>>,
+    written: Arc<AtomicU64>,
+    /// The store's own lane: commits are written there, off the main thread, one at a time in order.
+    lane: crate::http::Workers,
+    pending: Pending,
 }
 
 impl Store {
@@ -73,17 +84,19 @@ impl Store {
 
     fn with(connection: Connection) -> Result<Store, String> {
         let store = Store {
-            connection,
+            connection: Arc::new(Mutex::new(connection)),
             staged: RefCell::default(),
-            failures: RefCell::default(),
-            written: std::cell::Cell::new(0),
+            failures: Arc::default(),
+            written: Arc::default(),
+            lane: crate::http::Workers::lane("NetherForge store"),
+            pending: Arc::default(),
         };
         store.migrate()?;
         Ok(store)
     }
 
     fn migrate(&self) -> Result<(), String> {
-        let c = &self.connection;
+        let c = &*self.connection.lock().unwrap_or_else(|e| e.into_inner());
         c.execute_batch(
             "CREATE TABLE IF NOT EXISTS migrations (scope TEXT NOT NULL, version INTEGER NOT NULL, name TEXT NOT NULL, applied TEXT NOT NULL, PRIMARY KEY (scope, version))",
         )
@@ -122,64 +135,92 @@ impl Store {
         self.staged.borrow_mut().insert(key, write);
     }
 
-    /// Writes everything staged as one transaction, each write rolled back alone when it fails.
+    /// Hands everything staged to the lane, written there as one transaction, each write rolled back alone when it
+    /// fails. The main thread never waits on the disk to write: it waits only to read (`settled`), and sees every
+    /// write staged before it.
     pub fn commit(&self) {
         let staged = std::mem::take(&mut *self.staged.borrow_mut());
         if staged.is_empty() {
             return;
         }
-        let c = &self.connection;
-        if let Err(e) = c.execute_batch("BEGIN") {
-            self.failures
-                .borrow_mut()
-                .push(format!("The store couldn't write: {e}"));
-            return;
-        }
-        for (key, write) in staged {
-            let _ = c.execute_batch("SAVEPOINT one");
-            match write(c) {
-                Ok(()) => {
-                    let _ = c.execute_batch("RELEASE one");
-                    self.written.set(self.written.get() + 1);
-                }
-                Err(e) => {
-                    let _ = c.execute_batch("ROLLBACK TO one; RELEASE one");
-                    self.failures
-                        .borrow_mut()
-                        .push(format!("The store couldn't write {key}: {e}"));
+        *self.pending.0.lock().unwrap_or_else(|e| e.into_inner()) += 1;
+        let (connection, failures, written, pending) = (
+            self.connection.clone(),
+            self.failures.clone(),
+            self.written.clone(),
+            self.pending.clone(),
+        );
+        self.lane.submit(move || {
+            {
+                let c = connection.lock().unwrap_or_else(|e| e.into_inner());
+                let failed =
+                    |why: String| failures.lock().unwrap_or_else(|e| e.into_inner()).push(why);
+                if let Err(e) = c.execute_batch("BEGIN") {
+                    failed(format!("The store couldn't write: {e}"));
+                } else {
+                    for (key, write) in staged {
+                        let _ = c.execute_batch("SAVEPOINT one");
+                        match write(&c) {
+                            Ok(()) => {
+                                let _ = c.execute_batch("RELEASE one");
+                                written.fetch_add(1, Ordering::Relaxed);
+                            }
+                            Err(e) => {
+                                let _ = c.execute_batch("ROLLBACK TO one; RELEASE one");
+                                failed(format!("The store couldn't write {key}: {e}"));
+                            }
+                        }
+                    }
+                    if let Err(e) = c.execute_batch("COMMIT") {
+                        failed(format!("The store couldn't write: {e}"));
+                    }
                 }
             }
+            let (count, done) = &*pending;
+            *count.lock().unwrap_or_else(|e| e.into_inner()) -= 1;
+            done.notify_all();
+        });
+    }
+
+    /// Waits until everything staged so far is written.
+    pub fn flush(&self) {
+        self.commit();
+        let (count, done) = &*self.pending;
+        let mut left = count.lock().unwrap_or_else(|e| e.into_inner());
+        while *left > 0 {
+            left = done.wait(left).unwrap_or_else(|e| e.into_inner());
         }
-        if let Err(e) = c.execute_batch("COMMIT") {
-            self.failures
-                .borrow_mut()
-                .push(format!("The store couldn't write: {e}"));
-        }
+    }
+
+    /// The connection for a read on the main thread, once everything staged before it is written.
+    fn settled(&self) -> MutexGuard<'_, Connection> {
+        self.flush();
+        self.connection.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     /// What went wrong writing since the last call.
     pub fn take_failures(&self) -> Vec<String> {
-        std::mem::take(&mut self.failures.borrow_mut())
+        std::mem::take(&mut *self.failures.lock().unwrap_or_else(|e| e.into_inner()))
     }
 
     /// Writes committed so far.
     pub fn written(&self) -> u64 {
-        self.written.get()
+        self.flush();
+        self.written.load(Ordering::Relaxed)
     }
 
     // ---- instances ----
 
     /// Every spawned centity the store knows, in the order they were first put.
     pub fn instances(&self) -> Vec<InstanceRecord> {
-        self.commit();
+        let connection = self.settled();
         let read = || -> rusqlite::Result<Vec<InstanceRecord>> {
             let mut entities: std::collections::HashMap<
                 String,
                 Vec<(String, String, Option<String>)>,
             > = Default::default();
-            let mut rows = self
-                .connection
-                .prepare("SELECT instance, entity, role, node FROM instance_entities")?;
+            let mut rows =
+                connection.prepare("SELECT instance, entity, role, node FROM instance_entities")?;
             for row in rows.query_map([], |r| {
                 Ok((r.get::<_, String>(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
             })? {
@@ -190,8 +231,7 @@ impl Store {
                     .push((entity, role, node));
             }
             let mut out = Vec::new();
-            let mut rows = self
-                .connection
+            let mut rows = connection
                 .prepare("SELECT id, centity, world, x, y, z, yaw FROM instances ORDER BY rowid")?;
             for row in rows.query_map([], |r| {
                 Ok((
@@ -242,7 +282,8 @@ impl Store {
         };
         read().unwrap_or_else(|e| {
             self.failures
-                .borrow_mut()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
                 .push(format!("The store couldn't read the centities: {e}"));
             Vec::new()
         })
@@ -302,19 +343,19 @@ impl Store {
     /// `owner`'s saved table as last saved (the codec's JSON), or none when it never was.
     pub fn data(&self, owner: &crate::data::Owner) -> Option<String> {
         use crate::data::Owner;
-        self.commit();
+        let connection = self.settled();
         let row = match owner {
-            Owner::Centity(id) => self.connection.query_row(
+            Owner::Centity(id) => connection.query_row(
                 "SELECT value FROM centity_data WHERE instance = ?1",
                 params![uuid_text(id)],
                 |r| r.get(0),
             ),
-            Owner::Player(id) => self.connection.query_row(
+            Owner::Player(id) => connection.query_row(
                 "SELECT value FROM player_data WHERE player = ?1",
                 params![uuid_text(id)],
                 |r| r.get(0),
             ),
-            Owner::Named { namespace, name } => self.connection.query_row(
+            Owner::Named { namespace, name } => connection.query_row(
                 "SELECT value FROM named_data WHERE namespace = ?1 AND name = ?2",
                 params![namespace, name],
                 |r| r.get(0),
@@ -387,11 +428,10 @@ impl Store {
 impl Store {
     /// Every node `namespace`'s scripts set, by player.
     pub fn permissions_of(&self, namespace: &str) -> BTreeMap<Uuid, BTreeMap<String, bool>> {
-        self.commit();
+        let connection = self.settled();
         let mut out: BTreeMap<Uuid, BTreeMap<String, bool>> = BTreeMap::new();
-        let Ok(mut statement) = self
-            .connection
-            .prepare("SELECT player, node, value FROM permissions WHERE namespace = ?1")
+        let Ok(mut statement) =
+            connection.prepare("SELECT player, node, value FROM permissions WHERE namespace = ?1")
         else {
             return out;
         };
@@ -435,10 +475,9 @@ impl Store {
 impl Store {
     /// When each of `namespace`'s schedules last ran (Unix milliseconds), by id.
     pub fn schedule_runs(&self, namespace: &str) -> BTreeMap<String, i64> {
-        self.commit();
-        let Ok(mut statement) = self
-            .connection
-            .prepare("SELECT id, last_run FROM schedule_runs WHERE namespace = ?1")
+        let connection = self.settled();
+        let Ok(mut statement) =
+            connection.prepare("SELECT id, last_run FROM schedule_runs WHERE namespace = ?1")
         else {
             return BTreeMap::new();
         };
@@ -474,10 +513,9 @@ impl Store {
 impl Store {
     /// Every kept number, by (namespace, screen key), each by its tile's stable number.
     pub fn screen_maps(&self) -> BTreeMap<(String, String), BTreeMap<i64, i64>> {
-        self.commit();
-        let Ok(mut statement) = self
-            .connection
-            .prepare("SELECT namespace, screen, tile, map FROM screen_maps")
+        let connection = self.settled();
+        let Ok(mut statement) =
+            connection.prepare("SELECT namespace, screen, tile, map FROM screen_maps")
         else {
             return BTreeMap::new();
         };
@@ -500,8 +538,8 @@ impl Store {
 
     /// The next map number screens may take, if one was kept.
     pub fn screen_map_next(&self) -> Option<i64> {
-        self.commit();
-        self.connection
+        let connection = self.settled();
+        connection
             .query_row("SELECT next FROM screen_map_next WHERE id = 0", [], |r| {
                 r.get(0)
             })
@@ -555,8 +593,8 @@ impl Store {
 impl Store {
     /// Every player a cutscene held, and what they were before it.
     pub fn cutscene_states(&self) -> BTreeMap<Uuid, crate::cutscenes::PlayerState> {
-        self.commit();
-        let Ok(mut statement) = self.connection.prepare(
+        let connection = self.settled();
+        let Ok(mut statement) = connection.prepare(
             "SELECT player, world, x, y, z, yaw, pitch, game_mode, can_fly, flying, spectating FROM cutscene_states",
         ) else {
             return BTreeMap::new();
@@ -656,8 +694,8 @@ impl Store {
         &self,
         namespace: &str,
     ) -> BTreeMap<String, crate::managed_worlds::OwnedWorld> {
-        self.commit();
-        let Ok(mut statement) = self.connection.prepare(
+        let connection = self.settled();
+        let Ok(mut statement) = connection.prepare(
             "SELECT world, environment, terrain, dimension_type FROM worlds WHERE namespace = ?1",
         ) else {
             return BTreeMap::new();
