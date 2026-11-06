@@ -5,22 +5,67 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::{Rc, Weak};
 
+use netherforge_format::bridge::{BotActResult, BotAction, BotInfo};
 use netherforge_format::package::NoPackages;
 use netherforge_format::project::ProjectSource;
 use netherforge_platform::{
-    FakePlatform, FakePlatformLog, ItemData, PlatformError, PlatformEvents, PlatformLog, PlayerRef,
-    ServerInfo, Uuid, game_event,
+    BotAim, BotJoin, FakePlatform, FakePlatformLog, ItemData, PlatformError, PlatformEvents,
+    PlatformLog, PlayerRef, ServerInfo, Uuid, game_event,
 };
 use netherforge_runtime::server::ServerEvents;
 use netherforge_runtime::session::{Config, Session};
 use netherforge_runtime::testing::TestHarness;
 use netherforge_runtime::testing::runner::{Runner, TestEvent, TestServer, TextReport, junit};
 
+type Done<T> = Box<dyn Fn(Result<T, PlatformError>)>;
+
 #[derive(Default)]
 struct Fake {
     lines: RefCell<Vec<String>>,
     online: RefCell<Vec<PlayerRef>>,
     held: RefCell<BTreeMap<String, ItemData>>,
+    /// The bots online, those joining (they're in at the server's next tick), and what they were told to do.
+    bots: RefCell<Vec<PlayerRef>>,
+    joining: RefCell<Vec<(BotJoin, Done<BotInfo>)>>,
+    acted: RefCell<Vec<(String, BotAction)>>,
+}
+
+fn bot_info(player: &PlayerRef) -> BotInfo {
+    BotInfo {
+        name: player.name.clone(),
+        uuid: netherforge_runtime::events::uuid_text(&player.uuid),
+        world: "world".into(),
+        x: 0.0,
+        y: 64.0,
+        z: 0.0,
+        events: 0,
+    }
+}
+
+impl netherforge_platform::FakeBotOps for Fake {
+    fn join(&self, join: BotJoin, done: Done<BotInfo>) {
+        self.joining.borrow_mut().push((join, done));
+    }
+    fn leave(&self, name: String) {
+        self.bots.borrow_mut().retain(|b| b.name != name);
+        self.online.borrow_mut().retain(|b| b.name != name);
+    }
+    fn list(&self) -> Vec<BotInfo> {
+        self.bots.borrow().iter().map(bot_info).collect()
+    }
+    fn is_bot(&self, id: Uuid) -> bool {
+        self.bots.borrow().iter().any(|b| b.uuid == id)
+    }
+    fn act(&self, name: String, action: BotAction, _: Option<BotAim>, done: Done<BotActResult>) {
+        self.acted.borrow_mut().push((name, action));
+        done(Ok(BotActResult {
+            world: "world".into(),
+            x: 0.0,
+            y: 64.0,
+            z: 0.0,
+            since: 0,
+        }));
+    }
 }
 
 impl FakePlatformLog for Fake {
@@ -51,6 +96,13 @@ impl netherforge_platform::FakePlayerOps for Fake {
             .borrow()
             .iter()
             .find(|p| p.uuid == uuid)
+            .cloned()
+    }
+    fn find(&self, name: String) -> Option<PlayerRef> {
+        self.online
+            .borrow()
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(&name))
             .cloned()
     }
     fn kick(&self, uuid: Uuid, _: Option<String>) -> bool {
@@ -89,6 +141,9 @@ impl FakePlatform for Fake {
         self
     }
     fn teams(&self) -> &dyn netherforge_platform::TeamOps {
+        self
+    }
+    fn bots(&self) -> &dyn netherforge_platform::BotOps {
         self
     }
     fn info(&self) -> ServerInfo {
@@ -165,9 +220,26 @@ struct Harness {
 
 impl TestHarness for Harness {
     fn tick(&self) {
-        if let Some(events) = self.events.borrow().upgrade() {
-            events.tick();
+        let Some(events) = self.events.borrow().upgrade() else {
+            return;
+        };
+        // The server's bots first: a join lands as a player's does, then its `done`.
+        let joining = std::mem::take(&mut *self.platform.joining.borrow_mut());
+        for (join, done) in joining {
+            let player = PlayerRef {
+                uuid: Uuid(0xb07_0000 + self.platform.bots.borrow().len() as u128),
+                name: join.name.clone(),
+            };
+            self.platform.online.borrow_mut().push(player.clone());
+            self.platform.bots.borrow_mut().push(player.clone());
+            events.game().player_join(&mut game_event::PlayerJoin {
+                player: player.clone(),
+                first_join: true,
+                message: None,
+            });
+            done(Ok(bot_info(&player)));
         }
+        events.tick();
     }
 
     fn join(&self, name: &str) -> Option<PlayerRef> {
@@ -1221,4 +1293,39 @@ end)
 "#,
         ),
     ]));
+}
+
+#[test]
+fn a_test_joins_bots_and_drives_them_as_a_server_would() {
+    let files = project(&[
+        ("netherforge.json", &manifest(r#"{ "bots": true }"#)),
+        (
+            "modules/arena/init.lua",
+            r#"
+local M = { joined = {} }
+nf.on("player_join", function(e) table.insert(M.joined, e.player:name()) end)
+return M
+"#,
+        ),
+        (
+            "tests/arena_test.lua",
+            r#"
+local arena = require("arena")
+nf.test.case("a bot joins and plays", function()
+  local bot
+  nf.bots.join("Sparring", nil, nil, function(b, err) bot = b; assert(err == nil, err) end)
+  nf.test.advance(2)
+  assert(bot ~= nil, "joined")
+  assert(arena.joined[1] == "Sparring", "the server heard it join")
+  assert(bot:jump() and bot:chat("hello"), "it acts")
+  assert(#nf.bots.all() == 1)
+  assert(bot:leave() and #nf.bots.all() == 0, "it leaves")
+end)
+nf.test.case("each test's server has its own bots", function()
+  assert(#nf.bots.all() == 0)
+end)
+"#,
+        ),
+    ]);
+    all_pass(files);
 }

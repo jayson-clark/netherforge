@@ -268,7 +268,11 @@ impl<'a> Session<'a> {
             }
         }
         shared.web.borrow_mut().config = config.web.clone();
-        shared.bots.borrow_mut().config = config.bots;
+        // A test run's bots are on, as the dev server's are: a test of a project that joins bots is the point.
+        shared.bots.borrow_mut().config = crate::bots::BotsConfig {
+            enabled: config.bots.enabled || config.testing.is_some(),
+            ..config.bots
+        };
         shared.settings.borrow_mut().directory = config.settings_dir.clone();
         // A script test's server is a network of its own, `test`, whose other servers the test plays.
         let mut network_config = config.network.clone();
