@@ -992,8 +992,29 @@ impl netherforge_platform::CommandSender for TestSender {
     }
 }
 
+/// The game's one loot table: a diamond, as many as the seed is odd (one or two).
+impl netherforge_platform::FakeLootOps for Fake {
+    fn exists(&self, table: String) -> bool {
+        table == "minecraft:chests/simple"
+    }
+    fn roll(
+        &self,
+        table: String,
+        context: netherforge_platform::GameLootContext,
+        seed: i64,
+    ) -> Option<Vec<netherforge_platform::ItemData>> {
+        self.call(format!("game loot {table} at {}", at(&context.location)));
+        let mut diamond = stack("minecraft:diamond");
+        diamond.def.count = Some(1 + (seed & 1) as i32);
+        (table == "minecraft:chests/simple").then(|| vec![diamond])
+    }
+}
+
 impl FakePlatform for Fake {
     fn commands(&self) -> &dyn netherforge_platform::CommandOps {
+        self
+    }
+    fn loot(&self) -> &dyn netherforge_platform::LootOps {
         self
     }
     fn project_items(&self) -> &dyn netherforge_platform::ProjectItemOps {
@@ -4161,4 +4182,63 @@ for _ = 1, 17 do nf.particles.play("flood", vector.create(0, 64, 0)) end
     files.delete("particles/puff/effect.json");
     session.reload(&["particles/puff/effect.json".to_owned()]);
     assert_eq!(printed(&platform.take()), ["end\tremoved"]);
+}
+
+#[test]
+fn loot_tables_roll_the_same_for_a_seed_and_fill_empty_slots() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    // 100 sticks (two stacks of 64 and 36), a nested table's bread, and the game's table.
+    let treasure = r#"{ "pools": {
+        "a": { "entries": [ { "type": "item", "item": { "kind": "stick" }, "count": { "min": 100, "max": 100 } } ] },
+        "b": { "entries": [ { "type": "table", "table": "food" } ] },
+        "c": { "entries": [ { "type": "vanilla", "table": "minecraft:chests/simple" } ] }
+    } }"#;
+    let food = r#"{ "pools": { "main": { "entries": [ { "type": "item", "item": { "kind": "minecraft:bread" } } ] } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("loot/treasure.json", treasure),
+        ("loot/food.json", food),
+        (
+            "modules/chest/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local function show(items)
+  local out = {}
+  for _, i in items do table.insert(out, i.kind .. "x" .. i.count) end
+  return table.concat(out, " ")
+end
+local here = { location = { world = nf.worlds.default(), position = vector.create(3, 64, 3) }, seed = 7 }
+print(show(nf.loot.roll("treasure", here)))
+print(show(nf.loot.roll("demo:treasure", here)) == show(nf.loot.roll("treasure", here)))
+print(pcall(nf.loot.roll, "nope"))
+print(pcall(nf.loot.roll, "minecraft:chests/simple"))
+print(pcall(nf.loot.roll, "minecraft:chests/none", here))
+print(show(nf.loot.roll("minecraft:chests/simple", { player = alex, seed = 2 })))
+local bag = alex:storage("bag", 5)
+bag:set_item(1, { kind = "minecraft:dirt" })
+print(nf.loot.fill("treasure", bag, { seed = 7 }), bag:count_item("minecraft:dirt"), bag:count_item("minecraft:stick"))
+local pouch = alex:storage("pouch", 2)
+print(nf.loot.fill("treasure", pouch, { seed = 7 }), pouch:count_item("minecraft:stick"))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "minecraft:stickx64 minecraft:stickx36 minecraft:breadx1 minecraft:diamondx1",
+            "true",
+            "false\tmodules/chest/init.lua:11: there's no loot table \"nope\" (loot/nope.json)",
+            "false\tmodules/chest/init.lua:12: the game's loot table \"minecraft:chests/simple\" is rolled at a place: give the roll a location, a player or a looted entity",
+            "false\tmodules/chest/init.lua:13: neither the project nor the server has a loot table \"minecraft:chests/none\"",
+            "minecraft:diamondx1",
+            // Four stacks and four empty slots: nothing is left over, and the dirt stays.
+            "0\t1\t100",
+            // Two slots: the sticks take them, and the bread and the diamond are left out.
+            "2\t100",
+        ],
+        "{calls:?}"
+    );
 }

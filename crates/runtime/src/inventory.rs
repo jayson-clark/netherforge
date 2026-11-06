@@ -33,7 +33,7 @@ fn slot(index: i64, size: i32) -> ApiResult<i32> {
 
 impl GameContext {
     /// A storage changed: the menu slots bound to it show what it has now.
-    fn changed(&self, r#ref: &InventoryRef) {
+    pub(crate) fn inventory_changed(&self, r#ref: &InventoryRef) {
         if let InventoryRef::Storage(storage) = r#ref {
             crate::menu::MenuContext {
                 shared: self.shared.clone(),
@@ -145,7 +145,7 @@ impl InventoryApi for GameContext {
             return Ok(false);
         };
         let set = inventories.set_item(r#ref.clone(), slot(index, size)?, item);
-        self.changed(&r#ref);
+        self.inventory_changed(&r#ref);
         Ok(set)
     }
 
@@ -169,7 +169,7 @@ impl InventoryApi for GameContext {
             return Ok(count);
         };
         let left = self.shared.platform.inventories().add(r#ref.clone(), item);
-        self.changed(&r#ref);
+        self.inventory_changed(&r#ref);
         Ok(left.map_or(count, i64::from))
     }
 
@@ -193,7 +193,7 @@ impl InventoryApi for GameContext {
         let taken = matching.remove(&contents, count, |slot, item| {
             inventories.set_item(r#ref.clone(), slot as i32, item);
         });
-        self.changed(&r#ref);
+        self.inventory_changed(&r#ref);
         Ok(taken)
     }
 
@@ -234,7 +234,7 @@ impl InventoryApi for GameContext {
             return Ok(false);
         };
         let cleared = self.shared.platform.inventories().clear(r#ref.clone());
-        self.changed(&r#ref);
+        self.inventory_changed(&r#ref);
         Ok(cleared)
     }
 

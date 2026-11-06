@@ -32,6 +32,7 @@ pub mod images;
 pub mod inventory;
 pub mod items;
 pub mod living;
+pub mod loot;
 pub mod menu;
 pub mod modules;
 pub mod names;
@@ -515,6 +516,12 @@ impl LuaApi for Api {
         }
     }
     fn button(&self) -> &dyn netherforge_api::api::ButtonApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn nf_loot(&self) -> &dyn netherforge_api::api::NfLootApi {
         match &self.worlds {
             Some(w) => w,
             None => &Unported,

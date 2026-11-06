@@ -636,6 +636,9 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
             shared: shared.clone(),
             scripts: Default::default(),
         }),
+        Box::new(crate::loot::LootService {
+            shared: shared.clone(),
+        }),
         Box::new(crate::commands::CommandsService {
             shared: shared.clone(),
         }),

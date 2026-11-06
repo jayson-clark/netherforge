@@ -704,6 +704,20 @@ the files' with a UUID id and an owner scope, gone with that scope (`scope_relea
 `nf.dialogs.get` and `open_dialog` by name find only the project's. Not yet: the runtime's own dialogs
 (`/nf settings`).
 
+## Loot tables (`crates/runtime/src/loot.rs`)
+
+Kotlin's `LootTables` and `NfLootImpl`: the running `loot/<id>.json` by the project's names (a package's `ns:id`),
+the last good one kept while a file has errors. `nf.loot.roll` rolls format's `loot_roll::roll` on Kotlin's `Random`
+from the context's seed (a fresh one when none), so a seed's drops are the editor's and the Kotlin runtime's; a
+drop's count is split into stacks of its item's `max_stack_size` (64), a project item made through `ItemContext::create`.
+A game table (a namespace that's no package's, or a `vanilla` entry, with the seed the roller drew) is the server's
+(`LootOps`), rolled at the context's location, else its player's or looted entity's place. `nf.loot.fill` puts each
+stack in an empty slot shuffled as Kotlin's `shuffled(Random(seed.inv()))` (`shuffle`), a player's hotbar and main
+inventory only, and answers what found no slot; the storage's bound menu slots hear it (`inventory_changed`). The
+tool conditions match an ingredient as recipes will. Not yet: `LootOps::roll` can't say why the server refused a
+table (Kotlin's `IllegalArgumentException`: the Platform spec has no error there), and the loot blocks and natural
+spawning drop (they come with custom blocks).
+
 ## Particle effects (`crates/runtime/src/particles.rs`)
 
 Kotlin's `ParticleEffects`, `ActiveEffect`, `NfParticlesImpl` and `EffectImpl`: the compiled effects (the last good
