@@ -64,6 +64,8 @@ pub struct Shared {
     pub loot: RefCell<crate::loot::LootTables>,
     /// The project's particle effects and every one playing.
     pub particles: RefCell<crate::particles::Particles>,
+    /// The project's cutscenes and every one playing.
+    pub cutscenes: RefCell<crate::cutscenes::Cutscenes>,
     /// Boss bars scripts made, and players' sidebars.
     pub bars: RefCell<crate::bossbar::Bars>,
     /// Teams scripts made, lines under name tags, and who's out of whose player list.
@@ -116,6 +118,7 @@ impl Shared {
             recipes: RefCell::default(),
             loot: RefCell::default(),
             particles: RefCell::default(),
+            cutscenes: RefCell::default(),
             bars: RefCell::default(),
             teams: RefCell::default(),
             menus: RefCell::default(),

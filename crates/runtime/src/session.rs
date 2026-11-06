@@ -595,10 +595,13 @@ impl<'a> Session<'a> {
 
     /// Stops every service, in reverse order, and closes the room.
     pub fn stop(&mut self) {
-        let Some(room) = self.room.take() else { return };
+        let Some(room) = &self.room else { return };
         for service in self.services.iter().rev() {
-            service.stop(&room, &*self.platform);
+            service.stop(room, &*self.platform);
         }
+        // What the scripts said as they were stopped (an `end` handler of a cutscene that unloaded) is still told.
+        self.report();
+        self.room = None;
         self.services = services(&self.shared);
     }
 
@@ -711,6 +714,12 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         }),
         // After centities: their sync comes first, so a centity moved this tick is where its effect plays.
         Box::new(crate::particles::ParticlesService {
+            shared: shared.clone(),
+            scripts: Default::default(),
+        }),
+        // After centities, as Kotlin's pass runs in the effects' phase; stopped after every script, so `unload` may
+        // still play one, and before the store's last commit.
+        Box::new(crate::cutscenes::CutscenesService {
             shared: shared.clone(),
             scripts: Default::default(),
         }),

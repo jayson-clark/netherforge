@@ -550,6 +550,104 @@ impl Store {
     }
 }
 
+/// What players a cutscene holds were before it (Kotlin's `Store.CutsceneStates`): a row from the first of a run of
+/// cutscenes until the player is put back, so a crash can't lose it.
+impl Store {
+    /// Every player a cutscene held, and what they were before it.
+    pub fn cutscene_states(&self) -> BTreeMap<Uuid, crate::cutscenes::PlayerState> {
+        self.commit();
+        let Ok(mut statement) = self.connection.prepare(
+            "SELECT player, world, x, y, z, yaw, pitch, game_mode, can_fly, flying, spectating FROM cutscene_states",
+        ) else {
+            return BTreeMap::new();
+        };
+        let rows = statement.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                Location {
+                    world: r.get(1)?,
+                    x: r.get(2)?,
+                    y: r.get(3)?,
+                    z: r.get(4)?,
+                    yaw: r.get(5)?,
+                    pitch: r.get(6)?,
+                },
+                r.get::<_, String>(7)?,
+                r.get::<_, i64>(8)?,
+                r.get::<_, i64>(9)?,
+                r.get::<_, Option<String>>(10)?,
+            ))
+        });
+        let mut out = BTreeMap::new();
+        for (player, location, game_mode, can_fly, flying, spectating) in
+            rows.into_iter().flatten().flatten()
+        {
+            let Some(player) = parse_uuid(&player) else {
+                continue;
+            };
+            out.insert(
+                player,
+                crate::cutscenes::PlayerState {
+                    location,
+                    game_mode,
+                    can_fly: can_fly != 0,
+                    flying: flying != 0,
+                    spectating: spectating.as_deref().and_then(parse_uuid),
+                },
+            );
+        }
+        out
+    }
+
+    /// `player` is held by a cutscene, and was `state` before it.
+    pub fn put_cutscene_state(&self, player: Uuid, state: &crate::cutscenes::PlayerState) {
+        let player = uuid_text(&player);
+        let state = state.clone();
+        self.stage(
+            format!("cutscene_states {player}"),
+            Box::new(move |c| {
+                let at = &state.location;
+                c.execute(
+                    "INSERT INTO cutscene_states (player, world, x, y, z, yaw, pitch, game_mode, can_fly, flying, spectating) \
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11) ON CONFLICT (player) DO UPDATE SET world = excluded.world, \
+                     x = excluded.x, y = excluded.y, z = excluded.z, yaw = excluded.yaw, pitch = excluded.pitch, \
+                     game_mode = excluded.game_mode, can_fly = excluded.can_fly, flying = excluded.flying, \
+                     spectating = excluded.spectating",
+                    params![
+                        player,
+                        at.world,
+                        at.x,
+                        at.y,
+                        at.z,
+                        at.yaw,
+                        at.pitch,
+                        state.game_mode,
+                        state.can_fly,
+                        state.flying,
+                        state.spectating.as_ref().map(uuid_text),
+                    ],
+                )?;
+                Ok(())
+            }),
+        );
+    }
+
+    /// `player` is back as they were: nothing is left to put back.
+    pub fn delete_cutscene_state(&self, player: Uuid) {
+        let player = uuid_text(&player);
+        self.stage(
+            format!("cutscene_states {player}"),
+            Box::new(move |c| {
+                c.execute(
+                    "DELETE FROM cutscene_states WHERE player = ?1",
+                    params![player],
+                )?;
+                Ok(())
+            }),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

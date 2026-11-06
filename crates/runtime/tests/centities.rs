@@ -2727,9 +2727,13 @@ nf.on("player_quit", function(e) print("quit", e.player:session().streak) end)
         restarted.contains(&"spot\ttrue\tworld\t2".to_owned()),
         "{restarted:?}"
     );
+    // What the quit's handler printed is told as the old session stops, then the new one's first lines.
     assert_eq!(
-        restarted[0],
-        "1\tfalse\tmodules/scores/init.lua:3: \"Bad Name\" isn't a data table name (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)"
+        restarted[..2],
+        [
+            "quit\t4",
+            "1\tfalse\tmodules/scores/init.lua:3: \"Bad Name\" isn't a data table name (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)"
+        ]
     );
     server.session_mut().stop();
     let named = Owner::Named {
