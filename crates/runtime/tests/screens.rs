@@ -63,6 +63,10 @@ fn alex() -> PlayerRef {
 struct Fake {
     lines: RefCell<Vec<String>>,
     frames: RefCell<u128>,
+    /// Where Alex stands, when a test moved them (near the origin, facing south, when not).
+    at: RefCell<Option<Location>>,
+    /// A block this far along every ray, when there is one.
+    wall: RefCell<Option<f64>>,
 }
 
 impl Fake {
@@ -108,13 +112,27 @@ impl netherforge_platform::FakePlayerOps for Fake {
         (name == "Alex").then(alex)
     }
     fn location(&self, _: Uuid) -> Option<Location> {
-        Some(Location {
+        Some(self.at.borrow().clone().unwrap_or(Location {
             world: "world".into(),
             x: 0.0,
             y: 64.0,
             z: 0.0,
             yaw: 0.0,
             pitch: 0.0,
+        }))
+    }
+    /// The game's sight: 1.62 above the feet, yaw 0 facing south.
+    fn eye(&self, uuid: Uuid) -> Option<netherforge_platform::Ray> {
+        let at = netherforge_platform::FakePlayerOps::location(self, uuid)?;
+        let (yaw, pitch) = (at.yaw.to_radians(), at.pitch.to_radians());
+        Some(netherforge_platform::Ray {
+            world: at.world,
+            x: at.x,
+            y: at.y + 1.62,
+            z: at.z,
+            dx: -yaw.sin() * pitch.cos(),
+            dy: -pitch.sin(),
+            dz: yaw.cos() * pitch.cos(),
         })
     }
 }
@@ -141,6 +159,28 @@ impl netherforge_platform::FakeWorldOps for Fake {
     }
     fn entities_loaded(&self, _: Location) -> bool {
         true
+    }
+    fn raycast_blocks(
+        &self,
+        _: String,
+        origin: netherforge_format::math::Vec3,
+        direction: netherforge_format::math::Vec3,
+        max_distance: f64,
+        _: bool,
+    ) -> Option<netherforge_platform::BlockHit> {
+        let d = (*self.wall.borrow()).filter(|d| *d <= max_distance)?;
+        let at = netherforge_format::math::Vec3(
+            origin.0 + direction.0 * d,
+            origin.1 + direction.1 * d,
+            origin.2 + direction.2 * d,
+        );
+        Some(netherforge_platform::BlockHit {
+            x: at.0.floor() as i32,
+            y: at.1.floor() as i32,
+            z: at.2.floor() as i32,
+            position: at,
+            normal: netherforge_format::math::Vec3(0.0, 0.0, -1.0),
+        })
     }
 }
 
@@ -711,5 +751,158 @@ fn a_screens_video_plays_from_its_file_and_frames_for_other_settings_are_stale()
             .problems()
             .iter()
             .any(|p| p.code.as_deref() == Some("video.stale")),
+    );
+}
+
+#[test]
+fn a_hung_screen_catches_clicks_on_its_frames_and_from_afar_and_players_aim() {
+    use netherforge_platform::{ClickButton, PlatformEvents};
+    let platform = std::rc::Rc::new(Fake::default());
+    // In front of the left map (as they face it), looking south at its picture 5.34 blocks away.
+    *platform.at.borrow_mut() = Some(Location {
+        world: "world".into(),
+        x: 0.75,
+        y: 64.0,
+        z: 0.6,
+        yaw: 0.0,
+        pitch: 0.0,
+    });
+    let store = std::rc::Rc::new(netherforge_runtime::store::Store::in_memory());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "screens/wall/screen.json",
+            r#"{ "width": 2, "height": 1, "place": { "world": "world", "x": 0, "y": 65, "z": 5, "facing": "north" }, "script": { "file": "script.lua" } }"#,
+        ),
+        (
+            "screens/wall/script.lua",
+            r#"
+this:on("click", function(event) print("click", event.x, event.y, event.click, event.player:name(), event.screen:player() ~= nil) end)
+this:on("hover", function(event) print("hover", event.x, event.y) end)
+this:on("leave", function(event) print("leave", event.player:name()) end)
+nf.on("demo:look", function()
+  local point = nf.screens.looking_at(nf.players.get("Alex"))
+  print("look", point and point.screen:name(), point and point.x, point and point.y, point and math.floor(point.distance * 10))
+  print("near", nf.screens.looking_at(nf.players.get("Alex"), 2))
+end)
+nf.on("demo:own", function() this:for_player(nf.players.get("Alex")) end)
+"#,
+        ),
+    ]);
+    let events = netherforge_runtime::server::ServerEvents::new(Session::start_with(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        store,
+    ));
+    platform.take();
+    let emit = |event: &str| {
+        let session = events.session();
+        let room = session.room().unwrap();
+        room.scripts()
+            .emit_custom(
+                netherforge_runtime::Target::Nf,
+                event.into(),
+                mlua::Value::Table(room.host().lua().create_table().unwrap()),
+            )
+            .unwrap();
+    };
+    let alex = alex();
+    events.tick();
+    let first = platform.take();
+    let hung: Vec<&String> = first.iter().filter(|l| l.starts_with("hang")).collect();
+    assert_eq!(hung.len(), 2, "a frame a map: {first:?}");
+    assert!(
+        hung.iter()
+            .all(|h| h.contains(" North ") && h.ends_with(" true"))
+    );
+    assert_eq!(printed(&first), ["hover\t32\t48"], "aimed at the left map");
+    // Nothing moved: no hover again.
+    events.tick();
+    assert_eq!(printed(&platform.take()), Vec::<String>::new());
+
+    // A click on the left map's frame, at the pixel their sight meets; a second the same tick is the same click.
+    let frame = Uuid(1001);
+    let sight = netherforge_platform::FakePlayerOps::eye(&*platform, alex.uuid);
+    assert!(events.entity_clicked(frame, alex.clone(), ClickButton::Right, sight.clone()));
+    assert!(events.entity_clicked(frame, alex.clone(), ClickButton::Right, sight));
+    // Not a frame of ours: the world's.
+    assert!(!events.entity_clicked(Uuid(5), alex.clone(), ClickButton::Right, None));
+    emit("demo:look");
+    events.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        [
+            "click\t32\t48\tright\tAlex\tfalse",
+            "look\twall\t32\t48\t53",
+            "near\tnil",
+        ]
+    );
+    // Without their sight, the middle of the map clicked; on their own view, its handle is their own.
+    emit("demo:own");
+    events.tick();
+    platform.take();
+    assert!(events.entity_clicked(Uuid(1002), alex.clone(), ClickButton::Left, None));
+    events.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        ["click\t192\t64\tleft\tAlex\ttrue"]
+    );
+
+    // From afar, past the game's reach: a swing aimed at it.
+    platform.at.borrow_mut().as_mut().unwrap().z = -10.0;
+    assert!(events.player_interact(
+        alex.clone(),
+        ClickButton::Left,
+        None,
+        None,
+        None,
+        "main_hand".into()
+    ));
+    events.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        ["click\t32\t48\tleft\tAlex\ttrue"]
+    );
+    // A block in front: nothing is aimed at, and the swing is the world's.
+    *platform.wall.borrow_mut() = Some(3.0);
+    events.tick();
+    assert_eq!(printed(&platform.take()), ["leave\tAlex"]);
+    assert!(!events.player_interact(
+        alex.clone(),
+        ClickButton::Left,
+        None,
+        None,
+        None,
+        "main_hand".into()
+    ));
+    *platform.wall.borrow_mut() = None;
+    events.tick();
+    assert_eq!(printed(&platform.take()), ["hover\t32\t48"]);
+
+    // Looking away: a leave, and a swing that's the world's.
+    platform.at.borrow_mut().as_mut().unwrap().yaw = 180.0;
+    events.tick();
+    assert_eq!(printed(&platform.take()), ["leave\tAlex"]);
+    assert!(!events.player_interact(
+        alex.clone(),
+        ClickButton::Left,
+        None,
+        None,
+        None,
+        "main_hand".into()
+    ));
+    // Looking back, then gone: a leave as they quit.
+    platform.at.borrow_mut().as_mut().unwrap().yaw = 0.0;
+    events.tick();
+    assert_eq!(printed(&platform.take()), ["hover\t32\t48"]);
+    {
+        let session = events.session();
+        session.player_quit(&alex);
+    }
+    events.tick();
+    assert_eq!(
+        printed(&platform.take()).first().map(String::as_str),
+        Some("leave\tAlex")
     );
 }

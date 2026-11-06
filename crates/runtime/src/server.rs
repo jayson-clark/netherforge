@@ -10,8 +10,8 @@
 //! being changed (a reload, a stop) it can't be, and they go through unchanged.
 //!
 //! Not yet, each with its service: project items' stages (an item's handlers first) and their looks,
-//! custom blocks, structure markers, generated loot, menus, dialogs, resource packs and screens. Those
-//! events answer "unchanged" until then.
+//! custom blocks, structure markers, generated loot, menus, dialogs and resource packs. Those events answer
+//! "unchanged" until then.
 
 use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
@@ -97,6 +97,14 @@ fn cancelled(out: Option<Emitted>) -> bool {
 /// The project items' side of the running session.
 fn items(s: &Running) -> crate::project_items::ItemContext {
     crate::project_items::ItemContext {
+        shared: s.session().shared().clone(),
+        scripts: s.room().scripts().clone(),
+    }
+}
+
+/// The screens' side of the running session.
+fn screens(s: &Running) -> crate::screen::ScreensContext {
+    crate::screen::ScreensContext {
         shared: s.session().shared().clone(),
         scripts: s.room().scripts().clone(),
     }
@@ -265,6 +273,10 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         hand: String,
     ) -> bool {
         let Some(s) = self.open() else { return false };
+        // A click aimed at a screen within its click range is the screen's, before anything in the world hears it.
+        if screens(&s).swing(&player, button) {
+            return true;
+        }
         let stages = with_item(
             items(&s).stage(item.as_ref()),
             "interact",

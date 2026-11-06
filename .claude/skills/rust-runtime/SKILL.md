@@ -416,8 +416,8 @@ each with the compiler it needs.
   `entity_gone`, which drops the entity handle's subscriptions), `player_interact_entity`. A payload is built
   only when something listens. What handlers print is logged at the next tick, as other reports are.
 - Not yet, each with its service, answering "unchanged" until then: project items' stages (a held item's
-  handlers first) and looks, custom blocks, structure markers, generated loot, menus, dialogs, resource packs,
-  screens.
+  handlers first) and looks, custom blocks, structure markers, generated loot, menus, dialogs, resource packs.
+  Screens' are wired: `player_interact` asks the screens first (a swing aimed at one), `entity_clicked` after centities.
 
 ## Centities (`crates/runtime/src/centity`)
 
@@ -723,7 +723,19 @@ tick. A player's own view (`for_player`) is a canvas of their own until `release
 `Dither` into the game's palette (`GameData::map_colors`), the last 32 kept. Files are read while scripts run
 through `Config::bytes` (`ProjectBytes`, a `'static` reader the adapter gives from disk; none, and pictures and font
 files can't be read), since the session's source is only borrowed. `ScreenFacing` is format's in the Platform's Rust
-types. Not yet: aim (`looking_at`, clicks, `hover`, `leave`), the per-scope counts for `/nf scripts`.
+types. Not yet: the per-scope counts for `/nf scripts` (no service has a costs hook on Rust yet).
+
+**Aim** (`screen/aim.rs`, Kotlin's `ScreenAim`): `Placed::hit` is where a ray meets a screen's picture (a sixteenth of a
+block out from the wall, from its front only). A click on one of our frames (`Session::entity_clicked`, after centities)
+is the screen's when it's drawn for the player, at the pixel their sight meets (the map's middle without one); a swing
+(`ServerEvents::player_interact`, before anything in the world hears it) is a click on the nearest screen they aim at
+within its click range, a block in front of it (`raycast_blocks`, 0.05 slack) in the way; one click a player a tick.
+`hover` runs in the screens' tick, before the sending, only for screens whose handle (or a player's own view's) has a
+`hover` or `leave` listener, each player's aim worked out once a tick; `leave` when their aim moves off, they stop being
+a viewer (`view` returns who went), the screen moves, goes, or they quit. Events go along the player's own view first,
+then everyone's, the payload's `screen` their own view's when they have one. `nf.screens.looking_at` is the same aim
+with a reach (64 by default). One change: a swing asks the player's sight only when a hung screen is drawn for them
+(Kotlin asked on every click).
 
 **Videos** (`screen/video.rs`, Kotlin's `ScreenVideos`, `Playback`, `FrameFeed`, `NfvReader`, `PlaybackImpl`): each
 video that reads (`running::<VideoFile>()`, its folder's files from `present`), its frames file found on disk through

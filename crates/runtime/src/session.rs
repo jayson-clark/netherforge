@@ -361,8 +361,16 @@ impl<'a> Session<'a> {
         let Some(room) = self.room.as_ref() else {
             return false;
         };
-        let ours = CentityContext::new(self.shared.clone(), room.scripts().clone())
-            .click(entity, player, button, sight);
+        let ours = CentityContext::new(self.shared.clone(), room.scripts().clone()).click(
+            entity,
+            player,
+            button,
+            sight.clone(),
+        ) || crate::screen::ScreensContext {
+            shared: self.shared.clone(),
+            scripts: room.scripts().clone(),
+        }
+        .click(entity, player, button, sight);
         self.released();
         ours
     }

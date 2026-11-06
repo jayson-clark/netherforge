@@ -12,8 +12,9 @@
 //!
 //! - **Videos** (`video`): playbacks, their frames read ahead off the main thread, and their sound.
 //!
-//! Not yet (the next slice): aim (`looking_at`, clicks, `hover`, `leave`).
+//! - **Aim** (`aim`): a click on a frame, a swing aimed from further away, `hover`/`leave`, `looking_at`.
 
+pub mod aim;
 pub mod canvas;
 pub mod text;
 pub mod video;
@@ -26,7 +27,6 @@ use indexmap::IndexMap;
 use mlua::{Function, Value};
 use netherforge_api::api::{NfScreensApi, ScreenApi};
 use netherforge_api::handles::{self, Handle};
-use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, Caller, shapes, values};
 use netherforge_format::kind::screen::{
     DEFAULT_CLICK_RANGE, DEFAULT_RANGE, MAX_CLICK_RANGE, MAX_RANGE, MAX_TILES, ScreenFacing,
@@ -37,7 +37,9 @@ use netherforge_format::kind::screen_font::{
 };
 use netherforge_format::map_colors::{Dither, Palette, TRANSPARENT, parse};
 use netherforge_luau::ScopeId;
-use netherforge_platform::{EntityRole, EntityTag, ItemData, Location, Platform, PlayerRef, Uuid};
+use netherforge_platform::{
+    EntityRole, EntityTag, ItemData, Location, Platform, PlayerRef, Ray, Uuid,
+};
 
 use crate::Room;
 use crate::events::{parse_uuid, uuid_text};
@@ -156,7 +158,56 @@ impl Placed {
             cz + f64::from(rz) * f64::from(columns) / 2.0,
         )
     }
+
+    /// Where `ray` meets the picture of a `columns` by `rows` screen within `reach` blocks, from its front: the
+    /// pixel and how far along the ray. None when it misses, comes from behind, or is too far.
+    pub fn hit(&self, ray: &Ray, columns: i32, rows: i32, reach: f64) -> Option<Hit> {
+        if ray.world != self.world {
+            return None;
+        }
+        let (nx, nz) = self.facing.normal();
+        let (rx, rz) = self.facing.right();
+        let (nx, nz, rx, rz) = (f64::from(nx), f64::from(nz), f64::from(rx), f64::from(rz));
+        let (cx, cy, cz) = self.corner();
+        let toward = ray.dx * nx + ray.dz * nz;
+        // Looking at its face means looking against the way it faces.
+        if toward >= -1e-9 {
+            return None;
+        }
+        let t = ((cx - ray.x) * nx + (cz - ray.z) * nz) / toward;
+        if !(0.0..=reach).contains(&t) {
+            return None;
+        }
+        let (hx, hy, hz) = (ray.x + ray.dx * t, ray.y + ray.dy * t, ray.z + ray.dz * t);
+        let across = (hx - cx) * rx + (hz - cz) * rz;
+        let down = cy - hy;
+        let px = (across * f64::from(TILE)).floor();
+        let py = (down * f64::from(TILE)).floor();
+        if px < 0.0 || py < 0.0 || px >= f64::from(columns * TILE) || py >= f64::from(rows * TILE) {
+            return None;
+        }
+        Some(Hit {
+            x: px as i32,
+            y: py as i32,
+            distance: t,
+        })
+    }
 }
+
+/// A pixel a ray reached, `distance` blocks along it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Hit {
+    pub x: i32,
+    pub y: i32,
+    pub distance: f64,
+}
+
+/// How far a click on a frame is looked for along the player's sight: past any reach the game allows.
+const CLICK_REACH: f64 = 16.0;
+/// How much nearer than a screen a block must be to be in front of it (the wall it hangs on is just behind).
+const OCCLUSION_SLACK: f64 = 0.05;
+/// How far `nf.screens.looking_at` looks by default.
+const DEFAULT_LOOK: f64 = 64.0;
 
 /// How a screen shows: who for, how near, glowing or not, how far a click reaches, its first colour.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -216,6 +267,8 @@ pub struct ScreenState {
     pub removed: bool,
     /// The video playing on each canvas, by number: the one everyone sees under none, a player's own view under them.
     pub playbacks: HashMap<Option<Uuid>, i64>,
+    /// The pixel each player is aiming at, packed `x << 16 | y`, while a `hover` has been heard for them.
+    pub hovering: HashMap<Uuid, i32>,
 }
 
 fn background_canvas(columns: i32, rows: i32, background: i32) -> Canvas {
@@ -269,6 +322,7 @@ impl ScreenState {
             scope: None,
             removed: false,
             playbacks: HashMap::new(),
+            hovering: HashMap::new(),
         }
     }
 
@@ -292,6 +346,21 @@ impl ScreenState {
             Some(own) => own,
             None => &mut self.canvas,
         }
+    }
+
+    /// The handle an event `player` caused carries: their own view's, when they have one.
+    fn handle_of(&self, player: Uuid) -> handles::Screen {
+        self.handle_for(self.personal.contains_key(&player).then_some(player))
+    }
+
+    /// The events' path for something `player` did to it: their own view's handlers first, then everyone's.
+    fn path_of(&self, player: Uuid) -> Vec<handles::Screen> {
+        let mut path = Vec::new();
+        if self.personal.contains_key(&player) {
+            path.push(self.handle_for(Some(player)));
+        }
+        path.push(self.handle());
+        path
     }
 
     fn view_of(&self, player: Uuid) -> &Canvas {
@@ -404,6 +473,8 @@ pub struct Screens {
     ticks: u64,
     /// Our frames, by entity: whose screen and which tile.
     owners: HashMap<Uuid, (String, usize)>,
+    /// The tick each player last clicked a screen in.
+    clicked: HashMap<Uuid, u64>,
     pictures: VecDeque<(PictureKey, Picture)>,
     palette: Option<Palette>,
     /// The project's screens that have a file, with its first error when it has errors.
@@ -711,13 +782,21 @@ impl ScreensContext {
         }
     }
 
-    /// Works out who `id` is drawn for now: those it's new to are sent it whole, those it isn't any more forgotten.
+    /// Works out who `id` is drawn for now: those it's new to are sent it whole, those it isn't any more forgotten
+    /// (and stop aiming at it).
     fn view(&self, id: &str) {
+        for player in self.view_only(id) {
+            self.leave(id, player);
+        }
+    }
+
+    /// `view` but for the leaves: the players it's no longer drawn for.
+    fn view_only(&self, id: &str) -> Vec<Uuid> {
         let platform = self.platform();
         let players = platform.players();
         let mut screens = self.shared.screens.borrow_mut();
         let Some(screen) = screens.screens.get_mut(id).filter(|s| !s.removed) else {
-            return;
+            return Vec::new();
         };
         let mut wanted: IndexMap<Uuid, String> = IndexMap::new();
         for player in players.online() {
@@ -745,9 +824,15 @@ impl ScreensContext {
                 wanted.insert(uuid, at.world);
             }
         }
-        screen
+        let gone: Vec<Uuid> = screen
             .viewers
-            .retain(|player, viewer| wanted.get(player) == Some(&viewer.world));
+            .iter()
+            .filter(|(player, viewer)| wanted.get(*player) != Some(&viewer.world))
+            .map(|(player, _)| *player)
+            .collect();
+        for player in &gone {
+            screen.viewers.shift_remove(player);
+        }
         let tiles = screen.tiles();
         for (player, world) in wanted {
             // Someone new, or back from another world (their game forgets maps it's no longer in), gets it whole.
@@ -756,6 +841,7 @@ impl ScreensContext {
                 .entry(player)
                 .or_insert_with(|| Viewer::new(world, tiles));
         }
+        gone
     }
 
     /// Sends every viewer of every screen what changed of the screens they see, each up to the tick's budget.
@@ -829,6 +915,7 @@ impl ScreensContext {
     /// removing its own screen), a keyed one gives up its maps' numbers.
     fn remove(&self, id: &str, forget: bool) {
         self.end_where(video::EndReason::Removed, |p| p.screen == id);
+        self.leave_all(id);
         let (handles, owned) = {
             let mut screens = self.shared.screens.borrow_mut();
             let screens = &mut *screens;
@@ -1291,11 +1378,33 @@ impl NfScreensApi for GameContext {
 
     fn looking_at(
         &self,
-        caller: &Caller,
+        _caller: &Caller,
         player: handles::Player,
         distance: Option<f64>,
     ) -> ApiResult<Option<shapes::ScreenPoint>> {
-        <Unported as NfScreensApi>::looking_at(&Unported, caller, player, distance)
+        let Some(uuid) = parse_uuid(&player.id) else {
+            return Ok(None);
+        };
+        let Some(eye) = self.shared.platform.players().eye(uuid) else {
+            return Ok(None);
+        };
+        let reach = distance
+            .filter(|d| d.is_finite() && *d > 0.0)
+            .unwrap_or(DEFAULT_LOOK);
+        let context = self.screens_context();
+        let Some((id, hit)) = context.aim(uuid, &eye, Some(reach)) else {
+            return Ok(None);
+        };
+        let screens = self.shared.screens.borrow();
+        let Some(screen) = screens.screens.get(&id) else {
+            return Ok(None);
+        };
+        Ok(Some(shapes::ScreenPoint {
+            screen: screen.handle_of(uuid),
+            x: i64::from(hit.x),
+            y: i64::from(hit.y),
+            distance: hit.distance,
+        }))
     }
 }
 
@@ -1948,6 +2057,7 @@ impl GameContext {
     fn place_screen(&self, id: &str, placement: Option<Placed>) {
         let context = self.screens_context();
         context.take_down(id);
+        context.leave_all(id);
         if let Some(screen) = self.shared.screens.borrow_mut().screens.get_mut(id) {
             screen.move_to(placement);
         }
@@ -2259,6 +2369,7 @@ impl Service for ScreensService {
                 context.view(&id);
             }
         }
+        context.hover();
         context.flush();
     }
 
@@ -2346,6 +2457,7 @@ impl Service for ScreensService {
     fn player_quit(&self, player: &PlayerRef) {
         if let Some(context) = self.running() {
             let uuid = player.uuid;
+            context.forget(uuid);
             context.end_where(video::EndReason::Removed, |p| p.viewer == Some(uuid));
             context.silence_for(uuid);
         }
