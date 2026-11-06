@@ -326,8 +326,8 @@ function members(d: InterfaceDecl, cx: Context): Member[] {
   return out
 }
 
-/** What the runtime runs off the main thread, so a made one must be `Send`: a biome search runs on a lane. */
-const SENT = new Set(['BiomeSearch'])
+/** What the runtime runs off the main thread, so a made one must be `Send`: a biome search and worlds' file work run on lanes. */
+const SENT = new Set(['BiomeSearch', 'FileWork'])
 
 /** A trait's supertraits, written after its name: what it extends, and `Send` for one in [SENT]. */
 function supertraits(d: InterfaceDecl): string {

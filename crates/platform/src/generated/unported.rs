@@ -4598,7 +4598,7 @@ impl FileWork for Unported {
 
 /// A [`FileWork`] that means only some of it: implement this, and every method it
 /// doesn't answers as [`Unported`] does.
-pub trait FakeFileWork {
+pub trait FakeFileWork: Send {
     fn run(&self) {
         <Unported as FileWork>::run(&Unported)
     }

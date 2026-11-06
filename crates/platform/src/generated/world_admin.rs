@@ -117,7 +117,7 @@ pub struct WorldFiles {
 /// Blocking work on files that an adapter describes and the runtime runs off
 /// the main thread (`Workers`), in order with the rest of its kind: a world's
 /// files copied or deleted. It may throw [IOException], which is the failure.
-pub trait FileWork {
+pub trait FileWork: Send {
     fn run(&self);
 }
 

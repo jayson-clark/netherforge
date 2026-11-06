@@ -113,6 +113,10 @@ pub struct Shared {
     pub gone: RefCell<Vec<netherforge_platform::Uuid>>,
     /// Mobs' walks (`mob:move_to`) and the goals scripts added.
     pub mobs: Rc<crate::mob::Mobs>,
+    /// The worlds the project made and may take away.
+    pub managed_worlds: RefCell<crate::managed_worlds::ManagedWorlds>,
+    /// What the worlds' file work said as it failed on its lane, for the log at a tick.
+    pub managed_failures: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     /// Structures: the project's, its builds, scripts' saves, and the gradual work going.
     pub structures: RefCell<crate::structures::Structures>,
     /// Lanes work goes to off the main thread, by name, made as they're first wanted (a biome search's).
@@ -125,6 +129,8 @@ impl Shared {
             mobs: crate::mob::Mobs::new(platform.clone()),
             lanes: RefCell::default(),
             structures: RefCell::default(),
+            managed_worlds: RefCell::default(),
+            managed_failures: Default::default(),
             platform,
             store,
             data: RefCell::default(),

@@ -56,6 +56,10 @@ struct Fake {
     placed: RefCell<Vec<String>>,
     /// Markers of centities in the world.
     markers: RefCell<Vec<netherforge_platform::StructureMarker>>,
+    /// Worlds saved but not loaded.
+    saved: RefCell<BTreeSet<String>>,
+    /// What the world manager was asked, in order (file work included, from its lane).
+    managed: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
 }
 
 impl Fake {
@@ -251,6 +255,78 @@ impl netherforge_platform::FakeEntityOps for Fake {
     }
 }
 
+/// Copies or deletes a world's files: a copy of a map named `broken` fails.
+struct Work {
+    what: String,
+    log: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+}
+
+impl netherforge_platform::FakeFileWork for Work {
+    fn run(&self) {
+        std::thread::sleep(Duration::from_millis(5));
+        if self.what.contains("broken") {
+            panic!("the disk is full");
+        }
+        self.log.lock().unwrap().push(self.what.clone());
+    }
+}
+
+impl netherforge_platform::FakeWorldManagerOps for Fake {
+    fn is_saved(&self, name: String) -> bool {
+        self.saved.borrow().contains(&name) || self.worlds.borrow().contains(&name)
+    }
+    fn create(&self, name: String, settings: netherforge_platform::WorldSettings) -> bool {
+        self.managed.lock().unwrap().push(format!(
+            "create {name} {} {} {:?} {:?}",
+            settings.generator, settings.environment, settings.terrain, settings.dimension_type
+        ));
+        self.worlds.borrow_mut().insert(name);
+        true
+    }
+    fn dimension_types(&self) -> Vec<String> {
+        vec!["minecraft:overworld".into(), "test:deep".into()]
+    }
+    fn load(&self, name: String, environment: String, terrain: Option<String>) -> bool {
+        if !self.saved.borrow_mut().remove(&name) {
+            return false;
+        }
+        self.managed
+            .lock()
+            .unwrap()
+            .push(format!("load {name} {environment} {terrain:?}"));
+        self.worlds.borrow_mut().insert(name);
+        true
+    }
+    fn copy(
+        &self,
+        map: std::path::PathBuf,
+        name: String,
+    ) -> Box<dyn netherforge_platform::FileWork> {
+        // The files are in place once the work has run: as the fake has it, at once.
+        self.saved.borrow_mut().insert(name.clone());
+        Box::new(Work {
+            what: format!("copy {} {name}", map.display()),
+            log: self.managed.clone(),
+        })
+    }
+    fn unload(&self, name: String, save: bool) -> bool {
+        self.managed
+            .lock()
+            .unwrap()
+            .push(format!("unload {name} {save}"));
+        self.worlds.borrow_mut().remove(&name);
+        self.saved.borrow_mut().insert(name);
+        true
+    }
+    fn delete(&self, name: String) -> Box<dyn netherforge_platform::FileWork> {
+        self.saved.borrow_mut().remove(&name);
+        Box::new(Work {
+            what: format!("delete {name}"),
+            log: self.managed.clone(),
+        })
+    }
+}
+
 impl FakeWorldOps for Fake {
     fn default_world(&self) -> String {
         "world".into()
@@ -334,6 +410,9 @@ impl FakePlatform for Fake {
         self
     }
     fn structures(&self) -> &dyn netherforge_platform::StructureOps {
+        self
+    }
+    fn world_manager(&self) -> &dyn netherforge_platform::WorldManagerOps {
         self
     }
     fn entities(&self) -> &dyn netherforge_platform::EntityOps {
@@ -599,4 +678,117 @@ fn a_marker_naming_a_centity_the_project_lacks_stays() {
         ]
     );
     assert_eq!(platform.markers.borrow().len(), 1);
+}
+
+#[test]
+fn the_worlds_a_project_makes_are_its_own_to_unload_and_the_store_remembers_them() {
+    let files = Files::new(
+        &[
+            ("maps/lobby/level.dat", ""),
+            ("maps/broken/level.dat", ""),
+            (
+                "dimension_types/deep.json",
+                r#"{ "height": 384, "minY": -64 }"#,
+            ),
+        ],
+        &format!(
+            r#"{TRY}
+local arena = nf.worlds.create("arena", {{ seed = 7 }})
+print(arena:name(), arena:is_managed(), world:is_managed())
+print(nf.worlds.create("deep_one", {{ dimension_type = "deep" }}) ~= nil)
+try(nf.worlds.create, "arena")
+try(nf.worlds.create, "Bad Name")
+try(nf.worlds.create, "x", {{ terrain = "hills" }})
+try(nf.worlds.create, "x", {{ dimension_type = "shallow" }})
+print(nf.worlds.load("old") ~= nil, nf.worlds.load("nowhere"))
+nf.worlds.copy("lobby", "lobby_1", function(w, err) print("copied", w and w:name(), err, w and w:is_managed()) end)
+nf.worlds.copy("broken", "broken_1", function(w, err) print("copied", w, err) end)
+try(nf.worlds.copy, "lobbi", "x", print)
+try(nf.worlds.import, "somewhere", "x", nil, print)
+try(world.unload, world)
+try(nf.worlds.get("old").unload, nf.worlds.get("old"))
+print(arena:unload({{ delete = true }}), arena:is_managed())
+"#
+        ),
+    );
+    let platform = Fake::new();
+    platform.saved.borrow_mut().insert("old".into());
+    let store = Rc::new(netherforge_runtime::store::Store::in_memory());
+    let config = || Config {
+        paths: Some(netherforge_runtime::screen::video::ProjectPaths(Rc::new(
+            |path: &str| Some(std::path::PathBuf::from(format!("/project/{path}"))),
+        ))),
+        ..Config::default()
+    };
+    let mut session = Session::start_configured(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        store.clone(),
+        config(),
+    );
+    let mut lines = printed(&session, &platform, 15);
+    lines.sort();
+    assert_eq!(
+        lines,
+        [
+            "arena true false",
+            "copied lobby_1 nil true",
+            "copied nil couldn't copy map \"broken\" into world \"broken_1\": couldn't copy its files (the disk is full)",
+            "false \"Bad Name\" can't be a new world's name (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+            "false \"hills\" isn't one of the project's terrains (it has none)",
+            "false \"old\" isn't this project's to unload: only worlds its scripts created, or that netherforge.json names in managedWorlds, can be",
+            "false \"shallow\" isn't one of the project's dimension types (it has: deep)",
+            "false importing worlds is off on this server (worlds.import-root in config.yml)",
+            "false no map \"lobbi\" in this project (did you mean \"lobby\"?)",
+            "false the server's main world can't be unloaded",
+            "false there's already a world named \"arena\" (nf.worlds.load loads a saved one)",
+            "true",
+            "true false",
+            "true nil",
+            "warn Couldn't copy map \"broken\" into world \"broken_1\": couldn't copy its files (the disk is full)",
+        ]
+    );
+    let managed = platform.managed.lock().unwrap().clone();
+    assert!(
+        managed.contains(&"create arena normal normal None None".to_owned()),
+        "{managed:?}"
+    );
+    assert!(
+        managed.contains(&"create deep_one normal normal None Some(\"test:deep\")".to_owned()),
+        "{managed:?}"
+    );
+    assert!(
+        managed.contains(&"copy /project/maps/lobby lobby_1".to_owned()),
+        "{managed:?}"
+    );
+    assert!(
+        managed.contains(&"load lobby_1 normal None".to_owned()),
+        "{managed:?}"
+    );
+    // The world deleted went from the store; the others are the project's after a restart.
+    session.stop();
+    drop(session);
+    assert!(
+        platform
+            .managed
+            .lock()
+            .unwrap()
+            .contains(&"delete arena".to_owned())
+            || {
+                std::thread::sleep(Duration::from_millis(50));
+                platform
+                    .managed
+                    .lock()
+                    .unwrap()
+                    .contains(&"delete arena".to_owned())
+            }
+    );
+    let again = Files::new(
+        &[],
+        r#"print(nf.worlds.get("deep_one"):is_managed(), nf.worlds.get("lobby_1"):is_managed())"#,
+    );
+    let _session =
+        Session::start_configured(platform.clone(), &again, &NoPackages, store, config());
+    assert_eq!(platform.lines(), ["true true"]);
 }

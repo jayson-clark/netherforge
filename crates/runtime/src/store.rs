@@ -648,6 +648,70 @@ impl Store {
     }
 }
 
+/// The worlds a project's scripts made (Kotlin's `Store.Worlds`): the `worlds` table, by name, under the project's
+/// namespace, with how each was made.
+impl Store {
+    /// The worlds `namespace` made, by name.
+    pub fn worlds_of(
+        &self,
+        namespace: &str,
+    ) -> BTreeMap<String, crate::managed_worlds::OwnedWorld> {
+        self.commit();
+        let Ok(mut statement) = self.connection.prepare(
+            "SELECT world, environment, terrain, dimension_type FROM worlds WHERE namespace = ?1",
+        ) else {
+            return BTreeMap::new();
+        };
+        statement
+            .query_map(params![namespace], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    crate::managed_worlds::OwnedWorld {
+                        environment: r.get(1)?,
+                        terrain: r.get(2)?,
+                        dimension_type: r.get(3)?,
+                    },
+                ))
+            })
+            .into_iter()
+            .flatten()
+            .flatten()
+            .collect()
+    }
+
+    /// World `name` is `namespace`'s, made as `owned` says.
+    pub fn own_world(
+        &self,
+        namespace: &str,
+        name: &str,
+        owned: &crate::managed_worlds::OwnedWorld,
+    ) {
+        let (namespace, name, owned) = (namespace.to_owned(), name.to_owned(), owned.clone());
+        self.stage(
+            format!("worlds {name}"),
+            Box::new(move |c| {
+                c.execute(
+                    "INSERT INTO worlds (world, namespace, environment, terrain, dimension_type) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (world) DO UPDATE SET namespace = excluded.namespace, environment = excluded.environment, terrain = excluded.terrain, dimension_type = excluded.dimension_type",
+                    params![name, namespace, owned.environment, owned.terrain, owned.dimension_type],
+                )?;
+                Ok(())
+            }),
+        );
+    }
+
+    /// World `name` is nobody's any more.
+    pub fn forget_world(&self, name: &str) {
+        let name = name.to_owned();
+        self.stage(
+            format!("worlds {name}"),
+            Box::new(move |c| {
+                c.execute("DELETE FROM worlds WHERE world = ?1", params![name])?;
+                Ok(())
+            }),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

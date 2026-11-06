@@ -43,6 +43,7 @@ pub mod items;
 pub mod java_time;
 pub mod living;
 pub mod loot;
+pub mod managed_worlds;
 pub mod menu;
 pub mod mob;
 pub mod modules;

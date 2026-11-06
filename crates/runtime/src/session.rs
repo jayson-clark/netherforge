@@ -138,6 +138,8 @@ pub struct Config {
     pub bots: crate::bots::BotsConfig,
     /// `structures:` in `config.yml`: how fast gradual placements and fills go.
     pub structures: crate::structures::StructuresConfig,
+    /// `worlds:` in `config.yml`: where worlds are imported from, and how many may be loaded.
+    pub worlds: crate::managed_worlds::WorldsConfig,
     /// `<plugin folder>/settings`, where the owner's values for packages' settings are kept: none keeps them in
     /// memory only.
     pub settings_dir: Option<std::path::PathBuf>,
@@ -306,6 +308,11 @@ impl<'a> Session<'a> {
             screens.config = config.screens;
             screens.read = config.bytes.clone();
             screens.paths = config.paths.clone();
+        }
+        {
+            let mut managed = shared.managed_worlds.borrow_mut();
+            managed.config = config.worlds.clone();
+            managed.paths = config.paths.clone();
         }
         {
             let mut structures = shared.structures.borrow_mut();
@@ -1073,6 +1080,9 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
             mobs: shared.mobs.clone(),
         }),
         Box::new(crate::structures::StructuresService {
+            shared: shared.clone(),
+        }),
+        Box::new(crate::managed_worlds::ManagedWorldsService {
             shared: shared.clone(),
         }),
         Box::new(crate::project_items::ItemsService {

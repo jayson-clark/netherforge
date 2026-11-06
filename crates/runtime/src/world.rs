@@ -3,8 +3,8 @@
 //! see (an unknown game rule) is an error. The centity questions (`raycast` against hitboxes, `overlap_*`,
 //! `sweep`, `nearest`, `centities`) go to the centities' spatial index.
 //!
-//! Structures and gradual work are `crate::structures`'; `locate_biome` runs on its lane. Not yet: managed worlds
-//! (`create`, `load`, `copy`, `import`, `unload`).
+//! Structures and gradual work are `crate::structures`'; `locate_biome` runs on its lane; managed worlds (`create`,
+//! `load`, `copy`, `import`, `unload`) are `crate::managed_worlds`'.
 
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -12,7 +12,6 @@ use std::rc::Rc;
 use mlua::{Function, Value};
 use netherforge_api::api::{NfCentitiesApi, NfWorldsApi, WorldApi};
 use netherforge_api::handles::{self, Handle};
-use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, Caller, Pending, shapes, unions, values};
 use netherforge_format::canonical::name_of;
 use netherforge_format::game::{self, Registry};
@@ -228,6 +227,13 @@ impl GameContext {
             names: &names,
             from,
         })
+    }
+
+    pub(crate) fn managed(&self) -> crate::managed_worlds::ManagedContext {
+        crate::managed_worlds::ManagedContext {
+            shared: self.shared.clone(),
+            scripts: self.scripts.clone(),
+        }
     }
 
     pub(crate) fn structures(&self) -> crate::structures::StructuresContext {
@@ -1661,7 +1667,7 @@ impl WorldApi for GameContext {
     }
 
     fn is_managed(&self, this: &handles::World) -> ApiResult<bool> {
-        <Unported as WorldApi>::is_managed(&Unported, this)
+        Ok(self.managed().is_managed(&this.name))
     }
 
     fn unload(
@@ -1669,7 +1675,17 @@ impl WorldApi for GameContext {
         this: &handles::World,
         options: Option<shapes::WorldUnloadOptions>,
     ) -> ApiResult<bool> {
-        <Unported as WorldApi>::unload(&Unported, this, options)
+        let options = options.unwrap_or(shapes::WorldUnloadOptions {
+            save: None,
+            delete: None,
+            move_players_to: None,
+        });
+        self.managed().unload(
+            &this.name,
+            options.save != Some(false),
+            options.delete == Some(true),
+            options.move_players_to.map(|w| w.name),
+        )
     }
 
     fn border(&self, this: &handles::World) -> ApiResult<Option<handles::WorldBorder>> {
@@ -1821,34 +1837,30 @@ impl NfWorldsApi for GameContext {
 
     fn create(
         &self,
-        caller: &Caller,
+        _: &Caller,
         name: String,
         options: Option<shapes::WorldCreateOptions>,
     ) -> ApiResult<Option<handles::World>> {
-        <Unported as NfWorldsApi>::create(&Unported, caller, name, options)
+        self.managed().create(&name, options)
     }
 
-    fn load(&self, caller: &Caller, name: String) -> ApiResult<Option<handles::World>> {
-        <Unported as NfWorldsApi>::load(&Unported, caller, name)
+    fn load(&self, _: &Caller, name: String) -> ApiResult<Option<handles::World>> {
+        self.managed().load(&name)
     }
 
-    fn copy(
-        &self,
-        caller: &Caller,
-        map: String,
-        name: String,
-    ) -> ApiResult<Pending<handles::World>> {
-        <Unported as NfWorldsApi>::copy(&Unported, caller, map, name)
+    fn copy(&self, _: &Caller, map: String, name: String) -> ApiResult<Pending<handles::World>> {
+        self.managed().copy(&map, &name)
     }
 
     fn import(
         &self,
-        caller: &Caller,
+        _: &Caller,
         folder: String,
         name: String,
         options: Option<shapes::WorldImportOptions>,
     ) -> ApiResult<Pending<handles::World>> {
-        <Unported as NfWorldsApi>::import(&Unported, caller, folder, name, options)
+        self.managed()
+            .import(&folder, &name, options.and_then(|o| o.terrain))
     }
 
     fn default(&self, _: &Caller) -> ApiResult<handles::World> {
