@@ -715,13 +715,42 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         answer
     }
 
+    /// A container the world's generation made, opened for the first time, names one of the project's tables (the
+    /// start-up datapack's stand-in): rolled now, for whoever opened it, there.
     fn generated_loot(
         &self,
-        _table: String,
-        _player: Option<Uuid>,
-        _location: Location,
+        table: String,
+        player: Option<Uuid>,
+        location: Location,
     ) -> Option<Vec<ItemData>> {
-        None
+        let s = self.open()?;
+        let shared = s.session().shared().clone();
+        let log = shared.platform.log();
+        let Some(id) = shared.loot.borrow().id_of(&table) else {
+            log.warn(format!(
+                "A generated container at {} {} {} {} names the loot table \"{table}\", which isn't running: it's left empty",
+                location.world, location.x as i64, location.y as i64, location.z as i64
+            ));
+            return Some(Vec::new());
+        };
+        let game = crate::world::GameContext::new(shared.clone(), s.room().scripts().clone());
+        let roll = crate::loot::LootRoll {
+            player,
+            location: Some(location),
+            ..Default::default()
+        };
+        let mut seed = [0u8; 8];
+        getrandom::fill(&mut seed).expect("the system has randomness");
+        match game.roll_loot(&id, &roll, i64::from_le_bytes(seed)) {
+            Ok(items) => Some(items),
+            Err(e) => {
+                log.warn(format!(
+                    "Rolling the loot table \"{table}\" for a generated container failed: {}",
+                    e.0
+                ));
+                Some(Vec::new())
+            }
+        }
     }
 
     fn player_interact_entity(&self, player: PlayerRef, entity: Uuid, hand: String) -> bool {

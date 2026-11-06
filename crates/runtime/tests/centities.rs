@@ -4356,7 +4356,11 @@ print(nf.loot.fill("treasure", pouch, { seed = 7 }), pouch:count_item("minecraft
 "#,
         ),
     ]);
-    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let server = netherforge_runtime::server::ServerEvents::new(Session::start(
+        platform.clone(),
+        &files,
+        &NoPackages,
+    ));
     let calls = platform.take();
     assert_eq!(
         printed(&calls),
@@ -4374,6 +4378,26 @@ print(nf.loot.fill("treasure", pouch, { seed = 7 }), pouch:count_item("minecraft
         ],
         "{calls:?}"
     );
+    // A container the world's generation made names the project's table: rolled as it's opened.
+    let chest = place(3.0, 64.0, 3.0);
+    use netherforge_platform::PlatformEvents;
+    let rolled = server
+        .generated_loot("demo:food".into(), None, chest.clone())
+        .unwrap();
+    assert_eq!(
+        rolled
+            .iter()
+            .map(|i| i.def.kind.as_str())
+            .collect::<Vec<_>>(),
+        ["minecraft:bread"]
+    );
+    assert_eq!(
+        server.generated_loot("demo:gone".into(), None, chest),
+        Some(Vec::new())
+    );
+    assert!(platform.take().iter().any(|l| {
+        l.contains("names the loot table \"demo:gone\", which isn't running: it's left empty")
+    }),);
 }
 
 #[test]
