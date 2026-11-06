@@ -121,7 +121,7 @@ pub enum DialogBody {
 }
 
 impl DialogBody {
-    fn key(&self) -> Option<&str> {
+    pub fn key(&self) -> Option<&str> {
         match self {
             DialogBody::Message { key, .. } | DialogBody::Item { key, .. } => key.as_deref(),
         }
@@ -195,7 +195,7 @@ pub enum DialogInput {
 }
 
 impl DialogInput {
-    fn key(&self) -> &str {
+    pub fn key(&self) -> &str {
         match self {
             DialogInput::Text { key, .. }
             | DialogInput::Boolean { key, .. }

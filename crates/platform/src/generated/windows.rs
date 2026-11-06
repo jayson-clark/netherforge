@@ -85,7 +85,7 @@ pub struct MenuClick {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DialogSpec {
     pub id: String,
-    pub file: external::DialogFile,
+    pub file: netherforge_format::kind::dialog::DialogFile,
     /// Default: `emptyList()`.
     pub listed: Vec<DialogSpec>,
 }

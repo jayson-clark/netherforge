@@ -2,7 +2,7 @@
 //! they're offline; what works either way (bans, the whitelist, when they first played) needs only a UUID.
 //! Their stats and buffs are the centities' stat sheets (`crate::stats`, `Holder::Player`).
 //!
-//! Not yet, each with its area: recipes (with items), menu templates, dialogs, and resource packs.
+//! Not yet, each with its area: recipes (with items), menu templates, and resource packs.
 
 use std::collections::BTreeMap;
 
@@ -983,10 +983,10 @@ impl PlayerApi for GameContext {
         dialog: unions::StringOrDialog,
         options: Option<shapes::DialogOpenOptions>,
     ) -> ApiResult<bool> {
-        <Unported as PlayerApi>::open_dialog(&Unported, this, dialog, options)
+        GameContext::open_dialog(self, this, dialog, options)
     }
     fn close_dialog(&self, this: &handles::Player) -> ApiResult<bool> {
-        <Unported as PlayerApi>::close_dialog(&Unported, this)
+        Ok(GameContext::close_dialog(self, this))
     }
     fn sidebar(&self, this: &handles::Player) -> ApiResult<handles::Sidebar> {
         Ok(handles::Sidebar {

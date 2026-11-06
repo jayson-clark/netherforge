@@ -545,21 +545,39 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
 
     fn dialog_pressed(
         &self,
-        _player: PlayerRef,
-        _dialog: String,
-        _button: String,
-        _values: HashMap<String, Dynamic>,
+        player: PlayerRef,
+        dialog: String,
+        button: String,
+        values: HashMap<String, Dynamic>,
     ) {
+        let Some(s) = self.open() else { return };
+        crate::dialog::DialogContext {
+            shared: s.session().shared().clone(),
+            scripts: s.room().scripts().clone(),
+        }
+        .pressed(&player, &dialog, &button, values, false);
     }
 
-    fn dialog_closed(&self, _player: PlayerRef, _dialog: String) {}
+    fn dialog_closed(&self, player: PlayerRef, dialog: String) {
+        let Some(s) = self.open() else { return };
+        crate::dialog::DialogContext {
+            shared: s.session().shared().clone(),
+            scripts: s.room().scripts().clone(),
+        }
+        .closed(&player, &dialog, false);
+    }
 
     fn custom_clicked(
         &self,
-        _player: PlayerRef,
-        _id: String,
-        _answers: Rc<dyn DialogAnswers>,
+        player: PlayerRef,
+        id: String,
+        answers: Rc<dyn DialogAnswers>,
     ) -> bool {
-        false
+        let Some(s) = self.open() else { return false };
+        crate::dialog::DialogContext {
+            shared: s.session().shared().clone(),
+            scripts: s.room().scripts().clone(),
+        }
+        .registry_clicked(&player, &id, &*answers)
     }
 }

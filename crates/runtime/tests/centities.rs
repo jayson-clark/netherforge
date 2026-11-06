@@ -889,6 +889,21 @@ impl netherforge_platform::FakeMenuOps for Fake {
     }
 }
 
+impl netherforge_platform::FakeDialogOps for Fake {
+    fn show(&self, player: Uuid, dialog: netherforge_platform::DialogSpec) -> bool {
+        let initial = dialog.file.inputs.first().map(|i| format!("{i:?}"));
+        self.call(format!(
+            "dialog {} to {} \"{}\" {initial:?}",
+            dialog.id, player.0, dialog.file.title
+        ));
+        true
+    }
+    fn close(&self, player: Uuid) -> bool {
+        self.call(format!("dialog closed for {}", player.0));
+        true
+    }
+}
+
 impl netherforge_platform::FakePermissionOps for Fake {
     fn apply(&self, player: Uuid, nodes: std::collections::HashMap<String, bool>) {
         let mut nodes: Vec<String> = nodes.into_iter().map(|(n, v)| format!("{n}={v}")).collect();
@@ -945,6 +960,9 @@ impl FakePlatform for Fake {
         self
     }
     fn menus(&self) -> &dyn netherforge_platform::MenuOps {
+        self
+    }
+    fn dialogs(&self) -> &dyn netherforge_platform::DialogOps {
         self
     }
     fn player_list(&self) -> &dyn netherforge_platform::PlayerListOps {
@@ -3314,5 +3332,81 @@ print(pcall(this:slot(2).set_rule, this:slot(2), { max = 0 }))
             .as_ref()
             .and_then(|i| i.def.count),
         Some(1)
+    );
+}
+
+#[test]
+fn a_dialog_is_shown_pressed_and_closed_with_its_context() {
+    use netherforge_platform::PlatformEvents;
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let guestbook = r#"{ "type": "notice", "title": "Sign", "inputs": [ { "type": "text", "key": "line", "maxLength": 8 } ], "buttons": [ { "key": "sign", "label": "Sign" } ], "script": { "file": "script.lua" } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("dialogs/guestbook/dialog.json", guestbook),
+        (
+            "dialogs/guestbook/script.lua",
+            r#"
+this:button("sign"):on("press", function(e) print("signed", e.values.line, e.context, e.key) end)
+this:on("close", function(e) print("left", e.context) end)
+print(this:title(), this:buttons()[1], this:inputs()[1], this:button("sign"):label(), pcall(this.button, this, "nope"))
+"#,
+        ),
+        (
+            "modules/visit/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+print(alex:open_dialog("guestbook", { context = "visit", values = { line = "hi" } }))
+print(pcall(alex.open_dialog, alex, "guestbook", { values = { line = "far too long" } }))
+print(pcall(alex.open_dialog, alex, "guestbook", { values = { colour = "x" } }))
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    let lines = printed(&calls);
+    assert_eq!(lines[0], "true", "{lines:?}");
+    assert_eq!(
+        lines[1],
+        "false\tmodules/visit/init.lua:4: options.values.line is 12 characters, more than the input's max_length of 8"
+    );
+    assert_eq!(
+        lines[2],
+        "false\tmodules/visit/init.lua:5: dialog guestbook has no input \"colour\" (it has: line)"
+    );
+    assert!(lines[3].starts_with("Sign\tsign\tline\tSign\tfalse\tdialogs/guestbook/script.lua:4: dialog guestbook has no button \"nope\" (it has: sign)"), "{lines:?}");
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("dialog guestbook to 77 \"Sign\"")
+                && c.contains("initial: Some")
+                && c.contains("hi")),
+        "{calls:?}"
+    );
+    let alex = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let pressed = std::collections::HashMap::from([(
+        "line".to_owned(),
+        netherforge_platform::Dynamic::String("hello".into()),
+    )]);
+    server.dialog_pressed(
+        alex.clone(),
+        "guestbook".into(),
+        "sign".into(),
+        pressed.clone(),
+    );
+    // Pressed, the notice closed: a second press of it is a client's invention, ignored.
+    server.dialog_pressed(alex.clone(), "guestbook".into(), "sign".into(), pressed);
+    server.tick();
+    let after = platform.take();
+    assert_eq!(printed(&after), ["signed\thello\tvisit\tsign"], "{after:?}");
+    assert!(
+        after.iter().any(
+            |l| l.contains("pressed \"sign\" on dialog guestbook, which isn't on their screen")
+        )
     );
 }

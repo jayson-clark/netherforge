@@ -43,10 +43,6 @@ pub struct ScreenFacing(pub Dynamic);
 #[derive(Clone, Debug, PartialEq)]
 pub struct RecipeFile(pub Dynamic);
 
-/// format's `dialog` `DialogFile`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct DialogFile(pub Dynamic);
-
 /// format's `datapack` `GameDatapack`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GameDatapack(pub Dynamic);

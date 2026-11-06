@@ -21,6 +21,7 @@ pub mod border;
 pub mod bossbar;
 pub mod centity;
 pub mod data;
+pub mod dialog;
 pub mod effects;
 pub mod entity;
 pub mod events;
@@ -472,6 +473,24 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_dialogs(&self) -> &dyn netherforge_api::api::NfDialogsApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn dialog(&self) -> &dyn netherforge_api::api::DialogApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn button(&self) -> &dyn netherforge_api::api::ButtonApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
     fn nf_worlds(&self) -> &dyn netherforge_api::api::NfWorldsApi {
         match &self.worlds {
             Some(w) => w,
@@ -513,6 +532,7 @@ impl Room {
         let centities = shared.map(|shared| {
             centity::api::CentityContext::install_liveness(&shared, &scripts);
             menu::MenuContext::install_liveness(&shared, &scripts);
+            dialog::DialogContext::install_liveness(&shared, &scripts);
             centity::api::CentityContext::new(shared, scripts.clone())
         });
         let nf = NfContext {

@@ -663,6 +663,19 @@ Kotlin's. `shift_into` moves a shift-click from below into a storage's bound slo
 each slot the stack as a click. Not yet: templates (`nf.menus.create`), a rule's `property` (project items'
 properties), and skins in titles (with the built resource pack: until then a skin draws nothing).
 
+## Dialogs (`crates/runtime/src/dialog.rs`)
+
+Kotlin's `Dialogs`: one record per dialog file, its script started once modules run (`this` the dialog), built
+fresh for every show (`DialogSpec`, a `dialog_list`'s dialogs alongside, each once along a path). An opening
+(`open_dialog`, `open_for`) checks its `values`, `body` and `title` against the file first (an error even for
+someone offline) and keeps its `context` until the dialog leaves their screen. A press goes button → dialog →
+`nf` and closes the screen unless `afterAction` keeps it; only a dialog on the player's screen (or one in the
+server's registry, for custom clicks: format's `startup::dialog::click`) can be pressed or left; anything else
+is logged and ignored. A close the server causes (another dialog over it, `close_dialog`) raises `close` here.
+Reload restarts the script and drops handlers on buttons the new file lacks; a deleted dialog drops all. The
+Platform spec's `DialogFile` is format's. Not yet: `nf.dialogs.create`, `dialog:ask` (it waits for `wait_for`
+on a handle), the runtime's own dialogs (`/nf settings`).
+
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 
 The roadmap's "describe `Platform` and `PlatformEvents` in a language-neutral spec, and generate
