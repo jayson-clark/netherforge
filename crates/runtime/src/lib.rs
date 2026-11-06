@@ -61,6 +61,7 @@ pub mod stats;
 pub mod store;
 pub mod team;
 pub mod utilities;
+pub mod wasm;
 pub mod web;
 pub mod world;
 
@@ -253,6 +254,8 @@ struct Api {
     http: Option<http::api::HttpApi>,
     /// `nf.web`, `Route`, `WebResponse`, `OAuthFlow`.
     web: Option<web::api::WebApi>,
+    /// `nf.wasm`, `WasmInstance`, `WasmProcess`.
+    wasm: Option<wasm::api::WasmApi>,
 }
 
 impl Runtime for Api {
@@ -688,6 +691,24 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_wasm(&self) -> &dyn netherforge_api::api::NfWasmApi {
+        match &self.wasm {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn wasminstance(&self) -> &dyn netherforge_api::api::WasmInstanceApi {
+        match &self.wasm {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn wasmprocess(&self) -> &dyn netherforge_api::api::WasmProcessApi {
+        match &self.wasm {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
     fn nf_worlds(&self) -> &dyn netherforge_api::api::NfWorldsApi {
         match &self.worlds {
             Some(w) => w,
@@ -728,6 +749,10 @@ impl Room {
                 grants: grants.clone(),
             }
         });
+        let wasm = worlds.as_ref().map(|game| {
+            wasm::api::WasmApi::install_liveness(&game.shared, &scripts);
+            wasm::api::WasmApi { game: game.clone() }
+        });
         let images = shared.as_ref().map(|shared| images::ImagesApi {
             images: shared.images.clone(),
             http: http.clone(),
@@ -767,6 +792,7 @@ impl Room {
             worlds,
             http,
             web,
+            wasm,
         };
         netherforge_api::install(&host, Rc::new(api))?;
         Ok(Room { host, scripts })

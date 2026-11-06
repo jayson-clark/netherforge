@@ -65,6 +65,11 @@ pub trait Service {
     fn unload(&self, _room: &Room, _kind: &str, _ids: &BTreeSet<String>) {}
 
     fn reload(&self, _room: &Room, _kind: &str, _ids: &BTreeSet<String>, _project: &Define) {}
+    /// Before a reload of `ids` (of `kind`): other resources to reload with them (a WebAssembly module's reload
+    /// restarts the scripts that ran it), by kind and id. Asked before anything unloads.
+    fn restarts(&self, _kind: &str, _ids: &BTreeSet<String>) -> Vec<(&'static str, String)> {
+        Vec::new()
+    }
     /// After a reload: the kinds of resource it changed (`vanilla` for `client/vanilla.json`), for a service that
     /// follows kinds it doesn't reload itself (the resource pack draws the project's blocks).
     fn reloaded(&self, _room: &Room, _kinds: &BTreeSet<&str>, _project: &Define) {}
@@ -125,6 +130,8 @@ pub struct Config {
     pub net: crate::http::api::NetHooks,
     /// `web:` in `config.yml`: whether `nf.web` routes are served, and the owner's limits on them.
     pub web: crate::web::gate::WebConfig,
+    /// `wasm:` in `config.yml`: the owner's limits on `nf.wasm`.
+    pub wasm: crate::wasm::WasmConfig,
 }
 
 /// Why a project can't run: what the log says, and the problem to report if format didn't.
@@ -230,6 +237,14 @@ impl<'a> Session<'a> {
             http.hooks = config.net.clone();
         }
         shared.web.borrow_mut().config = config.web.clone();
+        {
+            let mut wasm = shared.wasm.borrow_mut();
+            wasm.config = config.wasm.clone();
+            wasm.sources = crate::wasm::Sources {
+                bytes: config.bytes.clone(),
+                paths: config.paths.clone(),
+            };
+        }
         {
             let mut screens = shared.screens.borrow_mut();
             screens.config = config.screens;
@@ -557,6 +572,22 @@ impl<'a> Session<'a> {
             }
         }
         let room = self.room.as_ref().expect("running");
+        // What else goes with them (the scripts that ran a WebAssembly module), asked before anything unloads.
+        let asked: Vec<(&'static str, BTreeSet<String>)> =
+            by_kind.iter().map(|(k, ids)| (*k, ids.clone())).collect();
+        for (kind, ids) in asked {
+            for service in &self.services {
+                for (also, id) in service.restarts(kind, &ids) {
+                    if kind_order(also) > kind_order(kind) {
+                        by_kind.entry(also).or_default().insert(id);
+                    }
+                }
+            }
+        }
+        // Kinds reload in format's order, so a kind reloads after what it's built on (a module after the
+        // WebAssembly module it runs).
+        let mut by_kind: Vec<(&'static str, BTreeSet<String>)> = by_kind.into_iter().collect();
+        by_kind.sort_by_key(|(kind, _)| kind_order(kind));
         let define = Define {
             project: &self.project,
             source: self.source,
@@ -577,7 +608,7 @@ impl<'a> Session<'a> {
                 service.reload(room, kind, ids, &define);
             }
         }
-        let mut kinds: BTreeSet<&str> = by_kind.keys().copied().collect();
+        let mut kinds: BTreeSet<&str> = by_kind.iter().map(|(k, _)| *k).collect();
         if changed.iter().any(|p| p == "client/vanilla.json") {
             kinds.insert("vanilla");
         }
@@ -698,6 +729,14 @@ impl Drop for Session<'_> {
     }
 }
 
+/// Where `kind` is in format's order of kinds (`kinds::ALL`).
+fn kind_order(kind: &str) -> usize {
+    netherforge_format::kinds::ALL
+        .iter()
+        .position(|k| k.id == kind)
+        .unwrap_or(usize::MAX)
+}
+
 /// The services a session runs, in the one order they start, tick and stop in.
 fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
     // Centities are defined before modules start: a module's body may spawn one. Their instances' scripts
@@ -799,6 +838,11 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         Box::new(crate::web::WebService {
             shared: shared.clone(),
             context: Default::default(),
+        }),
+        // Stops after every script that may hold an instance or a program, so theirs end `unloaded` as they go.
+        Box::new(crate::wasm::api::WasmService {
+            shared: shared.clone(),
+            api: Default::default(),
         }),
         Box::new(crate::schedule::SchedulesService {
             shared: shared.clone(),

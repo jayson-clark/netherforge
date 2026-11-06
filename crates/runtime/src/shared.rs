@@ -84,6 +84,8 @@ pub struct Shared {
     pub http: RefCell<crate::http::api::Http>,
     /// `nf.web`: routes, the requests waiting on them, login flows.
     pub web: RefCell<crate::web::Web>,
+    /// `nf.wasm`: the modules compiled, the instances and programs scripts hold, the owner's limits.
+    pub wasm: RefCell<crate::wasm::Wasm>,
     /// The pictures scripts hold.
     pub images: Rc<crate::images::Images>,
     /// Nodes' rigid bodies.
@@ -138,6 +140,7 @@ impl Shared {
             images: Rc::default(),
             http: RefCell::default(),
             web: RefCell::default(),
+            wasm: RefCell::default(),
             physics: RefCell::default(),
             stats: RefCell::default(),
             modules: RefCell::default(),
