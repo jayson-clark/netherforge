@@ -13,7 +13,6 @@ use std::sync::Arc;
 
 use base64::Engine;
 use netherforge_api::api::{ImageApi, NfImagesApi};
-use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, Caller, Pending, handles, shapes, unions};
 use netherforge_format::image::Pixels;
 
@@ -274,7 +273,7 @@ impl NfImagesApi for ImagesApi {
         options: shapes::HttpRequestOptions,
     ) -> ApiResult<Pending<handles::Image>> {
         let Some(http) = &self.http else {
-            return NfImagesApi::download(&Unported, caller, options);
+            return Err(crate::scripts::no_session("nf.images.download"));
         };
         // Decoded on the worker, after the request; held on the main thread as the value is delivered.
         let reply = http.fetch(caller, options, "nf.images.download", |reply| {

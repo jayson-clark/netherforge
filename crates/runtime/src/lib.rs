@@ -222,7 +222,7 @@ impl NfApi for NfContext {
             )));
         }
         let Some(shared) = &self.shared else {
-            return NfApi::data(&Unported, caller, name);
+            return NfApi::data(&self.scripts, caller, name);
         };
         // Each package's own: a dependency's `nf.data("config")` isn't the project's.
         let namespace = self

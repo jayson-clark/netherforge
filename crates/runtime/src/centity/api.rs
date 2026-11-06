@@ -4,9 +4,7 @@
 //!
 //! A handle names an instance by its id and a node by its instance and name, so a handle outlives what it
 //! names: once the instance is gone its getters answer nil (or false, or nothing) and its setters do
-//! nothing, as Kotlin's do. What isn't ported yet (animations, physics, hitboxes, health, paths, saved
-//! data...) is `Unported`, said function by function below, so the class is whole and the compiler holds it
-//! to the spec.
+//! nothing, as Kotlin's do. Every function of the classes is implemented.
 
 use std::collections::BTreeMap;
 use std::rc::{Rc, Weak};

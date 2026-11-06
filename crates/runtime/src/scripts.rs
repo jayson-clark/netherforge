@@ -22,7 +22,6 @@ use mlua::{AnyUserData, Function, Lua, MultiValue, Table, Thread, Value};
 use netherforge_api::api::{NfApi, SubscriptionApi, TaskApi};
 use netherforge_api::events::{self, EventType};
 use netherforge_api::handles::Handle;
-use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, Caller, Waiting, handles, shapes, unions};
 use netherforge_luau::{Failure, Host, ScopeId, WeakHost};
 
@@ -1601,6 +1600,11 @@ fn as_value_mistake(message: &str) -> String {
     message.to_owned()
 }
 
+/// What a room with no session says of what only a session has.
+pub(crate) fn no_session(called: &str) -> ApiError {
+    ApiError(format!("{called} needs a running project"))
+}
+
 impl NfApi for Scripts {
     fn on(
         &self,
@@ -1736,16 +1740,18 @@ impl NfApi for Scripts {
         Ok(Waiting)
     }
 
-    fn data(&self, caller: &Caller, name: String) -> ApiResult<Value> {
-        Unported.data(caller, name)
+    // A room with no session (a unit test's) keeps no saved tables, databases or settings: `nf`'s own context answers
+    // them in a session.
+    fn data(&self, _: &Caller, _: String) -> ApiResult<Value> {
+        Err(no_session("nf.data"))
     }
 
-    fn db(&self, caller: &Caller, name: Option<String>) -> ApiResult<handles::Database> {
-        Unported.db(caller, name)
+    fn db(&self, _: &Caller, _: Option<String>) -> ApiResult<handles::Database> {
+        Err(no_session("nf.db"))
     }
 
-    fn config(&self, caller: &Caller, name: String) -> ApiResult<Value> {
-        Unported.config(caller, name)
+    fn config(&self, _: &Caller, _: String) -> ApiResult<Value> {
+        Err(no_session("nf.config"))
     }
 
     fn instructions_left(&self, _: &Caller) -> ApiResult<i64> {
