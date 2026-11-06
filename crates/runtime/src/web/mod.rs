@@ -450,6 +450,13 @@ impl Service for WebService {
             web.home = Some(grants.home.clone());
             (web.config.public_url.clone(), web.gate())
         };
+        // A test run serves nothing: `nf.test.request` routes its requests, and its address is the owner's or
+        // localhost's.
+        if self.shared.tests.borrow().harness.is_some() {
+            let base = base.unwrap_or_else(|| "http://localhost".into());
+            self.shared.web.borrow_mut().base = Some(base.trim_end_matches('/').to_owned());
+            return;
+        }
         if !enabled {
             return;
         }

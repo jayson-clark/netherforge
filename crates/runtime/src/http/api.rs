@@ -253,14 +253,17 @@ impl HttpApi {
         Ok(Some(text.into_bytes()))
     }
 
-    /// The owner's `http.allow-private` entries for package `namespace`.
+    /// The owner's `http.allow-private` entries for package `namespace`. In a test, `nf.test.allow_private` stands in
+    /// for them too (a test has no config.yml).
     fn allowances(&self, namespace: &str) -> Vec<PrivateAllowance> {
+        let tests = self.shared().tests.borrow();
         self.shared()
             .http
             .borrow()
             .config
             .allow_private
             .iter()
+            .chain(tests.allowances.iter())
             .filter(|a| a.namespace == namespace)
             .cloned()
             .collect()
@@ -320,11 +323,51 @@ impl HttpApi {
             headers,
             body,
         };
+        if self.shared().tests.borrow().harness.is_some() {
+            self.answered_in_test(&fetcher, call, &allowances, send, read);
+            return Ok(Reply(receive));
+        }
         workers.submit(move || {
             let reply = fetcher.fetch(call, &allowances, &declared).and_then(read);
             let _ = send.send(reply);
         });
         Ok(Reply(receive))
+    }
+
+    /// A test run's request (`nf.test.http`): nothing reaches the network. The address rules a literal URL meets on a
+    /// server are held to first (a name isn't looked up; `localhost` is this machine), then the test's handler answers
+    /// it on the main thread at the next tick, as the test's code.
+    fn answered_in_test<T: Send + 'static>(
+        &self,
+        fetcher: &Fetcher,
+        call: HttpCall,
+        allowances: &[PrivateAllowance],
+        send: std::sync::mpsc::Sender<Result<T, String>>,
+        read: impl FnOnce(HttpReply) -> Result<T, String> + Send + 'static,
+    ) {
+        let host = super::fetch::host_text(&call.url).unwrap_or_default();
+        let port = super::fetch::port_of(&call.url);
+        let literal = if host == "localhost" || host.ends_with(".localhost") {
+            "127.0.0.1".to_owned()
+        } else {
+            host
+        };
+        if super::guard::looks_literal(&literal)
+            && let Err(why) = fetcher.guard(allowances, port).addresses(&literal, port)
+        {
+            let _ = send.send(Err(why.0));
+            return;
+        }
+        self.shared()
+            .tests
+            .borrow_mut()
+            .queued
+            .push(crate::testing::Queued {
+                call,
+                done: Box::new(move |reply| {
+                    let _ = send.send(reply.and_then(read));
+                }),
+            });
     }
 
     /// Opens a stream or a WebSocket for the running script, its limits checked.
@@ -852,6 +895,9 @@ impl Service for HttpService {
     }
 
     fn start(&self, room: &Room, project: &crate::session::Define) {
+        // A test run's connections reach no network: the test plays their far ends.
+        self.shared.http.borrow_mut().connections.testing =
+            self.shared.tests.borrow().harness.is_some();
         *self.api.borrow_mut() = Some(HttpApi {
             game: GameContext::new(self.shared.clone(), room.scripts().clone()),
             grants: crate::session::grants(project.project),
@@ -880,7 +926,9 @@ impl Service for HttpService {
             api.unload_where(|_| true);
         }
         let mut http = self.shared.http.borrow_mut();
+        let testing = http.connections.testing;
         http.connections = Connections::default();
+        http.connections.testing = testing;
         http.close();
     }
 }

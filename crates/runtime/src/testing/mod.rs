@@ -68,6 +68,12 @@ pub struct LoadedTests {
     pub failure: Option<ScriptError>,
 }
 
+/// A request a script made in a test, waiting for the test's handler, and where its answer goes.
+pub struct Queued {
+    pub call: crate::http::fetch::HttpCall,
+    pub done: Box<dyn FnOnce(Result<crate::http::fetch::HttpReply, String>)>,
+}
+
 /// A session's tests, and what a test run keeps of its scripts.
 #[derive(Default)]
 pub struct Tests {
@@ -84,6 +90,10 @@ pub struct Tests {
     pub logs: Vec<String>,
     /// What answers the test's `nf.http.request` calls (`nf.test.http`), in the scope that set it.
     pub(crate) http: Option<(ScopeId, Function)>,
+    /// `nf.test.allow_private`: the owner's `http.allow-private` entries this test stands in for, until it ends.
+    pub allowances: Vec<crate::http::PrivateAllowance>,
+    /// Requests scripts made, for the test's handler to answer at the next tick.
+    pub(crate) queued: Vec<Queued>,
     /// Why each request the test left unanswered failed it, in order; `reported` of them already raised.
     pub(crate) unanswered: Vec<String>,
     pub(crate) reported: usize,
@@ -134,6 +144,8 @@ impl Tests {
         self.scope = None;
         self.declaring = false;
         self.http = None;
+        self.allowances.clear();
+        self.queued.clear();
         self.unanswered.clear();
         self.reported = 0;
     }
@@ -290,4 +302,146 @@ impl Session<'_> {
             std::mem::take(&mut tests.logs),
         )
     }
+}
+
+// ---- a test's answers to the scripts' requests (`nf.test.http`) ----------------------------------------------------
+
+/// A script's value as JSON (the one Lua and JSON codec); none for nil.
+pub(crate) fn json_of(
+    host: &netherforge_luau::Host,
+    value: &mlua::Value,
+    what: &str,
+) -> Result<Option<serde_json::Value>, String> {
+    if value.is_nil() {
+        return Ok(None);
+    }
+    let encoded = netherforge_luau::json::encode(
+        host,
+        value,
+        what,
+        "written as JSON",
+        &netherforge_luau::json::NoTags,
+    )
+    .map_err(|stopped| stopped.0.to_string())?;
+    if let Some(problem) = encoded.problems.into_iter().next() {
+        return Err(problem);
+    }
+    let text = encoded
+        .text
+        .ok_or_else(|| format!("{what} can't be written as JSON"))?;
+    serde_json::from_str(&text)
+        .map(Some)
+        .map_err(|e| e.to_string())
+}
+
+/// What a handler's answer may hold.
+const ANSWER_KEYS: &[&str] = &["status", "headers", "body"];
+
+/// A handler's answer as the reply a script gets; none when it isn't `{ status, headers, body }`.
+fn reply_of(answer: &serde_json::Value, url: &url::Url) -> Option<crate::http::fetch::HttpReply> {
+    use serde_json::Value as Json;
+    let fields: serde_json::Map<String, Json> = match answer {
+        Json::Object(fields) => fields.clone(),
+        // An empty table reads as an empty list.
+        Json::Array(list) if list.is_empty() => serde_json::Map::new(),
+        _ => return None,
+    };
+    if fields.keys().any(|k| !ANSWER_KEYS.contains(&k.as_str())) {
+        return None;
+    }
+    let status = match fields.get("status") {
+        None => 200,
+        Some(Json::Number(n)) => {
+            let n = n.as_f64()?;
+            if n.fract() != 0.0 || !(100.0..=599.0).contains(&n) {
+                return None;
+            }
+            n as u16
+        }
+        Some(_) => return None,
+    };
+    let headers = match fields.get("headers") {
+        None => std::collections::BTreeMap::new(),
+        Some(Json::Object(given)) => given
+            .iter()
+            .map(|(k, v)| Some((k.to_lowercase(), v.as_str()?.to_owned())))
+            .collect::<Option<_>>()?,
+        Some(Json::Array(list)) if list.is_empty() => std::collections::BTreeMap::new(),
+        Some(_) => return None,
+    };
+    let body = match fields.get("body") {
+        None => String::new(),
+        Some(Json::String(text)) => text.clone(),
+        Some(_) => return None,
+    };
+    Some(crate::http::fetch::HttpReply {
+        status,
+        headers,
+        bytes: body.clone().into_bytes(),
+        body,
+        url: url.clone(),
+    })
+}
+
+/// Answers the requests scripts made since the last tick with the test's handler, as the test's code.
+pub(crate) fn answer_queued(shared: &crate::Shared, scripts: &crate::Scripts) {
+    let queued = std::mem::take(&mut shared.tests.borrow_mut().queued);
+    for request in queued {
+        let reply = answer(shared, scripts, &request.call);
+        (request.done)(reply);
+    }
+}
+
+fn answer(
+    shared: &crate::Shared,
+    scripts: &crate::Scripts,
+    call: &crate::http::fetch::HttpCall,
+) -> Result<crate::http::fetch::HttpReply, String> {
+    let url = call.url.to_string();
+    let unanswered = |why: String| {
+        let message = format!("the request to {url} wasn't answered: {why}");
+        shared.tests.borrow_mut().unanswered.push(message.clone());
+        message
+    };
+    let handler = shared.tests.borrow().http.clone();
+    let Some((scope, handler)) = handler else {
+        return Err(unanswered(
+            "no nf.test.http handler answers requests in this test".into(),
+        ));
+    };
+    let host = scripts.host();
+    let lua = host.lua();
+    let request = (|| -> mlua::Result<mlua::Table> {
+        let request = lua.create_table()?;
+        request.raw_set("method", call.method.as_str())?;
+        request.raw_set("url", url.as_str())?;
+        let headers = lua.create_table()?;
+        for (name, value) in &call.headers {
+            headers.raw_set(name.as_str(), value.as_str())?;
+        }
+        request.raw_set("headers", headers)?;
+        if let Some(body) = &call.body {
+            request.raw_set("body", lua.create_string(body)?)?;
+        }
+        Ok(request)
+    })()
+    .map_err(|e| unanswered(e.to_string()))?;
+    let answer = match scripts.call_kept(scope, &handler, request) {
+        Ok(value) => value,
+        Err(failure) => {
+            return Err(unanswered(format!(
+                "nf.test.http's handler failed: {failure}"
+            )));
+        }
+    };
+    let answer = json_of(&host, &answer, "the handler's answer")
+        .map_err(|why| unanswered(format!("nf.test.http's handler answered {why}")))?;
+    let Some(answer) = answer else {
+        return Err(unanswered("nf.test.http's handler answered nil".into()));
+    };
+    reply_of(&answer, &call.url).ok_or_else(|| {
+        unanswered(
+            "nf.test.http's handler answered something that isn't { status, headers, body }".into(),
+        )
+    })
 }

@@ -250,6 +250,20 @@ impl<'a> Session<'a> {
             let mut http = shared.http.borrow_mut();
             http.config = config.http.clone();
             http.hooks = config.net.clone();
+            // A test run looks no name up: `localhost` is this machine, any other name leads nowhere.
+            if config.testing.is_some() && http.hooks.resolve.is_none() {
+                http.hooks.resolve = Some(std::sync::Arc::new(|host: &str| {
+                    let host = host.to_lowercase();
+                    Ok(if host == "localhost" || host.ends_with(".localhost") {
+                        vec![
+                            std::net::Ipv4Addr::LOCALHOST.into(),
+                            std::net::Ipv6Addr::LOCALHOST.into(),
+                        ]
+                    } else {
+                        Vec::new()
+                    })
+                }));
+            }
         }
         shared.web.borrow_mut().config = config.web.clone();
         shared.settings.borrow_mut().directory = config.settings_dir.clone();

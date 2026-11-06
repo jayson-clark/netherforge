@@ -175,6 +175,19 @@ impl Sink {
         }
     }
 
+    /// A message if there's room for it now, never waiting: false when there isn't (a test's far end, which runs on
+    /// the main thread, can't wait for it to make room).
+    pub fn try_message(&self, message: Message) -> bool {
+        let mut room = self.room.lock().unwrap_or_else(|e| e.into_inner());
+        if *room == 0 {
+            return false;
+        }
+        *room -= 1;
+        drop(room);
+        self.queue(Inbound::Message(message));
+        true
+    }
+
     /// The far end finished, broke or was refused: heard once, after whatever came before it.
     pub fn ended(&self, reason: End, code: Option<u16>, detail: Option<String>) {
         if !self.end_heard.swap(true, Ordering::SeqCst) {
@@ -288,6 +301,20 @@ pub struct Connections {
     pub active: IndexMap<i64, Connection>,
     next: i64,
     bytes: Option<Arc<ByteRate>>,
+    /// A script test run's: nothing reaches the network, each connection's far end is a [`Far`] the test plays, and
+    /// every connection is kept, ended ones too, with what scripts sent on it (`nf.test.connections`, `sent`).
+    pub testing: bool,
+    history: Vec<Recorded>,
+    fars: std::collections::HashMap<i64, Far>,
+}
+
+/// A connection a test run keeps.
+pub struct Recorded {
+    pub number: i64,
+    pub websocket: bool,
+    pub url: String,
+    /// What scripts sent on it, in order.
+    pub sent: Vec<String>,
 }
 
 /// What a script's handlers hear next, taken out of the connections so nothing is borrowed while they run.
@@ -348,10 +375,38 @@ impl Connections {
             limits.bytes_per_minute,
         ));
         let refusal = refusal.or_else(|| self.refusal(namespace, limits));
+        if self.testing {
+            self.history.push(Recorded {
+                number,
+                websocket,
+                url: url.clone(),
+                sent: Vec::new(),
+            });
+        }
         let link: Option<Box<dyn Link>> = match refusal {
             Some(why) => {
                 sink.ended(End::Limit, None, Some(why));
                 None
+            }
+            None if self.testing => {
+                let finished = std::rc::Rc::new(std::cell::Cell::new(false));
+                self.fars.insert(
+                    number,
+                    Far {
+                        websocket,
+                        protocols: request.protocols.clone(),
+                        splitter: StreamSplitter::new(
+                            request.format.unwrap_or(StreamFormat::Lines),
+                            limits.max_message_bytes,
+                        ),
+                        sink: sink.clone(),
+                        accepted: false,
+                        finished: finished.clone(),
+                        max_bytes: limits.max_message_bytes,
+                        max_queued: limits.max_queued_messages,
+                    },
+                );
+                Some(Box::new(TestLink(finished)))
             }
             None if websocket => Some(open_websocket(
                 fetcher(),
@@ -426,6 +481,9 @@ impl Connections {
             );
         }
         connection.last_activity = tick;
+        if let Some(recorded) = self.history.iter_mut().find(|r| r.number == number) {
+            recorded.sent.push(text.clone());
+        }
         let sent = connection.link.as_ref().is_none_or(|link| link.send(text));
         (sent, None)
     }
@@ -517,6 +575,25 @@ impl Connections {
         None
     }
 
+    /// A test run's connections, oldest first, ended ones included: those whose URL starts with `prefix`, or all.
+    pub fn history(&self, prefix: Option<&str>) -> Vec<&Recorded> {
+        self.history
+            .iter()
+            .filter(|r| prefix.is_none_or(|p| r.url.starts_with(p)))
+            .collect()
+    }
+
+    /// The connection `number` a test run keeps, ended or not.
+    pub fn recorded(&self, number: i64) -> Option<&Recorded> {
+        self.history.iter().find(|r| r.number == number)
+    }
+
+    /// The far end of test connection `number`, which the test plays; none for one the owner's limits refused,
+    /// which never reached the transport.
+    pub fn far(&mut self, number: i64) -> Option<&mut Far> {
+        self.fars.get_mut(&number)
+    }
+
     /// How many `scope` holds open (`/nf scripts`' count).
     pub fn count_owned(&self, scope: ScopeId) -> usize {
         self.active.values().filter(|c| c.owner == scope).count()
@@ -524,6 +601,176 @@ impl Connections {
 }
 
 const TICKS_PER_SECOND: u64 = 20;
+
+// ---- a test run's far ends (Kotlin's `TestConnections`)
+
+/// A test connection's link: what scripts send is kept by `Connections`; closing it finishes the far end.
+struct TestLink(std::rc::Rc<std::cell::Cell<bool>>);
+
+impl Link for TestLink {
+    fn send(&self, _: String) -> bool {
+        !self.0.get()
+    }
+    fn close(&self, _: u16, _: Option<String>) {
+        self.0.set(true);
+    }
+}
+
+/// One test connection's far end, which the test plays with `nf.test.accept`, `receive` and `disconnect`, on the
+/// main thread. What it says goes through the same [`Sink`], splitter and byte count as the network's would, so
+/// scripts see exactly what they would on a server, at the next tick.
+pub struct Far {
+    websocket: bool,
+    protocols: Vec<String>,
+    splitter: StreamSplitter,
+    sink: Arc<Sink>,
+    accepted: bool,
+    /// It finished, broke or was closed: the test can't say any more on it.
+    finished: std::rc::Rc<std::cell::Cell<bool>>,
+    max_bytes: usize,
+    max_queued: usize,
+}
+
+const OK: u16 = 200;
+const SWITCHING: u16 = 101;
+
+impl Far {
+    fn full(&self) -> String {
+        format!(
+            "the connection already has {} messages waiting for the scripts (http.connections.max-queued-messages): \
+             nf.test.advance to let them in",
+            self.max_queued
+        )
+    }
+
+    /// Answers it as its server would: `status` (a stream's), `headers`, a WebSocket's chosen `protocol`.
+    pub fn accept(
+        &mut self,
+        status: Option<i64>,
+        headers: BTreeMap<String, String>,
+        protocol: Option<String>,
+    ) -> Result<(), String> {
+        if self.accepted || self.finished.get() {
+            return Err("bad argument 'connection' (it isn't connecting any more)".into());
+        }
+        if status.is_some() && self.websocket {
+            return Err("bad argument 'options.status' (a WebSocket opens without one)".into());
+        }
+        if let Some(status) = status
+            && !(100..=599).contains(&status)
+        {
+            return Err(format!(
+                "bad argument 'options.status' (100 to 599 expected, got {status})"
+            ));
+        }
+        if let Some(protocol) = &protocol
+            && (!self.websocket || !self.protocols.contains(protocol))
+        {
+            return Err(format!(
+                "bad argument 'options.protocol' (one of the protocols it offered expected, got \"{protocol}\")"
+            ));
+        }
+        self.accepted = true;
+        let status = status.map_or(if self.websocket { SWITCHING } else { OK }, |s| s as u16);
+        let headers = headers
+            .into_iter()
+            .map(|(k, v)| (k.to_lowercase(), v))
+            .collect();
+        self.sink.opened(status, headers, protocol);
+        Ok(())
+    }
+
+    /// `text` from the far end: one WebSocket message, or more of a stream's body.
+    pub fn receive(&mut self, text: &str) -> Result<(), String> {
+        if self.finished.get() {
+            return Err("bad argument 'connection' (it has ended)".into());
+        }
+        if !self.accepted {
+            self.accept(None, BTreeMap::new(), None)?;
+        }
+        if !self.sink.received(text.len() as u64) {
+            self.finished.set(true);
+            return Ok(());
+        }
+        let message = |data: String| Message {
+            data,
+            r#type: None,
+            id: None,
+        };
+        if self.websocket {
+            if text.len() > self.max_bytes {
+                self.finished.set(true);
+                self.sink.ended(
+                    End::Limit,
+                    None,
+                    Some(super::split::TooLarge(self.max_bytes).words()),
+                );
+                return Ok(());
+            }
+            if !self.sink.try_message(message(text.to_owned())) {
+                return Err(self.full());
+            }
+            return Ok(());
+        }
+        let sink = self.sink.clone();
+        let full = self.full();
+        let fed = self.splitter.feed(text.as_bytes(), &mut |m| {
+            if sink.try_message(m) {
+                Ok(())
+            } else {
+                Err(full.clone())
+            }
+        });
+        match fed {
+            Ok(()) => Ok(()),
+            Err(Split::Stopped(why)) => Err(why),
+            Err(Split::TooLarge(too)) => {
+                self.finished.set(true);
+                self.sink.ended(End::Limit, None, Some(too.words()));
+                Ok(())
+            }
+        }
+    }
+
+    /// Ends it from the far end: broken with `error`, otherwise finished (a WebSocket with `code` and `reason`).
+    pub fn disconnect(
+        &mut self,
+        code: Option<u16>,
+        reason: Option<String>,
+        error: Option<String>,
+    ) -> Result<(), String> {
+        if self.finished.get() {
+            return Ok(());
+        }
+        self.finished.set(true);
+        if let Some(error) = error {
+            self.sink.ended(End::Failed, None, Some(error));
+        } else if self.websocket {
+            self.sink
+                .ended(End::Finished, Some(code.unwrap_or(NORMAL)), reason);
+        } else {
+            let sink = self.sink.clone();
+            let full = self.full();
+            let rest = if self.accepted {
+                self.splitter.finish(&mut |m| {
+                    if sink.try_message(m) {
+                        Ok(())
+                    } else {
+                        Err(full.clone())
+                    }
+                })
+            } else {
+                Ok(())
+            };
+            match rest {
+                Err(Split::TooLarge(too)) => self.sink.ended(End::Limit, None, Some(too.words())),
+                Err(Split::Stopped(why)) => return Err(why),
+                Ok(()) => self.sink.ended(End::Finished, None, None),
+            }
+        }
+        Ok(())
+    }
+}
 
 // ---- streams
 

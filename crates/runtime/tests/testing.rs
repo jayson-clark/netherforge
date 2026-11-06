@@ -556,3 +556,344 @@ end)
         ]
     );
 }
+
+/// The results of running `files`' tests: each test's status, then its message.
+fn results(files: &'static Files) -> Vec<netherforge_runtime::testing::runner::TestResult> {
+    run(files, None)
+        .into_iter()
+        .filter_map(|e| match e {
+            TestEvent::Result(r) => Some(r),
+            TestEvent::Failed { message, .. } => panic!("{message}"),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Asserts every test of `files` passed, saying why one didn't.
+fn all_pass(files: &'static Files) {
+    let results = results(files);
+    assert!(!results.is_empty(), "no test ran");
+    for result in results {
+        assert_eq!(
+            result.status,
+            netherforge_runtime::testing::runner::Status::Passed,
+            "{}: {:?} {:?}",
+            result.name,
+            result.message,
+            result.logs
+        );
+    }
+}
+
+fn manifest(requires: &str) -> String {
+    format!(
+        r#"{{ "formatVersion": 1, "name": "Test", "namespace": "test", "version": "1.0.0", "minecraft": "26.3", "requires": {requires} }}"#
+    )
+}
+
+#[test]
+fn a_test_plays_the_far_end_of_the_scripts_connections() {
+    let manifest = manifest(r#"{ "http": ["chat.example.com", "feed.example.com"] }"#);
+    all_pass(project(&[
+        ("netherforge.json", &manifest),
+        (
+            "modules/bridge/init.lua",
+            r#"
+local M = { heard = {}, ended = {} }
+M.socket = nf.http.websocket({ url = "wss://chat.example.com/live", protocols = { "v2" } })
+M.socket:send("hello")
+M.socket:on("open", function(event) M.protocol = event.protocol end)
+M.socket:on("message", function(event)
+  table.insert(M.heard, event.data)
+  M.socket:send("got " .. event.data)
+end)
+M.socket:on("end", function(event) table.insert(M.ended, event.reason .. " " .. tostring(event.code) .. " " .. tostring(event.detail)) end)
+M.feed = nf.http.stream({ url = "https://feed.example.com/live", format = "events" })
+M.feed:on("open", function(event) M.status = event.status end)
+M.feed:on("message", function(event) table.insert(M.heard, event.type .. ":" .. event.data) end)
+M.feed:on("end", function(event) table.insert(M.ended, event.reason .. " " .. tostring(event.detail)) end)
+return M
+"#,
+        ),
+        (
+            "tests/bridge_test.lua",
+            r#"
+local bridge = require("bridge")
+
+nf.test.case("the far end is the test's", function()
+  assert(#nf.test.connections() == 2)
+  local socket = nf.test.connections("wss://chat.example.com")[1]
+  assert(socket == bridge.socket)
+  assert(socket:state() == "connecting")
+  nf.test.accept(socket, { protocol = "v2" })
+  nf.test.receive(socket, "hi")
+  nf.test.advance(1)
+  assert(socket:state() == "open" and bridge.protocol == "v2")
+  assert(bridge.heard[1] == "hi")
+  local sent = nf.test.sent(socket)
+  assert(sent[1] == "hello" and sent[2] == "got hi", table.concat(sent, ","))
+
+  local feed = nf.test.connections("https://feed.example.com")[1]
+  nf.test.accept(feed, { status = 201 })
+  nf.test.receive(feed, "event: goal\ndata: red")
+  nf.test.receive(feed, "\n\n")
+  nf.test.advance(1)
+  assert(bridge.status == 201 and feed:status() == 201)
+  assert(bridge.heard[2] == "goal:red", tostring(bridge.heard[2]))
+
+  nf.test.disconnect(socket, { code = 4000, reason = "resume" })
+  nf.test.disconnect(feed, { error = "reset" })
+  nf.test.advance(1)
+  assert(bridge.ended[1] == "finished 4000 resume", bridge.ended[1])
+  assert(bridge.ended[2] == "failed reset", bridge.ended[2])
+  assert(socket:state() == "ended")
+  assert(not pcall(nf.test.receive, socket, "late"))
+end)
+
+nf.test.case("mistakes are errors", function()
+  local socket = nf.test.connections("wss://")[1]
+  assert(not pcall(nf.test.accept, socket, { protocol = "v9" }))
+  assert(not pcall(nf.test.accept, socket, { status = 200 }))
+  nf.test.accept(socket)
+  assert(not pcall(nf.test.accept, socket))
+end)
+"#,
+        ),
+    ]));
+}
+
+#[test]
+fn a_test_answers_the_scripts_requests_after_the_checks_a_server_makes() {
+    let manifest = manifest(r#"{ "http": ["api.weather.example", "127.0.0.1"] }"#);
+    let files = project(&[
+        ("netherforge.json", &manifest),
+        (
+            "modules/weather/init.lua",
+            r#"
+local M = {}
+function M.refresh()
+  nf.http.request({ url = "https://api.weather.example/now?city=oslo", headers = { ["X-Key"] = "k" } }, function(response, err)
+    if response then
+      M.sky = nf.json.decode(response.body).sky
+      M.status, M.kind = response.status, response.headers["content-type"]
+    else
+      M.err = err
+    end
+  end)
+end
+return M
+"#,
+        ),
+        (
+            "tests/weather_test.lua",
+            r#"local weather = require("weather")
+
+nf.test.case("the fake answers", function()
+  local asked
+  nf.test.http(function(request)
+    asked = request
+    return { status = 203, headers = { ["Content-Type"] = "application/json" }, body = nf.json.encode({ sky = "rain" }) }
+  end)
+  weather.refresh()
+  nf.test.advance(1)
+  assert(weather.sky == "rain", tostring(weather.err))
+  assert(weather.status == 203 and weather.kind == "application/json")
+  assert(asked.method == "GET" and asked.url == "https://api.weather.example/now?city=oslo" and asked.headers["X-Key"] == "k")
+end)
+
+nf.test.case("the checks come first", function()
+  nf.test.http(function() return { body = "never" } end)
+  local ok, err = pcall(nf.http.request, { url = "https://undeclared.example/" }, function() end)
+  assert(not ok and tostring(err):find("hasn't declared"), tostring(err))
+  local got, why
+  nf.http.request({ url = "http://127.0.0.1:9000/" }, function(response, e) got, why = response, e end)
+  nf.test.advance(1)
+  assert(got == nil and tostring(why):find("loopback"), tostring(why))
+end)
+
+nf.test.case("an unanswered request fails the test", function()
+  nf.test.http(function() return nil end)
+  weather.refresh()
+  nf.test.advance(1)
+end)
+
+nf.test.case("with no handler too, even when the script takes its error", function()
+  weather.refresh()
+  nf.test.advance(1)
+  assert(weather.err)
+end)
+"#,
+        ),
+    ]);
+    use netherforge_runtime::testing::runner::Status;
+    let results = results(files);
+    let statuses: Vec<Status> = results.iter().map(|r| r.status).collect();
+    assert_eq!(
+        statuses,
+        [
+            Status::Passed,
+            Status::Passed,
+            Status::Failed,
+            Status::Failed
+        ],
+        "{results:?}"
+    );
+    assert_eq!(
+        results[2].message.as_deref(),
+        Some(
+            "tests/weather_test.lua:29: the request to https://api.weather.example/now?city=oslo wasn't answered: nf.test.http's handler answered nil"
+        )
+    );
+    assert_eq!(results[2].source.as_ref().and_then(|s| s.line), Some(29));
+    assert!(
+        results[3]
+            .message
+            .as_deref()
+            .is_some_and(|m| m.contains("no nf.test.http handler")),
+        "{:?}",
+        results[3].message
+    );
+}
+
+#[test]
+fn a_test_stands_in_for_the_owners_private_address_allowance() {
+    let manifest = manifest(r#"{ "http": ["127.0.0.1", "localhost"] }"#);
+    all_pass(project(&[
+        ("netherforge.json", &manifest),
+        (
+            "tests/bridge_test.lua",
+            r#"
+local function ask(url)
+  local got, why
+  nf.http.request({ url = url }, function(response, err) got, why = response, err end)
+  nf.test.advance(1)
+  return got, why
+end
+
+nf.test.case("the allowed address is answered", function()
+  nf.test.allow_private({ package = "test", host = "127.0.0.1", port = 9361 })
+  nf.test.http(function(request)
+    if request.url == "http://127.0.0.1:9361/events" then return { status = 204 } end
+  end)
+  local got, why = ask("http://127.0.0.1:9361/events")
+  assert(got and got.status == 204, tostring(why))
+  local _, other = ask("http://127.0.0.1:9000/events")
+  assert(tostring(other):find("loopback"), "another port is still refused: " .. tostring(other))
+end)
+
+nf.test.case("localhost, with a rate of its own", function()
+  nf.test.allow_private({ package = "test", host = "localhost", port = 8080, requests_per_minute = 1 })
+  nf.test.http(function() return { body = "ok" } end)
+  local got, why = ask("http://localhost:8080/")
+  assert(got and got.body == "ok", tostring(why))
+  local _, limited = ask("http://localhost:8080/")
+  assert(limited, "the second request in the minute is over its rate")
+end)
+
+nf.test.case("another package's allowance doesn't help", function()
+  nf.test.allow_private({ package = "other", host = "127.0.0.1", port = 9361 })
+  nf.test.http(function() return { body = "never" } end)
+  local got, why = ask("http://127.0.0.1:9361/events")
+  assert(got == nil and tostring(why):find("loopback"), tostring(why))
+end)
+
+nf.test.case("it lasts only for its test", function()
+  nf.test.http(function() return { body = "never" } end)
+  local got, why = ask("http://127.0.0.1:9361/events")
+  assert(got == nil and tostring(why):find("loopback"), tostring(why))
+end)
+
+nf.test.case("an allowance is checked as the owner's is", function()
+  for _, bad in ipairs({
+    { package = "Not A Namespace", host = "127.0.0.1", port = 1 },
+    { package = "test", host = "127.0.0.1/x", port = 1 },
+    { package = "test", host = "127.0.0.1", port = 0 },
+    { package = "test", host = "127.0.0.1", port = 1, requests_per_minute = -1 },
+  }) do
+    local ok, err = pcall(nf.test.allow_private, bad)
+    assert(not ok and tostring(err):find("bad argument 'allowance'"), tostring(err))
+  end
+end)
+"#,
+        ),
+    ]));
+}
+
+#[test]
+fn a_test_makes_web_requests_through_the_routes_and_plays_a_login() {
+    let manifest = manifest(r#"{ "web": true, "http": ["auth.example.com"] }"#);
+    all_pass(project(&[
+        ("netherforge.json", &manifest),
+        (
+            "modules/site/init.lua",
+            r#"
+local M = { linked = {}, failed = {} }
+nf.web.route("POST", "/hooks/:kind", function(request, response)
+  nf.after(3, function() response:json(202, { kind = request.params.kind, got = request.body }) end)
+end)
+M.flow = nf.web.oauth({
+  name = "example",
+  authorize_url = "https://auth.example.com/authorize",
+  token_url = "https://auth.example.com/token",
+  client_id = "abc",
+  scopes = { "identify", "email" },
+})
+M.flow:on("complete", function(event) M.linked[event.player:name()] = event.access_token .. "/" .. tostring(event.expires_in) end)
+M.flow:on("fail", function(event) table.insert(M.failed, event.error) end)
+return M
+"#,
+        ),
+        (
+            "tests/site_test.lua",
+            r#"
+local site = require("site")
+
+nf.test.case("a hook answered later is waited for", function()
+  local answer = nf.test.request("POST", "/test/hooks/store", { body = "order 7" })
+  assert(answer.status == 202, answer.status .. " " .. answer.body)
+  assert(answer.body == '{"got":"order 7","kind":"store"}', answer.body)
+  assert(answer.headers["content-type"] == "application/json")
+  assert(nf.test.request("GET", "/test/hooks/store").status == 405)
+  assert(nf.test.request("GET", "/test/nope").status == 404)
+end)
+
+nf.test.case("a login completes once, through its callback", function()
+  local alex = nf.test.player("Alex")
+  local url = assert(site.flow:begin(alex))
+  assert(url:find("^https://auth.example.com/authorize%?"), url)
+  assert(url:find("code_challenge_method=S256", 1, true), url)
+  assert(url:find("redirect_uri=http%3A%2F%2Flocalhost%2Ftest%2Foauth%2Fexample%2Fcallback", 1, true), url)
+  assert(url:find("scope=identify%20email", 1, true), url)
+  local state = url:match("state=([^&]+)")
+  nf.test.oauth_token(site.flow, { access_token = "tok", expires_in = 3600 })
+  local forged = nf.test.request("GET", "/test/oauth/example/callback?code=c&state=forged")
+  assert(forged.status == 400)
+  local back = nf.test.request("GET", "/test/oauth/example/callback?code=c&state=" .. state)
+  assert(back.status == 200, back.body)
+  -- Nothing is traded yet: the browser confirms which player it signs in as.
+  assert(back.body:find("Minecraft player Alex", 1, true), back.body)
+  assert(site.linked.Alex == nil)
+  local token = back.body:match('name="token" value="([^"]+)"')
+  assert(nf.test.request("POST", "/test/oauth/example/confirm", { body = "token=wrong" }).status == 400)
+  local done = nf.test.request("POST", "/test/oauth/example/confirm", { body = "token=" .. token })
+  assert(done.status == 200 and done.body:find("Signed in"), done.body)
+  assert(site.linked.Alex == "tok/3600", tostring(site.linked.Alex))
+  local again = nf.test.request("GET", "/test/oauth/example/callback?code=c&state=" .. state)
+  assert(again.status == 400, "a state is used once")
+  local twice = nf.test.request("POST", "/test/oauth/example/confirm", { body = "token=" .. token })
+  assert(twice.status == 400, "a confirmation is used once")
+end)
+
+nf.test.case("a declined login fails, and a route can't take a flow's path", function()
+  local alex = nf.test.player("Alex")
+  local state = site.flow:begin(alex):match("state=([^&]+)")
+  local back = nf.test.request("GET", "/test/oauth/example/callback?error=access_denied&state=" .. state)
+  assert(back.status == 400)
+  assert(site.failed[1] == "the service said access_denied", tostring(site.failed[1]))
+  assert(not pcall(nf.web.route, "GET", "/oauth/example/callback", function() end))
+  assert(not pcall(nf.web.oauth, { name = "x", authorize_url = "https://a.b/", token_url = "https://undeclared.example/t", client_id = "c" }))
+end)
+"#,
+        ),
+    ]));
+}

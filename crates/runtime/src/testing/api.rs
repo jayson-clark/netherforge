@@ -164,9 +164,41 @@ impl TestContext {
         let host = self.game.scripts.host();
         for _ in 0..ticks {
             self.settle()?;
-            host.detached(|| harness.tick());
+            host.detached(|| {
+                // What scripts asked of the network since the last tick is answered now, so it lands this tick.
+                super::answer_queued(self.shared(), &self.game.scripts);
+                harness.tick();
+            });
         }
         Ok(())
+    }
+
+    /// What `f` does with the far end of `connection` (from `nf.test.connections`), which the test plays.
+    fn far(
+        &self,
+        connection: &handles::Handle,
+        f: impl FnOnce(&mut crate::http::connections::Far) -> Result<(), String>,
+    ) -> ApiResult<()> {
+        let number = match connection {
+            handles::Handle::HttpStream(h) => h.number,
+            handles::Handle::WebSocket(h) => h.number,
+            _ => {
+                return err(
+                    "bad argument 'connection' (a connection scripts opened in this test expected)",
+                );
+            }
+        };
+        let mut http = self.shared().http.borrow_mut();
+        if http.connections.recorded(number).is_none() {
+            return err(
+                "bad argument 'connection' (a connection scripts opened in this test expected)",
+            );
+        }
+        // One the owner's limits refused never reached the transport: it's already ending.
+        let Some(far) = http.connections.far(number) else {
+            return err("bad argument 'connection' (it never connected: it ended \"limit\")");
+        };
+        f(far).map_err(ApiError)
     }
 
     /// `player` as the server knows them: one online, or an error (a test clicks only for someone there).
@@ -452,65 +484,232 @@ impl NfTestApi for TestContext {
             .map(|item| crate::items::to_value(&item)))
     }
 
-    fn connections(&self, caller: &Caller, url: Option<String>) -> ApiResult<Vec<handles::Handle>> {
-        NfTestApi::connections(&Unported, caller, url)
+    fn connections(
+        &self,
+        _caller: &Caller,
+        url: Option<String>,
+    ) -> ApiResult<Vec<handles::Handle>> {
+        let http = self.shared().http.borrow();
+        Ok(http
+            .connections
+            .history(url.as_deref())
+            .into_iter()
+            .map(|r| {
+                if r.websocket {
+                    handles::Handle::WebSocket(handles::WebSocket {
+                        number: r.number,
+                        url: r.url.clone(),
+                    })
+                } else {
+                    handles::Handle::HttpStream(handles::HttpStream {
+                        number: r.number,
+                        url: r.url.clone(),
+                    })
+                }
+            })
+            .collect())
     }
 
     fn accept(
         &self,
-        caller: &Caller,
+        _caller: &Caller,
         connection: handles::Handle,
         options: Option<shapes::TestAcceptOptions>,
     ) -> ApiResult<()> {
-        NfTestApi::accept(&Unported, caller, connection, options)
+        let status = options.as_ref().and_then(|o| o.status);
+        let headers = options
+            .as_ref()
+            .and_then(|o| o.headers.clone())
+            .unwrap_or_default();
+        let protocol = options.and_then(|o| o.protocol);
+        self.far(&connection, |far| far.accept(status, headers, protocol))
     }
 
-    fn receive(&self, caller: &Caller, connection: handles::Handle, text: String) -> ApiResult<()> {
-        NfTestApi::receive(&Unported, caller, connection, text)
+    fn receive(
+        &self,
+        _caller: &Caller,
+        connection: handles::Handle,
+        text: String,
+    ) -> ApiResult<()> {
+        self.far(&connection, |far| far.receive(&text))
     }
 
-    fn sent(&self, caller: &Caller, connection: handles::WebSocket) -> ApiResult<Vec<String>> {
-        NfTestApi::sent(&Unported, caller, connection)
+    fn sent(&self, _caller: &Caller, connection: handles::WebSocket) -> ApiResult<Vec<String>> {
+        let http = self.shared().http.borrow();
+        http.connections
+            .recorded(connection.number)
+            .map(|r| r.sent.clone())
+            .ok_or_else(|| {
+                ApiError(
+                    "bad argument 'connection' (a connection scripts opened in this test expected)"
+                        .into(),
+                )
+            })
     }
 
     fn request(
         &self,
-        caller: &Caller,
+        _caller: &Caller,
         method: String,
         path: String,
         options: Option<shapes::TestRequestOptions>,
     ) -> ApiResult<shapes::TestWebResponse> {
-        NfTestApi::request(&Unported, caller, method, path, options)
+        let verb = method.to_uppercase();
+        if verb.is_empty() || verb.len() > 16 || !verb.chars().all(|c| c.is_ascii_uppercase()) {
+            return err(format!(
+                "bad argument 'method' (an HTTP method expected, got \"{method}\")"
+            ));
+        }
+        if !path.starts_with('/') {
+            return err(format!(
+                "bad argument 'path' (a path starting with / expected, got \"{path}\")"
+            ));
+        }
+        let options = options.unwrap_or(shapes::TestRequestOptions {
+            headers: None,
+            body: None,
+            ip: None,
+        });
+        let headers = options
+            .headers
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(k, v)| (k.to_lowercase(), v))
+            .collect();
+        let (raw_path, query) = match path.split_once('?') {
+            Some((p, q)) => (p.to_owned(), Some(q.to_owned())),
+            None => (path.clone(), None),
+        };
+        let head = verb == "HEAD";
+        let (call, answer) = crate::web::gate::WebCall::new(
+            verb,
+            raw_path,
+            query,
+            headers,
+            options.body.unwrap_or_default().into_bytes(),
+            options.ip.unwrap_or_else(|| "127.0.0.1".into()),
+        );
+        crate::web::WebContext {
+            shared: self.shared().clone(),
+            scripts: self.game.scripts.clone(),
+        }
+        .route(call.clone());
+        // Answered later: the server runs on, as a client would wait, until the handler answers or times out.
+        let limit = self.shared().web.borrow().config.handler_timeout_seconds * 20 + 1;
+        let mut waited = 0;
+        while !call.is_answered() && waited < limit {
+            waited += 1;
+            self.run_ticks(1)?;
+        }
+        let got = answer
+            .try_recv()
+            .unwrap_or_else(|_| crate::web::gate::WebAnswer::text(504, "never answered", &[]));
+        Ok(shapes::TestWebResponse {
+            status: i64::from(got.status),
+            headers: got.headers.into_iter().collect(),
+            body: if head {
+                String::new()
+            } else {
+                String::from_utf8_lossy(&got.body).into_owned()
+            },
+        })
     }
 
     fn oauth_token(
         &self,
-        caller: &Caller,
+        _caller: &Caller,
         flow: handles::OAuthFlow,
         response: Value,
     ) -> ApiResult<()> {
-        NfTestApi::oauth_token(&Unported, caller, flow, response)
+        let host = self.game.scripts.host();
+        let json = super::json_of(&host, &response, "response").map_err(ApiError)?;
+        let Some(json @ serde_json::Value::Object(_)) = json else {
+            return err("bad argument 'response' (a table of fields expected)");
+        };
+        let mut web = self.shared().web.borrow_mut();
+        let flow = web
+            .flows
+            .find_mut(flow.number)
+            .ok_or_else(|| ApiError("bad argument 'flow' (it has gone)".into()))?;
+        flow.test_token = Some(json);
+        Ok(())
     }
 
     fn http(&self, caller: &Caller, handler: Function) -> ApiResult<()> {
-        NfTestApi::http(&Unported, caller, handler)
+        self.harness()?;
+        self.shared().tests.borrow_mut().http = Some((caller.scope, handler));
+        Ok(())
     }
 
     fn allow_private(
         &self,
-        caller: &Caller,
+        _caller: &Caller,
         allowance: shapes::TestPrivateAllowance,
     ) -> ApiResult<()> {
-        NfTestApi::allow_private(&Unported, caller, allowance)
+        self.harness()?;
+        // Read as the owner's entry is (`http.allow-private`), so a test allows only what a server could.
+        let namespace = allowance.package.trim().to_owned();
+        if !netherforge_format::names::is_namespace(&namespace) {
+            return err(format!(
+                "bad argument 'allowance' (package: \"{namespace}\" isn't a package's namespace)"
+            ));
+        }
+        let host = allowance.host.trim().to_lowercase();
+        if host.is_empty() || host.chars().any(|c| c.is_whitespace() || c == '/') {
+            return err(format!(
+                "bad argument 'allowance' (host: \"{}\" isn't an address or a host name)",
+                allowance.host
+            ));
+        }
+        if !(1..=65535).contains(&allowance.port) {
+            return err(format!(
+                "bad argument 'allowance' (port: from 1 to 65535 expected, got {})",
+                allowance.port
+            ));
+        }
+        let rate = allowance.requests_per_minute;
+        if let Some(rate) = rate
+            && !(0..=i64::from(i32::MAX)).contains(&rate)
+        {
+            return err(format!(
+                "bad argument 'allowance' (requests_per_minute: a whole number, 0 for no limit, expected, got {rate})"
+            ));
+        }
+        self.shared()
+            .tests
+            .borrow_mut()
+            .allowances
+            .push(crate::http::PrivateAllowance {
+                namespace,
+                host: host
+                    .trim_start_matches('[')
+                    .trim_end_matches(']')
+                    .to_owned(),
+                port: allowance.port as u16,
+                requests_per_minute: rate.map(|r| r as usize),
+            });
+        Ok(())
     }
 
     fn disconnect(
         &self,
-        caller: &Caller,
+        _caller: &Caller,
         connection: handles::Handle,
         options: Option<shapes::TestDisconnectOptions>,
     ) -> ApiResult<()> {
-        NfTestApi::disconnect(&Unported, caller, connection, options)
+        let code = options.as_ref().and_then(|o| o.code);
+        if let Some(code) = code
+            && !(1000..=4999).contains(&code)
+        {
+            return err(format!(
+                "bad argument 'options.code' (1000 to 4999 expected, got {code})"
+            ));
+        }
+        let reason = options.as_ref().and_then(|o| o.reason.clone());
+        let error = options.and_then(|o| o.error);
+        self.far(&connection, |far| {
+            far.disconnect(code.map(|c| c as u16), reason, error)
+        })
     }
 
     fn stub_wasm(

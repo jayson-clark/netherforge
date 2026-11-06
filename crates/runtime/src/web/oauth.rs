@@ -69,6 +69,8 @@ pub struct Flow {
     logins: IndexMap<String, Login>,
     /// Logins back from the service, waiting for the browser to confirm the player, by the confirm page's token.
     confirmations: IndexMap<String, Confirmation>,
+    /// What its token endpoint answers in a test run (`nf.test.oauth_token`), where it isn't called.
+    pub test_token: Option<serde_json::Value>,
 }
 
 /// A token request in flight.
@@ -90,6 +92,10 @@ pub struct Flows {
 impl Flows {
     pub fn find(&self, number: i64) -> Option<&Flow> {
         self.flows.get(&number)
+    }
+
+    pub fn find_mut(&mut self, number: i64) -> Option<&mut Flow> {
+        self.flows.get_mut(&number)
     }
 }
 
@@ -233,6 +239,7 @@ impl FlowsContext {
                 confirm_route,
                 logins: IndexMap::new(),
                 confirmations: IndexMap::new(),
+                test_token: None,
             },
         );
         Ok(handles::OAuthFlow { number })
@@ -474,7 +481,22 @@ impl FlowsContext {
             &redirect,
         );
         let declared = flow.declared.clone();
+        let test_token = flow.test_token.clone();
         drop(web);
+        // In a test run the token endpoint isn't called: the test's answer (or a default token) stands in.
+        if self.shared.tests.borrow().harness.is_some() {
+            let (send, reply) = mpsc::channel();
+            let _ = send.send(Ok(test_token.unwrap_or_else(
+                || serde_json::json!({ "access_token": "test-token", "token_type": "Bearer" }),
+            )));
+            self.shared.web.borrow_mut().flows.exchanges.push(Exchange {
+                flow: number,
+                login: confirmation.login,
+                waiting,
+                reply,
+            });
+            return;
+        }
         let (fetcher, workers) = {
             let mut http = self.shared.http.borrow_mut();
             (http.fetcher(), http.workers())
