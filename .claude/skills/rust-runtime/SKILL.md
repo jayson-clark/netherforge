@@ -707,6 +707,18 @@ the files' with a UUID id and an owner scope, gone with that scope (`scope_relea
 `nf.dialogs.get` and `open_dialog` by name find only the project's. Not yet: the runtime's own dialogs
 (`/nf settings`).
 
+## Files (`crates/runtime/src/files.rs`)
+
+Kotlin's `ScriptFiles`, `FileImpl` and `NfFilesImpl` on `std::fs`: a `File` handle's key is `<namespace>/<path>`, the
+calling package's folder first (`nf.files.get`), and nothing climbs above it. Paths are checked as strings first
+(`normalize`: no `..`, backslashes, names starting with a dot or a space, Windows' device names; at most 8 deep and
+200 long) and then on disk, every link followed, inside the root. Each package's folder is held to the session
+`Config`'s `files` limits (bytes and entries, counted once then kept up to date), files to 1 MiB. Files from before
+per-package folders move into the project's as the session starts (`adopt`, once: a marker file). JSON is
+`nf.json`'s (the saved tables' tags); `lines` is a Rust iterator over the file read once (the prelude's in Kotlin).
+The root is `Config::data_dir`; with none (tests), every file answers nil or false. Not yet: the root and limits read
+from `config.yml`.
+
 ## Custom blocks (`crates/runtime/src/custom_blocks.rs`)
 
 Kotlin's `CustomBlocks` (the design is the plugin-world skill's) and `NfBlocksImpl`, `ProjectBlockImpl`,

@@ -44,6 +44,8 @@ pub struct Shared {
     pub names: RefCell<netherforge_format::project::Names>,
     /// The skies over worlds and players.
     pub skies: RefCell<crate::sky::Skies>,
+    /// The scripts' data directory (`nf.files`), when the server has one.
+    pub files: RefCell<Option<crate::files::ScriptFiles>>,
     /// The tables `block:data()` hands out.
     pub block_data: RefCell<crate::block_data::BlockData>,
     /// Who's mining the project's blocks (and the game's with rules), and whose speed is turned down.
@@ -98,6 +100,7 @@ impl Shared {
             schedules: RefCell::default(),
             names: RefCell::default(),
             skies: RefCell::default(),
+            files: RefCell::default(),
             block_data: RefCell::default(),
             mining: RefCell::default(),
             blocks: RefCell::default(),

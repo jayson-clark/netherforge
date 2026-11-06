@@ -2836,6 +2836,7 @@ print(cron:next_run())
     let config = netherforge_runtime::session::Config {
         time_zone: Some("Europe/London".into()),
         wall_clock: Some(start),
+        ..Default::default()
     };
     let mut session =
         Session::start_configured(platform.clone(), &files, &NoPackages, store.clone(), config);

@@ -508,3 +508,79 @@ nf.on('player_chat', function(e) if e.message == 'bad' then e:cancel() end end)"
     server.game().player_join(&mut joined);
     assert_eq!(joined.message.as_deref(), Some("Alex joined"));
 }
+
+#[test]
+fn a_packages_files_are_kept_in_its_own_folder_within_its_limits() {
+    let root = std::env::temp_dir().join(format!("nf-files-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    // A file from before each package had a folder: the project's from now on.
+    std::fs::write(root.join("old.txt"), "kept").unwrap();
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/save/init.lua",
+            r#"
+local root = nf.files.get()
+print(root:path(), root:is_folder(), nf.files.get("old.txt"):read())
+print(nf.files.get("../x"), nf.files.get(".hidden"), nf.files.get("a\\b"), nf.files.get("con.txt"))
+local f = nf.files.get("saves/one.txt")
+print(f:exists(), f:write("a\r\nb"), f:append("\nc"), f:size(), f:name(), f:parent():path())
+local lines = {}
+for line in f:lines() do table.insert(lines, line) end
+print(table.concat(lines, "|"))
+local j = root:child("state.json")
+print(j:write_json({ wave = 3, names = { "a" } }), j:read_json().wave, j:read_json().names[1])
+print(root:child("pic.png"):write_base64("iVBORw"), root:child("pic.png"):read_base64(), root:child("x/y"))
+local names = {}
+for _, c in root:children() do table.insert(names, c:name()) end
+print(table.concat(names, " "))
+print(f:copy_to("saves/two.txt"):read(), f:rename("saves/two.txt"), f:rename("moved/one.txt"):path(), f:exists())
+print(nf.files.get("saves"):delete(), nf.files.get("saves/two.txt"):delete(), nf.files.get("saves"):delete(), root:delete())
+print(root:child("big.txt"):write(string.rep("x", 200)))
+"#,
+        ),
+    ]);
+    let platform = std::rc::Rc::new(Fake::default());
+    let config = netherforge_runtime::session::Config {
+        data_dir: Some(root.clone()),
+        files: netherforge_runtime::files::FilesConfig {
+            max_bytes_per_package: 100,
+            max_entries_per_package: 100,
+        },
+        ..Default::default()
+    };
+    let _session = Session::start_configured(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        std::rc::Rc::new(netherforge_runtime::store::Store::in_memory()),
+        config,
+    );
+    let printed: Vec<String> = platform
+        .take()
+        .into_iter()
+        .filter_map(|l| {
+            l.strip_prefix("info [module save] ")
+                .map(|l| l.rsplit_once(" (").map_or(l, |(t, _)| t).to_owned())
+        })
+        .collect();
+    assert_eq!(
+        printed,
+        [
+            "\ttrue\tkept",
+            "nil\tnil\tnil\tnil",
+            "false\ttrue\ttrue\t6\tone.txt\tsaves",
+            "a|b|c",
+            "true\t3\ta",
+            "true\tiVBORw==\tnil",
+            "old.txt pic.png saves state.json",
+            "a\r\nb\nc\tnil\tmoved/one.txt\tfalse",
+            "false\ttrue\ttrue\tfalse",
+            "false",
+        ]
+    );
+    assert!(root.join("demo/moved/one.txt").is_file());
+    assert!(root.join(".netherforge-files").is_file());
+    let _ = std::fs::remove_dir_all(&root);
+}

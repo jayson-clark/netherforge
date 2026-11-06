@@ -104,6 +104,10 @@ pub struct Config {
     pub time_zone: Option<String>,
     /// The wall clock schedules read, in Unix milliseconds, fixed: for tests. The system's when none.
     pub wall_clock: Option<i64>,
+    /// The scripts' data directory (`plugins/NetherForge/data/`): none, and `nf.files` finds nothing there.
+    pub data_dir: Option<std::path::PathBuf>,
+    /// `files:` in `config.yml`: what each package may keep there.
+    pub files: crate::files::FilesConfig,
 }
 
 /// Why a project can't run: what the log says, and the problem to report if format didn't.
@@ -202,6 +206,10 @@ impl<'a> Session<'a> {
         let project = load(source, packages);
         let shared = Shared::new(platform.clone(), store);
         shared.schedules.borrow_mut().now = config.wall_clock;
+        if let Some(root) = &config.data_dir {
+            *shared.files.borrow_mut() =
+                Some(crate::files::ScriptFiles::new(root.clone(), config.files));
+        }
         if let Some(zone) = &config.time_zone {
             match crate::schedule::Zone::parse(zone) {
                 Some(zone) => shared.schedules.borrow_mut().zone = zone,
@@ -259,6 +267,10 @@ impl<'a> Session<'a> {
             }
         };
         *self.shared.names.borrow_mut() = self.project.names();
+        // Files from before each package had a folder are the project's.
+        if let Some(files) = self.shared.files.borrow_mut().as_mut() {
+            files.adopt(self.project.namespace());
+        }
         let define = Define {
             project: &self.project,
             source: self.source,

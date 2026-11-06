@@ -31,6 +31,7 @@ pub mod effects;
 pub mod encoding;
 pub mod entity;
 pub mod events;
+pub mod files;
 pub mod images;
 pub mod inventory;
 pub mod items;
@@ -520,6 +521,18 @@ impl LuaApi for Api {
         }
     }
     fn button(&self) -> &dyn netherforge_api::api::ButtonApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn nf_files(&self) -> &dyn netherforge_api::api::NfFilesApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn file(&self) -> &dyn netherforge_api::api::FileApi {
         match &self.worlds {
             Some(w) => w,
             None => &Unported,
