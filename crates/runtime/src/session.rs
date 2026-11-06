@@ -119,6 +119,10 @@ pub struct Config {
     pub bytes: Option<crate::screen::ProjectBytes>,
     /// Where the project's files are on disk (videos' frames, read a frame at a time): the adapter's.
     pub paths: Option<crate::screen::video::ProjectPaths>,
+    /// `http:` in `config.yml`: the owner's limits on `nf.http`.
+    pub http: crate::http::HttpConfig,
+    /// What stands in for the network's own answers (where names lead, where connections go): tests'.
+    pub net: crate::http::api::NetHooks,
 }
 
 /// Why a project can't run: what the log says, and the problem to report if format didn't.
@@ -218,6 +222,11 @@ impl<'a> Session<'a> {
         let shared = Shared::new(platform.clone(), store);
         shared.schedules.borrow_mut().now = config.wall_clock;
         shared.packs.borrow_mut().config = config.pack.clone();
+        {
+            let mut http = shared.http.borrow_mut();
+            http.config = config.http.clone();
+            http.hooks = config.net.clone();
+        }
         {
             let mut screens = shared.screens.borrow_mut();
             screens.config = config.screens;
@@ -778,6 +787,11 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         Box::new(crate::sky::SkiesService {
             shared: shared.clone(),
         }),
+        // Stops after every script that may hold a connection open, so theirs end `unloaded` as they go.
+        Box::new(crate::http::api::HttpService {
+            shared: shared.clone(),
+            api: Default::default(),
+        }),
         Box::new(crate::schedule::SchedulesService {
             shared: shared.clone(),
         }),
@@ -1012,7 +1026,7 @@ fn namespaces(project: &Loaded) -> Vec<String> {
 }
 
 /// What each package of the tree declared it may do: its manifest's `requires`, by namespace.
-fn grants(project: &Loaded) -> crate::Grants {
+pub(crate) fn grants(project: &Loaded) -> crate::Grants {
     crate::Grants {
         home: project.namespace().to_owned(),
         requires: namespaces(project)

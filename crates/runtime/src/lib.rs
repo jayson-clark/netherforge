@@ -33,6 +33,7 @@ pub mod encoding;
 pub mod entity;
 pub mod events;
 pub mod files;
+pub mod http;
 pub mod huds;
 pub mod images;
 pub mod inventory;
@@ -77,6 +78,38 @@ pub struct Grants {
 }
 
 impl Grants {
+    /// Whether the package `namespace` (none: no package's code is calling) may do `wanted`, for `called`: a refusal
+    /// says what to add, as the Kotlin runtime's does. A call no package makes passes only when every package
+    /// declares it.
+    pub fn check(
+        &self,
+        namespace: Option<&str>,
+        wanted: &Requirement,
+        called: &str,
+    ) -> ApiResult<()> {
+        let granted = |namespace: &str| {
+            wanted.granted_by(self.requires.get(namespace).and_then(Option::as_ref))
+        };
+        let Some(namespace) = namespace else {
+            if self.requires.keys().all(|n| granted(n)) {
+                return Ok(());
+            }
+            return Err(ApiError(format!(
+                "{called} was called by no package's code, and not every package declares {}",
+                wanted.id()
+            )));
+        };
+        if granted(namespace) {
+            return Ok(());
+        }
+        Err(ApiError(format!(
+            "{called} needs {}, which package \"{namespace}\" hasn't declared: add {} to its {}",
+            wanted.id(),
+            wanted.declaration(),
+            netherforge_format::manifest::FILE_NAME
+        )))
+    }
+
     /// Only the project, `home`, declaring `requires`.
     pub fn only(home: &str, requires: Option<Requires>) -> Grants {
         Grants {
@@ -214,6 +247,8 @@ struct Api {
     schedules: Option<schedule::ScheduleContext>,
     /// `nf.server`, `nf.players`, `Sender`, `nf.math`, `nf.json`, `nf.random`, `nf.time`, `nf.text`.
     utilities: Option<utilities::UtilitiesContext>,
+    /// `nf.http`, `HttpStream`, `WebSocket`.
+    http: Option<http::api::HttpApi>,
 }
 
 impl Runtime for Api {
@@ -226,31 +261,12 @@ impl Runtime for Api {
                 "{called} needs \"{requirement}\", which isn't a requirement"
             )));
         };
-        let granted = |namespace: &str| {
-            wanted.granted_by(self.grants.requires.get(namespace).and_then(Option::as_ref))
-        };
-        let Some(scope) = scope else {
-            if self.grants.requires.keys().all(|n| granted(n)) {
-                return Ok(());
-            }
-            return Err(ApiError(format!(
-                "{called} was called by no package's code, and not every package declares {}",
-                wanted.id()
-            )));
-        };
-        let namespace = self
-            .scripts
-            .namespace(scope)
-            .unwrap_or_else(|| self.grants.home.clone());
-        if granted(&namespace) {
-            return Ok(());
-        }
-        Err(ApiError(format!(
-            "{called} needs {}, which package \"{namespace}\" hasn't declared: add {} to its {}",
-            wanted.id(),
-            wanted.declaration(),
-            netherforge_format::manifest::FILE_NAME
-        )))
+        let namespace = scope.map(|scope| {
+            self.scripts
+                .namespace(scope)
+                .unwrap_or_else(|| self.grants.home.clone())
+        });
+        self.grants.check(namespace.as_deref(), &wanted, called)
     }
 
     fn waiting_task(&self, called: &str) -> ApiResult<u64> {
@@ -626,6 +642,24 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_http(&self) -> &dyn netherforge_api::api::NfHttpApi {
+        match &self.http {
+            Some(h) => h,
+            None => &Unported,
+        }
+    }
+    fn httpstream(&self) -> &dyn netherforge_api::api::HttpStreamApi {
+        match &self.http {
+            Some(h) => h,
+            None => &Unported,
+        }
+    }
+    fn websocket(&self) -> &dyn netherforge_api::api::WebSocketApi {
+        match &self.http {
+            Some(h) => h,
+            None => &Unported,
+        }
+    }
     fn nf_worlds(&self) -> &dyn netherforge_api::api::NfWorldsApi {
         match &self.worlds {
             Some(w) => w,
@@ -649,12 +683,20 @@ impl Room {
     /// A room whose API reaches what a session shares (its centities), when it's given.
     pub fn with(host: Host, grants: Grants, shared: Option<Rc<Shared>>) -> mlua::Result<Room> {
         let scripts = Scripts::new(host.clone())?;
-        let images = shared.as_ref().map(|shared| images::ImagesApi {
-            images: shared.images.clone(),
-        });
         let worlds = shared
             .as_ref()
             .map(|shared| world::GameContext::new(shared.clone(), scripts.clone()));
+        let http = worlds.as_ref().map(|game| {
+            http::api::HttpApi::install_liveness(&game.shared, &scripts);
+            http::api::HttpApi {
+                game: game.clone(),
+                grants: grants.clone(),
+            }
+        });
+        let images = shared.as_ref().map(|shared| images::ImagesApi {
+            images: shared.images.clone(),
+            http: http.clone(),
+        });
         let schedules = shared.as_ref().map(|shared| schedule::ScheduleContext {
             shared: shared.clone(),
             scripts: scripts.clone(),
@@ -688,6 +730,7 @@ impl Room {
             schedules,
             utilities,
             worlds,
+            http,
         };
         netherforge_api::install(&host, Rc::new(api))?;
         Ok(Room { host, scripts })

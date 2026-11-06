@@ -80,6 +80,8 @@ pub struct Shared {
     pub items: RefCell<crate::project_items::ProjectItems>,
     /// Natural spawning: its passes, rules and scripts' conditions.
     pub spawner: RefCell<crate::centity::natural::Spawner>,
+    /// `nf.http`: the owner's limits, the client, the rates, and the connections open.
+    pub http: RefCell<crate::http::api::Http>,
     /// The pictures scripts hold.
     pub images: Rc<crate::images::Images>,
     /// Nodes' rigid bodies.
@@ -132,6 +134,7 @@ impl Shared {
             path_nodes: std::cell::Cell::new(0),
             spawner: RefCell::default(),
             images: Rc::default(),
+            http: RefCell::default(),
             physics: RefCell::default(),
             stats: RefCell::default(),
             modules: RefCell::default(),

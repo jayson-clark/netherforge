@@ -151,6 +151,8 @@ impl Images {
 /// `nf.images` and `Image` for one room.
 pub struct ImagesApi {
     pub images: Rc<Images>,
+    /// `nf.http`'s requests, which `download` makes.
+    pub http: Option<crate::http::api::HttpApi>,
 }
 
 fn byte(bytes: &[u8], at: usize) -> u32 {
@@ -271,7 +273,25 @@ impl NfImagesApi for ImagesApi {
         caller: &Caller,
         options: shapes::HttpRequestOptions,
     ) -> ApiResult<Pending<handles::Image>> {
-        NfImagesApi::download(&Unported, caller, options)
+        let Some(http) = &self.http else {
+            return NfImagesApi::download(&Unported, caller, options);
+        };
+        // Decoded on the worker, after the request; held on the main thread as the value is delivered.
+        let reply = http.fetch(caller, options, "nf.images.download", |reply| {
+            if !(200..=299).contains(&reply.status) {
+                return Err(format!("the server answered {}", reply.status));
+            }
+            decode(&reply.bytes).ok_or_else(|| {
+                format!(
+                    "what came back isn't an image (PNG, JPEG, GIF or BMP) of at most {MAX_SIDE} pixels either way"
+                )
+            })
+        })?;
+        let images = self.images.clone();
+        Ok(Box::pin(async move {
+            let pixels = reply.await.map_err(ApiError)?;
+            images.hold(Arc::new(pixels))
+        }))
     }
 }
 
