@@ -436,6 +436,21 @@ impl Host {
         })
     }
 
+    /// Runs `f` as if no call were running (Kotlin's `detached`): a call into a script inside it is a frame of
+    /// its own, with its own budget and time limit, and none of its steps is charged to the calls running now.
+    /// A test's `nf.test.advance` ticks the server this way, as a server would, inside the test's own call.
+    pub fn detached<R>(&self, f: impl FnOnce() -> R) -> R {
+        let saved = std::mem::take(&mut self.0.guard.borrow_mut().frames);
+        let category = saved.last().map_or(HOST_CATEGORY, |f| f.category);
+        set_memory_category(&self.0.lua, HOST_CATEGORY);
+        let result = f();
+        set_memory_category(&self.0.lua, category);
+        let mut guard = self.0.guard.borrow_mut();
+        let inside = std::mem::replace(&mut guard.frames, saved);
+        debug_assert!(inside.is_empty(), "every call inside has returned");
+        result
+    }
+
     /// Loads and runs a chunk's body in `scope`.
     pub fn run<R: FromLuaMulti>(
         &self,
@@ -539,9 +554,11 @@ fn unknown_scope(scope: ScopeId) -> Failure {
 const SHIM: &str = r#"
 local failed, locate, error, yield, isyieldable = ...
 return function(f, waiting, stuck)
-  local function finish(first, ...)
+  -- What the function returned, as many values as it returned (none is none, not one nil).
+  local function finish(...)
+    local first = ...
     if first == failed then
-      error(locate((...)), 0)
+      error(locate((select(2, ...))), 0)
     end
     if waiting ~= nil and first == waiting then
       if not isyieldable() then
@@ -549,7 +566,7 @@ return function(f, waiting, stuck)
       end
       return yield()
     end
-    return first, ...
+    return ...
   end
   return function(...)
     return finish(f(...))

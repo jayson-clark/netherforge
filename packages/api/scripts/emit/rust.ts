@@ -721,6 +721,11 @@ export function bindRust(classes: ClassBinding[]): string {
     'pub const BINDINGS: &[Binding] = &[',
     ...entries,
     '];',
+    '',
+    '/// The namespaces only a test run has (`testOnly` in the spec): a server has no such field of `nf`.',
+    'pub const TEST_ONLY: &[&str] = &[',
+    ...classes.filter((it) => it.cls.testOnly).map((it) => `    ${JSON.stringify(it.cls.name)},`),
+    '];',
   )
   return finish(lines)
 }

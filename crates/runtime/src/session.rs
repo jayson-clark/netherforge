@@ -106,7 +106,7 @@ pub trait Service {
 }
 
 /// What the server's config says a session runs with (Kotlin's `RuntimeConfig`, as far as it's ported).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct Config {
     /// `schedules.time-zone`: the zone `nf.schedule`'s times are in; the server's own when none.
     pub time_zone: Option<String>,
@@ -140,6 +140,12 @@ pub struct Config {
     /// The plugin's link to its network, which outlives every session: none, and the session makes one from
     /// `network` (and stops it with itself).
     pub network_link: Option<crate::network::Link>,
+    /// A script test run's harness (the test runner's fake server): only then do scripts have `nf.test`, and
+    /// nothing reaches the network.
+    pub testing: Option<Rc<dyn crate::testing::TestHarness>>,
+    /// What the Luau host holds scripts to: the defaults when none (a test run's are more generous, since a
+    /// test's one call includes every tick it advances).
+    pub limits: Option<Limits>,
 }
 
 /// Why a project can't run: what the log says, and the problem to report if format didn't.
@@ -161,6 +167,7 @@ pub struct Session<'a> {
     /// What its services share with the room's API: its centities, its modules.
     shared: Rc<Shared>,
     reported: std::cell::RefCell<Reported>,
+    limits: Limits,
 }
 
 /// How long the same runtime error stays quiet after it's logged: five seconds.
@@ -280,7 +287,9 @@ impl<'a> Session<'a> {
                 )),
             }
         }
+        shared.tests.borrow_mut().harness = config.testing.clone();
         let mut session = Session {
+            limits: config.limits.clone().unwrap_or_default(),
             refusal: refusal(&*platform, &project),
             platform,
             source,
@@ -316,7 +325,7 @@ impl<'a> Session<'a> {
             log.error(format!("Not running {name}: {}", refusal.message), None);
             return;
         }
-        let room = match Host::new(Limits::default())
+        let room = match Host::new(self.limits.clone())
             .and_then(|host| Room::with(host, grants(&self.project), Some(self.shared.clone())))
         {
             Ok(room) => room,
@@ -499,6 +508,11 @@ impl<'a> Session<'a> {
     /// What its services share with the room's API.
     pub fn shared(&self) -> &Rc<Shared> {
         &self.shared
+    }
+
+    /// Where its project's files are read from.
+    pub fn source(&self) -> &'a dyn ProjectSource {
+        self.source
     }
 
     /// The server it runs on.
@@ -813,6 +827,7 @@ impl<'a> Session<'a> {
         }
         // What the scripts said as they were stopped (an `end` handler of a cutscene that unloaded) is still told.
         self.report();
+        self.shared.tests.borrow_mut().clear();
         self.room = None;
         self.services = services(&self.shared);
     }
@@ -822,15 +837,38 @@ impl<'a> Session<'a> {
     /// the same error again within `ERROR_QUIET_TICKS` only counted (the next line says how many were held
     /// back); one cancelled for failing `MAX_ERRORS` times in a row, which is always said. Each is a
     /// `script.error` problem too, until its scope closes. Then the lines scripts logged.
-    fn report(&self) {
+    pub(crate) fn report(&self) {
         let Some(room) = &self.room else { return };
         let log = self.platform.log();
         let scripts = room.scripts();
         let tick = scripts.tick_count();
         let mut reported = self.reported.borrow_mut();
+        // A test run keeps what the editor's console would get: a script's error fails the test that set it off.
+        let testing = self.shared.tests.borrow().harness.is_some();
+        let record = |message: String,
+                      file: &Option<String>,
+                      line: Option<u32>,
+                      traceback: Option<String>| {
+            if testing {
+                self.shared
+                    .tests
+                    .borrow_mut()
+                    .errors
+                    .push(crate::testing::ScriptError {
+                        message,
+                        file: file.clone(),
+                        line,
+                        traceback,
+                    });
+            }
+        };
         for report in scripts.take_reports() {
             let label = label(room, report.scope);
             let (message, file, line) = placed(&report.failure);
+            let traceback = match &report.failure {
+                netherforge_luau::Failure::Error { traceback, .. } => traceback.clone(),
+                _ => None,
+            };
             let at = match (&file, line) {
                 (Some(file), Some(line)) => format!(" ({file}:{line})"),
                 (Some(file), None) => format!(" ({file})"),
@@ -840,6 +878,12 @@ impl<'a> Session<'a> {
                 log.warn(format!(
                     "{label}: body failed: {message}{at}. It's disabled until it's reloaded."
                 ));
+                record(
+                    format!("{label}: body failed: {message}"),
+                    &file,
+                    line,
+                    traceback.clone(),
+                );
             } else {
                 let key = format!(
                     "{:?}|{}|{message}|{file:?}|{line:?}",
@@ -865,6 +909,12 @@ impl<'a> Session<'a> {
                         "{label}: {} failed: {message}{at}{more}",
                         report.what
                     ));
+                    record(
+                        format!("{label}: {} failed: {message}{more}", report.what),
+                        &file,
+                        line,
+                        traceback.clone(),
+                    );
                 }
                 if report.gave_up {
                     log.warn(format!(
@@ -872,6 +922,16 @@ impl<'a> Session<'a> {
                         report.what,
                         crate::MAX_ERRORS
                     ));
+                    record(
+                        format!(
+                            "{label}: {} failed {} times in a row, so it was cancelled{at}",
+                            report.what,
+                            crate::MAX_ERRORS
+                        ),
+                        &file,
+                        line,
+                        None,
+                    );
                 }
             }
             let problem = netherforge_format::codes::SCRIPT_ERROR.at(
@@ -886,6 +946,13 @@ impl<'a> Session<'a> {
             }
         }
         for line in scripts.take_logs() {
+            if testing && let Some(at) = &line.location {
+                self.shared
+                    .tests
+                    .borrow_mut()
+                    .logs
+                    .push(format!("{at}: {}", line.line));
+            }
             let at = line.location.map(|l| format!(" ({l})")).unwrap_or_default();
             log.info(format!("[{}] {}{at}", label(room, line.scope), line.line));
         }

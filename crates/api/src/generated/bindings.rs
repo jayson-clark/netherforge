@@ -10732,3 +10732,8 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "Hud", name: "remove", method: true, waits: false, call: hud_remove },
     Binding { class: "Hud", name: "clear", method: true, waits: false, call: hud_clear },
 ];
+
+/// The namespaces only a test run has (`testOnly` in the spec): a server has no such field of `nf`.
+pub const TEST_ONLY: &[&str] = &[
+    "nf.test",
+];

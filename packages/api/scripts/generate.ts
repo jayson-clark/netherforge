@@ -51,7 +51,7 @@ import {
   unionsRust,
   unportedRust,
 } from './emit/rust.ts'
-import { raisableKotlin } from './emit/raisable.ts'
+import { raisableKotlin, raisableRust } from './emit/raisable.ts'
 import { dispatchKotlin, platformKotlin, raisedEvents } from './emit/raised.ts'
 import { dispatchRust, gameEventsRust } from './emit/raisedRust.ts'
 import { luals, lualsGates, lualsSurfaces } from './emit/luals.ts'
@@ -126,6 +126,8 @@ writeDir(
 // The Rust runtime's half (see the rust-runtime skill): the same bindings, as Rust, with the
 // functions the Kotlin runtime writes in the prelude (`impl: "lua"`) bound like every other.
 const boundRust = bindings(api, { handwritten: true })
+// The server's events for the Rust runtime: the sink in the platform's crate, the dispatch in the runtime's.
+const raisedRust = raisedEvents(api, boundRust)
 writeDir(
   'crates/api/src/generated',
   new Map([
@@ -138,11 +140,10 @@ writeDir(
     ['unported.rs', unportedRust(boundRust.classes)],
     ['events.rs', eventsRust(api)],
     ['arguments.rs', argumentCodecsRust(boundRust)],
+    ['raisable.rs', raisableRust(api, raisedRust)],
   ]),
   '.rs',
 )
-// The server's events for the Rust runtime: the sink in the platform's crate, the dispatch in the runtime's.
-const raisedRust = raisedEvents(api, boundRust)
 writeDir(
   'crates/platform/src/api',
   new Map([

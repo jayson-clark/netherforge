@@ -63,6 +63,7 @@ pub mod sky;
 pub mod stats;
 pub mod store;
 pub mod team;
+pub mod testing;
 pub mod utilities;
 pub mod wasm;
 pub mod web;
@@ -275,6 +276,8 @@ struct Api {
     network: Option<network::service::NetworkContext>,
     /// `nf.economy`, `nf.placeholders`.
     interop: Option<interop::InteropContext>,
+    /// `nf.test`, in a script test run only.
+    test: Option<testing::api::TestContext>,
 }
 
 impl Runtime for Api {
@@ -301,6 +304,10 @@ impl Runtime for Api {
 
     fn wait_on(&self, task: u64, wait: u64) {
         self.scripts.wait_on(task, wait);
+    }
+
+    fn testing(&self) -> bool {
+        self.test.is_some()
     }
 }
 
@@ -764,6 +771,12 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_test(&self) -> &dyn netherforge_api::api::NfTestApi {
+        match &self.test {
+            Some(t) => t,
+            None => &Unported,
+        }
+    }
     fn nf_worlds(&self) -> &dyn netherforge_api::api::NfWorldsApi {
         match &self.worlds {
             Some(w) => w,
@@ -818,6 +831,10 @@ impl Room {
             shared: game.shared.clone(),
             scripts: scripts.clone(),
         });
+        let test = worlds
+            .as_ref()
+            .filter(|game| game.shared.tests.borrow().harness.is_some())
+            .map(|game| testing::api::TestContext { game: game.clone() });
         let images = shared.as_ref().map(|shared| images::ImagesApi {
             images: shared.images.clone(),
             http: http.clone(),
@@ -860,6 +877,7 @@ impl Room {
             wasm,
             network,
             interop,
+            test,
         };
         netherforge_api::install(&host, Rc::new(api))?;
         Ok(Room { host, scripts })

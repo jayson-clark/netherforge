@@ -169,6 +169,14 @@ fn lookup(lua: &Lua, scope: ScopeId, path: &'static str, name: &str) -> mlua::Re
         return Ok(Value::Function(f));
     }
     let child = format!("{path}.{name}");
+    if crate::bindings::TEST_ONLY.contains(&child.as_str()) {
+        let testing = lua
+            .app_data_ref::<Installed>()
+            .is_some_and(|i| i.api.testing());
+        if !testing {
+            return Ok(Value::Nil);
+        }
+    }
     if let Some(binding) = BINDINGS.iter().find(|b| !b.method && b.class == child) {
         return namespace(lua, scope, binding.class).map(Value::Table);
     }

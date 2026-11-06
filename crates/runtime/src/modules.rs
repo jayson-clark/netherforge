@@ -246,6 +246,39 @@ impl Modules {
         (Some(scope), ran)
     }
 
+    /// Runs the script `file` in a scope of its own, as a resource's script runs (its own files beside it, the
+    /// project's modules), its calls given `budget` steps and `opened` told its scope before its body runs, without
+    /// reporting a failure of its body: a test file, whose runner says what went wrong. Its scope (none when it
+    /// couldn't open), and how its body ran.
+    pub fn quiet_script(
+        &self,
+        name: &str,
+        file: &str,
+        budget: u64,
+        opened: &dyn Fn(ScopeId),
+    ) -> (Option<ScopeId>, Result<(), Failure>) {
+        let scope = match self.open_with(name, file, Owner::Script(file.to_owned()), budget) {
+            Ok(scope) => scope,
+            Err(e) => return (None, Err(Failure::of(&e))),
+        };
+        opened(scope);
+        let Some(source) = self.source(file) else {
+            return (
+                Some(scope),
+                Err(Failure::Error {
+                    message: format!("can't read {file}"),
+                    traceback: None,
+                }),
+            );
+        };
+        let ran = self
+            .0
+            .scripts
+            .host()
+            .run::<()>(scope, budget, file, &source);
+        (Some(scope), ran)
+    }
+
     /// Closes `scope` and forgets what it required.
     pub fn close(&self, scope: ScopeId) {
         self.0.scripts.close(scope);
@@ -314,13 +347,23 @@ impl Modules {
     }
 
     fn open(&self, name: &str, memory_key: &str, owner: Owner) -> mlua::Result<ScopeId> {
+        self.open_with(name, memory_key, owner, self.0.budget)
+    }
+
+    fn open_with(
+        &self,
+        name: &str,
+        memory_key: &str,
+        owner: Owner,
+        budget: u64,
+    ) -> mlua::Result<ScopeId> {
         let namespace = match &owner {
             Owner::Module(id) | Owner::Script(id) => split_package(id).0.map(str::to_owned),
         };
-        let scope =
-            self.0
-                .scripts
-                .open_in(name, memory_key, self.0.budget, namespace.as_deref())?;
+        let scope = self
+            .0
+            .scripts
+            .open_in(name, memory_key, budget, namespace.as_deref())?;
         self.0.owners.borrow_mut().insert(scope, owner);
         let host = self.0.scripts.host();
         let weak: Weak<Inner> = Rc::downgrade(&self.0);

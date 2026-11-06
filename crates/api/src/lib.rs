@@ -48,6 +48,11 @@ pub mod unported;
 #[path = "generated/arguments.rs"]
 pub mod arguments;
 
+#[rustfmt::skip]
+#[allow(clippy::all, unused_imports, unused_variables)]
+#[path = "generated/raisable.rs"]
+pub mod raisable;
+
 pub mod bind;
 pub mod codec;
 pub mod events;
@@ -77,6 +82,12 @@ pub trait Runtime {
 
     /// Task `task` waits for async wait `wait`'s value: it's resumed with `value, err` when that's delivered.
     fn wait_on(&self, task: u64, wait: u64);
+
+    /// Whether this is a script test run, which alone has the test-only namespaces (`nf.test`): a server's
+    /// scripts find `nil` there.
+    fn testing(&self) -> bool {
+        false
+    }
 }
 
 /// What a call into the API did wrong, as the script is told: its message

@@ -94,6 +94,8 @@ pub struct Shared {
     pub network: RefCell<crate::network::service::Network>,
     /// The pictures scripts hold.
     pub images: Rc<crate::images::Images>,
+    /// A script test run's tests (`nf.test`), and its harness: none on a server.
+    pub tests: RefCell<crate::testing::Tests>,
     /// Nodes' rigid bodies.
     pub physics: RefCell<crate::centity::physics::Physics>,
     /// Players' and centities' stats and buffs.
@@ -144,6 +146,7 @@ impl Shared {
             path_nodes: std::cell::Cell::new(0),
             spawner: RefCell::default(),
             images: Rc::default(),
+            tests: RefCell::default(),
             http: RefCell::default(),
             web: RefCell::default(),
             wasm: RefCell::default(),
