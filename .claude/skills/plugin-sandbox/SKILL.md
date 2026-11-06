@@ -7,6 +7,8 @@ description: Inside the plugin's one Lua state - the sandbox (one hook, the inst
 
 What keeps a script from stalling the server, and the tools that look inside a running one. The Lua state itself (one state, a scope per script, handles, `require`) is the plugin-runtime skill's "Lua"; this is what runs inside it.
 
+This is the Kotlin runtime's. The Rust runtime's host, costs, profiler and debugger (on Luau: one interrupt, single-stepping for the debugger) are the rust-runtime skill's "The host", "What scripts cost and the profiler" and "The debugger".
+
 ## The sandbox: the hook, the budget, time, memory and the library's caps
 
 A script can stall the server three ways: running Lua for too long, running

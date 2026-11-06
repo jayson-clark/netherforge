@@ -318,9 +318,8 @@ nil expected, got number)`, Kotlin's words.
   wrapper; a callback that isn't a function is refused first too. The callback form returns
   nothing, as the spec says. Ending a waiting task drops its wait (`pending::cancel`).
 
-Not ported yet (the Kotlin runtime does them): `:on` on handles other than `nf` (it needs each
-service's liveness), `nf.wait_for` on a handle, the per-scope time per tick (`maxTickMillis`, which
-holds back timers and tick handlers), and time per scope and the profiler.
+The per-scope time per tick (`performance.max-ms-per-tick`), time per scope and the profiler: see "What scripts cost
+and the profiler".
 
 ## Modules (`crates/runtime/src/modules.rs`)
 
@@ -392,7 +391,7 @@ dead: body failed: … (modules/dead/init.lua:2). It's disabled until it's reloa
   `stop` take `&mut`.
 
 Not yet: the game's facts from the Platform (`external::GameData` is a placeholder, so format reads
-without them), the debugger and the profiler. Reloading (packages' files included) and the bridge: see "Hot reload" and
+without them). The debugger and the profiler: their sections. Reloading (packages' files included) and the bridge: see "Hot reload" and
 "The dev bridge". The policy is the session's:
 see "Config, policy and the hub".
 
@@ -744,7 +743,7 @@ tick. A player's own view (`for_player`) is a canvas of their own until `release
 `Dither` into the game's palette (`GameData::map_colors`), the last 32 kept. Files are read while scripts run
 through `Config::bytes` (`ProjectBytes`, a `'static` reader the adapter gives from disk; none, and pictures and font
 files can't be read), since the session's source is only borrowed. `ScreenFacing` is format's in the Platform's Rust
-types. Not yet: the per-scope counts for `/nf scripts` (no service has a costs hook on Rust yet).
+types. `/nf scripts`' per-scope counts: `ScreensService::costs` (screens, videos).
 
 **Aim** (`screen/aim.rs`, Kotlin's `ScreenAim`): `Placed::hit` is where a ray meets a screen's picture (a sixteenth of a
 block out from the wall, from its front only). A click on one of our frames (`Session::entity_clicked`, after centities)
@@ -940,8 +939,8 @@ held across a call to the server** (a teleport or a game mode change is an event
 stopping one). The store's `cutscene_states` table (`Store::cutscene_states`/`put_cutscene_state`/
 `delete_cutscene_state`) keeps what a crash would lose; `start` reads it and `player_joined` puts that player back
 with Kotlin's warning, before scripts hear the join. `Session::stop` now reports what scripts said while services
-stopped (a cutscene's `end` handler at `unloaded`), which used to be dropped. Not yet: `/nf scripts`' per-scope
-count (`count_owned` is there; no service has that hook yet).
+stopped (a cutscene's `end` handler at `unloaded`), which used to be dropped. `/nf scripts`' per-scope count is
+`CutscenesService::costs` (`count_owned`).
 
 ## HTTP (`crates/runtime/src/http/`)
 
@@ -1056,7 +1055,7 @@ Pieces, each Kotlin's of the same job:
 - A compile's failure is the `runtime.wasm` problem and is warned at the next tick (there's no `problemsChanged` hook).
 
 Not yet: `nf.test.stub_wasm` and the test tick's `settle` (with `nf.test`; `Wasm::quiet` is what it will wait on),
-`/nf scripts`' per-scope counts, `WasmConfig` read from `config.yml`, the threads' lowest priority (std has no way to
+`WasmConfig` read from `config.yml`, the threads' lowest priority (std has no way to
 set it), an `i64` argument past 2^53 (a string there is text), and a package's module reloading (the session doesn't
 reload packages' files yet).
 
@@ -1273,20 +1272,22 @@ types are format's (`bridge/`), so the editor's generated TypeScript is what the
 - **Unasked**: on connect `problems`, `settings_changed`, `status`; `status` and `problems` again once a second
   (`STATUS_EVERY`) if they changed (Kotlin sends problems when one appears; the Rust bridge looks once a second).
   Instances in `status` count inert records, as Kotlin's `count()` did.
-- **The debugger's hook** (`Debugger`, `Bridge::set_debugger`, `Bridge::dap`): `dap` notifications go to it on the bridge's
-  thread, its `refusal` refuses main-thread requests while paused, `detach` runs when the connection ends. Nothing
-  implements it yet (the next phase).
+- **The debugger's hook** (`Debugger`, `Bridge::set_debugger`, `Bridge::dap_sender`): `dap` notifications go to it on the
+  bridge's thread, its `refusal` refuses main-thread requests while paused, `detach` runs when the connection ends.
+  `crate::debug::Debugger` implements it (see "The debugger"); `ServerEvents::attach_bridge` sets it.
 - **Composition**: `Bridge::new(platform, BridgeConfig::of(&runtime_config, server_folder)?)` (`config::read` already took
   `netherforge.bridge.port` and `NETHERFORGE_BRIDGE_TOKEN`), start the session on `bridge.platform()`,
-  `ServerEvents::new`, `attach_bridge`, `connect`; `Bridge::stop` as the plugin disables. The adapter does this once
-  the Java side exists.
+  `ServerEvents::new` (in an `Rc`, `'static`), `set_profiler(Profiler::new(<plugin folder>/profiles, server))`,
+  `attach_bridge`, `AdminCommand::register(&events, <plugin folder>)`, `connect`; `Profiler::await_writes` and
+  `Bridge::stop` as the plugin disables. Without a bridge (production) the same less `attach_bridge`. The adapter does
+  this once the Java side exists.
 - **Tests**: `tests/bridge_client.rs` (Kotlin's `BridgeClientTest`), `tests/bridge.rs` (Kotlin's `BridgeTest`, plus every
   request of format's recorded session replayed against the server and each answer held to its declared type, and every
   notification it sent held to format's tables: what the editor's client is typed by), `tests/reload.rs`
   (Kotlin's `ReloadTest`). They share `tests/support/` (the centities tests' fake, extracted).
 
-Not yet: the profiler stream (`profiler_subscribe` sets the flag; nothing samples), the debugger, `/nf reload`; the
-web routes' listing is `/nf`'s (Kotlin's bridge has no routes request).
+The profiler stream, the debugger and `/nf`: their sections. The web routes' listing is `/nf requires`' (Kotlin's
+bridge has no routes request).
 
 ## Mobs (`crates/runtime/src/mob.rs`)
 
@@ -1377,8 +1378,8 @@ section: `schedules`, `http` with `allow-private` and `connections`, `web`, `was
 `packages.provided`, the package cache and the wall clock's rate. A number that isn't a positive one is the
 default; a value that can't be acted on (an `allow-private` entry, an S3 store missing a field) is an error. The dev
 server takes its project, bridge and network from the properties, its bots always on. Not yet: a `project:` that's a
-bundle's URL (an error saying so), and applying `performance` (no per-tick time limit or slow-script warnings in
-Rust yet) and `wall_clock_rate`.
+bundle's URL (an error saying so), and `wall_clock_rate`. `performance` goes into `session::Config::performance`
+(see "What scripts cost and the profiler").
 
 **The policy** (`Session::refuse`, as each run starts): the owner's (`Config::policy`) and the network's for this
 server (the link's `state.policy`, from the hub's welcome) together (`Policy::and`). An owner's policy that can't be
@@ -1405,6 +1406,96 @@ refreshed next tick), and the held item's on break, hit (attacks only) and inter
 `item_viewed` run `view` then `item_view`, nil when a handler failed (`Scripts::handler_failures`). Views are sent
 again at the end of a tick (`player:refresh_items`), everyone's when a session starts. Not yet: `Platform::bind`
 (the platform's lookups, `ProjectItems::look`), an item's `block`, recipes.
+
+## What scripts cost and the profiler (`crates/luau/src/timing.rs`, `crates/runtime/src/costs.rs`, `profile.rs`)
+
+Kotlin's prelude `timing`, `ScriptCosts`, `ScriptProfile`, `Profiler`, `ProfileReport` and `TickParts`; the plugin-sandbox
+skill's "The profiler" has the design, which is unchanged.
+
+- **The host times every call in** (`Host::invoke`): two reads of the clock a frame, its own time (less the frames
+  nested in it) charged to its scope, its slowest call kept per scope over this window and the last (`hot_spot`, where
+  a slow warning points), its time this tick (`over_tick` against `Limits::max_tick`, which `performance.max-ms-per-tick`
+  sets), and, while profiling (`set_profiling`), per function: keyed by the function's pointer, its kind the caller's
+  (`Host::next_kind`: an event's name from `run_handlers`, `timer`, `task`, `callback`, `command`, `complete`, `goal`,
+  `schedule`, `route`, `load` from `Modules::run_file`), its file and line read once per drain (`take_profile`). **Luau
+  says no `main` for a chunk's body** and gives it line 1, so a body is told by its `load` kind, and the profiler names it
+  by its file alone (line none), as Kotlin's did. A scope closed while profiling keeps its name until the next drain
+  (`scope_title`), so a reloaded module's old rows land with the new.
+- **The host's clock leaves paused time out** (`Host::now`, `add_paused`, `Guard::paused`): every deadline, cost and the
+  session's phase timing read it, so a tick held at a breakpoint is neither slow nor stopped.
+- **Costs** (`ScriptCosts`, in the session): `record` once a tick (the accounts) keeps a 100-tick window per live scope;
+  a scope averaging over `warn-ms` across `warn-ticks` (its first tick never counted) is `Slow`, warned about once per
+  `QUIET_TICKS` per script's place (log and the editor's console, `held back` counted) and a `script.slow` problem while
+  it runs; a scope whose timers or `tick` handlers waited (`Scripts` asks `over_tick` before each) is warned about once
+  per `QUIET_TICKS`. **A session made without the server's config (`Config::performance` none, every test's) warns of
+  nothing and holds nothing back**: tests run unoptimised, where 25 ms a tick is easy to reach.
+- **`Service::costs(scope)`**: what a scope owns, by the word `/nf scripts` shows it as (effects, cutscenes, goals,
+  gradual, connections, schedules, routes, logins, placeholders, wasm instances, wasm programs, screens, videos); the
+  session adds `waits` (`pending::waiting`). `Session::costs()` is `/nf scripts`' list, the most expensive first, with
+  subscriptions and tasks (`Scripts::held`) and the bytes its script's memory key holds (per key, so a centity's
+  instances each show the script's).
+- **Phases**: Rust's tick has three, `scripts` (timers, async values, `tick` handlers), `services` (each service's share
+  a part, `services/<name>`) and `accounts`. Kotlin's eight `TickPhase`s don't exist on the Rust runtime.
+- **The profiler** is `ServerEvents`' (it outlives sessions; `set_profiler` hands the adapter's, writing into the plugin's
+  `profiles/`); the session syncs the host's bookkeeping to `active()` at each tick's start and as each Lua state starts.
+  Samples go on the bridge's `profiler` stream while the editor subscribes (or to a test's `set_sink`). Reports are
+  written on a thread of their own; whoever asked is told on the main thread (`poll` each tick, `await_writes`). The
+  first run's bodies aren't profiled: the session starts before `ServerEvents` (and its profiler) exists.
+
+## `/nf` (`crates/runtime/src/admin.rs`)
+
+Kotlin's `AdminCommand` and `DataCommand`, every subcommand. `AdminCommand::register(&Rc<ServerEvents<'static>>,
+plugin folder)` registers `/netherforge` (`/nf`) with one free-form argument it reads and completes itself, holding the
+events weakly (so the adapter's events live as long as the plugin, as the test runner's leaked project already does).
+
+- What only reads borrows the session shared; what changes it (`reload`, `settings set|reset|reload`) borrows it to
+  change, "the project is busy; try again" when it can't (a script running `/nf reload` mid-tick).
+- **The settings dialog** is a `dialog::RuntimeDialog` (Kotlin's `Dialogs.RuntimeDialog`): built from JSON for one
+  showing, its presses answered by the runtime before any script's; Save is held and applied at the next tick
+  (`ServerEvents::set_after_tick`), since a press arrives inside an event, where the session can't be changed.
+- `/nf data` reads the store (`Store::file`, `table_names`, `sizes`, `rows`, `export` on the store's lane, told at the next
+  tick) after `Session::save_data` stages every saved table and place; `show` saves the one table first.
+- `/nf shutdown` starts the network's shutdown (drain, wait for empty, fallback); its end sets `stop_server`, which
+  `ServerEvents::tick` now hands the platform (`shutdown_server`): Kotlin's did, the Rust runtime only noted it before.
+- `/nf requires` lists `http.allow-private`'s grants; Kotlin's `packages.provided` and `own-databases` lines wait for
+  those features. The fake's `escape` is `<` as `\<`.
+
+## The debugger (`crates/luau/src/debug.rs`, `crates/runtime/src/debug.rs`)
+
+Kotlin's `Debugger` and `prelude/debugger.lua`. The editor's DAP client (`apps/editor/src/core/debug`) is unchanged: the
+messages are DAP's, the same requests answered, the same events (`initialized`, `stopped`, `continued`).
+
+- **Lines come from Luau's single-stepping** (`lua_singlestep`, the `debugstep` callback before every instruction), on
+  every thread (`userthread` keeps the set; a new thread inherits its maker's), only while there are breakpoints or a
+  step or pause is under way: a server nobody debugs runs the plain VM. A new line is a change of thread, stack depth
+  or line; only then is the chunk read. Luau picks the stepping VM as a call enters from the host, so a change applies
+  from the next call in: the config is handed over at each tick's start anyway. `lua_breakpoint` (bytecode patching)
+  was the alternative: it needs every function each chunk made, and stepping needs single steps regardless.
+- **A stop** calls a Rust function on the stopped thread from the callback (kept in the registry), so mlua reads that
+  thread's stack as a callback's: frames, locals (chunks are compiled with debug level 2 for their names: nothing at run
+  time), upvalues and the scope's globals (`lua_getfenv`), all copied at once; values read raw. The runtime's
+  `HostHandler` holds there: it sends `stopped`, answers `stackTrace`/`scopes`/`variables` from the debugger's inbox,
+  takes new configuration at once, calls `PauseOps::hold` once a second, and returns how to go on; the time held goes to
+  `Guard::paused`. A frame's name is Luau's debug name (a local function's), `(body)` for a chunk, else `function (line
+N)`; Luau's names are where a function was defined, not Kotlin's call-site names.
+- **Steps** count stack depth: over stops at the next line at or above the step's depth, out above it, in anywhere. On the
+  main thread a step belongs to the host's call in (`Frame::serial`): a nested call in runs through, and once the call
+  returns the step ends. In a task it follows the thread (a freed thread ends it).
+- **Break on errors**: while on, `Host::invoke` calls through `xpcall` with a Rust message handler that stops at the error
+  with its stack whole and appends the traceback; then the error is raised again, so it's reported as ever. Only errors
+  no `pcall` catches reach it. Not in tasks (a task's resume catches its error first).
+- **Handles** show as Kotlin's (`Player Steve`, `Centity tower 1a2b3c4d` with its position, `Node top of tower 1a2b3c4d`,
+  `World world`, else class and keys); events as `Event <name>`, expanding to their fields (the view's chain, raw).
+- **Configuration** arrives on the bridge's thread (`bridge::Debugger::receive`) and waits under a mutex with a version;
+  `Debugger::sync` hands it to the host at each tick's start (`ServerEvents::tick`) and each new Lua state gets it before
+  any body runs (`Session::set_on_host`, installed by `ServerEvents::attach_bridge`/`attach_debugger`), so breakpoints in
+  bodies hold on a full reload. The bridge's connection ending detaches: a held server goes on.
+- **Paths**: chunks are project or package paths; a `setBreakpoints` path that's absolute and under the project's folder
+  is mapped to its project path. Not yet: a package's file named by its place on disk (a path dependency's folder or the
+  package cache's checkout; Kotlin's `ProjectFiles.pathOf`), and a coroutine's stop listing the main thread's frames
+  below it.
+- Tests: `crates/luau/tests/debug.rs` (the host's half with a recording handler), `crates/runtime/tests/debugger.rs`
+  (DAP end to end: a thread plays the editor while the test's thread is held in its tick).
 
 ## Commands (`crates/runtime/src/commands.rs`)
 
