@@ -113,6 +113,8 @@ pub struct Shared {
     pub gone: RefCell<Vec<netherforge_platform::Uuid>>,
     /// Mobs' walks (`mob:move_to`) and the goals scripts added.
     pub mobs: Rc<crate::mob::Mobs>,
+    /// The packages' own databases (`nf.db`), and the owner's connections.
+    pub databases: RefCell<crate::databases::Databases>,
     /// The worlds the project made and may take away.
     pub managed_worlds: RefCell<crate::managed_worlds::ManagedWorlds>,
     /// What the worlds' file work said as it failed on its lane, for the log at a tick.
@@ -130,6 +132,7 @@ impl Shared {
             lanes: RefCell::default(),
             structures: RefCell::default(),
             managed_worlds: RefCell::default(),
+            databases: RefCell::default(),
             managed_failures: Default::default(),
             platform,
             store,

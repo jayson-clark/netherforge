@@ -138,6 +138,10 @@ pub struct Config {
     pub bots: crate::bots::BotsConfig,
     /// `structures:` in `config.yml`: how fast gradual placements and fills go.
     pub structures: crate::structures::StructuresConfig,
+    /// `<plugin folder>/databases`, where each package's own database is a file: none keeps them in memory.
+    pub databases_dir: Option<std::path::PathBuf>,
+    /// `databases:` in `config.yml`: the MySQL and PostgreSQL connections the owner names.
+    pub databases: crate::databases::DatabasesConfig,
     /// `worlds:` in `config.yml`: where worlds are imported from, and how many may be loaded.
     pub worlds: crate::managed_worlds::WorldsConfig,
     /// `<plugin folder>/settings`, where the owner's values for packages' settings are kept: none keeps them in
@@ -308,6 +312,11 @@ impl<'a> Session<'a> {
             screens.config = config.screens;
             screens.read = config.bytes.clone();
             screens.paths = config.paths.clone();
+        }
+        {
+            let mut databases = shared.databases.borrow_mut();
+            databases.dir = config.databases_dir.clone();
+            databases.config = config.databases.clone();
         }
         {
             let mut managed = shared.managed_worlds.borrow_mut();
@@ -1052,6 +1061,11 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         }),
         Box::new(crate::data::SessionTablesService {
             shared: shared.clone(),
+        }),
+        // Before any script runs, so a module's body finds its package's tables made.
+        Box::new(crate::databases::DatabasesService {
+            shared: shared.clone(),
+            problems: Default::default(),
         }),
         // Before any script runs, so `has_permission` already answers.
         Box::new(crate::permissions::PermissionsService {

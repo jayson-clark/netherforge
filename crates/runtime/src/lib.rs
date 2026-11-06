@@ -27,6 +27,7 @@ pub mod commands;
 pub mod custom_blocks;
 pub mod cutscenes;
 pub mod data;
+pub mod databases;
 pub mod definitions;
 pub mod dialog;
 pub mod effects;
@@ -231,8 +232,21 @@ impl NfApi for NfContext {
         .map_err(|e| ApiError(e.to_string()))
     }
 
+    // The calling package's own database: a dependency's `nf.db()` isn't the project's. A named connection is the
+    // owner's as well: it must exist and list the calling package, checked before any statement.
     fn db(&self, caller: &Caller, name: Option<String>) -> ApiResult<handles::Database> {
-        NfApi::db(&self.scripts, caller, name)
+        let Some(shared) = &self.shared else {
+            return NfApi::db(&self.scripts, caller, name);
+        };
+        let namespace = self
+            .scripts
+            .namespace(caller.scope)
+            .unwrap_or_else(|| self.grants.home.clone());
+        databases::DatabaseContext {
+            shared: shared.clone(),
+            scripts: self.scripts.clone(),
+        }
+        .db(namespace, name)
     }
 
     fn config(&self, caller: &Caller, name: String) -> ApiResult<Value> {
@@ -273,6 +287,8 @@ struct Api {
     utilities: Option<utilities::UtilitiesContext>,
     /// `nf.structures`.
     structures: Option<structures::StructuresContext>,
+    /// `Database`.
+    databases: Option<databases::DatabaseContext>,
     /// `nf.http`, `HttpStream`, `WebSocket`.
     http: Option<http::api::HttpApi>,
     /// `nf.web`, `Route`, `WebResponse`, `OAuthFlow`.
@@ -490,6 +506,12 @@ impl LuaApi for Api {
     fn nf_text(&self) -> &dyn netherforge_api::api::NfTextApi {
         match &self.utilities {
             Some(u) => u,
+            None => &Unported,
+        }
+    }
+    fn database(&self) -> &dyn netherforge_api::api::DatabaseApi {
+        match &self.databases {
+            Some(d) => d,
             None => &Unported,
         }
     }
@@ -912,6 +934,10 @@ impl Room {
             centity::api::CentityContext::new(shared, scripts.clone())
         });
         let structures = worlds.as_ref().map(|game| game.structures());
+        let databases = worlds.as_ref().map(|game| databases::DatabaseContext {
+            shared: game.shared.clone(),
+            scripts: scripts.clone(),
+        });
         let nf = NfContext {
             scripts: scripts.clone(),
             shared: worlds.as_ref().map(|w| w.shared.clone()),
@@ -926,6 +952,7 @@ impl Room {
             schedules,
             utilities,
             structures,
+            databases,
             worlds,
             http,
             web,
