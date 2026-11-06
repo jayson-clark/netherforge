@@ -678,8 +678,17 @@ Platform spec's `DialogFile` is format's. `dialog:ask` is the prelude's `wait_ev
 accepting only that player's), opens the dialog, and only then has the task wait, so a close the opening causes
 isn't heard. A dialog that's gone or couldn't be opened hands back `nil` at the tick boundary (a ready async
 wait), not at once: a binding that waits can't also return. A wait whose target goes (`drop_target`) ends its
-task, `nf.wait_for`'s too, as Kotlin's `sub.gone` does. `nf.wait_for` takes any handle. Not yet:
-`nf.dialogs.create`, the runtime's own dialogs (`/nf settings`).
+task, `nf.wait_for`'s too, as Kotlin's `sub.gone` does. `nf.wait_for` takes any handle.
+
+**Made in Lua** (`definitions.rs`, Kotlin's `Definitions.kt`): `nf.dialogs.create(definition)` encodes the table
+with the codec, respells it as the file (snake_case to camelCase, a camelCase key a mistake, `{}` the empty list
+for list keys, an item body's `item` read by `items::from_value`), writes its names as the server knows them
+(`Calling::definition`, Kotlin's `PackageNames.definition`: each reference found by format's schema walk, held
+to what the calling package may name) and reads it with format's `document::load`, the file's own parse and
+checks; the first error is the script's, at its Lua path (`definition.inputs[1].max_length`). It's a record like
+the files' with a UUID id and an owner scope, gone with that scope (`scope_released`, its handlers dropped).
+`nf.dialogs.get` and `open_dialog` by name find only the project's. Not yet: the runtime's own dialogs
+(`/nf settings`).
 
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 

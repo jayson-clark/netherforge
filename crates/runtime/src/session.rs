@@ -623,6 +623,7 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         }),
         Box::new(crate::dialog::DialogsService {
             shared: shared.clone(),
+            scripts: Default::default(),
         }),
         Box::new(crate::menu::MenusService {
             shared: shared.clone(),

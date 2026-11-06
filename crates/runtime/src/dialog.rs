@@ -23,7 +23,6 @@ use mlua::{Function, Value};
 use netherforge_api::api::{ButtonApi, DialogApi, NfDialogsApi};
 use netherforge_api::codec::Codec;
 use netherforge_api::handles::{self, Handle};
-use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, Caller, Waiting, codecs, shapes, unions, values};
 use netherforge_format::kind::dialog::{
     AfterAction, DialogBody, DialogFile, DialogInput, DialogType,
@@ -49,6 +48,8 @@ struct Record {
     file: DialogFile,
     /// The dialog's script's scope, while it runs.
     scope: Option<ScopeId>,
+    /// For a dialog a script made (`nf.dialogs.create`): the scope it goes with.
+    owner: Option<ScopeId>,
 }
 
 /// One showing of a dialog to a player, and the context it was opened with.
@@ -73,7 +74,22 @@ impl Dialogs {
     fn id_of(&self, reference: &str) -> Option<String> {
         let key = netherforge_format::reference::resolve_any(&self.home, reference)?;
         let id = key.relative_to(&self.home);
-        self.records.contains_key(&id).then_some(id)
+        self.records
+            .get(&id)
+            .is_some_and(|r| r.owner.is_none())
+            .then_some(id)
+    }
+
+    /// The project's dialogs (not those scripts made), for messages.
+    fn ids(&self) -> Vec<String> {
+        let mut ids: Vec<String> = self
+            .records
+            .iter()
+            .filter(|(_, r)| r.owner.is_none())
+            .map(|(id, _)| id.clone())
+            .collect();
+        ids.sort();
+        ids
     }
 
     /// The dialog as the platform builds it, with the dialogs a `dialog_list` offers built alongside (each only
@@ -540,6 +556,7 @@ impl DialogContext {
             Record {
                 file: next,
                 scope: None,
+                owner: None,
             },
         );
         self.start_script(id);
@@ -658,6 +675,16 @@ impl GameContext {
         }
     }
 
+    /// Whether `id` is one of the project's dialogs, not one a script made.
+    fn is_project_dialog(&self, id: &str) -> bool {
+        self.shared
+            .dialogs
+            .borrow()
+            .records
+            .get(id)
+            .is_some_and(|r| r.owner.is_none())
+    }
+
     fn dialog_file(&self, id: &str) -> Option<DialogFile> {
         self.shared
             .dialogs
@@ -754,15 +781,8 @@ impl GameContext {
             unions::StringOrDialog::Dialog(d) => d.id,
             unions::StringOrDialog::String(name) => {
                 let id = self.with_names(|names| names.resource("dialog", &name))?;
-                if self.dialog_file(&id).is_none() {
-                    let known: Vec<String> = self
-                        .shared
-                        .dialogs
-                        .borrow()
-                        .records
-                        .keys()
-                        .cloned()
-                        .collect();
+                if !self.is_project_dialog(&id) {
+                    let known = self.shared.dialogs.borrow().ids();
                     let has = if known.is_empty() {
                         String::new()
                     } else {
@@ -786,14 +806,47 @@ impl GameContext {
 impl NfDialogsApi for GameContext {
     fn get(&self, _: &Caller, dialog: String) -> ApiResult<handles::Dialog> {
         let id = self.with_names(|names| names.resource("dialog", &dialog))?;
-        if self.dialog_file(&id).is_none() {
+        if !self.is_project_dialog(&id) {
             return Err(err(format!("no dialog \"{dialog}\" in this project")));
         }
         Ok(handles::Dialog { id })
     }
 
+    /// Checked as `dialog.json` is (a `dialog_list` may name any dialog there is), then kept for the calling
+    /// scope.
     fn create(&self, caller: &Caller, definition: Value) -> ApiResult<handles::Dialog> {
-        <Unported as NfDialogsApi>::create(&Unported, caller, definition)
+        let owner = caller.scope;
+        let game = self.shared.platform.game();
+        let file = self.with_names(|names| {
+            crate::definitions::dialog_from(&self.scripts.host(), &definition, game, names)
+        })?;
+        let dialogs = self.shared.dialogs.borrow();
+        for (i, other) in file.dialogs.iter().enumerate() {
+            if dialogs.id_of(other).is_none() {
+                let spelled = self.with_names(|names| names.spell(other));
+                let known = dialogs.ids();
+                let has = if known.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (it has: {})", known.join(", "))
+                };
+                return Err(err(format!(
+                    "definition.dialogs[{}]: no dialog \"{spelled}\" in this project{has}",
+                    i + 1
+                )));
+            }
+        }
+        drop(dialogs);
+        let id = uuid_text(&crate::centity::saving::random_uuid());
+        self.shared.dialogs.borrow_mut().records.insert(
+            id.clone(),
+            Record {
+                file,
+                scope: None,
+                owner: Some(owner),
+            },
+        );
+        Ok(handles::Dialog { id })
     }
 }
 
@@ -999,6 +1052,8 @@ impl ButtonApi for GameContext {
 /// Dialogs as a session's service.
 pub struct DialogsService {
     pub shared: Rc<Shared>,
+    /// The room's scripts, once it starts: what a released scope's dialogs' handlers are dropped from.
+    pub scripts: std::cell::RefCell<Option<crate::Scripts>>,
 }
 
 impl DialogsService {
@@ -1046,11 +1101,21 @@ impl Service for DialogsService {
         &["dialog"]
     }
 
-    fn start(&self, _room: &Room, project: &Define) {
+    fn start(&self, room: &Room, project: &Define) {
+        *self.scripts.borrow_mut() = Some(room.scripts().clone());
         let running = self.define(project);
         self.shared.dialogs.borrow_mut().records = running
             .into_iter()
-            .map(|(id, file)| (id, Record { file, scope: None }))
+            .map(|(id, file)| {
+                (
+                    id,
+                    Record {
+                        file,
+                        scope: None,
+                        owner: None,
+                    },
+                )
+            })
             .collect();
     }
 
@@ -1081,6 +1146,32 @@ impl Service for DialogsService {
     /// The player left: whatever they had open just goes.
     fn player_quit(&self, player: &PlayerRef) {
         self.shared.dialogs.borrow_mut().open.remove(&player.uuid);
+    }
+
+    /// The dialogs a stopped scope made go, and every handler on them.
+    fn scope_released(&self, scopes: &[ScopeId]) {
+        let gone: Vec<String> = {
+            let mut dialogs = self.shared.dialogs.borrow_mut();
+            let gone: Vec<String> = dialogs
+                .records
+                .iter()
+                .filter(|(_, r)| r.owner.is_some_and(|o| scopes.contains(&o)))
+                .map(|(id, _)| id.clone())
+                .collect();
+            for id in &gone {
+                dialogs.records.shift_remove(id);
+            }
+            gone
+        };
+        let Some(scripts) = self.scripts.borrow().clone() else {
+            return;
+        };
+        for id in gone {
+            let handle = Handle::Dialog(handles::Dialog { id });
+            if let Ok(target) = netherforge_api::handle::push_any(scripts.host().lua(), &handle) {
+                scripts.drop_target(&Target::Handle(target));
+            }
+        }
     }
 
     fn stop(&self, room: &Room, _platform: &dyn Platform) {

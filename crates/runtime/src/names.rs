@@ -55,6 +55,80 @@ impl Calling<'_> {
         Ok(key.relative_to(self.home()))
     }
 
+    /// `json`, a document of `schema` the calling code wrote (`nf.dialogs.create`'s table in the file's spelling),
+    /// with every name in it as the server knows it, each held to what a file of the calling package could name
+    /// (Kotlin's `PackageNames.definition`). A mistake names where it is: `place` turns the reference's JSON path
+    /// into the script's words.
+    pub fn definition(
+        &self,
+        schema: &netherforge_format::schema::Schema,
+        json: &serde_json::Value,
+        place: &dyn Fn(&str) -> String,
+    ) -> ApiResult<serde_json::Value> {
+        use netherforge_format::reference::{RefScope, find_in};
+        const LOOKS: &[RefKind] = &[
+            RefKind::ItemModel,
+            RefKind::Glyph,
+            RefKind::Skin,
+            RefKind::Tooltip,
+            RefKind::Equipment,
+            RefKind::Sound,
+        ];
+        let references = self.names.references_of(&self.from);
+        // Every reference checked first, so the first mistake is the one reported.
+        let mut renamed: Vec<(String, String)> = Vec::new();
+        for found in find_in(schema, json) {
+            let spec = found.kind.spec();
+            if spec.scope == RefScope::File || (spec.game && found.kind.is_game(&found.text)) {
+                continue;
+            }
+            let tag = if found.span.is_some() {
+                format!("<glyph:{}>: ", found.text)
+            } else {
+                String::new()
+            };
+            let fail = |problem: String| err(format!("{}: {tag}{problem}", place(&found.path)));
+            let key = if spec.scope == RefScope::Resource {
+                let Some(key) = resolve_any(&self.from, &found.text) else {
+                    continue;
+                };
+                if let Some(kind) = spec.resource_kind
+                    && let Some(broken) = self.names.nameable(&self.from, kind, &key)
+                {
+                    return Err(fail(for_script(&broken)));
+                }
+                key
+            } else if LOOKS.contains(&found.kind) {
+                self.look(found.kind, &found.text).map_err(|e| fail(e.0))?
+            } else {
+                if let Some(broken) = references.and_then(|r| r.check(found.kind, &found.text)) {
+                    return Err(fail(for_script(&broken)));
+                }
+                match resolve(&self.from, found.kind, &found.text) {
+                    Some(key) => key,
+                    None => continue,
+                }
+            };
+            let text = key.relative_to(self.home());
+            if text != found.text {
+                renamed.push((found.text.clone(), text));
+            }
+        }
+        if renamed.is_empty() {
+            return Ok(json.clone());
+        }
+        Ok(netherforge_format::reference::rewrite(
+            schema,
+            json,
+            &mut |_, text| {
+                renamed
+                    .iter()
+                    .find(|(from, _)| from == text)
+                    .map(|(_, to)| to.clone())
+            },
+        ))
+    }
+
     /// `name`, as the server names it, as the reading package writes it.
     pub fn spell(&self, name: &str) -> String {
         if !self.names.spanning() || self.from == self.home() {

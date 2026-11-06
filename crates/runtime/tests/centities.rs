@@ -3471,3 +3471,70 @@ end)
     server.tick();
     assert_eq!(printed(&platform.take()), ["third\tno"]);
 }
+
+#[test]
+fn a_dialog_made_in_lua_is_checked_as_its_file_and_shown() {
+    use netherforge_platform::PlatformEvents;
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/made/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local d = nf.dialogs.create({
+  title = "Name it",
+  inputs = { { type = "text", key = "name", max_length = 8 } },
+  body = { { type = "item", item = { kind = "minecraft:bread", count = 2 } } },
+  buttons = { { key = "ok", label = "Ok" } },
+})
+d:button("ok"):on("press", function(e) print("named", e.values.name) end)
+print(d:title(), d:inputs()[1], d:exists(), pcall(nf.dialogs.get, d:id()))
+print(alex:open_dialog(d))
+print(pcall(nf.dialogs.create, { title = "x", inputs = { { type = "text", key = "a", maxLength = 2 } } }))
+print(pcall(nf.dialogs.create, { title = "x", script = { file = "a.lua" } }))
+print(pcall(nf.dialogs.create, { title = "x", type = "dialog_list", dialogs = { "nope" } }))
+print(pcall(nf.dialogs.create, { title = "x", body = { { type = "item", item = { kind = "minecraft:bread", colour = 1 } } } }))
+print(pcall(nf.dialogs.create, { title = "x", columns = 3 }))
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    let lines = printed(&calls);
+    assert!(
+        lines[0].starts_with("Name it\tname\ttrue\tfalse\t"),
+        "{lines:?}"
+    );
+    assert_eq!(lines[1], "true");
+    assert_eq!(
+        &lines[2..],
+        [
+            "false\tmodules/made/init.lua:12: definition.inputs[1].maxLength: Lua spells keys in snake_case, so it's max_length",
+            "false\tmodules/made/init.lua:13: definition.script: a dialog made in Lua has no script of its own; put handlers on the Dialog it returns",
+            "false\tmodules/made/init.lua:14: definition.dialogs[1]: no dialog \"nope\" in this project",
+            "false\tmodules/made/init.lua:15: bad argument 'definition.body[1].item' (unknown field `colour`, expected one of `kind`, `name`, `lore`, `enchantments`, `glint`, `hide_tooltip`, `unbreakable`, `item_model`, `tooltip_style`, `equipment`, `color`, `profile`, `max_stack_size`, `rarity`, `attribute_modifiers`, `can_break`, `can_place_on`, `invisible`, `hidden_tooltip_components`, `food`, `cooldown`, `hold`, `use_effects`, `item`, `count`, `damage`, `map`, `data`)",
+            "false\tmodules/made/init.lua:16: definition.columns: Only a multi_action dialog lays its buttons out in columns",
+        ],
+        "{lines:?}"
+    );
+    let shown = calls
+        .iter()
+        .find(|c| c.starts_with("dialog "))
+        .expect("shown");
+    let id = shown.split(' ').nth(1).unwrap().to_owned();
+    let alex = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let values = std::collections::HashMap::from([(
+        "name".to_owned(),
+        netherforge_platform::Dynamic::String("Rex".into()),
+    )]);
+    server.dialog_pressed(alex, id, "ok".into(), values);
+    server.tick();
+    assert_eq!(printed(&platform.take()), ["named\tRex"]);
+}

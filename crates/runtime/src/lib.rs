@@ -21,6 +21,7 @@ pub mod border;
 pub mod bossbar;
 pub mod centity;
 pub mod data;
+pub mod definitions;
 pub mod dialog;
 pub mod effects;
 pub mod entity;
