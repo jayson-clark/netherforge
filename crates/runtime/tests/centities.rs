@@ -52,6 +52,8 @@ type FakeWindow = (Vec<Option<netherforge_platform::ItemData>>, Vec<Uuid>);
 struct Fake {
     /// Each open window's slots and viewers, by window.
     windows: RefCell<BTreeMap<u128, FakeWindow>>,
+    /// Storages, by name.
+    storages: RefCell<BTreeMap<String, Vec<Option<netherforge_platform::ItemData>>>>,
     /// Alex's inventory: nine slots.
     inventory: RefCell<Vec<Option<netherforge_platform::ItemData>>>,
     /// Each scoreboard team's entries.
@@ -73,6 +75,7 @@ impl Default for Fake {
         Fake {
             windows: RefCell::default(),
             inventory: RefCell::new(vec![None; 9]),
+            storages: RefCell::default(),
             teams: RefCell::new(BTreeMap::from([
                 ("nf.stale".to_owned(), Vec::new()),
                 ("red".to_owned(), Vec::new()),
@@ -719,19 +722,43 @@ impl netherforge_platform::FakeBorderOps for Fake {
     }
 }
 
-/// Alex's own inventory, and nothing else.
+impl Fake {
+    /// The slots `r#ref` names: a storage's (made as it's first asked for), else Alex's own.
+    fn slots_of(
+        &self,
+        r#ref: &netherforge_platform::InventoryRef,
+    ) -> Option<Vec<Option<netherforge_platform::ItemData>>> {
+        match r#ref {
+            netherforge_platform::InventoryRef::Player(_) => Some(self.inventory.borrow().clone()),
+            netherforge_platform::InventoryRef::Storage(s) => Some(
+                self.storages
+                    .borrow_mut()
+                    .entry(s.name.clone())
+                    .or_insert_with(|| vec![None; s.size as usize])
+                    .clone(),
+            ),
+            _ => None,
+        }
+    }
+}
+
+/// Alex's own inventory and storages, and nothing else.
 impl netherforge_platform::FakeInventoryOps for Fake {
     fn kind(&self, r#ref: netherforge_platform::InventoryRef) -> Option<String> {
-        matches!(r#ref, netherforge_platform::InventoryRef::Player(_)).then(|| "player".into())
+        match r#ref {
+            netherforge_platform::InventoryRef::Player(_) => Some("player".into()),
+            netherforge_platform::InventoryRef::Storage(_) => Some("storage".into()),
+            _ => None,
+        }
     }
     fn size(&self, r#ref: netherforge_platform::InventoryRef) -> Option<i32> {
-        self.kind(r#ref).map(|_| 9)
+        self.slots_of(&r#ref).map(|s| s.len() as i32)
     }
     fn contents(
         &self,
-        _: netherforge_platform::InventoryRef,
+        r#ref: netherforge_platform::InventoryRef,
     ) -> Option<Vec<Option<netherforge_platform::ItemData>>> {
-        Some(self.inventory.borrow().clone())
+        self.slots_of(&r#ref)
     }
     fn contents_with_filter(
         &self,
@@ -742,21 +769,27 @@ impl netherforge_platform::FakeInventoryOps for Fake {
     }
     fn item(
         &self,
-        _: netherforge_platform::InventoryRef,
+        r#ref: netherforge_platform::InventoryRef,
         slot: i32,
     ) -> Option<netherforge_platform::ItemData> {
-        self.inventory.borrow()[slot as usize].clone()
+        self.slots_of(&r#ref)?[slot as usize].clone()
     }
     fn set_item(
         &self,
-        _: netherforge_platform::InventoryRef,
+        r#ref: netherforge_platform::InventoryRef,
         slot: i32,
         item: Option<netherforge_platform::ItemData>,
     ) -> bool {
-        self.inventory.borrow_mut()[slot as usize] = item;
+        match r#ref {
+            netherforge_platform::InventoryRef::Storage(s) => {
+                self.slots_of(&netherforge_platform::InventoryRef::Storage(s.clone()));
+                self.storages.borrow_mut().get_mut(&s.name).expect("made")[slot as usize] = item;
+            }
+            _ => self.inventory.borrow_mut()[slot as usize] = item,
+        }
         true
     }
-    /// Into the first empty slot, whole.
+    /// Into the first empty slot of Alex's, whole.
     fn add(
         &self,
         _: netherforge_platform::InventoryRef,
@@ -826,6 +859,28 @@ impl netherforge_platform::FakeMenuOps for Fake {
             .iter()
             .find(|(_, w)| w.1.contains(&player))
             .map(|(id, _)| Uuid(*id))
+    }
+    /// Room for a full stack of 64.
+    fn room(&self, window: Uuid, slot: i32, _: netherforge_platform::ItemData) -> i32 {
+        64 - self
+            .item(window, slot)
+            .map_or(0, |i| i.def.count.unwrap_or(1))
+    }
+    fn set_cursor(
+        &self,
+        _: Uuid,
+        player: Uuid,
+        item: Option<netherforge_platform::ItemData>,
+    ) -> bool {
+        self.call(format!(
+            "cursor {} {:?}",
+            player.0,
+            item.map(|i| (i.def.kind, i.def.count))
+        ));
+        true
+    }
+    fn refresh(&self, _: Uuid) {
+        self.call("window refreshed".into());
     }
     fn close(&self, window: Uuid, player: Option<Uuid>) {
         if let Some((_, viewers)) = self.windows.borrow_mut().get_mut(&window.0) {
@@ -3167,4 +3222,97 @@ nf.on("menu_click", function(e) print("nf", e.index, e.cancelled) end)
         "{closed:?}"
     );
     assert!(!server.menu_clicked(window, click(4, true)));
+}
+
+#[test]
+fn a_menu_slot_bound_to_a_storage_writes_through_and_a_rule_lets_in_what_fits() {
+    use netherforge_platform::PlatformEvents;
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let vault =
+        r#"{ "name": "Vault", "rows": 1, "locked": false, "script": { "file": "script.lua" } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("menus/vault/menu.json", vault),
+        (
+            "menus/vault/script.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local bank = alex:storage("bank", 9)
+bank:set_item(0, { kind = "minecraft:emerald", count = 2 })
+print(this:slot(0):bind(bank), this:item(0).count, this:slot(0):binding().index)
+this:set_item(1, { kind = "minecraft:bread" })
+print(this:slot(1):bind(bank), bank:item(1))
+this:slot(0):set_item({ kind = "minecraft:emerald", count = 5 })
+print(bank:item(0).count, #bank:viewers())
+this:slot(2):set_rule({ kinds = { "minecraft:diamond" }, max = 1 })
+print(this:slot(2):accepts({ kind = "minecraft:emerald" }), this:slot(2):rule().max)
+print(pcall(this:slot(2).set_rule, this:slot(2), { max = 0 }))
+"#,
+        ),
+        (
+            "modules/open/init.lua",
+            "nf.worlds.default():players()[1]:open_menu('vault')",
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "true\t2\t0",
+            // Bound, the slot shows the storage's (empty): the bread it held isn't the storage's.
+            "true\tnil",
+            "5\t0",
+            "false\t1",
+            "false\tmenus/vault/script.lua:12: bad argument 'rule.max' (at least 1, got 0)",
+        ]
+    );
+    let window = Uuid(*platform.windows.borrow().keys().next().expect("a window"));
+    // The game put something in a bound slot by hand: the storage holds it once the click is done.
+    platform
+        .windows
+        .borrow_mut()
+        .get_mut(&window.0)
+        .expect("open")
+        .0[1] = Some(stack("minecraft:apple"));
+    server.menu_changed(window, vec![1]);
+    assert_eq!(
+        platform.storages.borrow()["demo:bank"][1]
+            .as_ref()
+            .map(|i| i.def.kind.clone()),
+        Some("minecraft:apple".to_owned())
+    );
+    let alex = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let click = |cursor: netherforge_platform::ItemData| netherforge_platform::MenuClick {
+        player: alex.clone(),
+        slot: Some(2),
+        top: true,
+        click: "left".into(),
+        hotbar: None,
+        item: None,
+        cursor: Some(cursor),
+        moves_items: true,
+    };
+    // An emerald the rule doesn't take is refused; three diamonds put one in, the rest stay on the cursor.
+    assert!(server.menu_clicked(window, click(stack("minecraft:emerald"))));
+    let mut diamonds = stack("minecraft:diamond");
+    diamonds.def.count = Some(3);
+    assert!(server.menu_clicked(window, click(diamonds)));
+    let moved = platform.take();
+    assert!(
+        moved.contains(&"cursor 77 Some((\"minecraft:diamond\", Some(2)))".to_owned()),
+        "{moved:?}"
+    );
+    assert_eq!(
+        platform.windows.borrow()[&window.0].0[2]
+            .as_ref()
+            .and_then(|i| i.def.count),
+        Some(1)
+    );
 }

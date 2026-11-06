@@ -9,11 +9,16 @@
 //! click that would move items in or out of it already cancelled, which a handler may undo. When a window goes,
 //! so does every handler on it and its slots.
 //!
-//! Not yet: slots bound to storages and equipment, slot rules and `shift_into` (the next slice);
-//! `nf.menus.create` and templates; skins in titles (they wait for the built resource pack: a skin draws
+//! A slot of a window that isn't shared can be **bound** to a slot of a player's storage, or to what a player
+//! wears: whatever goes in or out of it is written there as it happens (a click the game applies is heard straight
+//! after, `menu_changed`), so an item is only ever in the storage or out of it. A slot's **rule** says which stacks
+//! it takes and how many; `shift_into` moves a shift-click from below into a storage's bound slots, offering it to
+//! each slot's handlers.
+//!
+//! Not yet: `nf.menus.create` and templates; a rule's `property` (project items' properties); skins in titles (they wait for the built resource pack: a skin draws
 //! nothing until then, and the words show on their own).
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::rc::{Rc, Weak};
 
 use indexmap::IndexMap;
@@ -25,7 +30,10 @@ use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, Caller, codecs, shapes, unions, values};
 use netherforge_format::kind::menu::CompiledMenu;
 use netherforge_luau::ScopeId;
-use netherforge_platform::{ItemData, MenuClick, Platform, PlayerRef, Uuid, WindowSpec};
+use netherforge_platform::{
+    InventoryRef, InventoryRefPlayer, InventoryRefStorage, ItemData, MenuClick, Platform,
+    PlayerRef, Uuid, WindowSpec,
+};
 
 use crate::Room;
 use crate::events::{parse_uuid, uuid_text};
@@ -53,6 +61,76 @@ pub struct Window {
     scope: Option<ScopeId>,
     /// What the server was last told the title is, skin included.
     pushed_title: String,
+    /// Its slots bound to a storage's, by slot.
+    bindings: HashMap<i32, Binding>,
+    /// Its slots bound to what a player wears, by slot.
+    worn: HashMap<i32, Worn>,
+    /// What its slots take, for those a script gave a rule, by slot.
+    rules: HashMap<i32, Rule>,
+    /// Where a shift-click from the player's own inventory goes, when a script set it.
+    shift_into: Option<ShiftInto>,
+}
+
+impl Window {
+    /// Whether `slot` shows a storage's slot or a player's equipment: theirs to use by hand.
+    fn bound(&self, slot: i32) -> bool {
+        self.bindings.contains_key(&slot) || self.worn.contains_key(&slot)
+    }
+}
+
+/// Which slot of a storage a window's slot shows.
+#[derive(Clone)]
+struct Binding {
+    storage: InventoryRefStorage,
+    index: i32,
+}
+
+/// A slot that shows what `player` wears in `slot` (`head`, `chest`, `legs`, `feet`, `off_hand`).
+#[derive(Clone)]
+struct Worn {
+    player: Uuid,
+    slot: String,
+}
+
+/// What a slot takes: `takes` says which stacks, `max` how many of one; `source` is as the script gave it.
+#[derive(Clone)]
+struct Rule {
+    source: shapes::SlotRule,
+    max: Option<i32>,
+    takes: Rc<dyn Fn(&ItemData) -> bool>,
+}
+
+/// Where a shift-click from the player's inventory goes: the window's slots bound to `storage`'s, `first` to `last`.
+#[derive(Clone)]
+struct ShiftInto {
+    storage: InventoryRefStorage,
+    first: i32,
+    last: i32,
+}
+
+fn same(a: &InventoryRefStorage, b: &InventoryRefStorage) -> bool {
+    a.player == b.player && a.name == b.name
+}
+
+/// What a click on a ruled slot does about the rule.
+enum Ruled {
+    /// A stack the slot doesn't take: the click is refused.
+    Refuse,
+    /// The game's own move is fine.
+    Allowed,
+    /// Only some of the stack may go in: the slot gets `held`, the cursor `rest`.
+    Move {
+        slot: i32,
+        held: Box<ItemData>,
+        player: Uuid,
+        rest: Option<Box<ItemData>>,
+    },
+}
+
+fn with_count(item: &ItemData, count: i32) -> ItemData {
+    let mut item = item.clone();
+    item.def.count = Some(count);
+    item
 }
 
 /// The file's title; with no title and no skin, the menu's name, so a plain window isn't blank.
@@ -111,6 +189,10 @@ impl MenuContext {
             context,
             scope: None,
             pushed_title: String::new(),
+            bindings: HashMap::new(),
+            worn: HashMap::new(),
+            rules: HashMap::new(),
+            shift_into: None,
         };
         self.shared
             .menus
@@ -327,14 +409,33 @@ impl MenuContext {
     }
 
     /// A click while window `uuid` was open, along its path: the clicked slot, the window, then `nf`. True means
-    /// cancel.
+    /// cancel. A locked window starts a click that moves items already cancelled, but for its bound slots, which
+    /// are the player's to use by hand. A shift-click from below into a window with `shift_into` is moved by the
+    /// runtime; a click past a slot's rule is refused, or moves only what the rule lets in.
     pub fn click(&self, uuid: Uuid, click: MenuClick) -> bool {
-        let (id, size, locked, context) = {
+        let (id, size, locked, context, shifting, rule, by_hand) = {
             let menus = self.shared.menus.borrow();
             let Some(w) = menus.by_uuid(uuid) else {
                 return false;
             };
-            (w.id.clone(), w.definition.size, w.locked, w.context.clone())
+            let shifting = w.shift_into.is_some()
+                && !click.top
+                && ["shift_left", "shift_right"].contains(&click.click.as_str());
+            let rule = click
+                .slot
+                .filter(|_| click.top)
+                .and_then(|s| w.rules.get(&s).cloned());
+            let by_hand =
+                click.top && click.slot.is_some_and(|s| w.bound(s)) && click.click != "double";
+            (
+                w.id.clone(),
+                w.definition.size,
+                w.locked,
+                w.context.clone(),
+                shifting,
+                rule,
+                by_hand,
+            )
         };
         let menu = handles::Menu { id: id.clone() };
         let slot = click
@@ -364,12 +465,522 @@ impl MenuContext {
         }
         path.push(("click", Some(Handle::Menu(menu))));
         path.push(("menu_click", None));
-        self.raise(
+        if shifting {
+            // The runtime moves the stack itself, slot by slot, so the game's own move is always stopped.
+            if !self.raise(&path, codecs::MenuClickEvent, payload, false) {
+                self.shift_in(&id, &click);
+            }
+            return true;
+        }
+        let ruled = match &rule {
+            Some(rule) => match self.ruled(uuid, &click, rule) {
+                Ruled::Refuse => return true,
+                other => Some(other),
+            },
+            None => None,
+        };
+        let cancelled = self.raise(
             &path,
             codecs::MenuClickEvent,
             payload,
-            locked && click.moves_items,
+            locked && click.moves_items && !by_hand,
+        );
+        match ruled {
+            Some(Ruled::Move {
+                slot,
+                held,
+                player,
+                rest,
+            }) if !cancelled => {
+                // More than the rule's max would go in: the runtime puts in what fits, and the game's own move is
+                // stopped. The client guessed the whole stack went in, so it's sent the window again.
+                self.write(&id, slot, Some(*held));
+                self.platform()
+                    .menus()
+                    .set_cursor(uuid, player, rest.map(|r| *r));
+                self.platform().menus().refresh(uuid);
+                true
+            }
+            _ => cancelled,
+        }
+    }
+
+    /// What a click on a slot with `rule` does about it.
+    fn ruled(&self, uuid: Uuid, click: &MenuClick, rule: &Rule) -> Ruled {
+        let Some(slot) = click.slot else {
+            return Ruled::Allowed;
+        };
+        let ops = self.platform().menus();
+        let held = ops.item(uuid, slot);
+        match click.click.as_str() {
+            "left" | "right" => {
+                let Some(cursor) = &click.cursor else {
+                    return Ruled::Allowed;
+                };
+                if !(rule.takes)(cursor) {
+                    return Ruled::Refuse;
+                }
+                let Some(max) = rule.max else {
+                    return Ruled::Allowed;
+                };
+                let count = cursor.def.count.unwrap_or(1);
+                let stacks = held.is_some() && ops.room(uuid, slot, cursor.clone()) > 0;
+                if held.is_some() && !stacks {
+                    return if count <= max {
+                        Ruled::Allowed
+                    } else {
+                        Ruled::Refuse
+                    };
+                }
+                let has = held.as_ref().map_or(0, |h| h.def.count.unwrap_or(1));
+                let wanted = if click.click == "right" { 1 } else { count };
+                if has + wanted <= max {
+                    return Ruled::Allowed;
+                }
+                let put = (max - has)
+                    .min(wanted)
+                    .min(ops.room(uuid, slot, cursor.clone()));
+                if put <= 0 {
+                    return Ruled::Refuse;
+                }
+                let rest = count - put;
+                Ruled::Move {
+                    slot,
+                    held: Box::new(with_count(cursor, has + put)),
+                    player: click.player.uuid,
+                    rest: (rest > 0).then(|| Box::new(with_count(cursor, rest))),
+                }
+            }
+            "number_key" => {
+                let incoming = click.hotbar.and_then(|h| {
+                    self.platform()
+                        .inventories()
+                        .contents(InventoryRef::Player(InventoryRefPlayer {
+                            player: click.player.uuid,
+                        }))?
+                        .get(h as usize)
+                        .cloned()
+                        .flatten()
+                });
+                match incoming {
+                    None => Ruled::Allowed,
+                    Some(incoming)
+                        if (rule.takes)(&incoming)
+                            && incoming.def.count.unwrap_or(1) <= rule.max.unwrap_or(i32::MAX) =>
+                    {
+                        Ruled::Allowed
+                    }
+                    Some(_) => Ruled::Refuse,
+                }
+            }
+            _ => Ruled::Allowed,
+        }
+    }
+
+    /// Moves the stack a shift-click took from the player's inventory into the window's slots that show the
+    /// storage of its `shift_into`, first slot first: partial stacks it can top up, then empty ones, each taking
+    /// what the server says it holds. A slot is offered the stack as a click on it, which may refuse it.
+    fn shift_in(&self, id: &str, click: &MenuClick) {
+        let (Some(from), Some(moving)) = (click.slot, click.item.clone()) else {
+            return;
+        };
+        let (uuid, mut slots) = {
+            let menus = self.shared.menus.borrow();
+            let Some(w) = menus.windows.get(id) else {
+                return;
+            };
+            let Some(target) = &w.shift_into else {
+                return;
+            };
+            let slots: Vec<(i32, i32)> = w
+                .bindings
+                .iter()
+                .filter(|(_, b)| {
+                    same(&b.storage, &target.storage)
+                        && (target.first..=target.last).contains(&b.index)
+                })
+                .map(|(slot, b)| (b.index, *slot))
+                .collect();
+            (w.uuid, slots)
+        };
+        slots.sort();
+        let ops = self.platform().menus();
+        let mut left = moving.def.count.unwrap_or(1);
+        for partial in [true, false] {
+            for (_, slot) in &slots {
+                if left <= 0 {
+                    break;
+                }
+                let held = ops.item(uuid, *slot);
+                if held.is_some() != partial {
+                    continue;
+                }
+                let rule = self
+                    .shared
+                    .menus
+                    .borrow()
+                    .windows
+                    .get(id)
+                    .and_then(|w| w.rules.get(slot).cloned());
+                if rule.as_ref().is_some_and(|r| !(r.takes)(&moving)) {
+                    continue;
+                }
+                let has = held.as_ref().map_or(0, |h| h.def.count.unwrap_or(1));
+                let room = ops
+                    .room(uuid, *slot, moving.clone())
+                    .min(rule.as_ref().and_then(|r| r.max).unwrap_or(i32::MAX) - has);
+                if room <= 0 || !self.offer(id, click, *slot, &moving) {
+                    continue;
+                }
+                let amount = room.min(left);
+                if !self.write(id, *slot, Some(with_count(&moving, has + amount))) {
+                    continue;
+                }
+                left -= amount;
+            }
+        }
+        let taken = moving.def.count.unwrap_or(1) - left;
+        if taken > 0 {
+            let remainder = (left > 0).then(|| with_count(&moving, left));
+            self.platform().inventories().set_item(
+                InventoryRef::Player(InventoryRefPlayer {
+                    player: click.player.uuid,
+                }),
+                from,
+                remainder,
+            );
+        }
+    }
+
+    /// Whether the slot's click handlers let `item` in: they hear it as a click on the slot, and a cancel refuses it.
+    fn offer(&self, id: &str, click: &MenuClick, slot: i32, item: &ItemData) -> bool {
+        let context = self
+            .shared
+            .menus
+            .borrow()
+            .windows
+            .get(id)
+            .map_or(Value::Nil, |w| w.context.clone());
+        let target = handles::Slot {
+            menu: id.to_owned(),
+            index: i64::from(slot),
+        };
+        let payload = shapes::MenuClickEvent {
+            player: handles::Player {
+                id: uuid_text(&click.player.uuid),
+            },
+            menu: handles::Menu { id: id.to_owned() },
+            target: Some(target.clone()),
+            index: Some(i64::from(slot)),
+            in_menu: true,
+            click: click.click.clone(),
+            hotbar_index: None,
+            item: Some(crate::items::to_value(item)),
+            cursor_item: None,
+            context,
+        };
+        !self.raise(
+            &[("click", Some(Handle::Slot(target)))],
+            codecs::MenuClickEvent,
+            payload,
+            false,
         )
+    }
+
+    // ---- bindings ----
+
+    /// Writes a slot (and the storage slot or equipment it's bound to); none empties it.
+    pub fn write(&self, id: &str, slot: i32, item: Option<ItemData>) -> bool {
+        let Some(uuid) = self.window_uuid(id) else {
+            return false;
+        };
+        if !self.platform().menus().set_item(uuid, slot, item) {
+            return false;
+        }
+        self.wrote_through(id, slot);
+        true
+    }
+
+    /// A slot of window `id` changed (already written): when it's bound, its storage or equipment holds it too.
+    fn wrote_through(&self, id: &str, slot: i32) {
+        let (uuid, binding, worn) = {
+            let menus = self.shared.menus.borrow();
+            let Some(w) = menus.windows.get(id) else {
+                return;
+            };
+            (
+                w.uuid,
+                w.bindings.get(&slot).cloned(),
+                w.worn.get(&slot).cloned(),
+            )
+        };
+        let platform = self.platform();
+        let holds = platform.menus().item(uuid, slot);
+        if let Some(worn) = worn {
+            if !platform
+                .world_entities()
+                .set_equipment(worn.player, worn.slot, holds)
+            {
+                self.unbind(id, slot);
+            }
+            return;
+        }
+        if let Some(binding) = binding
+            && !platform.inventories().set_item(
+                InventoryRef::Storage(binding.storage),
+                binding.index,
+                holds,
+            )
+        {
+            self.unbind(id, slot);
+        }
+    }
+
+    /// Every bound slot of window `id` written through (after an add the server spread).
+    pub fn wrote_all(&self, id: &str) {
+        let slots: Vec<i32> = self
+            .shared
+            .menus
+            .borrow()
+            .windows
+            .get(id)
+            .map(|w| w.bindings.keys().chain(w.worn.keys()).copied().collect())
+            .unwrap_or_default();
+        for slot in slots {
+            self.wrote_through(id, slot);
+        }
+    }
+
+    fn bind(&self, id: &str, slot: i32, storage: InventoryRefStorage, index: i32) -> bool {
+        let Some(uuid) = self.window_uuid(id) else {
+            return false;
+        };
+        let Some(held) = self
+            .platform()
+            .inventories()
+            .contents(InventoryRef::Storage(storage.clone()))
+        else {
+            return false;
+        };
+        if let Some(w) = self.shared.menus.borrow_mut().windows.get_mut(id) {
+            w.worn.remove(&slot);
+            w.bindings.insert(slot, Binding { storage, index });
+        }
+        self.platform()
+            .menus()
+            .set_item(uuid, slot, held.get(index as usize).cloned().flatten());
+        true
+    }
+
+    fn bind_worn(&self, id: &str, slot: i32, player: Uuid, place: &str) -> bool {
+        let Some(uuid) = self.window_uuid(id) else {
+            return false;
+        };
+        let platform = self.platform();
+        if platform.players().get(player).is_none() {
+            return false;
+        }
+        if let Some(w) = self.shared.menus.borrow_mut().windows.get_mut(id) {
+            w.bindings.remove(&slot);
+            w.worn.insert(
+                slot,
+                Worn {
+                    player,
+                    slot: place.to_owned(),
+                },
+            );
+        }
+        platform.menus().set_item(
+            uuid,
+            slot,
+            platform
+                .world_entities()
+                .equipment(player, place.to_owned()),
+        );
+        true
+    }
+
+    /// Stops `slot` showing a storage's or what someone wears, and empties it: what it showed is still there.
+    fn unbind(&self, id: &str, slot: i32) -> bool {
+        let (uuid, had) = {
+            let mut menus = self.shared.menus.borrow_mut();
+            let Some(w) = menus.windows.get_mut(id) else {
+                return false;
+            };
+            let storage = w.bindings.remove(&slot).is_some();
+            let worn = w.worn.remove(&slot).is_some();
+            (w.uuid, storage || worn)
+        };
+        if had {
+            self.platform().menus().set_item(uuid, slot, None);
+        }
+        had
+    }
+
+    /// The game moved items in `slots` of window `uuid`: what the bound ones hold now is their storage's.
+    pub fn changed(&self, uuid: Uuid, slots: &[i32]) {
+        let Some(id) = self
+            .shared
+            .menus
+            .borrow()
+            .by_uuid(uuid)
+            .map(|w| w.id.clone())
+        else {
+            return;
+        };
+        for slot in slots {
+            self.wrote_through(&id, *slot);
+        }
+    }
+
+    /// A script changed `storage`: every slot bound to it shows what it has now.
+    pub fn storage_changed(&self, storage: &InventoryRefStorage) {
+        let bound: Vec<(Uuid, i32, Binding)> = self
+            .shared
+            .menus
+            .borrow()
+            .windows
+            .values()
+            .flat_map(|w| {
+                w.bindings
+                    .iter()
+                    .filter(|(_, b)| same(&b.storage, storage))
+                    .map(|(slot, b)| (w.uuid, *slot, b.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        let platform = self.platform();
+        for (uuid, slot, binding) in bound {
+            let held = platform
+                .inventories()
+                .contents(InventoryRef::Storage(binding.storage));
+            platform.menus().set_item(
+                uuid,
+                slot,
+                held.and_then(|h| h.get(binding.index as usize).cloned().flatten()),
+            );
+        }
+    }
+
+    /// Who's looking at a window with a slot bound to `storage`.
+    pub fn viewers_of(&self, storage: &InventoryRefStorage) -> Vec<Uuid> {
+        let windows: Vec<Uuid> = self
+            .shared
+            .menus
+            .borrow()
+            .windows
+            .values()
+            .filter(|w| w.bindings.values().any(|b| same(&b.storage, storage)))
+            .map(|w| w.uuid)
+            .collect();
+        let mut viewers: Vec<Uuid> = windows
+            .into_iter()
+            .flat_map(|w| self.platform().menus().viewers(w))
+            .collect();
+        viewers.sort();
+        viewers.dedup();
+        viewers
+    }
+
+    /// Puts every bound slot of window `id` back as its storage or wearer has it: after it was rebuilt.
+    fn show_bound(&self, id: &str) {
+        let (uuid, bindings, worn) = {
+            let mut menus = self.shared.menus.borrow_mut();
+            let Some(w) = menus.windows.get_mut(id) else {
+                return;
+            };
+            let size = w.definition.size;
+            w.bindings.retain(|s, _| *s < size);
+            w.worn.retain(|s, _| *s < size);
+            w.rules.retain(|s, _| *s < size);
+            (w.uuid, w.bindings.clone(), w.worn.clone())
+        };
+        let platform = self.platform();
+        for (slot, binding) in bindings {
+            match platform
+                .inventories()
+                .contents(InventoryRef::Storage(binding.storage))
+            {
+                Some(held) => {
+                    platform.menus().set_item(
+                        uuid,
+                        slot,
+                        held.get(binding.index as usize).cloned().flatten(),
+                    );
+                }
+                None => {
+                    self.unbind(id, slot);
+                }
+            }
+        }
+        for (slot, worn) in worn {
+            if platform.players().get(worn.player).is_some() {
+                platform.menus().set_item(
+                    uuid,
+                    slot,
+                    platform.world_entities().equipment(worn.player, worn.slot),
+                );
+            } else {
+                self.unbind(id, slot);
+            }
+        }
+    }
+
+    /// Every slot bound to what someone wears shows what they wear now: it changes other ways than through the
+    /// window.
+    fn show_worn(&self) {
+        let worn: Vec<(String, Uuid, i32, Worn)> = self
+            .shared
+            .menus
+            .borrow()
+            .windows
+            .values()
+            .flat_map(|w| {
+                w.worn
+                    .iter()
+                    .map(|(s, worn)| (w.id.clone(), w.uuid, *s, worn.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        let platform = self.platform();
+        for (id, uuid, slot, worn) in worn {
+            if platform.players().get(worn.player).is_none() {
+                self.unbind(&id, slot);
+                continue;
+            }
+            let wearing = platform.world_entities().equipment(worn.player, worn.slot);
+            if wearing != platform.menus().item(uuid, slot) {
+                platform.menus().set_item(uuid, slot, wearing);
+            }
+        }
+    }
+
+    /// `player` left: every slot bound to one of their storages, or to what they wear, stops showing it.
+    fn player_left(&self, player: Uuid) {
+        let doomed: Vec<(String, i32)> = self
+            .shared
+            .menus
+            .borrow()
+            .windows
+            .values()
+            .flat_map(|w| {
+                w.bindings
+                    .iter()
+                    .filter(|(_, b)| b.storage.player == player)
+                    .map(|(s, _)| *s)
+                    .chain(
+                        w.worn
+                            .iter()
+                            .filter(|(_, worn)| worn.player == player)
+                            .map(|(s, _)| *s),
+                    )
+                    .map(|s| (w.id.clone(), s))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        for (id, slot) in doomed {
+            self.unbind(&id, slot);
+        }
     }
 
     /// A drag of `cursor` over `slots` of the window and `own` of the player's inventory below. A locked window
@@ -383,13 +994,35 @@ impl MenuContext {
         own: &[i32],
         click: &str,
     ) -> bool {
-        let (id, locked, context) = {
+        let (id, locked, context, refused, all_bound) = {
             let menus = self.shared.menus.borrow();
             let Some(w) = menus.by_uuid(uuid) else {
                 return false;
             };
-            (w.id.clone(), w.locked, w.context.clone())
+            // A drag puts some of the cursor in each slot: refused over a slot that doesn't take it or holds fewer
+            // than it brings.
+            let refused = cursor.is_some_and(|cursor| {
+                slots.iter().any(|slot| {
+                    w.rules.get(slot).is_some_and(|rule| {
+                        !(rule.takes)(cursor)
+                            || rule
+                                .max
+                                .is_some_and(|max| cursor.def.count.unwrap_or(1) > max)
+                    })
+                })
+            });
+            let all_bound = slots.iter().all(|s| w.bound(*s));
+            (
+                w.id.clone(),
+                w.locked,
+                w.context.clone(),
+                refused,
+                all_bound,
+            )
         };
+        if refused {
+            return true;
+        }
         let menu = handles::Menu { id };
         let payload = shapes::MenuDragEvent {
             player: handles::Player {
@@ -406,7 +1039,7 @@ impl MenuContext {
             &[("drag", Some(Handle::Menu(menu)))],
             codecs::MenuDragEvent,
             payload,
-            locked && !slots.is_empty(),
+            locked && !slots.is_empty() && !all_bound,
         )
     }
 
@@ -501,6 +1134,9 @@ impl MenuContext {
         let ops = self.platform().menus();
         for window in live {
             self.stop_script(&window);
+            if let Some(w) = self.shared.menus.borrow_mut().windows.get_mut(&window) {
+                w.shift_into = None;
+            }
             let shared_before = previous.as_ref().is_some_and(|p| p.shared);
             if shared_before && !next.shared {
                 self.retire(&window);
@@ -533,6 +1169,17 @@ impl MenuContext {
                     .copied()
                     .collect();
                 for slot in slots {
+                    // A bound slot shows its storage's, whatever the file says.
+                    if self
+                        .shared
+                        .menus
+                        .borrow()
+                        .windows
+                        .get(&window)
+                        .is_some_and(|w| w.bound(slot))
+                    {
+                        continue;
+                    }
                     let before = previous.slots.get(&slot).and_then(|s| s.item.clone());
                     let after = next.slots.get(&slot).and_then(|s| s.item.clone());
                     if before != after {
@@ -560,6 +1207,7 @@ impl MenuContext {
                     w.locked = next.locked;
                 }
                 self.build(&window);
+                self.show_bound(&window);
                 for viewer in viewers {
                     ops.open(uuid, viewer);
                 }
@@ -806,7 +1454,37 @@ impl MenuApi for GameContext {
         first: Option<i64>,
         last: Option<i64>,
     ) -> ApiResult<bool> {
-        <Unported as MenuApi>::shift_into(&Unported, this, storage, first, last)
+        let Some(InventoryRef::Storage(storage)) = crate::events::inventory_ref(&storage) else {
+            return Err(err(
+                "only a player's storage (player:storage) can take shift-clicks from a menu",
+            ));
+        };
+        let size = i64::from(storage.size);
+        let (from, to) = (first.unwrap_or(0), last.unwrap_or(size - 1));
+        for at in [from, to] {
+            if !(0..size).contains(&at) {
+                return Err(err(format!(
+                    "slot {at} is outside this storage: it has {size} slots, 0 to {}",
+                    size - 1
+                )));
+            }
+        }
+        if from > to {
+            return Err(err(format!("first slot {from} is after last slot {to}")));
+        }
+        let mut menus = self.shared.menus.borrow_mut();
+        let Some(window) = menus.windows.get_mut(&this.id) else {
+            return Ok(false);
+        };
+        if window.definition.shared {
+            return Err(err(SHARED_STORAGE));
+        }
+        window.shift_into = Some(ShiftInto {
+            storage,
+            first: from as i32,
+            last: to as i32,
+        });
+        Ok(true)
     }
     /// Checked against the window while it's there; a gone window's slots are handed out and answer nil.
     fn slot(&self, this: &handles::Menu, index: i64) -> ApiResult<handles::Slot> {
@@ -836,15 +1514,12 @@ impl MenuApi for GameContext {
         item: Option<values::Item>,
     ) -> ApiResult<bool> {
         let item = self.item_of_value(item)?;
-        let Some((uuid, size)) = self.window(&this.id, |w| (w.uuid, w.definition.size)) else {
+        let Some(size) = self.window(&this.id, |w| w.definition.size) else {
             return Ok(false);
         };
-        Ok(self
-            .shared
-            .platform
-            .menus()
-            .set_item(uuid, slot_in(index, size)?, item))
+        Ok(self.menus().write(&this.id, slot_in(index, size)?, item))
     }
+    /// How many didn't fit: all of them when the window is gone.
     /// How many didn't fit: all of them when the window is gone.
     fn add_item(&self, this: &handles::Menu, item: values::Item) -> ApiResult<i64> {
         let item =
@@ -852,7 +1527,9 @@ impl MenuApi for GameContext {
         let Some(uuid) = self.window(&this.id, |w| w.uuid) else {
             return Ok(i64::from(item.def.count.unwrap_or(1)));
         };
-        Ok(i64::from(self.shared.platform.menus().add(uuid, item)))
+        let left = self.shared.platform.menus().add(uuid, item);
+        self.menus().wrote_all(&this.id);
+        Ok(i64::from(left))
     }
     fn items(&self, this: &handles::Menu) -> ApiResult<BTreeMap<i64, values::Item>> {
         let Some((uuid, size)) = self.window(&this.id, |w| (w.uuid, w.definition.size)) else {
@@ -873,7 +1550,7 @@ impl MenuApi for GameContext {
         this: &handles::Menu,
         items: BTreeMap<i64, values::Item>,
     ) -> ApiResult<bool> {
-        let Some((uuid, size)) = self.window(&this.id, |w| (w.uuid, w.definition.size)) else {
+        let Some(size) = self.window(&this.id, |w| w.definition.size) else {
             return Ok(false);
         };
         // Every slot is checked before any changes.
@@ -881,9 +1558,9 @@ impl MenuApi for GameContext {
         for (index, item) in items {
             slots.push((slot_in(index, size)?, self.item_of_value(Some(item))?));
         }
-        let ops = self.shared.platform.menus();
+        let menus = self.menus();
         for (slot, item) in slots {
-            ops.set_item(uuid, slot, item);
+            menus.write(&this.id, slot, item);
         }
         Ok(true)
     }
@@ -905,18 +1582,19 @@ impl MenuApi for GameContext {
                 .collect::<ApiResult<_>>()?,
             None => (0..size).filter(|s| ops.item(uuid, *s).is_none()).collect(),
         };
+        let menus = self.menus();
         for slot in slots {
-            ops.set_item(uuid, slot, item.clone());
+            menus.write(&this.id, slot, item.clone());
         }
         Ok(true)
     }
     fn clear(&self, this: &handles::Menu) -> ApiResult<bool> {
-        let Some((uuid, size)) = self.window(&this.id, |w| (w.uuid, w.definition.size)) else {
+        let Some(size) = self.window(&this.id, |w| w.definition.size) else {
             return Ok(false);
         };
-        let ops = self.shared.platform.menus();
+        let menus = self.menus();
         for slot in 0..size {
-            ops.set_item(uuid, slot, None);
+            menus.write(&this.id, slot, None);
         }
         Ok(true)
     }
@@ -1066,7 +1744,33 @@ impl SlotApi for GameContext {
         storage: handles::Inventory,
         index: Option<i64>,
     ) -> ApiResult<bool> {
-        <Unported as SlotApi>::bind(&Unported, this, storage, index)
+        let Some(InventoryRef::Storage(storage)) = crate::events::inventory_ref(&storage) else {
+            return Err(err(
+                "only a player's storage (player:storage) can be bound to a menu slot",
+            ));
+        };
+        let at = index.unwrap_or(this.index);
+        let size = i64::from(storage.size);
+        if !(0..size).contains(&at) {
+            return Err(err(format!(
+                "slot {at} is outside this storage: it has {size} slots, 0 to {}",
+                size - 1
+            )));
+        }
+        let Some((shared, window_size)) =
+            self.window(&this.menu, |w| (w.definition.shared, w.definition.size))
+        else {
+            return Ok(false);
+        };
+        if shared {
+            return Err(err(SHARED_STORAGE));
+        }
+        Ok(self.menus().bind(
+            &this.menu,
+            slot_in(this.index, window_size)?,
+            storage,
+            at as i32,
+        ))
     }
     fn bind_equipment(
         &self,
@@ -1074,22 +1778,100 @@ impl SlotApi for GameContext {
         player: handles::Player,
         equipment: String,
     ) -> ApiResult<bool> {
-        <Unported as SlotApi>::bind_equipment(&Unported, this, player, equipment)
+        if !BINDABLE.contains(&equipment.as_str()) {
+            return Err(err(format!(
+                "bad argument 'equipment' ({}, got \"{equipment}\")",
+                BINDABLE.join(", ")
+            )));
+        }
+        let Some((shared, size)) =
+            self.window(&this.menu, |w| (w.definition.shared, w.definition.size))
+        else {
+            return Ok(false);
+        };
+        if shared {
+            return Err(err(
+                "a shared menu's window can't show what a player wears: everyone would see one player's (bind a window of their own)",
+            ));
+        }
+        let Some(uuid) = parse_uuid(&player.id) else {
+            return Ok(false);
+        };
+        Ok(self
+            .menus()
+            .bind_worn(&this.menu, slot_in(this.index, size)?, uuid, &equipment))
     }
     fn set_rule(&self, this: &handles::Slot, rule: Option<shapes::SlotRule>) -> ApiResult<bool> {
-        <Unported as SlotApi>::set_rule(&Unported, this, rule)
+        let built = match rule {
+            Some(rule) => Some(self.settle(rule)?),
+            None => None,
+        };
+        let Some(size) = self.window(&this.menu, |w| w.definition.size) else {
+            return Ok(false);
+        };
+        let slot = slot_in(this.index, size)?;
+        if let Some(w) = self.shared.menus.borrow_mut().windows.get_mut(&this.menu) {
+            match built {
+                Some(rule) => w.rules.insert(slot, rule),
+                None => w.rules.remove(&slot),
+            };
+        }
+        Ok(true)
     }
     fn rule(&self, this: &handles::Slot) -> ApiResult<Option<shapes::SlotRule>> {
-        <Unported as SlotApi>::rule(&Unported, this)
+        let Some(size) = self.window(&this.menu, |w| w.definition.size) else {
+            return Ok(None);
+        };
+        let slot = slot_in(this.index, size)?;
+        Ok(self
+            .window(&this.menu, |w| w.rules.get(&slot).map(|r| r.source.clone()))
+            .flatten())
     }
     fn accepts(&self, this: &handles::Slot, item: values::Item) -> ApiResult<bool> {
-        <Unported as SlotApi>::accepts(&Unported, this, item)
+        let item =
+            crate::items::from_value(&item, "item", self.shared.platform.game()).map_err(err)?;
+        let Some(size) = self.window(&this.menu, |w| w.definition.size) else {
+            return Ok(false);
+        };
+        let slot = slot_in(this.index, size)?;
+        let rule = self
+            .window(&this.menu, |w| w.rules.get(&slot).cloned())
+            .flatten();
+        Ok(rule.is_none_or(|r| (r.takes)(&item)))
     }
     fn unbind(&self, this: &handles::Slot) -> ApiResult<bool> {
-        <Unported as SlotApi>::unbind(&Unported, this)
+        let Some(size) = self.window(&this.menu, |w| w.definition.size) else {
+            return Ok(false);
+        };
+        Ok(self.menus().unbind(&this.menu, slot_in(this.index, size)?))
     }
     fn binding(&self, this: &handles::Slot) -> ApiResult<Option<shapes::SlotBinding>> {
-        <Unported as SlotApi>::binding(&Unported, this)
+        let Some(size) = self.window(&this.menu, |w| w.definition.size) else {
+            return Ok(None);
+        };
+        let slot = slot_in(this.index, size)?;
+        Ok(self
+            .window(&this.menu, |w| {
+                if let Some(worn) = w.worn.get(&slot) {
+                    return Some(shapes::SlotBinding {
+                        storage: None,
+                        index: None,
+                        player: Some(handles::Player {
+                            id: uuid_text(&worn.player),
+                        }),
+                        equipment: Some(worn.slot.clone()),
+                    });
+                }
+                w.bindings.get(&slot).map(|b| shapes::SlotBinding {
+                    storage: Some(crate::events::inventory_handle(&InventoryRef::Storage(
+                        b.storage.clone(),
+                    ))),
+                    index: Some(i64::from(b.index)),
+                    player: None,
+                    equipment: None,
+                })
+            })
+            .flatten())
     }
     fn on(
         &self,
@@ -1121,6 +1903,125 @@ impl SlotApi for GameContext {
             None,
             true,
         )
+    }
+}
+
+/// What a slot can show of what a player wears.
+const BINDABLE: [&str; 5] = ["head", "chest", "legs", "feet", "off_hand"];
+/// Where a rule's `wearable` says a stack is worn.
+const WEARABLE: [&str; 5] = ["head", "chest", "legs", "feet", "body"];
+const SHARED_STORAGE: &str = "a shared menu's window can't show a storage: everyone would see one player's items (bind a window of their own)";
+
+impl GameContext {
+    /// The project item a stack's `item` reference names, by the project's id for it; none for none.
+    fn project_item_of(&self, reference: &str) -> Option<String> {
+        let names = self.shared.names.borrow();
+        let key = netherforge_format::reference::resolve_any(&names.home, reference)?;
+        names
+            .namespaces
+            .get(&key.namespace)?
+            .resources
+            .contains(&("item".to_owned(), key.path.clone()))
+            .then(|| key.relative_to(&names.home))
+    }
+
+    /// `rule` as a slot holds it to stacks, checked: its items must be the project's, its places real ones.
+    fn settle(&self, rule: shapes::SlotRule) -> ApiResult<Rule> {
+        let items: Option<HashSet<String>> = match &rule.items {
+            Some(items) => Some(
+                items
+                    .iter()
+                    .map(|id| {
+                        let named = self.with_names(|names| names.resource("item", id))?;
+                        self.project_item_of(&named).ok_or_else(|| {
+                            err(format!("bad argument 'rule.items' (no item \"{id}\")"))
+                        })
+                    })
+                    .collect::<ApiResult<_>>()?,
+            ),
+            None => None,
+        };
+        let kinds: Option<Vec<(String, bool)>> = rule.kinds.as_ref().map(|kinds| {
+            kinds
+                .iter()
+                .map(|k| {
+                    (
+                        netherforge_format::game::normalize(k.trim_start_matches('#')),
+                        k.starts_with('#'),
+                    )
+                })
+                .collect()
+        });
+        if let Some(wearable) = &rule.wearable
+            && !WEARABLE.contains(&wearable.as_str())
+        {
+            return Err(err(format!(
+                "bad argument 'rule.wearable' ({}, got \"{wearable}\")",
+                WEARABLE.join(", ")
+            )));
+        }
+        if rule.property.is_some() {
+            return Err(err(
+                "rule.property isn't on the Rust runtime yet (it needs project items' properties)",
+            ));
+        }
+        let max = match rule.max {
+            Some(max) if max < 1 => {
+                return Err(err(format!(
+                    "bad argument 'rule.max' (at least 1, got {max})"
+                )));
+            }
+            Some(max) => Some(max.min(i64::from(i32::MAX)) as i32),
+            None => None,
+        };
+        let any = items.is_none() && kinds.is_none() && rule.wearable.is_none();
+        let wearable = rule.wearable.clone();
+        let context = self.clone();
+        let takes = move |stack: &ItemData| -> bool {
+            if any {
+                return true;
+            }
+            let game = context.shared.platform.game();
+            let project = stack
+                .def
+                .item
+                .as_deref()
+                .and_then(|r| context.project_item_of(r));
+            let kind = netherforge_format::game::normalize(&stack.def.kind);
+            let is_kind = |id: &str, tag: bool| {
+                if tag {
+                    game.tag(netherforge_format::game::Registry::Item.key(), id)
+                        .is_some_and(|t| t.contains(&kind))
+                } else {
+                    kind == id
+                }
+            };
+            let by_item = project
+                .as_ref()
+                .is_some_and(|p| items.as_ref().is_some_and(|i| i.contains(p)));
+            let by_kind = project.is_none()
+                && kinds
+                    .as_ref()
+                    .is_some_and(|k| k.iter().any(|(id, tag)| is_kind(id, *tag)));
+            let by_wear = wearable.as_ref().is_some_and(|w| {
+                let worn = stack
+                    .def
+                    .equipment
+                    .as_ref()
+                    .map(|e| netherforge_format::canonical::name_of(&e.slot))
+                    .or_else(|| {
+                        (project.is_none() && is_kind(&format!("minecraft:{w}_armor"), true))
+                            .then(|| w.clone())
+                    });
+                worn.as_ref() == Some(w)
+            });
+            by_item || by_kind || by_wear
+        };
+        Ok(Rule {
+            source: rule,
+            max,
+            takes: Rc::new(takes),
+        })
     }
 }
 
@@ -1227,6 +2128,7 @@ impl Service for MenusService {
 
     /// Takes every definition and makes every shared menu's window; their scripts start once modules run.
     fn start(&self, room: &Room, project: &Define) {
+        *self.scripts.borrow_mut() = Some(room.scripts().clone());
         let definitions = self.define(project);
         self.shared.menus.borrow_mut().definitions = definitions.clone();
         let context = self.context(room);
@@ -1246,7 +2148,19 @@ impl Service for MenusService {
     }
 
     fn tick(&self, room: &Room, _platform: &dyn Platform) {
-        self.context(room).retire_unseen();
+        let context = self.context(room);
+        context.retire_unseen();
+        context.show_worn();
+    }
+
+    fn player_quit(&self, player: &PlayerRef) {
+        if let Some(scripts) = self.scripts.borrow().clone() {
+            MenuContext {
+                shared: self.shared.clone(),
+                scripts,
+            }
+            .player_left(player.uuid);
+        }
     }
 
     fn reload(&self, room: &Room, _kind: &str, ids: &BTreeSet<String>, project: &Define) {

@@ -653,9 +653,15 @@ slots; liveness answers for `Menu` and `Slot` handles. Reload keeps a window of 
 slots whose authored item changed; title, skin and lock where the file changed them) and rebuilds and reopens one
 whose shape changed; its script restarts. The Platform spec's `MenuType` is format's.
 
-Not yet (the next slice): slots bound to storages and equipment, slot rules, `shift_into`, `menu_changed`;
-then templates (`nf.menus.create`) and skins in titles (with the built resource pack: until then a skin draws
-nothing and the words show alone).
+A slot of a window that isn't shared can be bound to a player's storage or to what they wear (`Slot:bind`,
+`bind_equipment`): every write through the API goes through (`MenuContext::write`, `wrote_through`), a game-applied
+click is written back on `PlatformEvents::menu_changed`, an `Inventory` change to the storage shows in its bound
+slots (`storage_changed`), and a storage's viewers are those windows'. A slot's rule (`set_rule`: project items by
+id through `Names`, kinds and `#tags`, `wearable`, `max`) refuses a click with a stack it doesn't take, or moves
+only what fits and hands the rest back on the cursor; a locked window's click is cancelled before any of that, as
+Kotlin's. `shift_into` moves a shift-click from below into a storage's bound slots, partial stacks first, offering
+each slot the stack as a click. Not yet: templates (`nf.menus.create`), a rule's `property` (project items'
+properties), and skins in titles (with the built resource pack: until then a skin draws nothing).
 
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 

@@ -2,8 +2,8 @@
 //! once it isn't there; a slot outside it, or a mistake in an item or a match, is an error. Taking, counting and
 //! finding go through `items::ItemMatch` over the inventory's contents.
 //!
-//! Not yet, with menus: a storage's viewers are the menus showing it (none until menus come), and a change to a
-//! storage isn't yet pushed to the menu slots bound to it.
+//! A storage is on screen only where a menu shows it: its viewers are those windows', and a change to it shows in
+//! every menu slot bound to it.
 
 use std::collections::BTreeMap;
 
@@ -32,6 +32,17 @@ fn slot(index: i64, size: i32) -> ApiResult<i32> {
 }
 
 impl GameContext {
+    /// A storage changed: the menu slots bound to it show what it has now.
+    fn changed(&self, r#ref: &InventoryRef) {
+        if let InventoryRef::Storage(storage) = r#ref {
+            crate::menu::MenuContext {
+                shared: self.shared.clone(),
+                scripts: self.scripts.clone(),
+            }
+            .storage_changed(storage);
+        }
+    }
+
     fn item_match(&self, given: unions::StringOrItemMatch) -> ApiResult<ItemMatch> {
         let json = match given {
             unions::StringOrItemMatch::String(kind) => {
@@ -133,7 +144,9 @@ impl InventoryApi for GameContext {
         let Some(size) = inventories.size(r#ref.clone()) else {
             return Ok(false);
         };
-        Ok(inventories.set_item(r#ref, slot(index, size)?, item))
+        let set = inventories.set_item(r#ref.clone(), slot(index, size)?, item);
+        self.changed(&r#ref);
+        Ok(set)
     }
 
     fn items(&self, this: &handles::Inventory) -> ApiResult<BTreeMap<i64, values::Item>> {
@@ -152,9 +165,12 @@ impl InventoryApi for GameContext {
         let item =
             crate::items::from_value(&item, "item", self.shared.platform.game()).map_err(err)?;
         let count = i64::from(item.def.count.unwrap_or(1));
-        Ok(inventory_ref(this)
-            .and_then(|r| self.shared.platform.inventories().add(r, item))
-            .map_or(count, i64::from))
+        let Some(r#ref) = inventory_ref(this) else {
+            return Ok(count);
+        };
+        let left = self.shared.platform.inventories().add(r#ref.clone(), item);
+        self.changed(&r#ref);
+        Ok(left.map_or(count, i64::from))
     }
 
     fn remove_item(
@@ -174,9 +190,11 @@ impl InventoryApi for GameContext {
             return Ok(0);
         };
         let inventories = self.shared.platform.inventories();
-        Ok(matching.remove(&contents, count, |slot, item| {
+        let taken = matching.remove(&contents, count, |slot, item| {
             inventories.set_item(r#ref.clone(), slot as i32, item);
-        }))
+        });
+        self.changed(&r#ref);
+        Ok(taken)
     }
 
     fn count_item(
@@ -212,21 +230,29 @@ impl InventoryApi for GameContext {
     }
 
     fn clear(&self, this: &handles::Inventory) -> ApiResult<bool> {
-        Ok(inventory_ref(this).is_some_and(|r| self.shared.platform.inventories().clear(r)))
+        let Some(r#ref) = inventory_ref(this) else {
+            return Ok(false);
+        };
+        let cleared = self.shared.platform.inventories().clear(r#ref.clone());
+        self.changed(&r#ref);
+        Ok(cleared)
     }
 
     fn viewers(&self, this: &handles::Inventory) -> ApiResult<Vec<handles::Player>> {
         let Some(r#ref) = inventory_ref(this) else {
             return Ok(Vec::new());
         };
-        // A storage is on screen only where a menu shows it.
-        if matches!(r#ref, InventoryRef::Storage(_)) {
-            return Ok(Vec::new());
-        }
         let platform = &*self.shared.platform;
-        Ok(platform
-            .inventories()
-            .viewers(r#ref)
+        // A storage is on screen only where a menu shows it.
+        let viewers = match &r#ref {
+            InventoryRef::Storage(storage) => crate::menu::MenuContext {
+                shared: self.shared.clone(),
+                scripts: self.scripts.clone(),
+            }
+            .viewers_of(storage),
+            _ => platform.inventories().viewers(r#ref),
+        };
+        Ok(viewers
             .into_iter()
             .filter_map(|id| platform.players().get(id))
             .map(|p| handles::Player {

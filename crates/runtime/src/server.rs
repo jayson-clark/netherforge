@@ -533,8 +533,15 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         .closed(window, &player);
     }
 
-    /// For slots bound to storages, which come with the next slice of menus.
-    fn menu_changed(&self, _window: Uuid, _slots: Vec<i32>) {}
+    /// What a viewer's click or drag moved: the bound slots' storages hold it now.
+    fn menu_changed(&self, window: Uuid, slots: Vec<i32>) {
+        let Some(s) = self.open() else { return };
+        crate::menu::MenuContext {
+            shared: s.session().shared().clone(),
+            scripts: s.room().scripts().clone(),
+        }
+        .changed(window, &slots);
+    }
 
     fn dialog_pressed(
         &self,
