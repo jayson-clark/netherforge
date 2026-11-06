@@ -541,6 +541,12 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn playback(&self) -> &dyn netherforge_api::api::PlaybackApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
     fn hud(&self) -> &dyn netherforge_api::api::HudApi {
         match &self.worlds {
             Some(w) => w,

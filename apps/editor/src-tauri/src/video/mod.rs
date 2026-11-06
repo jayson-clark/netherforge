@@ -195,7 +195,7 @@ pub fn info(root: &ProjectRoot, folder: &str) -> Result<VideoInfo> {
         .resolve(&format!("{folder}/{}", settings.source))
         .ok()
         .filter(|p| p.is_file());
-    let header = nfv::Header::read(&frames);
+    let header = nfv::read_header(&frames);
     let source_changed = match (&header, &source) {
         (Some(h), Some(s)) => Some(hash_file(s)? != h.source_sha256),
         _ => None,
@@ -619,7 +619,7 @@ mod tests {
                 && dir.join("audio/0.ogg").is_file()
                 && dir.join("audio/1.ogg").is_file()
         );
-        let header = nfv::Header::read(&dir.join(FRAMES)).unwrap();
+        let header = nfv::read_header(&dir.join(FRAMES)).unwrap();
         assert_eq!(
             (
                 header.columns,
@@ -666,7 +666,7 @@ mod tests {
         assert!(!made.audio);
         assert!(!tmp.path().join("videos/clip").join(AUDIO).exists());
         assert!(
-            !nfv::Header::read(&tmp.path().join("videos/clip").join(FRAMES))
+            !nfv::read_header(&tmp.path().join("videos/clip").join(FRAMES))
                 .unwrap()
                 .audio
         );

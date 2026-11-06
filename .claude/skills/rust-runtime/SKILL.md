@@ -723,8 +723,20 @@ tick. A player's own view (`for_player`) is a canvas of their own until `release
 `Dither` into the game's palette (`GameData::map_colors`), the last 32 kept. Files are read while scripts run
 through `Config::bytes` (`ProjectBytes`, a `'static` reader the adapter gives from disk; none, and pictures and font
 files can't be read), since the session's source is only borrowed. `ScreenFacing` is format's in the Platform's Rust
-types. Not yet: videos and playback (`play`, `playback`, `Playback`), aim (`looking_at`, clicks, `hover`, `leave`),
-the per-scope counts for `/nf scripts`.
+types. Not yet: aim (`looking_at`, clicks, `hover`, `leave`), the per-scope counts for `/nf scripts`.
+
+**Videos** (`screen/video.rs`, Kotlin's `ScreenVideos`, `Playback`, `FrameFeed`, `NfvReader`, `PlaybackImpl`): each
+video that reads (`running::<VideoFile>()`, its folder's files from `present`), its frames file found on disk through
+`Config::paths` (`ProjectPaths`, the adapter's: frames are read a frame at a time, so they need a file, not bytes; none,
+and nothing plays), its sounds `<ns>:video.<id>` and the pieces `video.<id>.<n>` that are there in a row from 0. A
+playback's `FrameFeed` reads ahead on the session's videos `Lane` (a thread of its own, made on the first play and ended
+when the screens' state goes; `ScreensConfig::read_inline` runs it on the caller, for tests), and every playback of one
+video shares its reader while any holds it (a `Weak` by the video's serial, which a reload renews). Playbacks advance at
+the start of the screens' tick, before the sending. Sound, `screen.json`'s own `video` (played after the screens' scripts
+start, and again on its reload), `video.stale` problems and the end reasons are Kotlin's. Two deliberate changes: a
+looping playback's read-ahead wraps to the video's start (Kotlin's stopped at the end, so every loop held a tick, and a
+short loop never showed its first frame again); and `playback:length()` after its end is the video's (from the header
+read for the staleness check), as the spec says, where Kotlin's answered 0. The `.nfv` layout is format's (below).
 
 ## HUDs (`crates/runtime/src/huds.rs`)
 
@@ -1245,6 +1257,9 @@ Next in format: the compilers, with the runtime pieces that use them. The compil
   from Kotlin's stdlib on every branch (a power of two by its bits, the rest by rejection), held to `random.txt`,
   which `RandomGoldenTest` now writes with long draws after the old ones. An error (a missing table, a cycle past
   `MOST_DEPTH`) is a `Result`, where Kotlin threw.
+- **Converted videos** (`nfv.rs`): the `.nfv` layout once (header, index, records, the per-map delta, zlib through
+  `flate2`), which the editor's converter writes through (its `Writer` streams `record`s) and the runtime reads with;
+  `encode` writes a whole video in memory for tests. The editor and the Kotlin reader each defined it before.
 - **Map colours** (`map_colors.rs`, `MapPalette` and `Dither`): the palette, the redmean match (per 15-bit cell,
   exact for Floyd–Steinberg) and the three dithers, whole-number arithmetic only. It was the editor's video
   converter's Rust copy (`src-tauri/src/video/palette.rs`), moved here and made general over where pixels come from

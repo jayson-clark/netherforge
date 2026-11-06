@@ -2448,6 +2448,7 @@ dependencies = [
 name = "netherforge-format"
 version = "0.0.0"
 dependencies = [
+ "flate2",
  "getrandom 0.4.3",
  "indexmap 2.14.2",
  "regex",

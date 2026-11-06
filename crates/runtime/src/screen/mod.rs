@@ -10,10 +10,13 @@
 //! - **Frames**: a screen that hangs somewhere is item frames, one a map, never saved with their chunk: hung again
 //!   whenever their chunk is loaded and they aren't there, taken down when the session ends.
 //!
-//! Not yet (the next slices): videos and playback, and aim (`looking_at`, clicks, `hover`, `leave`).
+//! - **Videos** (`video`): playbacks, their frames read ahead off the main thread, and their sound.
+//!
+//! Not yet (the next slice): aim (`looking_at`, clicks, `hover`, `leave`).
 
 pub mod canvas;
 pub mod text;
+pub mod video;
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
@@ -76,12 +79,15 @@ fn int(n: i64) -> i32 {
 #[derive(Clone, Copy, Debug)]
 pub struct ScreensConfig {
     pub bytes_per_tick: i32,
+    /// For tests: videos' frames are read at once, on the main thread, rather than on the videos' lane.
+    pub read_inline: bool,
 }
 
 impl Default for ScreensConfig {
     fn default() -> ScreensConfig {
         ScreensConfig {
             bytes_per_tick: 64 * 1024,
+            read_inline: false,
         }
     }
 }
@@ -208,6 +214,8 @@ pub struct ScreenState {
     /// Its script's scope, for a project screen with a script.
     pub scope: Option<ScopeId>,
     pub removed: bool,
+    /// The video playing on each canvas, by number: the one everyone sees under none, a player's own view under them.
+    pub playbacks: HashMap<Option<Uuid>, i64>,
 }
 
 fn background_canvas(columns: i32, rows: i32, background: i32) -> Canvas {
@@ -260,6 +268,7 @@ impl ScreenState {
             personal: HashMap::new(),
             scope: None,
             removed: false,
+            playbacks: HashMap::new(),
         }
     }
 
@@ -376,6 +385,11 @@ impl std::fmt::Debug for ProjectBytes {
 pub struct Screens {
     pub config: ScreensConfig,
     pub read: Option<ProjectBytes>,
+    /// Where the project's files are on disk: what videos' frames are read from.
+    pub paths: Option<video::ProjectPaths>,
+    pub videos: video::Videos,
+    /// Each video's number, so one read again on a reload is a new video to the readers.
+    video_serial: u64,
     pub screens: IndexMap<String, ScreenState>,
     next_screen: u64,
     /// The map numbers kept for good, by (namespace, screen key), each by its tile's stable number.
@@ -814,6 +828,7 @@ impl ScreensContext {
     /// Takes `id` away: its frames, everyone's own views of it, every handler on it. With `forget` (a script
     /// removing its own screen), a keyed one gives up its maps' numbers.
     fn remove(&self, id: &str, forget: bool) {
+        self.end_where(video::EndReason::Removed, |p| p.screen == id);
         let (handles, owned) = {
             let mut screens = self.shared.screens.borrow_mut();
             let screens = &mut *screens;
@@ -916,6 +931,7 @@ impl ScreensContext {
             let screens = shared.screens.try_borrow().ok()?;
             match handle {
                 Handle::Screen(s) => Some(screens.resolve(s).is_some()),
+                Handle::Playback(p) => Some(screens.videos.playbacks.contains_key(&p.number)),
                 _ => None,
             }
         }));
@@ -1815,6 +1831,17 @@ impl ScreenApi for GameContext {
 
     /// Ends a player's own view: they're sent what everyone sees.
     fn release(&self, this: &handles::Screen) -> ApiResult<bool> {
+        let playing = {
+            let screens = self.shared.screens.borrow();
+            match screens.resolve(this) {
+                Some((screen, Some(player))) => screen.playbacks.get(&Some(player)).copied(),
+                _ => None,
+            }
+        };
+        if let Some(number) = playing {
+            self.screens_context()
+                .end(number, video::EndReason::Removed);
+        }
         let released = {
             let mut screens = self.shared.screens.borrow_mut();
             let Some((_, Some(player))) = screens.resolve(this) else {
@@ -1840,11 +1867,28 @@ impl ScreenApi for GameContext {
         video: String,
         options: Option<shapes::VideoPlayOptions>,
     ) -> ApiResult<Option<handles::Playback>> {
-        <Unported as ScreenApi>::play(&Unported, this, video, options)
+        let name = self.with_names(|names| names.resource("video", &video))?;
+        let options = GameContext::play_options(options)?;
+        let Some((id, viewer)) = self
+            .shared
+            .screens
+            .borrow()
+            .resolve(this)
+            .map(|(s, p)| (s.id.clone(), p))
+        else {
+            return Ok(None);
+        };
+        let owner = self.scripts.host().running_scope();
+        self.screens_context()
+            .play(&id, viewer, &name, owner, options)
     }
 
     fn playback(&self, this: &handles::Screen) -> ApiResult<Option<handles::Playback>> {
-        <Unported as ScreenApi>::playback(&Unported, this)
+        let screens = self.shared.screens.borrow();
+        Ok(screens.resolve(this).and_then(|(screen, viewer)| {
+            let number = screen.playbacks.get(&viewer)?;
+            screens.videos.live(*number).map(video::Playback::handle)
+        }))
     }
 
     fn remove(&self, this: &handles::Screen) -> ApiResult<bool> {
@@ -1947,6 +1991,8 @@ impl GameContext {
 pub struct ScreensService {
     pub shared: Rc<Shared>,
     pub scripts: RefCell<Option<crate::Scripts>>,
+    /// The project's namespace.
+    pub home: RefCell<String>,
 }
 
 impl ScreensService {
@@ -2005,6 +2051,9 @@ impl ScreensService {
             .into_iter()
             .map(|(id, _)| (id, true))
             .collect();
+        let mut serial = screens.video_serial;
+        screens.videos.records = video::load_videos(project, screens.paths.as_ref(), &mut serial);
+        screens.video_serial = serial;
         screens.screens.clear();
         screens.owners.clear();
         for (name, file) in project.project.running::<ScreenFile>() {
@@ -2038,9 +2087,13 @@ impl ScreensService {
                 .insert(id.to_owned(), screen);
             context.view(id);
             context.start_script(id);
+            context.autoplay(id, home);
             return;
         }
         context.stop_script(id);
+        context.end_where(video::EndReason::Unloaded, |p| {
+            p.screen == id && p.owner.is_none()
+        });
         let Some(next) = next else {
             context.remove(id, false);
             self.shared.screens.borrow_mut().screens.shift_remove(id);
@@ -2056,6 +2109,7 @@ impl ScreensService {
                 .then(|| screen.namespace.clone())
         };
         if let Some(namespace) = resized {
+            context.end_where(video::EndReason::Removed, |p| p.screen == id);
             context.take_down(id);
             let bare = netherforge_format::kinds::split_package(id).1.to_owned();
             let mut screens = self.shared.screens.borrow_mut();
@@ -2095,6 +2149,33 @@ impl ScreensService {
         }
         context.view(id);
         context.start_script(id);
+        context.autoplay(id, home);
+    }
+
+    /// The project's videos changed: those playing keep the frames they opened; the next play takes the new ones.
+    fn reload_videos(&self, ids: &BTreeSet<String>, project: &Define) {
+        let mut screens = self.shared.screens.borrow_mut();
+        let mut serial = screens.video_serial;
+        let mut fresh = video::load_videos(project, screens.paths.as_ref(), &mut serial);
+        screens.video_serial = serial;
+        let present: BTreeSet<String> = project
+            .project
+            .present("video")
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        for id in ids {
+            match fresh.remove(id) {
+                Some(video) => {
+                    screens.videos.records.insert(id.clone(), video);
+                }
+                None if !present.contains(id) => {
+                    screens.videos.records.remove(id);
+                }
+                // A file with errors keeps its last good version.
+                None => {}
+            }
+        }
     }
 }
 
@@ -2122,11 +2203,12 @@ impl Service for ScreensService {
     }
 
     fn reloads(&self) -> &'static [&'static str] {
-        &["screen", "screen_font"]
+        &["screen", "screen_font", "video"]
     }
 
     fn start(&self, room: &Room, project: &Define) {
         *self.scripts.borrow_mut() = Some(room.scripts().clone());
+        *self.home.borrow_mut() = project.project.namespace().to_owned();
         self.define(project);
     }
 
@@ -2139,10 +2221,15 @@ impl Service for ScreensService {
         for id in self.ids() {
             context.start_script(&id);
         }
+        let home = self.home.borrow().clone();
+        for id in self.ids() {
+            context.autoplay(&id, &home);
+        }
     }
 
     fn tick(&self, room: &Room, _platform: &dyn Platform) {
         let context = self.context(room);
+        context.advance();
         let ticks = {
             let mut screens = self.shared.screens.borrow_mut();
             screens.ticks += 1;
@@ -2178,6 +2265,9 @@ impl Service for ScreensService {
     fn reload(&self, room: &Room, kind: &str, ids: &BTreeSet<String>, project: &Define) {
         let context = self.context(room);
         let platform = project.platform;
+        if kind == "video" {
+            return self.reload_videos(ids, project);
+        }
         if kind == "screen_font" {
             let mut screens = self.shared.screens.borrow_mut();
             screens.font_files = project
@@ -2227,6 +2317,9 @@ impl Service for ScreensService {
         let Some(context) = self.running() else {
             return;
         };
+        context.end_where(video::EndReason::Unloaded, |p| {
+            p.owner.is_some_and(|o| scopes.contains(&o))
+        });
         let gone: Vec<String> = self
             .shared
             .screens
@@ -2251,6 +2344,11 @@ impl Service for ScreensService {
     }
 
     fn player_quit(&self, player: &PlayerRef) {
+        if let Some(context) = self.running() {
+            let uuid = player.uuid;
+            context.end_where(video::EndReason::Removed, |p| p.viewer == Some(uuid));
+            context.silence_for(uuid);
+        }
         let released: Vec<handles::Screen> = {
             let mut screens = self.shared.screens.borrow_mut();
             let mut released = Vec::new();
@@ -2297,16 +2395,22 @@ impl Service for ScreensService {
         }
     }
 
+    fn problems(&self) -> Vec<netherforge_format::problem::Problem> {
+        self.shared.screens.borrow().videos.stale()
+    }
+
     fn stop(&self, room: &Room, _platform: &dyn Platform) {
         let context = self.context(room);
+        context.end_where(video::EndReason::Unloaded, |_| true);
         for id in self.ids() {
             context.stop_script(&id);
             context.take_down(&id);
         }
         let mut screens = self.shared.screens.borrow_mut();
-        let (config, read) = (screens.config, screens.read.clone());
+        let (config, read, paths) = (screens.config, screens.read.clone(), screens.paths.clone());
         *screens = Screens::default();
         screens.config = config;
         screens.read = read;
+        screens.paths = paths;
     }
 }

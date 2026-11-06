@@ -117,6 +117,8 @@ pub struct Config {
     pub screens: crate::screen::ScreensConfig,
     /// The project's files' bytes while scripts run (pictures, font files): the adapter's reader of the disk.
     pub bytes: Option<crate::screen::ProjectBytes>,
+    /// Where the project's files are on disk (videos' frames, read a frame at a time): the adapter's.
+    pub paths: Option<crate::screen::video::ProjectPaths>,
 }
 
 /// Why a project can't run: what the log says, and the problem to report if format didn't.
@@ -220,6 +222,7 @@ impl<'a> Session<'a> {
             let mut screens = shared.screens.borrow_mut();
             screens.config = config.screens;
             screens.read = config.bytes.clone();
+            screens.paths = config.paths.clone();
         }
         if let Some(root) = &config.data_dir {
             *shared.files.borrow_mut() =
@@ -753,6 +756,7 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         Box::new(crate::screen::ScreensService {
             shared: shared.clone(),
             scripts: Default::default(),
+            home: Default::default(),
         }),
         Box::new(crate::sky::SkiesService {
             shared: shared.clone(),

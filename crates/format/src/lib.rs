@@ -20,6 +20,7 @@ pub mod manifest;
 pub mod map_colors;
 pub mod math;
 pub mod names;
+pub mod nfv;
 pub mod noise;
 pub mod package;
 pub mod png;
