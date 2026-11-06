@@ -63,7 +63,7 @@ impl Zone {
     }
 
     /// The wall-clock time `at` is here.
-    fn local(&self, at: DateTime<Utc>) -> NaiveDateTime {
+    pub fn local(&self, at: DateTime<Utc>) -> NaiveDateTime {
         match self {
             Zone::Local => at.with_timezone(&Local).naive_local(),
             Zone::Named(tz) => at.with_timezone(tz).naive_local(),
@@ -72,7 +72,7 @@ impl Zone {
     }
 
     /// The instant wall-clock time `local` is here: the first of two, and past a gap shifted by the gap.
-    fn instant(&self, local: NaiveDateTime) -> Option<DateTime<Utc>> {
+    pub fn instant(&self, local: NaiveDateTime) -> Option<DateTime<Utc>> {
         fn resolve<Tz: TimeZone>(tz: &Tz, local: NaiveDateTime) -> Option<DateTime<Utc>> {
             match tz.from_local_datetime(&local) {
                 LocalResult::Single(at) | LocalResult::Ambiguous(at, _) => {
@@ -93,6 +93,45 @@ impl Zone {
             Zone::Named(tz) => resolve(tz, local),
             Zone::Fixed(offset) => resolve(offset, local),
         }
+    }
+
+    /// How far ahead of UTC the clocks are here at `at`, in seconds.
+    pub fn offset_seconds(&self, at: DateTime<Utc>) -> i32 {
+        match self {
+            Zone::Local => at.with_timezone(&Local).offset().local_minus_utc(),
+            Zone::Named(tz) => at.with_timezone(tz).offset().fix().local_minus_utc(),
+            Zone::Fixed(offset) => offset.local_minus_utc(),
+        }
+    }
+
+    /// The zone's id as java.time spells it: `Europe/London`, `Z`, `+02:00`.
+    pub fn id(&self) -> String {
+        match self {
+            Zone::Local => iana_time_zone::get_timezone().unwrap_or_else(|_| "UTC".into()),
+            Zone::Named(tz) => tz.name().to_owned(),
+            Zone::Fixed(offset) if offset.local_minus_utc() == 0 => "Z".into(),
+            Zone::Fixed(offset) => offset.to_string(),
+        }
+    }
+
+    /// The zone's short name at `at` (`BST`), or its id when it has none.
+    pub fn abbreviation(&self, at: DateTime<Utc>) -> String {
+        let named = match self {
+            Zone::Named(tz) => Some(*tz),
+            Zone::Local => iana_time_zone::get_timezone()
+                .ok()
+                .and_then(|name| chrono_tz::Tz::from_str(&name).ok()),
+            Zone::Fixed(_) => None,
+        };
+        named
+            .and_then(|tz| {
+                use chrono_tz::OffsetName;
+                at.with_timezone(&tz)
+                    .offset()
+                    .abbreviation()
+                    .map(str::to_owned)
+            })
+            .unwrap_or_else(|| self.id())
     }
 
     /// The first time `cron` matches strictly after `after`, here.

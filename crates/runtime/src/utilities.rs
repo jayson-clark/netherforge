@@ -20,7 +20,6 @@ use netherforge_api::api::{
     SenderApi,
 };
 use netherforge_api::handles;
-use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, Caller, shapes, values};
 use netherforge_luau::random::Random;
 use netherforge_platform::PlayerRef;
@@ -683,27 +682,61 @@ impl SimplexNoise {
     }
 }
 
+/// A pattern for `nf.time`, or the error a script sees.
+fn time_pattern(pattern: &str) -> ApiResult<crate::java_time::Pattern> {
+    crate::java_time::Pattern::compile(pattern)
+        .map_err(|e| ApiError(format!("bad time pattern \"{pattern}\": {e}")))
+}
+
+impl UtilitiesContext {
+    /// The zone `options` names, or the owner's (`schedules.time-zone`), as schedules' are.
+    fn zone(&self, options: Option<shapes::TimeOptions>) -> ApiResult<crate::schedule::Zone> {
+        match options.and_then(|o| o.zone) {
+            None => Ok(self.shared.schedules.borrow().zone.clone()),
+            Some(name) => crate::schedule::Zone::parse(&name).ok_or_else(|| {
+                ApiError(format!(
+                    "options.zone: there's no time zone \"{name}\" (try \"UTC\", \"Europe/London\" or \"+02:00\")"
+                ))
+            }),
+        }
+    }
+}
+
 /// Whole seconds as `1d 2h 3m 4s`, as `nf.time.duration` writes them.
 const DURATION_UNITS: [(&str, i64); 4] = [("d", 86_400), ("h", 3_600), ("m", 60), ("s", 1)];
 
 impl NfTimeApi for UtilitiesContext {
     fn format(
         &self,
-        caller: &Caller,
+        _: &Caller,
         time: i64,
         pattern: String,
         options: Option<shapes::TimeOptions>,
     ) -> ApiResult<String> {
-        <Unported as NfTimeApi>::format(&Unported, caller, time, pattern, options)
+        let zone = self.zone(options)?;
+        let compiled = time_pattern(&pattern)?;
+        let at = chrono::DateTime::from_timestamp_millis(time).ok_or_else(|| {
+            ApiError(format!(
+                "can't write {time} as \"{pattern}\": it's outside the years a clock time can have"
+            ))
+        })?;
+        Ok(compiled.format(at, &zone))
     }
     fn parse(
         &self,
-        caller: &Caller,
+        _: &Caller,
         text: String,
         pattern: String,
         options: Option<shapes::TimeOptions>,
     ) -> ApiResult<Option<i64>> {
-        <Unported as NfTimeApi>::parse(&Unported, caller, text, pattern, options)
+        let compiled = time_pattern(&pattern)?;
+        let zone = self.zone(options)?;
+        if !compiled.has_date() {
+            return Err(ApiError(format!(
+                "the pattern \"{pattern}\" needs a year, month and day"
+            )));
+        }
+        Ok(compiled.parse(&text, &zone))
     }
     fn duration(&self, _: &Caller, milliseconds: i64) -> ApiResult<String> {
         // Whole seconds, towards zero.
@@ -767,6 +800,13 @@ impl NfTimeApi for UtilitiesContext {
         }
         let rounded = total.round();
         Ok((rounded.abs() <= 9.007_199_254_740_991e15).then_some(rounded as i64))
+    }
+}
+
+impl netherforge_api::api::NfLooksApi for UtilitiesContext {
+    fn qualify(&self, _: &Caller, look: String) -> ApiResult<String> {
+        let game = crate::world::GameContext::new(self.shared.clone(), self.scripts.clone());
+        game.with_names(|names| names.qualify(&look))
     }
 }
 

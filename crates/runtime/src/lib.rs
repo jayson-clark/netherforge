@@ -40,6 +40,7 @@ pub mod images;
 pub mod interop;
 pub mod inventory;
 pub mod items;
+pub mod java_time;
 pub mod living;
 pub mod loot;
 pub mod menu;
@@ -482,6 +483,12 @@ impl LuaApi for Api {
         }
     }
     fn nf_text(&self) -> &dyn netherforge_api::api::NfTextApi {
+        match &self.utilities {
+            Some(u) => u,
+            None => &Unported,
+        }
+    }
+    fn nf_looks(&self) -> &dyn netherforge_api::api::NfLooksApi {
         match &self.utilities {
             Some(u) => u,
             None => &Unported,

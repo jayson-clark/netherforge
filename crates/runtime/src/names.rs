@@ -24,6 +24,16 @@ pub fn for_script(broken: &BrokenRef) -> String {
     }
 }
 
+/// The kinds of reference that are looks: values any package's code may hand on, by `look`'s rule.
+pub const LOOKS: [RefKind; 6] = [
+    RefKind::ItemModel,
+    RefKind::Glyph,
+    RefKind::Skin,
+    RefKind::Tooltip,
+    RefKind::Equipment,
+    RefKind::Sound,
+];
+
 fn err(message: impl Into<String>) -> ApiError {
     ApiError(message.into())
 }
@@ -201,6 +211,19 @@ impl Calling<'_> {
             for_script(&broken),
             self.elsewhere(kind, &key)
         )))
+    }
+
+    /// `reference`, a look the calling code named, in full (`ns:<pack>/<key>`), so it means the same in any
+    /// package's code (`nf.looks.qualify`). Not checked for being there: wherever it's shown checks that.
+    pub fn qualify(&self, reference: &str) -> ApiResult<String> {
+        resolve_any(&self.from, reference)
+            .filter(|key| LOOKS.iter().any(|kind| kind.is_path(&key.path)))
+            .map(|key| key.to_string())
+            .ok_or_else(|| {
+                err(format!(
+                    "\"{reference}\" isn't a look: write <pack>/<key>, or <namespace>:<pack>/<key> for another package's"
+                ))
+            })
     }
 
     /// `reference`, a look of `kind` the calling code named, as the server names it (`ui/coin`,

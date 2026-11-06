@@ -3119,6 +3119,73 @@ print(nf.server.tick(), #nf.random.uuid())
 }
 
 #[test]
+fn nf_time_formats_and_parses_clock_times_with_java_patterns() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/clock/init.lua",
+            r#"
+local utc = { zone = "UTC" }
+local moment = 1791050400000 -- 2026-10-03 18:00 UTC
+print(nf.time.format(0, "yyyy-MM-dd HH:mm:ss", utc), nf.time.format(moment, "EEEE, d MMMM yyyy 'at' h a", utc))
+print(nf.time.format(moment, "HH:mm XXX", { zone = "Europe/London" }), nf.time.format(moment, "HH:mm", { zone = "-05:00" }))
+print(nf.time.parse("2026-10-03 18:00", "yyyy-MM-dd HH:mm", utc) == moment, nf.time.parse("2026-10-03 19:00", "yyyy-MM-dd HH:mm", { zone = "Europe/London" }) == moment)
+print(nf.time.parse("2026-10-03 20:00 +02:00", "yyyy-MM-dd HH:mm XXX", utc) == moment, nf.time.parse("2026-10-03", "yyyy-MM-dd", utc) == moment - 18 * 3600000)
+print(nf.time.parse("2026-10-03 6 PM", "yyyy-MM-dd h a", utc) == moment, nf.time.parse(nf.time.format(moment, "dd MMM yyyy HH:mm", utc), "dd MMM yyyy HH:mm", utc) == moment)
+print(nf.time.parse("tomorrow", "yyyy-MM-dd", utc), nf.time.parse("2026-02-30", "yyyy-MM-dd", utc), nf.time.parse("2026-10-03 25:00", "yyyy-MM-dd HH:mm", utc))
+print(pcall(nf.time.format, 0, "yyyy-bb"))
+print(pcall(nf.time.parse, "18:00", "HH:mm"))
+print(pcall(nf.time.format, 0, "HH", { zone = "Mars/Olympus" }))
+print(type(nf.time.format(0, "HH:mm")))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "1970-01-01 00:00:00\tSaturday, 3 October 2026 at 6 PM",
+            "19:00 +01:00\t13:00",
+            "true\ttrue",
+            "true\ttrue",
+            "true\ttrue",
+            "nil\tnil\tnil",
+            "false\tmodules/clock/init.lua:10: bad time pattern \"yyyy-bb\": Unknown pattern letter: b",
+            "false\tmodules/clock/init.lua:11: the pattern \"HH:mm\" needs a year, month and day",
+            "false\tmodules/clock/init.lua:12: options.zone: there's no time zone \"Mars/Olympus\" (try \"UTC\", \"Europe/London\" or \"+02:00\")",
+            "string",
+        ]
+    );
+}
+
+#[test]
+fn nf_looks_qualify_writes_a_look_in_full() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/looks/init.lua",
+            r#"
+print(nf.looks.qualify("p/box"), nf.looks.qualify("lib:gems/gem"))
+print(pcall(nf.looks.qualify, "box"))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "demo:p/box\tlib:gems/gem",
+            "false\tmodules/looks/init.lua:3: \"box\" isn't a look: write <pack>/<key>, or <namespace>:<pack>/<key> for another package's",
+        ]
+    );
+}
+
+#[test]
 fn boss_bars_show_follow_a_centity_and_go_with_their_script() {
     let platform = std::rc::Rc::new(Fake::default());
     *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));

@@ -30,6 +30,7 @@ fontdue = "0.9"
 sha2.workspace = true
 chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
 chrono-tz = "0.10.4"
+iana-time-zone = "0.1"
 croner = "4.0.3"
 # nf.http: the client (blocking, on the runtime's own threads), its TLS, WebSockets, and the web routes' requests.
 ureq = { version = "3.5", default-features = false, features = ["rustls", "gzip", "platform-verifier"] }
