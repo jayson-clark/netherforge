@@ -136,6 +136,8 @@ pub struct Config {
     pub network: crate::network::NetworkConfig,
     /// `bots:` in `config.yml`: whether scripts may join bots, and how many (the dev server's are always on).
     pub bots: crate::bots::BotsConfig,
+    /// `structures:` in `config.yml`: how fast gradual placements and fills go.
+    pub structures: crate::structures::StructuresConfig,
     /// `<plugin folder>/settings`, where the owner's values for packages' settings are kept: none keeps them in
     /// memory only.
     pub settings_dir: Option<std::path::PathBuf>,
@@ -304,6 +306,15 @@ impl<'a> Session<'a> {
             screens.config = config.screens;
             screens.read = config.bytes.clone();
             screens.paths = config.paths.clone();
+        }
+        {
+            let mut structures = shared.structures.borrow_mut();
+            structures.config = config.structures;
+            structures.paths = config.paths.clone();
+            structures.saved = config
+                .data_dir
+                .as_ref()
+                .map(|d| d.join(".nf").join("structures"));
         }
         if let Some(root) = &config.data_dir {
             *shared.files.borrow_mut() =
@@ -1060,6 +1071,9 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         }),
         Box::new(crate::mob::MobsService {
             mobs: shared.mobs.clone(),
+        }),
+        Box::new(crate::structures::StructuresService {
+            shared: shared.clone(),
         }),
         Box::new(crate::project_items::ItemsService {
             shared: shared.clone(),

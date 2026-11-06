@@ -9,9 +9,6 @@
 //! a player: the teleport is an event). While the session ticks it's shared, so they reach it; while it's
 //! being changed (a reload, a stop) it can't be, and they go through unchanged.
 //!
-//! Not yet, each with its service: project items' stages (an item's handlers first) and their looks,
-//! custom blocks, structure markers, generated loot, menus, dialogs and resource packs. Those events answer
-//! "unchanged" until then.
 
 use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
@@ -627,7 +624,15 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         }
     }
 
-    fn structure_markers_loaded(&self, _markers: Vec<StructureMarker>) {}
+    /// Markers of centities in a structure came into the world: each turns into its centity.
+    fn structure_markers_loaded(&self, markers: Vec<StructureMarker>) {
+        let Some(s) = self.open() else { return };
+        crate::structures::StructuresContext {
+            shared: s.session().shared().clone(),
+            scripts: s.room().scripts().clone(),
+        }
+        .spawn(markers);
+    }
 
     fn entities_unloading(&self, entities: Vec<Uuid>) {
         if let Some(session) = self.any() {

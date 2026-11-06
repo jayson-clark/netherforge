@@ -3,9 +3,8 @@
 //! see (an unknown game rule) is an error. The centity questions (`raycast` against hitboxes, `overlap_*`,
 //! `sweep`, `nearest`, `centities`) go to the centities' spatial index.
 //!
-//! Not yet, each with the area it needs: gradual fills and structures, `locate_biome` (the workers),
-//! managed worlds (`create`, `load`, `copy`, `import`, `unload`). `blocks`'
-//! `custom` and `flood`'s project blocks wait for custom blocks: until then no block is a project block.
+//! Structures and gradual work are `crate::structures`'; `locate_biome` runs on its lane. Not yet: managed worlds
+//! (`create`, `load`, `copy`, `import`, `unload`).
 
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -229,6 +228,13 @@ impl GameContext {
             names: &names,
             from,
         })
+    }
+
+    pub(crate) fn structures(&self) -> crate::structures::StructuresContext {
+        crate::structures::StructuresContext {
+            shared: self.shared.clone(),
+            scripts: self.scripts.clone(),
+        }
     }
 
     pub(crate) fn centities(&self) -> CentityContext {
@@ -931,7 +937,20 @@ impl WorldApi for GameContext {
         state: String,
         options: Option<shapes::GradualFillOptions>,
     ) -> ApiResult<Pending<i64>> {
-        <Unported as WorldApi>::fill_gradually(&Unported, this, from, to, state, options)
+        let (a, b) = (block_at(&from)?, block_at(&to)?);
+        let canonical = crate::block::canonical_state(self.platform().game(), &state, "state")?;
+        let options = options.unwrap_or(shapes::GradualFillOptions {
+            update: None,
+            per_tick: None,
+        });
+        self.structures().fill_gradually(
+            &this.name,
+            a,
+            b,
+            canonical,
+            options.update != Some(false),
+            options.per_tick,
+        )
     }
 
     fn highest_block(
@@ -1668,7 +1687,14 @@ impl WorldApi for GameContext {
         to: values::Vec3,
         options: Option<shapes::StructureSaveOptions>,
     ) -> ApiResult<bool> {
-        <Unported as WorldApi>::save_structure(&Unported, this, id, from, to, options)
+        let (a, b) = (block_at(&from)?, block_at(&to)?);
+        self.structures().save(
+            &id,
+            &this.name,
+            a,
+            b,
+            options.and_then(|o| o.entities) == Some(true),
+        )
     }
 
     fn place_structure(
@@ -1678,7 +1704,22 @@ impl WorldApi for GameContext {
         position: values::Vec3,
         options: Option<shapes::StructurePlaceOptions>,
     ) -> ApiResult<bool> {
-        <Unported as WorldApi>::place_structure(&Unported, this, id, position, options)
+        let at = block_at(&position)?;
+        let options = options.unwrap_or(shapes::StructurePlaceOptions {
+            rotation: None,
+            mirror: None,
+            integrity: None,
+            entities: None,
+        });
+        self.structures().place(
+            &id,
+            &this.name,
+            at,
+            options.rotation.unwrap_or(0),
+            options.mirror.unwrap_or_else(|| "none".into()),
+            options.integrity.unwrap_or(1.0),
+            options.entities != Some(false),
+        )
     }
 
     fn place_gradually(
@@ -1688,7 +1729,24 @@ impl WorldApi for GameContext {
         position: values::Vec3,
         options: Option<shapes::GradualPlaceOptions>,
     ) -> ApiResult<Pending<i64>> {
-        <Unported as WorldApi>::place_gradually(&Unported, this, id, position, options)
+        let at = block_at(&position)?;
+        let options = options.unwrap_or(shapes::GradualPlaceOptions {
+            rotation: None,
+            mirror: None,
+            integrity: None,
+            entities: None,
+            per_tick: None,
+        });
+        self.structures().place_gradually(
+            &id,
+            &this.name,
+            at,
+            options.rotation.unwrap_or(0),
+            options.mirror.unwrap_or_else(|| "none".into()),
+            options.integrity.unwrap_or(1.0),
+            options.entities != Some(false),
+            options.per_tick,
+        )
     }
 
     fn on(

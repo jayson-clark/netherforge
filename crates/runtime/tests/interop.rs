@@ -136,7 +136,17 @@ impl PlaceholderOps for Fake {
     }
 }
 
+/// No structure has put a marker in the world.
+impl netherforge_platform::FakeEntityOps for Fake {
+    fn structure_markers(&self) -> Vec<netherforge_platform::StructureMarker> {
+        Vec::new()
+    }
+}
+
 impl FakePlatform for Fake {
+    fn entities(&self) -> &dyn netherforge_platform::EntityOps {
+        self
+    }
     fn players(&self) -> &dyn netherforge_platform::PlayerOps {
         self
     }

@@ -65,6 +65,7 @@ pub mod shared;
 pub mod sky;
 pub mod stats;
 pub mod store;
+pub mod structures;
 pub mod team;
 pub mod testing;
 pub mod utilities;
@@ -269,6 +270,8 @@ struct Api {
     schedules: Option<schedule::ScheduleContext>,
     /// `nf.server`, `nf.players`, `Sender`, `nf.math`, `nf.json`, `nf.random`, `nf.time`, `nf.text`.
     utilities: Option<utilities::UtilitiesContext>,
+    /// `nf.structures`.
+    structures: Option<structures::StructuresContext>,
     /// `nf.http`, `HttpStream`, `WebSocket`.
     http: Option<http::api::HttpApi>,
     /// `nf.web`, `Route`, `WebResponse`, `OAuthFlow`.
@@ -486,6 +489,12 @@ impl LuaApi for Api {
     fn nf_text(&self) -> &dyn netherforge_api::api::NfTextApi {
         match &self.utilities {
             Some(u) => u,
+            None => &Unported,
+        }
+    }
+    fn nf_structures(&self) -> &dyn netherforge_api::api::NfStructuresApi {
+        match &self.structures {
+            Some(s) => s,
             None => &Unported,
         }
     }
@@ -901,6 +910,7 @@ impl Room {
             screen::ScreensContext::install_liveness(&shared, &scripts);
             centity::api::CentityContext::new(shared, scripts.clone())
         });
+        let structures = worlds.as_ref().map(|game| game.structures());
         let nf = NfContext {
             scripts: scripts.clone(),
             shared: worlds.as_ref().map(|w| w.shared.clone()),
@@ -914,6 +924,7 @@ impl Room {
             images,
             schedules,
             utilities,
+            structures,
             worlds,
             http,
             web,

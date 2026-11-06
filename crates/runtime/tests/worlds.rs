@@ -50,6 +50,12 @@ struct Fake {
     /// Where biome searches looked from.
     searched: RefCell<Vec<String>>,
     sets: Cell<usize>,
+    /// Structure files' sizes, by file name; a saved one is added as it's saved.
+    sizes: RefCell<BTreeMap<String, (i32, i32, i32)>>,
+    /// What was done with structures, in order.
+    placed: RefCell<Vec<String>>,
+    /// Markers of centities in the world.
+    markers: RefCell<Vec<netherforge_platform::StructureMarker>>,
 }
 
 impl Fake {
@@ -115,6 +121,133 @@ impl FakeBiomeSearch for Search {
         std::thread::sleep(Duration::from_millis(20));
         (self.biome == "minecraft:plains")
             .then(|| Vec3(f64::from(self.from.0 + 100), 64.0, f64::from(self.from.2)))
+    }
+}
+
+fn file_name(file: &std::path::Path) -> String {
+    file.file_name().unwrap().to_string_lossy().into_owned()
+}
+
+/// Goes through a file's blocks, each one placed.
+struct Placer {
+    size: (i32, i32, i32),
+    left: Cell<i32>,
+    entities: bool,
+    calls: Rc<RefCell<Vec<String>>>,
+    name: String,
+}
+
+impl netherforge_platform::FakeStructurePlacer for Placer {
+    fn size(&self) -> netherforge_platform::BlockVector {
+        netherforge_platform::BlockVector {
+            x: self.size.0,
+            y: self.size.1,
+            z: self.size.2,
+        }
+    }
+    fn has_entities(&self) -> bool {
+        self.entities
+    }
+    fn remaining(&self) -> i32 {
+        self.left.get()
+    }
+    fn placed(&self) -> i64 {
+        i64::from(self.size.0 * self.size.1 * self.size.2)
+    }
+    fn place(&self, budget: i32) -> Option<i32> {
+        let went = budget.min(self.left.get());
+        self.left.set(self.left.get() - went);
+        Some(went)
+    }
+    fn entities(&self) -> bool {
+        self.calls
+            .borrow_mut()
+            .push(format!("entities {}", self.name));
+        true
+    }
+}
+
+impl netherforge_platform::FakeStructureOps for Fake {
+    fn size(&self, file: std::path::PathBuf) -> Option<netherforge_platform::BlockVector> {
+        let (x, y, z) = *self.sizes.borrow().get(&file_name(&file))?;
+        Some(netherforge_platform::BlockVector { x, y, z })
+    }
+    fn place(
+        &self,
+        file: std::path::PathBuf,
+        world: String,
+        at: netherforge_platform::BlockVector,
+        placement: netherforge_platform::StructurePlacement,
+    ) -> bool {
+        self.placed.borrow_mut().push(format!(
+            "place {} {world} {} {} {} {} {}",
+            file_name(&file),
+            at.x,
+            at.y,
+            at.z,
+            placement.rotation,
+            placement.mirror
+        ));
+        true
+    }
+    fn placer(
+        &self,
+        file: std::path::PathBuf,
+        _world: String,
+        transform: netherforge_platform::StructureTransform,
+        _placement: netherforge_platform::StructurePlacement,
+        _seed: i64,
+    ) -> Option<Box<dyn netherforge_platform::StructurePlacer>> {
+        let name = file_name(&file);
+        let size = *self.sizes.borrow().get(&name)?;
+        self.placed.borrow_mut().push(format!(
+            "open {name} at {} {} {} + {} {} {}",
+            transform.origin.x,
+            transform.origin.y,
+            transform.origin.z,
+            transform.offset.x,
+            transform.offset.y,
+            transform.offset.z
+        ));
+        Some(Box::new(Placer {
+            size,
+            left: Cell::new(size.0 * size.1 * size.2),
+            entities: name == "0_0_0.nbt",
+            calls: Rc::new(RefCell::new(Vec::new())),
+            name,
+        }))
+    }
+    fn save(
+        &self,
+        file: std::path::PathBuf,
+        _world: String,
+        min: netherforge_platform::BlockVector,
+        max: netherforge_platform::BlockVector,
+        _entities: bool,
+    ) -> bool {
+        std::fs::write(&file, b"nbt").unwrap();
+        self.sizes.borrow_mut().insert(
+            file_name(&file),
+            (max.x - min.x + 1, max.y - min.y + 1, max.z - min.z + 1),
+        );
+        true
+    }
+    fn forget(&self, file: std::path::PathBuf) {
+        self.placed
+            .borrow_mut()
+            .push(format!("forget {}", file_name(&file)));
+    }
+}
+
+impl netherforge_platform::FakeEntityOps for Fake {
+    fn structure_markers(&self) -> Vec<netherforge_platform::StructureMarker> {
+        self.markers.borrow().clone()
+    }
+    fn remove(&self, id: Uuid) -> bool {
+        let mut markers = self.markers.borrow_mut();
+        let before = markers.len();
+        markers.retain(|m| m.id != id);
+        before != markers.len()
     }
 }
 
@@ -198,6 +331,12 @@ impl FakePlatform for Fake {
         self
     }
     fn blocks(&self) -> &dyn netherforge_platform::BlockOps {
+        self
+    }
+    fn structures(&self) -> &dyn netherforge_platform::StructureOps {
+        self
+    }
+    fn entities(&self) -> &dyn netherforge_platform::EntityOps {
         self
     }
     fn players(&self) -> &dyn netherforge_platform::PlayerOps {
@@ -299,4 +438,165 @@ try(world.locate_biome, world, "minecraft:plains", {{ radius = 6401 }}, print)
         platform.searched.borrow()[0],
         "world 8 70 -4 6400 minecraft:plains"
     );
+}
+
+/// A config whose project files are under `/project` and whose data folder is `data`.
+fn on_disk(data: &std::path::Path) -> Config {
+    Config {
+        data_dir: Some(data.to_owned()),
+        paths: Some(netherforge_runtime::screen::video::ProjectPaths(Rc::new(
+            |path: &str| Some(std::path::PathBuf::from(format!("/project/{path}"))),
+        ))),
+        structures: netherforge_runtime::structures::StructuresConfig {
+            blocks_per_tick: 1000,
+            max_jobs_per_package: 2,
+        },
+        ..Config::default()
+    }
+}
+
+#[test]
+fn structures_are_the_projects_its_builds_and_scripts_saves() {
+    let data = tempfile::tempdir().unwrap();
+    let files = Files::new(
+        &[
+            ("structures/arena.nbt", ""),
+            ("builds/castle/0_0_0.nbt", ""),
+            ("builds/castle/1_0_0.nbt", ""),
+        ],
+        &format!(
+            r#"{TRY}
+print(nf.structures.exists("arena"), nf.structures.exists("castle"), nf.structures.exists("hut"))
+local size = nf.structures.size("castle")
+print(size.x, size.y, size.z, nf.structures.size("arena").x, nf.structures.size("hut"))
+print(world:place_structure("arena", vector.create(1.5, 64, -2), {{ rotation = -90, mirror = "left_right" }}))
+try(world.place_structure, world, "castle", vector.create(0, 64, 0))
+try(world.place_structure, world, "arena", vector.create(0, 64, 0), {{ rotation = 45 }})
+try(world.place_structure, world, "arenx", vector.create(0, 64, 0))
+print(world:save_structure("hut", vector.create(0, 64, 0), vector.create(3, 66, 4)))
+print(nf.structures.exists("hut"), nf.structures.size("hut").z)
+try(world.save_structure, world, "arena", vector.create(0, 64, 0), vector.create(1, 1, 1))
+try(world.save_structure, world, "big", vector.create(0, 0, 0), vector.create(48, 1, 1))
+try(world.save_structure, world, "Bad Name", vector.create(0, 0, 0), vector.create(1, 1, 1))
+"#
+        ),
+    );
+    let platform = Fake::new();
+    platform.sizes.borrow_mut().extend([
+        ("arena.nbt".to_owned(), (5, 3, 5)),
+        ("0_0_0.nbt".to_owned(), (48, 10, 20)),
+        ("1_0_0.nbt".to_owned(), (12, 10, 20)),
+    ]);
+    let _session = start(&files, &platform, on_disk(data.path()));
+    assert_eq!(
+        platform.lines(),
+        [
+            "true true false",
+            "60 10 20 5 nil",
+            "true",
+            "false \"castle\" is a build (builds/castle/), too big to place in one tick: place it with world:place_gradually",
+            "false rotation must be a multiple of 90, not 45",
+            "false no structure \"arenx\" in this project (did you mean \"arena\"?) (the project's are structures/<id>.nbt and builds/<id>/; scripts add more with world:save_structure)",
+            "true",
+            "true 5",
+            "false \"arena\" is one of the project's structures (structures/arena.nbt): save under another id",
+            "false that box is 49×2×2 blocks; a structure is at most 48 along each side",
+            "false \"Bad Name\" can't name a structure (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+        ]
+    );
+    assert!(data.path().join(".nf/structures/hut.nbt").is_file());
+    assert_eq!(
+        platform.placed.borrow()[0],
+        "place arena.nbt world 1 64 -2 270 left_right"
+    );
+}
+
+#[test]
+fn gradual_placements_and_fills_share_the_ticks_blocks() {
+    let data = tempfile::tempdir().unwrap();
+    let files = Files::new(
+        &[
+            ("builds/castle/0_0_0.nbt", ""),
+            ("builds/castle/1_0_0.nbt", ""),
+        ],
+        &format!(
+            r#"{TRY}
+world:place_gradually("castle", vector.create(100, 64, 0), nil, function(placed, err) print("castle", placed, err) end)
+world:fill_gradually(vector.create(0, 64, 0), vector.create(9, 64, 9), "minecraft:stone", {{ per_tick = 30 }}, function(changed, err) print("fill", changed, err) end)
+world:fill_gradually(vector.create(0, 0, 0), vector.create(1, 1, 1), "minecraft:dirt", nil, function(changed, err) print("third", changed, err) end)
+try(world.fill_gradually, world, vector.create(0, 0, 0), vector.create(1, 1, 1), "minecraft:dirt", {{ per_tick = 0 }}, print)
+try(world.place_gradually, world, "nope", vector.create(0, 0, 0), nil, print)
+"#
+        ),
+    );
+    let platform = Fake::new();
+    platform.sizes.borrow_mut().extend([
+        ("0_0_0.nbt".to_owned(), (48, 10, 20)),
+        ("1_0_0.nbt".to_owned(), (12, 10, 20)),
+    ]);
+    let session = start(&files, &platform, on_disk(data.path()));
+    assert_eq!(
+        platform.lines(),
+        [
+            "false options.per_tick must be 1 or more, not 0",
+            "false no structure \"nope\" in this project (the project's are structures/<id>.nbt and builds/<id>/; scripts add more with world:save_structure)",
+        ]
+    );
+    // Two at most a package: the third fails at once (at the next tick, as every async value comes).
+    session.tick();
+    assert_eq!(
+        platform.lines(),
+        [
+            "third nil package \"test\" already has 2 gradual placements and fills going, the server's limit (structures.max-jobs-per-package in config.yml)"
+        ]
+    );
+    // The fill goes 30 a tick, the castle the rest of the tick's thousand.
+    let before = platform.sets.get();
+    session.tick();
+    assert_eq!(platform.sets.get() - before, 30);
+    let mut lines = printed(&session, &platform, 2);
+    lines.sort();
+    assert_eq!(lines, ["castle 12000 nil", "fill 100 nil"]);
+    assert_eq!(
+        platform.placed.borrow().as_slice(),
+        [
+            "open 0_0_0.nbt at 100 64 0 + 0 0 0",
+            "open 1_0_0.nbt at 100 64 0 + 48 0 0",
+            // Its entities, last: only the parts that have any, read again.
+            "open 0_0_0.nbt at 100 64 0 + 0 0 0",
+        ]
+    );
+    assert_eq!(
+        platform.blocks.borrow()[&("world".to_owned(), 9, 64, 9)],
+        "minecraft:stone"
+    );
+}
+
+#[test]
+fn a_marker_naming_a_centity_the_project_lacks_stays() {
+    let files = Files::new(&[], "");
+    let platform = Fake::new();
+    platform
+        .markers
+        .borrow_mut()
+        .push(netherforge_platform::StructureMarker {
+            id: Uuid(9),
+            centity: "test:guard".into(),
+            at: Location {
+                world: "world".into(),
+                x: 1.0,
+                y: 64.0,
+                z: 1.0,
+                yaw: 0.0,
+                pitch: 0.0,
+            },
+        });
+    let _session = start(&files, &platform, Config::default());
+    assert_eq!(
+        platform.lines(),
+        [
+            "warn A structure has a marker for the centity \"test:guard\", which the project doesn't have: the marker stays in the world, and spawns it once it does"
+        ]
+    );
+    assert_eq!(platform.markers.borrow().len(), 1);
 }

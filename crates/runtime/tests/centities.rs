@@ -129,6 +129,10 @@ fn at(l: &Location) -> String {
 }
 
 impl FakeEntityOps for Fake {
+    /// No structure has put a marker in the world.
+    fn structure_markers(&self) -> Vec<netherforge_platform::StructureMarker> {
+        Vec::new()
+    }
     fn spawn_hitbox(
         &self,
         location: Location,
