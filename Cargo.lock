@@ -1414,6 +1414,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "netherforge-ffi"
+version = "0.0.0"
+dependencies = [
+ "netherforge-format",
+ "netherforge-platform",
+ "netherforge-runtime",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "netherforge-format"
 version = "0.0.0"
 dependencies = [

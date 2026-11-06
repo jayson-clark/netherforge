@@ -54,6 +54,7 @@ import {
 import { raisableKotlin, raisableRust } from './emit/raisable.ts'
 import { dispatchKotlin, platformKotlin, raisedEvents } from './emit/raised.ts'
 import { dispatchRust, gameEventsRust } from './emit/raisedRust.ts'
+import { gameEventsFfiKotlin, gameEventsFfiRust } from './emit/raisedFfi.ts'
 import { luals, lualsGates, lualsSurfaces } from './emit/luals.ts'
 import { terrainReference, terrainStubs } from './emit/terrain.ts'
 import { terrainApi } from '../src/terrain.ts'
@@ -156,4 +157,10 @@ writeDir(
   'crates/runtime/src/generated',
   new Map([['game_event_dispatch.rs', dispatchRust(raisedRust)]]),
   '.rs',
+)
+// The server's events across the FFM boundary: the adapter's proxy and the runtime's dispatcher.
+write('crates/ffi/src/generated/events/game_events.rs', gameEventsFfiRust(raisedRust))
+write(
+  'apps/plugin/ffi/src/generated/kotlin/dev/netherforge/plugin/ffi/events/RustGameEvents.kt',
+  gameEventsFfiKotlin(raised),
 )

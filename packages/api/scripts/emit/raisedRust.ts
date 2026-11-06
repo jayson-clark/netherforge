@@ -38,14 +38,14 @@ const PLATFORM_VALUES: Record<string, { type: string; make: string }> = {
   Text: { type: 'String', make: 'text' },
 }
 
-const snake = (name: string) =>
+export const snake = (name: string) =>
   name
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
     .replace(/([A-Z])([A-Z][a-z])/g, '$1_$2')
     .toLowerCase()
 
 /** The platform's Rust type for [codec]. */
-function platformRust(codec: Codec): string {
+export function platformRust(codec: Codec): string {
   switch (codec.kind) {
     case 'string':
     case 'choice':

@@ -1,0 +1,282 @@
+//! The runtime as the plugin runs it (Kotlin's `NetherForgeRuntime`'s enable and disable): what
+//! `nf_start` puts together on the server's platform, and `nf_stop` takes apart. See the
+//! rust-runtime skill, "The dev bridge" → Composition.
+
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
+use std::rc::{Rc, Weak};
+
+use netherforge_format::package::Folders;
+use netherforge_platform::{Dynamic, Platform, PlatformEvents};
+use netherforge_runtime::admin::AdminCommand;
+use netherforge_runtime::bridge::{Bridge, BridgeConfig};
+use netherforge_runtime::config::{self, ServerAddress};
+use netherforge_runtime::network::{Link, NetworkLink};
+use netherforge_runtime::profile::Profiler;
+use netherforge_runtime::screen::ProjectBytes;
+use netherforge_runtime::screen::video::ProjectPaths;
+use netherforge_runtime::server::ServerEvents;
+use netherforge_runtime::session::Session;
+use netherforge_runtime::store::Store;
+
+use crate::JavaPlatform;
+use crate::disk::DiskProject;
+use crate::objects::JavaRef;
+use crate::wire::{Reader, Take};
+
+/// What the plugin starts the runtime with: the server's platform, its folders and address, and
+/// `config.yml`'s values with the JVM's properties and environment.
+pub struct StartArgs {
+    pub platform: JavaRef,
+    pub plugin_folder: PathBuf,
+    pub server_folder: PathBuf,
+    pub server_ip: String,
+    pub settings: Dynamic,
+    pub properties: HashMap<String, String>,
+    pub env: HashMap<String, String>,
+}
+
+impl Take for StartArgs {
+    fn take(r: &mut Reader) -> Self {
+        StartArgs {
+            platform: Take::take(r),
+            plugin_folder: Take::take(r),
+            server_folder: Take::take(r),
+            server_ip: Take::take(r),
+            settings: Take::take(r),
+            properties: Take::take(r),
+            env: Take::take(r),
+        }
+    }
+}
+
+/// The running runtime: what the plugin's life holds.
+pub struct Running {
+    pub events: Rc<ServerEvents<'static>>,
+    pub platform: Rc<dyn Platform>,
+    bridge: Option<Rc<Bridge>>,
+    profiler: Rc<Profiler>,
+    _admin: Option<Rc<AdminCommand>>,
+}
+
+thread_local! {
+    static RUNNING: RefCell<Option<Rc<Running>>> = const { RefCell::new(None) };
+}
+
+/// The runtime this thread started, if it runs.
+pub fn running() -> Option<Rc<Running>> {
+    RUNNING.with(|r| r.borrow().clone())
+}
+
+fn json(value: Dynamic) -> serde_json::Value {
+    match value {
+        Dynamic::Null => serde_json::Value::Null,
+        Dynamic::Bool(b) => b.into(),
+        Dynamic::Number(n) if n.fract() == 0.0 && n.abs() < 9.0e15 => (n as i64).into(),
+        Dynamic::Number(n) => {
+            serde_json::Number::from_f64(n).map_or(serde_json::Value::Null, Into::into)
+        }
+        Dynamic::String(s) => s.into(),
+        Dynamic::List(items) => items.into_iter().map(json).collect(),
+        Dynamic::Map(entries) => entries
+            .into_iter()
+            .map(|(k, v)| (k, json(v)))
+            .collect::<serde_json::Map<_, _>>()
+            .into(),
+    }
+}
+
+/// Starts the runtime: the events the server's adapter calls, or none when there's no project to run. An error says
+/// why `config.yml` can't be acted on.
+pub fn start(args: StartArgs) -> Result<Option<Rc<dyn PlatformEvents>>, String> {
+    if let Some(running) = running() {
+        return Ok(Some(running.events.clone()));
+    }
+    let platform: Rc<dyn Platform> = Rc::new(JavaPlatform::new(args.platform));
+    let settings = json(args.settings);
+    let properties = args.properties;
+    let env = args.env;
+    let server = ServerAddress {
+        directory: args.server_folder.clone(),
+        ip: args.server_ip,
+    };
+    let Some(config) = config::read(
+        &args.plugin_folder,
+        &settings,
+        &server,
+        &|key| properties.get(key).cloned(),
+        &|key| env.get(key).cloned(),
+    )?
+    else {
+        return Ok(None);
+    };
+
+    let bridge = BridgeConfig::of(&config, args.server_folder.clone())
+        .map(|c| Bridge::new(platform.clone(), c));
+    let session_platform = bridge.as_ref().map_or(platform.clone(), |b| b.platform());
+
+    // The project's folder and its packages' outlive every session of the plugin's life.
+    let source: &'static DiskProject =
+        Box::leak(Box::new(DiskProject::new(config.project.clone())));
+    let packages: &'static Folders = Box::leak(Box::new(Folders {
+        root: config.project.clone(),
+    }));
+    std::fs::create_dir_all(&config.state_dir)
+        .map_err(|e| format!("{}: {e}", config.state_dir.display()))?;
+    let store = Rc::new(Store::open(&config.state_dir.join("netherforge.db"))?);
+
+    let mut session_config = config.session.clone();
+    session_config.bytes = Some(ProjectBytes(Rc::new(|path: &str| {
+        netherforge_format::project::ProjectSource::bytes(source, path)
+    })));
+    session_config.paths = Some(ProjectPaths(Rc::new(|path: &str| source.path_of(path))));
+    // The network's link is the plugin's: it outlives sessions, and the first waits for the hub.
+    let link = Link(NetworkLink::new(session_config.network.clone()));
+    {
+        let log = platform.clone();
+        link.0.start(&move |line| log.log().info(line));
+    }
+    netherforge_runtime::network::wait_for_hub(&link, platform.log());
+    session_config.network_link = Some(link);
+
+    let session =
+        Session::start_configured(session_platform, source, packages, store, session_config);
+    let events = Rc::new(ServerEvents::new(session));
+    let info = platform.info();
+    let profiler = Rc::new(Profiler::new(
+        config.state_dir.join("profiles"),
+        format!(
+            "Minecraft {}, NetherForge {}",
+            info.minecraft_version, info.plugin_version
+        ),
+    ));
+    events.set_profiler(profiler.clone());
+    if let Some(bridge) = &bridge {
+        events.attach_bridge(bridge.clone());
+    }
+    let admin = AdminCommand::register(&events, config.state_dir.clone());
+    bind(&platform, &events);
+    if let Some(bridge) = &bridge {
+        bridge.connect();
+    }
+    // Entities in chunks loaded before the runtime was: no load event will announce them.
+    events.entities_loaded(platform.entities().loaded_tagged(), Vec::new());
+
+    let running = Rc::new(Running {
+        events: events.clone(),
+        platform,
+        bridge,
+        profiler,
+        _admin: admin,
+    });
+    RUNNING.with(|r| *r.borrow_mut() = Some(running));
+    Ok(Some(events))
+}
+
+/// The most `<at>` tags that can't be placed told about, once each.
+const MOST_REPORTED_ATS: usize = 20;
+
+/// Hands the server the runtime's events and the lookups it answers its text and items with (Kotlin's
+/// `platform.bind` and `bindText`), each reading the session running when it's asked.
+fn bind(platform: &Rc<dyn Platform>, events: &Rc<ServerEvents<'static>>) {
+    let weak: Weak<ServerEvents<'static>> = Rc::downgrade(events);
+    let on = move |f: &dyn Fn(&Session<'static>) -> Option<String>| -> Option<String> {
+        let events = weak.upgrade()?;
+        let session = events.try_session().ok()?;
+        f(&session)
+    };
+    let glyphs = {
+        let on = on.clone();
+        Box::new(move |reference: String| {
+            on(&|s| {
+                let shared = s.shared();
+                let mut packs = shared.packs.try_borrow_mut().ok()?;
+                packs.text_glyph(&*shared.platform, &reference)
+            })
+        })
+    };
+    let items = {
+        let weak = Rc::downgrade(events);
+        Box::new(move |reference: String| {
+            let events = weak.upgrade()?;
+            let session = events.try_session().ok()?;
+            let items = session.shared().items.try_borrow().ok()?;
+            items.look(&reference)
+        })
+    };
+    let blocks = {
+        let on = on.clone();
+        Box::new(move |name: String| {
+            on(&|s| s.shared().blocks.try_borrow().ok()?.state_of(&name, None))
+        })
+    };
+    let namespace = {
+        let weak = Rc::downgrade(events);
+        Box::new(move || {
+            weak.upgrade()
+                .and_then(|e| {
+                    e.try_session()
+                        .ok()
+                        .map(|s| s.project().namespace().to_string())
+                })
+                .unwrap_or_default()
+        })
+    };
+    platform.bind(events.clone(), glyphs, items, blocks, namespace);
+
+    let space = {
+        let on = on.clone();
+        Box::new(move |px: i32| {
+            on(&|s| {
+                let built = s.shared().packs.try_borrow().ok()?.built.is_some();
+                built.then(|| netherforge_format::kind::resource_pack::fonts::offset(px))
+            })
+        })
+    };
+    let reported = Rc::new(RefCell::new(HashSet::<String>::new()));
+    let layout = Box::new(move |text: String| {
+        if !text.to_lowercase().contains("<at") {
+            return text;
+        }
+        on(&|s| {
+            let shared = s.shared();
+            let font = shared.font.borrow();
+            let packs = shared.packs.try_borrow().ok()?;
+            let width = match font.as_ref() {
+                Some(font) => netherforge_format::text::TextWidth::of_font(font),
+                None => netherforge_format::text::TextWidth::new(|_| None),
+            }
+            .with_glyphs(|reference| packs.glyph_advance(reference))
+            .with_glyph_chars(|code| packs.glyph_char_advance(code));
+            let layout = width.layout(&text);
+            for tag in &layout.unplaced {
+                let mut reported = reported.borrow_mut();
+                if reported.len() < MOST_REPORTED_ATS && reported.insert(tag.clone()) {
+                    shared.platform.log().warn(format!(
+                        "{tag} draws what it holds in line: it, or the line it's counted from, can't be measured \
+                         (fonts/default.json is missing or doesn't cover a character, or a glyph's width is unknown)"
+                    ));
+                }
+            }
+            Some(layout.text.into_owned())
+        })
+        .unwrap_or(text)
+    });
+    platform.bind_text(space, layout);
+}
+
+/// Stops the runtime: the session's services, the profiler's reports written, the bridge closed.
+pub fn stop() {
+    let Some(running) = RUNNING.with(|r| r.borrow_mut().take()) else {
+        return;
+    };
+    if let Some(mut session) = running.events.session_mut_now() {
+        session.stop();
+    }
+    running.profiler.await_writes();
+    if let Some(bridge) = &running.bridge {
+        bridge.stop();
+    }
+    let _ = &running.platform;
+}

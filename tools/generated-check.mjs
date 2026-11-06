@@ -24,6 +24,9 @@ const generated = [
   // The Rust runtime's bindings and Platform.
   'crates/api/src/generated',
   'crates/platform/src/generated',
+  // The FFM glue's two halves.
+  'crates/ffi/src/generated',
+  'apps/plugin/ffi/src/generated',
   // tauri-specta's output: the UI's command bindings and the commands permission.
   'apps/editor/src/core/backend/generated',
   'apps/editor/src-tauri/permissions/generated',

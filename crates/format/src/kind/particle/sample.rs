@@ -44,7 +44,7 @@ pub struct EffectSpawn {
 }
 
 /// The options a spawn carries, by its particle's data kind; colours are `0xRRGGBB`.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, serde::Deserialize)]
 #[serde(
     tag = "type",
     rename_all = "snake_case",

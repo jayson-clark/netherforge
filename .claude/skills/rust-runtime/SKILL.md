@@ -107,6 +107,7 @@ becomes.
 | `Cargo.toml`   | The runtime's workspace (`crates/*`). The editor's backend is still its own workspace, taking `netherforge-format` by path (map colours so far), which turns on serde_json's `preserve_order` there too. |
 | `crates/luau/` | `netherforge-luau`: the Luau host. One state per room, scopes, the guards, memory per scope.                                                                                                             |
 | `crates/api/`  | `netherforge-api`: the Lua API for the Rust runtime, generated from `packages/api`.                                                                                                                      |
+| `crates/ffi/`  | `netherforge-ffi`: the FFM glue's Rust half, the cdylib the plugin loads (its Kotlin half is `apps/plugin/ffi`).                                                                                         |
 
 `pnpm test` runs `cargo test --workspace`, and `pnpm lint` runs rustfmt and clippy on it.
 
@@ -1559,10 +1560,80 @@ side). Types are strings in Kotlin's spelling (`src/types.ts`, parsed by `src/ty
   dispatch. Not yet: an entity's exact class (it's an `Entity`, or the `Living`/`Mob` the event
   says), and items, which cross as empty and are never written back until their area is ported.
 
-Still to come: the Kotlin side generated from the spec (then `extract.ts` and the drift test
-go), the FFM glue between them, the coarse crossings the roadmap asks for (per-tick batches,
-handles as integers, flat buffers: annotations on the spec's methods), and the rest of
-`PlatformEvents`' events as their services come (`ServerEvents`, above).
+Still to come: the Kotlin interfaces generated from the spec (then `extract.ts` and the drift test
+go; until the Kotlin runtime is deleted they're its own, and the FFM glue is generated against them),
+and the coarse crossings the roadmap asks for (per-tick batches: annotations on the spec's methods).
+
+## The FFM boundary (`crates/ffi`, `apps/plugin/ffi`)
+
+How the Paper adapter (Kotlin) runs the Rust runtime in-process: `crates/ffi` is a cdylib
+(`libnetherforge_ffi`), `:plugin:ffi` its Kotlin half (Java 25, for the foreign function API: only
+the 26.x adapters can carry it). Both halves are generated: `packages/platform/scripts/ffi.ts` from
+the Platform spec (`crates/ffi/src/generated/`, `apps/plugin/ffi/src/generated/`), and
+`packages/api/scripts/emit/raisedFfi.ts` the server's raised events (`generated/events/`), on a wire,
+an object registry and a loader written by hand on each side.
+
+- **One entry point each way.** The JVM calls `nf_call(id, method, args, len, out_len)`; Rust calls the
+  JVM's `javaCall` (an upcall stub handed over by `nf_init`, which also checks the wire's version). An
+  object is an id, a method its number (its place among the interface's members, a parent's first, so
+  `ClientEntityOps`' are `EntityOps`' and then its own), the arguments a flat buffer, the answer a
+  status byte (0 ok, 1 failed with an error) and the value. The callee keeps its answer in a
+  thread-local buffer until that thread's next call, and the caller copies it out at once; arguments
+  are read whole before the callee does anything, so a call made while one is under way (a teleport
+  raising an event) can't overwrite what's still needed. Nothing unwinds across: a panic is a failed
+  answer the JVM throws as `NativeException`, and a Kotlin exception is one Rust panics with ("the
+  server's TeamOps::create failed: ..."), or an `Err` for a method answering `Result`.
+- **Which side implements an interface follows from the spec** (`ffi.ts`'s `sides`): `Platform` is the
+  JVM's and `PlatformEvents` Rust's; what a side's method returns is that side's, what it takes is the
+  other's. It comes out as Rust implementing `PlatformEvents`, `CommandHandler`, `PlaceholderResolver`,
+  `GoalCallbacks` and `GameEvents`, and the JVM everything else (`CommandSender`, `DialogAnswers`, a
+  `StructurePlacer`...), with no conflict; the generator fails if one appears. A function type's side
+  follows the same rule.
+- **The JVM's objects in Rust** are generated proxies (`JavaTeamOps`) over a `JavaRef` (an id; dropping
+  it lets the JVM let go, from any thread, so `BiomeSearch`'s proxy is `Send`). A group the trait hands
+  out borrowed (`fn worlds(&self) -> &dyn WorldOps`) is made once per member and kept (`Kept::once`); a
+  method answering one (`economy()`) keeps one proxy per JVM object (`Kept::by_id`: the JVM gives an
+  object the same id each time and counts it, so a second reference is let go at once). `game()` is
+  read once as the bundle `exportGameData` makes, which is a `GameData`. An `object` (`CommandSender`)
+  crosses as its fields' values and a reference for its methods.
+- **Rust's objects in the JVM** are generated proxies (`RustPlatformEvents`) over an id; each is
+  tracked by a `Cleaner`, which releases it once collected. Rust's objects are `Rc`s, so they live on
+  the thread that handed them out (the server's main thread, `thread_local`): a release from the
+  cleaner's thread is queued and done at the main thread's next call in, and a call from another
+  thread fails ("no object on this thread"). The placeholder resolver PlaceholderAPI may call off the
+  main thread needs the Kotlin glue to answer it itself (not yet).
+- **The wire** (`wire.rs`, `Wire.kt`): little-endian numbers, `Boolean` a byte, strings UTF-8 after their
+  byte count (u32), `UUID` two longs (most significant first), `T?` a byte then the value, lists, sets,
+  arrays and maps a count then the items, a record its fields in order, an enum its entry's number
+  (u32), a union its case's number then its fields, `Result` a byte then the value or the error, an
+  error its message and its trace as text, `Any` a tagged JSON-like value (a whole number in `Int`'s
+  range reads in Kotlin as an `Int`, which integer game rules need), a reference a side byte (0 the
+  JVM's, 1 Rust's) and an id (u64). **Format's types cross as their file text** (`CanonicalJson` on the
+  Kotlin side, serde on Rust's: both read the same files byte for byte), but `Vec3`, `Box` and
+  `Matrix4`, which are their numbers, and a `Path`, which is its text. The Lua API's enums
+  (`ArgumentType`, `WatchedEvent`) are their entry numbers, both generated in the spec's order. A type
+  Rust has no home for yet (`GameDatapack`, `TerrainScripts`, `StructureTemplate`, `CompiledTerrain`,
+  `DatapackRefusal`) crosses as nothing and can't come back. `ChunkGrid` is its filled positions.
+- **The server's events** (`GameEvents`): `PlatformEvents.game` hands out `game_events_dispatch` over the
+  runtime's `Rc<dyn PlatformEvents>`; `RustGameEvents` writes a payload's fields (a lazy one as a function
+  the runtime calls back only if a script asks), and reads back whether it ended cancelled and each
+  writable field, which it assigns into the Kotlin payload.
+- **Composition** (`compose.rs`, `nf_start`/`nf_stop`; Kotlin's `NativeRuntime`): the JVM hands its
+  platform, the plugin's and the server's folders, the server's address, `config.yml`'s values (as `Any`)
+  and the JVM's properties and environment; Rust reads the config (`config::read`), opens the store
+  (`<plugin folder>/netherforge.db`), starts the network's link and waits for the hub, starts the session
+  on the bridge's platform (a dev server) over a `DiskProject` (listed again at each load, so a reload
+  sees new files) and `Folders` for packages, then `ServerEvents`, the profiler, the bridge, `/nf`, and
+  binds the platform's lookups (glyphs, item looks, blocks' states, the namespace, `<space>` and `<at>`
+  layout, each reading the session running when asked) and answers its `PlatformEvents`, which the
+  plugin ticks. `nf_stop` stops the session, waits for the profiler's reports and stops the bridge.
+- **Tests**: `apps/plugin/ffi/src/test` runs the Rust runtime through FFM on the testkit's Kotlin
+  `FakePlatform` (`cargoBuild` builds the library first; `netherforge.ffi.library` names it): a module's
+  print, a raised event with its writable field back, a command with the server's sender, a centity's
+  displays, a script's error, a panic thrown in the JVM.
+- Gaps: the plugin doesn't use it yet (the adapter still starts the Kotlin runtime), the library isn't
+  in the plugin jar, packages from git (only path dependencies, `Folders`), the placeholder resolver off
+  the main thread, the main world's generator (`getDefaultWorldGenerator`: the terrains' service).
 
 ## Format (`crates/format`)
 

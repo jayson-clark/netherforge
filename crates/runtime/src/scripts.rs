@@ -315,15 +315,20 @@ impl Scripts {
                 return Ok(());
             };
             let mut texts = Vec::with_capacity(parts.len());
+            // As Luau's `tostring` writes each: a vector's numbers, a `__tostring` metamethod's text.
+            let tostring: Option<mlua::Function> = lua.globals().get("tostring")?;
             for part in parts.iter() {
-                let text: String = lua.coerce_string(part.clone())?.map_or_else(
-                    || match part {
+                let text: String = match (lua.coerce_string(part.clone())?, &tostring) {
+                    (Some(s), _) => s.to_string_lossy(),
+                    (None, Some(tostring)) => tostring
+                        .call::<mlua::LuaString>(part.clone())?
+                        .to_string_lossy(),
+                    (None, None) => match part {
                         Value::Nil => "nil".to_owned(),
                         Value::Boolean(b) => b.to_string(),
                         other => format!("{}: {:p}", other.type_name(), other.to_pointer()),
                     },
-                    |s| s.to_string_lossy(),
-                );
+                };
                 texts.push(text);
             }
             let location = netherforge_luau::script_location(lua);
