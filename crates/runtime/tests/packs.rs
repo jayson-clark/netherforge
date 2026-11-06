@@ -567,6 +567,168 @@ fn an_owners_url_is_sent_and_the_zip_written_for_them() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// What a store was asked: each request's method, path and `Authorization`.
+type Asked = std::sync::Arc<std::sync::Mutex<Vec<(String, String, String)>>>;
+
+/// A store on loopback: what it was asked (method, path, `Authorization`), each answered by `found` for a HEAD and
+/// 200 for a PUT.
+fn store(found: u16) -> (u16, Asked) {
+    use std::io::{BufRead as _, Write as _};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let seen: Asked = Default::default();
+    let kept = seen.clone();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            use std::io::Read as _;
+            let mut reader = std::io::BufReader::new(stream.try_clone().unwrap());
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            let mut parts = line.split_whitespace();
+            let (method, path) = (
+                parts.next().unwrap().to_owned(),
+                parts.next().unwrap().to_owned(),
+            );
+            let (mut auth, mut length) = (String::new(), 0usize);
+            loop {
+                let mut header = String::new();
+                reader.read_line(&mut header).unwrap();
+                let header = header.trim_end();
+                if header.is_empty() {
+                    break;
+                }
+                let (name, value) = header.split_once(':').unwrap();
+                match name.to_lowercase().as_str() {
+                    "authorization" => auth = value.trim().to_owned(),
+                    "content-length" => length = value.trim().parse().unwrap(),
+                    _ => {}
+                }
+            }
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).unwrap();
+            kept.lock().unwrap().push((method.clone(), path, auth));
+            let status = if method == "HEAD" { found } else { 200 };
+            let _ = stream.write_all(
+                format!("HTTP/1.1 {status} X\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                    .as_bytes(),
+            );
+        }
+    });
+    (port, seen)
+}
+
+#[test]
+fn with_a_store_each_build_is_uploaded_before_anyone_is_sent_it() {
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "resource_packs/ui/pack.json",
+            r#"{ "glyphs": { "coin": { "texture": "glyph/coin.png" } } }"#,
+        ),
+        ("resource_packs/ui/textures/glyph/coin.png", "png"),
+    ]);
+    let (port, seen) = store(404);
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.alex.borrow_mut() = true;
+    let config = netherforge_runtime::session::Config {
+        pack: netherforge_runtime::packs::PackConfig {
+            storage: Some(netherforge_runtime::pack_storage::PackStorageConfig {
+                endpoint: format!("http://127.0.0.1:{port}"),
+                bucket: "packs".into(),
+                prefix: "/server one/".into(),
+                region: "auto".into(),
+                public_url: "https://cdn.example/".into(),
+                access_key: "KEY".into(),
+                secret_key: "SECRET".into(),
+            }),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let session = Session::start_configured(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        std::rc::Rc::new(netherforge_runtime::store::Store::in_memory()),
+        config,
+    );
+    let sha1 = session.shared().packs.borrow().built.clone().unwrap().sha1;
+    assert!(
+        !platform.take().iter().any(|l| l.starts_with("offer")),
+        "sent before it was stored"
+    );
+    let started = std::time::Instant::now();
+    let mut said = Vec::new();
+    while !said.iter().any(|l: &String| l.starts_with("offer")) {
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(5),
+            "{said:?}"
+        );
+        session.tick();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        said.extend(platform.take());
+    }
+    assert!(
+        said.contains(&format!(
+            "info Uploaded the resource pack {sha1} to https://cdn.example/server%20one/{sha1}.zip"
+        )),
+        "{said:?}"
+    );
+    assert!(
+        said.contains(&format!(
+            "offer 77 project https://cdn.example/server%20one/{sha1}.zip {sha1} true"
+        )),
+        "{said:?}"
+    );
+    let seen = seen.lock().unwrap().clone();
+    let methods: Vec<&str> = seen.iter().map(|(m, _, _)| m.as_str()).collect();
+    assert_eq!(methods, ["HEAD", "PUT"]);
+    assert_eq!(seen[1].1, format!("/packs/server%20one/{sha1}.zip"));
+    let day = chrono::Utc::now().format("%Y%m%d").to_string();
+    assert!(
+        seen[1].2.starts_with(&format!(
+            "AWS4-HMAC-SHA256 Credential=KEY/{day}/auto/s3/aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature="
+        )),
+        "{}",
+        seen[1].2
+    );
+}
+
+#[test]
+fn a_store_signs_as_aws_signature_version_4_says() {
+    // The signature as an independent implementation of the same rules (Python's hmac and hashlib) works it out.
+    let config = netherforge_runtime::pack_storage::PackStorageConfig {
+        endpoint: "https://s3.example".into(),
+        bucket: "b".into(),
+        prefix: String::new(),
+        region: "us-east-1".into(),
+        public_url: "https://cdn.example".into(),
+        access_key: "AKIDEXAMPLE".into(),
+        secret_key: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into(),
+    };
+    let (authorization, hash) = netherforge_runtime::pack_storage::authorization(
+        &config,
+        "PUT",
+        "s3.example",
+        "/b/x.zip",
+        b"",
+        Some("application/zip"),
+        "20150830T123600Z",
+    );
+    assert_eq!(
+        hash,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    );
+    assert!(authorization.starts_with(
+        "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/s3/aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature="
+    ));
+    assert_eq!(
+        authorization.rsplit('=').next(),
+        Some("9c1a443118e3257216cc78494e6a7a0b9d0141e69137189af5202cd2634cfb73")
+    );
+}
+
 #[test]
 fn a_players_hud_is_drawn_in_their_action_bar_and_sent_again_before_it_fades() {
     use netherforge_platform::PlatformEvents;

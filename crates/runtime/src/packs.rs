@@ -8,7 +8,8 @@
 //! nothing changes no hash, and what each player's client was sent and said is kept with it. Players fetch a zip
 //! from the plugin's own HTTP server (`PackServer`) at `<base>/<sha1>.zip`, or from a URL the server owner serves it
 //! at (the plugin writes `resource-pack.zip` for them); they get it as they join and again only when the hash has
-//! changed. Not yet: an S3 store (it waits for the HTTP client), and what the network knows a player loaded.
+//! changed. With an owner's S3-compatible store (`pack_storage.rs`) each build is uploaded on a thread of its own, and
+//! nobody's sent one until it's there. Not yet: what the network knows a player loaded.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::Write as _;
@@ -126,6 +127,8 @@ pub struct PackConfig {
     pub prompt: Option<String>,
     /// Where `resource-pack.zip` is written for an owner who serves it.
     pub state_dir: Option<PathBuf>,
+    /// `resource-pack.storage`: an S3-compatible store packs are uploaded to and fetched from.
+    pub storage: Option<crate::pack_storage::PackStorageConfig>,
 }
 
 impl Default for PackConfig {
@@ -139,6 +142,7 @@ impl Default for PackConfig {
             required: false,
             prompt: None,
             state_dir: None,
+            storage: None,
         }
     }
 }
@@ -303,6 +307,14 @@ fn answer(mut stream: TcpStream, served: &Served, web: &WebSlot) {
     let _ = stream.flush();
 }
 
+/// Uploads to the store, one at a time on a thread of their own, and what each came to.
+struct Uploads {
+    lane: crate::screen::video::Lane,
+    done: std::sync::mpsc::Sender<(String, Result<bool, String>)>,
+    heard: std::sync::mpsc::Receiver<(String, Result<bool, String>)>,
+    storage: Arc<crate::pack_storage::PackStorage>,
+}
+
 /// The pack as last built, what scripts and menus read of it, and what each player's client was sent and said.
 #[derive(Default)]
 pub struct Packs {
@@ -326,6 +338,11 @@ pub struct Packs {
     /// Each `onDemand` pack's own build, by the pack's name as the server knows it (`featured`, `library:featured`).
     pub on_demand: BTreeMap<String, Built>,
     compiled: BTreeMap<String, CompiledResourcePack>,
+    /// Packs in the store (or there already), by SHA-1: until one is, nobody's sent it.
+    uploaded: BTreeSet<String>,
+    uploading: BTreeSet<String>,
+    /// The upload thread, and what it says of each upload.
+    uploads: Option<Uploads>,
     /// The project's namespace, the last load's: what a pack entry's name resolves in.
     home: Option<String>,
     /// Unknown `<glyph:…>` references already reported, each once per build.
@@ -456,6 +473,31 @@ impl Packs {
         sha1: &str,
         name: &str,
     ) -> Option<String> {
+        if let Some(storage) = self.config.storage.clone() {
+            let url = storage.url_of(sha1);
+            if !self.uploaded.contains(sha1) && self.uploading.insert(sha1.to_owned()) {
+                let uploads = self.uploads.get_or_insert_with(|| {
+                    let (done, heard) = std::sync::mpsc::channel();
+                    Uploads {
+                        lane: crate::screen::video::Lane::thread("NetherForge pack upload"),
+                        done,
+                        heard,
+                        storage: Arc::new(crate::pack_storage::PackStorage::new(storage)),
+                    }
+                });
+                let (store, done, sha1, bytes) = (
+                    uploads.storage.clone(),
+                    uploads.done.clone(),
+                    sha1.to_owned(),
+                    bytes.clone(),
+                );
+                uploads.lane.run(Box::new(move || {
+                    let outcome = store.upload(&sha1, &bytes);
+                    let _ = done.send((sha1, outcome));
+                }));
+            }
+            return Some(url);
+        }
         if !self.config.enabled {
             return None;
         }
@@ -482,6 +524,40 @@ impl Packs {
         server.serve(sha1, bytes.clone(), name);
         let base = public.unwrap_or_else(|| format!("http://{}:{}", server.host, server.port));
         Some(format!("{}/{sha1}.zip", base.trim_end_matches('/')))
+    }
+
+    /// Uploads that have finished: each one stored is marked so (and logged), a failure logged. True when one was,
+    /// so the packs can be sent.
+    pub fn uploads_done(&mut self, platform: &dyn Platform) -> bool {
+        let Some(uploads) = &self.uploads else {
+            return false;
+        };
+        let mut stored = false;
+        while let Ok((sha1, outcome)) = uploads.heard.try_recv() {
+            self.uploading.remove(&sha1);
+            let url = self
+                .config
+                .storage
+                .as_ref()
+                .map(|s| s.url_of(&sha1))
+                .unwrap_or_default();
+            match outcome {
+                Ok(fresh) => {
+                    platform.log().info(if fresh {
+                        format!("Uploaded the resource pack {sha1} to {url}")
+                    } else {
+                        format!("The resource pack {sha1} is stored already")
+                    });
+                    self.uploaded.insert(sha1);
+                    stored = true;
+                }
+                Err(why) => platform.log().error(
+                    format!("Couldn't upload the resource pack {sha1} to its store: {why}"),
+                    None,
+                ),
+            }
+        }
+        stored
     }
 
     /// The plugin's HTTP server, if it's running.
@@ -519,6 +595,9 @@ impl Packs {
             return false;
         };
         if self.sent.get(&player) == Some(&pack.sha1) {
+            return false;
+        }
+        if self.config.storage.is_some() && !self.uploaded.contains(&pack.sha1) {
             return false;
         }
         let first = !self.sent.contains_key(&player);
@@ -567,6 +646,9 @@ impl Packs {
         let Some(url) = pack.url.clone() else {
             return false;
         };
+        if self.config.storage.is_some() && !self.uploaded.contains(&pack.sha1) {
+            return false;
+        }
         if self.pushed.get(&player).and_then(|p| p.get(name)) == Some(&pack.sha1) {
             return true;
         }
@@ -885,6 +967,14 @@ impl Service for PacksService {
     /// Everyone online gets it, once scripts are running.
     fn after_start(&self, _room: &Room) {
         self.send_all();
+    }
+
+    /// A pack the store has now is sent to whoever doesn't have it.
+    fn tick(&self, _room: &Room, platform: &dyn Platform) {
+        let stored = self.shared.packs.borrow_mut().uploads_done(platform);
+        if stored {
+            self.send_all();
+        }
     }
 
     fn player_joined(&self, player: &netherforge_platform::PlayerRef) {
