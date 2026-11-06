@@ -20,4 +20,10 @@ dependencies {
 tasks.test {
     useJUnitPlatform()
     systemProperty("junit.jupiter.execution.timeout.default", "1 m")
+    // RecordedSessionTest's recording, which the Rust runtime's tests read too; UPDATE_GOLDEN=1 rewrites it.
+    val updateGolden = System.getenv("UPDATE_GOLDEN") ?: ""
+    environment("UPDATE_GOLDEN", updateGolden)
+    inputs.dir(layout.projectDirectory.dir("testdata"))
+    inputs.property("updateGolden", updateGolden)
+    if (updateGolden == "1") outputs.upToDateWhen { false }
 }

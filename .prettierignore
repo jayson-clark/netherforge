@@ -8,5 +8,6 @@ apps/editor/src/core/backend/generated/
 apps/editor/src-tauri/permissions/generated/
 examples/**/*.json
 packages/format/testdata/
+packages/network/testdata/
 .claude/settings*.json
 tools/gradle/kotlin-js-store/
