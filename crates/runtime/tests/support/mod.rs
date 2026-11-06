@@ -80,6 +80,18 @@ pub struct Fake {
     pub bots: FakeBots,
     /// The data pack format the server says it has (none: it doesn't say, and never needs a restart).
     pub datapack_format: RefCell<Option<Vec<i32>>>,
+    /// Whether Alex has eyes the server reports (a line of sight from where they stand, the way they face).
+    pub alex_eye: std::cell::Cell<bool>,
+    /// Worlds loaded besides `world`.
+    pub extra_worlds: RefCell<Vec<String>>,
+    /// Each world's spawn, where set.
+    pub spawns: RefCell<BTreeMap<String, Location>>,
+    /// Where the main world's storage is (`level.dat`, `dimensions/`): none, and no world saves.
+    pub storage: RefCell<Option<std::path::PathBuf>>,
+    /// The worlds saved, in order.
+    pub saved_worlds: RefCell<Vec<String>>,
+    /// Why the server was asked to stop.
+    pub shutdown: RefCell<Option<String>>,
 }
 
 impl Default for Fake {
@@ -102,6 +114,12 @@ impl Default for Fake {
             broken: RefCell::default(),
             bots: FakeBots::default(),
             datapack_format: RefCell::new(None),
+            alex_eye: std::cell::Cell::new(false),
+            extra_worlds: RefCell::default(),
+            spawns: RefCell::default(),
+            storage: RefCell::default(),
+            saved_worlds: RefCell::default(),
+            shutdown: RefCell::default(),
         }
     }
 }
@@ -470,6 +488,19 @@ impl netherforge_platform::FakePlayerOps for Fake {
             .flatten()
     }
     fn eye(&self, uuid: Uuid) -> Option<Ray> {
+        if uuid == Uuid(77) && self.alex_eye.get() {
+            let at = self.player.borrow().clone()?;
+            let (yaw, pitch) = (at.yaw.to_radians(), at.pitch.to_radians());
+            return Some(Ray {
+                world: at.world,
+                x: at.x,
+                y: at.y + 1.62,
+                z: at.z,
+                dx: -yaw.sin() * pitch.cos(),
+                dy: -pitch.sin(),
+                dz: yaw.cos() * pitch.cos(),
+            });
+        }
         let at = self.bots.by_id(uuid)?.at;
         Some(Ray {
             world: at.world,
@@ -485,10 +516,28 @@ impl netherforge_platform::FakePlayerOps for Fake {
 
 impl FakeWorldOps for Fake {
     fn names(&self) -> Vec<String> {
-        vec!["world".into()]
+        let mut names = vec!["world".to_owned()];
+        names.extend(self.extra_worlds.borrow().iter().cloned());
+        names
     }
     fn exists(&self, world: String) -> bool {
-        world == "world"
+        world == "world" || self.extra_worlds.borrow().contains(&world)
+    }
+    fn spawn_location(&self, world: String) -> Option<Location> {
+        if let Some(spawn) = self.spawns.borrow().get(&world) {
+            return Some(spawn.clone());
+        }
+        FakeWorldOps::exists(self, world.clone()).then_some(Location {
+            world,
+            x: 0.5,
+            y: 64.0,
+            z: 0.5,
+            yaw: 0.0,
+            pitch: 0.0,
+        })
+    }
+    fn environment(&self, world: String) -> Option<String> {
+        FakeWorldOps::exists(self, world).then(|| "normal".into())
     }
     fn default_world(&self) -> String {
         "world".into()
@@ -975,6 +1024,11 @@ impl netherforge_platform::FakePermissionOps for Fake {
 
 /// Commands kept by name, a name taken once; `vanilla` is the server's own.
 impl netherforge_platform::FakeCommandOps for Fake {
+    /// Runs what it knows of (anything but a line starting `nothing`).
+    fn run_console(&self, line: String) -> bool {
+        self.call(format!("console {line}"));
+        !line.starts_with("nothing")
+    }
     fn register(
         &self,
         spec: netherforge_platform::CommandSpec,
@@ -1081,7 +1135,60 @@ impl netherforge_platform::FakeLootOps for Fake {
     }
 }
 
+/// Worlds saved into `storage`: the main one's dimension is the overworld's.
+impl netherforge_platform::FakeWorldManagerOps for Fake {
+    fn save_files(&self, name: String) -> Option<netherforge_platform::WorldFiles> {
+        let storage = self.storage.borrow().clone()?;
+        if !FakeWorldOps::exists(self, name.clone()) {
+            return None;
+        }
+        self.saved_worlds.borrow_mut().push(name.clone());
+        let dimension = if name == "world" {
+            "overworld".to_owned()
+        } else {
+            name
+        };
+        Some(netherforge_platform::WorldFiles {
+            level: storage.join("level.dat"),
+            dimension: storage.join("dimensions").join("minecraft").join(dimension),
+        })
+    }
+}
+
+/// A structure saved as a line of its size and one per block of stone in it.
+impl netherforge_platform::FakeStructureOps for Fake {
+    fn save(
+        &self,
+        file: std::path::PathBuf,
+        _: String,
+        min: netherforge_platform::BlockVector,
+        max: netherforge_platform::BlockVector,
+        _: bool,
+    ) -> bool {
+        let text = format!(
+            "size {} {} {}\n",
+            max.x - min.x + 1,
+            max.y - min.y + 1,
+            max.z - min.z + 1
+        );
+        std::fs::write(file, text).is_ok()
+    }
+    fn forget(&self, _: std::path::PathBuf) {}
+}
+
 impl FakePlatform for Fake {
+    fn world_manager(&self) -> &dyn netherforge_platform::WorldManagerOps {
+        self
+    }
+    fn structures(&self) -> &dyn netherforge_platform::StructureOps {
+        self
+    }
+    fn export_game_data(&self) -> netherforge_format::game::GameDataBundle {
+        serde_json::from_value(serde_json::json!({ "minecraft": "26.3" })).expect("a bundle")
+    }
+    fn shutdown_server(&self, reason: String) {
+        *self.shutdown.borrow_mut() = Some(reason);
+    }
     fn commands(&self) -> &dyn netherforge_platform::CommandOps {
         self
     }

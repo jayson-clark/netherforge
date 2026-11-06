@@ -1201,10 +1201,26 @@ impl<'a> Session<'a> {
                 (Some(file), None) => format!(" ({file})"),
                 _ => String::new(),
             };
+            let source = file
+                .as_ref()
+                .map(|f| netherforge_format::bridge::SourceRef {
+                    file: f.clone(),
+                    line: line.map(|l| l as i32),
+                });
+            let console = self.shared.console.borrow().clone();
+            // The server's console gets the line; the editor's, the error located with its traceback.
+            let warn = |text: String, entry: String, traceback: Option<String>| match &console {
+                Some(console) => console.script_error(text, entry, source.clone(), traceback),
+                None => log.warn(text),
+            };
             if report.what == "body" {
-                log.warn(format!(
-                    "{label}: body failed: {message}{at}. It's disabled until it's reloaded."
-                ));
+                warn(
+                    format!(
+                        "{label}: body failed: {message}{at}. It's disabled until it's reloaded."
+                    ),
+                    format!("{label}: body failed: {message}"),
+                    traceback.clone(),
+                );
                 record(
                     format!("{label}: body failed: {message}"),
                     &file,
@@ -1232,10 +1248,11 @@ impl<'a> Session<'a> {
                     } else {
                         String::new()
                     };
-                    log.warn(format!(
-                        "{label}: {} failed: {message}{at}{more}",
-                        report.what
-                    ));
+                    warn(
+                        format!("{label}: {} failed: {message}{at}{more}", report.what),
+                        format!("{label}: {} failed: {message}{more}", report.what),
+                        traceback.clone(),
+                    );
                     record(
                         format!("{label}: {} failed: {message}{more}", report.what),
                         &file,
@@ -1244,11 +1261,12 @@ impl<'a> Session<'a> {
                     );
                 }
                 if report.gave_up {
-                    log.warn(format!(
+                    let text = format!(
                         "{label}: {} failed {} times in a row, so it was cancelled{at}",
                         report.what,
                         crate::MAX_ERRORS
-                    ));
+                    );
+                    warn(text.clone(), text, None);
                     record(
                         format!(
                             "{label}: {} failed {} times in a row, so it was cancelled{at}",
@@ -1295,8 +1313,19 @@ impl<'a> Session<'a> {
                     .logs
                     .push(format!("{at}: {}", line.line));
             }
+            let source = line
+                .location
+                .as_ref()
+                .map(|l| netherforge_format::bridge::SourceRef {
+                    file: l.chunk.clone(),
+                    line: Some(l.line as i32),
+                });
             let at = line.location.map(|l| format!(" ({l})")).unwrap_or_default();
-            log.info(format!("[{}] {}{at}", label(room, line.scope), line.line));
+            let text = format!("[{}] {}{at}", label(room, line.scope), line.line);
+            match self.shared.console.borrow().clone() {
+                Some(console) => console.script_line(text, line.line, source),
+                None => log.info(text),
+            }
         }
     }
 }

@@ -44,6 +44,8 @@ impl<'a> EventSource for Current<'a> {
 pub struct ServerEvents<'a> {
     game: GameEventDispatch<Current<'a>>,
     ticks: std::cell::Cell<u64>,
+    /// The dev bridge, on a dev server: its work runs at the start of each tick, its status after.
+    bridge: RefCell<Option<Rc<crate::bridge::Bridge>>>,
 }
 
 /// How often the runtime looks whether the network's policy changed, or the hub a project waits for is here.
@@ -54,7 +56,31 @@ impl<'a> ServerEvents<'a> {
         ServerEvents {
             game: GameEventDispatch(Current(RefCell::new(session))),
             ticks: std::cell::Cell::new(0),
+            bridge: RefCell::new(None),
         }
+    }
+
+    /// Runs the dev bridge with the server: what the editor asks is answered at the start of each tick, and scripts'
+    /// lines and errors go to its console. The session should run on `bridge.platform()`, so the runtime's own log
+    /// lines reach the editor too.
+    pub fn attach_bridge(&self, bridge: Rc<crate::bridge::Bridge>) {
+        *self.session().shared().console.borrow_mut() = Some(bridge.console());
+        *self.bridge.borrow_mut() = Some(bridge);
+    }
+
+    /// The dev bridge, when there's one.
+    pub fn bridge(&self) -> Option<Rc<crate::bridge::Bridge>> {
+        self.bridge.borrow().clone()
+    }
+
+    /// The session, shared, unless it's being changed.
+    pub fn try_session(&self) -> Result<Ref<'_, Session<'a>>, std::cell::BorrowError> {
+        self.game.0.0.try_borrow()
+    }
+
+    /// The session to change, unless something holds it.
+    pub fn session_mut_now(&self) -> Option<RefMut<'_, Session<'a>>> {
+        self.game.0.0.try_borrow_mut().ok()
     }
 
     /// The session, shared (what the bridge and `/nf` ask).
@@ -236,6 +262,11 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
     }
 
     fn tick(&self) {
+        // What the editor asked since the last tick, before any script of this one runs.
+        let bridge = self.bridge.borrow().clone();
+        if let Some(bridge) = &bridge {
+            bridge.run(self);
+        }
         let wanted = match self.any() {
             Some(session) => {
                 session.tick();
@@ -256,6 +287,9 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         {
             session.platform().log().info(why.to_owned());
             session.restart();
+        }
+        if let Some(bridge) = &bridge {
+            bridge.tick(self);
         }
     }
 

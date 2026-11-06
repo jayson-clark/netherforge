@@ -413,6 +413,38 @@ function unported(all: Decl[], cx: Context): string[] {
   return lines
 }
 
+/**
+ * `LogOver`: a Platform that is another one but for its console. Every call goes
+ * to `inner` except `log`, which is `log`'s: how the runtime tees what it says to
+ * the dev bridge's console without the adapter knowing.
+ */
+function logOver(all: Decl[], cx: Context): string[] {
+  const platform = all.find((d) => d.name === 'Platform' && d.kind === 'interface') as InterfaceDecl
+  const lines = [
+    '',
+    '/// A Platform that is `inner` but for its console, which is `log`.',
+    'pub struct LogOver {',
+    '    pub inner: Rc<dyn Platform>,',
+    '    pub log: Box<dyn PlatformLog>,',
+    '}',
+    '',
+    'impl Platform for LogOver {',
+  ]
+  for (const m of members(platform, cx)) {
+    lines.push(
+      `    ${m.signature} {`,
+      m.name === 'log'
+        ? '        &*self.log'
+        : `        self.inner.${m.name}(${m.params.join(', ')})`,
+      '    }',
+      '',
+    )
+  }
+  if (lines[lines.length - 1] === '') lines.pop()
+  lines.push('}', '')
+  return lines
+}
+
 /** The generated modules, by file name: one per spec file, and `mod.rs` naming them. */
 export function platformRust(
   spec: PlatformFile[],
@@ -447,7 +479,7 @@ export function platformRust(
         .trimEnd()}\n`,
     )
   }
-  out.set('unported.rs', `${unported(all, cx).join('\n').trimEnd()}\n`)
+  out.set('unported.rs', `${[...unported(all, cx), ...logOver(all, cx)].join('\n').trimEnd()}\n`)
   out.set(
     'external.rs',
     [

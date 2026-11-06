@@ -170,6 +170,44 @@ impl Settings {
             .is_some_and(|p| p.values.contains_key(setting))
     }
 
+    /// Every package's settings as the editor shows them (the bridge's `settings`): each with the value it runs with,
+    /// whether the owner set it, and why the file's value wasn't used; each file named by `name` (relative to the
+    /// server's folder, where the editor reads).
+    pub fn state(
+        &self,
+        name: &dyn Fn(&std::path::Path) -> String,
+    ) -> netherforge_format::bridge::ServerSettings {
+        use netherforge_format::bridge::{Json, PackageSettings, ServerSettings, SettingState};
+        let packages = self
+            .packages
+            .iter()
+            .map(|(namespace, pkg)| PackageSettings {
+                namespace: namespace.clone(),
+                name: pkg.name.clone(),
+                file: self
+                    .file(namespace)
+                    .map(|f| name(&f))
+                    .unwrap_or_else(|| format!("{namespace}.json")),
+                settings: pkg
+                    .declared
+                    .iter()
+                    .map(|(setting, definition)| {
+                        (
+                            setting.clone(),
+                            SettingState {
+                                definition: definition.clone(),
+                                value: Json(pkg.current(setting).expect("declared")),
+                                set: pkg.values.contains_key(setting),
+                                problem: pkg.misfits.get(setting).map(|p| p.message.clone()),
+                            },
+                        )
+                    })
+                    .collect(),
+            })
+            .collect();
+        ServerSettings { packages }
+    }
+
     /// The package's name, `netherforge.json`'s.
     pub fn package_name(&self, namespace: &str) -> Option<String> {
         self.packages.get(namespace).map(|p| p.name.clone())

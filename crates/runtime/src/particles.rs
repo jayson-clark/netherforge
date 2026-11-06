@@ -188,6 +188,11 @@ impl Particles {
             .count()
     }
 
+    /// Every effect playing (or ending), in the order they started.
+    pub fn playing(&self) -> impl Iterator<Item = &Active> {
+        self.active.values()
+    }
+
     /// The budget's warning, while there is one.
     pub fn problems(&self) -> Vec<Problem> {
         self.budget_problem.iter().cloned().collect()

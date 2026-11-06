@@ -123,6 +123,9 @@ pub struct Shared {
     pub structures: RefCell<crate::structures::Structures>,
     /// What services say of the reload running now (what kept running on each resource): read once it's done.
     pub reloading: RefCell<crate::reload::Notes>,
+    /// The dev bridge's console, while there's a bridge: what scripts say and how they fail goes there as itself
+    /// (a line with where it was written, an error with its traceback) rather than as a plain log line.
+    pub console: RefCell<Option<Rc<dyn crate::bridge::Console>>>,
     /// Lanes work goes to off the main thread, by name, made as they're first wanted (a biome search's).
     pub lanes: RefCell<std::collections::HashMap<&'static str, crate::http::Workers>>,
 }
@@ -145,6 +148,7 @@ impl Shared {
             lanes: RefCell::default(),
             structures: RefCell::default(),
             reloading: RefCell::default(),
+            console: RefCell::default(),
             managed_worlds: RefCell::default(),
             databases: RefCell::default(),
             managed_failures: Default::default(),

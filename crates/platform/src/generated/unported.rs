@@ -5729,3 +5729,212 @@ impl<T: FakeBiomeSearch> BiomeSearch for T {
         FakeBiomeSearch::run(self)
     }
 }
+
+
+/// A Platform that is `inner` but for its console, which is `log`.
+pub struct LogOver {
+    pub inner: Rc<dyn Platform>,
+    pub log: Box<dyn PlatformLog>,
+}
+
+impl Platform for LogOver {
+    fn info(&self) -> ServerInfo {
+        self.inner.info()
+    }
+
+    fn game(&self) -> &dyn netherforge_format::game::GameData {
+        self.inner.game()
+    }
+
+    fn log(&self) -> &dyn PlatformLog {
+        &*self.log
+    }
+
+    fn worlds(&self) -> &dyn WorldOps {
+        self.inner.worlds()
+    }
+
+    fn entities(&self) -> &dyn EntityOps {
+        self.inner.entities()
+    }
+
+    fn client_entities(&self) -> &dyn ClientEntityOps {
+        self.inner.client_entities()
+    }
+
+    fn players(&self) -> &dyn PlayerOps {
+        self.inner.players()
+    }
+
+    fn commands(&self) -> &dyn CommandOps {
+        self.inner.commands()
+    }
+
+    fn blocks(&self) -> &dyn BlockOps {
+        self.inner.blocks()
+    }
+
+    fn world_entities(&self) -> &dyn WorldEntityOps {
+        self.inner.world_entities()
+    }
+
+    fn mannequins(&self) -> &dyn MannequinOps {
+        self.inner.mannequins()
+    }
+
+    fn inventories(&self) -> &dyn InventoryOps {
+        self.inner.inventories()
+    }
+
+    fn attributes(&self) -> &dyn AttributeOps {
+        self.inner.attributes()
+    }
+
+    fn pathfinding(&self) -> &dyn PathfindingOps {
+        self.inner.pathfinding()
+    }
+
+    fn mob_goals(&self) -> &dyn MobGoalOps {
+        self.inner.mob_goals()
+    }
+
+    fn boss_bars(&self) -> &dyn BossBarOps {
+        self.inner.boss_bars()
+    }
+
+    fn sidebars(&self) -> &dyn SidebarOps {
+        self.inner.sidebars()
+    }
+
+    fn teams(&self) -> &dyn TeamOps {
+        self.inner.teams()
+    }
+
+    fn player_list(&self) -> &dyn PlayerListOps {
+        self.inner.player_list()
+    }
+
+    fn particles(&self) -> &dyn ParticleOps {
+        self.inner.particles()
+    }
+
+    fn screens(&self) -> &dyn ScreenOps {
+        self.inner.screens()
+    }
+
+    fn sounds(&self) -> &dyn SoundOps {
+        self.inner.sounds()
+    }
+
+    fn performance(&self) -> &dyn PerformanceOps {
+        self.inner.performance()
+    }
+
+    fn text(&self) -> &dyn TextOps {
+        self.inner.text()
+    }
+
+    fn menus(&self) -> &dyn MenuOps {
+        self.inner.menus()
+    }
+
+    fn dialogs(&self) -> &dyn DialogOps {
+        self.inner.dialogs()
+    }
+
+    fn resource_packs(&self) -> &dyn ResourcePackOps {
+        self.inner.resource_packs()
+    }
+
+    fn project_items(&self) -> &dyn ProjectItemOps {
+        self.inner.project_items()
+    }
+
+    fn item_views(&self) -> &dyn ItemViewOps {
+        self.inner.item_views()
+    }
+
+    fn recipes(&self) -> &dyn RecipeOps {
+        self.inner.recipes()
+    }
+
+    fn loot(&self) -> &dyn LootOps {
+        self.inner.loot()
+    }
+
+    fn world_manager(&self) -> &dyn WorldManagerOps {
+        self.inner.world_manager()
+    }
+
+    fn borders(&self) -> &dyn BorderOps {
+        self.inner.borders()
+    }
+
+    fn structures(&self) -> &dyn StructureOps {
+        self.inner.structures()
+    }
+
+    fn player_views(&self) -> &dyn PlayerViewOps {
+        self.inner.player_views()
+    }
+
+    fn server_admin(&self) -> &dyn ServerAdminOps {
+        self.inner.server_admin()
+    }
+
+    fn permissions(&self) -> &dyn PermissionOps {
+        self.inner.permissions()
+    }
+
+    fn advancements(&self) -> &dyn AdvancementOps {
+        self.inner.advancements()
+    }
+
+    fn plugins(&self) -> &dyn PluginOps {
+        self.inner.plugins()
+    }
+
+    fn placeholders(&self) -> &dyn PlaceholderOps {
+        self.inner.placeholders()
+    }
+
+    fn datapacks(&self) -> &dyn DatapackOps {
+        self.inner.datapacks()
+    }
+
+    fn skies(&self) -> &dyn SkyOps {
+        self.inner.skies()
+    }
+
+    fn pause(&self) -> &dyn PauseOps {
+        self.inner.pause()
+    }
+
+    fn bots(&self) -> &dyn BotOps {
+        self.inner.bots()
+    }
+
+    fn economy(&self) -> Option<&dyn EconomyOps> {
+        self.inner.economy()
+    }
+
+    fn bind(&self, events: Rc<dyn PlatformEvents>, glyphs: Box<dyn Fn(String) -> Option<String>>, items: Box<dyn Fn(String) -> Option<ItemLook>>, blocks: Box<dyn Fn(String) -> Option<String>>, namespace: Box<dyn Fn() -> String>) {
+        self.inner.bind(events, glyphs, items, blocks, namespace)
+    }
+
+    fn bind_text(&self, space: Box<dyn Fn(i32) -> Option<String>>, layout: Box<dyn Fn(String) -> String>) {
+        self.inner.bind_text(space, layout)
+    }
+
+    fn watch(&self, event: crate::api::WatchedEvent, listening: bool) {
+        self.inner.watch(event, listening)
+    }
+
+    fn export_game_data(&self) -> netherforge_format::game::GameDataBundle {
+        self.inner.export_game_data()
+    }
+
+    fn shutdown_server(&self, reason: String) {
+        self.inner.shutdown_server(reason)
+    }
+}
