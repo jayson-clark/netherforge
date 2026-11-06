@@ -218,7 +218,9 @@ runtimes can't disagree about what crosses. `pnpm lint`'s generated-files check 
   function fails with "`BossBar:exists` isn't on the Rust runtime yet", so the runtime ports
   a class at a time. A class's own trait has no defaults: once a class is implemented, it
   must match the spec. **The end of the port removes the defaults**, so a class left out
-  stops building.
+  stops building. As of the leftovers phase every class is implemented and no function delegates to
+  `Unported`; the `Api`'s accessors still fall back to it only for a room with no session (`Room::new`,
+  unit tests), and `Scripts`' own `nf.data`/`db`/`config` say "needs a running project".
 - **The prelude's functions are bound like the rest.** The Kotlin runtime writes the spec's
   `impl: "lua"` functions (`:on`, `nf.after`, `nf.task`, `Random`, `Task`...) in the prelude;
   the Rust target plans them too (`bindings(spec, { handwritten: true })`), so they're trait
@@ -390,8 +392,8 @@ dead: body failed: … (modules/dead/init.lua:2). It's disabled until it's reloa
   `stop` take `&mut`.
 
 Not yet: the game's facts from the Platform (`external::GameData` is a placeholder, so format reads
-without them), reloading a package's files, the policy, the bridge to the editor, the debugger, and every service but modules and centities (menus, dialogs, items...),
-each with the compiler it needs.
+without them), reloading a package's files, the bridge to the editor, the debugger and the profiler. The policy is the session's:
+see "Config, policy and the hub".
 
 ## The server's events (`crates/runtime/src/server.rs`)
 
@@ -415,9 +417,13 @@ each with the compiler it needs.
   unless a handler said what does), `entity_damaged` (the amount back, at least 0), `entity_died` (then
   `entity_gone`, which drops the entity handle's subscriptions), `player_interact_entity`. A payload is built
   only when something listens. What handlers print is logged at the next tick, as other reports are.
-- Not yet, each with its service, answering "unchanged" until then: project items' stages (a held item's
-  handlers first) and looks, custom blocks, structure markers, generated loot, menus, dialogs, resource packs.
-  Screens' are wired: `player_interact` asks the screens first (a swing aimed at one), `entity_clicked` after centities.
+- Every event is wired to its service now: project items' stages (a held item's handlers first) and looks, custom
+  blocks, menus, dialogs, resource packs, screens (`player_interact` asks the screens first, `entity_clicked` after
+  centities), structure markers (`structures.rs`: each turns into its centity) and generated loot (a container the
+  world's generation made rolls the project's table for whoever opened it, at their place; one naming a table that
+  isn't running is left empty, said in the log).
+- Every `POLICY_CHECK_TICKS` (20) `tick` asks `Session::hub_changed` and restarts the session when the network's
+  policy came or changed, or the hub a project waits for is here.
 
 ## Centities (`crates/runtime/src/centity`)
 
@@ -481,7 +487,7 @@ end of the tick (`CentityContext::commit`), its place saved when the world saves
 session stops or autosave (6000 ticks). A stopping session leaves instances in the world; the next restores
 them (their scripts start in `Service::after_start`, once modules run, without `spawn`), inert while their
 centity is gone and revived when it's back. `centity:data()` is one of the saved tables
-(`crate::data`, below). The store commits on the main thread for now.
+(`crate::data`, below). The store commits on its own lane (see Persistence).
 
 **Images** (`crate::images`): pictures held by number, bounded by `MAX_HELD` pixels, decoded with the `image`
 crate (PNG, JPEG, GIF, BMP), encoded as PNG. Not yet: letting go when Lua drops a handle (they go with the
@@ -518,10 +524,11 @@ spawner forgets them), `world_saving`, `chunk_unloading`, `block_changed` (physi
   and set through `BorderOps` with Kotlin's limits.
 - `set_block` and `fill_blocks` (at most 32768, loaded chunks only) write canonical states. `spawn_entity` checks
   the kind and tags and encodes `options.data` with the saved tables' tags; `spawn_item` takes an item table.
-- Not yet, delegated to `Unported`: gradual fills, structures,
-  `locate_biome`, managed worlds, `block:custom` and
-  `block:data`. Until custom blocks come, no block is a project block (`blocks`' `custom`, `flood`'s
-  matcher), and a project biome is spelled without the project's namespace (not yet relative to a package).
+- `world:locate_biome` checks the biome and the radius (at most `BIOME_SEARCH_LIMIT`, 6400) on the main thread and
+  runs the Platform's `BiomeSearch` on its lane (`Shared::lane("biome search")`: one thread, searches one at a time);
+  `near` defaults to the world's spawn. Structures and gradual work are `structures.rs`', managed worlds
+  `managed_worlds.rs`' (their sections below). A project biome is spelled without the project's namespace (not
+  yet relative to a package).
 
 ## Entities (`crates/runtime/src/entity.rs`, `living.rs`)
 
@@ -539,7 +546,7 @@ nil or false while it isn't in the world.
   (its table, who it was hidden from, its handle's subscriptions).
 - `own_id` is Kotlin's `ownId` (a modifier's or goal's id in the project's namespace).
 - `AttributeOperation` is format's in the Platform's Rust types.
-- Not yet: `entity:team()` (teams), a mob's `move_to`/`stop_pathing` and goals (mob goals).
+- A mob's walks and goals are `mob.rs`' (see Mobs).
 - **`Player`** (`player.rs`, Kotlin's `PlayerImpl`): what needs them online answers nil or false while they're
   offline; bans, the whitelist and played times need only a UUID. Their stats and buffs are the stat sheets
   centities use (`Holder::Player`): `buff_add` and `buff_end` raise on the player too, and a player's buffs
@@ -549,6 +556,12 @@ nil or false while it isn't in the world.
   `player:data()` and `player:session()`.
 
 ## Saved tables (`crates/runtime/src/data.rs`)
+
+**The store's lane**: `Store::commit` hands what's staged (keyed writes, `Send` closures) to the store's own lane
+(`Workers::lane("NetherForge store")`), written there as one transaction with a savepoint each; the main thread waits
+only to read: every read (`instances`, `data`, `worlds_of`...) and `written()` call `flush` first (the pending
+commits counted under a `Condvar`), so a read sees every write staged before it. A stopping session flushes. Not yet:
+carrying a batch that couldn't be committed to the next, and moving aside a file that isn't a database.
 
 `ScriptData` is Kotlin's: `centity:data()`, `player:data()` and `nf.data(name)` are one kind of thing, a live
 Lua table by `Owner` (`Centity`, `Player`, `Named { namespace, name }`), made from the store the first time
@@ -584,8 +597,8 @@ Cron is Unix's five fields through `croner` (seconds disallowed; day-of-month an
 as Unix's). A schedule with an id keeps its last run per package in the store's `schedule_runs`; `catch_up`
 runs a missed one as its script starts, and one seen for the first time counts as run when it's made. A
 session's `Config` (`session::Config`, the start of Kotlin's `RuntimeConfig`) gives the zone and, for tests,
-a fixed wall clock (`Session::set_wall_clock`). Not yet: the zone read from `config.yml`, the test servers'
-scaled clock.
+a fixed wall clock (`Session::set_wall_clock`); `config.rs` reads the zone from `config.yml`. Not yet: the test
+servers' scaled clock (`RuntimeConfig::wall_clock_rate` is read, not applied).
 
 ## Names across packages, effects (`names.rs`, `effects.rs`)
 
@@ -624,7 +637,15 @@ steps that same tick. Not yet: the refusal's own words (`DatapackOps::refused` i
   to numbers jshell printed (`SplittableRandom` draws, and a Java transcription of `noise2`/`noise3`).
 - `nf.json` encodes and decodes with the saved tables' handle tags; text that isn't JSON decodes to nil.
 - `nf.server.unix_time` reads the same wall clock schedules do (a session's `Config` can fix it).
-- Not yet: `nf.time.format`/`parse` (Java's pattern language), `nf.text.glyph`/`space` (the built pack).
+- `nf.time.format`/`parse` are java.time's pattern letters (`java_time.rs`, Kotlin's `DateTimeFormatter.ofPattern`
+  with `y` read as `u`, English, `ResolverStyle.STRICT`): a letter's count picks its form as Java's does, Java's
+  "Unknown pattern letter"/"Too many pattern letters" are its errors, reading is strict (the whole text, a day that
+  exists, a weekday that's the date's, adjacent numbers leaving the digits fixed-width ones after them need). A zone
+  named in the text, then an offset, then the option's zone, then the owner's (`Schedules::zone`); a gap moves the
+  time forward and an overlap takes the first (`Zone::instant`). Not supported, an error naming the letter: Java's
+  week-based fields (`Y w W e c F`), day periods (`B`), padding (`p`), optional sections (`[ ]`) and generic zone
+  names (`v`, `zzzz`); `z` writes an abbreviation (chrono-tz's) and can't be read back. `nf.looks.qualify` is
+  `names::Calling::qualify` (the `LOOKS` kinds).
 - `nf.encoding` and `nf.crypto` (`encoding.rs`, Kotlin's `EncodingImpls.kt`): over a text's UTF-8 bytes, nil
   for bytes that aren't UTF-8; RustCrypto's `sha1`/`sha2`/`hmac`. A form is walked raw (no metamethod runs), its
   keys sorted, a whole number written as an integer and any other in plain decimal (Rust's `{}` never writes an
@@ -788,7 +809,8 @@ an error for a pack that isn't `onDemand`) and resent when rebuilt. Ids are Java
 `md-5`). What a client says (`PlatformEvents::resource_pack_status`) is kept for our packs only and raised as the
 player's `resource_pack_status`, then `nf`'s. `nf.packs.rebuild` reads the packs again from disk at the end of the
 tick (`Session::rebuild_packs`, from `ServerEvents::tick` once nothing runs). `Player` is whole now. The owner's S3 store is under
-Web routes. Not yet: what the network knows a player loaded, `PackConfig` read from `config.yml`.
+Web routes. `PackConfig` (S3 store included) is read from `config.yml` by `config.rs`. Not yet: what the network
+knows a player loaded.
 
 ## Files (`crates/runtime/src/files.rs`)
 
@@ -799,8 +821,8 @@ calling package's folder first (`nf.files.get`), and nothing climbs above it. Pa
 `Config`'s `files` limits (bytes and entries, counted once then kept up to date), files to 1 MiB. Files from before
 per-package folders move into the project's as the session starts (`adopt`, once: a marker file). JSON is
 `nf.json`'s (the saved tables' tags); `lines` is a Rust iterator over the file read once (the prelude's in Kotlin).
-The root is `Config::data_dir`; with none (tests), every file answers nil or false. Not yet: the root and limits read
-from `config.yml`.
+The root is `Config::data_dir`; with none (tests), every file answers nil or false. `config.rs` sets the root
+(`<plugin folder>/data`) and the limits from `config.yml`.
 
 ## Custom blocks (`crates/runtime/src/custom_blocks.rs`)
 
@@ -1073,8 +1095,8 @@ the proxy, the standalone hub) **stays Kotlin**: the Rust runtime is a client of
   changed. A muted player's chat is held back in `events.rs`'s `Around::player_chat`.
 - Not as Kotlin: "Ready N seconds after…" is logged only in a network; a server's start time is the link's creation (the plugin's).
 
-Not yet: `network.wait-for-hub-seconds` and `require-hub` (the session doesn't wait for a welcome; the policy the hub sends isn't
-applied), `/nf network`, `/nf drain`, `/nf shutdown`, metrics (`sent_by_package`/`heard_by_package` are counted), the bundle and pack
+`network.wait-for-hub-seconds` and `require-hub`, and the policy the hub sends: see "Config, policy and the hub". Not yet:
+`/nf network`, `/nf drain`, `/nf shutdown`, metrics (`sent_by_package`/`heard_by_package` are counted), the bundle and pack
 sharing parts (`keeps_packs`, `PackLoaded`), and the adapter's watched events (chat is held back only if the adapter forwards it).
 `nf.test.network_*` is ported: see Script test runs.
 
@@ -1184,6 +1206,112 @@ the runtime reaches it only through the Platform's `BotOps`, which the spec alre
 Not yet: a bot leaving during a reload or as the session stops goes out while the session is borrowed mutably, so a quit the
 Platform raises synchronously then isn't heard (Paper handles a disconnect at the connection's next tick, after it); the
 bridge's extension itself; a Rust testkit `FakeBots` (each test file's fake has its own few lines of bots).
+
+## Mobs (`crates/runtime/src/mob.rs`)
+
+Kotlin's `MobPaths` and `MobGoals` as one `Mobs` (in `Shared`, an `Rc` because the Platform holds goals' hooks),
+ticked by `MobsService`.
+
+- **Walks** (`mob:move_to`, `stop_pathing`): the Platform's `PathfindingOps` walks the mob; the server has no event for
+  a path ending, so each tick a walk is over when the mob has no path (reached within `PATH_REACH` of its target) or is
+  on one that isn't ours (its end more than 0.75 from ours: its AI sent it elsewhere). A walk after an entity finds a
+  new path every `REPATH_TICKS`. `path_end` is raised on the mob's handle at the tick, after the pass. Not saved; a
+  mob that goes is forgotten without `path_end`.
+- **Goals**: `mob:goals()` sorted by key then priority, controls in the spec's order, lowercase. `add_goal` takes the
+  generated `GoalDefinition` (the codec checks its shape and the controls' names; Kotlin's prelude half did), its id in
+  the project's namespace (`own_id`), and hands the Platform a `GoalHook` (`Rc<dyn GoalCallbacks>`) over a `LuaGoal`.
+  Each callback is called as its scope's code (`Scripts::call_kept`) with the mob's handle, the prelude's
+  `fn(self)`; a yes-or-no answer is Lua's truthiness. One that fails is reported (`goal <key>'s <name>`), warned
+  about and its goal dropped. While any callback runs (`calling`), a change to goals (an add, a remove, a clear, a
+  drop) waits in `pending` for the next tick, before the mobs' next AI tick. A scope released drops its goals; a
+  mob gone, unloading or not found by the sweep (every `SWEEP_TICKS`) forgets its own. The tests' fake AI asserts no
+  change comes while it goes through goals.
+
+## Structures (`crates/runtime/src/structures.rs`)
+
+Kotlin's `StructureStore`, `GradualJobs` and `StructureSpawns`. The project's structures (`structures/<id>.nbt`, by
+project path) and builds (`builds/<id>/`, its grid from format's `part_of` over the folder's files) are read as the
+session starts and on a reload of either kind (the Platform forgets the files first: `StructureOps::forget`). Files on
+disk come from `Config::paths` (`ProjectPaths`); scripts' saves go to `<data>/.nf/structures/<id>.nbt`.
+
+- `place_structure` refuses a build (too big for a tick) and a rotation not a multiple of 90; `save_structure` refuses
+  an id the project's structures or builds have and a box past 48 a side.
+- **Gradual jobs** (`place_gradually`, `fill_gradually`): each a scope's, its value an `Outcome` cell the room's
+  future polls (`std::future::poll_fn`). Every tick the jobs share `blocks_per_tick` in turn and equal shares, each
+  never past its `per_tick`; a package past `max_jobs_per_package` fails at once (at the next tick, as every async
+  value arrives). A placement opens one part at a time (`StructureOps::placer`, now a `Box<dyn StructurePlacer>` the
+  job holds) and puts entities in last from a second read of the parts that have any; a fill goes chunk column by
+  column, loading each, and tells custom blocks what it replaced. A scope released or the session stopping drops its
+  jobs ("its script stopped").
+- **Markers** (`structure_markers_loaded`, a scan after start, after a placement with entities, and after the
+  centities reload): a marker naming a centity the project has is removed, then the centity spawned where it stood;
+  one naming a centity it lacks stays, warned about once.
+- The Platform's Rust target now hands out what a method with parameters makes as `Box<dyn X>` (a placer, a biome
+  search, worlds' file work), a group's accessor still `&dyn`; `SENT` in `scripts/rust.ts` makes `BiomeSearch` and
+  `FileWork` `Send` (they run on lanes). `Path` is `PathBuf`.
+
+## Managed worlds (`crates/runtime/src/managed_worlds.rs`)
+
+Kotlin's `ManagedWorlds`. `nf.worlds.create` (a vanilla generator or one of the project's terrains with no errors,
+not both; a project dimension type as the server keys it, which `WorldManagerOps::dimension_types` must have), `load`
+(a world made with a dimension type the server lacks is an error), `copy` (a map's folder) and `import` (a folder under
+`worlds.import-root`), `world:is_managed` and `unload` (players moved to `move_players_to`'s spawn or the main world's;
+`delete` deletes its files). Only worlds the project's scripts made, or `managedWorlds` names, may be unloaded; never the
+main world. What scripts made is the store's `worlds` table (`Store::worlds_of`, `own_world`, `forget_world`).
+Copies' and deletions' file work runs on the `world files` lane, one at a time; a copy is loaded at the next tick
+after its files are in place (`ManagedContext::tick`), its world then the script's (a script that stopped first isn't
+called; the world is kept). File work fails by panicking with its reason. Not yet: the worlds `netherforge.json` makes
+as the session starts (`worlds` with a `terrain` or `dimensionType`), which come with the terrains' service (publishing
+generators to the server: `ProjectGenerator`'s types are still placeholders).
+
+## Package databases (`crates/runtime/src/databases.rs`)
+
+Kotlin's `PackageDatabases`, `PackageSchemas`, `SqlText`, `DatabasesConfig` and `DatabaseImpl`. `nf.db()` is the
+calling package's own SQLite file, `<plugin folder>/databases/<namespace>.db` (`Config::databases_dir`; in memory
+with none), its connection opened on its lane (`database:<namespace>`) and used only there, with
+`SQLITE_LIMIT_ATTACHED` 0, WAL, a busy timeout. Statements are checked on the main thread: one statement
+(`sql_problem`), no `ATTACH`/`DETACH`/`VACUUM`/folder pragmas (`sqlite_problem`), params a list of strings, numbers
+and booleans (a hole is NULL). Numbers bind as an integer when whole and safe, else a real; an integer column past the
+safe range comes back as a string of digits, NULL is left out of its row, a blob is the statement's failure.
+`execute`'s `last_insert_id` is SQLite's last rowid (nil when 0). A transaction is rusqlite's, its failure
+"statement N failed, so nothing was changed: …". The database's messages lose rusqlite's "in SQL at offset" tail
+(`said`). **Migrations** (`DatabasesService`, before any script runs): every package's `migrations/NNN_name.sql`,
+applied in order on the lane (the session waits), each once (`migrations`, scoped by namespace); one with problems or
+that fails leaves its package without a database, `nil, err` to its scripts and a `migration.failed` problem.
+
+`databases:` (`DatabasesConfig`, read by `config.rs`) is checked when a script names a connection (`problem`: the
+owner's words, never a host or password; `ConnectionConfig`'s `Debug` hides the password), but **the Rust runtime has
+no MySQL or PostgreSQL driver yet**: a named connection's work fails saying so, and `own-databases` (a package's own
+database on a shared server) isn't applied: its SQLite file stays.
+
+## Config, policy and the hub (`crates/runtime/src/config.rs`, `session.rs`)
+
+**`config.yml` is read in one place** (`config::read`, Kotlin's `RuntimeConfig.read`): the adapter hands over its
+values as plain JSON-like values (`read_yaml` turns the file's text into them, serde_yaml_ng), with the plugin's
+folder, the server's folder and address, and the system properties and environment. The answer is a
+`RuntimeConfig`: the project folder, the bridge (dev server), the `session::Config` every session starts with (every
+section: `schedules`, `http` with `allow-private` and `connections`, `web`, `wasm`, `network`, `bots`,
+`structures`, `screens`, `files`, `worlds`, `databases`, `resource-pack` with its S3 store; the folders `data`,
+`settings`, `databases` and the pack's state), `performance`, `policy.json`, `bundles`, `metrics`, `control`,
+`packages.provided`, the package cache and the wall clock's rate. A number that isn't a positive one is the
+default; a value that can't be acted on (an `allow-private` entry, an S3 store missing a field) is an error. The dev
+server takes its project, bridge and network from the properties, its bots always on. Not yet: a `project:` that's a
+bundle's URL (an error saying so), and applying `performance` (no per-tick time limit or slow-script warnings in
+Rust yet) and `wall_clock_rate`.
+
+**The policy** (`Session::refuse`, as each run starts): the owner's (`Config::policy`) and the network's for this
+server (the link's `state.policy`, from the hub's welcome) together (`Policy::and`). An owner's policy that can't be
+read refuses every project (`runtime.policy`); a policy that stops projects refuses one that requires what it
+refuses, its first `check` problem the refusal; one that degrades leaves the project running, its `check` problems
+warnings in `Session::problems`, and `Grants::check` refusing what it denies ("…needs db, which the server's policy
+refuses (requires.deny lists "db")"), before anything else. Its limits lower the host's (`limits_under_policy`:
+memory, call time, the budget's most) and the network's and HTTP's rates.
+
+**The hub**: `network::wait_for_hub(link, log)` is what the adapter calls before the first session (the link started):
+it waits up to `network.wait-for-hub-seconds` for the hub's welcome (`NetworkLink::await_welcome` takes it from the
+inbox's front, leaving it to be drained as ever), logging Kotlin's lines. With `network.require-hub` and no hub, the
+session is refused ("The project waits for the network's hub…"); `ServerEvents::tick` restarts it
+(`Session::restart`) once the hub is there, or when the network's policy came or changed (`Session::hub_changed`).
 
 ## Project items (`crates/runtime/src/project_items.rs`)
 

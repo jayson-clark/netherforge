@@ -12,8 +12,8 @@
 //! **Daylight saving is java.time's**, as Kotlin's was: a wall-clock time the clocks skip is shifted by the
 //! gap (`02:30` on the night clocks jump from 02:00 to 03:00 is 03:30), and one that happens twice is the first.
 //!
-//! Not yet: the zone from `config.yml` (`schedules.time-zone`; the session is given one with
-//! `Session::set_time_zone`), and the test servers' scaled clock.
+//! The zone is `config.yml`'s `schedules.time-zone` (`crate::config` reads it into `session::Config::time_zone`).
+//! Not yet: the test servers' scaled clock (`config::RuntimeConfig::wall_clock_rate` is read, not applied).
 
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
