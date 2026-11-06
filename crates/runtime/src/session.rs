@@ -737,6 +737,10 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         Box::new(crate::bossbar::BarsService {
             shared: shared.clone(),
         }),
+        // After centities and particle effects, as Kotlin's draws in the effects' phase.
+        Box::new(crate::huds::HudsService {
+            shared: shared.clone(),
+        }),
         Box::new(crate::sky::SkiesService {
             shared: shared.clone(),
         }),

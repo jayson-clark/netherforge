@@ -44,6 +44,8 @@ pub struct Shared {
     pub names: RefCell<netherforge_format::project::Names>,
     /// The skies over worlds and players.
     pub skies: RefCell<crate::sky::Skies>,
+    /// Every online player's HUD.
+    pub huds: RefCell<crate::huds::Huds>,
     /// The resource pack as last built, and the characters it draws glyphs and skins with.
     pub packs: RefCell<crate::packs::Packs>,
     /// The scripts' data directory (`nf.files`), when the server has one.
@@ -102,6 +104,7 @@ impl Shared {
             schedules: RefCell::default(),
             names: RefCell::default(),
             skies: RefCell::default(),
+            huds: RefCell::default(),
             packs: RefCell::default(),
             files: RefCell::default(),
             block_data: RefCell::default(),
@@ -187,6 +190,17 @@ impl Shared {
                 id: crate::events::uuid_text(&id),
             },
         }
+    }
+
+    /// How wide `text` (MiniMessage) draws in the project's default font, the built pack's glyphs (their tags and
+    /// their bare characters) included, and how many lines it is; none when the project has no font facts.
+    pub fn measure_text(&self, text: &str) -> Option<(i32, i32)> {
+        let font = self.font.borrow();
+        let packs = self.packs.borrow();
+        let width = netherforge_format::text::TextWidth::of_font(font.as_ref()?)
+            .with_glyphs(|reference| packs.glyph_advance(reference))
+            .with_glyph_chars(|code| packs.glyph_char_advance(code));
+        Some((width.measure(text)?, width.line_count(text) as i32))
     }
 
     /// `f` with the centities and how their displays are drawn (text measured with the project's font).

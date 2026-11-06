@@ -707,6 +707,16 @@ the files' with a UUID id and an owner scope, gone with that scope (`scope_relea
 `nf.dialogs.get` and `open_dialog` by name find only the project's. Not yet: the runtime's own dialogs
 (`/nf settings`).
 
+## HUDs (`crates/runtime/src/huds.rs`)
+
+Kotlin's `Huds` and `HudImpl`: each online player's `HudState` (format's), drawn by format's `hud::compose` per built
+pack in the pack's name order into their action bar, sent the tick after it changes and again every `RESEND` (20)
+ticks before it fades. `player:send_actionbar` goes through it while a HUD shows (`Huds::message`): drawn in the
+middle of the line for `MESSAGE` (60) ticks when it can be measured, else on its own. Elements are named as looks
+(`RefKind::Hud`, `ui/mana`); a pack with errors has no HUD (its elements are an error to set). A pack's rebuild draws
+every HUD again (`reloaded`). Text is measured by `Shared::measure_text` (new): the default font with the built
+pack's glyph tags and bare glyph characters, which `nf.text.width`/`measure` use too, as Kotlin's do.
+
 ## Resource packs (`crates/runtime/src/packs.rs`)
 
 Kotlin's `Packs` (the build half), `PackZip` and `PackService`: format's `build::build` over every compiled pack but

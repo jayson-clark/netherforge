@@ -94,6 +94,12 @@ impl netherforge_platform::FakePlayerOps for Fake {
     fn known(&self, name: String) -> Option<netherforge_platform::PlayerRef> {
         (name == "Alex").then(alex)
     }
+    fn actionbar(&self, uuid: netherforge_platform::Uuid, text: String) -> bool {
+        self.lines
+            .borrow_mut()
+            .push(format!("actionbar {} {text}", uuid.0));
+        true
+    }
 }
 
 /// Offers said as they're sent.
@@ -559,4 +565,125 @@ fn an_owners_url_is_sent_and_the_zip_written_for_them() {
         *built.bytes
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_players_hud_is_drawn_in_their_action_bar_and_sent_again_before_it_fades() {
+    use netherforge_platform::PlatformEvents;
+    let pack = r#"{
+        "name": "UI",
+        "hud": {
+            "bars": { "mana": { "full": "hud/full.png", "empty": "hud/empty.png", "segments": 3, "x": -91, "y": 52 } },
+            "texts": { "label": { "x": -91 } }
+        }
+    }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("resource_packs/ui/pack.json", pack),
+        ("resource_packs/ui/textures/hud/full.png", "png"),
+        ("resource_packs/ui/textures/hud/empty.png", "png"),
+        (
+            "modules/hud/init.lua",
+            r#"
+nf.on("demo:show", function()
+  local hud = nf.players.get("Alex"):hud()
+  print(hud:fill_bar("ui/mana", 2, 3), hud:set_text("ui/label", "Mana"), hud:bar("ui/mana").segments, hud:text("ui/label"))
+  print(pcall(hud.fill_bar, hud, "ui/label", 1, 2))
+  print(pcall(hud.fill_bar, hud, "ui/mana", 1, 2, { segments = 9 }))
+  print(hud:fill_bars({ "ui/mana" }, 5, 10, 2), hud:bar("ui/mana").max)
+end)
+nf.on("demo:clear", function() nf.players.get("Alex"):hud():clear() end)
+nf.on("demo:say", function() print("said", nf.players.get("Alex"):send_actionbar("Hello")) end)
+"#,
+        ),
+    ]);
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.alex.borrow_mut() = true;
+    let events = netherforge_runtime::server::ServerEvents::new(Session::start(
+        platform.clone(),
+        &files,
+        &NoPackages,
+    ));
+    platform.take();
+    let emit = |event: &str| {
+        let session = events.session();
+        let room = session.room().unwrap();
+        room.scripts()
+            .emit_custom(
+                netherforge_runtime::Target::Nf,
+                event.into(),
+                mlua::Value::Table(room.host().lua().create_table().unwrap()),
+            )
+            .unwrap();
+    };
+    emit("demo:show");
+    events.tick();
+    let shown = platform.take();
+    let printed: Vec<String> = shown
+        .iter()
+        .filter_map(|l| {
+            l.strip_prefix("info [module hud] ")
+                .map(|l| l.rsplit_once(" (").map_or(l, |(t, _)| t).to_owned())
+        })
+        .collect();
+    assert_eq!(
+        printed,
+        [
+            "true\ttrue\t3\tMana",
+            "false\tmodules/hud/init.lua:5: \"ui/label\" is a line of text, not a bar",
+            "false\tmodules/hud/init.lua:6: bad argument 'options.segments' (1 to 3 for \"ui/mana\", got 9)",
+            "3\t6",
+        ]
+    );
+    // Sent once (this project's pictures and font aren't read, so format's line has nothing it can place).
+    let bars: Vec<&String> = shown
+        .iter()
+        .filter(|l| l.starts_with("actionbar"))
+        .collect();
+    assert_eq!(bars.len(), 1, "{shown:?}");
+    // Nothing changes: it's sent again only once it's been a second.
+    for _ in 0..19 {
+        events.tick();
+    }
+    assert!(!platform.take().iter().any(|l| l.starts_with("actionbar")));
+    events.tick();
+    assert_eq!(
+        platform
+            .take()
+            .iter()
+            .filter(|l| l.starts_with("actionbar"))
+            .count(),
+        1
+    );
+    // A script's own line goes through the HUD: here, where it can't be measured, it shows on its own.
+    emit("demo:say");
+    events.tick();
+    let said: Vec<String> = platform
+        .take()
+        .into_iter()
+        .filter(|l| l.starts_with("actionbar"))
+        .collect();
+    assert_eq!(said, ["actionbar 77 Hello"]);
+    // Cleared while the script's line still has its time: that shows until it's over, then an empty line.
+    emit("demo:clear");
+    events.tick();
+    let cleared: Vec<String> = platform
+        .take()
+        .into_iter()
+        .filter(|l| l.starts_with("actionbar"))
+        .collect();
+    assert_eq!(cleared, ["actionbar 77 Hello"]);
+    for _ in 0..60 {
+        events.tick();
+    }
+    let ended: Vec<String> = platform
+        .take()
+        .into_iter()
+        .filter(|l| l.starts_with("actionbar"))
+        .collect();
+    assert_eq!(
+        ended.last().map(String::as_str),
+        Some("actionbar 77 "),
+        "{ended:?}"
+    );
 }

@@ -340,7 +340,7 @@ impl Packs {
             return Vec::new();
         }
         self.compiled = loaded.compiled_resource_packs.clone();
-        self.glyph_chars = None;
+        self.settle_glyph_chars();
         let Some(format) = platform.game().resource_pack_format() else {
             let message = "This server doesn't say which resource pack format it uses, so no resource pack was built";
             platform.log().warn(message.to_owned());
@@ -676,22 +676,39 @@ impl Packs {
 
     /// How far a glyph's bare character moves the cursor, for measuring text that holds it rather than its tag;
     /// none for a character that isn't one. Every pack's, `onDemand` ones' too: glyphs are numbered across them.
-    pub fn glyph_char_advance(&mut self, code_point: u32) -> Option<i32> {
-        if self.glyph_chars.is_none() {
-            let mut chars = BTreeMap::new();
-            for pack in self.compiled.values() {
-                for glyph in pack.glyphs.values() {
-                    let Some(advances) = &glyph.cell_advances else {
-                        continue;
-                    };
-                    for (c, advance) in glyph.cells.chars().zip(advances) {
-                        chars.insert(c as u32, *advance);
-                    }
+    pub fn glyph_char_advance(&self, code_point: u32) -> Option<i32> {
+        self.glyph_chars.as_ref()?.get(&code_point).copied()
+    }
+
+    /// Every glyph character's advance by code point, worked out once per build.
+    fn settle_glyph_chars(&mut self) {
+        let mut chars = BTreeMap::new();
+        for pack in self.compiled.values() {
+            for glyph in pack.glyphs.values() {
+                let Some(advances) = &glyph.cell_advances else {
+                    continue;
+                };
+                for (c, advance) in glyph.cells.chars().zip(advances) {
+                    chars.insert(c as u32, *advance);
                 }
             }
-            self.glyph_chars = Some(chars);
         }
-        self.glyph_chars.as_ref()?.get(&code_point).copied()
+        self.glyph_chars = Some(chars);
+    }
+
+    /// Each built pack's HUD, by the pack's name as the server knows it.
+    pub fn huds(
+        &self,
+    ) -> BTreeMap<String, netherforge_format::kind::resource_pack::hud::CompiledHud> {
+        self.compiled
+            .iter()
+            .filter_map(|(name, pack)| Some((name.clone(), pack.hud.clone()?)))
+            .collect()
+    }
+
+    /// Whether pack `name` is built (none are while any has errors).
+    pub fn has_pack(&self, name: &str) -> bool {
+        self.compiled.contains_key(name)
     }
 }
 

@@ -397,10 +397,16 @@ impl PlayerApi for GameContext {
     fn send_message(&self, this: &handles::Player, text: values::Text) -> ApiResult<bool> {
         Ok(parse_uuid(&this.id).is_some_and(|id| self.players().message(id, text.0)))
     }
+    /// Drawn in the middle of their HUD's line while they have one; else sent as it is.
     fn send_actionbar(&self, this: &handles::Player, text: values::Text) -> ApiResult<bool> {
-        Ok(self
-            .player_online(this)
-            .is_some_and(|id| self.players().actionbar(id, text.0)))
+        let Some(id) = self.player_online(this) else {
+            return Ok(false);
+        };
+        let now = self.scripts.tick_count();
+        if self.shared.huds.borrow_mut().message(id, &text.0, now) {
+            return Ok(true);
+        }
+        Ok(self.players().actionbar(id, text.0))
     }
     fn send_title(
         &self,

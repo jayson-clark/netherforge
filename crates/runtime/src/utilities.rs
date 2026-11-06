@@ -829,9 +829,7 @@ impl NfTextApi for UtilitiesContext {
 impl UtilitiesContext {
     /// `text`'s widest line and its lines, in the project's default font.
     fn measure_lines(&self, text: &str) -> Option<(i32, i32)> {
-        let font = self.shared.font.borrow();
-        let width = netherforge_format::text::TextWidth::of_font(font.as_ref()?);
-        Some((width.measure(text)?, width.line_count(text) as i32))
+        self.shared.measure_text(text)
     }
 }
 

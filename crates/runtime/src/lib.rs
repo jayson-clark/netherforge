@@ -32,6 +32,7 @@ pub mod encoding;
 pub mod entity;
 pub mod events;
 pub mod files;
+pub mod huds;
 pub mod images;
 pub mod inventory;
 pub mod items;
@@ -522,6 +523,12 @@ impl LuaApi for Api {
         }
     }
     fn button(&self) -> &dyn netherforge_api::api::ButtonApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn hud(&self) -> &dyn netherforge_api::api::HudApi {
         match &self.worlds {
             Some(w) => w,
             None => &Unported,
