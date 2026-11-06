@@ -983,6 +983,60 @@ independent implementation's signature), ureq without the guard (the owner's end
 `Lane` thread; `Packs::uploads_done` (the packs service's tick) marks what's stored and sends it. A key's prefix is encoded
 in the public URL too (Kotlin's left spaces in it).
 
+## WebAssembly (`crates/runtime/src/wasm/`)
+
+Kotlin's `wasm/` and `WasmImpls`; the plugin-capabilities skill's WebAssembly section is the design. **wasmtime** (41, the
+last on the workspace's Rust 1.90; features `runtime`, `cranelift`, `pulley`, no `parallel-compilation`) runs modules,
+chosen over wasmi because it holds every limit Kotlin does, and holds them better:
+
+- **Time**: epoch interruption. One thread (`Ticker`) moves the engine's epoch every 10 ms; each store's deadline callback
+  asks its `Guard` (closed? past its deadline?), so a call past `max-call-seconds` and an instance closed from the main
+  thread both trap at the next tick, in compiled code and the interpreter alike. That's Kotlin's watchdog and
+  `Thread.interrupt` in one. Fuel isn't used: the limit is in seconds, as Kotlin's is.
+- **Memory**: a `ResourceLimiter` per store refuses a growth past `max-memory-mb` (`memory.grow` answers -1), where
+  Chicory could only cap; the `Budget` still reserves each instance's or program's most against `max-memory-total-mb`
+  (a `Reservation` the store holds, given back when it's dropped).
+- **Speed**: Cranelift's machine code, as Chicory's compiler made JVM classes; `wasm.compile: false` is **Pulley**,
+  wasmtime's interpreter (the same code compiled to its bytecode), and a machine Cranelift can't target falls back to
+  it with a warning. wasmi is an interpreter only.
+- **SIMD runs**: Kotlin refused it (Chicory runs none); wasmtime runs it in both modes, so that refusal is gone.
+
+Pieces, each Kotlin's of the same job:
+
+- `wasi.rs`: **WASI preview 1 written here** (all 46 functions on one `Linker` per engine, an `InstancePre` per compile),
+  not `wasmtime-wasi`, so a module gets exactly what Kotlin gave it and nothing of the host's: standard streams are
+  `Input`/`Output`s (nothing for a library, the given text and `CappedOutput` for `run`, line queues for a program),
+  arguments with `argv[0]` the module's name, only the script's environment, the system's clocks, `getrandom`; sockets
+  `ENOTSUP`; `proc_exit` is an `Exit` error the caller turns into a code; `poll_oneoff` answers descriptors ready and
+  sleeps for clocks, checking the guard. Memory is reached through `Mem` (every access checked, `EFAULT` past the end).
+- `files.rs` (`WasmData`, `Files`): Kotlin's `WasmFiles` whole: fd 3 is the data at `/`, `..` past the root is
+  `ENOTCAPABLE`, anything that writes is `EROFS`. A data file is `DataFile::Disk` when `Config::paths` finds it (read at
+  its position as the module reads), else its bytes from the source (tests, an archive).
+- `compiled.rs`: validated (`Module::validate`, "isn't a valid WebAssembly module"), compiled, imports held to WASI's,
+  exports' signatures in their order; a store per instance with its guard and limiter.
+- `calls.rs`: arguments read from the script's table on the main thread and checked against the export (Kotlin's
+  messages); under Luau a whole number in the safe range is an integer argument and anything else real, so `2.0`
+  passes for an `i32`. An `i64` result past 2^53 comes back as its **digits** (a string), as a database's does.
+- `program.rs`: input and output queues with the `room` of permits (backpressure), lines cut by `whole_characters`.
+- `threads.rs`: `Pool` (`wasm.threads` threads, `idle` for tests), `Lane` (an instance's calls one at a time),
+  `Guard`, `Budget`. Every guard is made under the session's `stopping` flag, so `Wasm::close` stops whatever still runs
+  (the ticker's last tick reaches it). Programs get a thread each.
+- `api.rs`: `WasmApi` (the three classes) and `WasmService` (registered after web, so it stops after every script). An
+  async value is a `Reply` from the job; `instantiate`'s future files the instance on the main thread and drops it when
+  its script went (an `Instantiating` guard counts it in flight until the future goes, done or cancelled). A program's
+  lines and end reach scripts in the service's tick; `end` is raised while the handle answers, then the program goes
+  with its handlers.
+- **Reload** restarts the scripts that ran a module: `Service::restarts` (new) is asked before anything unloads, and
+  answers each user scope's resource (`Modules::owner`: a module, or a resource script's file through `classify`).
+  The session now reloads kinds **in format's order** (`kinds::ALL`, as Kotlin's `Kinds.all`), not by name, so a
+  module restarts after the WebAssembly module it runs is compiled again.
+- A compile's failure is the `runtime.wasm` problem and is warned at the next tick (there's no `problemsChanged` hook).
+
+Not yet: `nf.test.stub_wasm` and the test tick's `settle` (with `nf.test`; `Wasm::quiet` is what it will wait on),
+`/nf scripts`' per-scope counts, `WasmConfig` read from `config.yml`, the threads' lowest priority (std has no way to
+set it), an `i64` argument past 2^53 (a string there is text), and a package's module reloading (the session doesn't
+reload packages' files yet).
+
 ## Project items (`crates/runtime/src/project_items.rs`)
 
 Kotlin's `item/Items.kt`: one record per `items/<id>/item.json` with its look and the look's hash (format's
