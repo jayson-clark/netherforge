@@ -142,6 +142,10 @@ pub struct Config {
     pub databases_dir: Option<std::path::PathBuf>,
     /// `databases:` in `config.yml`: the MySQL and PostgreSQL connections the owner names.
     pub databases: crate::databases::DatabasesConfig,
+    /// The owner's policy over what projects may require (`policy.json` beside `config.yml`).
+    pub policy: Option<netherforge_format::policy::Policy>,
+    /// Why the owner's policy couldn't be read: then no project runs, rather than every one.
+    pub policy_problem: Option<String>,
     /// `worlds:` in `config.yml`: where worlds are imported from, and how many may be loaded.
     pub worlds: crate::managed_worlds::WorldsConfig,
     /// `<plugin folder>/settings`, where the owner's values for packages' settings are kept: none keeps them in
@@ -178,6 +182,18 @@ pub struct Session<'a> {
     shared: Rc<Shared>,
     reported: std::cell::RefCell<Reported>,
     limits: Limits,
+    /// The owner's policy, and why it couldn't be read.
+    owner_policy: Option<netherforge_format::policy::Policy>,
+    policy_problem: Option<String>,
+    /// The policy this run is under (the owner's and the network's for this server, the stricter of each), and the
+    /// network's as its hub sent it when the run started.
+    policy: Option<std::sync::Arc<netherforge_format::policy::Policy>>,
+    hub_policy: Option<String>,
+    /// Refused only for want of the hub (`network.require-hub`): it starts once the hub is there.
+    waits_for_hub: bool,
+    /// What the owner's config says of the network and HTTP rates, before a policy lowers them.
+    rates: (usize, usize),
+    require_hub: bool,
 }
 
 /// How long the same runtime error stays quiet after it's logged: five seconds.
@@ -347,7 +363,17 @@ impl<'a> Session<'a> {
         shared.tests.borrow_mut().harness = config.testing.clone();
         let mut session = Session {
             limits: config.limits.clone().unwrap_or_default(),
-            refusal: refusal(&*platform, &project),
+            owner_policy: config.policy.clone(),
+            policy_problem: config.policy_problem.clone(),
+            policy: None,
+            hub_policy: None,
+            waits_for_hub: false,
+            rates: (
+                config.network.messages_per_minute,
+                config.http.requests_per_minute,
+            ),
+            require_hub: config.network.require_hub,
+            refusal: None,
             platform,
             source,
             packages,
@@ -357,8 +383,102 @@ impl<'a> Session<'a> {
             shared,
             reported: Default::default(),
         };
+        session.refuse();
         session.run();
         session
+    }
+
+    /// The policy this run is under, from the owner's and what the network's hub sent; whether it waits for the hub;
+    /// and, with those, why the project can't run.
+    fn refuse(&mut self) {
+        let link = self.shared.network.borrow().link.clone();
+        let (remote, connected, hub_policy) = link.as_ref().map_or((false, false, None), |l| {
+            (
+                l.mode == crate::network::Mode::Remote,
+                l.connected(),
+                l.state.borrow().policy.clone(),
+            )
+        });
+        let hub = hub_policy
+            .as_deref()
+            .and_then(|text| netherforge_format::policy::Policy::parse(text).ok());
+        self.policy = match (&self.owner_policy, hub) {
+            (Some(a), Some(b)) => Some(std::sync::Arc::new(a.and(&b))),
+            (Some(a), None) => Some(std::sync::Arc::new(a.clone())),
+            (None, Some(b)) => Some(std::sync::Arc::new(b)),
+            (None, None) => None,
+        };
+        self.hub_policy = hub_policy;
+        self.waits_for_hub = self.require_hub && remote && !connected;
+        self.refusal = self
+            .refused_by_policy()
+            .or_else(|| refusal(&*self.platform, &self.project));
+    }
+
+    /// The policy's half of why a project can't run: the owner's that can't be read, a hub a project must wait for,
+    /// or what a policy that stops projects refuses of what it requires.
+    fn refused_by_policy(&self) -> Option<Refusal> {
+        if let Some(problem) = &self.policy_problem {
+            return Some(Refusal {
+                message: problem.clone(),
+                problem: Some(netherforge_format::codes::RUNTIME_POLICY.at(
+                    netherforge_format::manifest::FILE_NAME,
+                    problem.clone(),
+                    None,
+                )),
+            });
+        }
+        if self.waits_for_hub {
+            return Some(Refusal {
+                message: "The project waits for the network's hub (network.require-hub): it starts once the hub welcomes this server".into(),
+                problem: None,
+            });
+        }
+        let policy = self.policy.as_ref().filter(|p| p.stops())?;
+        let problem = policy.check(&self.project).into_iter().next()?;
+        Some(Refusal {
+            message: format!("{}: {}", problem.file, problem.message),
+            problem: Some(problem),
+        })
+    }
+
+    /// Whether the session should start again: the network's policy for this server came or changed, or the hub a
+    /// project waits for is here. The runtime asks now and then while the link is connected.
+    pub fn hub_changed(&self) -> Option<&'static str> {
+        let link = self.shared.network.borrow().link.clone()?;
+        if !link.connected() {
+            return None;
+        }
+        if self.waits_for_hub {
+            return Some("The network's hub is here; starting the project");
+        }
+        let now = link.state.borrow().policy.clone();
+        (now != self.hub_policy).then_some(if self.hub_policy.is_none() {
+            "The network's policy for this server arrived; starting the project again under it"
+        } else {
+            "The network's policy for this server changed; starting the project again under it"
+        })
+    }
+
+    /// The limits a run is under: the owner's, lowered where the policy's are lower.
+    fn limits_under_policy(&self) -> Limits {
+        let mut limits = self.limits.clone();
+        let Some(policy) = &self.policy else {
+            return limits;
+        };
+        let l = &policy.limits;
+        if let Some(mb) = l.script_memory_mb.filter(|m| *m > 0) {
+            limits.memory_bytes = limits.memory_bytes.min(mb as usize * 1024 * 1024);
+        }
+        if let Some(ms) = l.call_millis.filter(|m| *m > 0) {
+            limits.deadline = limits
+                .deadline
+                .min(std::time::Duration::from_millis(ms as u64));
+        }
+        if let Some(budget) = l.instruction_budget.filter(|b| *b > 0) {
+            limits.max_budget = Some(budget as u64);
+        }
+        limits
     }
 
     fn run(&mut self) {
@@ -382,8 +502,22 @@ impl<'a> Session<'a> {
             log.error(format!("Not running {name}: {}", refusal.message), None);
             return;
         }
-        let room = match Host::new(self.limits.clone())
-            .and_then(|host| Room::with(host, grants(&self.project), Some(self.shared.clone())))
+        // The policy's rates where they're lower than the owner's.
+        let lower =
+            |own: usize, theirs: Option<i32>| theirs.map_or(own, |t| own.min(t.max(0) as usize));
+        let limits = self
+            .policy
+            .as_ref()
+            .map(|p| p.limits.clone())
+            .unwrap_or_default();
+        self.shared.network.borrow_mut().config.messages_per_minute =
+            lower(self.rates.0, limits.network_messages_per_minute);
+        self.shared.http.borrow_mut().config.requests_per_minute =
+            lower(self.rates.1, limits.http_requests_per_minute);
+        let mut grants = grants(&self.project);
+        grants.policy = self.policy.clone();
+        let room = match Host::new(self.limits_under_policy())
+            .and_then(|host| Room::with(host, grants, Some(self.shared.clone())))
         {
             Ok(room) => room,
             Err(e) => {
@@ -626,6 +760,13 @@ impl<'a> Session<'a> {
             .iter()
             .cloned()
             .chain(refused)
+            // What a policy that doesn't stop projects refuses: warnings, the refused calls failing.
+            .chain(
+                self.policy
+                    .iter()
+                    .filter(|p| !p.stops())
+                    .flat_map(|p| p.check(&self.project)),
+            )
             .chain(reported.problems.values().flatten().cloned())
             .chain(self.services.iter().flat_map(|s| s.problems()))
             .collect()
@@ -643,6 +784,11 @@ impl<'a> Session<'a> {
         self.shared.classed.borrow_mut().clear();
     }
 
+    /// Stops the run and starts it again from the files, as a change to `netherforge.json` does.
+    pub fn restart(&mut self) {
+        self.reload(&[netherforge_format::manifest::FILE_NAME.to_owned()]);
+    }
+
     /// Reads the project again after `changed` (project paths) changed, and
     /// reloads each changed resource through the service that reloads its kind.
     /// A change to `netherforge.json` (or the lock) restarts the session whole.
@@ -654,7 +800,7 @@ impl<'a> Session<'a> {
         if whole || self.room.is_none() {
             self.stop();
             self.project = load(self.source, self.packages);
-            self.refusal = refusal(&*self.platform, &self.project);
+            self.refuse();
             self.run();
             return;
         }
@@ -1416,6 +1562,7 @@ fn namespaces(project: &Loaded) -> Vec<String> {
 /// What each package of the tree declared it may do: its manifest's `requires`, by namespace.
 pub(crate) fn grants(project: &Loaded) -> crate::Grants {
     crate::Grants {
+        policy: None,
         home: project.namespace().to_owned(),
         requires: namespaces(project)
             .into_iter()

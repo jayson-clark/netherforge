@@ -172,7 +172,7 @@ pub fn sqlite_problem(sql: &str) -> Option<String> {
 // ---- `databases:` -------------------------------------------------------------
 
 /// One `databases:` entry, as far as the Rust runtime reads it: who may open it. The password is never shown.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ConnectionConfig {
     pub kind: String,
     pub host: String,
@@ -184,6 +184,17 @@ pub struct ConnectionConfig {
     pub packages: BTreeSet<String>,
     pub properties: BTreeMap<String, String>,
     pub own_databases: BTreeSet<String>,
+}
+
+/// The password is never in a log line.
+impl std::fmt::Debug for ConnectionConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} connection to {}:{}/{} as {}",
+            self.kind, self.host, self.port, self.database, self.username
+        )
+    }
 }
 
 /// `databases:` in `config.yml`: the MySQL and PostgreSQL servers the owner lets scripts reach, by name, and the

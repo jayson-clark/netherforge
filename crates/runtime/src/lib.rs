@@ -24,6 +24,7 @@ pub mod bossbar;
 pub mod bots;
 pub mod centity;
 pub mod commands;
+pub mod config;
 pub mod custom_blocks;
 pub mod cutscenes;
 pub mod data;
@@ -88,6 +89,9 @@ pub struct Grants {
     pub home: String,
     /// Each package's declaration by namespace, the project's own included.
     pub requires: BTreeMap<String, Option<Requires>>,
+    /// The policy the session runs under (the owner's and the network's together): what it refuses fails whoever
+    /// declared it.
+    pub policy: Option<std::sync::Arc<netherforge_format::policy::Policy>>,
 }
 
 impl Grants {
@@ -100,6 +104,12 @@ impl Grants {
         wanted: &Requirement,
         called: &str,
     ) -> ApiResult<()> {
+        if let Some(why) = self.policy.as_ref().and_then(|p| p.refuses(&wanted.id())) {
+            return Err(ApiError(format!(
+                "{called} needs {}, which the server's policy refuses ({why})",
+                wanted.id()
+            )));
+        }
         let granted = |namespace: &str| {
             wanted.granted_by(self.requires.get(namespace).and_then(Option::as_ref))
         };
@@ -128,6 +138,7 @@ impl Grants {
         Grants {
             home: home.into(),
             requires: BTreeMap::from([(home.to_owned(), requires)]),
+            policy: None,
         }
     }
 }

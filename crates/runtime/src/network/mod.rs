@@ -44,6 +44,12 @@ pub struct NetworkConfig {
     pub register: Option<protocol::Registration>,
     /// Whether the server is ready only once its project runs (`network.require-project`).
     pub require_project: bool,
+    /// How long the server waits as it starts for the hub to welcome it (its grants, the network's policy for it)
+    /// before its project starts; 0: it doesn't (`network.wait-for-hub-seconds`).
+    pub wait_for_hub_seconds: u64,
+    /// Whether a server the hub hasn't welcomed runs nothing rather than run without the network's policy; it starts
+    /// by itself once the hub is there (`network.require-hub`).
+    pub require_hub: bool,
     /// How long this server may be empty before the hub hears it's idle; 0: never.
     pub idle_after_seconds: u64,
     /// What each package may send a minute: messages, requests, map writes and players sent.
@@ -72,6 +78,8 @@ impl Default for NetworkConfig {
             capacity: None,
             register: None,
             require_project: false,
+            wait_for_hub_seconds: 0,
+            require_hub: false,
             idle_after_seconds: 0,
             messages_per_minute: 1200,
             request_timeout_seconds: 10,
@@ -140,6 +148,32 @@ impl NetworkConfig {
         let host = value[..colon].trim_start_matches('[').trim_end_matches(']');
         Some((host.into(), port))
     }
+}
+
+/// As the server starts: waits up to `network.wait-for-hub-seconds` for the hub to welcome it, so the project starts
+/// under the network's policy and grants (Kotlin's runtime does it before its first session), saying so in the log.
+/// The link must have been started. True when the hub welcomed it.
+pub fn wait_for_hub(link: &Link, log: &dyn netherforge_platform::PlatformLog) -> bool {
+    let config = link.0.config();
+    let waiting = config.wait_for_hub_seconds;
+    if waiting == 0 || link.0.mode != Mode::Remote {
+        return link.0.connected();
+    }
+    log.info(format!(
+        "Waiting up to {waiting} seconds for the network's hub before starting the project"
+    ));
+    let welcomed = link.0.await_welcome(waiting);
+    if !welcomed {
+        log.warn(format!(
+            "The network's hub didn't welcome this server within {waiting} seconds{}",
+            if config.require_hub {
+                "; the project waits for it"
+            } else {
+                "; starting the project without it"
+            }
+        ));
+    }
+    welcomed
 }
 
 /// What came in from the hub, for the main thread.

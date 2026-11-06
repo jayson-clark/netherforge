@@ -358,6 +358,26 @@ impl NetworkLink {
         out
     }
 
+    /// Waits up to `seconds` for the hub's first welcome, on the main thread as the server starts, and takes what it
+    /// says of this server (its grants, the network's policy) at once, so the project starts under it. False when it
+    /// didn't come in time. Its `Connected` is drained later as ever (saying it again changes nothing).
+    pub fn await_welcome(&self, seconds: u64) -> bool {
+        if self.mode != Mode::Remote || seconds == 0 {
+            return self.connected();
+        }
+        let deadline = Instant::now() + std::time::Duration::from_secs(seconds);
+        loop {
+            if let Some(Inbound::Connected(welcome)) = self.inbox.front() {
+                self.welcomed(&welcome);
+                return true;
+            }
+            if Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
     /// The network as `welcome` says it is.
     fn welcomed(&self, welcome: &Welcome) {
         {

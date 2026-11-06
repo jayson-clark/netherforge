@@ -806,6 +806,8 @@ enum Answer {
     Welcome,
     /// A welcome it can't seal: not the network's hub.
     Unsealed,
+    /// A welcome with the network's policy for this server.
+    Policy(&'static str),
 }
 
 /// A hub on loopback for one connection at a time, speaking the protocol as `:network`'s `Hub` does for what the
@@ -900,7 +902,10 @@ fn serve(
         }],
         max_value_bytes: 1000,
         grants: protocol::Grants::trusted(),
-        policy: None,
+        policy: match answer {
+            Answer::Policy(policy) => Some(policy.into()),
+            _ => None,
+        },
         keeps_packs: false,
     });
     if answer == Answer::Unsealed {
@@ -1236,5 +1241,119 @@ fn bans_mutes_and_reports_go_through_the_hub() {
             "dev",
             Some(serde_json::json!({ "seen": 3 }))
         )
+    );
+}
+
+#[test]
+fn a_server_waits_for_its_hub_and_runs_under_the_networks_policy() {
+    let hub = test_hub(
+        "s3cret",
+        Answer::Policy(r#"{ "requires": { "deny": ["db"], "refused": "degrade" } }"#),
+    );
+    let files = project(
+        r#"print(pcall(nf.db))"#,
+        r#"{ "network": true, "db": true }"#,
+    );
+    let platform = Platform::default();
+    let mut config = remote(hub.port, "s3cret");
+    config.wait_for_hub_seconds = 5;
+    let link = Link(netherforge_runtime::network::NetworkLink::new(
+        config.clone(),
+    ));
+    link.0.start(&|_| {});
+    assert!(netherforge_runtime::network::wait_for_hub(
+        &link,
+        platform.log()
+    ));
+    let session = start(&files, &platform, config, Some(link.clone()));
+    let lines = printed(&session, &platform, 1);
+    assert_eq!(
+        lines,
+        [
+            "false modules/t/init.lua:1: nf.db needs db, which the server's policy refuses (requires.deny lists \"db\")"
+        ]
+    );
+    // Degraded, not refused: a warning on the manifest.
+    assert!(
+        session
+            .problems()
+            .iter()
+            .any(|p| p.code.as_deref() == Some("runtime.policy"))
+    );
+    assert_eq!(session.hub_changed(), None);
+    link.0.stop();
+}
+
+#[test]
+fn a_server_that_requires_its_hub_runs_nothing_until_it_comes() {
+    let files = project(r#"print("running")"#, NETWORK);
+    let platform = Platform::default();
+    // Nothing listens on the port: the hub isn't there.
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let mut config = remote(port, "s3cret");
+    config.require_hub = true;
+    config.wait_for_hub_seconds = 1;
+    let link = Link(netherforge_runtime::network::NetworkLink::new(
+        config.clone(),
+    ));
+    link.0.start(&|_| {});
+    assert!(!netherforge_runtime::network::wait_for_hub(
+        &link,
+        platform.log()
+    ));
+    let session = start(&files, &platform, config, Some(link.clone()));
+    let said = platform.take();
+    assert!(
+        said.iter()
+            .any(|l| l
+                .contains("didn't welcome this server within 1 seconds; the project waits for it")),
+        "{said:?}"
+    );
+    assert!(
+        said.iter().any(|l| l.contains(
+            "Not running Test: The project waits for the network's hub (network.require-hub)"
+        )),
+        "{said:?}"
+    );
+    assert!(session.room().is_none());
+    link.0.stop();
+}
+
+#[test]
+fn the_owners_policy_that_stops_projects_refuses_one_that_requires_what_it_denies() {
+    let files = project(r#"print("running")"#, NETWORK);
+    let platform = Platform::default();
+    let session = Session::start_configured(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        std::rc::Rc::new(netherforge_runtime::store::Store::in_memory()),
+        Config {
+            network: dev(),
+            policy: Some(
+                netherforge_format::policy::Policy::parse(
+                    r#"{ "requires": { "deny": ["network"] } }"#,
+                )
+                .unwrap(),
+            ),
+            ..Config::default()
+        },
+    );
+    assert!(session.room().is_none());
+    assert!(
+        platform.take().iter().any(|l| l.contains(
+            "Not running Test: netherforge.json: Package \"test\" requires network, which the server's policy refuses (requires.deny lists \"network\"), so the project doesn't load"
+        ))
+    );
+    assert_eq!(
+        session
+            .refusal()
+            .and_then(|r| r.problem.as_ref())
+            .and_then(|p| p.code.as_deref()),
+        Some("runtime.policy")
     );
 }

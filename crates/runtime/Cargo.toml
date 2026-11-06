@@ -17,6 +17,8 @@ netherforge-format = { path = "../format" }
 netherforge-platform = { path = "../platform" }
 serde.workspace = true
 serde_json.workspace = true
+# config.yml, read in one place (`config.rs`).
+serde_yaml_ng = "0.10"
 rapier3d-f64 = "0.36"
 rusqlite = { version = "0.37", features = ["bundled", "limits"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp"] }

@@ -43,12 +43,17 @@ impl<'a> EventSource for Current<'a> {
 /// `PlatformEvents` for a session: what the adapter calls.
 pub struct ServerEvents<'a> {
     game: GameEventDispatch<Current<'a>>,
+    ticks: std::cell::Cell<u64>,
 }
+
+/// How often the runtime looks whether the network's policy changed, or the hub a project waits for is here.
+pub const POLICY_CHECK_TICKS: u64 = 20;
 
 impl<'a> ServerEvents<'a> {
     pub fn new(session: Session<'a>) -> ServerEvents<'a> {
         ServerEvents {
             game: GameEventDispatch(Current(RefCell::new(session))),
+            ticks: std::cell::Cell::new(0),
         }
     }
 
@@ -241,6 +246,16 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         // `nf.packs.rebuild` asked during the tick: read again from disk once nothing is running.
         if wanted && let Ok(mut session) = self.game.0.0.try_borrow_mut() {
             session.rebuild_packs();
+        }
+        let ticks = self.ticks.get() + 1;
+        self.ticks.set(ticks);
+        // The network's policy for this server came, or changed, or the hub a project waits for is here: a new run.
+        if ticks.is_multiple_of(POLICY_CHECK_TICKS)
+            && let Ok(mut session) = self.game.0.0.try_borrow_mut()
+            && let Some(why) = session.hub_changed()
+        {
+            session.platform().log().info(why.to_owned());
+            session.restart();
         }
     }
 
