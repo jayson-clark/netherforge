@@ -43,6 +43,11 @@ pub mod bindings;
 #[path = "generated/unported.rs"]
 pub mod unported;
 
+#[rustfmt::skip]
+#[allow(clippy::all, unused_imports, unused_variables)]
+#[path = "generated/arguments.rs"]
+pub mod arguments;
+
 pub mod bind;
 pub mod codec;
 pub mod events;

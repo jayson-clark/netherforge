@@ -1049,6 +1049,11 @@ impl ButtonApi for GameContext {
     }
 }
 
+/// The project's dialogs (not those scripts made), sorted: what a `dialog` command argument takes.
+pub fn dialog_ids(shared: &Shared) -> Vec<String> {
+    shared.dialogs.borrow().ids()
+}
+
 /// Dialogs as a session's service.
 pub struct DialogsService {
     pub shared: Rc<Shared>,

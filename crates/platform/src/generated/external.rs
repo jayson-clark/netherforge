@@ -7,10 +7,6 @@
 
 use super::Dynamic;
 
-/// The Lua API's `ArgumentType`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ArgumentType(pub Dynamic);
-
 /// The runtime's `DatapackRefusal`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DatapackRefusal(pub Dynamic);

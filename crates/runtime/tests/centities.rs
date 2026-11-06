@@ -49,7 +49,15 @@ impl netherforge_format::game::GameData for NoFacts {
 /// A window the fake holds: its slots and who's looking.
 type FakeWindow = (Vec<Option<netherforge_platform::ItemData>>, Vec<Uuid>);
 
+/// A command the fake server took: its spec and its handler.
+type Registered = (
+    netherforge_platform::CommandSpec,
+    std::rc::Rc<dyn netherforge_platform::CommandHandler>,
+);
+
 struct Fake {
+    /// The commands registered, by name.
+    commands: RefCell<BTreeMap<String, Registered>>,
     /// Each open window's slots and viewers, by window.
     windows: RefCell<BTreeMap<u128, FakeWindow>>,
     /// Storages, by name.
@@ -73,6 +81,7 @@ struct Fake {
 impl Default for Fake {
     fn default() -> Fake {
         Fake {
+            commands: RefCell::default(),
             windows: RefCell::default(),
             inventory: RefCell::new(vec![None; 9]),
             storages: RefCell::default(),
@@ -912,7 +921,67 @@ impl netherforge_platform::FakePermissionOps for Fake {
     }
 }
 
+/// Commands kept by name, a name taken once; `vanilla` is the server's own.
+impl netherforge_platform::FakeCommandOps for Fake {
+    fn register(
+        &self,
+        spec: netherforge_platform::CommandSpec,
+        handler: std::rc::Rc<dyn netherforge_platform::CommandHandler>,
+    ) -> bool {
+        let mut commands = self.commands.borrow_mut();
+        if spec.name == "vanilla" || commands.contains_key(&spec.name) {
+            return false;
+        }
+        self.call(format!("command registered /{}", spec.name));
+        commands.insert(spec.name.clone(), (spec, handler));
+        true
+    }
+    fn unregister(&self, name: String) {
+        self.call(format!("command unregistered /{name}"));
+        self.commands.borrow_mut().remove(&name);
+    }
+}
+
+/// Whoever runs a command in a test: its replies go in the fake's calls.
+struct TestSender {
+    player: Option<PlayerRef>,
+    allowed: bool,
+    replies: RefCell<Vec<String>>,
+}
+
+impl netherforge_platform::CommandSender for TestSender {
+    fn player(&self) -> Option<PlayerRef> {
+        self.player.clone()
+    }
+    fn name(&self) -> String {
+        self.player
+            .as_ref()
+            .map_or("CONSOLE".into(), |p| p.name.clone())
+    }
+    fn location(&self) -> Option<netherforge_platform::Location> {
+        self.player
+            .as_ref()
+            .map(|_| netherforge_platform::Location {
+                world: "world".into(),
+                x: 1.0,
+                y: 64.0,
+                z: 2.0,
+                yaw: 90.0,
+                pitch: 0.0,
+            })
+    }
+    fn reply(&self, mini_message: String) {
+        self.replies.borrow_mut().push(mini_message);
+    }
+    fn has_permission(&self, _: String) -> bool {
+        self.allowed
+    }
+}
+
 impl FakePlatform for Fake {
+    fn commands(&self) -> &dyn netherforge_platform::CommandOps {
+        self
+    }
     fn info(&self) -> ServerInfo {
         ServerInfo {
             minecraft_version: "26.3".into(),
@@ -3665,4 +3734,180 @@ print(c.sign("The quick brown fox jumps over the lazy dog", { secret = "key" }))
             "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8",
         ]
     );
+}
+
+#[test]
+fn a_module_declares_a_command_that_reads_typed_arguments() {
+    use netherforge_platform::{ArgumentValue, CommandInput, SuggestionRequest};
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/cmd/init.lua",
+            r#"
+print(nf.commands.register("greet", {
+  description = "Says hello",
+  arguments = {
+    { name = "times", type = "integer", min = 1, max = 5, default = 1 },
+    { name = "who", type = "word", default = false, complete = function(event, partial) return { "alex", "amy", "bo" } end },
+  },
+  subcommands = {
+    admin = { permission = "greet.admin", handler = function(e) print("admin", e.label) end },
+    shout = { players_only = true, arguments = { { name = "text", type = "text" } }, handler = function(e) print("shout", e.arguments.text, e.player:name()) end },
+  },
+}, function(e) print("greet", e.arguments.times, e.arguments.who, e.input, e.player and e.player:name(), e.sender:is_console()) end))
+print(nf.commands.register("vanilla", function() end))
+print(pcall(nf.commands.register, "Bad", function() end))
+print(pcall(nf.commands.register, "x", { arguments = { { name = "a", type = "word", default = "z" }, { name = "b", type = "word" } } }, function() end))
+print(pcall(nf.commands.register, "y", { arguments = { { name = "n", type = "integer", default = 9, max = 5 } } }, function() end))
+print(pcall(nf.commands.register, "z", { arguments = { { name = "c", type = "choice" } } }, function() end))
+print(pcall(nf.commands.register, "w", {}))
+print(pcall(nf.commands.register, "v", { arguments = { { name = "n", type = "integer", default = "x" } } }, function() end))
+print(nf.commands.register("boom", function() error("kaboom") end))
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    let lines = printed(&calls);
+    assert_eq!(
+        lines,
+        [
+            "true",
+            "false",
+            "false\tmodules/cmd/init.lua:14: \"Bad\" can't be a command name (lowercase letters, digits, _ and -, starting with a letter)",
+            "false\tmodules/cmd/init.lua:15: argument 'b' in 'definition' has no default but comes after 'a', which has one: optional arguments must come last",
+            "false\tmodules/cmd/init.lua:16: 'definition.arguments[1].default' (9) is outside min and max",
+            "false\tmodules/cmd/init.lua:17: 'definition.arguments[1]' is a choice, so it needs choices",
+            "false\tmodules/cmd/init.lua:18: 'definition' has neither a handler nor subcommands",
+            "false\tmodules/cmd/init.lua:19: bad argument 'definition.arguments[1].default' (whole number or false expected, got string)",
+            "true",
+        ],
+        "{calls:?}"
+    );
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.contains("/vanilla is already a command")),
+        "{calls:?}"
+    );
+    let (spec, handler) = platform
+        .commands
+        .borrow()
+        .get("greet")
+        .cloned()
+        .expect("registered");
+    assert_eq!(spec.syntax.arguments.len(), 2);
+    assert!(spec.syntax.arguments[0].optional);
+    let alex = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let sender = |player: Option<PlayerRef>, allowed: bool| {
+        std::rc::Rc::new(TestSender {
+            player,
+            allowed,
+            replies: RefCell::new(Vec::new()),
+        })
+    };
+    let input = |path: &[&str], arguments: Vec<(&str, ArgumentValue)>, text: &str| CommandInput {
+        path: path.iter().map(|s| s.to_string()).collect(),
+        arguments: arguments
+            .into_iter()
+            .map(|(k, v)| (k.to_owned(), v))
+            .collect(),
+        text: text.into(),
+    };
+    let console = sender(None, true);
+    handler.run(console.clone(), "greet".into(), input(&[], vec![], ""));
+    let player = sender(Some(alex.clone()), false);
+    handler.run(
+        player.clone(),
+        "greet".into(),
+        input(
+            &[],
+            vec![
+                (
+                    "times",
+                    ArgumentValue::Integer(netherforge_platform::ArgumentValueInteger { value: 3 }),
+                ),
+                (
+                    "who",
+                    ArgumentValue::Text(netherforge_platform::ArgumentValueText {
+                        text: "bo".into(),
+                    }),
+                ),
+            ],
+            "3 bo",
+        ),
+    );
+    handler.run(
+        player.clone(),
+        "greet".into(),
+        input(&["admin"], vec![], "admin"),
+    );
+    handler.run(
+        console.clone(),
+        "greet".into(),
+        input(&["shout"], vec![], "shout hi"),
+    );
+    let text = ArgumentValue::Text(netherforge_platform::ArgumentValueText {
+        text: "hi there".into(),
+    });
+    handler.run(
+        player.clone(),
+        "greet".into(),
+        input(&["shout"], vec![("text", text)], "shout hi there"),
+    );
+    session.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        [
+            "greet\t1\tfalse\t\tnil\ttrue",
+            "greet\t3\tbo\t3 bo\tAlex\tfalse",
+            "shout\thi there\tAlex",
+        ]
+    );
+    assert_eq!(
+        *console.replies.borrow(),
+        ["<red>Only players can use /greet shout."]
+    );
+    assert_eq!(
+        *player.replies.borrow(),
+        ["<red>You don't have permission to use /greet admin."]
+    );
+    let completion = handler.suggest(
+        player.clone(),
+        SuggestionRequest {
+            path: Vec::new(),
+            argument: "who".into(),
+            arguments: Default::default(),
+            partial: "a".into(),
+        },
+    );
+    assert_eq!(completion.suggestions, ["alex", "amy"]);
+    let (_, boom) = platform
+        .commands
+        .borrow()
+        .get("boom")
+        .cloned()
+        .expect("registered");
+    let typed = sender(None, true);
+    boom.run(typed.clone(), "boom".into(), input(&[], vec![], ""));
+    assert_eq!(typed.replies.borrow().len(), 1);
+    assert!(
+        typed.replies.borrow()[0].starts_with("<red>/boom failed: modules/cmd/init.lua:20: kaboom"),
+        "{:?}",
+        typed.replies.borrow()
+    );
+    platform.take();
+    let mut session = session;
+    session.stop();
+    let stopped = platform.take();
+    assert!(
+        stopped.contains(&"command unregistered /greet".to_owned()),
+        "{stopped:?}"
+    );
+    assert!(platform.commands.borrow().is_empty());
 }

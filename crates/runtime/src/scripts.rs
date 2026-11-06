@@ -208,6 +208,16 @@ struct Inner {
 #[derive(Clone)]
 pub struct Scripts(Rc<Inner>);
 
+/// The scripts without keeping them: what something the server holds (a command's handler) calls them through.
+#[derive(Clone)]
+pub struct WeakScripts(std::rc::Weak<Inner>);
+
+impl WeakScripts {
+    pub fn upgrade(&self) -> Option<Scripts> {
+        self.0.upgrade().map(Scripts)
+    }
+}
+
 fn err(message: impl Into<String>) -> ApiError {
     ApiError(message.into())
 }
@@ -469,6 +479,10 @@ impl Scripts {
     }
 
     /// Whether `scope` still runs (open and not disabled).
+    pub fn downgrade(&self) -> WeakScripts {
+        WeakScripts(Rc::downgrade(&self.0))
+    }
+
     pub fn live(&self, scope: ScopeId) -> bool {
         self.0
             .state
@@ -575,7 +589,7 @@ impl Scripts {
         }
     }
 
-    fn call<A: mlua::IntoLuaMulti>(
+    pub(crate) fn call<A: mlua::IntoLuaMulti>(
         &self,
         scope: ScopeId,
         f: &Function,

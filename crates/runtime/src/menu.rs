@@ -2378,6 +2378,11 @@ impl Service for MenusService {
     }
 }
 
+/// The project's menus, by id, sorted: what a `menu` command argument takes.
+pub fn menu_ids(shared: &Shared) -> Vec<String> {
+    shared.menus.borrow().definitions.keys().cloned().collect()
+}
+
 /// The ids of every window, for tests and `/nf`.
 pub fn window_ids(shared: &Shared) -> HashSet<String> {
     shared.menus.borrow().windows.keys().cloned().collect()

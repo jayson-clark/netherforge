@@ -814,3 +814,105 @@ export function eventsRust(spec: ApiSpec): string {
   lines.push('];')
   return finish(lines)
 }
+
+/**
+ * `crates/platform/src/api/command_arguments.rs`: `ArgumentType`, what a command argument's `type` can be, each
+ * with its Lua name, what the server reads it as and whether only the runtime can resolve it (Kotlin's
+ * `platform/CommandArguments.kt`).
+ */
+export function argumentTypesRust(bindings: Bindings): string {
+  const types = bindings.commandArguments.map(({ type }) => type)
+  return finish([
+    ...header(
+      [
+        "What a command argument takes, by its Lua name (the spec's `commandArguments`), and what the server reads",
+        "it as (`reading`). `names`: a word only the runtime can resolve and complete (the project's own things,",
+        "the server's worlds), which the runtime turns into the handler's value.",
+      ],
+      ['crate::ArgumentReading'],
+    ),
+    '#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]',
+    'pub enum ArgumentType {',
+    ...types.flatMap((type) => [
+      ...rustdoc(`\`"${type.name}"\`: ${type.doc}.`, '    '),
+      `    ${pascal(type.name)},`,
+    ]),
+    '}',
+    '',
+    'impl ArgumentType {',
+    "    /// Every type, in the spec's order.",
+    `    pub const ALL: &'static [ArgumentType] = &[${types.map((t) => `ArgumentType::${pascal(t.name)}`).join(', ')}];`,
+    '',
+    '    /// Its name in Lua (`block_state`).',
+    "    pub fn lua_name(self) -> &'static str {",
+    '        match self {',
+    ...types.map(
+      (t) => `            ArgumentType::${pascal(t.name)} => ${JSON.stringify(t.name)},`,
+    ),
+    '        }',
+    '    }',
+    '',
+    '    /// What the server reads it as.',
+    '    pub fn reading(self) -> ArgumentReading {',
+    '        match self {',
+    ...types.map(
+      (t) =>
+        `            ArgumentType::${pascal(t.name)} => ArgumentReading::${pascal(t.reading)},`,
+    ),
+    '        }',
+    '    }',
+    '',
+    "    /// Whether it's a word only the runtime can resolve and complete.",
+    '    pub fn names(self) -> bool {',
+    `        matches!(self, ${
+      types
+        .filter((t) => t.names)
+        .map((t) => `ArgumentType::${pascal(t.name)}`)
+        .join(' | ') || 'Self::__None'
+    })`,
+    '    }',
+    '',
+    '    /// The type a Lua name names.',
+    '    pub fn of(lua_name: &str) -> Option<ArgumentType> {',
+    '        ArgumentType::ALL.iter().copied().find(|t| t.lua_name() == lua_name)',
+    '    }',
+    '}',
+  ])
+}
+
+/**
+ * `crates/api/src/generated/arguments.rs`: a command argument's `default` read by the codec its type's value
+ * crosses by (Kotlin's `ArgumentCodecs.kt`), so a default is a value the handler could have got.
+ */
+export function argumentCodecsRust(bindings: Bindings): string {
+  return finish([
+    ...header(
+      [
+        "A command argument's `default`, read by the codec its type's value crosses by (`Player` for `player`,",
+        '`Vec3` for `position`): a mistake names `at`.',
+      ],
+      ['mlua::{Lua, Value}', 'crate::codec::*', 'crate::{handles, ApiResult}'],
+    ),
+    "/// Reads `value` as a value of the argument type `type_name` (its Lua name); none for a type there isn't.",
+    'pub fn read_default(lua: &Lua, type_name: &str, value: Value, at: &str) -> Option<ApiResult<()>> {',
+    '    Some(match type_name {',
+    ...bindings.commandArguments.map(
+      ({ type, codec }) =>
+        `        ${JSON.stringify(type.name)} => ${codecExpr(codec)}.read(lua, value, at).map(|_| ()),`,
+    ),
+    '        _ => return None,',
+    '    })',
+    '}',
+    '',
+    "/// What a default of argument type `type_name` was expected to be, for a mistake's words.",
+    'pub fn expected(type_name: &str) -> Option<String> {',
+    '    Some(match type_name {',
+    ...bindings.commandArguments.map(
+      ({ type, codec }) =>
+        `        ${JSON.stringify(type.name)} => ${codecExpr(codec)}.expected(),`,
+    ),
+    '        _ => return None,',
+    '    })',
+    '}',
+  ])
+}

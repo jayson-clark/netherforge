@@ -52,6 +52,8 @@ pub struct Shared {
     pub menus: RefCell<crate::menu::Menus>,
     /// Dialogs and which one each player has open.
     pub dialogs: RefCell<crate::dialog::Dialogs>,
+    /// The commands modules declared.
+    pub commands: RefCell<crate::commands::Commands>,
     /// Natural spawning: its passes, rules and scripts' conditions.
     pub spawner: RefCell<crate::centity::natural::Spawner>,
     /// The pictures scripts hold.
@@ -86,6 +88,7 @@ impl Shared {
             teams: RefCell::default(),
             menus: RefCell::default(),
             dialogs: RefCell::default(),
+            commands: RefCell::default(),
             centities: RefCell::default(),
             font: RefCell::default(),
             centity_scripts: RefCell::default(),

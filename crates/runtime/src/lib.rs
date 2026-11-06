@@ -20,6 +20,7 @@ pub mod block;
 pub mod border;
 pub mod bossbar;
 pub mod centity;
+pub mod commands;
 pub mod data;
 pub mod definitions;
 pub mod dialog;
@@ -406,6 +407,12 @@ impl LuaApi for Api {
     fn nf_text(&self) -> &dyn netherforge_api::api::NfTextApi {
         match &self.utilities {
             Some(u) => u,
+            None => &Unported,
+        }
+    }
+    fn nf_commands(&self) -> &dyn netherforge_api::api::NfCommandsApi {
+        match &self.worlds {
+            Some(g) => g,
             None => &Unported,
         }
     }

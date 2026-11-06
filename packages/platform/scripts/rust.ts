@@ -28,6 +28,7 @@ import { parseType, type TypeNode } from '../src/type.ts'
  */
 const RUST_EXTERNAL: Record<string, { path: string; interface?: boolean }> = {
   GameEvents: { path: 'crate::api::GameEvents', interface: true },
+  ArgumentType: { path: 'crate::api::ArgumentType' },
   WatchedEvent: { path: 'crate::api::WatchedEvent' },
   Vec3: { path: 'netherforge_format::math::Vec3' },
   Matrix4: { path: 'netherforge_format::math::Matrix4' },

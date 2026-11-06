@@ -41,6 +41,8 @@ import {
 import { bindingsLua, schemaLua } from './emit/lua.ts'
 import {
   apiRust,
+  argumentCodecsRust,
+  argumentTypesRust,
   bindRust,
   codecsRust,
   eventsRust,
@@ -135,6 +137,7 @@ writeDir(
     ['bindings.rs', bindRust(boundRust.classes)],
     ['unported.rs', unportedRust(boundRust.classes)],
     ['events.rs', eventsRust(api)],
+    ['arguments.rs', argumentCodecsRust(boundRust)],
   ]),
   '.rs',
 )
@@ -142,7 +145,10 @@ writeDir(
 const raisedRust = raisedEvents(api, boundRust)
 writeDir(
   'crates/platform/src/api',
-  new Map([['game_events.rs', gameEventsRust(raisedRust)]]),
+  new Map([
+    ['game_events.rs', gameEventsRust(raisedRust)],
+    ['command_arguments.rs', argumentTypesRust(boundRust)],
+  ]),
   '.rs',
 )
 writeDir(

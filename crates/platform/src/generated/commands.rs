@@ -98,7 +98,7 @@ impl ArgumentReading {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ArgumentSyntax {
     pub name: String,
-    pub r#type: external::ArgumentType,
+    pub r#type: crate::api::ArgumentType,
     /// Default: `false`.
     pub optional: bool,
     /// Default: `null`.

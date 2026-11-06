@@ -12,11 +12,14 @@ mod generated;
 pub mod api {
     #[rustfmt::skip]
     mod game_events;
+    #[rustfmt::skip]
+    mod command_arguments;
 
+    pub use command_arguments::*;
     pub use game_events::*;
 }
 
-pub use api::{GameEvents, WatchedEvent, game_event};
+pub use api::{ArgumentType, GameEvents, WatchedEvent, game_event};
 
 pub use generated::*;
 

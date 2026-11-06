@@ -704,6 +704,19 @@ the files' with a UUID id and an owner scope, gone with that scope (`scope_relea
 `nf.dialogs.get` and `open_dialog` by name find only the project's. Not yet: the runtime's own dialogs
 (`/nf settings`).
 
+## Commands (`crates/runtime/src/commands.rs`)
+
+Kotlin's `ProjectCommands`, `CommandDefinitions` and `ArgumentValues`: `nf.commands.register` (modules only:
+`Modules::owner`) checks the definition as Kotlin does (names, optional arguments last, `text` last, bounds and
+choices, a `default` read by its type's codec: `netherforge_api::arguments::read_default`, generated from the
+spec's `commandArguments` beside the platform's `ArgumentType`, `crate::api::ArgumentType` in the platform
+crate), keeps the tree (`Node`: handler, defaults, `complete` functions) in `Shared::commands`, and registers a
+`Handler` that holds the session only weakly (`Weak<Shared>`, `WeakScripts`), since the platform keeps it. The
+server reads what's typed; the handler checks permissions and `players_only` along the path, resolves each
+value (project names, worlds) and calls the handler as the module's code with a `CommandEvent` table. A failing
+handler is reported and the sender told. A module's commands go with its scope (`scope_released`) and all of
+them when the session stops.
+
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 
 The roadmap's "describe `Platform` and `PlatformEvents` in a language-neutral spec, and generate
