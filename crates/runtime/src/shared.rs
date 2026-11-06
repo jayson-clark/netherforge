@@ -44,6 +44,8 @@ pub struct Shared {
     pub names: RefCell<netherforge_format::project::Names>,
     /// The skies over worlds and players.
     pub skies: RefCell<crate::sky::Skies>,
+    /// The project's blocks and every one placed in a loaded chunk.
+    pub blocks: RefCell<crate::custom_blocks::CustomBlocks>,
     /// The project's recipes and those scripts registered.
     pub recipes: RefCell<crate::recipes::Recipes>,
     /// The project's loot tables.
@@ -92,6 +94,7 @@ impl Shared {
             schedules: RefCell::default(),
             names: RefCell::default(),
             skies: RefCell::default(),
+            blocks: RefCell::default(),
             recipes: RefCell::default(),
             loot: RefCell::default(),
             particles: RefCell::default(),

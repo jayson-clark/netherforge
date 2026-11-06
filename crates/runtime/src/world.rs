@@ -857,15 +857,16 @@ impl WorldApi for GameContext {
             return Ok(false);
         };
         let update = options.and_then(|o| o.update) != Some(false);
-        let set = self
-            .platform()
-            .blocks()
-            .set(world.to_owned(), x, y, z, canonical, update);
+        let set =
+            self.platform()
+                .blocks()
+                .set(world.to_owned(), x, y, z, canonical.clone(), update);
         if set {
             self.shared
                 .physics
                 .borrow_mut()
                 .block_changed(world, x, y, z);
+            self.blocks().replaced(world, x, y, z, &canonical);
         }
         Ok(set)
     }
@@ -909,6 +910,7 @@ impl WorldApi for GameContext {
                             .physics
                             .borrow_mut()
                             .block_changed(world, x, y, z);
+                        self.blocks().replaced(world, x, y, z, &canonical);
                     }
                 }
             }

@@ -21,6 +21,7 @@ pub mod border;
 pub mod bossbar;
 pub mod centity;
 pub mod commands;
+pub mod custom_blocks;
 pub mod data;
 pub mod definitions;
 pub mod dialog;
@@ -522,6 +523,24 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_blocks(&self) -> &dyn netherforge_api::api::NfBlocksApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn projectblock(&self) -> &dyn netherforge_api::api::ProjectBlockApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn customblock(&self) -> &dyn netherforge_api::api::CustomBlockApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
     fn nf_recipes(&self) -> &dyn netherforge_api::api::NfRecipesApi {
         match &self.worlds {
             Some(w) => w,
@@ -589,6 +608,7 @@ impl Room {
             menu::MenuContext::install_liveness(&shared, &scripts);
             dialog::DialogContext::install_liveness(&shared, &scripts);
             particles::ParticlesContext::install_liveness(&shared, &scripts);
+            custom_blocks::BlocksContext::install_liveness(&shared, &scripts);
             centity::api::CentityContext::new(shared, scripts.clone())
         });
         let nf = NfContext {

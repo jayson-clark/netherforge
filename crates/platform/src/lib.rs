@@ -4,6 +4,7 @@
 //! `packages/platform` (never edit it); the rest is what it's built from. See
 //! the rust-runtime skill, "The Platform boundary".
 
+pub mod chunk_grid;
 #[rustfmt::skip]
 mod generated;
 

@@ -383,6 +383,16 @@ impl Around for Running<'_, '_> {
         self.session.chunk_unloading(&event.world, event.x, event.z);
     }
 
+    fn chunk_load(
+        &self,
+        event: &mut netherforge_platform::game_event::ChunkLoad,
+        raise: &dyn Fn(&mut netherforge_platform::game_event::ChunkLoad),
+    ) {
+        self.session
+            .chunk_loaded(&event.world, event.x, event.z, event.generated);
+        raise(event)
+    }
+
     fn block_place(
         &self,
         event: &mut netherforge_platform::game_event::BlockPlace,

@@ -91,16 +91,17 @@ impl GameContext {
     /// Sets the block to the canonical `state`; physics reads its section again.
     fn set_at(&self, this: &handles::Block, state: String, update: bool) -> bool {
         let (x, y, z) = unpack(this.position);
-        let set = self
-            .shared
-            .platform
-            .blocks()
-            .set(this.world.clone(), x, y, z, state, update);
+        let set =
+            self.shared
+                .platform
+                .blocks()
+                .set(this.world.clone(), x, y, z, state.clone(), update);
         if set {
             self.shared
                 .physics
                 .borrow_mut()
                 .block_changed(&this.world, x, y, z);
+            self.blocks().replaced(&this.world, x, y, z, &state);
         }
         set
     }
@@ -278,7 +279,7 @@ impl BlockApi for GameContext {
     }
 
     fn custom(&self, this: &handles::Block) -> ApiResult<Option<handles::CustomBlock>> {
-        <Unported as BlockApi>::custom(&Unported, this)
+        Ok(self.custom_at(&this.world, this.position))
     }
 
     fn light_level(&self, this: &handles::Block) -> ApiResult<Option<i64>> {

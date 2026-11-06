@@ -155,6 +155,32 @@ impl Centities {
         true
     }
 
+    /// An inert record goes for good (the block it was drawn over went): its entities, and its row at the next
+    /// flush. False when there's no such record.
+    pub fn remove_inert(&mut self, platform: &dyn Platform, id: Uuid) -> bool {
+        let Some(record) = self.inert.shift_remove(&id) else {
+            return false;
+        };
+        self.changed(id);
+        let entities = platform.entities();
+        for entity in record
+            .anchor_entity
+            .iter()
+            .chain(record.displays.values())
+            .chain(record.hitboxes.values())
+            .chain(&record.orphans)
+        {
+            self.owners.remove(entity);
+            entities.remove(*entity);
+        }
+        true
+    }
+
+    /// Whether `id` is an inert record.
+    pub fn is_inert(&self, id: Uuid) -> bool {
+        self.inert.contains_key(&id)
+    }
+
     /// Every instance out of the world.
     pub fn remove_all(&mut self, platform: &dyn Platform) {
         let ids: Vec<Uuid> = self.instances.keys().copied().collect();

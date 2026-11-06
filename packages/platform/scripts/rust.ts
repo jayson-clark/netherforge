@@ -44,6 +44,7 @@ const RUST_EXTERNAL: Record<string, { path: string; interface?: boolean }> = {
   MenuType: { path: 'netherforge_format::kind::menu::MenuType' },
   DialogFile: { path: 'netherforge_format::kind::dialog::DialogFile' },
   RecipeFile: { path: 'netherforge_format::kind::recipe::RecipeFile' },
+  BlockCarrier: { path: 'netherforge_format::kind::block::BlockCarrier' },
   BotState: { path: 'netherforge_format::bridge::BotState' },
   BotPosition: { path: 'netherforge_format::bridge::BotPosition' },
   BotPackAnswer: { path: 'netherforge_format::bridge::BotPackAnswer' },
@@ -193,9 +194,20 @@ function literal(arg: string, type: string): string {
   return arg
 }
 
+/**
+ * Records whose Kotlin class keeps its state private and works on it in methods: a utility both sides have, not
+ * data that crosses as fields. Each is written by hand in the platform crate, at this path.
+ */
+const HAND_WRITTEN: Record<string, string> = {
+  ChunkGrid: 'crate::chunk_grid::ChunkGrid',
+}
+
 function decl(d: Decl, cx: Context): string[] {
   switch (d.kind) {
     case 'record':
+      if (HAND_WRITTEN[d.name]) {
+        return [...rustdoc(d.doc, ''), `pub use ${HAND_WRITTEN[d.name]};`, '']
+      }
       return struct(d.name, d.doc, d.fields, cx)
     case 'enum': {
       const lines = [

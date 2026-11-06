@@ -302,6 +302,35 @@ impl Plan {
             .map(|u| &u.state)
     }
 
+    /// The way the block held in `state` (canonical text) faces, for a block that turns.
+    pub fn facing_of(&self, state: &str) -> Option<super::block::BlockFacing> {
+        self.uses
+            .iter()
+            .find(|u| u.state.text() == state)
+            .and_then(|u| u.facing)
+    }
+
+    /// Every state `name` is held in: one, or one per way it faces.
+    pub fn states_of(&self, name: &str) -> Vec<String> {
+        self.uses
+            .iter()
+            .filter(|u| u.name == name)
+            .map(|u| u.state.text())
+            .collect()
+    }
+
+    /// Whether `state` (canonical text) is one any carrier could hold a block in.
+    pub fn is_carrier(&self, state: &str) -> bool {
+        let Some(parsed) = crate::block_state::BlockState::parse(state) else {
+            return false;
+        };
+        let state = State {
+            id: parsed.id,
+            properties: parsed.properties.into_iter().collect(),
+        };
+        self.pools.values().any(|p| p.is_carrier(&state))
+    }
+
     /// The block `state` (canonical text) is the carrier of.
     pub fn name_of(&self, state: &str) -> Option<&str> {
         self.uses

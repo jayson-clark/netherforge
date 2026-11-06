@@ -4999,7 +4999,7 @@ impl BlockOps for Unported {
         unported("BlockOps::fall")
     }
 
-    fn freeze(&self, _: external::BlockCarrier) -> bool {
+    fn freeze(&self, _: netherforge_format::kind::block::BlockCarrier) -> bool {
         unported("BlockOps::freeze")
     }
 }
@@ -5107,7 +5107,7 @@ pub trait FakeBlockOps {
         <Unported as BlockOps>::fall(&Unported, world, x, y, z)
     }
 
-    fn freeze(&self, carrier: external::BlockCarrier) -> bool {
+    fn freeze(&self, carrier: netherforge_format::kind::block::BlockCarrier) -> bool {
         <Unported as BlockOps>::freeze(&Unported, carrier)
     }
 }
@@ -5213,7 +5213,7 @@ impl<T: FakeBlockOps> BlockOps for T {
         FakeBlockOps::fall(self, world, x, y, z)
     }
 
-    fn freeze(&self, carrier: external::BlockCarrier) -> bool {
+    fn freeze(&self, carrier: netherforge_format::kind::block::BlockCarrier) -> bool {
         FakeBlockOps::freeze(self, carrier)
     }
 }

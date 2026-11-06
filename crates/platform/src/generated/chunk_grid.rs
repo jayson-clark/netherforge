@@ -7,6 +7,4 @@ use super::*;
 /// A small number (1 to 65535) for some of one chunk's positions, kept a
 /// section at a time: a chunk full of them costs a few kilobytes a section,
 /// not an object a block. x and z are the chunk's own (0 to 15), y the world's.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ChunkGrid {
-}
+pub use crate::chunk_grid::ChunkGrid;

@@ -82,6 +82,8 @@ pub trait Service {
     fn entities_unloading(&self, _entities: &HashSet<Uuid>) {}
     /// A chunk is about to unload, once its scripts have heard of it.
     fn chunk_unloading(&self, _world: &str, _chunk_x: i32, _chunk_z: i32) {}
+    /// A chunk came into memory (`generated` when it was made just now), before its scripts hear of it.
+    fn chunk_loaded(&self, _world: &str, _chunk_x: i32, _chunk_z: i32, _generated: bool) {}
     /// A world is being saved (an autosave, `/save-all`, the server stopping).
     fn world_saving(&self, _world: &str) {}
     /// Another plugin was enabled or disabled, or a service provider registered or went.
@@ -380,6 +382,13 @@ impl<'a> Session<'a> {
         self.shared.store.commit();
     }
 
+    /// A chunk came into memory: its services hear of it before its scripts do (its blocks are the project's,
+    /// tracked, before a script asks).
+    pub fn chunk_loaded(&self, world: &str, chunk_x: i32, chunk_z: i32, generated: bool) {
+        self.each(|s| s.chunk_loaded(world, chunk_x, chunk_z, generated));
+        self.released();
+    }
+
     /// Other plugins changed (`PlatformEvents::plugins_changed`).
     pub fn plugins_changed(&self) {
         self.each(|s| s.plugins_changed());
@@ -643,6 +652,12 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
             host: Default::default(),
         }),
         Box::new(crate::project_items::ItemsService {
+            shared: shared.clone(),
+            scripts: Default::default(),
+        }),
+        // Before any script runs: a module's body may place blocks. Before centities stop, so a block's centity
+        // is its block's until the end.
+        Box::new(crate::custom_blocks::BlocksService {
             shared: shared.clone(),
             scripts: Default::default(),
         }),

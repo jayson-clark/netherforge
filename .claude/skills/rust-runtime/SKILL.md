@@ -707,6 +707,32 @@ the files' with a UUID id and an owner scope, gone with that scope (`scope_relea
 `nf.dialogs.get` and `open_dialog` by name find only the project's. Not yet: the runtime's own dialogs
 (`/nf settings`).
 
+## Custom blocks (`crates/runtime/src/custom_blocks.rs`)
+
+Kotlin's `CustomBlocks` (the design is the plugin-world skill's) and `NfBlocksImpl`, `ProjectBlockImpl`,
+`CustomBlockImpl`. The plan of carrier states is format's `carriers::plan` over every block of the tree (one with
+errors keeps its carrier and rotation, so the others' states don't move), held only while the server freezes every
+carrier it uses (`BlockOps::freeze`; one it won't is a `runtime.blocks` problem, as are unheld and overflowing
+blocks, through `Service::problems`). A chunk's blocks are a `ChunkGrid` of numbers (a name each, numbered for the
+session) plus a `Placed` for the few with more to them (ticking, a centity, a pin). Each chunk's legend (state to
+`name` or `name#facing`, sorted JSON) and the records of blocks with a centity are the server's (`BlockOps::legend`,
+`records`); `reconcile` reads a chunk as Kotlin's does (records first; then each found state by the legend, else as
+the block it is now, a leaves state only where it can't be a player's leaves; states that moved put right quietly)
+and runs once it's let the blocks go what it leaves to do (centities to spawn for adopted blocks, those whose block
+went). Chunks are read at start, as they load (`Service::chunk_loaded`, new: services hear a chunk load before its
+scripts, through `Running`'s `chunk_load`) and by the sweep, two a tick, passing over a chunk whose fingerprint
+(`BlockOps::fingerprint` and Java's hash of the legend) hasn't changed. `world:set_block`, `fill_blocks` and
+`block:set` forget a block they replace (`replaced`). A block's script runs with `this` its `ProjectBlock`; `tick`
+is raised on it every `tick` ticks per placed block. `block:custom()` is the `CustomBlock` there.
+
+`ChunkGrid` is hand-written in the platform crate (`chunk_grid.rs`): the Platform generator writes a record named
+in its `HAND_WRITTEN` as a re-export, since its Kotlin class keeps its state private.
+
+Not yet (the next slices): breaking with drops (`block_break`, explosions, `break_naturally`), clicks and placing
+from items, picking, pistons, falling, the game's blocks' rules (`game_blocks/`), mining (`BlockMining`), pinning a
+block's record for its `block:data()` table, and leaves adopted in a chunk generated while the project runs comes
+with chunk loads' `generated` (already passed through).
+
 ## Recipes (`crates/runtime/src/recipes.rs`)
 
 Kotlin's `Recipes`, `StationCrafting` and `NfRecipesImpl`: the running `recipes/<id>.json` and those scripts register

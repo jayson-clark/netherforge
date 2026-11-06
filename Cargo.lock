@@ -836,6 +836,7 @@ dependencies = [
  "netherforge-platform",
  "rapier3d-f64",
  "rusqlite",
+ "serde",
  "serde_json",
  "sha1",
  "sha2",

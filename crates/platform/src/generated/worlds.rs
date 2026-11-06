@@ -135,7 +135,7 @@ pub trait BlockOps {
     /// distance isn't worked out again, and a player's leaves go down at the farthest distance; natural leaves still
     /// decay. Idempotent, and it stays in force while the plugin is enabled. False when this server can't (then
     /// nothing holds custom blocks in that carrier).
-    fn freeze(&self, carrier: external::BlockCarrier) -> bool;
+    fn freeze(&self, carrier: netherforge_format::kind::block::BlockCarrier) -> bool;
 }
 
 /// A custom block the server remembers at a position: [json] is what the runtime stored with [BlockOps.setRecord].
