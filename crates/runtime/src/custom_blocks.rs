@@ -425,7 +425,7 @@ struct Afterwards {
     /// A block that needs its centity: where, which block, facing.
     spawn: Vec<(String, At, String, Option<BlockFacing>)>,
     /// A block that went: its centity goes.
-    gone: Vec<Uuid>,
+    gone: Vec<(String, At, Option<Uuid>)>,
 }
 
 /// The work that reaches scripts and centities.
@@ -540,8 +540,15 @@ impl BlocksContext {
         spawned
     }
 
-    /// A block went: the centity drawn over it goes.
-    fn centity_gone(&self, centity: Option<Uuid>) {
+    /// A block went: the centity drawn over it goes, and its data table.
+    fn gone(&self, world: &str, at: At, centity: Option<Uuid>) {
+        self.shared.block_data.borrow_mut().discard(
+            &*self.shared.platform,
+            world,
+            at.0,
+            at.1,
+            at.2,
+        );
         let Some(id) = centity else { return };
         let live = self.shared.centities.borrow().get(id).is_some();
         if live {
@@ -555,8 +562,8 @@ impl BlocksContext {
     }
 
     fn finish(&self, after: Afterwards) {
-        for id in after.gone {
-            self.centity_gone(Some(id));
+        for (world, at, centity) in after.gone {
+            self.gone(&world, at, centity);
         }
         for (world, at, name, facing) in after.spawn {
             let centity = self.spawn_centity(&world, at, &name, facing);
@@ -660,15 +667,23 @@ impl BlocksContext {
                 carrier
             } {
                 let mut placed = placed_of(&blocks, at, &read.id, centity, facing);
-                // One that needn't keep a record (one from before legends) loses it; the legend has it now.
+                // One that needn't keep a record (one from before legends) loses it, and the legend has it from
+                // now on, unless it keeps the record for its data table.
                 if !blocks.recorded(&read.id) && centity.is_none() {
-                    records_to_write.push((at, None));
-                    placed.pinned = false;
+                    let table = self
+                        .shared
+                        .block_data
+                        .borrow()
+                        .has(platform, world, at.0, at.1, at.2);
+                    placed.pinned = table;
+                    if !table {
+                        records_to_write.push((at, None));
+                    }
                 }
                 tracked.push((at, placed));
             } else {
                 // Whatever it was, it isn't there now: its centity goes.
-                after.gone.extend(centity);
+                after.gone.push((world.to_owned(), at, centity));
                 records_to_write.push((at, None));
             }
         }
@@ -732,9 +747,8 @@ impl BlocksContext {
             }
             let at = (chunk_x * 16 + x, y, chunk_z * 16 + z);
             if !recorded.contains(&at) {
-                after
-                    .gone
-                    .extend(previous.kept.get(&at).and_then(|p| p.centity));
+                let centity = previous.kept.get(&at).and_then(|p| p.centity);
+                after.gone.push((world.to_owned(), at, centity));
             }
         });
         for (at, placed) in tracked {
@@ -856,7 +870,7 @@ impl BlocksContext {
         };
         let _ = tick;
         if let Some(was) = was {
-            self.centity_gone(was.centity);
+            self.gone(world, at, was.centity);
         }
         if recorded {
             let centity = self.spawn_centity(world, at, name, facing);
@@ -886,7 +900,7 @@ impl BlocksContext {
             let key = blocks.known_key(world, x >> 4, z >> 4)?;
             blocks.take(key, (x, y, z))?
         };
-        self.centity_gone(placed.centity);
+        self.gone(world, (x, y, z), placed.centity);
         self.write_record(world, (x, y, z), None);
         Some(placed.name)
     }
@@ -1140,6 +1154,79 @@ impl BlocksContext {
                 Some(modules) => modules.close(scope),
                 None => self.scripts.close(scope),
             }
+        }
+    }
+
+    /// A block known by its state alone that scripts gave a table keeps a record from now on: if something else
+    /// takes its place while its chunk isn't loaded, the record is how its table is found to go.
+    fn pin_data(&self, world: &str, chunk_x: i32, chunk_z: i32) {
+        let platform = self.platform();
+        let tables = self
+            .shared
+            .block_data
+            .borrow()
+            .tables_in(platform, world, chunk_x, chunk_z);
+        for at in tables {
+            let name = {
+                let blocks = self.shared.blocks.borrow();
+                let Some(key) = blocks.known_key(world, chunk_x, chunk_z) else {
+                    return;
+                };
+                let Some(chunk) = blocks.chunks.get(&key) else {
+                    return;
+                };
+                if chunk.kept.get(&at).is_some_and(|p| p.pinned) {
+                    continue;
+                }
+                match blocks.at(world, at.0, at.1, at.2) {
+                    Some(name) if !blocks.recorded(&name) => name,
+                    _ => continue,
+                }
+            };
+            let facing = platform
+                .blocks()
+                .get(world.to_owned(), at.0, at.1, at.2)
+                .and_then(|s| {
+                    self.shared
+                        .blocks
+                        .borrow()
+                        .plan
+                        .as_ref()?
+                        .facing_of(&s.state)
+                });
+            self.write_record(world, at, Some(record(&name, None, facing)));
+            let mut blocks = self.shared.blocks.borrow_mut();
+            let key = blocks.key(world, chunk_x, chunk_z);
+            let mut placed = blocks
+                .chunks
+                .get(&key)
+                .and_then(|c| c.kept.get(&at).cloned())
+                .unwrap_or(Placed {
+                    name: name.clone(),
+                    centity: None,
+                    next: 0,
+                    facing: None,
+                    pinned: false,
+                });
+            placed.facing = facing;
+            placed.pinned = true;
+            blocks.put(key, at, placed);
+        }
+    }
+
+    /// Pins the data of every chunk tracked, of `world` or every world.
+    fn pin_all(&self, world: Option<&str>) {
+        let chunks: Vec<(String, i32, i32)> = {
+            let blocks = self.shared.blocks.borrow();
+            blocks
+                .chunks
+                .keys()
+                .map(|k| (blocks.worlds[k.world_index].clone(), k.x, k.z))
+                .filter(|(w, _, _)| world.is_none_or(|world| world == w))
+                .collect()
+        };
+        for (w, x, z) in chunks {
+            self.pin_data(&w, x, z);
         }
     }
 
@@ -2257,10 +2344,19 @@ impl Service for BlocksService {
     }
 
     fn chunk_unloading(&self, world: &str, chunk_x: i32, chunk_z: i32) {
+        if let Some(context) = self.running() {
+            context.pin_data(world, chunk_x, chunk_z);
+        }
         let mut blocks = self.shared.blocks.borrow_mut();
         if let Some(key) = blocks.known_key(world, chunk_x, chunk_z) {
             blocks.chunks.remove(&key);
             blocks.ticking.shift_remove(&key);
+        }
+    }
+
+    fn world_saving(&self, world: &str) {
+        if let Some(context) = self.running() {
+            context.pin_all(Some(world));
         }
     }
 
@@ -2275,6 +2371,8 @@ impl Service for BlocksService {
             context.stop_script(&id);
         }
         self.shared.mining.borrow_mut().stop_all(platform);
+        // Before the tables are saved and let go (block data stops after this service).
+        context.pin_all(None);
         let watched = std::mem::take(&mut self.shared.blocks.borrow_mut().watched);
         if watched != (Vec::new(), Vec::new()) {
             platform.blocks().watch(Vec::new(), Vec::new());

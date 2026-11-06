@@ -750,7 +750,15 @@ The server's break raises its own event synchronously, which comes back into the
 breaks it finished and the tick does them once nothing is borrowed (`after_break`). Looking at one slows a player
 before the hit; the modifier is cleared on join, since the server saves it.
 
-Not yet: pinning a block's record for its `block:data()` table, and the editor's view of the blocks' problems.
+**`block:data()`** (`block_data.rs`, Kotlin's `BlockData`, in `Shared::block_data`): a table per position, read from
+its chunk the first time (`BlockOps::data`) and written back when the chunk unloads, the world saves and the session
+ends, only when it changed, with the saved tables' codec and tags (an empty table is no data; save problems logged
+when they change, a table over 1 MiB once). A block known by its state alone that has a table keeps a record from
+then on (`pin_data`, as its chunk unloads, the world saves or the session stops; the data service is registered
+before the blocks so it stops after them), so a block replaced while its chunk is out is found to have gone; a
+block that goes takes its table with it (`gone`). `Block` is whole now: no `Unported`.
+
+Not yet: the editor's view of the blocks' problems (with the bridge).
 
 ## Recipes (`crates/runtime/src/recipes.rs`)
 

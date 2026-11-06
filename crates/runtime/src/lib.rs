@@ -17,6 +17,7 @@ use netherforge_format::requirement::Requirement;
 use netherforge_luau::{Host, ScopeId};
 
 pub mod block;
+pub mod block_data;
 pub mod block_mining;
 pub mod border;
 pub mod bossbar;

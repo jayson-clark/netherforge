@@ -9,7 +9,6 @@ use std::collections::BTreeMap;
 use mlua::Value;
 use netherforge_api::api::BlockApi;
 use netherforge_api::handles;
-use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, shapes, unions, values};
 use netherforge_format::block_state::BlockState;
 use netherforge_format::game::GameData;
@@ -313,6 +312,8 @@ impl BlockApi for GameContext {
     }
 
     fn data(&self, this: &handles::Block) -> ApiResult<Value> {
-        <Unported as BlockApi>::data(&Unported, this)
+        let (x, y, z) = unpack(this.position);
+        self.block_data(&this.world, x, y, z)
+            .map_err(|e| err(e.to_string()))
     }
 }

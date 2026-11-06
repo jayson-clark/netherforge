@@ -655,6 +655,11 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
             shared: shared.clone(),
             scripts: Default::default(),
         }),
+        // Block data stops after the blocks, which pin the records of the tables it saves.
+        Box::new(crate::block_data::BlockDataService {
+            shared: shared.clone(),
+            host: Default::default(),
+        }),
         // Before any script runs: a module's body may place blocks. Before centities stop, so a block's centity
         // is its block's until the end.
         Box::new(crate::custom_blocks::BlocksService {

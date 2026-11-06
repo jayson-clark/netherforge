@@ -61,6 +61,8 @@ struct Fake {
     held: RefCell<HashMap<String, netherforge_platform::ItemData>>,
     /// Whether the falling block entity is in the world.
     falling: RefCell<bool>,
+    /// What `block:data()` saved, by position.
+    data: RefCell<HashMap<At, String>>,
 }
 
 fn alex() -> netherforge_platform::PlayerRef {
@@ -326,6 +328,36 @@ impl netherforge_platform::FakeBlockOps for Fake {
     ) -> bool {
         netherforge_platform::FakeBlockOps::set(self, world, x, y, z, state, true)
     }
+    fn data(&self, _: String, x: i32, y: i32, z: i32) -> Option<String> {
+        self.data.borrow().get(&(x, y, z)).cloned()
+    }
+    fn set_data(&self, _: String, x: i32, y: i32, z: i32, json: Option<String>) -> bool {
+        match json {
+            Some(json) => self.data.borrow_mut().insert((x, y, z), json),
+            None => self.data.borrow_mut().remove(&(x, y, z)),
+        };
+        true
+    }
+    fn with_data(
+        &self,
+        _: String,
+        chunk_x: i32,
+        chunk_z: i32,
+    ) -> Option<Vec<netherforge_platform::BlockVector>> {
+        Some(
+            self.data
+                .borrow()
+                .keys()
+                .filter(|(x, _, z)| (x >> 4, z >> 4) == (chunk_x, chunk_z))
+                .map(|(x, y, z)| netherforge_platform::BlockVector {
+                    x: *x,
+                    y: *y,
+                    z: *z,
+                })
+                .collect(),
+        )
+    }
+
     /// A note block is 0.8 hard, everything else 1.5; a bare hand mines at speed 1.
     fn hardness(&self, state: String) -> Option<f64> {
         Some(if state.starts_with("minecraft:note_block") {
@@ -911,4 +943,52 @@ nf.blocks.get("glass"):place({ world = w, position = vector.create(2, 64, 1) })
             "break_as 1 64 1"
         ]
     );
+}
+
+#[test]
+fn a_blocks_table_is_saved_with_its_chunk_and_goes_with_the_block() {
+    let platform = std::rc::Rc::new(Fake::new());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("blocks/ruby_ore/block.json", "{}"),
+        (
+            "modules/build/init.lua",
+            r#"
+local w = nf.worlds.default()
+nf.blocks.get("ruby_ore"):place({ world = w, position = vector.create(1, 64, 1) })
+local data = w:block(vector.create(1, 64, 1)):data()
+data.owner = "Alex"
+print(w:block(vector.create(1, 64, 1)):data() == data, w:block(vector.create(1, 64, 1)):data().owner)
+nf.on("demo:break", function() w:set_block(vector.create(1, 64, 1), "minecraft:stone") end)
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    assert_eq!(printed(&platform.take()), ["true\tAlex"]);
+    assert!(platform.records.borrow().is_empty());
+    // The world saves: the table is written, and the block, known by its state alone, keeps a record for it.
+    session.world_saving("world");
+    assert_eq!(
+        platform.data.borrow().get(&(1, 64, 1)).map(String::as_str),
+        Some(r#"{"owner":"Alex"}"#)
+    );
+    assert_eq!(
+        platform
+            .records
+            .borrow()
+            .get(&(1, 64, 1))
+            .map(String::as_str),
+        Some(r#"{"id":"ruby_ore"}"#)
+    );
+    // Something replaces the block: its table and record go.
+    let room = session.room().unwrap();
+    room.scripts()
+        .emit_custom(
+            netherforge_runtime::Target::Nf,
+            "demo:break".into(),
+            mlua::Value::Table(room.host().lua().create_table().unwrap()),
+        )
+        .unwrap();
+    assert!(platform.data.borrow().is_empty());
+    assert!(platform.records.borrow().is_empty());
 }

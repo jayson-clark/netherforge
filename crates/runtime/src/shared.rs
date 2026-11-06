@@ -44,6 +44,8 @@ pub struct Shared {
     pub names: RefCell<netherforge_format::project::Names>,
     /// The skies over worlds and players.
     pub skies: RefCell<crate::sky::Skies>,
+    /// The tables `block:data()` hands out.
+    pub block_data: RefCell<crate::block_data::BlockData>,
     /// Who's mining the project's blocks (and the game's with rules), and whose speed is turned down.
     pub mining: RefCell<crate::block_mining::BlockMining>,
     /// The project's blocks and every one placed in a loaded chunk.
@@ -96,6 +98,7 @@ impl Shared {
             schedules: RefCell::default(),
             names: RefCell::default(),
             skies: RefCell::default(),
+            block_data: RefCell::default(),
             mining: RefCell::default(),
             blocks: RefCell::default(),
             recipes: RefCell::default(),
