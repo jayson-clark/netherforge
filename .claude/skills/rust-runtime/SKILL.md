@@ -900,6 +900,27 @@ for a file with errors, and ends them `removed` when the file goes. Not yet: the
 (the bridge), Kotlin's once-a-minute log of a platform failure (the Rust `spawn` can't fail), the editor's "Play on
 server" (`stop_unowned` is there for it), and `/nf scripts`' per-scope count (`count_owned`).
 
+## Cutscenes (`crates/runtime/src/cutscenes.rs`)
+
+Kotlin's `Cutscenes`, `ActiveCutscene`, `NfCutscenesImpl` and `CutsceneImpl` (the plugin-world skill's Cutscenes
+section is the design): definitions are format's `CompiledCutscene` behind an `Rc`, the last good one kept while a
+file has errors (playing one that never had one says the file's first error); each run holds the `Rc` it started
+with, so a reload never moves one playing. `play` saves the player's `PlayerState` (or keeps the run's first), holds
+the camera's chunk, retires what they watched, closes their window, dismounts them, spawns the camera (an empty
+text display, transparent background, tagged `cutscene:camera`, not persistent, `teleport_ticks` 1) and makes them
+spectate it. The service is registered right after particle effects', so its pass runs after the centities' sync:
+the player gone ends it `player_left`, a game mode or a missing camera `stopped`, a camera let go `skipped` or put
+back; then the tick, the chunk hold moved, the camera teleported, cues fired (`cue` raised only when something
+listens; text as the subtitle, cleared when its duration is up). Ending is retire (camera, title, chunk), restore
+(each step made whatever the last answered: the Rust Platform's calls don't throw), then `end` with the run still
+found (`is_active()` true, `time()` nil), then forgotten and its handlers dropped. **No borrow of the cutscenes is
+held across a call to the server** (a teleport or a game mode change is an event scripts may answer by playing or
+stopping one). The store's `cutscene_states` table (`Store::cutscene_states`/`put_cutscene_state`/
+`delete_cutscene_state`) keeps what a crash would lose; `start` reads it and `player_joined` puts that player back
+with Kotlin's warning, before scripts hear the join. `Session::stop` now reports what scripts said while services
+stopped (a cutscene's `end` handler at `unloaded`), which used to be dropped. Not yet: `/nf scripts`' per-scope
+count (`count_owned` is there; no service has that hook yet).
+
 ## Project items (`crates/runtime/src/project_items.rs`)
 
 Kotlin's `item/Items.kt`: one record per `items/<id>/item.json` with its look and the look's hash (format's
