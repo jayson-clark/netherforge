@@ -21,6 +21,7 @@ pub mod block_data;
 pub mod block_mining;
 pub mod border;
 pub mod bossbar;
+pub mod bots;
 pub mod centity;
 pub mod commands;
 pub mod custom_blocks;
@@ -278,6 +279,8 @@ struct Api {
     interop: Option<interop::InteropContext>,
     /// `nf.test`, in a script test run only.
     test: Option<testing::api::TestContext>,
+    /// `nf.bots`, `Bot`.
+    bots: Option<bots::BotsContext>,
 }
 
 impl Runtime for Api {
@@ -308,6 +311,19 @@ impl Runtime for Api {
 
     fn testing(&self) -> bool {
         self.test.is_some()
+    }
+
+    /// An entity's handle as the class it is now (a `Bot`, a `Mob`): Kotlin's `RuntimeApi.refine`.
+    fn refine(&self, handle: &handles::Handle) -> Option<handles::Handle> {
+        let shared = &self.worlds.as_ref()?.shared;
+        if !netherforge_api::handle::is_a(handle.class(), "Entity") {
+            return None;
+        }
+        let Some(netherforge_api::handle::KeyPart::Str(id)) = handle.key().into_iter().next()
+        else {
+            return None;
+        };
+        Some(shared.class_of_id(events::parse_uuid(&id)?))
     }
 }
 
@@ -777,6 +793,18 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_bots(&self) -> &dyn netherforge_api::api::NfBotsApi {
+        match &self.bots {
+            Some(b) => b,
+            None => &Unported,
+        }
+    }
+    fn bot(&self) -> &dyn netherforge_api::api::BotApi {
+        match &self.bots {
+            Some(b) => b,
+            None => &Unported,
+        }
+    }
     fn nf_worlds(&self) -> &dyn netherforge_api::api::NfWorldsApi {
         match &self.worlds {
             Some(w) => w,
@@ -831,6 +859,10 @@ impl Room {
             shared: game.shared.clone(),
             scripts: scripts.clone(),
         });
+        let bots = worlds.as_ref().map(|game| bots::BotsContext {
+            shared: game.shared.clone(),
+            scripts: scripts.clone(),
+        });
         let test = worlds
             .as_ref()
             .filter(|game| game.shared.tests.borrow().harness.is_some())
@@ -881,6 +913,7 @@ impl Room {
             network,
             interop,
             test,
+            bots,
         };
         netherforge_api::install(&host, Rc::new(api))?;
         Ok(Room { host, scripts })

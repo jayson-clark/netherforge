@@ -76,6 +76,8 @@ struct Fake {
     poses: RefCell<BTreeMap<u128, DisplayPose>>,
     /// Blocks of the floor that were broken.
     broken: RefCell<std::collections::HashSet<(i32, i32, i32)>>,
+    /// The bots: who's online, who's joining, what they were told to do.
+    bots: FakeBots,
 }
 
 impl Default for Fake {
@@ -96,6 +98,7 @@ impl Default for Fake {
             next: RefCell::default(),
             poses: RefCell::default(),
             broken: RefCell::default(),
+            bots: FakeBots::default(),
         }
     }
 }
@@ -238,6 +241,16 @@ impl netherforge_platform::FakeWorldEntityOps for Fake {
         Vec::new()
     }
     fn info(&self, id: Uuid) -> Option<netherforge_platform::EntityInfo> {
+        if let Some(bot) = self.bots.by_id(id) {
+            return Some(netherforge_platform::EntityInfo {
+                id,
+                kind: "minecraft:player".into(),
+                location: bot.at.clone(),
+                category: netherforge_platform::EntityCategory::Living,
+                player: Some(bot.player()),
+                tags: Vec::new(),
+            });
+        }
         if id == Uuid(77) {
             let location = self.player.borrow().clone()?;
             return Some(netherforge_platform::EntityInfo {
@@ -387,6 +400,9 @@ impl netherforge_platform::FakeBlockOps for Fake {
 
 impl netherforge_platform::FakePlayerOps for Fake {
     fn find(&self, name: String) -> Option<PlayerRef> {
+        if let Some(bot) = self.bots.by_name(&name) {
+            return Some(bot.player());
+        }
         let alex = name == "Alex";
         alex.then_some(PlayerRef {
             uuid: Uuid(77),
@@ -415,28 +431,48 @@ impl netherforge_platform::FakePlayerOps for Fake {
     fn game_mode(&self, _: Uuid) -> Option<String> {
         Some("survival".into())
     }
-    fn known(&self, _: String) -> Option<PlayerRef> {
-        None
+    fn known(&self, name: String) -> Option<PlayerRef> {
+        self.bots.by_name(&name).map(|b| b.player())
     }
     fn get(&self, uuid: Uuid) -> Option<PlayerRef> {
+        if let Some(bot) = self.bots.by_id(uuid) {
+            return Some(bot.player());
+        }
         (uuid == Uuid(77)).then(|| PlayerRef {
             uuid,
             name: "Alex".into(),
         })
     }
     fn online(&self) -> Vec<PlayerRef> {
-        match &*self.player.borrow() {
+        let mut online = match &*self.player.borrow() {
             Some(_) => vec![PlayerRef {
                 uuid: Uuid(77),
                 name: "Alex".into(),
             }],
             None => Vec::new(),
-        }
+        };
+        online.extend(self.bots.online.borrow().iter().map(FakeBot::player));
+        online
     }
     fn location(&self, uuid: Uuid) -> Option<Location> {
+        if let Some(bot) = self.bots.by_id(uuid) {
+            return Some(bot.at);
+        }
         (uuid == Uuid(77))
             .then(|| self.player.borrow().clone())
             .flatten()
+    }
+    fn eye(&self, uuid: Uuid) -> Option<Ray> {
+        let at = self.bots.by_id(uuid)?.at;
+        Some(Ray {
+            world: at.world,
+            x: at.x,
+            y: at.y + 1.62,
+            z: at.z,
+            dx: 0.0,
+            dy: 0.0,
+            dz: 1.0,
+        })
     }
 }
 
@@ -1117,6 +1153,9 @@ impl FakePlatform for Fake {
     }
     fn players(&self) -> &dyn netherforge_platform::PlayerOps {
         self
+    }
+    fn bots(&self) -> &dyn netherforge_platform::BotOps {
+        &self.bots
     }
 }
 
@@ -4376,4 +4415,651 @@ print(nf.recipes.remove("altar"), nf.recipes.remove("altar"))
         .filter(|c| c.starts_with("recipe"))
         .collect();
     assert_eq!(after, ["recipe remove torch", "recipe resend"]);
+}
+
+// ---- bots ----
+
+use netherforge_format::bridge::{BotActResult, BotAction, BotInfo, BotPackAnswer};
+use netherforge_platform::{BotAim, BotJoin};
+
+type Done<T> = Box<dyn Fn(Result<T, PlatformError>)>;
+
+/// A bot walking: who, to where (x, z), and what to call once there.
+type Walk = (String, f64, f64, Done<BotActResult>);
+
+#[derive(Clone)]
+struct FakeBot {
+    name: String,
+    id: Uuid,
+    at: Location,
+}
+
+impl FakeBot {
+    fn player(&self) -> PlayerRef {
+        PlayerRef {
+            uuid: self.id,
+            name: self.name.clone(),
+        }
+    }
+    fn result(&self) -> BotActResult {
+        BotActResult {
+            world: self.at.world.clone(),
+            x: self.at.x,
+            y: self.at.y,
+            z: self.at.z,
+            since: 0,
+        }
+    }
+}
+
+/// Bots as the Platform has them: a join lands at the fake's next `tick`, a walk arrives there then, anything else
+/// is done at once (a respawn of a bot that's alive fails), and every join and action is kept.
+#[derive(Default)]
+struct FakeBots {
+    online: RefCell<Vec<FakeBot>>,
+    joining: RefCell<Vec<(BotJoin, Done<BotInfo>)>>,
+    walking: RefCell<Vec<Walk>>,
+    joins: RefCell<Vec<BotJoin>>,
+    acted: RefCell<Vec<(String, BotAction, Option<BotAim>)>>,
+    next: std::cell::Cell<u128>,
+}
+
+impl FakeBots {
+    fn by_name(&self, name: &str) -> Option<FakeBot> {
+        self.online
+            .borrow()
+            .iter()
+            .find(|b| b.name.eq_ignore_ascii_case(name))
+            .cloned()
+    }
+    fn by_id(&self, id: Uuid) -> Option<FakeBot> {
+        self.online.borrow().iter().find(|b| b.id == id).cloned()
+    }
+    fn info(bot: &FakeBot) -> BotInfo {
+        BotInfo {
+            name: bot.name.clone(),
+            uuid: netherforge_runtime::events::uuid_text(&bot.id),
+            world: bot.at.world.clone(),
+            x: bot.at.x,
+            y: bot.at.y,
+            z: bot.at.z,
+            events: 0,
+        }
+    }
+    /// The server's tick: joins land and walks arrive.
+    fn tick(&self) {
+        let joining = std::mem::take(&mut *self.joining.borrow_mut());
+        for (join, done) in joining {
+            self.next.set(self.next.get() + 1);
+            let at = join.at.as_ref().map_or_else(
+                || place(0.5, 64.0, 0.5),
+                |p| Location {
+                    world: p.world.clone().unwrap_or_else(|| "world".into()),
+                    x: p.x,
+                    y: p.y,
+                    z: p.z,
+                    yaw: 0.0,
+                    pitch: 0.0,
+                },
+            );
+            let bot = FakeBot {
+                name: join.name.clone(),
+                id: Uuid(1000 + self.next.get()),
+                at,
+            };
+            self.online.borrow_mut().push(bot.clone());
+            done(Ok(Self::info(&bot)));
+        }
+        let walking = std::mem::take(&mut *self.walking.borrow_mut());
+        for (name, x, z, done) in walking {
+            let mut online = self.online.borrow_mut();
+            let Some(bot) = online.iter_mut().find(|b| b.name == name) else {
+                done(Err(PlatformError {
+                    message: format!("{name} left"),
+                    cause: None,
+                }));
+                continue;
+            };
+            bot.at.x = x;
+            bot.at.z = z;
+            let result = bot.result();
+            drop(online);
+            done(Ok(result));
+        }
+    }
+}
+
+impl netherforge_platform::FakeBotOps for FakeBots {
+    fn join(&self, join: BotJoin, done: Done<BotInfo>) {
+        self.joins.borrow_mut().push(join.clone());
+        self.joining.borrow_mut().push((join, done));
+    }
+    fn leave(&self, name: String) {
+        self.online.borrow_mut().retain(|b| b.name != name);
+    }
+    fn list(&self) -> Vec<BotInfo> {
+        self.online.borrow().iter().map(Self::info).collect()
+    }
+    fn is_bot(&self, id: Uuid) -> bool {
+        self.by_id(id).is_some()
+    }
+    fn act(&self, name: String, action: BotAction, aim: Option<BotAim>, done: Done<BotActResult>) {
+        self.acted
+            .borrow_mut()
+            .push((name.clone(), action.clone(), aim));
+        let Some(bot) = self.by_name(&name) else {
+            return done(Err(PlatformError {
+                message: format!("no bot called {name}"),
+                cause: None,
+            }));
+        };
+        match action {
+            BotAction::WalkTo { x, z, .. } => self.walking.borrow_mut().push((name, x, z, done)),
+            BotAction::Respawn => done(Err(PlatformError {
+                message: format!("{name} isn't dead"),
+                cause: None,
+            })),
+            _ => done(Ok(bot.result())),
+        }
+    }
+}
+
+const BOTS_MANIFEST: &str = r#"{ "formatVersion": 1, "name": "Demo", "namespace": "demo", "version": "1.0.0", "minecraft": "26.3", "requires": { "bots": true } }"#;
+
+fn bots_session<'a>(
+    platform: &std::rc::Rc<Fake>,
+    files: &'a Files,
+    bots: netherforge_runtime::bots::BotsConfig,
+) -> Session<'a> {
+    Session::start_configured(
+        platform.clone(),
+        files,
+        &NoPackages,
+        std::rc::Rc::new(netherforge_runtime::store::Store::in_memory()),
+        netherforge_runtime::session::Config {
+            bots,
+            ..Default::default()
+        },
+    )
+}
+
+fn bots_on() -> netherforge_runtime::bots::BotsConfig {
+    netherforge_runtime::bots::BotsConfig {
+        enabled: true,
+        max: 20,
+    }
+}
+
+/// The server's tick, then the session's: a join lands, and its bot is delivered.
+fn bot_ticks(platform: &Fake, session: &Session, ticks: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    for _ in 0..ticks {
+        platform.bots.tick();
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    lines
+}
+
+#[test]
+fn a_bot_joins_in_a_task_as_a_new_player_a_player_too_with_the_pack_loaded_and_its_skin() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", BOTS_MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"
+nf.task(function()
+  local bot, err = nf.bots.join("Sparring", vector.create(4.5, 64, 0.5), { skin = { texture = "dGV4dHVyZQ==", signature = "c2ln" } })
+  print("joined", err, bot:is_player(), bot:name(), tostring(bot):match("^%a+"))
+  print("listed", nf.bots.all()[1] == bot, nf.players.get("Sparring") == bot)
+  print("where", bot:position().x, bot:position().z)
+end)
+"#,
+        ),
+    ]);
+    let session = bots_session(&platform, &files, bots_on());
+    platform.take();
+    assert_eq!(
+        bot_ticks(&platform, &session, 3),
+        [
+            "joined\tnil\ttrue\tSparring\tBot",
+            "listed\ttrue\ttrue",
+            "where\t4.5\t0.5"
+        ]
+    );
+    let joins = platform.bots.joins.borrow();
+    assert_eq!(joins[0].pack, BotPackAnswer::Loaded);
+    let skin = joins[0].script.as_ref().unwrap().skin.as_ref().unwrap();
+    assert_eq!(
+        (skin.value.as_str(), skin.signature.as_deref()),
+        ("dGV4dHVyZQ==", Some("c2ln"))
+    );
+    assert_eq!(
+        joins[0].at.as_ref().unwrap().world.as_deref(),
+        Some("world")
+    );
+}
+
+#[test]
+fn a_bots_controls_are_its_clients_actions_and_a_click_on_a_node_aims_at_its_hitbox() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = r#"{ "nodes": {
+  "root": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} }
+} }"#;
+    let files = Files::new(&[
+        ("netherforge.json", BOTS_MANIFEST),
+        ("centities/c/centity.json", centity),
+        (
+            "modules/t/init.lua",
+            r#"
+nf.task(function()
+  local bot = nf.bots.join("Sparring", vector.create(0.5, 64, 0.5))
+  local at, err = bot:walk_to(vector.create(2.5, 64, 0.5), { sprint = true })
+  print("walked", at.x, at.z, err)
+  print("look", bot:look_at(vector.create(4, 65, 0)), bot:jump(), bot:set_sneaking(true), bot:chat("hello"))
+  local zombie = nf.worlds.default():entities()[1]
+  print("attack", bot:attack(zombie), bot:stop())
+  local tower = nf.centities.spawn("c", vector.create(3.5, 64, 2.5))
+  print("click a node", bot:interact(tower:node("root")))
+  print("respawn when alive", bot:respawn())
+  print("mined", bot:break_block(vector.create(0.5, 70.2, 3)))
+  print("slot", bot:click_slot(3, "shift_left"), bot:drop_item(true), bot:use_block(vector.create(1.2, 63.9, 0), "north", true))
+end)
+"#,
+        ),
+    ]);
+    let session = bots_session(&platform, &files, bots_on());
+    platform.take();
+    let lines = bot_ticks(&platform, &session, 4);
+    assert_eq!(
+        lines,
+        [
+            "walked\t2.5\t0.5\tnil",
+            "look\ttrue\ttrue\ttrue\ttrue",
+            "attack\ttrue\ttrue",
+            "click a node\ttrue",
+            "respawn when alive\tfalse",
+            "mined\ttrue\tnil",
+            "slot\ttrue\ttrue\ttrue",
+        ]
+    );
+    let acted = platform.bots.acted.borrow();
+    let actions: Vec<&BotAction> = acted.iter().map(|(_, a, _)| a).collect();
+    assert_eq!(
+        actions[0],
+        &BotAction::WalkTo {
+            x: 2.5,
+            z: 0.5,
+            sprint: true,
+            timeout_ticks: 200
+        }
+    );
+    assert_eq!(
+        actions[1..5],
+        [
+            &BotAction::LookAt {
+                x: 4.0,
+                y: 65.0,
+                z: 0.0
+            },
+            &BotAction::Jump,
+            &BotAction::Sneak { on: true },
+            &BotAction::Chat {
+                message: "hello".into()
+            },
+        ]
+    );
+    assert!(
+        matches!(actions[5], BotAction::Attack { entity: Some(e), .. } if e == &netherforge_runtime::events::uuid_text(&Uuid(500)))
+    );
+    assert_eq!(actions[6], &BotAction::Stop);
+    // The node's hitbox, which only the runtime knows: its interaction entity, and the middle of its box.
+    let (_, click, aim) = &acted[7];
+    assert!(matches!(click, BotAction::Interact { entity: None, .. }));
+    let aim = aim.as_ref().unwrap();
+    assert_eq!((aim.at.0, aim.at.1, aim.at.2), (4.0, 64.5, 3.0));
+    // Mined from below the bot's eyes' block: the face toward them is the bottom.
+    assert_eq!(
+        actions[9],
+        &BotAction::BreakBlock {
+            x: 0,
+            y: 70,
+            z: 3,
+            face: "down".into()
+        }
+    );
+    assert_eq!(
+        actions[10],
+        &BotAction::ClickSlot {
+            slot: 3,
+            click: netherforge_format::bridge::BotClick::ShiftLeft,
+            hotbar: None
+        }
+    );
+    assert_eq!(
+        actions[12],
+        &BotAction::UseBlock {
+            x: 1,
+            y: 63,
+            z: 0,
+            face: "north".into(),
+            hand: netherforge_format::bridge::BotHand::Off
+        }
+    );
+}
+
+#[test]
+fn a_bot_leaves_with_the_script_that_joined_it() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", BOTS_MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"nf.bots.join("Sparring", nil, nil, function(bot) print("in", bot:name()) end)"#,
+        ),
+    ]);
+    let mut session = bots_session(&platform, &files, bots_on());
+    platform.take();
+    assert_eq!(bot_ticks(&platform, &session, 2), ["in\tSparring"]);
+    assert!(platform.bots.by_name("Sparring").is_some());
+    files.write("modules/t/init.lua", "-- no bots now");
+    session.reload(&["modules/t/init.lua".into()]);
+    assert!(platform.bots.by_name("Sparring").is_none());
+    // And every bot leaves as the session stops.
+    files.write(
+        "modules/t/init.lua",
+        r#"nf.bots.join("Again", nil, nil, function() end)"#,
+    );
+    session.reload(&["modules/t/init.lua".into()]);
+    bot_ticks(&platform, &session, 2);
+    assert!(platform.bots.by_name("Again").is_some());
+    session.stop();
+    assert!(platform.bots.online.borrow().is_empty());
+}
+
+#[test]
+fn the_owner_decides_whether_there_are_bots_and_how_many_and_a_busy_name_is_no_bot() {
+    let joining = r#"
+nf.task(function()
+  local first, err1 = nf.bots.join("One")
+  local second, err2 = nf.bots.join("Two")
+  local again, err3 = nf.bots.join("One")
+  print(first ~= nil, err1, second ~= nil, err2, again ~= nil, err3)
+end)
+"#;
+    let files = Files::new(&[
+        ("netherforge.json", BOTS_MANIFEST),
+        ("modules/t/init.lua", joining),
+    ]);
+    let platform = std::rc::Rc::new(Fake::default());
+    let one = netherforge_runtime::bots::BotsConfig {
+        enabled: true,
+        max: 1,
+    };
+    let session = bots_session(&platform, &files, one);
+    platform.take();
+    let many = "1 bots are online already, as many as this server allows (bots.max in config.yml)";
+    assert_eq!(
+        bot_ticks(&platform, &session, 4),
+        [format!("true\tnil\tfalse\t{many}\tfalse\t{many}")]
+    );
+    assert!(
+        !session
+            .problems()
+            .iter()
+            .any(|p| p.code.as_deref() == Some("runtime.bots-disabled"))
+    );
+    drop(session);
+
+    let platform = std::rc::Rc::new(Fake::default());
+    let session = bots_session(&platform, &files, Default::default());
+    platform.take();
+    let off = "bots are off on this server: the server owner turns them on with bots.enabled in config.yml";
+    assert_eq!(
+        bot_ticks(&platform, &session, 4),
+        [format!("false\t{off}\tfalse\t{off}\tfalse\t{off}")]
+    );
+    let problems = session.problems();
+    let problem = problems
+        .iter()
+        .find(|p| p.code.as_deref() == Some("runtime.bots-disabled"))
+        .unwrap();
+    assert_eq!(problem.path.as_deref(), Some("$.requires.bots"));
+    assert_eq!(problem.file, "netherforge.json");
+    drop(session);
+
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", BOTS_MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"nf.task(function() local bot, err = nf.bots.join("Alex"); print(bot, err) end)"#,
+        ),
+    ]);
+    let session = bots_session(&platform, &files, bots_on());
+    assert_eq!(
+        bot_ticks(&platform, &session, 1),
+        ["nil\tsomeone called Alex is online already"]
+    );
+}
+
+#[test]
+fn a_scripts_mistakes_are_errors_and_a_package_must_declare_bots() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", BOTS_MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"
+print(pcall(nf.bots.join, "no spaces", nil, nil, function() end))
+nf.task(function()
+  local bot = nf.bots.join("Sparring")
+  print(pcall(bot.walk_to, bot, vector.create(9, 64, 9), { timeout = 0 }))
+end)
+"#,
+        ),
+    ]);
+    let session = bots_session(&platform, &files, bots_on());
+    let mut lines = printed(&platform.take());
+    lines.extend(bot_ticks(&platform, &session, 2));
+    assert_eq!(
+        lines,
+        [
+            "false\tmodules/t/init.lua:2: bad argument 'name' (3 to 16 letters, digits or _ expected, got \"no spaces\")",
+            "false\tmodules/t/init.lua:5: bad argument 'options.timeout' (1 to 500 ticks expected, got 0)",
+        ]
+    );
+    drop(session);
+
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("modules/t/init.lua", "print(pcall(nf.bots.all))"),
+    ]);
+    let _session = bots_session(&platform, &files, bots_on());
+    let lines = printed(&platform.take());
+    assert!(
+        lines[0].starts_with("false") && lines[0].contains(r#""requires": { "bots": true }"#),
+        "{lines:?}"
+    );
+}
+
+#[test]
+fn a_bot_that_has_left_answers_false_and_its_walk_nil_and_why() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", BOTS_MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"
+nf.task(function()
+  local bot = nf.bots.join("Sparring")
+  print(bot:leave(), bot:leave(), bot:jump())
+  print(bot:walk_to(vector.create(9, 64, 9)))
+end)
+"#,
+        ),
+    ]);
+    let session = bots_session(&platform, &files, bots_on());
+    platform.take();
+    assert_eq!(
+        bot_ticks(&platform, &session, 3),
+        ["true\tfalse\tfalse", "nil\tthe bot has left"]
+    );
+}
+
+#[test]
+fn a_player_handle_that_is_a_bot_becomes_one_when_a_bot_method_is_called() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", BOTS_MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"
+nf.on("player_join", function(e)
+  local player = e.player
+  print("joined as", tostring(player):match("^%a+"), player:is_player())
+  print("a bot's method", player:jump(), tostring(player):match("^%a+"))
+  print("nothing", player.no_such_method)
+end)
+nf.bots.join("Sparring", nil, nil, function() end)
+"#,
+        ),
+    ]);
+    use netherforge_platform::PlatformEvents;
+    let server =
+        netherforge_runtime::server::ServerEvents::new(bots_session(&platform, &files, bots_on()));
+    platform.take();
+    platform.bots.tick();
+    let bot = platform.bots.by_name("Sparring").unwrap();
+    server
+        .game()
+        .player_join(&mut netherforge_platform::game_event::PlayerJoin {
+            player: bot.player(),
+            first_join: true,
+            message: None,
+        });
+    server.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        [
+            "joined as\tPlayer\ttrue",
+            "a bot's method\ttrue\tBot",
+            "nothing\tnil"
+        ]
+    );
+}
+
+#[test]
+fn the_bridges_bots_aim_at_a_centitys_node_and_say_which_node_they_look_at() {
+    use netherforge_format::bridge::{BotState, BotTarget, BotTargetKind};
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = r#"{ "nodes": {
+  "root": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} },
+  "bare": { "display": { "type": "block", "block": "minecraft:stone" } }
+} }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/c/centity.json", centity),
+    ]);
+    let session = bots_session(&platform, &files, Default::default());
+    let id = session.spawn("c", place(3.5, 64.0, 2.5), 0.0).unwrap();
+    let text = netherforge_runtime::events::uuid_text(&id);
+    let bots = session.bots().unwrap();
+    let interact = |centity: Option<&str>, node: Option<&str>| BotAction::Interact {
+        entity: None,
+        centity: centity.map(Into::into),
+        node: node.map(Into::into),
+        hand: Default::default(),
+        x: None,
+        y: None,
+        z: None,
+    };
+    let aim = bots
+        .bridge_aim(&interact(Some(&text), None))
+        .unwrap()
+        .unwrap();
+    assert_eq!((aim.at.0, aim.at.1, aim.at.2), (4.0, 64.5, 3.0));
+    let by_node = bots
+        .bridge_aim(&interact(Some(&text), Some("root")))
+        .unwrap()
+        .unwrap();
+    assert_eq!(by_node, aim);
+    assert_eq!(bots.bridge_aim(&BotAction::Jump), Ok(None));
+    assert_eq!(bots.bridge_aim(&interact(None, None)), Ok(None));
+    assert_eq!(
+        bots.bridge_aim(&interact(None, Some("root"))),
+        Err("`node` names a node of the centity given as `centity`, and there's none".into())
+    );
+    assert_eq!(
+        bots.bridge_aim(&interact(Some(&text), Some("nope"))),
+        Err("centity c has no node \"nope\"".into())
+    );
+    assert_eq!(
+        bots.bridge_aim(&interact(Some(&text), Some("bare"))),
+        Err("node \"bare\" of centity c has no hitbox to click".into())
+    );
+    assert_eq!(
+        bots.bridge_aim(&interact(Some("x"), None)),
+        Err("no centity instance \"x\"".into())
+    );
+    // A bot looking at the node's hitbox: which node it is comes from the runtime.
+    let state = BotState {
+        name: "Probe".into(),
+        uuid: netherforge_runtime::events::uuid_text(&Uuid(77)),
+        world: "world".into(),
+        x: 0.0,
+        y: 64.0,
+        z: 0.0,
+        yaw: 0.0,
+        pitch: 0.0,
+        on_ground: true,
+        health: 20.0,
+        food: 20,
+        game_mode: "survival".into(),
+        dead: false,
+        sneaking: false,
+        sprinting: false,
+        selected_slot: 0,
+        inventory: Vec::new(),
+        menu: None,
+        dialog: None,
+        boss_bars: Vec::new(),
+        sidebar: None,
+        title: None,
+        subtitle: None,
+        action_bar: None,
+        resource_packs: Vec::new(),
+        entities: Vec::new(),
+        target: Some(BotTarget {
+            kind: BotTargetKind::Entity,
+            x: 3.5,
+            y: 64.5,
+            z: 2.5,
+            distance: 4.0,
+            block_x: None,
+            block_y: None,
+            block_z: None,
+            face: None,
+            state: None,
+            entity: Some(netherforge_runtime::events::uuid_text(&aim.entity)),
+            entity_type: Some("minecraft:interaction".into()),
+            centity: None,
+            node: None,
+        }),
+        teams: Vec::new(),
+        player_list: Vec::new(),
+        events: 0,
+    };
+    let seen = bots.bridge_state(state.clone()).target.unwrap();
+    assert_eq!(
+        (seen.centity.as_deref(), seen.node.as_deref()),
+        (Some(text.as_str()), Some("root"))
+    );
+    // Anything else is as the bot said.
+    let mut elsewhere = state;
+    elsewhere.target.as_mut().unwrap().entity =
+        Some(netherforge_runtime::events::uuid_text(&Uuid(500)));
+    assert_eq!(bots.bridge_state(elsewhere.clone()), elsewhere);
 }

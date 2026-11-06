@@ -88,6 +88,8 @@ pub struct Shared {
     pub wasm: RefCell<crate::wasm::Wasm>,
     /// The plugins packages declared, and the placeholders scripts offer.
     pub interop: RefCell<crate::interop::Interop>,
+    /// The bots scripts joined, and the owner's `bots:`.
+    pub bots: RefCell<crate::bots::ScriptBots>,
     /// The owner's values for each package's settings (`nf.config`).
     pub settings: RefCell<crate::settings::Settings>,
     /// `nf.network`: the plugin's link, the channels and maps scripts named, what waits for the hub.
@@ -153,6 +155,7 @@ impl Shared {
             network: RefCell::default(),
             settings: RefCell::default(),
             interop: RefCell::default(),
+            bots: RefCell::default(),
             physics: RefCell::default(),
             stats: RefCell::default(),
             modules: RefCell::default(),
@@ -170,27 +173,54 @@ impl Shared {
         lua: &mlua::Lua,
         info: &netherforge_platform::EntityInfo,
     ) -> handles::Entity {
-        use netherforge_platform::EntityCategory;
         let id = crate::events::uuid_text(&info.id);
-        let classed = if info.player.is_some() {
-            Handle::Player(handles::Player { id: id.clone() })
-        } else {
-            match info.category {
-                EntityCategory::Mob => Handle::Mob(handles::Mob { id: id.clone() }),
-                EntityCategory::Mannequin => {
-                    Handle::Mannequin(handles::Mannequin { id: id.clone() })
-                }
-                EntityCategory::Living => Handle::Living(handles::Living { id: id.clone() }),
-                EntityCategory::DroppedItem => {
-                    Handle::DroppedItem(handles::DroppedItem { id: id.clone() })
-                }
-                EntityCategory::Other => return handles::Entity { id },
-            }
-        };
+        let classed = self.class_of(info);
+        if matches!(classed, Handle::Entity(_)) {
+            return handles::Entity { id };
+        }
         if let Ok(pushed) = netherforge_api::handle::push_any(lua, &classed) {
             self.classed.borrow_mut().push(pushed);
         }
         handles::Entity { id }
+    }
+
+    /// What `info` describes as the class it is (Kotlin's `entityHandle(info)`): a `Player`, a `Mob`, a
+    /// `Mannequin`, a `Living`, a `DroppedItem`, or an `Entity`. A bot's is a `Player` until a script calls a `Bot`
+    /// method on it ([`Shared::class_of_id`] then says): the server isn't asked whether each player is a bot.
+    pub fn class_of(&self, info: &netherforge_platform::EntityInfo) -> Handle {
+        use netherforge_platform::EntityCategory;
+        let id = crate::events::uuid_text(&info.id);
+        if info.player.is_some() {
+            return Handle::Player(handles::Player { id });
+        }
+        match info.category {
+            EntityCategory::Mob => Handle::Mob(handles::Mob { id }),
+            EntityCategory::Mannequin => Handle::Mannequin(handles::Mannequin { id }),
+            EntityCategory::Living => Handle::Living(handles::Living { id }),
+            EntityCategory::DroppedItem => Handle::DroppedItem(handles::DroppedItem { id }),
+            EntityCategory::Other => Handle::Entity(handles::Entity { id }),
+        }
+    }
+
+    /// The entity `id` as the class it is now (Kotlin's `entityHandle(id)`): what the server says of it, a `Player`
+    /// (a `Bot` online) for anyone who has played here, or an `Entity` for anything that isn't in the world now.
+    pub fn class_of_id(&self, id: netherforge_platform::Uuid) -> Handle {
+        let text = crate::events::uuid_text(&id);
+        let players = self.platform.players();
+        if players.get(id).is_some() {
+            return if self.platform.bots().is_bot(id) {
+                Handle::Bot(handles::Bot { id: text })
+            } else {
+                Handle::Player(handles::Player { id: text })
+            };
+        }
+        if let Some(info) = self.platform.world_entities().info(id) {
+            return self.class_of(&info);
+        }
+        if players.known(text.clone()).is_some() {
+            return Handle::Player(handles::Player { id: text });
+        }
+        Handle::Entity(handles::Entity { id: text })
     }
 
     /// Player `id` as the `Entity` the spec's type says, its value a `Player`'s.
@@ -200,10 +230,8 @@ impl Shared {
         id: netherforge_platform::Uuid,
     ) -> handles::Entity {
         let text = crate::events::uuid_text(&id);
-        if let Ok(pushed) = netherforge_api::handle::push_any(
-            lua,
-            &Handle::Player(handles::Player { id: text.clone() }),
-        ) {
+        let classed = Handle::Player(handles::Player { id: text.clone() });
+        if let Ok(pushed) = netherforge_api::handle::push_any(lua, &classed) {
             self.classed.borrow_mut().push(pushed);
         }
         handles::Entity { id: text }

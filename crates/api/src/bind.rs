@@ -41,6 +41,19 @@ struct Installed {
     waiting: Table,
 }
 
+/// What the runtime says the handle of `class` keyed `key` is now ([`crate::Runtime::refine`]): its class, when
+/// that's below `class` in its chain.
+pub fn refine(
+    lua: &Lua,
+    class: &'static str,
+    key: &[crate::handle::KeyPart],
+) -> Option<&'static str> {
+    let handle = crate::handles::Handle::from_key(class, key)?;
+    let api = lua.app_data_ref::<Installed>()?.api.clone();
+    let refined = api.refine(&handle)?.class();
+    (refined != class && crate::handle::is_a(refined, class)).then_some(refined)
+}
+
 /// The value a waiting binding returns, which its shim answers by yielding.
 pub fn waiting(lua: &Lua) -> mlua::Result<Value> {
     lua.app_data_ref::<Installed>()

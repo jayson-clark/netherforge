@@ -88,6 +88,14 @@ pub trait Runtime {
     fn testing(&self) -> bool {
         false
     }
+
+    /// What `handle` is now, when the runtime knows more than it did when it handed it out (Kotlin's
+    /// `LuaMarshal.refine`): a `Player` that's a `Bot`, an `Entity` whose entity was unloaded then. Asked only for a
+    /// handle of a class others extend, when it lacks a method a script called or isn't the class an argument
+    /// wants; none when it's what it was.
+    fn refine(&self, _handle: &handles::Handle) -> Option<handles::Handle> {
+        None
+    }
 }
 
 /// What a call into the API did wrong, as the script is told: its message

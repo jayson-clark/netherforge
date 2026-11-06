@@ -400,9 +400,9 @@ impl<H: HandleClass> Codec for HandleOf<H> {
             _ => false,
         }
     }
-    fn read(&self, _: &Lua, value: Value, at: &str) -> ApiResult<H> {
+    fn read(&self, lua: &Lua, value: Value, at: &str) -> ApiResult<H> {
         if let Value::UserData(u) = &value
-            && let Some(h) = handle::read::<H>(u)
+            && let Some(h) = handle::read::<H>(u).or_else(|| handle::read_refined::<H>(lua, u))
         {
             return Ok(h);
         }

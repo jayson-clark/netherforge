@@ -134,6 +134,8 @@ pub struct Config {
     pub wasm: crate::wasm::WasmConfig,
     /// `network:` in `config.yml`, and whether this is a network of its own (a dev server's, a test's).
     pub network: crate::network::NetworkConfig,
+    /// `bots:` in `config.yml`: whether scripts may join bots, and how many (the dev server's are always on).
+    pub bots: crate::bots::BotsConfig,
     /// `<plugin folder>/settings`, where the owner's values for packages' settings are kept: none keeps them in
     /// memory only.
     pub settings_dir: Option<std::path::PathBuf>,
@@ -266,6 +268,7 @@ impl<'a> Session<'a> {
             }
         }
         shared.web.borrow_mut().config = config.web.clone();
+        shared.bots.borrow_mut().config = config.bots;
         shared.settings.borrow_mut().directory = config.settings_dir.clone();
         // A script test's server is a network of its own, `test`, whose other servers the test plays.
         let mut network_config = config.network.clone();
@@ -411,6 +414,16 @@ impl<'a> Session<'a> {
     /// Its centities' instances.
     pub fn centities(&self) -> std::cell::RefMut<'_, crate::centity::Centities> {
         self.shared.centities.borrow_mut()
+    }
+
+    /// The runtime's half of the bots (what the bridge's bots extension asks: where a click on a centity's node aims,
+    /// which node a bot looks at), while the session runs.
+    pub fn bots(&self) -> Option<crate::bots::BotsContext> {
+        let room = self.room.as_ref()?;
+        Some(crate::bots::BotsContext {
+            shared: self.shared.clone(),
+            scripts: room.scripts().clone(),
+        })
     }
 
     /// Spawns an instance of `centity` at `at`, facing `yaw`, as `nf.centities.spawn` will: its id, or none
@@ -1124,6 +1137,11 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
             shared: shared.clone(),
             modules: Default::default(),
             again: Default::default(),
+        }),
+        // After modules, so it stops first: scripts' bots leave while their scripts still run.
+        Box::new(crate::bots::BotsService {
+            shared: shared.clone(),
+            context: Default::default(),
         }),
     ]
 }

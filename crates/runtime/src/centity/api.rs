@@ -606,6 +606,70 @@ impl CentityContext {
         true
     }
 
+    /// Which instance and node a click on `entity` by `player` along `sight` would reach (Kotlin's
+    /// `CentityClicks.clickTarget`, the same pick as [`CentityContext::click`]): the instance's id, and the node
+    /// (none when the click would reach none). None when `entity` isn't one of ours, or `player` doesn't see it.
+    pub fn click_target(
+        &self,
+        entity: Uuid,
+        player: Uuid,
+        sight: Option<&Ray>,
+    ) -> Option<(Uuid, Option<String>)> {
+        let mut centities = self.shared.centities.borrow_mut();
+        let (id, name) = centities.owner_of(entity).cloned()?;
+        let instance = centities.get_mut(id)?;
+        if instance.removed || !instance.sees(player) {
+            return None;
+        }
+        let Some(clicked) = instance.index_of(&name) else {
+            return Some((id, None));
+        };
+        let picked = pick(self.shared.platform.game(), instance, clicked, sight);
+        Some((
+            id,
+            picked.map(|p| instance.definition.nodes[p.index].name.clone()),
+        ))
+    }
+
+    /// Where a player would aim to click instance `id`'s node `node` (its first clickable, shown node with a
+    /// hitbox when none: Kotlin's `CentityClicks.aim`): the node's interaction entity, and the middle of its box
+    /// in the world. None when that node has no hitbox out in the world to click.
+    pub fn aim(&self, id: Uuid, node: Option<&str>) -> Option<(Uuid, Vec3)> {
+        let centities = self.shared.centities.borrow();
+        let instance = centities.get(id)?;
+        let name = match node {
+            Some(node) => node.to_owned(),
+            None => instance
+                .definition
+                .nodes
+                .iter()
+                .enumerate()
+                .find(|(index, n)| {
+                    n.hitbox.is_some()
+                        && instance.shown(*index)
+                        && instance.clickable(*index)
+                        && instance.hitboxes.contains_key(&n.name)
+                })?
+                .1
+                .name
+                .clone(),
+        };
+        let entity = *instance.hitboxes.get(&name)?;
+        let anchor = instance.anchor();
+        let middle = match instance.pushed_hitboxes.get(&entity) {
+            Some(b) => Vec3(b.center_x, b.bottom_y + b.height / 2.0, b.center_z),
+            None => Vec3(0.0, 0.0, 0.0),
+        };
+        Some((
+            entity,
+            Vec3(
+                middle.0 + anchor.x,
+                middle.1 + anchor.y,
+                middle.2 + anchor.z,
+            ),
+        ))
+    }
+
     // ---- lives ----
 
     /// Puts a new instance of `centity` into the world at `at`, facing `yaw`: its entities made, its

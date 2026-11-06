@@ -62,11 +62,16 @@ pub struct Classes {
 impl UserData for HandleData {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_meta_method(MetaMethod::Index, |lua, this, name: Value| {
-            let classes = lua.app_data_ref::<Classes>();
-            let Some(table) = classes.as_ref().and_then(|c| c.methods.get(this.class())) else {
-                return Ok(Value::Nil);
-            };
-            table.raw_get::<Value>(name)
+            let found = method(lua, this.class(), &name)?;
+            // A handle of a class others extend may be one the runtime knew less about when it handed it out (a
+            // `Player` that's a `Bot`): a method its class lacks asks what it is now, and looks again.
+            if !found.is_nil() || !extended(this.class()) {
+                return Ok(found);
+            }
+            match refine(lua, this) {
+                Some(class) => method(lua, class, &name),
+                None => Ok(Value::Nil),
+            }
         });
         methods.add_meta_method(MetaMethod::NewIndex, |_, this, (_, _): (Value, Value)| {
             Err::<(), _>(mlua::Error::runtime(format!(
@@ -97,6 +102,44 @@ impl UserData for HandleData {
         // `getmetatable(h)` gives scripts nothing they can use.)
         fields.add_meta_field("__type", "handle");
     }
+}
+
+/// Method `name` of `class`, or nil.
+fn method(lua: &Lua, class: &str, name: &Value) -> mlua::Result<Value> {
+    let classes = lua.app_data_ref::<Classes>();
+    match classes.as_ref().and_then(|c| c.methods.get(class)) {
+        Some(table) => table.raw_get::<Value>(name.clone()),
+        None => Ok(Value::Nil),
+    }
+}
+
+/// Whether other classes extend `class` (an `Entity`, a `Player`): only then can the runtime know more of it.
+fn extended(class: &str) -> bool {
+    CHAINS
+        .iter()
+        .any(|chain| chain.len() > 1 && chain[1..].contains(&class))
+}
+
+/// Asks the runtime what `data` is now ([`crate::Runtime::refine`]), and makes it that class: its class then, when
+/// it changed.
+fn refine(lua: &Lua, data: &HandleData) -> Option<&'static str> {
+    let class = crate::bind::refine(lua, data.class(), &data.key)?;
+    data.class.set(class);
+    Some(class)
+}
+
+/// A handle userdata as `H` once the runtime has said what it is now, when it was handed out as a class above
+/// `H` (a `Player` where a `Bot` is wanted).
+pub fn read_refined<H: HandleClass>(lua: &Lua, u: &AnyUserData) -> Option<H> {
+    let data = u.borrow::<HandleData>().ok()?;
+    if !is_a(H::NAME, data.class()) {
+        return None;
+    }
+    refine(lua, &data)?;
+    if !H::CLASSES.contains(&data.class()) {
+        return None;
+    }
+    H::from_key(&data.key)
 }
 
 fn a_or_an(word: &str) -> String {
