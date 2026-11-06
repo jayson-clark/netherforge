@@ -3410,3 +3410,64 @@ print(pcall(alex.open_dialog, alex, "guestbook", { values = { colour = "x" } }))
         )
     );
 }
+
+#[test]
+fn dialog_ask_waits_for_their_press_or_close() {
+    use netherforge_platform::PlatformEvents;
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let confirm = r#"{ "type": "confirmation", "title": "Sure?", "buttons": [ { "key": "yes", "label": "Yes" }, { "key": "no", "label": "No" } ] }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("dialogs/confirm/dialog.json", confirm),
+        (
+            "modules/ask/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local confirm = nf.dialogs.get("confirm")
+print(pcall(confirm.ask, confirm, alex))
+nf.task(function()
+  local first = confirm:ask(alex)
+  print("first", first and first.key, first and first.player == alex)
+  print("second", confirm:ask(alex))
+  confirm:open_for(alex)
+  local pressed = nf.wait_for(confirm, "press")
+  print("third", pressed.key)
+end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert!(
+        printed(&calls)[0]
+            .starts_with("false\tmodules/ask/init.lua:4: dialog:ask only works inside a task"),
+        "{calls:?}"
+    );
+    let alex = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let none = std::collections::HashMap::new();
+    server.tick();
+    let shown = platform.take();
+    assert!(
+        calls
+            .iter()
+            .chain(&shown)
+            .any(|c| c.starts_with("dialog confirm to 77")),
+        "{calls:?} {shown:?}"
+    );
+    server.dialog_pressed(alex.clone(), "confirm".into(), "yes".into(), none.clone());
+    server.tick();
+    assert_eq!(printed(&platform.take()), ["first\tyes\ttrue"]);
+    server.dialog_closed(alex.clone(), "confirm".into());
+    server.tick();
+    assert_eq!(printed(&platform.take()), ["second\tnil"]);
+    // wait_for on a handle: the dialog's own press.
+    server.dialog_pressed(alex.clone(), "confirm".into(), "no".into(), none);
+    server.tick();
+    assert_eq!(printed(&platform.take()), ["third\tno"]);
+}

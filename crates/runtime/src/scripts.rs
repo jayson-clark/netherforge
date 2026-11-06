@@ -21,6 +21,7 @@ use mlua::thread::ThreadStatus;
 use mlua::{AnyUserData, Function, Lua, MultiValue, Table, Thread, Value};
 use netherforge_api::api::{NfApi, SubscriptionApi, TaskApi};
 use netherforge_api::events::{self, EventType};
+use netherforge_api::handles::Handle;
 use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, Caller, Waiting, handles, shapes, unions};
 use netherforge_luau::{Failure, Host, ScopeId, WeakHost};
@@ -128,7 +129,20 @@ enum Wait {
     Event { sub: u64, filter: Option<Function> },
     /// An `async` function's waiting form: the wait (`pending`'s id) whose `value, err` wakes it.
     Async(u64),
+    /// [`Scripts::wait_any`]: subscriptions, the first whose event is accepted waking it.
+    Any(Rc<[u64]>),
 }
+
+/// One of the events a task waits for with [`Scripts::wait_any`]: `accept` says whether an event ends the
+/// wait (`Some`) and with what the task's call returns.
+pub struct Awaited {
+    pub target: Target,
+    pub event: String,
+    pub accept: Accept,
+}
+
+/// Whether an event ends a [`Scripts::wait_any`] wait (`Some`), and with what.
+pub type Accept = Box<dyn Fn(&Value) -> Option<Value>>;
 
 struct Task {
     scope: ScopeId,
@@ -391,8 +405,25 @@ impl Scripts {
                 .flat_map(|(_, ids)| ids.clone())
                 .collect()
         };
-        for id in ids {
-            self.unsubscribe(id);
+        for id in &ids {
+            self.unsubscribe(*id);
+        }
+        // A task waiting for an event of something gone ends (Kotlin's `sub.gone`).
+        let ended: Vec<u64> = self
+            .0
+            .state
+            .borrow()
+            .tasks
+            .iter()
+            .filter(|(_, t)| match &t.waiting {
+                Some(Wait::Event { sub, .. }) => ids.contains(sub),
+                Some(Wait::Any(subs)) => subs.iter().any(|s| ids.contains(s)),
+                _ => false,
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        for task in ended {
+            self.end_task(task);
         }
     }
 
@@ -1111,6 +1142,11 @@ impl Scripts {
             Some(Wait::Event { sub, .. }) => {
                 self.unsubscribe(sub);
             }
+            Some(Wait::Any(subs)) => {
+                for sub in subs.iter() {
+                    self.unsubscribe(*sub);
+                }
+            }
             // Nothing is delivered now (the work itself goes on).
             Some(Wait::Async(wait)) => {
                 netherforge_api::pending::cancel(self.host().lua(), wait);
@@ -1129,6 +1165,7 @@ impl Scripts {
                 (Some(Wait::Event { sub: a, .. }), Wait::Event { sub: b, .. }) => a == b,
                 (Some(Wait::Until { .. }), Wait::Until { .. }) => true,
                 (Some(Wait::Async(a)), Wait::Async(b)) => a == b,
+                (Some(Wait::Any(a)), Wait::Any(b)) => Rc::ptr_eq(a, b),
                 _ => false,
             }
         };
@@ -1194,9 +1231,94 @@ impl Scripts {
         }
     }
 
+    /// Subscribes task `task` to each of `waits`, in the task's scope, without waiting yet: the first event
+    /// one accepts once [`Scripts::await_subs`] has the task wait wakes it with what `accept` gave. Events
+    /// before that are ignored, so whatever the caller does in between (opening a dialog) can't wake it.
+    pub fn wait_any(&self, task: u64, waits: Vec<Awaited>) -> ApiResult<Rc<[u64]>> {
+        let Some(scope) = self.0.state.borrow().tasks.get(&task).map(|t| t.scope) else {
+            return Err(err("the task is gone"));
+        };
+        let lua = self.host().lua().clone();
+        let mut subs = Vec::with_capacity(waits.len());
+        for wait in waits {
+            let scripts = Rc::downgrade(&self.0);
+            let accept = wait.accept;
+            let waker = lua
+                .create_function(move |_, ev: Value| {
+                    let Some(inner) = scripts.upgrade() else {
+                        return Ok(());
+                    };
+                    let scripts = Scripts(inner);
+                    let subs = match scripts
+                        .0
+                        .state
+                        .borrow()
+                        .tasks
+                        .get(&task)
+                        .and_then(|t| t.waiting.as_ref())
+                    {
+                        Some(Wait::Any(subs)) => subs.clone(),
+                        _ => return Ok(()),
+                    };
+                    let Some(value) = accept(&ev) else {
+                        return Ok(());
+                    };
+                    for sub in subs.iter() {
+                        scripts.unsubscribe(*sub);
+                    }
+                    scripts.wake(task, Wait::Any(subs), MultiValue::from_vec(vec![value]));
+                    Ok(())
+                })
+                .map_err(lua_err);
+            let sub = match waker
+                .and_then(|w| self.subscribe(scope, wait.target, wait.event, w, None, false))
+            {
+                Ok(sub) => sub,
+                Err(e) => {
+                    for sub in subs {
+                        self.unsubscribe(sub);
+                    }
+                    return Err(e);
+                }
+            };
+            subs.push(sub.id as u64);
+        }
+        Ok(subs.into())
+    }
+
+    /// Task `task` waits on `subs` from [`Scripts::wait_any`].
+    pub fn await_subs(&self, task: u64, subs: Rc<[u64]>) {
+        if let Some(t) = self.0.state.borrow_mut().tasks.get_mut(&task) {
+            t.waiting = Some(Wait::Any(subs));
+        }
+    }
+
+    /// Drops `subs` from [`Scripts::wait_any`] without waiting on them.
+    pub fn release_subs(&self, subs: &[u64]) {
+        for sub in subs {
+            self.unsubscribe(*sub);
+        }
+    }
+
+    /// Task `task` gets `nil` back at the tick boundary: a wait that's over before it began (the dialog
+    /// couldn't be opened).
+    pub fn wake_with_nil(&self, task: u64) -> ApiResult<()> {
+        let scope = self.0.state.borrow().tasks.get(&task).map(|t| t.scope);
+        let wait = netherforge_api::pending::defer(
+            self.host().lua(),
+            scope,
+            Box::pin(async { Ok(None) }),
+            netherforge_api::codec::Opt(netherforge_api::codec::Int),
+            None,
+        )
+        .map_err(lua_err)?;
+        self.wait_on(task, wait);
+        Ok(())
+    }
+
     /// The task whose own code is running, for a wait called `what`; an error
     /// anywhere else.
-    fn running_task(&self, what: &str) -> ApiResult<u64> {
+    pub fn running_task(&self, what: &str) -> ApiResult<u64> {
         let host = self.host();
         let lua = host.lua();
         let current = lua.current_thread();
@@ -1571,16 +1693,37 @@ impl NfApi for Scripts {
 
 /// What `nf.wait_for` waits on: a handle, or a scope's `nf` (a table).
 fn target_of(
-    _: &Lua,
+    lua: &Lua,
     handle: unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable,
 ) -> ApiResult<Target> {
     use unions::CentityOrNodeOrEntityOrWorldOrProjectBlockOrMenuOrSlotOrMenuTemplateOrDialogOrButtonOrProjectItemOrEffectOrHttpStreamOrWebSocketOrOAuthFlowOrWasmProcessOrNetworkChannelOrNetworkMapOrCutsceneOrScreenOrPlaybackOrTable as U;
-    match handle {
-        U::Table(_) => Ok(Target::Nf),
-        _ => Err(err(
-            "nf.wait_for on a handle isn't on the Rust runtime yet: only nf",
-        )),
-    }
+    let handle = match handle {
+        U::Table(_) => return Ok(Target::Nf),
+        U::Centity(h) => Handle::Centity(h),
+        U::Node(h) => Handle::Node(h),
+        U::Entity(h) => Handle::Entity(h),
+        U::World(h) => Handle::World(h),
+        U::ProjectBlock(h) => Handle::ProjectBlock(h),
+        U::Menu(h) => Handle::Menu(h),
+        U::Slot(h) => Handle::Slot(h),
+        U::MenuTemplate(h) => Handle::MenuTemplate(h),
+        U::Dialog(h) => Handle::Dialog(h),
+        U::Button(h) => Handle::Button(h),
+        U::ProjectItem(h) => Handle::ProjectItem(h),
+        U::Effect(h) => Handle::Effect(h),
+        U::HttpStream(h) => Handle::HttpStream(h),
+        U::WebSocket(h) => Handle::WebSocket(h),
+        U::OAuthFlow(h) => Handle::OAuthFlow(h),
+        U::WasmProcess(h) => Handle::WasmProcess(h),
+        U::NetworkChannel(h) => Handle::NetworkChannel(h),
+        U::NetworkMap(h) => Handle::NetworkMap(h),
+        U::Cutscene(h) => Handle::Cutscene(h),
+        U::Screen(h) => Handle::Screen(h),
+        U::Playback(h) => Handle::Playback(h),
+    };
+    netherforge_api::handle::push_any(lua, &handle)
+        .map(Target::Handle)
+        .map_err(|e| err(e.to_string()))
 }
 
 impl SubscriptionApi for Scripts {

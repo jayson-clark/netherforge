@@ -33,7 +33,7 @@ use netherforge_platform::{DialogAnswers, DialogSpec, Dynamic, Platform, PlayerR
 
 use crate::Room;
 use crate::events::{parse_uuid, uuid_text};
-use crate::scripts::Target;
+use crate::scripts::{Accept, Awaited, Target};
 use crate::session::{Define, Service};
 use crate::shared::Shared;
 use crate::world::GameContext;
@@ -854,7 +854,64 @@ impl DialogApi for GameContext {
         player: handles::Player,
         options: Option<shapes::DialogOpenOptions>,
     ) -> ApiResult<Waiting> {
-        <Unported as DialogApi>::ask(&Unported, this, player, options)
+        let task = self.scripts.running_task("dialog:ask")?;
+        if self.dialog_file(&this.id).is_none() {
+            self.scripts.wake_with_nil(task)?;
+            return Ok(Waiting);
+        }
+        let lua = self.scripts.host().lua().clone();
+        let push =
+            |h: Handle| netherforge_api::handle::push_any(&lua, &h).map_err(|e| err(e.to_string()));
+        let dialog = push(Handle::Dialog(this.clone()))?;
+        let who = push(Handle::Player(player.clone()))?.to_pointer();
+        // Their own press, close or quit: `answer` says whether the event is what's handed back.
+        let theirs = move |answer: bool| -> Accept {
+            Box::new(move |ev: &Value| {
+                let Value::Table(ev) = ev else { return None };
+                match ev.get::<Value>("player") {
+                    Ok(Value::UserData(p)) if p.to_pointer() == who => Some(if answer {
+                        Value::Table(ev.clone())
+                    } else {
+                        Value::Nil
+                    }),
+                    _ => None,
+                }
+            })
+        };
+        // Listens before it opens the dialog, so nothing the opening causes is missed; a close the opening
+        // causes for this same dialog comes before the wait, so it's ignored.
+        let subs = self.scripts.wait_any(
+            task,
+            vec![
+                Awaited {
+                    target: Target::Handle(dialog.clone()),
+                    event: "press".into(),
+                    accept: theirs(true),
+                },
+                Awaited {
+                    target: Target::Handle(dialog),
+                    event: "close".into(),
+                    accept: theirs(false),
+                },
+                Awaited {
+                    target: Target::Nf,
+                    event: "player_quit".into(),
+                    accept: theirs(false),
+                },
+            ],
+        )?;
+        match self.open_dialog_for(&this.id, &player, options) {
+            Ok(true) => self.scripts.await_subs(task, subs),
+            Ok(false) => {
+                self.scripts.release_subs(&subs);
+                self.scripts.wake_with_nil(task)?;
+            }
+            Err(e) => {
+                self.scripts.release_subs(&subs);
+                return Err(e);
+            }
+        }
+        Ok(Waiting)
     }
     fn on(
         &self,

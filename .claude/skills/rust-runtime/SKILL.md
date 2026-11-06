@@ -673,8 +673,13 @@ someone offline) and keeps its `context` until the dialog leaves their screen. A
 server's registry, for custom clicks: format's `startup::dialog::click`) can be pressed or left; anything else
 is logged and ignored. A close the server causes (another dialog over it, `close_dialog`) raises `close` here.
 Reload restarts the script and drops handlers on buttons the new file lacks; a deleted dialog drops all. The
-Platform spec's `DialogFile` is format's. Not yet: `nf.dialogs.create`, `dialog:ask` (it waits for `wait_for`
-on a handle), the runtime's own dialogs (`/nf settings`).
+Platform spec's `DialogFile` is format's. `dialog:ask` is the prelude's `wait_events` in Rust
+(`Scripts::wait_any`): it subscribes to the dialog's `press` and `close` and `nf`'s `player_quit` (each
+accepting only that player's), opens the dialog, and only then has the task wait, so a close the opening causes
+isn't heard. A dialog that's gone or couldn't be opened hands back `nil` at the tick boundary (a ready async
+wait), not at once: a binding that waits can't also return. A wait whose target goes (`drop_target`) ends its
+task, `nf.wait_for`'s too, as Kotlin's `sub.gone` does. `nf.wait_for` takes any handle. Not yet:
+`nf.dialogs.create`, the runtime's own dialogs (`/nf settings`).
 
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 
