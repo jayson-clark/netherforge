@@ -660,8 +660,17 @@ slots (`storage_changed`), and a storage's viewers are those windows'. A slot's 
 id through `Names`, kinds and `#tags`, `wearable`, `max`) refuses a click with a stack it doesn't take, or moves
 only what fits and hands the rest back on the cursor; a locked window's click is cancelled before any of that, as
 Kotlin's. `shift_into` moves a shift-click from below into a storage's bound slots, partial stacks first, offering
-each slot the stack as a click. Not yet: templates (`nf.menus.create`), a rule's `property` (project items'
-properties), and skins in titles (with the built resource pack: until then a skin draws nothing).
+each slot the stack as a click.
+
+**Templates** (`nf.menus.create`): `definitions::menu_from` reads the table but `slots` as JSON (the file's keys,
+strictly), `slots` by hand (Lua's integer keys aren't JSON's; each read by `ItemCodec` and `items::from_value`),
+writes its names as the server knows them and checks it with format's `document::load`, then format's `compile`
+gives the `CompiledMenu`, its id a UUID. A `Template` belongs to its scope (`MenusService::scope_released`) or
+goes with `template:remove()`; either way its windows retire and its handlers go. `open_menu(template)` makes a
+new window every time (`Window::template`), whose events go on to the template after the window: slot → menu →
+template → `nf` for clicks, menu → template → `nf` for open and close, menu → template for drags. Its `kind()` is
+nil. Not yet: a rule's `property` (project items' properties), and skins in titles (with the built resource pack:
+until then a skin draws nothing).
 
 ## Dialogs (`crates/runtime/src/dialog.rs`)
 

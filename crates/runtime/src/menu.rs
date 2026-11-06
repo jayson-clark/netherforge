@@ -26,7 +26,6 @@ use mlua::{Function, Value};
 use netherforge_api::api::{MenuApi, MenuTemplateApi, NfMenusApi, SlotApi};
 use netherforge_api::codec::Codec;
 use netherforge_api::handles::{self, Handle};
-use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, Caller, codecs, shapes, unions, values};
 use netherforge_format::kind::menu::CompiledMenu;
 use netherforge_luau::ScopeId;
@@ -69,6 +68,8 @@ pub struct Window {
     rules: HashMap<i32, Rule>,
     /// Where a shift-click from the player's own inventory goes, when a script set it.
     shift_into: Option<ShiftInto>,
+    /// The template it was made from, by id; none for a window of a menu file.
+    template: Option<String>,
 }
 
 impl Window {
@@ -151,11 +152,36 @@ pub struct Menus {
     scripts: BTreeMap<String, String>,
     windows: IndexMap<String, Window>,
     retiring: Vec<String>,
+    /// Menus scripts made (`nf.menus.create`), by id: no file and no script.
+    templates: IndexMap<String, Template>,
+}
+
+/// A menu a script made, until it's removed or the scope that made it stops.
+pub struct Template {
+    pub definition: Rc<CompiledMenu>,
+    pub owner: ScopeId,
 }
 
 impl Menus {
     fn by_uuid(&self, uuid: Uuid) -> Option<&Window> {
         self.windows.values().find(|w| w.uuid == uuid)
+    }
+
+    /// The template window `id` was made from, while it's there.
+    fn template_of(&self, id: &str) -> Option<handles::MenuTemplate> {
+        let template = self.windows.get(id)?.template.clone()?;
+        self.templates
+            .contains_key(&template)
+            .then_some(handles::MenuTemplate { id: template })
+    }
+
+    /// Every open window made from template `id`.
+    fn windows_of(&self, id: &str) -> Vec<String> {
+        self.windows
+            .values()
+            .filter(|w| w.template.as_deref() == Some(id))
+            .map(|w| w.id.clone())
+            .collect()
     }
 
     /// The skin's characters, then the words. Until the built pack is here a skin draws nothing.
@@ -193,6 +219,7 @@ impl MenuContext {
             worn: HashMap::new(),
             rules: HashMap::new(),
             shift_into: None,
+            template: None,
         };
         self.shared
             .menus
@@ -357,7 +384,7 @@ impl MenuContext {
         delivered.cancelled
     }
 
-    /// `open` or `close` on the window, then on `nf`.
+    /// `open` or `close` on the window, then on its template, then on `nf`.
     fn menu_event(&self, id: &str, player: &PlayerRef, own: &str, server: &str) {
         let context = self
             .shared
@@ -367,6 +394,7 @@ impl MenuContext {
             .get(id)
             .map_or(Value::Nil, |w| w.context.clone());
         let menu = handles::Menu { id: id.to_owned() };
+        let template = self.shared.menus.borrow().template_of(id);
         let payload = shapes::MenuEvent {
             player: handles::Player {
                 id: uuid_text(&player.uuid),
@@ -374,12 +402,12 @@ impl MenuContext {
             menu: menu.clone(),
             context,
         };
-        self.raise(
-            &[(own, Some(Handle::Menu(menu))), (server, None)],
-            codecs::MenuEvent,
-            payload,
-            false,
-        );
+        let mut path = vec![(own, Some(Handle::Menu(menu)))];
+        if let Some(template) = template {
+            path.push((own, Some(Handle::MenuTemplate(template))));
+        }
+        path.push((server, None));
+        self.raise(&path, codecs::MenuEvent, payload, false);
     }
 
     /// Opens `menu` for `player`: the shared window, or a new one of their own (its script's body has run before
@@ -406,6 +434,59 @@ impl MenuContext {
         }
         self.menu_event(&id, player, "open", "menu_open");
         Some(id)
+    }
+
+    /// Opens a new window of template `template` for `player`, holding `context`. None when the template or the
+    /// player is gone.
+    pub fn open_template(
+        &self,
+        template: &str,
+        player: &PlayerRef,
+        context: Value,
+    ) -> Option<String> {
+        let definition = self
+            .shared
+            .menus
+            .borrow()
+            .templates
+            .get(template)?
+            .definition
+            .clone();
+        let id = uuid_text(&crate::centity::saving::random_uuid());
+        let uuid = self.make(id.clone(), definition, context, false);
+        if let Some(window) = self.shared.menus.borrow_mut().windows.get_mut(&id) {
+            window.template = Some(template.to_owned());
+        }
+        if !self.platform().menus().open(uuid, player.uuid) {
+            self.retire(&id);
+            return None;
+        }
+        self.menu_event(&id, player, "open", "menu_open");
+        Some(id)
+    }
+
+    /// Takes template `id` away: its windows retire and the handlers on it go.
+    pub fn remove_template(&self, id: &str) -> bool {
+        if self
+            .shared
+            .menus
+            .borrow_mut()
+            .templates
+            .shift_remove(id)
+            .is_none()
+        {
+            return false;
+        }
+        let windows = self.shared.menus.borrow().windows_of(id);
+        for window in windows {
+            self.retire(&window);
+        }
+        if let Some(target) = self.target(Handle::MenuTemplate(handles::MenuTemplate {
+            id: id.to_owned(),
+        })) {
+            self.scripts.drop_target(&target);
+        }
+        true
     }
 
     /// A click while window `uuid` was open, along its path: the clicked slot, the window, then `nf`. True means
@@ -464,6 +545,9 @@ impl MenuContext {
             path.push(("click", Some(Handle::Slot(slot))));
         }
         path.push(("click", Some(Handle::Menu(menu))));
+        if let Some(template) = self.shared.menus.borrow().template_of(&id) {
+            path.push(("click", Some(Handle::MenuTemplate(template))));
+        }
         path.push(("menu_click", None));
         if shifting {
             // The runtime moves the stack itself, slot by slot, so the game's own move is always stopped.
@@ -1035,8 +1119,13 @@ impl MenuContext {
             cursor_item: cursor.map(crate::items::to_value),
             context,
         };
+        let template = self.shared.menus.borrow().template_of(&menu.id);
+        let mut path = vec![("drag", Some(Handle::Menu(menu)))];
+        if let Some(template) = template {
+            path.push(("drag", Some(Handle::MenuTemplate(template))));
+        }
         self.raise(
-            &[("drag", Some(Handle::Menu(menu)))],
+            &path,
             codecs::MenuDragEvent,
             payload,
             locked && !slots.is_empty() && !all_bound,
@@ -1241,6 +1330,7 @@ impl MenuContext {
             let menus = shared.menus.try_borrow().ok()?;
             match handle {
                 Handle::Menu(m) => Some(menus.windows.contains_key(&m.id)),
+                Handle::MenuTemplate(t) => Some(menus.templates.contains_key(&t.id)),
                 Handle::Slot(s) => Some(
                     menus
                         .windows
@@ -1288,10 +1378,20 @@ impl GameContext {
         menu: unions::StringOrMenuTemplate,
         options: Option<shapes::MenuOpenOptions>,
     ) -> ApiResult<Option<handles::Menu>> {
-        let unions::StringOrMenuTemplate::String(name) = menu else {
-            return Err(err(
-                "Player:open_menu with a template isn't on the Rust runtime yet",
-            ));
+        let name = match menu {
+            unions::StringOrMenuTemplate::String(name) => name,
+            unions::StringOrMenuTemplate::MenuTemplate(template) => {
+                let context = options.map_or(Value::Nil, |o| o.context);
+                let Some(online) =
+                    parse_uuid(&player.id).and_then(|id| self.shared.platform.players().get(id))
+                else {
+                    return Ok(None);
+                };
+                return Ok(self
+                    .menus()
+                    .open_template(&template.id, &online, context)
+                    .map(|id| handles::Menu { id }));
+            }
         };
         let menu = self.with_names(|names| names.resource("menu", &name))?;
         let definition = self.shared.menus.borrow().definitions.get(&menu).cloned();
@@ -1354,8 +1454,22 @@ impl NfMenusApi for GameContext {
             .map(|_| handles::Menu { id }))
     }
 
+    /// Checked as `menu.json` is, then kept for the calling scope until it stops or the template is removed.
     fn create(&self, caller: &Caller, definition: Value) -> ApiResult<handles::MenuTemplate> {
-        <Unported as NfMenusApi>::create(&Unported, caller, definition)
+        let game = self.shared.platform.game();
+        let file = self.with_names(|names| {
+            crate::definitions::menu_from(&self.scripts.host(), &definition, game, names)
+        })?;
+        let id = uuid_text(&crate::centity::saving::random_uuid());
+        let definition = Rc::new(netherforge_format::kind::menu::compile(&id, &file));
+        self.shared.menus.borrow_mut().templates.insert(
+            id.clone(),
+            Template {
+                definition,
+                owner: caller.scope,
+            },
+        );
+        Ok(handles::MenuTemplate { id })
     }
 }
 
@@ -1363,13 +1477,17 @@ impl MenuApi for GameContext {
     fn id(&self, this: &handles::Menu) -> ApiResult<String> {
         Ok(self.with_names(|names| names.spell(&this.id)))
     }
+    /// A window from a template has no folder, so no kind (`template()` says where it came from).
     fn kind(&self, this: &handles::Menu) -> ApiResult<Option<String>> {
         Ok(self
-            .window(&this.id, |w| w.definition.id.clone())
+            .window(&this.id, |w| {
+                w.template.is_none().then(|| w.definition.id.clone())
+            })
+            .flatten()
             .map(|k| self.with_names(|names| names.spell(&k))))
     }
-    fn template(&self, _: &handles::Menu) -> ApiResult<Option<handles::MenuTemplate>> {
-        Ok(None)
+    fn template(&self, this: &handles::Menu) -> ApiResult<Option<handles::MenuTemplate>> {
+        Ok(self.shared.menus.borrow().template_of(&this.id))
     }
     fn exists(&self, this: &handles::Menu) -> ApiResult<bool> {
         Ok(self.window(&this.id, |_| ()).is_some())
@@ -2025,36 +2143,77 @@ impl GameContext {
     }
 }
 
+impl GameContext {
+    fn template<R>(&self, id: &str, f: impl FnOnce(&CompiledMenu) -> R) -> Option<R> {
+        self.shared
+            .menus
+            .borrow()
+            .templates
+            .get(id)
+            .map(|t| f(&t.definition))
+    }
+}
+
 impl MenuTemplateApi for GameContext {
     fn id(&self, this: &handles::MenuTemplate) -> ApiResult<String> {
         Ok(this.id.clone())
     }
-    fn exists(&self, _: &handles::MenuTemplate) -> ApiResult<bool> {
-        Ok(false)
+    fn exists(&self, this: &handles::MenuTemplate) -> ApiResult<bool> {
+        Ok(self.template(&this.id, |_| ()).is_some())
     }
     fn size(&self, this: &handles::MenuTemplate) -> ApiResult<i64> {
-        <Unported as MenuTemplateApi>::size(&Unported, this)
+        Ok(self.template(&this.id, |d| i64::from(d.size)).unwrap_or(0))
     }
     fn rows(&self, this: &handles::MenuTemplate) -> ApiResult<i64> {
-        <Unported as MenuTemplateApi>::rows(&Unported, this)
+        Ok(self.template(&this.id, |d| i64::from(d.rows)).unwrap_or(0))
     }
     fn title(&self, this: &handles::MenuTemplate) -> ApiResult<Option<values::Text>> {
-        <Unported as MenuTemplateApi>::title(&Unported, this)
+        Ok(self
+            .template(&this.id, |d| d.title.clone().map(values::Text))
+            .flatten())
     }
     fn skin(&self, this: &handles::MenuTemplate) -> ApiResult<Option<String>> {
-        <Unported as MenuTemplateApi>::skin(&Unported, this)
+        Ok(self.template(&this.id, |d| d.skin.clone()).flatten())
     }
     fn is_locked(&self, this: &handles::MenuTemplate) -> ApiResult<bool> {
-        <Unported as MenuTemplateApi>::is_locked(&Unported, this)
+        Ok(self.template(&this.id, |d| d.locked).unwrap_or(false))
     }
     fn item(&self, this: &handles::MenuTemplate, index: i64) -> ApiResult<Option<values::Item>> {
-        <Unported as MenuTemplateApi>::item(&Unported, this, index)
+        let Some(size) = self.template(&this.id, |d| d.size) else {
+            return Ok(None);
+        };
+        if !(0..i64::from(size)).contains(&index) {
+            return Err(err(format!(
+                "slot {index} is outside this template's windows: they have {size} slots, 0 to {}",
+                size - 1
+            )));
+        }
+        Ok(self
+            .template(&this.id, |d| {
+                d.slot(index as i32)
+                    .and_then(|s| s.item.clone())
+                    .map(|def| {
+                        crate::items::to_value(&ItemData {
+                            def,
+                            raw: None,
+                            look: None,
+                        })
+                    })
+            })
+            .flatten())
     }
     fn windows(&self, this: &handles::MenuTemplate) -> ApiResult<Vec<handles::Menu>> {
-        <Unported as MenuTemplateApi>::windows(&Unported, this)
+        Ok(self
+            .shared
+            .menus
+            .borrow()
+            .windows_of(&this.id)
+            .into_iter()
+            .map(|id| handles::Menu { id })
+            .collect())
     }
     fn remove(&self, this: &handles::MenuTemplate) -> ApiResult<bool> {
-        <Unported as MenuTemplateApi>::remove(&Unported, this)
+        Ok(self.menus().remove_template(&this.id))
     }
     fn on(
         &self,
@@ -2063,7 +2222,14 @@ impl MenuTemplateApi for GameContext {
         handler: Function,
         options: Option<shapes::EventOptions>,
     ) -> ApiResult<handles::Subscription> {
-        <Unported as MenuTemplateApi>::on(&Unported, this, event, handler, options)
+        self.subscribe_on(
+            Handle::MenuTemplate(this.clone()),
+            "MenuTemplate:on",
+            event,
+            handler,
+            options,
+            false,
+        )
     }
     fn once(
         &self,
@@ -2071,7 +2237,14 @@ impl MenuTemplateApi for GameContext {
         event: String,
         handler: Function,
     ) -> ApiResult<handles::Subscription> {
-        <Unported as MenuTemplateApi>::once(&Unported, this, event, handler)
+        self.subscribe_on(
+            Handle::MenuTemplate(this.clone()),
+            "MenuTemplate:once",
+            event,
+            handler,
+            None,
+            true,
+        )
     }
 }
 
@@ -2160,6 +2333,29 @@ impl Service for MenusService {
                 scripts,
             }
             .player_left(player.uuid);
+        }
+    }
+
+    /// The templates a stopped scope made go, and their windows.
+    fn scope_released(&self, scopes: &[ScopeId]) {
+        let Some(scripts) = self.scripts.borrow().clone() else {
+            return;
+        };
+        let doomed: Vec<String> = self
+            .shared
+            .menus
+            .borrow()
+            .templates
+            .iter()
+            .filter(|(_, t)| scopes.contains(&t.owner))
+            .map(|(id, _)| id.clone())
+            .collect();
+        let context = MenuContext {
+            shared: self.shared.clone(),
+            scripts,
+        };
+        for id in doomed {
+            context.remove_template(&id);
         }
     }
 

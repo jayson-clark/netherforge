@@ -3538,3 +3538,88 @@ print(pcall(nf.dialogs.create, { title = "x", columns = 3 }))
     server.tick();
     assert_eq!(printed(&platform.take()), ["named\tRex"]);
 }
+
+#[test]
+fn a_menu_template_opens_windows_whose_events_reach_it() {
+    use netherforge_platform::PlatformEvents;
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/made/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local t = nf.menus.create({ rows = 2, title = "Made", locked = true, slots = { [3] = { kind = "minecraft:emerald", count = 2 } } })
+print(t:exists(), t:size(), t:rows(), t:title(), t:is_locked(), t:item(3).kind, t:item(3).count, t:item(4))
+print(pcall(t.item, t, 18))
+t:on("click", function(e) print("template", e.index, e.cancelled, e.context) end)
+t:on("open", function(e) print("opened", e.context) end)
+local menu = alex:open_menu(t, { context = "c" })
+print(menu:kind(), menu:template() == t, #t:windows(), menu:item(3).kind)
+nf.on("menu_click", function(e) print("nf", e.index) end)
+print(pcall(nf.menus.create, { rows = 2, colour = "red" }))
+print(pcall(nf.menus.create, { rows = 9 }))
+print(pcall(nf.menus.create, { slots = { [40] = { kind = "minecraft:stone" } } }))
+print(pcall(nf.menus.create, { slots = { [1] = { kind = "minecraft:stone", colour = 1 } } }))
+_G.t = t
+nf.task(function() nf.wait(1); print("removed", t:remove(), t:exists(), menu:exists(), t:remove()) end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    let lines = printed(&calls);
+    assert_eq!(
+        lines[..4],
+        [
+            "true\t18\t2\tMade\ttrue\tminecraft:emerald\t2\tnil",
+            "false\tmodules/made/init.lua:5: slot 18 is outside this template's windows: they have 18 slots, 0 to 17",
+            "opened\tc",
+            "nil\ttrue\t1\tminecraft:emerald",
+        ],
+        "{lines:?}"
+    );
+    assert_eq!(
+        lines[4..7],
+        [
+            "false\tmodules/made/init.lua:11: unknown field 'definition.colour' (fields: locked, rows, skin, slots, title, type)",
+            "false\tmodules/made/init.lua:12: definition.rows: A chest has 1 to 6 rows",
+            "false\tmodules/made/init.lua:13: definition.slots[40]: This menu has 27 slots (0–26)",
+        ],
+        "{lines:?}"
+    );
+    assert!(lines[7].starts_with(
+        "false\tmodules/made/init.lua:14: bad argument 'definition.slots[1]' (unknown field `colour`"
+    ));
+    let window = Uuid(*platform.windows.borrow().keys().next().expect("a window"));
+    let alex = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let click = netherforge_platform::MenuClick {
+        player: alex,
+        slot: Some(3),
+        top: true,
+        click: "left".into(),
+        hotbar: None,
+        item: None,
+        cursor: None,
+        moves_items: true,
+    };
+    assert!(server.menu_clicked(window, click));
+    server.tick();
+    let after = platform.take();
+    assert_eq!(
+        printed(&after),
+        [
+            "template\t3\ttrue\tc",
+            "nf\t3",
+            "removed\ttrue\tfalse\tfalse\tfalse"
+        ],
+        "{after:?}"
+    );
+    assert!(after.contains(&"window destroyed".to_owned()), "{after:?}");
+}

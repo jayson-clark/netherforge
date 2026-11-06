@@ -10,6 +10,7 @@ use netherforge_api::{ApiError, ApiResult, values};
 use netherforge_format::document::{Context, load};
 use netherforge_format::game::GameData;
 use netherforge_format::kind::dialog::DialogFile;
+use netherforge_format::kind::menu::MenuFile;
 use netherforge_format::problem::{Problem, Severity};
 use netherforge_luau::Host;
 use serde_json::{Map, Value as Json};
@@ -77,6 +78,88 @@ pub fn dialog_from(
         &lua_path,
     )?;
     checked::<DialogFile>(&named, game)
+}
+
+/// The keys a menu definition takes, all one word, so its Lua and file spellings agree.
+const MENU_KEYS: &[&str] = &["type", "rows", "title", "skin", "locked", "slots"];
+
+/// The menu `definition` describes, validated as `menu.json` would be. `slots` (items by slot number) are read
+/// as every other item a script hands over.
+pub fn menu_from(
+    host: &Host,
+    definition: &Value,
+    game: &dyn GameData,
+    names: &Calling,
+) -> ApiResult<MenuFile> {
+    const LIKE: &str =
+        "{ type = \"chest\", rows = 3, slots = { [13] = { kind = \"minecraft:emerald\" } } }";
+    let Value::Table(table) = definition else {
+        return Err(err(format!("{ROOT} must be a table, like {LIKE}")));
+    };
+    let lua = host.lua();
+    // Everything but `slots` as JSON; `slots` by hand, since a Lua table's integer keys aren't JSON's.
+    let rest = lua.create_table().map_err(|e| err(e.to_string()))?;
+    let mut slots = Map::new();
+    for pair in table.pairs::<Value, Value>() {
+        let (key, value) = pair.map_err(|e| err(e.to_string()))?;
+        if matches!(&key, Value::String(k) if k.as_bytes() == b"slots") {
+            slots = slots_of(lua, value, game)?;
+        } else {
+            rest.raw_set(key, value).map_err(|e| err(e.to_string()))?;
+        }
+    }
+    let mut fields = table_json(host, &Value::Table(rest), LIKE)?;
+    if let Some(key) = fields.keys().find(|k| !MENU_KEYS.contains(&k.as_str())) {
+        let mut known = MENU_KEYS.to_vec();
+        known.sort_unstable();
+        return Err(err(format!(
+            "unknown field '{ROOT}.{key}' (fields: {})",
+            known.join(", ")
+        )));
+    }
+    if !slots.is_empty() {
+        fields.insert("slots".into(), Json::Object(slots));
+    }
+    let named = names.definition(
+        netherforge_format::schema::of::<MenuFile>(),
+        &Json::Object(fields),
+        &lua_path,
+    )?;
+    checked::<MenuFile>(&named, game)
+}
+
+/// A menu definition's `slots`: items by slot number, as the file writes them (`{ "13": { "item": ... } }`).
+fn slots_of(lua: &mlua::Lua, value: Value, game: &dyn GameData) -> ApiResult<Map<String, Json>> {
+    use netherforge_api::codec::{Codec, ItemCodec};
+    let Value::Table(table) = value else {
+        return Err(err(format!(
+            "bad field '{ROOT}.slots' (a table of items by slot number expected)"
+        )));
+    };
+    let mut slots: Vec<(i64, Json)> = Vec::new();
+    for pair in table.pairs::<Value, Value>() {
+        let (key, item) = pair.map_err(|e| err(e.to_string()))?;
+        let index = match key {
+            Value::Integer(n) => n,
+            Value::Number(n) if n.fract() == 0.0 && n.is_finite() => n as i64,
+            other => {
+                return Err(err(format!(
+                    "bad field '{ROOT}.slots' (its keys are slot numbers, got {})",
+                    netherforge_api::codec::type_name(&other)
+                )));
+            }
+        };
+        let at = format!("{ROOT}.slots[{index}]");
+        let read = ItemCodec.read(lua, item, &at)?;
+        let item = crate::items::from_value(&read, &at, game).map_err(err)?;
+        let def = serde_json::to_value(&item.def).map_err(|e| err(e.to_string()))?;
+        slots.push((index, serde_json::json!({ "item": def })));
+    }
+    slots.sort_by_key(|(i, _)| *i);
+    Ok(slots
+        .into_iter()
+        .map(|(i, slot)| (i.to_string(), slot))
+        .collect())
 }
 
 /// `json`, a file of kind `T`, parsed and validated as the file would be; the first error is the script's.
