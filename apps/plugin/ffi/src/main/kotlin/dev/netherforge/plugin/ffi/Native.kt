@@ -48,7 +48,8 @@ object Native {
             check(it == library) { "the Rust runtime is already loaded from $it" }
             return
         }
-        lookup = SymbolLookup.libraryLookup(library, Arena.global())
+        // An absolute path: a relative one (the plugin folder, `plugins/NetherForge`) doesn't open.
+        lookup = SymbolLookup.libraryLookup(library.toAbsolutePath(), Arena.global())
         nfCall = linker.downcallHandle(symbol("nf_call"), CALL)
         nfRelease = linker.downcallHandle(symbol("nf_release"), FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG))
         val here = MethodHandles.lookup()

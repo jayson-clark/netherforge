@@ -84,6 +84,8 @@ dependencies {
     // Paper's API and the server, Mojang-named; the server brings its own Kotlin-free libraries.
     addProvider("paperweightDevelopmentBundle", adapter.paper.map { "io.papermc.paper:dev-bundle:$it" })
     "implementation"(project(":plugin:paper-common"))
+    // The Rust runtime (`-Dnetherforge.runtime=rust`), through Java 25's foreign function API: 26.x only.
+    if (java >= 25) "implementation"(project(":plugin:ffi"))
     // The bots read and write the bridge's JSON; the plugin jar has kotlinx.serialization already (format's).
     "compileOnly"(rootProject.extensions.getByType<VersionCatalogsExtension>().named("libs").findLibrary("serialization-json").get())
 }

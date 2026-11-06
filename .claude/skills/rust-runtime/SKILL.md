@@ -1631,9 +1631,24 @@ an object registry and a loader written by hand on each side.
   `FakePlatform` (`cargoBuild` builds the library first; `netherforge.ffi.library` names it): a module's
   print, a raised event with its writable field back, a command with the server's sender, a centity's
   displays, a script's error, a panic thrown in the JVM.
-- Gaps: the plugin doesn't use it yet (the adapter still starts the Kotlin runtime), the library isn't
-  in the plugin jar, packages from git (only path dependencies, `Folders`), the placeholder resolver off
-  the main thread, the main world's generator (`getDefaultWorldGenerator`: the terrains' service).
+- **The plugin chooses its runtime** (`ProjectRuntimes` in paper-common, Java 21 so it can't name `:plugin:ffi`):
+  the Kotlin one in every jar, others found as services; `RustRuntimes` (`:plugin:ffi`, which the 26.x adapters
+  carry through the adapter convention) is `-Dnetherforge.runtime=rust` or `runtime: rust` in `config.yml`. The
+  Kotlin runtime stays the default until the integration scenarios pass on Rust. The library is
+  `-Dnetherforge.ffi.library`'s, or the jar's (`META-INF/netherforge/native/<os>-<arch>/`, copied into
+  `<plugin folder>/native/` under its hash: a library can't load from inside a jar), which the build packs only when
+  asked (`-Pnetherforge.native=host`, this machine's release build).
+- **Checked on a real Paper 26.3 server**: a project started, its module ran, a centity spawned and drew, timers
+  ticked, a command answered the console, `/nf reload`, `/nf list` and `/nf scripts` worked, it stopped cleanly and
+  the centity came back from the store after a restart.
+- Findings: `SymbolLookup.libraryLookup` refuses a relative path (the plugin folder is `plugins/NetherForge`), so
+  `Native.load` makes it absolute. **macOS's `strip` (ld-27106) breaks the dylib** ("mis-aligned LINKEDIT string
+  pool"), and a release build strips debug info by default: the jar's build sets `CARGO_PROFILE_RELEASE_STRIP=none`
+  on macOS (the library is about 54 MB then). After `/nf reload` fixed a module, the reload's answer still listed
+  the old body's error: a failure reported before the reload is collected into its outcome (not looked into yet).
+- Gaps: every OS's library in a release jar (the release workflow), packages from git (only path dependencies,
+  `Folders`), the placeholder resolver off the main thread, the main world's generator (`getDefaultWorldGenerator`:
+  the terrains' service), the dev bridge with the editor (configured from the properties, not yet tried for real).
 
 ## Format (`crates/format`)
 

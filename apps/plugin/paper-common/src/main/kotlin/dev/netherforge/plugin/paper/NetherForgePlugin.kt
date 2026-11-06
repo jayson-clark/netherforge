@@ -2,9 +2,7 @@ package dev.netherforge.plugin.paper
 
 import dev.netherforge.plugin.Folia
 import dev.netherforge.plugin.GameDataExport
-import dev.netherforge.plugin.NetherForgeRuntime
 import dev.netherforge.plugin.RuntimeConfig
-import dev.netherforge.plugin.ServerAddress
 import org.bukkit.configuration.ConfigurationSection
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
@@ -39,7 +37,7 @@ class NetherForgePlugin :
     /** This adapter's own: what its Minecraft version does differently. The contract suites' plugin makes its platform with it. */
     val version: PaperVersion by lazy { PaperVersion.load() }
 
-    private var runtime: NetherForgeRuntime? = null
+    private var runtime: ProjectRuntime? = null
     private var platform: PaperPlatform? = null
     private var ticker: BukkitTask? = null
 
@@ -57,19 +55,27 @@ class NetherForgePlugin :
         saveDefaultConfig()
         val settings = config.plain()
         export = GameDataExport.read(settings, server.worldContainer.toPath())
-        val config = RuntimeConfig.read(
-            pluginFolder = dataFolder.toPath(),
-            settings = settings,
-            server = ServerAddress(server.worldContainer.toPath(), server.ip)
-        )
-        if (config == null && export == null) {
-            logger.warning(RuntimeConfig.NO_PROJECT)
+        val chosen = ProjectRuntimes.chosen(settings)
+        val runtimes = ProjectRuntimes.named(chosen, javaClass.classLoader)
+        if (runtimes == null) {
+            logger.severe(
+                "NetherForge has no runtime called \"$chosen\" (-D${ProjectRuntimes.PROPERTY} or config.yml's runtime:): this jar has " +
+                    "the Kotlin runtime, and the 26.x adapters' have the Rust one (\"rust\")"
+            )
+            server.pluginManager.disablePlugin(this)
             return
         }
 
-        val platform = PaperPlatform(this, version)
-        this.platform = platform
-        runtime = config?.let { NetherForgeRuntime(platform, it) }
+        var built: PaperPlatform? = null
+        val platform = { built ?: PaperPlatform(this, version).also { built = it } }
+        runtime = runtimes.create(this, platform, settings)
+        if (runtime == null && export == null) {
+            logger.warning(RuntimeConfig.NO_PROJECT)
+            built?.close()
+            return
+        }
+        this.platform = platform()
+        if (runtimes != ProjectRuntimes.Kotlin) logger.info("Running the project on the ${runtimes.name} runtime")
         server.pluginManager.registerEvents(this, this)
     }
 

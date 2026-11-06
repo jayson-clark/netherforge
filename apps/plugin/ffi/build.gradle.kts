@@ -20,6 +20,9 @@ dependencies {
     // The Platform's Kotlin interfaces and the server's events, and format's types they carry.
     api(project(":plugin:runtime"))
     implementation(libs.serialization.json)
+    // The plugin's runtime choice (ProjectRuntimes), which the 26.x adapters carry this module for.
+    compileOnly(project(":plugin:paper-common"))
+    compileOnly(libs.paper.api)
 
     testImplementation(project(":plugin:testkit"))
     testImplementation(kotlin("test"))
@@ -35,6 +38,38 @@ ktlint {
 }
 
 val repoRoot: File by rootProject.extra
+
+/*
+ * The library in the jar, for this machine only, when the build is asked for it (`-Pnetherforge.native=host`):
+ * a release build, at `META-INF/netherforge/native/<os>-<arch>/`. Without it, a server running the Rust runtime
+ * names a library (-Dnetherforge.ffi.library). Every OS's, for a release, comes with the release workflow.
+ */
+val native = providers.gradleProperty("netherforge.native").orNull
+if (native == "host") {
+    val cargoRelease = tasks.register<Exec>("cargoRelease") {
+        description = "Builds crates/ffi's library, release, for the jar"
+        workingDir = repoRoot
+        commandLine("cargo", "build", "--release", "-p", "netherforge-ffi")
+        // macOS's `strip` (as of ld-27106) leaves a dylib that won't load ("mis-aligned LINKEDIT string pool"), and
+        // a release build strips its debug info by default.
+        if (System.getProperty("os.name").lowercase().contains("mac")) environment("CARGO_PROFILE_RELEASE_STRIP", "none")
+    }
+    val os = System.getProperty("os.name").lowercase()
+    val (folder, file) = when {
+        os.contains("mac") -> "macos" to "libnetherforge_ffi.dylib"
+        os.contains("win") -> "windows" to "netherforge_ffi.dll"
+        else -> "linux" to "libnetherforge_ffi.so"
+    }
+    val arch = when (val a = System.getProperty("os.arch").lowercase()) {
+        "amd64", "x86_64" -> "x86_64"
+        "aarch64", "arm64" -> "aarch64"
+        else -> a
+    }
+    tasks.named<Copy>("processResources") {
+        dependsOn(cargoRelease)
+        from(repoRoot.resolve("target/release/$file")) { into("META-INF/netherforge/native/$folder-$arch") }
+    }
+}
 
 /** The Rust runtime's library, built by cargo for the tests (debug: the release build is the plugin jar's). */
 val cargoBuild = tasks.register<Exec>("cargoBuild") {
