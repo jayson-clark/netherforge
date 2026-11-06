@@ -641,6 +641,22 @@ scoreboard's (a player by name, any other entity by UUID: `scoreboard_entry`). I
 name tags and who's out of whose player list are kept and applied again on join; the session's end undoes all
 three. `entity:team()` is the project's team the entity is in, if any.
 
+## Menus (`crates/runtime/src/menu.rs`)
+
+Kotlin's `Menus` and `MenuImpl` (the menus-and-dialogs skill has the design): a window per opening (UUID id,
+retired the tick after its last viewer closes it) or one shared window per `shared` menu, made at start and named
+by the menu's id. Each window runs its own copy of the menu's script (`Modules::script_with`, `this` the window),
+started once modules run (`after_start`; a window a module's body opens starts its script then, and only once). A
+click goes slot → menu → `nf` (`raise_path`, pre-cancelled for a locked window's item-moving click); a drag to the
+window only; `open` is the runtime's own, `close` the server's. Retiring drops every handler on the window and its
+slots; liveness answers for `Menu` and `Slot` handles. Reload keeps a window of the same shape (contents but for
+slots whose authored item changed; title, skin and lock where the file changed them) and rebuilds and reopens one
+whose shape changed; its script restarts. The Platform spec's `MenuType` is format's.
+
+Not yet (the next slice): slots bound to storages and equipment, slot rules, `shift_into`, `menu_changed`;
+then templates (`nf.menus.create`) and skins in titles (with the built resource pack: until then a skin draws
+nothing and the words show alone).
+
 ## The Platform boundary (`packages/platform`, `crates/platform`)
 
 The roadmap's "describe `Platform` and `PlatformEvents` in a language-neutral spec, and generate

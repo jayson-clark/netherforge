@@ -498,24 +498,42 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
 
     fn resource_pack_status(&self, _player: Uuid, _pack: Uuid, _status: Option<String>) {}
 
-    fn menu_clicked(&self, _window: Uuid, _click: MenuClick) -> bool {
-        false
+    fn menu_clicked(&self, window: Uuid, click: MenuClick) -> bool {
+        let Some(s) = self.open() else { return false };
+        crate::menu::MenuContext {
+            shared: s.session().shared().clone(),
+            scripts: s.room().scripts().clone(),
+        }
+        .click(window, click)
     }
 
     fn menu_dragged(
         &self,
-        _window: Uuid,
-        _player: PlayerRef,
-        _slots: Vec<i32>,
-        _cursor: Option<ItemData>,
-        _own_slots: Vec<i32>,
-        _click: String,
+        window: Uuid,
+        player: PlayerRef,
+        slots: Vec<i32>,
+        cursor: Option<ItemData>,
+        own_slots: Vec<i32>,
+        click: String,
     ) -> bool {
-        false
+        let Some(s) = self.open() else { return false };
+        crate::menu::MenuContext {
+            shared: s.session().shared().clone(),
+            scripts: s.room().scripts().clone(),
+        }
+        .drag(window, &player, &slots, cursor.as_ref(), &own_slots, &click)
     }
 
-    fn menu_closed(&self, _window: Uuid, _player: PlayerRef) {}
+    fn menu_closed(&self, window: Uuid, player: PlayerRef) {
+        let Some(s) = self.open() else { return };
+        crate::menu::MenuContext {
+            shared: s.session().shared().clone(),
+            scripts: s.room().scripts().clone(),
+        }
+        .closed(window, &player);
+    }
 
+    /// For slots bound to storages, which come with the next slice of menus.
     fn menu_changed(&self, _window: Uuid, _slots: Vec<i32>) {}
 
     fn dialog_pressed(

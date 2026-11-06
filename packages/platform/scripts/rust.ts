@@ -40,6 +40,7 @@ const RUST_EXTERNAL: Record<string, { path: string; interface?: boolean }> = {
   SpawnCategory: { path: 'netherforge_format::manifest::SpawnCategory' },
   AttributeOperation: { path: 'netherforge_format::item::AttributeOperation' },
   SpawnData: { path: 'netherforge_format::kind::particle::sample::SpawnData' },
+  MenuType: { path: 'netherforge_format::kind::menu::MenuType' },
   BotState: { path: 'netherforge_format::bridge::BotState' },
   BotPosition: { path: 'netherforge_format::bridge::BotPosition' },
   BotPackAnswer: { path: 'netherforge_format::bridge::BotPackAnswer' },

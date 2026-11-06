@@ -48,6 +48,8 @@ pub struct Shared {
     pub bars: RefCell<crate::bossbar::Bars>,
     /// Teams scripts made, lines under name tags, and who's out of whose player list.
     pub teams: RefCell<crate::team::Teams>,
+    /// Menus' definitions and their open windows.
+    pub menus: RefCell<crate::menu::Menus>,
     /// Natural spawning: its passes, rules and scripts' conditions.
     pub spawner: RefCell<crate::centity::natural::Spawner>,
     /// The pictures scripts hold.
@@ -80,6 +82,7 @@ impl Shared {
             skies: RefCell::default(),
             bars: RefCell::default(),
             teams: RefCell::default(),
+            menus: RefCell::default(),
             centities: RefCell::default(),
             font: RefCell::default(),
             centity_scripts: RefCell::default(),

@@ -7,7 +7,7 @@ use super::*;
 /// What a window looks like: its container, its slot count, and its whole title (skin included) as MiniMessage.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WindowSpec {
-    pub r#type: external::MenuType,
+    pub r#type: netherforge_format::kind::menu::MenuType,
     pub size: i32,
     pub title: String,
 }

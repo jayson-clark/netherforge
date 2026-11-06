@@ -28,6 +28,7 @@ pub mod images;
 pub mod inventory;
 pub mod items;
 pub mod living;
+pub mod menu;
 pub mod modules;
 pub mod names;
 pub mod permissions;
@@ -447,6 +448,30 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_menus(&self) -> &dyn netherforge_api::api::NfMenusApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn menu(&self) -> &dyn netherforge_api::api::MenuApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn slot(&self) -> &dyn netherforge_api::api::SlotApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn menutemplate(&self) -> &dyn netherforge_api::api::MenuTemplateApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
     fn nf_worlds(&self) -> &dyn netherforge_api::api::NfWorldsApi {
         match &self.worlds {
             Some(w) => w,
@@ -487,6 +512,7 @@ impl Room {
         });
         let centities = shared.map(|shared| {
             centity::api::CentityContext::install_liveness(&shared, &scripts);
+            menu::MenuContext::install_liveness(&shared, &scripts);
             centity::api::CentityContext::new(shared, scripts.clone())
         });
         let nf = NfContext {

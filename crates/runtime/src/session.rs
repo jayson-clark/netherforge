@@ -396,6 +396,11 @@ impl<'a> Session<'a> {
         self.shared.schedules.borrow_mut().now = millis;
     }
 
+    /// What its services share with the room's API.
+    pub fn shared(&self) -> &Rc<Shared> {
+        &self.shared
+    }
+
     /// The server it runs on.
     pub fn platform(&self) -> &dyn Platform {
         &*self.platform
@@ -615,6 +620,10 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         Box::new(crate::entity::EntitiesService {
             shared: shared.clone(),
             host: Default::default(),
+        }),
+        Box::new(crate::menu::MenusService {
+            shared: shared.clone(),
+            scripts: Default::default(),
         }),
         Box::new(crate::team::TeamsService {
             shared: shared.clone(),

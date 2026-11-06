@@ -46,7 +46,12 @@ impl netherforge_format::game::GameData for NoFacts {
     }
 }
 
+/// A window the fake holds: its slots and who's looking.
+type FakeWindow = (Vec<Option<netherforge_platform::ItemData>>, Vec<Uuid>);
+
 struct Fake {
+    /// Each open window's slots and viewers, by window.
+    windows: RefCell<BTreeMap<u128, FakeWindow>>,
     /// Alex's inventory: nine slots.
     inventory: RefCell<Vec<Option<netherforge_platform::ItemData>>>,
     /// Each scoreboard team's entries.
@@ -66,6 +71,7 @@ struct Fake {
 impl Default for Fake {
     fn default() -> Fake {
         Fake {
+            windows: RefCell::default(),
             inventory: RefCell::new(vec![None; 9]),
             teams: RefCell::new(BTreeMap::from([
                 ("nf.stale".to_owned(), Vec::new()),
@@ -767,6 +773,67 @@ impl netherforge_platform::FakeInventoryOps for Fake {
     }
 }
 
+impl netherforge_platform::FakeMenuOps for Fake {
+    fn create(&self, window: Uuid, spec: netherforge_platform::WindowSpec) {
+        self.call(format!("window made {} \"{}\"", spec.size, spec.title));
+        self.windows
+            .borrow_mut()
+            .insert(window.0, (vec![None; spec.size as usize], Vec::new()));
+    }
+    fn destroy(&self, window: Uuid) {
+        self.call("window destroyed".into());
+        self.windows.borrow_mut().remove(&window.0);
+    }
+    fn retitle(&self, _: Uuid, title: String) {
+        self.call(format!("window retitled \"{title}\""));
+    }
+    fn item(&self, window: Uuid, slot: i32) -> Option<netherforge_platform::ItemData> {
+        self.windows.borrow().get(&window.0)?.0[slot as usize].clone()
+    }
+    fn set_item(
+        &self,
+        window: Uuid,
+        slot: i32,
+        item: Option<netherforge_platform::ItemData>,
+    ) -> bool {
+        match self.windows.borrow_mut().get_mut(&window.0) {
+            Some((slots, _)) => {
+                slots[slot as usize] = item;
+                true
+            }
+            None => false,
+        }
+    }
+    fn open(&self, window: Uuid, player: Uuid) -> bool {
+        match self.windows.borrow_mut().get_mut(&window.0) {
+            Some((_, viewers)) => {
+                viewers.push(player);
+                true
+            }
+            None => false,
+        }
+    }
+    fn viewers(&self, window: Uuid) -> Vec<Uuid> {
+        self.windows
+            .borrow()
+            .get(&window.0)
+            .map(|w| w.1.clone())
+            .unwrap_or_default()
+    }
+    fn viewing(&self, player: Uuid) -> Option<Uuid> {
+        self.windows
+            .borrow()
+            .iter()
+            .find(|(_, w)| w.1.contains(&player))
+            .map(|(id, _)| Uuid(*id))
+    }
+    fn close(&self, window: Uuid, player: Option<Uuid>) {
+        if let Some((_, viewers)) = self.windows.borrow_mut().get_mut(&window.0) {
+            viewers.retain(|v| player.is_some_and(|p| p != *v));
+        }
+    }
+}
+
 impl netherforge_platform::FakePermissionOps for Fake {
     fn apply(&self, player: Uuid, nodes: std::collections::HashMap<String, bool>) {
         let mut nodes: Vec<String> = nodes.into_iter().map(|(n, v)| format!("{n}={v}")).collect();
@@ -820,6 +887,9 @@ impl FakePlatform for Fake {
         self
     }
     fn inventories(&self) -> &dyn netherforge_platform::InventoryOps {
+        self
+    }
+    fn menus(&self) -> &dyn netherforge_platform::MenuOps {
         self
     }
     fn player_list(&self) -> &dyn netherforge_platform::PlayerListOps {
@@ -3005,4 +3075,96 @@ print(pcall(bag.remove_item, bag, { colour = 1 }))
         ),
         "{lines:?}"
     );
+}
+
+#[test]
+fn a_menu_window_runs_its_script_hears_clicks_and_goes_when_closed() {
+    use netherforge_platform::PlatformEvents;
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let shop = r#"{ "name": "Shop", "rows": 1, "locked": true, "slots": { "4": { "item": { "kind": "minecraft:emerald" } } }, "script": { "file": "script.lua" } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("menus/shop/menu.json", shop),
+        (
+            "menus/shop/script.lua",
+            r#"
+print("window", this:size(), this:title(), this:item(4).kind, this:context())
+this:slot(4):on("click", function(e) print("slot", e.index, e.cancelled, e.context); e:uncancel() end)
+this:on("click", function(e) print("menu", e.index, e.in_menu, e.cancelled) end)
+this:on("close", function(e) print("closed", e.player:name()) end)
+"#,
+        ),
+        (
+            "modules/open/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local menu = alex:open_menu("shop", { context = "gift" })
+print(menu ~= nil, alex:menu() == menu, menu:kind(), pcall(menu.slot, menu, 9))
+nf.on("menu_click", function(e) print("nf", e.index, e.cancelled) end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "window\t9\tShop\tminecraft:emerald\tgift",
+            "true\ttrue\tshop\tfalse\tmodules/open/init.lua:4: slot 9 is outside this window: it has 9 slots, 0 to 8",
+        ]
+    );
+    assert!(
+        calls.contains(&"window made 9 \"Shop\"".to_owned()),
+        "{calls:?}"
+    );
+    let window = Uuid(*platform.windows.borrow().keys().next().expect("a window"));
+    let alex = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let click = |slot: i32, top: bool| netherforge_platform::MenuClick {
+        player: alex.clone(),
+        slot: Some(slot),
+        top,
+        click: "left".into(),
+        hotbar: None,
+        item: None,
+        cursor: None,
+        moves_items: true,
+    };
+    // A locked window's click starts cancelled; the slot's handler lets this one through.
+    assert!(!server.menu_clicked(window, click(4, true)));
+    // A click in the window off that slot stays cancelled; one in their own bag below isn't the window's.
+    assert!(server.menu_clicked(window, click(2, true)));
+    server.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        [
+            "slot\t4\ttrue\tgift",
+            "menu\t4\ttrue\tfalse",
+            "nf\t4\tfalse",
+            "menu\t2\ttrue\ttrue",
+            "nf\t2\ttrue",
+        ]
+    );
+    // They close it: its close, and next tick it's retired with its handlers.
+    platform
+        .windows
+        .borrow_mut()
+        .get_mut(&window.0)
+        .expect("open")
+        .1
+        .clear();
+    server.menu_closed(window, alex.clone());
+    server.tick();
+    let closed = platform.take();
+    assert_eq!(printed(&closed), ["closed\tAlex"]);
+    assert!(
+        closed.contains(&"window destroyed".to_owned()),
+        "{closed:?}"
+    );
+    assert!(!server.menu_clicked(window, click(4, true)));
 }
