@@ -1135,7 +1135,7 @@ Kotlin's `testing/ScriptTests`, `TestHarness`, `NfTestImpl` and the test runner'
 
 Not yet: the runner's executable (the Kotlin `NetherForgeTest` jar stays what `netherforge test` runs until a Rust fake platform, the
 testkit's, exists: the Rust tests' fakes are each test file's own), the game data a run is checked against, `nf.test.shown`'s views
-(the harness's), and bots (`nf.bots` in a test is the bots phase's).
+(the harness's). Bots: see Bots (a test run's are on, and the harness's tick lands their joins).
 
 ## Server-owner settings (`crates/runtime/src/settings.rs`)
 
@@ -1152,6 +1152,38 @@ Kotlin's `interop/` and `NfEconomyImpl`/`NfPlaceholdersImpl`: `nf.economy` (Vaul
 The declared plugins the server lacks are `runtime.plugin-missing`, looked at as the session starts, on the first tick and on any
 tick after `plugins_changed`. The Platform takes a placeholder resolver as an `Rc`, so it's asked on the main thread only; answering
 other threads from the last answer (Kotlin's resolver did it itself) is the adapter glue's job.
+
+## Bots (`crates/runtime/src/bots.rs`)
+
+Kotlin's `bots/ScriptBots`, `api/BotImpl.kt` and the runtime's half of `bridge/BotsBridge.kt`; the plugin-bots skill is the
+design. The bot itself (its connection, the client's half, movement, `BotScreen`) stays Mojang-named code in paper-internals:
+the runtime reaches it only through the Platform's `BotOps`, which the spec already had whole (its records are format's
+`bridge::Bot*`), so nothing in `packages/platform` changed.
+
+- **`ScriptBots`** (`Shared::bots`): the owner's `bots:` (`session::Config::bots`, `BotsConfig`: off, `max` 20), the bots scripts
+  joined by lowercase name (joining ones count towards `max`), each owned by its scope (`BotsService::scope_released` makes them
+  leave, `stop` makes every one leave), and the namespaces whose manifest declares `requires.bots`, which are
+  `runtime.bots-disabled` while the owner has bots off. A test run's bots are on whatever the config says (Kotlin's runner left
+  them off, so a test of a project with bots couldn't join one).
+- **The Platform's callbacks become futures** (`Answer`, a slot the callback fills, polled at the tick boundary). `did` is
+  Kotlin's: the Platform calls an instant action's `done` at once, so whether it failed is known as `act` returns; a walk and a
+  mine are `Pending`. The Rust `BotOps` can't throw, so "no such bot" comes through `done` too, and `leave` answers from
+  `list()` whether the bot was online before leaving it.
+- **A `Player` handle becomes a `Bot` lazily.** Kotlin classed every player handle by asking `BotOps.isBot`; the Rust port
+  doesn't ask per push. The API crate's handle `__index`, on a method its class lacks, asks `Runtime::refine` when other
+  classes extend the class (Kotlin's prelude's refining `__index`), and `HandleOf::read` does the same for an argument handed
+  out as a class above the one wanted. The runtime's `refine` is `Shared::class_of_id` (Kotlin's `entityHandle(id)`): a bot
+  online, a player, the server's entity info, a player who has played here, else an `Entity`. So an `Entity` handle given
+  while its entity was unloaded becomes its `Mob` too. Handles `nf.bots` gives are `Bot`s from the start.
+- **The bridge's half** (`BotsContext::bridge_aim`, `bridge_state`, reached through `Session::bots`): where an `interact` or
+  `attack` naming a centity's node aims (`CentityContext::aim`: the node's interaction entity and its box's middle) with
+  Kotlin's refusals word for word, and which centity and node a bot's target is (`CentityContext::click_target`, the same
+  `pick` a click uses). There's no bridge server in Rust yet: `bots/join`, `bots/act`, `bots/state`... are the bridge phase's,
+  which calls these and forwards the rest to `BotOps` unchanged (the bridge's bots aren't held to `bots:`).
+
+Not yet: a bot leaving during a reload or as the session stops goes out while the session is borrowed mutably, so a quit the
+Platform raises synchronously then isn't heard (Paper handles a disconnect at the connection's next tick, after it); the
+bridge's extension itself; a Rust testkit `FakeBots` (each test file's fake has its own few lines of bots).
 
 ## Project items (`crates/runtime/src/project_items.rs`)
 
