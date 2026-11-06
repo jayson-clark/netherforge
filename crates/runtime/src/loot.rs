@@ -428,7 +428,7 @@ impl Service for LootService {
         let mut next = running(project);
         let present: BTreeSet<String> = project
             .project
-            .everywhere(KIND)
+            .present(KIND)
             .into_iter()
             .map(|(id, _)| id)
             .collect();

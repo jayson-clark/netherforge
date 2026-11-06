@@ -81,6 +81,11 @@ pub trait ProjectSource {
     fn files(&self) -> &BTreeSet<String>;
     /// A file's text, if it's there.
     fn read(&self, path: &str) -> Option<String>;
+    /// A file's bytes, if it's there and this source reads bytes (a picture to copy into a built pack): its text's,
+    /// unless the source says otherwise.
+    fn bytes(&self, path: &str) -> Option<Vec<u8>> {
+        self.read(path).map(String::into_bytes)
+    }
     /// Whether `image` reads pixels at all: then `None` for a texture that's there means it can't be read.
     fn reads_images(&self) -> bool {
         false
@@ -183,6 +188,13 @@ impl ProjectSource for Folder {
             return None;
         }
         std::fs::read_to_string(self.root.join(path)).ok()
+    }
+
+    fn bytes(&self, path: &str) -> Option<Vec<u8>> {
+        if !self.files.contains(path) {
+            return None;
+        }
+        std::fs::read(self.root.join(path)).ok()
     }
 }
 
@@ -520,10 +532,15 @@ fn build_packs(
     source: &dyn ProjectSource,
 ) -> BTreeMap<String, crate::kind::resource_pack::compiled::CompiledResourcePack> {
     use crate::kind::resource_pack::{compiled, sounds, under};
-    let packs = project.everywhere("resource_pack");
-    if packs.iter().any(|(_, r)| r.errors) {
+    // A pack whose file doesn't read has errors too: none are built, so a server keeps its last good build.
+    if project
+        .present("resource_pack")
+        .iter()
+        .any(|(_, r)| r.errors || !r.read)
+    {
         return BTreeMap::new();
     }
+    let packs = project.everywhere("resource_pack");
     let inputs: BTreeMap<String, compiled::PackInput> = packs
         .iter()
         .filter_map(|(name, resource)| {
@@ -639,6 +656,26 @@ impl<'a> Project<'a> {
                 .resources
                 .iter()
                 .filter(|r| r.read && r.found.kind.id == kind)
+                .map(move |r| (crate::kinds::package_path(namespace, &r.found.id), r))
+        });
+        own.chain(theirs).collect()
+    }
+
+    /// Every resource of `kind` there is, the packages' included, whether or not it read: one whose file doesn't
+    /// parse is still there (Kotlin's `everywhere`), so it can keep its place (a block's carrier state) or keep
+    /// the last good build running (a resource pack). By `everywhere`'s names.
+    pub fn present(&self, kind: &str) -> Vec<(String, &Resource)> {
+        let own = self
+            .resources
+            .iter()
+            .filter(|r| r.found.kind.id == kind)
+            .map(|r| (r.found.id.clone(), r));
+        let theirs = self.packages.iter().flat_map(|(namespace, package)| {
+            package
+                .project
+                .resources
+                .iter()
+                .filter(|r| r.found.kind.id == kind)
                 .map(move |r| (crate::kinds::package_path(namespace, &r.found.id), r))
         });
         own.chain(theirs).collect()

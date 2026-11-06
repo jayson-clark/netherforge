@@ -862,7 +862,7 @@ impl ParticlesService {
 fn files(project: &Define) -> (BTreeMap<String, Option<String>>, BTreeMap<String, String>) {
     let mut files = BTreeMap::new();
     let mut paths = BTreeMap::new();
-    for (id, resource) in project.project.everywhere(KIND) {
+    for (id, resource) in project.project.present(KIND) {
         let problem = resource
             .problems
             .iter()

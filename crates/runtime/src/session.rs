@@ -65,6 +65,9 @@ pub trait Service {
     fn unload(&self, _room: &Room, _kind: &str, _ids: &BTreeSet<String>) {}
 
     fn reload(&self, _room: &Room, _kind: &str, _ids: &BTreeSet<String>, _project: &Define) {}
+    /// After a reload: the kinds of resource it changed (`vanilla` for `client/vanilla.json`), for a service that
+    /// follows kinds it doesn't reload itself (the resource pack draws the project's blocks).
+    fn reloaded(&self, _room: &Room, _kinds: &BTreeSet<&str>, _project: &Define) {}
     /// Stops it: everything it holds goes.
     fn stop(&self, _room: &Room, _platform: &dyn Platform) {}
 
@@ -539,6 +542,13 @@ impl<'a> Session<'a> {
                 service.reload(room, kind, ids, &define);
             }
         }
+        let mut kinds: BTreeSet<&str> = by_kind.keys().copied().collect();
+        if changed.iter().any(|p| p == "client/vanilla.json") {
+            kinds.insert("vanilla");
+        }
+        for service in &self.services {
+            service.reloaded(room, &kinds, &define);
+        }
         self.released();
         self.report();
     }
@@ -642,6 +652,11 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         Box::new(crate::data::DataService {
             shared: shared.clone(),
             host: Default::default(),
+        }),
+        // Before anything that draws with the pack: menus' skins and scripts' glyphs read the build.
+        Box::new(crate::packs::PacksService {
+            shared: shared.clone(),
+            problems: Default::default(),
         }),
         Box::new(crate::data::SessionTablesService {
             shared: shared.clone(),

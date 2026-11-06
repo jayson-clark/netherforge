@@ -108,8 +108,8 @@ impl VideoSound {
 /// Whether `project` puts anything in the resource pack: a pack, a block (the states it's held as are drawn by
 /// the pack) or a video's sound, the packages' included.
 pub fn needed(project: &Project) -> bool {
-    !project.everywhere("resource_pack").is_empty()
-        || !project.everywhere("block").is_empty()
+    !project.present("resource_pack").is_empty()
+        || !project.present("block").is_empty()
         || !VideoSound::of(project).is_empty()
 }
 

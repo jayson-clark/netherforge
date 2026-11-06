@@ -15,8 +15,8 @@
 //! it takes and how many; `shift_into` moves a shift-click from below into a storage's bound slots, offering it to
 //! each slot's handlers.
 //!
-//! Not yet: `nf.menus.create` and templates; a rule's `property` (project items' properties); skins in titles (they wait for the built resource pack: a skin draws
-//! nothing until then, and the words show on their own).
+//! Not yet: a rule's `property` (project items' properties). Skins in titles are drawn from the built pack: before
+//! there is one, the words show on their own.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::rc::{Rc, Weak};
@@ -184,9 +184,28 @@ impl Menus {
             .collect()
     }
 
-    /// The skin's characters, then the words. Until the built pack is here a skin draws nothing.
-    fn compose_title(window: &Window) -> String {
-        window.title.clone().unwrap_or_default()
+    /// The skin's characters, then the words. A window type that centres its title (a dispenser) moves the
+    /// zero-wide skin prefix along with the words, so the skin is shifted back by as much: known exactly from the
+    /// words' width in the default font (none for no words), and left where it falls when that can't be measured.
+    fn compose_title(shared: &Shared, window: &Window) -> String {
+        let words = window.title.clone().unwrap_or_default();
+        let Some(skin) = &window.skin else {
+            return words;
+        };
+        let width = if words.is_empty() {
+            Some(0)
+        } else {
+            let font = shared.font.borrow();
+            font.as_ref()
+                .and_then(|f| netherforge_format::text::TextWidth::of_font(f).measure(&words))
+        };
+        let shift = width.map_or(0, |w| window.definition.kind.skin_shift(w));
+        let skin = shared
+            .packs
+            .borrow()
+            .skin_title(skin, shift)
+            .unwrap_or_default();
+        skin + &words
     }
 }
 
@@ -240,7 +259,7 @@ impl MenuContext {
             let Some(window) = menus.windows.get_mut(id) else {
                 return;
             };
-            window.pushed_title = Menus::compose_title(window);
+            window.pushed_title = Menus::compose_title(&self.shared, window);
             let spec = WindowSpec {
                 r#type: window.definition.kind,
                 size: window.definition.size,
@@ -1159,7 +1178,7 @@ impl MenuContext {
             let Some(window) = menus.windows.get_mut(id) else {
                 return;
             };
-            let title = Menus::compose_title(window);
+            let title = Menus::compose_title(&self.shared, window);
             if title == window.pushed_title {
                 return;
             }

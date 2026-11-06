@@ -777,11 +777,25 @@ impl NfTextApi for UtilitiesContext {
     fn strip(&self, _: &Caller, text: values::Text) -> ApiResult<String> {
         Ok(self.shared.platform.text().strip(text.0))
     }
-    fn glyph(&self, caller: &Caller, glyph: String) -> ApiResult<Option<String>> {
-        <Unported as NfTextApi>::glyph(&Unported, caller, glyph)
+    /// The character a glyph of the project's packs (or a package's it may name) is drawn as; nil while the pack
+    /// isn't built.
+    fn glyph(&self, _: &Caller, glyph: String) -> ApiResult<Option<String>> {
+        let game = crate::world::GameContext::new(self.shared.clone(), self.scripts.clone());
+        let key = game.with_names(|names| {
+            names.look(netherforge_format::reference::RefKind::Glyph, &glyph)
+        })?;
+        Ok(self.shared.packs.borrow().glyph(&key))
     }
-    fn space(&self, caller: &Caller, pixels: i64) -> ApiResult<Option<String>> {
-        <Unported as NfTextApi>::space(&Unported, caller, pixels)
+    /// Characters that move the cursor `pixels` (held to what the pack's space font reaches); nil while there's no
+    /// built pack to draw them.
+    fn space(&self, _: &Caller, pixels: i64) -> ApiResult<Option<String>> {
+        if self.shared.packs.borrow().built.is_none() {
+            return Ok(None);
+        }
+        let most = i64::from(netherforge_format::kind::resource_pack::fonts::MAX_OFFSET);
+        Ok(Some(
+            netherforge_format::kind::resource_pack::fonts::offset(pixels.clamp(-most, most) as i32),
+        ))
     }
     /// Its width in the project's default font; none when the project has no font facts.
     fn width(&self, _: &Caller, text: values::Text) -> ApiResult<Option<i64>> {

@@ -40,6 +40,7 @@ pub mod loot;
 pub mod menu;
 pub mod modules;
 pub mod names;
+pub mod packs;
 pub mod particles;
 pub mod permissions;
 pub mod player;

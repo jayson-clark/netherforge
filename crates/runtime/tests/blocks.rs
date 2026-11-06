@@ -32,6 +32,9 @@ impl GameData for Game {
     fn particle(&self, _: &str) -> Option<netherforge_format::game::ParticleData> {
         None
     }
+    fn resource_pack_format(&self) -> Option<[i32; 2]> {
+        Some([75, 0])
+    }
     fn block_properties(&self, id: &str) -> Option<BTreeMap<String, Vec<String>>> {
         let list = |v: &[&str]| v.iter().map(|s| s.to_string()).collect();
         Some(if id == "minecraft:note_block" {

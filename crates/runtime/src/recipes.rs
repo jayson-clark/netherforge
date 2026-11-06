@@ -709,7 +709,7 @@ pub struct RecipesService {
 fn paths(project: &Define) -> BTreeMap<String, String> {
     project
         .project
-        .everywhere(KIND)
+        .present(KIND)
         .into_iter()
         .map(|(id, resource)| {
             let found = &resource.found;

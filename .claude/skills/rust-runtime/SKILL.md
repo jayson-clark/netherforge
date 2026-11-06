@@ -707,6 +707,28 @@ the files' with a UUID id and an owner scope, gone with that scope (`scope_relea
 `nf.dialogs.get` and `open_dialog` by name find only the project's. Not yet: the runtime's own dialogs
 (`/nf settings`).
 
+## Resource packs (`crates/runtime/src/packs.rs`)
+
+Kotlin's `Packs` (the build half), `PackZip` and `PackService`: format's `build::build` over every compiled pack but
+the `onDemand` ones (each of those zipped on its own), the project's files read through `ProjectSource::bytes` (new,
+a package's from its own source), zipped by `packs::zip` (entries in path order, one fixed DOS date, deflated at the
+default level, UTF-8 names, no extras: written by hand on `flate2` and `crc32fast`, so the same files always make
+the same SHA-1). The build lives in `Shared::packs`, so a full restart within the session keeps it, and a pack with
+errors (or one whose `pack.json` doesn't parse) keeps the last good build and its characters. The pack format is
+`GameData::resource_pack_format` (new; the bundle's `pack_format`): none is a `runtime.pack-format` problem. It's
+rebuilt when a pack changes, and after a reload that changed blocks, videos or `client/vanilla.json`
+(`Service::reloaded`, new: every service hears the kinds a reload changed). What reads it: `nf.text.glyph`/`space`,
+skins in menu titles (shifted for a centred title by the words' width), and the glyph lookups the adapter's text
+will ask for (`text_glyph`, `glyph_advance`, `glyph_char_advance`).
+
+**`Project::present(kind)`** (format) is every resource of a kind whether it read or not, Kotlin's `everywhere`:
+format's `everywhere` leaves out a file that doesn't parse, which made a broken `pack.json` invisible (the other packs
+built without it). The pack build and `build::needed`, the blocks' plan, and the "is the file still there" checks of
+particles, loot and recipes reloads use it.
+
+Not yet (the next slice): serving and sending the zips (the plugin's HTTP server, an owner's URL, an S3 store with
+the HTTP client), players' statuses, `onDemand` pushes, `nf.packs`, the player's pack functions; then the HUD.
+
 ## Files (`crates/runtime/src/files.rs`)
 
 Kotlin's `ScriptFiles`, `FileImpl` and `NfFilesImpl` on `std::fs`: a `File` handle's key is `<namespace>/<path>`, the

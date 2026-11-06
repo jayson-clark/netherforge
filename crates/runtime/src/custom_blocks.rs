@@ -2039,7 +2039,7 @@ fn define(shared: &Shared, project: &Define) {
     let mut carriers_of = BTreeMap::new();
     let mut rotations = BTreeMap::new();
     let mut paths = BTreeMap::new();
-    for (id, resource) in project.project.everywhere(KIND) {
+    for (id, resource) in project.project.present(KIND) {
         let found = &resource.found;
         let folder = found.kind.location_of(&found.id, &found.group);
         let folder = match netherforge_format::kinds::split_package(&id) {

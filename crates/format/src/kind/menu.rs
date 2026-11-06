@@ -14,6 +14,10 @@ use crate::script::{self, ScriptDef};
 pub const FILE_NAME: &str = "menu.json";
 pub const DEFAULT_ROWS: i32 = 3;
 pub const MAX_ROWS: i32 = 6;
+/// Every container screen a menu may be is this many GUI pixels wide.
+pub const WINDOW_WIDTH: i32 = 176;
+/// Where a title that isn't centred starts, from the window's left edge.
+pub const TITLE_X: i32 = 8;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -75,6 +79,22 @@ impl MenuType {
             self,
             MenuType::Dispenser | MenuType::Dropper | MenuType::Crafter
         )
+    }
+
+    /// Where the title starts, in pixels from the window's left edge, when its words are `words_width` wide:
+    /// `TITLE_X`, or centred on `WINDOW_WIDTH` the way the game centres it (integer division, as the client does).
+    pub fn title_x(self, words_width: i32) -> i32 {
+        if self.centres_title() {
+            (WINDOW_WIDTH - words_width) / 2
+        } else {
+            TITLE_X
+        }
+    }
+
+    /// How far a skin must move so it lands where it would on a window whose title starts at `TITLE_X`: 0 unless
+    /// the title is centred, which moves the zero-wide skin prefix along with the words.
+    pub fn skin_shift(self, words_width: i32) -> i32 {
+        TITLE_X - self.title_x(words_width)
     }
 
     /// How many slots a type always has (a chest's depend on its rows).
