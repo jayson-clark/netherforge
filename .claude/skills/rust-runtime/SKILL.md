@@ -726,8 +726,17 @@ format's `everywhere` leaves out a file that doesn't parse, which made a broken 
 built without it). The pack build and `build::needed`, the blocks' plan, and the "is the file still there" checks of
 particles, loot and recipes reloads use it.
 
-Not yet (the next slice): serving and sending the zips (the plugin's HTTP server, an owner's URL, an S3 store with
-the HTTP client), players' statuses, `onDemand` pushes, `nf.packs`, the player's pack functions; then the HUD.
+**Delivery** (Kotlin's `Packs`' other half and `PackServer`): the plugin's HTTP server is `std::net` (`PackServer`: a
+thread accepting, one per request, `GET`/`HEAD /<sha1>.zip` from the current and previous build of each pack it
+serves, 404 and 405 otherwise), started on the first build at `PackConfig`'s bind and port (0 picks one), the URL its
+address or `public_url`. An owner's `external_url` is sent instead, with `resource-pack.zip` written to `state_dir`
+for them. A player gets the pack as scripts start and as they join, again only when its hash changed (the first
+send replaces whatever else they had); `onDemand` packs are pushed and popped by scripts (`player:push_resource_pack`,
+an error for a pack that isn't `onDemand`) and resent when rebuilt. Ids are Java's `UUID.nameUUIDFromBytes` (MD5,
+`md-5`). What a client says (`PlatformEvents::resource_pack_status`) is kept for our packs only and raised as the
+player's `resource_pack_status`, then `nf`'s. `nf.packs.rebuild` reads the packs again from disk at the end of the
+tick (`Session::rebuild_packs`, from `ServerEvents::tick` once nothing runs). `Player` is whole now. Not yet: an S3
+store (with the HTTP client), what the network knows a player loaded, `PackConfig` read from `config.yml`.
 
 ## Files (`crates/runtime/src/files.rs`)
 

@@ -5,18 +5,24 @@
 //! into a zip of their own, for scripts to push.
 //!
 //! The build lives in `Shared`, which outlives a full restart of the session's project, so a reload that changes
-//! nothing changes no hash. Serving and sending the zips (the plugin's HTTP server, an owner's URL, an S3 store) come
-//! with the next slice.
+//! nothing changes no hash, and what each player's client was sent and said is kept with it. Players fetch a zip
+//! from the plugin's own HTTP server (`PackServer`) at `<base>/<sha1>.zip`, or from a URL the server owner serves it
+//! at (the plugin writes `resource-pack.zip` for them); they get it as they join and again only when the hash has
+//! changed. Not yet: an S3 store (it waits for the HTTP client), and what the network knows a player loaded.
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::io::Write as _;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::io::{Read as _, Write as _};
+use std::net::{TcpListener, TcpStream};
+use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use netherforge_format::Problem;
 use netherforge_format::kind::resource_pack::build::{self, Entry, VideoSound};
 use netherforge_format::kind::resource_pack::compiled::CompiledResourcePack;
 use netherforge_format::reference::{RefKind, ResourceKey, resolve_any};
-use netherforge_platform::Platform;
+use netherforge_platform::{PackOffer, Platform, Uuid};
 use sha1::Digest as _;
 
 use crate::Room;
@@ -93,17 +99,202 @@ pub fn sha1_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// One build: the zip and its hash.
+/// One build: the zip, its hash and where players fetch it (none when packs aren't delivered).
 #[derive(Clone, Debug)]
 pub struct Built {
-    pub bytes: Rc<Vec<u8>>,
+    pub bytes: Arc<Vec<u8>>,
     pub sha1: String,
+    pub url: Option<String>,
 }
 
-/// The pack as last built, and what scripts and menus read of it.
+/// Where the resource pack is served from (`resource-pack:` in `config.yml`).
+#[derive(Clone, Debug)]
+pub struct PackConfig {
+    /// Off: nothing is sent to players (the pack is still built, so glyphs and skins still resolve).
+    pub enabled: bool,
+    /// The address the built-in server listens on.
+    pub bind: String,
+    /// Its port; 0 picks a free one.
+    pub port: u16,
+    /// The base URL players fetch from, when it isn't `http://<bind>:<port>` (a public host name, a proxy).
+    pub public_url: Option<String>,
+    /// Serve it yourself from this URL: the plugin writes `resource-pack.zip` to its folder and sends this with its hash.
+    pub external_url: Option<String>,
+    /// Players who decline it are disconnected.
+    pub required: bool,
+    /// MiniMessage shown on the client's prompt.
+    pub prompt: Option<String>,
+    /// Where `resource-pack.zip` is written for an owner who serves it.
+    pub state_dir: Option<PathBuf>,
+}
+
+impl Default for PackConfig {
+    fn default() -> PackConfig {
+        PackConfig {
+            enabled: true,
+            bind: "127.0.0.1".into(),
+            port: 0,
+            public_url: None,
+            external_url: None,
+            required: false,
+            prompt: None,
+            state_dir: None,
+        }
+    }
+}
+
+/// What the game says of a pack it has loaded.
+pub const LOADED: &str = "loaded";
+
+/// Java's `UUID.nameUUIDFromBytes`: a version 3 UUID, MD5 of the bytes.
+fn name_uuid(bytes: &[u8]) -> Uuid {
+    use md5::Digest as _;
+    let mut hash: [u8; 16] = md5::Md5::digest(bytes).into();
+    hash[6] = (hash[6] & 0x0f) | 0x30;
+    hash[8] = (hash[8] & 0x3f) | 0x80;
+    Uuid(u128::from_be_bytes(hash))
+}
+
+/// One pack per server, sent under one id, so a new one replaces the old on the client.
+pub fn pack_id() -> Uuid {
+    name_uuid(b"netherforge:resource-pack")
+}
+
+/// The id `onDemand` pack `name` is sent under, so a rebuild replaces it on the client and popping finds it.
+pub fn on_demand_id(name: &str) -> Uuid {
+    name_uuid(format!("netherforge:resource-pack:{name}").as_bytes())
+}
+
+type Served = Arc<Mutex<BTreeMap<String, Vec<(String, Arc<Vec<u8>>)>>>>;
+
+/// The plugin's own HTTP server (Kotlin's `PackServer`): serving each pack at `GET /<sha1>.zip`, from a thread of
+/// its own and one per request. It keeps the current build and the one before it of each pack it serves, so a
+/// player who started downloading just before a rebuild still gets their bytes. Web routes come with `nf.web`.
+pub struct PackServer {
+    pub host: String,
+    pub port: u16,
+    packs: Served,
+    stopping: Arc<AtomicBool>,
+}
+
+impl PackServer {
+    pub fn start(bind: &str, port: u16) -> std::io::Result<PackServer> {
+        let listener = TcpListener::bind((bind, port))?;
+        let address = listener.local_addr()?;
+        let host = if address.ip().is_unspecified() {
+            "127.0.0.1".to_owned()
+        } else {
+            address.ip().to_string()
+        };
+        let packs: Served = Arc::default();
+        let stopping = Arc::new(AtomicBool::new(false));
+        let (served, stop) = (packs.clone(), stopping.clone());
+        std::thread::Builder::new()
+            .name("NetherForge HTTP server".into())
+            .spawn(move || {
+                for stream in listener.incoming() {
+                    if stop.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    let Ok(stream) = stream else { continue };
+                    let served = served.clone();
+                    let _ = std::thread::Builder::new()
+                        .name("NetherForge HTTP request".into())
+                        .spawn(move || answer(stream, &served));
+                }
+            })?;
+        Ok(PackServer {
+            host,
+            port: address.port(),
+            packs,
+            stopping,
+        })
+    }
+
+    /// Serves `bytes` as pack `name`'s current build (`""`: the project's), keeping the one before it.
+    pub fn serve(&self, sha1: &str, bytes: Arc<Vec<u8>>, name: &str) {
+        let mut packs = self.packs.lock().expect("not poisoned");
+        let builds = packs.entry(name.to_owned()).or_default();
+        builds.retain(|(s, _)| s != sha1);
+        builds.insert(0, (sha1.to_owned(), bytes));
+        builds.truncate(2);
+    }
+}
+
+impl Drop for PackServer {
+    fn drop(&mut self) {
+        self.stopping.store(true, Ordering::SeqCst);
+        // Wakes the accepting thread so it sees it's stopping.
+        let _ = TcpStream::connect((self.host.as_str(), self.port));
+    }
+}
+
+/// One request: a pack's bytes, or 404 (405 for a method that isn't GET or HEAD).
+fn answer(mut stream: TcpStream, served: &Served) {
+    let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(10)));
+    let mut request = Vec::new();
+    let mut buffer = [0u8; 1024];
+    while !request.windows(4).any(|w| w == b"\r\n\r\n") && request.len() < 16 * 1024 {
+        match stream.read(&mut buffer) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => request.extend_from_slice(&buffer[..n]),
+        }
+    }
+    let text = String::from_utf8_lossy(&request);
+    let mut line = text.lines().next().unwrap_or_default().split(' ');
+    let (method, path) = (
+        line.next().unwrap_or_default(),
+        line.next().unwrap_or_default(),
+    );
+    let name = path.strip_prefix('/').and_then(|p| p.strip_suffix(".zip"));
+    let bytes = name
+        .filter(|n| n.len() == 40 && n.bytes().all(|b| b.is_ascii_hexdigit()))
+        .and_then(|sha1| {
+            let packs = served.lock().ok()?;
+            packs.values().find_map(|builds| {
+                builds
+                    .iter()
+                    .find(|(s, _)| s == sha1)
+                    .map(|(_, b)| b.clone())
+            })
+        });
+    let head = |status: &str, length: Option<usize>| {
+        let length = length.map_or(String::new(), |l| {
+            format!("Content-Type: application/zip\r\nContent-Length: {l}\r\n")
+        });
+        format!("HTTP/1.1 {status}\r\n{length}Connection: close\r\n\r\n")
+    };
+    let _ = match (method, bytes) {
+        ("GET" | "HEAD", None) => stream.write_all(head("404 Not Found", Some(0)).as_bytes()),
+        ("GET", Some(bytes)) => stream
+            .write_all(head("200 OK", Some(bytes.len())).as_bytes())
+            .and_then(|()| stream.write_all(&bytes)),
+        ("HEAD", Some(bytes)) => stream.write_all(head("200 OK", Some(bytes.len())).as_bytes()),
+        _ => stream.write_all(head("405 Method Not Allowed", Some(0)).as_bytes()),
+    };
+    let _ = stream.flush();
+}
+
+/// The pack as last built, what scripts and menus read of it, and what each player's client was sent and said.
 #[derive(Default)]
 pub struct Packs {
+    pub config: PackConfig,
+    server: Option<PackServer>,
+    /// Whether the server couldn't start: said once.
+    server_failed: bool,
     pub built: Option<Built>,
+    /// Every pack the tree has, by the name the server knows it by, built or not.
+    pub pack_files: BTreeSet<String>,
+    /// The packs whose file says `onDemand`, built or not.
+    pub on_demand_files: BTreeSet<String>,
+    /// The project's pack's hash each online player was sent.
+    sent: HashMap<Uuid, String>,
+    /// The `onDemand` packs pushed to each online player, and the hash each was sent at.
+    pushed: HashMap<Uuid, BTreeMap<String, String>>,
+    /// What each online player's game said last about each of our packs, by the pack's id.
+    statuses: HashMap<Uuid, HashMap<Uuid, String>>,
+    /// Asked for by `nf.packs.rebuild`: the packs are read again at the end of the tick.
+    pub wanted: bool,
     /// Each `onDemand` pack's own build, by the pack's name as the server knows it (`featured`, `library:featured`).
     pub on_demand: BTreeMap<String, Built>,
     compiled: BTreeMap<String, CompiledResourcePack>,
@@ -122,6 +313,20 @@ impl Packs {
         let loaded = project.project;
         self.home = Some(loaded.namespace().to_owned());
         self.reported_glyphs.clear();
+        self.pack_files = loaded
+            .present("resource_pack")
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect();
+        self.on_demand_files = loaded
+            .present("resource_pack")
+            .into_iter()
+            .filter(|(_, r)| {
+                r.model::<netherforge_format::kind::resource_pack::ResourcePackFile>()
+                    .is_some_and(|m| m.on_demand == Some(true))
+            })
+            .map(|(name, _)| name)
+            .collect();
         if !build::needed(loaded) {
             self.compiled.clear();
             self.glyph_chars = None;
@@ -153,8 +358,10 @@ impl Packs {
             .unwrap_or_else(|| "NetherForge".into());
         let plan = blocks_plan(platform, project);
         let videos = VideoSound::of(loaded);
+        // Its own copy: publishing a zip changes what's served while the packs are walked.
+        let compiled = loaded.compiled_resource_packs.clone();
         let (separate, joined): (Vec<&CompiledResourcePack>, Vec<&CompiledResourcePack>) =
-            self.compiled.values().partition(|p| p.on_demand);
+            compiled.values().partition(|p| p.on_demand);
         let read = |path: &str| read_bytes(project, path);
         let size = |path: &str| read(path).and_then(|b| png_size(&b));
         let bytes = zip(&files(
@@ -186,13 +393,15 @@ impl Packs {
                 .get(&pack.key)
                 .filter(|b| b.sha1 == sha1)
                 .cloned();
-            on_demand.insert(
-                pack.key.clone(),
-                kept.unwrap_or(Built {
-                    bytes: Rc::new(own),
-                    sha1,
-                }),
-            );
+            let built = match kept {
+                Some(kept) => kept,
+                None => {
+                    let bytes = Arc::new(own);
+                    let url = self.publish(platform, &bytes, &sha1, &pack.key);
+                    Built { bytes, sha1, url }
+                }
+            };
+            on_demand.insert(pack.key.clone(), built);
         }
         self.on_demand = on_demand;
         let sha1 = sha1_hex(&bytes);
@@ -204,11 +413,207 @@ impl Packs {
             joined.len(),
             bytes.len()
         ));
-        self.built = Some(Built {
-            bytes: Rc::new(bytes),
-            sha1,
-        });
+        let bytes = Arc::new(bytes);
+        let url = self.publish(platform, &bytes, &sha1, "");
+        self.built = Some(Built { bytes, sha1, url });
         Vec::new()
+    }
+
+    /// Makes `bytes` fetchable and answers the URL, or none when packs aren't delivered. `name` is an `onDemand`
+    /// pack's, which only the plugin's own server can serve (an owner's URL is for the project's one zip).
+    fn publish(
+        &mut self,
+        platform: &dyn Platform,
+        bytes: &Arc<Vec<u8>>,
+        sha1: &str,
+        name: &str,
+    ) -> Option<String> {
+        if !self.config.enabled {
+            return None;
+        }
+        if name.is_empty()
+            && let Some(url) = self.config.external_url.clone()
+        {
+            // The owner serves it: give them the file to upload.
+            if let Some(dir) = &self.config.state_dir {
+                let file = dir.join("resource-pack.zip");
+                let temp = dir.join("resource-pack.zip.tmp");
+                let written = std::fs::create_dir_all(dir)
+                    .and_then(|()| std::fs::write(&temp, bytes.as_slice()))
+                    .and_then(|()| std::fs::rename(&temp, &file));
+                if let Err(e) = written {
+                    platform
+                        .log()
+                        .error(format!("Couldn't write {}: {e}", file.display()), None);
+                }
+            }
+            return Some(url);
+        }
+        let public = self.config.public_url.clone();
+        let server = self.listener(platform)?;
+        server.serve(sha1, bytes.clone(), name);
+        let base = public.unwrap_or_else(|| format!("http://{}:{}", server.host, server.port));
+        Some(format!("{}/{sha1}.zip", base.trim_end_matches('/')))
+    }
+
+    /// The plugin's HTTP server, started if it isn't yet; none when it couldn't start (said once).
+    pub fn listener(&mut self, platform: &dyn Platform) -> Option<&PackServer> {
+        if self.server.is_none() && !self.server_failed {
+            match PackServer::start(&self.config.bind, self.config.port) {
+                Ok(server) => self.server = Some(server),
+                Err(e) => {
+                    self.server_failed = true;
+                    platform.log().error(
+                        format!(
+                            "Couldn't start NetherForge's HTTP server on {}:{}: {e}",
+                            self.config.bind, self.config.port
+                        ),
+                        None,
+                    );
+                }
+            }
+        }
+        self.server.as_ref()
+    }
+
+    /// Sends the current pack to `player` unless they already have this one. The first send takes every other pack
+    /// they have off (what another server of a network sent); later ones replace only the project's.
+    pub fn send(&mut self, platform: &dyn Platform, player: Uuid) -> bool {
+        let Some(pack) = &self.built else {
+            return false;
+        };
+        let Some(url) = pack.url.clone() else {
+            return false;
+        };
+        if self.sent.get(&player) == Some(&pack.sha1) {
+            return false;
+        }
+        let first = !self.sent.contains_key(&player);
+        let offer = PackOffer {
+            id: pack_id(),
+            url,
+            sha1: pack.sha1.clone(),
+            required: self.config.required,
+            prompt: self.config.prompt.clone(),
+            replacing: first,
+        };
+        if !platform.resource_packs().send(player, offer) {
+            return false;
+        }
+        self.sent.insert(player, pack.sha1.clone());
+        true
+    }
+
+    /// Sends the current packs to everyone online who doesn't have them: how many players that was.
+    pub fn send_all(&mut self, platform: &dyn Platform) -> usize {
+        let mut count = 0;
+        for player in platform.players().online() {
+            let main = self.send(platform, player.uuid);
+            let names: Vec<String> = self
+                .pushed
+                .get(&player.uuid)
+                .map(|p| p.keys().cloned().collect())
+                .unwrap_or_default();
+            let extra = names
+                .iter()
+                .filter(|n| self.push(platform, player.uuid, n))
+                .count();
+            if main || extra > 0 {
+                count += 1;
+            }
+        }
+        count
+    }
+
+    /// Sends `player` `onDemand` pack `name` beside their others, unless they have this build. False when there's
+    /// no such build, it isn't served, or they're offline.
+    pub fn push(&mut self, platform: &dyn Platform, player: Uuid, name: &str) -> bool {
+        let Some(pack) = self.on_demand.get(name) else {
+            return false;
+        };
+        let Some(url) = pack.url.clone() else {
+            return false;
+        };
+        if self.pushed.get(&player).and_then(|p| p.get(name)) == Some(&pack.sha1) {
+            return true;
+        }
+        let offer = PackOffer {
+            id: on_demand_id(name),
+            url,
+            sha1: pack.sha1.clone(),
+            required: false,
+            prompt: None,
+            replacing: false,
+        };
+        if !platform.resource_packs().send(player, offer) {
+            return false;
+        }
+        let sha1 = pack.sha1.clone();
+        self.pushed
+            .entry(player)
+            .or_default()
+            .insert(name.to_owned(), sha1);
+        true
+    }
+
+    /// Takes `onDemand` pack `name` off `player`'s game. False when it wasn't pushed to them, or they're offline.
+    pub fn pop(&mut self, platform: &dyn Platform, player: Uuid, name: &str) -> bool {
+        if self
+            .pushed
+            .get_mut(&player)
+            .and_then(|p| p.remove(name))
+            .is_none()
+        {
+            return false;
+        }
+        if let Some(statuses) = self.statuses.get_mut(&player) {
+            statuses.remove(&on_demand_id(name));
+        }
+        platform.resource_packs().remove(player, on_demand_id(name))
+    }
+
+    /// A player left: next time they join they get it again, and nothing that was pushed.
+    pub fn forget(&mut self, player: Uuid) {
+        self.sent.remove(&player);
+        self.statuses.remove(&player);
+        self.pushed.remove(&player);
+    }
+
+    /// What `player`'s game said last about the project's pack, or `onDemand` pack `name`.
+    pub fn status(&self, player: Uuid, name: Option<&str>) -> Option<String> {
+        let id = name.map_or_else(pack_id, on_demand_id);
+        self.statuses.get(&player)?.get(&id).cloned()
+    }
+
+    /// `player`'s game says `status` about `pack` (none: it forgot). Only our packs' are kept; what to tell scripts
+    /// (the `onDemand` pack's name, or none for the project's, and the status), when there's anything to.
+    pub fn status_changed(
+        &mut self,
+        player: Uuid,
+        pack: Uuid,
+        status: Option<String>,
+    ) -> Option<(Option<String>, String)> {
+        let name = if pack == pack_id() {
+            None
+        } else {
+            Some(
+                self.on_demand
+                    .keys()
+                    .find(|n| on_demand_id(n) == pack)?
+                    .clone(),
+            )
+        };
+        let Some(status) = status else {
+            if let Some(statuses) = self.statuses.get_mut(&player) {
+                statuses.remove(&pack);
+            }
+            return None;
+        };
+        self.statuses
+            .entry(player)
+            .or_default()
+            .insert(pack, status.clone());
+        Some((name, status))
     }
 
     /// `reference`, an entry of `kind`'s name, as a key; none when it isn't shaped like one.
@@ -363,6 +768,33 @@ fn files(
         .collect()
 }
 
+impl netherforge_api::api::NfPacksApi for crate::world::GameContext {
+    /// The packs are read again from disk and rebuilt at the end of the tick, and sent to who lacks the new build.
+    fn rebuild(&self, _caller: &netherforge_api::Caller) -> netherforge_api::ApiResult<()> {
+        self.shared.packs.borrow_mut().wanted = true;
+        Ok(())
+    }
+
+    /// The `onDemand` packs, by the names the calling package writes them.
+    fn on_demand(
+        &self,
+        _caller: &netherforge_api::Caller,
+    ) -> netherforge_api::ApiResult<Vec<String>> {
+        let names: Vec<String> = self
+            .shared
+            .packs
+            .borrow()
+            .on_demand
+            .keys()
+            .cloned()
+            .collect();
+        Ok(names
+            .iter()
+            .map(|n| self.with_names(|names| names.spell(n)))
+            .collect())
+    }
+}
+
 /// The resource pack's part in a session: built first (menus' skins and scripts' glyphs read it), again when a
 /// pack, a block, `client/vanilla.json` or a video changes.
 pub struct PacksService {
@@ -371,13 +803,19 @@ pub struct PacksService {
 }
 
 impl PacksService {
+    /// Builds again, and sends it to everyone online whose client doesn't have this hash.
     fn rebuild(&self, project: &Define) {
-        let problems = self
-            .shared
+        let platform = &*self.shared.platform;
+        let mut packs = self.shared.packs.borrow_mut();
+        let problems = packs.rebuild(platform, project);
+        *self.problems.borrow_mut() = problems;
+    }
+
+    fn send_all(&self) -> usize {
+        self.shared
             .packs
             .borrow_mut()
-            .rebuild(&*self.shared.platform, project);
-        *self.problems.borrow_mut() = problems;
+            .send_all(&*self.shared.platform)
     }
 }
 
@@ -394,15 +832,26 @@ impl Service for PacksService {
         self.rebuild(project);
     }
 
-    fn reload(&self, _room: &Room, _kind: &str, _ids: &BTreeSet<String>, project: &Define) {
-        let had = self
-            .shared
+    /// Everyone online gets it, once scripts are running.
+    fn after_start(&self, _room: &Room) {
+        self.send_all();
+    }
+
+    fn player_joined(&self, player: &netherforge_platform::PlayerRef) {
+        self.shared
             .packs
-            .borrow()
-            .built
-            .as_ref()
-            .map(|b| b.sha1.clone());
+            .borrow_mut()
+            .send(&*self.shared.platform, player.uuid);
+    }
+
+    fn player_quit(&self, player: &netherforge_platform::PlayerRef) {
+        self.shared.packs.borrow_mut().forget(player.uuid);
+    }
+
+    /// Built again and sent to everyone online whose client doesn't have this hash.
+    fn reload(&self, _room: &Room, _kind: &str, _ids: &BTreeSet<String>, project: &Define) {
         self.rebuild(project);
+        self.send_all();
         let loaded = project.project;
         if !loaded.present("resource_pack").is_empty() && loaded.compiled_resource_packs.is_empty()
         {
@@ -410,17 +859,17 @@ impl Service for PacksService {
                 "A resource pack has errors; players keep the last good resource pack".into(),
             );
         }
-        let _ = had;
     }
 
     /// The blocks the pack draws change with the project's blocks, the game's own looks of their carriers with
-    /// `client/vanilla.json`, and the sounds it carries with videos.
+    /// `client/vanilla.json`, and the sounds it carries with videos. Only what changed goes.
     fn reloaded(&self, _room: &Room, kinds: &BTreeSet<&str>, project: &Define) {
         if ["block", "vanilla", "video"]
             .iter()
             .any(|k| kinds.contains(k))
         {
             self.rebuild(project);
+            self.send_all();
         }
     }
 

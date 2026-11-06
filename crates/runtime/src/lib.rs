@@ -527,6 +527,12 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_packs(&self) -> &dyn netherforge_api::api::NfPacksApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
     fn nf_files(&self) -> &dyn netherforge_api::api::NfFilesApi {
         match &self.worlds {
             Some(w) => w,

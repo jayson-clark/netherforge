@@ -226,8 +226,16 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
     }
 
     fn tick(&self) {
-        if let Some(session) = self.any() {
-            session.tick();
+        let wanted = match self.any() {
+            Some(session) => {
+                session.tick();
+                session.shared().packs.borrow().wanted
+            }
+            None => false,
+        };
+        // `nf.packs.rebuild` asked during the tick: read again from disk once nothing is running.
+        if wanted && let Ok(mut session) = self.game.0.0.try_borrow_mut() {
+            session.rebuild_packs();
         }
     }
 
@@ -724,7 +732,43 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         ))
     }
 
-    fn resource_pack_status(&self, _player: Uuid, _pack: Uuid, _status: Option<String>) {}
+    /// Only our packs' statuses are kept; scripts hear each (the `onDemand` pack's name, or none for the project's).
+    fn resource_pack_status(&self, player: Uuid, pack: Uuid, status: Option<String>) {
+        let Some(s) = self.open() else { return };
+        let changed = s
+            .session()
+            .shared()
+            .packs
+            .borrow_mut()
+            .status_changed(player, pack, status);
+        let Some((name, status)) = changed else {
+            return;
+        };
+        let who = PlayerRef {
+            uuid: player,
+            name: String::new(),
+        };
+        let stages = [
+            player_stage(&s, "resource_pack_status", &who),
+            ("player_resource_pack_status", None),
+        ];
+        raise(&s, &stages, codecs::PlayerResourcePackStatusEvent, || {
+            shapes::PlayerResourcePackStatusEvent {
+                player: s.player(&who),
+                pack: name.map(|n| {
+                    let shared = s.session().shared().clone();
+                    let names = shared.names.borrow();
+                    let home = names.home.clone();
+                    crate::names::Calling {
+                        names: &names,
+                        from: home,
+                    }
+                    .spell(&n)
+                }),
+                status,
+            }
+        });
+    }
 
     fn menu_clicked(&self, window: Uuid, click: MenuClick) -> bool {
         let Some(s) = self.open() else { return false };

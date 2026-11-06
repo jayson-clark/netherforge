@@ -9,7 +9,6 @@ use std::collections::BTreeMap;
 use mlua::{Function, Value};
 use netherforge_api::api::PlayerApi;
 use netherforge_api::handles::{self, Handle};
-use netherforge_api::unported::Unported;
 use netherforge_api::{ApiError, ApiResult, shapes, unions, values};
 use netherforge_format::math::Vec3;
 use netherforge_platform::{
@@ -94,6 +93,22 @@ fn location_value(l: &Location) -> values::Location {
 impl GameContext {
     fn players(&self) -> &dyn PlayerOps {
         self.shared.platform.players()
+    }
+
+    /// `pack`, an `onDemand` pack the calling script named, as the server names it; an error when it isn't one.
+    fn on_demand_pack(&self, pack: &str) -> ApiResult<String> {
+        let name = self.with_names(|names| names.resource("resource_pack", pack))?;
+        let packs = self.shared.packs.borrow();
+        if packs.on_demand_files.contains(&name) {
+            return Ok(name);
+        }
+        Err(err(if packs.pack_files.contains(&name) {
+            format!(
+                "resource pack \"{pack}\" isn't onDemand: give it \"onDemand\": true in its pack.json to push it"
+            )
+        } else {
+            format!("there's no resource pack \"{pack}\"")
+        }))
     }
 
     /// Their UUID while they're online.
@@ -1127,13 +1142,33 @@ impl PlayerApi for GameContext {
         this: &handles::Player,
         pack: Option<String>,
     ) -> ApiResult<Option<String>> {
-        <Unported as PlayerApi>::resource_pack_status(&Unported, this, pack)
+        let name = pack.map(|p| self.on_demand_pack(&p)).transpose()?;
+        let Some(uuid) = self.player_online(this) else {
+            return Ok(None);
+        };
+        Ok(self.shared.packs.borrow().status(uuid, name.as_deref()))
     }
     fn push_resource_pack(&self, this: &handles::Player, pack: String) -> ApiResult<bool> {
-        <Unported as PlayerApi>::push_resource_pack(&Unported, this, pack)
+        let name = self.on_demand_pack(&pack)?;
+        let Some(uuid) = self.player_online(this) else {
+            return Ok(false);
+        };
+        Ok(self
+            .shared
+            .packs
+            .borrow_mut()
+            .push(&*self.shared.platform, uuid, &name))
     }
     fn pop_resource_pack(&self, this: &handles::Player, pack: String) -> ApiResult<bool> {
-        <Unported as PlayerApi>::pop_resource_pack(&Unported, this, pack)
+        let name = self.on_demand_pack(&pack)?;
+        let Some(uuid) = self.player_online(this) else {
+            return Ok(false);
+        };
+        Ok(self
+            .shared
+            .packs
+            .borrow_mut()
+            .pop(&*self.shared.platform, uuid, &name))
     }
     fn send_block_change(
         &self,

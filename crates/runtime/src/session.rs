@@ -111,6 +111,8 @@ pub struct Config {
     pub data_dir: Option<std::path::PathBuf>,
     /// `files:` in `config.yml`: what each package may keep there.
     pub files: crate::files::FilesConfig,
+    /// `resource-pack:` in `config.yml`: where the pack is served from.
+    pub pack: crate::packs::PackConfig,
 }
 
 /// Why a project can't run: what the log says, and the problem to report if format didn't.
@@ -209,6 +211,7 @@ impl<'a> Session<'a> {
         let project = load(source, packages);
         let shared = Shared::new(platform.clone(), store);
         shared.schedules.borrow_mut().now = config.wall_clock;
+        shared.packs.borrow_mut().config = config.pack.clone();
         if let Some(root) = &config.data_dir {
             *shared.files.borrow_mut() =
                 Some(crate::files::ScriptFiles::new(root.clone(), config.files));
@@ -551,6 +554,23 @@ impl<'a> Session<'a> {
         }
         self.released();
         self.report();
+    }
+
+    /// The project's packs read again from disk and rebuilt (`nf.packs.rebuild`), when a script asked for it.
+    pub fn rebuild_packs(&mut self) {
+        if !std::mem::take(&mut self.shared.packs.borrow_mut().wanted) {
+            return;
+        }
+        let paths: Vec<String> = self
+            .source
+            .files()
+            .iter()
+            .filter(|p| p.starts_with("resource_packs/"))
+            .cloned()
+            .collect();
+        if !paths.is_empty() {
+            self.reload(&paths);
+        }
     }
 
     /// Stops every service, in reverse order, and closes the room.
