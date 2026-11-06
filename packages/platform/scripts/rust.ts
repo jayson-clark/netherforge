@@ -10,8 +10,10 @@
  *  - types: `Int` → `i32`, `Long` → `i64`, `Double` → `f64`, `UUID` → `Uuid`, `T?` →
  *    `Option<T>`, `List<T>` and `Set<T>` → `Vec<T>` (a set's items are distinct), `Map<K, V>` →
  *    `HashMap<K, V>`, `Result<T>` → `Result<T, PlatformError>`, `Throwable` → `PlatformError`,
- *    `Any` → `Dynamic`, a function → a boxed `Fn`, an interface → `&dyn` returned and `Rc<dyn>`
- *    taken, format's and the API's types → `external::*`.
+ *    `Any` → `Dynamic`, a function → a boxed `Fn`, an interface → `&dyn` returned by a group's
+ *    accessor (no parameters: the platform keeps it), `Box<dyn>` returned by a method with
+ *    parameters (something made for the caller, which it holds: a structure placer, a biome
+ *    search) and `Rc<dyn>` taken, format's and the API's types → `external::*`.
  */
 import {
   EXTERNAL,
@@ -53,6 +55,7 @@ const RUST_EXTERNAL: Record<string, { path: string; interface?: boolean }> = {
   BotEvents: { path: 'netherforge_format::bridge::BotEvents' },
   BotAction: { path: 'netherforge_format::bridge::BotAction' },
   BotActResult: { path: 'netherforge_format::bridge::BotActResult' },
+  Path: { path: 'std::path::PathBuf' },
 }
 
 const GENERATED_BY =
@@ -311,13 +314,29 @@ function members(d: InterfaceDecl, cx: Context): Member[] {
       name = `${name}_with_${snake(m.params[m.params.length - 1]!.name).replace(/^r#/, '')}`
     seen.add(name)
     const params = m.params.map((p): [string, string] => [snake(p.name), typeOf(p.type, cx, 'in')])
-    member(m.doc, name, params, typeOf(m.returns, cx, 'out'))
+    // A group is borrowed from the platform; what a method with parameters makes is the caller's to hold.
+    const returns = typeOf(m.returns, cx, 'out')
+    member(
+      m.doc,
+      name,
+      params,
+      params.length ? returns.replace(/&dyn ([\w:]+)/, 'Box<dyn $1>') : returns,
+    )
   }
   return out
 }
 
+/** What the runtime runs off the main thread, so a made one must be `Send`: a biome search runs on a lane. */
+const SENT = new Set(['BiomeSearch'])
+
+/** A trait's supertraits, written after its name: what it extends, and `Send` for one in [SENT]. */
+function supertraits(d: InterfaceDecl): string {
+  const supers = [d.extends, SENT.has(d.name) ? 'Send' : undefined].filter(Boolean)
+  return supers.length ? `: ${supers.join(' + ')}` : ''
+}
+
 function trait(d: InterfaceDecl, cx: Context): string[] {
-  const lines = [...rustdoc(d.doc, ''), `pub trait ${d.name}${d.extends ? `: ${d.extends}` : ''} {`]
+  const lines = [...rustdoc(d.doc, ''), `pub trait ${d.name}${supertraits(d)} {`]
   for (const m of members(d, cx)) lines.push(...rustdoc(m.doc, '    '), `    ${m.signature};`, '')
   if (lines[lines.length - 1] === '') lines.pop()
   lines.push('}', '')
@@ -370,7 +389,7 @@ function unported(all: Decl[], cx: Context): string[] {
     lines.push(
       `/// A [\`${d.name}\`] that means only some of it: implement this, and every method it`,
       "/// doesn't answers as [`Unported`] does.",
-      `pub trait ${fake}${d.extends ? `: ${d.extends}` : ''} {`,
+      `pub trait ${fake}${supertraits(d)} {`,
     )
     for (const m of members(d, cx))
       lines.push(

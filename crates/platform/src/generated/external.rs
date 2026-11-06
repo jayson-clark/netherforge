@@ -30,7 +30,3 @@ pub struct CompiledTerrain(pub Dynamic);
 /// format's `datapack` `GameDatapack`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GameDatapack(pub Dynamic);
-
-/// format's `java.nio.file` `Path`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Path(pub Dynamic);

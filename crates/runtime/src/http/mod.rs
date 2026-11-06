@@ -186,9 +186,18 @@ const WORKERS: usize = 4;
 
 impl Workers {
     pub fn new(name: &str) -> Workers {
+        Workers::with_threads(name, WORKERS)
+    }
+
+    /// A lane: one thread, so its jobs run one at a time in the order they're given (Kotlin's `workers.lane`).
+    pub fn lane(name: &str) -> Workers {
+        Workers::with_threads(name, 1)
+    }
+
+    fn with_threads(name: &str, threads: usize) -> Workers {
         let (send, jobs) = mpsc::channel::<Job>();
         let jobs = Arc::new(Mutex::new(jobs));
-        for n in 0..WORKERS {
+        for n in 0..threads {
             let jobs = jobs.clone();
             let _ = std::thread::Builder::new()
                 .name(format!("{name} {}", n + 1))

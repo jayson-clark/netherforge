@@ -53,6 +53,11 @@ fn length(v: Vec3) -> f64 {
 
 const DAY: i64 = DAY_TICKS as i64;
 
+/// How far `world:locate_biome` looks, at most and by default: `BIOME_SEARCH_LIMIT` in the spec.
+const BIOME_SEARCH_LIMIT: i64 = 6400;
+/// The lane biome searches run on, one at a time.
+const BIOME_SEARCH_LANE: &str = "biome search";
+
 /// How many blocks one `world:fill_blocks` may change: `FILL_LIMIT` in the spec (`spec/worlds.ts`).
 const FILL_LIMIT: i64 = 32768;
 
@@ -969,7 +974,72 @@ impl WorldApi for GameContext {
         id: String,
         options: Option<shapes::BiomeSearchOptions>,
     ) -> ApiResult<Pending<values::Vec3>> {
-        <Unported as WorldApi>::locate_biome(&Unported, this, id, options)
+        let biome = self.with_names(|names| names.biome(&id))?;
+        if self
+            .platform()
+            .game()
+            .lacks(netherforge_format::game::Registry::Biome, &biome)
+        {
+            return Err(err(if id.contains(':') {
+                format!("no biome \"{id}\" on this server")
+            } else {
+                format!(
+                    "no biome \"{id}\" in the project (a project biome is biomes/{id}.json); the game's are written in full, \"minecraft:{id}\""
+                )
+            }));
+        }
+        let options = options.unwrap_or(shapes::BiomeSearchOptions {
+            near: None,
+            radius: None,
+        });
+        let radius = options.radius.unwrap_or(BIOME_SEARCH_LIMIT);
+        if !(1..=BIOME_SEARCH_LIMIT).contains(&radius) {
+            return Err(err(format!(
+                "options.radius must be 1 to {BIOME_SEARCH_LIMIT}, not {radius}"
+            )));
+        }
+        let near = options.near.or_else(|| {
+            let world = self.live(this)?;
+            let spawn = self.platform().worlds().spawn_location(world.to_owned())?;
+            Some(values::Vec3 {
+                x: spawn.x,
+                y: spawn.y,
+                z: spawn.z,
+            })
+        });
+        let search = near.and_then(|at| {
+            self.platform().worlds().biome_search(
+                this.name.clone(),
+                at.x.floor() as i32,
+                at.y.floor() as i32,
+                at.z.floor() as i32,
+                radius as i32,
+                biome.clone(),
+            )
+        });
+        let Some(search) = search else {
+            let name = this.name.clone();
+            return Ok(Box::pin(async move {
+                Err(err(format!("world \"{name}\" has gone")))
+            }));
+        };
+        // It reads only what the world's generator reads, and can take seconds: on its lane, off the main thread.
+        let (send, receive) = std::sync::mpsc::channel();
+        self.shared.lane(BIOME_SEARCH_LANE).submit(move || {
+            let found = search
+                .run()
+                .ok_or_else(|| format!("no {biome} within {radius} blocks"));
+            let _ = send.send(found);
+        });
+        let reply = crate::http::Reply(receive);
+        Ok(Box::pin(async move {
+            let at = reply.await.map_err(ApiError)?;
+            Ok(values::Vec3 {
+                x: at.0,
+                y: at.1,
+                z: at.2,
+            })
+        }))
     }
 
     fn players(&self, this: &handles::World) -> ApiResult<Vec<handles::Player>> {

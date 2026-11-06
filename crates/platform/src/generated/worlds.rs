@@ -338,7 +338,7 @@ pub trait WorldOps {
     /// every [BiomeSearch.ACROSS] blocks across and [BiomeSearch.UP] up and down, asking the world's
     /// biome source, so it never loads or generates a chunk. Made on the main thread: null when the world
     /// doesn't exist or the server has no such biome.
-    fn biome_search(&self, world: String, x: i32, y: i32, z: i32, radius: i32, biome: String) -> Option<&dyn BiomeSearch>;
+    fn biome_search(&self, world: String, x: i32, y: i32, z: i32, radius: i32, biome: String) -> Option<Box<dyn BiomeSearch>>;
 
     fn explode(&self, world: String, position: netherforge_format::math::Vec3, power: f64, fire: bool, break_blocks: bool) -> bool;
 
@@ -354,7 +354,7 @@ pub trait WorldOps {
 /// generator reads while it generates chunks on the server's own worker
 /// threads, so the runtime runs it off the main thread (it can take seconds
 /// when the biome is far or nowhere).
-pub trait BiomeSearch {
+pub trait BiomeSearch: Send {
     /// The block position it found the biome at, or null when there's none within the radius.
     fn run(&self) -> Option<netherforge_format::math::Vec3>;
 }

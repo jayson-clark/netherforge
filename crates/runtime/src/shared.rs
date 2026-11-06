@@ -113,12 +113,15 @@ pub struct Shared {
     pub gone: RefCell<Vec<netherforge_platform::Uuid>>,
     /// Mobs' walks (`mob:move_to`) and the goals scripts added.
     pub mobs: Rc<crate::mob::Mobs>,
+    /// Lanes work goes to off the main thread, by name, made as they're first wanted (a biome search's).
+    pub lanes: RefCell<std::collections::HashMap<&'static str, crate::http::Workers>>,
 }
 
 impl Shared {
     pub fn new(platform: Rc<dyn Platform>, store: Rc<crate::store::Store>) -> Rc<Shared> {
         Rc::new(Shared {
             mobs: crate::mob::Mobs::new(platform.clone()),
+            lanes: RefCell::default(),
             platform,
             store,
             data: RefCell::default(),
@@ -166,6 +169,15 @@ impl Shared {
             entities: RefCell::default(),
             gone: RefCell::default(),
         })
+    }
+
+    /// The lane named `name`: one thread whose jobs run in order, made the first time it's wanted.
+    pub fn lane(&self, name: &'static str) -> crate::http::Workers {
+        self.lanes
+            .borrow_mut()
+            .entry(name)
+            .or_insert_with(|| crate::http::Workers::lane(&format!("NetherForge {name}")))
+            .clone()
     }
 
     /// The entity `info` describes as the handle the spec's types say (`Entity`), made the class it is

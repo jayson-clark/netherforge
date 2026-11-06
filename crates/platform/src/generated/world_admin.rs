@@ -84,7 +84,7 @@ pub trait WorldManagerOps {
     /// a worker, after every copy and deletion asked for before, and then
     /// [load]s `normal` on the main thread. The work touches nothing but
     /// files, and leaves nothing half-copied when it fails.
-    fn copy(&self, map: external::Path, name: String) -> &dyn FileWork;
+    fn copy(&self, map: std::path::PathBuf, name: String) -> Box<dyn FileWork>;
 
     /// Unloads a loaded world, saving it first with [save]. False when the server kept it.
     fn unload(&self, name: String, save: bool) -> bool;
@@ -92,7 +92,7 @@ pub trait WorldManagerOps {
     /// What deleting an unloaded world's files takes: asked on the main thread
     /// (where the server says where they are), run by the runtime on a worker,
     /// after every copy and deletion asked for before.
-    fn delete(&self, name: String) -> &dyn FileWork;
+    fn delete(&self, name: String) -> Box<dyn FileWork>;
 
     /// Saves a loaded world and flushes it to disk, so its files can be copied
     /// while the server runs (the dev bridge's `save_world`, which makes a
@@ -110,8 +110,8 @@ pub trait WorldManagerOps {
 /// as the map's overworld.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WorldFiles {
-    pub level: external::Path,
-    pub dimension: external::Path,
+    pub level: std::path::PathBuf,
+    pub dimension: std::path::PathBuf,
 }
 
 /// Blocking work on files that an adapter describes and the runtime runs off
@@ -242,25 +242,25 @@ pub trait StructurePlacer {
 /// kept until [forget] (a reload of it); placing loads the chunks it covers.
 pub trait StructureOps {
     /// The size of the structure in [file], or null when it can't be read as one.
-    fn size(&self, file: external::Path) -> Option<BlockVector>;
+    fn size(&self, file: std::path::PathBuf) -> Option<BlockVector>;
 
     /// The blocks of the structure in [file] as a terrain places them (its first palette, air included, every
     /// state in full as the server reads it), or null when it can't be read as one. A decoration of a generator is
     /// linked to it ([dev.netherforge.format.terrain.CompiledTerrain.withStructures]).
-    fn template(&self, file: external::Path) -> Option<external::StructureTemplate>;
+    fn template(&self, file: std::path::PathBuf) -> Option<external::StructureTemplate>;
 
     /// Places the structure in [file] with its smallest corner at [at]. False when the world has gone or the file can't be read.
-    fn place(&self, file: external::Path, world: String, at: BlockVector, placement: StructurePlacement) -> bool;
+    fn place(&self, file: std::path::PathBuf, world: String, at: BlockVector, placement: StructurePlacement) -> bool;
 
     /// The structure in [file] to place a few blocks at a time where [transform] says, with [placement]'s
     /// integrity and entities ([placement]'s rotation and mirror are [transform]'s), integrity's chances drawn from
     /// [seed]. Null when the world has gone or the file can't be read. A file not already kept is read for this and
     /// let go with it, so a build's parts don't all stay in memory.
-    fn placer(&self, file: external::Path, world: String, transform: StructureTransform, placement: StructurePlacement, seed: i64) -> Option<&dyn StructurePlacer>;
+    fn placer(&self, file: std::path::PathBuf, world: String, transform: StructureTransform, placement: StructurePlacement, seed: i64) -> Option<Box<dyn StructurePlacer>>;
 
     /// Saves the box from [min] to [max] (both included) into [file], replacing it. False when the world has gone or it can't be written.
-    fn save(&self, file: external::Path, world: String, min: BlockVector, max: BlockVector, entities: bool) -> bool;
+    fn save(&self, file: std::path::PathBuf, world: String, min: BlockVector, max: BlockVector, entities: bool) -> bool;
 
     /// Drops what was read from [file]: it changed.
-    fn forget(&self, file: external::Path);
+    fn forget(&self, file: std::path::PathBuf);
 }

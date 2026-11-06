@@ -4483,16 +4483,16 @@ impl WorldManagerOps for Unported {
         unported("WorldManagerOps::publish_generators")
     }
 
-    fn copy(&self, _: external::Path, _: String) -> &dyn FileWork {
-        &Unported
+    fn copy(&self, _: std::path::PathBuf, _: String) -> Box<dyn FileWork> {
+        unported("WorldManagerOps::copy")
     }
 
     fn unload(&self, _: String, _: bool) -> bool {
         unported("WorldManagerOps::unload")
     }
 
-    fn delete(&self, _: String) -> &dyn FileWork {
-        &Unported
+    fn delete(&self, _: String) -> Box<dyn FileWork> {
+        unported("WorldManagerOps::delete")
     }
 
     fn save_files(&self, _: String) -> Option<WorldFiles> {
@@ -4527,7 +4527,7 @@ pub trait FakeWorldManagerOps {
         <Unported as WorldManagerOps>::publish_generators(&Unported, generators)
     }
 
-    fn copy(&self, map: external::Path, name: String) -> &dyn FileWork {
+    fn copy(&self, map: std::path::PathBuf, name: String) -> Box<dyn FileWork> {
         <Unported as WorldManagerOps>::copy(&Unported, map, name)
     }
 
@@ -4535,7 +4535,7 @@ pub trait FakeWorldManagerOps {
         <Unported as WorldManagerOps>::unload(&Unported, name, save)
     }
 
-    fn delete(&self, name: String) -> &dyn FileWork {
+    fn delete(&self, name: String) -> Box<dyn FileWork> {
         <Unported as WorldManagerOps>::delete(&Unported, name)
     }
 
@@ -4569,7 +4569,7 @@ impl<T: FakeWorldManagerOps> WorldManagerOps for T {
         FakeWorldManagerOps::publish_generators(self, generators)
     }
 
-    fn copy(&self, map: external::Path, name: String) -> &dyn FileWork {
+    fn copy(&self, map: std::path::PathBuf, name: String) -> Box<dyn FileWork> {
         FakeWorldManagerOps::copy(self, map, name)
     }
 
@@ -4577,7 +4577,7 @@ impl<T: FakeWorldManagerOps> WorldManagerOps for T {
         FakeWorldManagerOps::unload(self, name, save)
     }
 
-    fn delete(&self, name: String) -> &dyn FileWork {
+    fn delete(&self, name: String) -> Box<dyn FileWork> {
         FakeWorldManagerOps::delete(self, name)
     }
 
@@ -4819,27 +4819,27 @@ impl<T: FakeStructurePlacer> StructurePlacer for T {
 }
 
 impl StructureOps for Unported {
-    fn size(&self, _: external::Path) -> Option<BlockVector> {
+    fn size(&self, _: std::path::PathBuf) -> Option<BlockVector> {
         unported("StructureOps::size")
     }
 
-    fn template(&self, _: external::Path) -> Option<external::StructureTemplate> {
+    fn template(&self, _: std::path::PathBuf) -> Option<external::StructureTemplate> {
         unported("StructureOps::template")
     }
 
-    fn place(&self, _: external::Path, _: String, _: BlockVector, _: StructurePlacement) -> bool {
+    fn place(&self, _: std::path::PathBuf, _: String, _: BlockVector, _: StructurePlacement) -> bool {
         unported("StructureOps::place")
     }
 
-    fn placer(&self, _: external::Path, _: String, _: StructureTransform, _: StructurePlacement, _: i64) -> Option<&dyn StructurePlacer> {
+    fn placer(&self, _: std::path::PathBuf, _: String, _: StructureTransform, _: StructurePlacement, _: i64) -> Option<Box<dyn StructurePlacer>> {
         unported("StructureOps::placer")
     }
 
-    fn save(&self, _: external::Path, _: String, _: BlockVector, _: BlockVector, _: bool) -> bool {
+    fn save(&self, _: std::path::PathBuf, _: String, _: BlockVector, _: BlockVector, _: bool) -> bool {
         unported("StructureOps::save")
     }
 
-    fn forget(&self, _: external::Path) {
+    fn forget(&self, _: std::path::PathBuf) {
         unported("StructureOps::forget")
     }
 }
@@ -4847,53 +4847,53 @@ impl StructureOps for Unported {
 /// A [`StructureOps`] that means only some of it: implement this, and every method it
 /// doesn't answers as [`Unported`] does.
 pub trait FakeStructureOps {
-    fn size(&self, file: external::Path) -> Option<BlockVector> {
+    fn size(&self, file: std::path::PathBuf) -> Option<BlockVector> {
         <Unported as StructureOps>::size(&Unported, file)
     }
 
-    fn template(&self, file: external::Path) -> Option<external::StructureTemplate> {
+    fn template(&self, file: std::path::PathBuf) -> Option<external::StructureTemplate> {
         <Unported as StructureOps>::template(&Unported, file)
     }
 
-    fn place(&self, file: external::Path, world: String, at: BlockVector, placement: StructurePlacement) -> bool {
+    fn place(&self, file: std::path::PathBuf, world: String, at: BlockVector, placement: StructurePlacement) -> bool {
         <Unported as StructureOps>::place(&Unported, file, world, at, placement)
     }
 
-    fn placer(&self, file: external::Path, world: String, transform: StructureTransform, placement: StructurePlacement, seed: i64) -> Option<&dyn StructurePlacer> {
+    fn placer(&self, file: std::path::PathBuf, world: String, transform: StructureTransform, placement: StructurePlacement, seed: i64) -> Option<Box<dyn StructurePlacer>> {
         <Unported as StructureOps>::placer(&Unported, file, world, transform, placement, seed)
     }
 
-    fn save(&self, file: external::Path, world: String, min: BlockVector, max: BlockVector, entities: bool) -> bool {
+    fn save(&self, file: std::path::PathBuf, world: String, min: BlockVector, max: BlockVector, entities: bool) -> bool {
         <Unported as StructureOps>::save(&Unported, file, world, min, max, entities)
     }
 
-    fn forget(&self, file: external::Path) {
+    fn forget(&self, file: std::path::PathBuf) {
         <Unported as StructureOps>::forget(&Unported, file)
     }
 }
 
 impl<T: FakeStructureOps> StructureOps for T {
-    fn size(&self, file: external::Path) -> Option<BlockVector> {
+    fn size(&self, file: std::path::PathBuf) -> Option<BlockVector> {
         FakeStructureOps::size(self, file)
     }
 
-    fn template(&self, file: external::Path) -> Option<external::StructureTemplate> {
+    fn template(&self, file: std::path::PathBuf) -> Option<external::StructureTemplate> {
         FakeStructureOps::template(self, file)
     }
 
-    fn place(&self, file: external::Path, world: String, at: BlockVector, placement: StructurePlacement) -> bool {
+    fn place(&self, file: std::path::PathBuf, world: String, at: BlockVector, placement: StructurePlacement) -> bool {
         FakeStructureOps::place(self, file, world, at, placement)
     }
 
-    fn placer(&self, file: external::Path, world: String, transform: StructureTransform, placement: StructurePlacement, seed: i64) -> Option<&dyn StructurePlacer> {
+    fn placer(&self, file: std::path::PathBuf, world: String, transform: StructureTransform, placement: StructurePlacement, seed: i64) -> Option<Box<dyn StructurePlacer>> {
         FakeStructureOps::placer(self, file, world, transform, placement, seed)
     }
 
-    fn save(&self, file: external::Path, world: String, min: BlockVector, max: BlockVector, entities: bool) -> bool {
+    fn save(&self, file: std::path::PathBuf, world: String, min: BlockVector, max: BlockVector, entities: bool) -> bool {
         FakeStructureOps::save(self, file, world, min, max, entities)
     }
 
-    fn forget(&self, file: external::Path) {
+    fn forget(&self, file: std::path::PathBuf) {
         FakeStructureOps::forget(self, file)
     }
 }
@@ -5415,7 +5415,7 @@ impl WorldOps for Unported {
         unported("WorldOps::biome")
     }
 
-    fn biome_search(&self, _: String, _: i32, _: i32, _: i32, _: i32, _: String) -> Option<&dyn BiomeSearch> {
+    fn biome_search(&self, _: String, _: i32, _: i32, _: i32, _: i32, _: String) -> Option<Box<dyn BiomeSearch>> {
         unported("WorldOps::biome_search")
     }
 
@@ -5555,7 +5555,7 @@ pub trait FakeWorldOps {
         <Unported as WorldOps>::biome(&Unported, world, x, y, z)
     }
 
-    fn biome_search(&self, world: String, x: i32, y: i32, z: i32, radius: i32, biome: String) -> Option<&dyn BiomeSearch> {
+    fn biome_search(&self, world: String, x: i32, y: i32, z: i32, radius: i32, biome: String) -> Option<Box<dyn BiomeSearch>> {
         <Unported as WorldOps>::biome_search(&Unported, world, x, y, z, radius, biome)
     }
 
@@ -5693,7 +5693,7 @@ impl<T: FakeWorldOps> WorldOps for T {
         FakeWorldOps::biome(self, world, x, y, z)
     }
 
-    fn biome_search(&self, world: String, x: i32, y: i32, z: i32, radius: i32, biome: String) -> Option<&dyn BiomeSearch> {
+    fn biome_search(&self, world: String, x: i32, y: i32, z: i32, radius: i32, biome: String) -> Option<Box<dyn BiomeSearch>> {
         FakeWorldOps::biome_search(self, world, x, y, z, radius, biome)
     }
 
@@ -5718,7 +5718,7 @@ impl BiomeSearch for Unported {
 
 /// A [`BiomeSearch`] that means only some of it: implement this, and every method it
 /// doesn't answers as [`Unported`] does.
-pub trait FakeBiomeSearch {
+pub trait FakeBiomeSearch: Send {
     fn run(&self) -> Option<netherforge_format::math::Vec3> {
         <Unported as BiomeSearch>::run(&Unported)
     }
