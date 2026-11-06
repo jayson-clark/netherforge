@@ -1277,7 +1277,7 @@ impl CentityContext {
 
     /// The world a bare position means for `scope`'s code: a centity script's own instance's; for anything
     /// else, the server's default.
-    fn script_world(&self, scope: ScopeId) -> String {
+    pub(crate) fn script_world(&self, scope: ScopeId) -> String {
         let own = self
             .shared
             .centities

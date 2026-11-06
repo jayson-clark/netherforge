@@ -84,6 +84,11 @@ pub trait Service {
     fn plugins_changed(&self) {}
     /// A block was placed or broken (once scripts let it be): what's built from the world's blocks reads it again.
     fn block_changed(&self, _block: &BlockRef) {}
+
+    /// What's wrong as it runs, beyond the project's files (the particle budget's warning).
+    fn problems(&self) -> Vec<Problem> {
+        Vec::new()
+    }
 }
 
 /// What the server's config says a session runs with (Kotlin's `RuntimeConfig`, as far as it's ported).
@@ -446,6 +451,7 @@ impl<'a> Session<'a> {
             .cloned()
             .chain(refused)
             .chain(reported.problems.values().flatten().cloned())
+            .chain(self.services.iter().flat_map(|s| s.problems()))
             .collect()
     }
 
@@ -616,6 +622,11 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         Box::new(CentitiesService {
             shared: shared.clone(),
             restored: Default::default(),
+        }),
+        // After centities: their sync comes first, so a centity moved this tick is where its effect plays.
+        Box::new(crate::particles::ParticlesService {
+            shared: shared.clone(),
+            scripts: Default::default(),
         }),
         Box::new(crate::entity::EntitiesService {
             shared: shared.clone(),

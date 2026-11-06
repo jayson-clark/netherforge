@@ -35,6 +35,7 @@ pub mod living;
 pub mod menu;
 pub mod modules;
 pub mod names;
+pub mod particles;
 pub mod permissions;
 pub mod player;
 pub mod project_items;
@@ -519,6 +520,18 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_particles(&self) -> &dyn netherforge_api::api::NfParticlesApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
+    fn effect(&self) -> &dyn netherforge_api::api::EffectApi {
+        match &self.worlds {
+            Some(w) => w,
+            None => &Unported,
+        }
+    }
     fn nf_worlds(&self) -> &dyn netherforge_api::api::NfWorldsApi {
         match &self.worlds {
             Some(w) => w,
@@ -561,6 +574,7 @@ impl Room {
             centity::api::CentityContext::install_liveness(&shared, &scripts);
             menu::MenuContext::install_liveness(&shared, &scripts);
             dialog::DialogContext::install_liveness(&shared, &scripts);
+            particles::ParticlesContext::install_liveness(&shared, &scripts);
             centity::api::CentityContext::new(shared, scripts.clone())
         });
         let nf = NfContext {

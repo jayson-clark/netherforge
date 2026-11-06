@@ -704,6 +704,23 @@ the files' with a UUID id and an owner scope, gone with that scope (`scope_relea
 `nf.dialogs.get` and `open_dialog` by name find only the project's. Not yet: the runtime's own dialogs
 (`/nf settings`).
 
+## Particle effects (`crates/runtime/src/particles.rs`)
+
+Kotlin's `ParticleEffects`, `ActiveEffect`, `NfParticlesImpl` and `EffectImpl`: the compiled effects (the last good
+one kept while a file has errors; playing one that never had a good version says the file's first error), and
+every one playing, by a number that's the handle's key. An effect belongs to the scope that played it and ends
+`unloaded` with it (`scope_released`); its `end` handlers run while it's still found (`is_active()` true, `stop()`
+false), then its handlers go. The service is registered right after centities', so its pass runs after their sync:
+per effect, round-robin from a rotating start, follow the target (a centity, node, player or entity; gone ends it
+`target_gone`), step the sampler (format's `EffectSampler`, seeded fresh each play), send to who's within 32 blocks
+(128 forced) in one `ParticleOps::spawn` per batch, within `MAX_POINTS_PER_TICK` (4096) a tick. Skipping is a
+warning in the log at most every 200 ticks and a `particles.budget` problem on the first skipped effect's file
+until 200 quiet ticks, which `Service::problems` (new: services' own problems, chained into `Session::problems`)
+hands the session. A reload moves live effects onto a valid file's new definition (`redefine`), keeps the old one
+for a file with errors, and ends them `removed` when the file goes. Not yet: the budget's warning to the editor
+(the bridge), Kotlin's once-a-minute log of a platform failure (the Rust `spawn` can't fail), the editor's "Play on
+server" (`stop_unowned` is there for it), and `/nf scripts`' per-scope count (`count_owned`).
+
 ## Project items (`crates/runtime/src/project_items.rs`)
 
 Kotlin's `item/Items.kt`: one record per `items/<id>/item.json` with its look and the look's hash (format's

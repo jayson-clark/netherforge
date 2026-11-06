@@ -44,6 +44,8 @@ pub struct Shared {
     pub names: RefCell<netherforge_format::project::Names>,
     /// The skies over worlds and players.
     pub skies: RefCell<crate::sky::Skies>,
+    /// The project's particle effects and every one playing.
+    pub particles: RefCell<crate::particles::Particles>,
     /// Boss bars scripts made, and players' sidebars.
     pub bars: RefCell<crate::bossbar::Bars>,
     /// Teams scripts made, lines under name tags, and who's out of whose player list.
@@ -86,6 +88,7 @@ impl Shared {
             schedules: RefCell::default(),
             names: RefCell::default(),
             skies: RefCell::default(),
+            particles: RefCell::default(),
             bars: RefCell::default(),
             teams: RefCell::default(),
             menus: RefCell::default(),

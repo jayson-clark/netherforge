@@ -4003,3 +4003,162 @@ end)
         ["item use\truby\tmain_hand", "nf use\ttrue"]
     );
 }
+
+#[test]
+fn a_particle_effect_plays_follows_and_ends_with_its_reason() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    // Two points every 2 ticks for 4 ticks: ticks 0 and 2.
+    let puff = r##"{ "duration": 4, "emitters": { "main": { "particle": "minecraft:flame", "burst": 2, "every": 2 } } }"##;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &lamp(1.0)),
+        ("particles/puff/effect.json", puff),
+        ("particles/broken/effect.json", r#"{ "duration": 0 }"#),
+        (
+            "modules/fx/init.lua",
+            r##"
+local w = nf.worlds.default()
+local e = nf.particles.play("puff", vector.create(1, 64, 1))
+e:on("end", function(ev) print("end", ev.reason, ev.effect == e, e:is_active(), e:stop()) end)
+print(e:kind(), e:is_active(), e:location().position.x)
+print(pcall(nf.particles.play, "puf", vector.create(0, 0, 0)))
+print(pcall(nf.particles.play, "broken", vector.create(0, 0, 0)))
+print(pcall(nf.particles.play, "puff", vector.create(0, 0, 0), { scale = 20 }))
+print(pcall(nf.particles.play, "puff", vector.create(0, 0, 0), { offset = vector.create(0, 1, 0) }))
+print(pcall(nf.particles.play, "puff", vector.create(0, 0, 0), { follow = w }))
+local lamp = nf.centities.spawn("lamp", vector.create(5, 64, 0))
+local glow = nf.particles.play("puff", vector.create(0, 0, 0), { loop = true, follow = lamp, offset = vector.create(0, 2, 0) })
+glow:on("end", function(ev) print("glow end", ev.reason) end)
+local far = nf.particles.play("puff", vector.create(500, 64, 0), { loop = true })
+print(far:teleport(vector.create(2, 64, 2)), far:location().position.x)
+nf.after(3, function()
+  print("glow at", glow:location().position.x, glow:location().position.y)
+  lamp:remove()
+end)
+nf.after(6, function() print(far:stop(), far:stop(), far:is_active(), far:location()) end)
+"##,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "puff\ttrue\t1",
+            "false\tmodules/fx/init.lua:6: no particle effect \"puf\" in this project (did you mean \"puff\"?)",
+            "false\tmodules/fx/init.lua:7: particle effect \"broken\" has errors, and there's no earlier version to play: duration must be from 1 to 72000",
+            "false\tmodules/fx/init.lua:8: options.scale must be more than 0 and at most 16, not 20",
+            "false\tmodules/fx/init.lua:9: options.offset only goes with options.follow",
+            "false\tmodules/fx/init.lua:10: bad argument 'options.follow' (Centity, Node, Player or Entity or nil expected, got World)",
+            "true\t2",
+        ]
+    );
+    let mut ticked = Vec::new();
+    for _ in 0..8 {
+        session.tick();
+        ticked.extend(platform.take());
+    }
+    assert_eq!(
+        printed(&ticked),
+        [
+            "glow at\t5\t66",
+            "glow end\ttarget_gone",
+            "end\tfinished\ttrue\ttrue\tfalse",
+            "true\tfalse\tfalse\tnil",
+        ]
+    );
+    // Two points on its ticks 0 and 2: the puff's four, the glow's two before its lamp went, and the loop's six
+    // (ticks 0, 2 and 4) before it stopped, each sent on its own.
+    let sent: Vec<&String> = ticked
+        .iter()
+        .filter(|c| c.starts_with("particle"))
+        .collect();
+    assert_eq!(sent.len(), 12, "{sent:?}");
+    assert!(
+        sent.iter()
+            .all(|c| *c == "particle world minecraft:flame x1 None to Alex")
+    );
+    // A reload of the module ends what its old scope played, `unloaded`, which another module hears.
+    let again = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("particles/puff/effect.json", puff),
+        (
+            "modules/a_watch/init.lua",
+            r#"nf.on("demo:played", function(ev) ev.effect:on("end", function(e) print("over", e.reason) end) end)"#,
+        ),
+        (
+            "modules/fx/init.lua",
+            r#"nf.emit("demo:played", { effect = nf.particles.play("puff", vector.create(0, 64, 0), { loop = true }) })"#,
+        ),
+    ]);
+    drop(session);
+    let mut session = Session::start(platform.clone(), &again, &NoPackages);
+    let started = platform.take();
+    assert!(
+        !started.iter().any(|c| c.starts_with("warn")),
+        "{started:?}"
+    );
+    session.tick();
+    session.reload(&["modules/fx/init.lua".to_owned()]);
+    let all = platform.take();
+    let reloaded = printed(&all);
+    assert_eq!(reloaded, ["over\tunloaded"], "{all:?}");
+}
+
+#[test]
+fn an_effects_file_with_errors_keeps_its_last_good_version_and_a_deleted_one_ends_it() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let puff = r##"{ "duration": 4, "loop": true, "emitters": { "main": { "particle": "minecraft:flame", "burst": 2, "every": 2 } } }"##;
+    // 256 points a tick, the most one effect may: seventeen of them are past the pass's budget of 4096.
+    let flood = r##"{ "duration": 4, "emitters": { "main": { "particle": "minecraft:flame", "burst": 256, "every": 1 } } }"##;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("particles/puff/effect.json", puff),
+        ("particles/flood/effect.json", flood),
+        (
+            "modules/fx/init.lua",
+            r#"
+local e = nf.particles.play("puff", vector.create(0, 64, 0))
+e:on("end", function(ev) print("end", ev.reason) end)
+nf.on("demo:again", function() print(pcall(nf.particles.play, "puff", vector.create(0, 64, 0)) and "played") end)
+for _ = 1, 17 do nf.particles.play("flood", vector.create(0, 64, 0)) end
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    session.tick();
+    let ticked = platform.take();
+    assert!(
+        ticked
+            .iter()
+            .any(|c| c.starts_with("warn particle budget exceeded: 2 effects skipped (more than 4096 points in a tick, from flood)")),
+        "{ticked:?}"
+    );
+    let budget: Vec<String> = session
+        .problems()
+        .iter()
+        .filter(|p| p.code.as_deref() == Some("particles.budget"))
+        .map(|p| p.file.clone())
+        .collect();
+    assert_eq!(budget, ["particles/flood/effect.json"]);
+    // A file with errors: the playing one keeps going, and a new play plays the last good version.
+    files.write("particles/puff/effect.json", r#"{ "duration": 0 }"#);
+    session.reload(&["particles/puff/effect.json".to_owned()]);
+    let room = session.room().unwrap();
+    let payload = mlua::Value::Table(room.host().lua().create_table().unwrap());
+    room.scripts()
+        .emit_custom(
+            netherforge_runtime::Target::Nf,
+            "demo:again".into(),
+            payload,
+        )
+        .unwrap();
+    session.tick();
+    assert_eq!(printed(&platform.take()), ["played"]);
+    // Deleted: what plays of it ends `removed`.
+    files.delete("particles/puff/effect.json");
+    session.reload(&["particles/puff/effect.json".to_owned()]);
+    assert_eq!(printed(&platform.take()), ["end\tremoved"]);
+}
