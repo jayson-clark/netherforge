@@ -2312,7 +2312,7 @@ impl Service for BlocksService {
         context.watch_world();
         // Stacks whose canBreak or canPlaceOn names a block whose state moved break the wrong blocks until rewritten.
         if self.shared.blocks.borrow().by_state != states_before {
-            context.game().items().refresh_online();
+            let _ = context.game().items().refresh_online();
         }
     }
 

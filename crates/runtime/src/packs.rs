@@ -989,9 +989,21 @@ impl Service for PacksService {
     }
 
     /// Built again and sent to everyone online whose client doesn't have this hash.
-    fn reload(&self, _room: &Room, _kind: &str, _ids: &BTreeSet<String>, project: &Define) {
+    fn reload(&self, _room: &Room, _kind: &str, ids: &BTreeSet<String>, project: &Define) {
         self.rebuild(project);
-        self.send_all();
+        let sent = self.send_all();
+        // Every pack is in the one build: each that reloaded answers with it, and whom it went to.
+        let built = self.shared.packs.borrow().built.as_ref().map(|b| {
+            netherforge_format::bridge::PackBuild {
+                sha1: b.sha1.clone(),
+                url: b.url.clone(),
+                bytes: b.bytes.len() as i32,
+            }
+        });
+        self.shared.reloading.borrow_mut().pack = built;
+        for id in ids {
+            self.shared.reattached("resource_pack", id, sent);
+        }
         let loaded = project.project;
         if !loaded.present("resource_pack").is_empty() && loaded.compiled_resource_packs.is_empty()
         {

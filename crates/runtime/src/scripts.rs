@@ -392,13 +392,19 @@ impl Scripts {
         }
     }
 
-    /// Closes `scope`: what it made goes, and so does its environment.
     /// The scopes stopped for good since the last call.
     pub fn take_released(&self) -> Vec<ScopeId> {
         std::mem::take(&mut self.0.state.borrow_mut().released)
     }
 
+    /// Closes `scope`: what it made goes, and so does its environment.
     pub fn close(&self, scope: ScopeId) {
+        // A scope still running hears it's going first: its own `nf.on("unload")` handlers (Kotlin's `close`).
+        if self.live(scope)
+            && let Ok(payload) = self.host().lua().create_table()
+        {
+            self.raise_within(&Target::Nf, "unload", payload, &|s| s == scope);
+        }
         self.disable(scope);
         self.0.state.borrow_mut().scopes.remove(&scope);
         self.host().close_scope(scope);

@@ -922,7 +922,8 @@ impl Service for ParticlesService {
                 .map(|(_, c)| (*c).clone());
             let exists = files.contains_key(id);
             let problem = files.get(id).cloned().flatten();
-            context.reload(id, next, exists, problem);
+            let moved = context.reload(id, next, exists, problem);
+            self.shared.reattached(KIND, id, moved);
         }
     }
 

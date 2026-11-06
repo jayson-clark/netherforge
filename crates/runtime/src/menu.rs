@@ -1255,6 +1255,7 @@ impl MenuContext {
                 .is_some_and(|p| p.kind == next.kind && p.size == next.size);
             let uuid = self.window_uuid(&window).expect("live");
             if same_shape {
+                self.shared.reattached("menu", id, 1);
                 let previous = previous.as_ref().expect("same shape");
                 {
                     let mut menus = self.shared.menus.borrow_mut();

@@ -219,7 +219,8 @@ impl ItemContext {
             .insert(id.to_owned(), record);
         self.start_script(id);
         if changed {
-            self.refresh_online();
+            let players = self.refresh_online();
+            self.shared.reattached("item", id, players);
         }
     }
 
@@ -380,10 +381,14 @@ impl ItemContext {
     }
 
     /// Every online player's own inventory.
-    pub(crate) fn refresh_online(&self) {
-        for player in self.platform().players().online() {
-            self.refresh(player.uuid);
-        }
+    /// Every online player's own inventory: how many players had stacks rewritten.
+    pub(crate) fn refresh_online(&self) -> usize {
+        self.platform()
+            .players()
+            .online()
+            .into_iter()
+            .filter(|player| self.refresh(player.uuid) > 0)
+            .count()
     }
 
     /// Once a tick: the inventories and the views asked for.

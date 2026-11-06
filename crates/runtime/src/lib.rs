@@ -58,6 +58,7 @@ pub mod permissions;
 pub mod player;
 pub mod project_items;
 pub mod recipes;
+pub mod reload;
 pub mod schedule;
 pub mod screen;
 pub mod scripts;

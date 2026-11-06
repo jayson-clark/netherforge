@@ -19,6 +19,7 @@ use std::rc::Rc;
 
 use netherforge_format::Problem;
 use netherforge_format::Severity;
+use netherforge_format::bridge::{ReloadResult, ReloadedResource};
 use netherforge_format::names::MinecraftVersion;
 use netherforge_format::package::PackageSources;
 use netherforge_format::project::{self, Project as Loaded, ProjectSource};
@@ -194,6 +195,8 @@ pub struct Session<'a> {
     /// What the owner's config says of the network and HTTP rates, before a policy lowers them.
     rates: (usize, usize),
     require_hub: bool,
+    /// Whether the server must restart for what it learns only as it starts.
+    startup: std::cell::RefCell<crate::reload::StartupCheck>,
 }
 
 /// How long the same runtime error stays quiet after it's logged: five seconds.
@@ -206,6 +209,8 @@ struct Reported {
     errors: std::collections::HashMap<String, (u64, u32)>,
     /// The problems scripts caused while running, by scope, until the scope closes.
     problems: BTreeMap<netherforge_luau::ScopeId, Vec<Problem>>,
+    /// The failures while a reload runs, for its answer (Kotlin's `Failures`): none when nothing is reloading.
+    collecting: Option<Vec<crate::reload::Failed>>,
 }
 
 /// A failure's message without its location, and where it was (`modules/door/init.lua`, line 3).
@@ -373,6 +378,7 @@ impl<'a> Session<'a> {
                 config.http.requests_per_minute,
             ),
             require_hub: config.network.require_hub,
+            startup: Default::default(),
             refusal: None,
             platform,
             source,
@@ -769,6 +775,7 @@ impl<'a> Session<'a> {
             )
             .chain(reported.problems.values().flatten().cloned())
             .chain(self.services.iter().flat_map(|s| s.problems()))
+            .chain(self.startup.borrow().problems())
             .collect()
     }
 
@@ -785,65 +792,180 @@ impl<'a> Session<'a> {
     }
 
     /// Stops the run and starts it again from the files, as a change to `netherforge.json` does.
-    pub fn restart(&mut self) {
-        self.reload(&[netherforge_format::manifest::FILE_NAME.to_owned()]);
+    pub fn restart(&mut self) -> ReloadResult {
+        self.reload(&[netherforge_format::manifest::FILE_NAME.to_owned()])
     }
 
-    /// Reads the project again after `changed` (project paths) changed, and
-    /// reloads each changed resource through the service that reloads its kind.
-    /// A change to `netherforge.json` (or the lock) restarts the session whole.
-    pub fn reload(&mut self, changed: &[String]) {
-        let whole = changed.iter().any(|p| {
-            p == netherforge_format::manifest::FILE_NAME
-                || p == netherforge_format::package::LOCK_FILE
-        });
+    /// Whether it runs: it isn't refused, and its Lua state started.
+    pub fn running(&self) -> bool {
+        self.room.is_some()
+    }
+
+    /// Reads the project again after `changed` (project or package paths) changed, and reloads the resource that
+    /// owns each path, once, through the service that reloads its kind: what each did, as the editor is told. A
+    /// change to a `netherforge.json` (any package's) or the lock, or any change while the project doesn't run,
+    /// starts the session again whole. `fonts/default.json` and `client/vanilla.json` reload nothing but are heard by
+    /// the services that follow them.
+    pub fn reload(&mut self, changed: &[String]) -> ReloadResult {
+        use crate::reload::{document_of, resource_of};
+        let documents: Vec<&'static str> = changed.iter().filter_map(|p| document_of(p)).collect();
+        let whole = documents
+            .iter()
+            .any(|d| *d == "netherforge" || *d == "lock");
+        let mut wanted: Vec<crate::reload::Key> = Vec::new();
+        for key in changed.iter().filter_map(|p| resource_of(p)) {
+            if !wanted.contains(&key) {
+                wanted.push(key);
+            }
+        }
+        let followed: Vec<&'static str> = documents
+            .iter()
+            .copied()
+            .filter(|d| *d == "vanilla" || *d == "default_font")
+            .collect();
+        if wanted.is_empty() && !whole {
+            if !followed.is_empty() && self.room.is_some() {
+                self.project = load(self.source, self.packages);
+                self.reload_kinds(Vec::new(), &followed);
+            }
+            return ReloadResult {
+                resources: Vec::new(),
+                restart: false,
+            };
+        }
         if whole || self.room.is_none() {
-            self.stop();
-            self.project = load(self.source, self.packages);
-            self.refuse();
-            self.run();
-            return;
+            return self.reload_all();
         }
         self.project = load(self.source, self.packages);
         *self.shared.names.borrow_mut() = self.project.names();
-        let mut by_kind: BTreeMap<&'static str, BTreeSet<String>> = BTreeMap::new();
-        for path in changed {
-            if let Some(found) = netherforge_format::kinds::classify(path)
-                && let (Some(kind), Some(id)) = (found.kind, found.id)
-                && found.package.is_none()
-            {
-                by_kind.entry(kind).or_default().insert(id);
-            }
-        }
-        let vanilla = changed.iter().any(|p| p == "client/vanilla.json");
-        self.reload_kinds(by_kind, vanilla);
+        self.collect();
+        let order = self.reload_kinds(wanted, &followed);
+        let failed = self.collected();
+        let restart = order
+            .iter()
+            .any(|(kind, _)| crate::reload::STARTUP_KINDS.contains(kind))
+            && self.check_startup();
+        let notes = std::mem::take(&mut *self.shared.reloading.borrow_mut());
+        let resources = crate::reload::outcomes(
+            &order,
+            self.project.namespace(),
+            &self.project.problems,
+            self.source.files(),
+            failed,
+            &notes,
+            self.platform.log(),
+        );
+        ReloadResult { resources, restart }
     }
 
-    /// Reloads the resources `by_kind` names (and what goes with them), the project as it read last.
+    /// Stops every service and starts the project again on a fresh Lua state, read afresh: the whole package, as
+    /// the editor is told (no kind, no id). Spawned centities reattach to the new definitions.
+    fn reload_all(&mut self) -> ReloadResult {
+        self.collect();
+        self.stop();
+        self.project = load(self.source, self.packages);
+        self.refuse();
+        self.run();
+        let failed: Vec<Problem> = self.collected().into_iter().map(|f| f.problem).collect();
+        let restart = self.has_startup_resources() && self.check_startup();
+        std::mem::take(&mut *self.shared.reloading.borrow_mut());
+        let mut problems = self.problems();
+        for problem in &failed {
+            if !problems.contains(problem) {
+                problems.push(problem.clone());
+            }
+        }
+        ReloadResult {
+            resources: vec![ReloadedResource {
+                pkg: self.project.namespace().to_owned(),
+                kind: None,
+                id: None,
+                ok: self.room.is_some() && failed.is_empty(),
+                reattached: self.shared.centities.borrow().all().count() as i32,
+                problems,
+                pack: None,
+            }],
+            restart,
+        }
+    }
+
+    /// Whether anything of the project goes in the start-up datapack.
+    fn has_startup_resources(&self) -> bool {
+        crate::reload::STARTUP_KINDS
+            .iter()
+            .any(|kind| !self.project.everywhere(kind).is_empty())
+    }
+
+    /// The start-up datapack checked against what the server started with: whether a restart is needed.
+    fn check_startup(&self) -> bool {
+        self.startup
+            .borrow_mut()
+            .check(&self.project, self.source, &*self.platform)
+    }
+
+    /// Starts keeping the scripts' failures for a reload's answer.
+    fn collect(&self) {
+        self.reported.borrow_mut().collecting = Some(Vec::new());
+    }
+
+    /// The failures kept since `collect`, and stops keeping them.
+    fn collected(&self) -> Vec<crate::reload::Failed> {
+        self.reported
+            .borrow_mut()
+            .collecting
+            .take()
+            .unwrap_or_default()
+    }
+
+    /// Reloads the resources in `wanted` (and what goes with them), the project as it read last, kind by kind in
+    /// format's order, and tells the services that follow `followed` documents: every resource it reloaded, in order.
     fn reload_kinds(
         &mut self,
-        mut by_kind: BTreeMap<&'static str, BTreeSet<String>>,
-        vanilla: bool,
-    ) {
+        wanted: Vec<crate::reload::Key>,
+        followed: &[&'static str],
+    ) -> Vec<crate::reload::Key> {
         let Some(room) = self.room.as_ref() else {
-            return;
+            return Vec::new();
         };
-        // What else goes with them (the scripts that ran a WebAssembly module), asked before anything unloads.
-        let asked: Vec<(&'static str, BTreeSet<String>)> =
-            by_kind.iter().map(|(k, ids)| (*k, ids.clone())).collect();
-        for (kind, ids) in asked {
+        let mut order = wanted;
+        let ids_of = |order: &[crate::reload::Key], kind: &str| -> BTreeSet<String> {
+            order
+                .iter()
+                .filter(|(k, _)| *k == kind)
+                .map(|(_, id)| id.clone())
+                .collect()
+        };
+        // What else goes with them (the scripts that required a module, or ran a WebAssembly module), asked before
+        // anything unloads, kind by kind; a kind that gained ids is asked again.
+        let mut asked: BTreeSet<&'static str> = BTreeSet::new();
+        loop {
+            let mut kinds: Vec<&'static str> = order.iter().map(|(k, _)| *k).collect();
+            kinds.sort_by_key(|k| kind_order(k));
+            kinds.dedup();
+            let Some(kind) = kinds.into_iter().find(|k| !asked.contains(k)) else {
+                break;
+            };
+            asked.insert(kind);
+            let ids = ids_of(&order, kind);
             for service in &self.services {
                 for (also, id) in service.restarts(kind, &ids) {
-                    if kind_order(also) > kind_order(kind) {
-                        by_kind.entry(also).or_default().insert(id);
+                    let key = (also, id);
+                    if kind_order(also) >= kind_order(kind) && !order.contains(&key) {
+                        asked.remove(also);
+                        order.push(key);
                     }
                 }
             }
         }
         // Kinds reload in format's order, so a kind reloads after what it's built on (a module after the
-        // WebAssembly module it runs).
-        let mut by_kind: Vec<(&'static str, BTreeSet<String>)> = by_kind.into_iter().collect();
-        by_kind.sort_by_key(|(kind, _)| kind_order(kind));
+        // WebAssembly module it runs); within a kind, in the order they were asked for.
+        order.sort_by_key(|(kind, _)| kind_order(kind));
+        let mut by_kind: Vec<(&'static str, BTreeSet<String>)> = Vec::new();
+        for (kind, _) in &order {
+            if by_kind.last().is_none_or(|(k, _)| k != kind) {
+                by_kind.push((kind, ids_of(&order, kind)));
+            }
+        }
         let define = Define {
             project: &self.project,
             source: self.source,
@@ -865,14 +987,13 @@ impl<'a> Session<'a> {
             }
         }
         let mut kinds: BTreeSet<&str> = by_kind.iter().map(|(k, _)| *k).collect();
-        if vanilla {
-            kinds.insert("vanilla");
-        }
+        kinds.extend(followed.iter().copied());
         for service in &self.services {
             service.reloaded(room, &kinds, &define);
         }
         self.released();
         self.report();
+        order
     }
 
     // ---- the owner's settings -----------------------------------------------------------
@@ -988,31 +1109,22 @@ impl<'a> Session<'a> {
         let Some(modules) = self.shared.modules.borrow().clone() else {
             return;
         };
-        let mut by_kind: BTreeMap<&'static str, BTreeSet<String>> = BTreeMap::new();
-        for scope in stale {
-            match modules.owner(scope) {
-                Some(Owner::Module(id)) => {
-                    by_kind.entry("module").or_default().insert(id);
-                }
-                Some(Owner::Script(file)) => {
-                    if let Some(found) = netherforge_format::kinds::classify(&file)
-                        && let (Some(kind), Some(id), None) = (found.kind, found.id, found.package)
-                    {
-                        by_kind.entry(kind).or_default().insert(id);
-                    }
-                }
-                None => {}
+        let mut wanted: Vec<crate::reload::Key> = Vec::new();
+        for key in stale
+            .into_iter()
+            .filter_map(|scope| modules.owner(scope))
+            .filter_map(|owner| crate::reload::owned_by(&owner))
+        {
+            if !wanted.contains(&key) {
+                wanted.push(key);
             }
         }
-        if by_kind.is_empty() {
+        if wanted.is_empty() {
             return;
         }
-        let each: Vec<String> = by_kind
-            .iter()
-            .flat_map(|(k, ids)| ids.iter().map(move |id| format!("{k}:{id}")))
-            .collect();
+        let each: Vec<String> = wanted.iter().map(|(k, id)| format!("{k}:{id}")).collect();
         log.info(format!("Restarting what read it: {}", each.join(", ")));
-        self.reload_kinds(by_kind, false);
+        self.reload_kinds(wanted, &[]);
     }
 
     /// The project's packs read again from disk and rebuilt (`nf.packs.rebuild`), when a script asked for it.
@@ -1155,6 +1267,21 @@ impl<'a> Session<'a> {
                 None,
             );
             let problem = Problem { line, ..problem };
+            if reported.collecting.is_some() {
+                let owner = self
+                    .shared
+                    .modules
+                    .borrow()
+                    .as_ref()
+                    .and_then(|m| m.owner(report.scope))
+                    .and_then(|o| crate::reload::owned_by(&o));
+                if let Some(collecting) = reported.collecting.as_mut() {
+                    collecting.push(crate::reload::Failed {
+                        owner,
+                        problem: problem.clone(),
+                    });
+                }
+            }
             let kept = reported.problems.entry(report.scope).or_default();
             if !kept.contains(&problem) {
                 kept.push(problem);
@@ -1421,6 +1548,12 @@ impl Service for CentitiesService {
         let before = context.instances_of(ids);
         self.define(project);
         context.reload(ids, &before);
+        // What's live on each new definition now: the instances moved onto it, and inert ones it brought back.
+        let centities = self.shared.centities.borrow();
+        for id in ids {
+            let live = centities.all().filter(|i| i.declared.id == *id).count();
+            self.shared.reattached("centity", id, live);
+        }
     }
 
     /// Instances stay in the world, saved, for the next session to restore; temporary ones go.
@@ -1683,6 +1816,31 @@ impl Service for ModulesService {
             // A module that's gone, or now has errors, stops; its failures are in the reports.
             let _ = modules.reload(&id, lua.clone());
         }
+    }
+
+    /// A module's reload restarts every module that required it, and every resource whose script (or a file beside
+    /// it) did, in their kinds' turns.
+    fn restarts(&self, kind: &str, ids: &BTreeSet<String>) -> Vec<(&'static str, String)> {
+        let Some(modules) = self.modules.borrow().clone() else {
+            return Vec::new();
+        };
+        if kind != "module" {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        for id in ids {
+            for scope in modules.dependents(id) {
+                if let Some(key) = modules
+                    .owner(scope)
+                    .and_then(|o| crate::reload::owned_by(&o))
+                    && !out.contains(&key)
+                    && !(key.0 == "module" && ids.contains(&key.1))
+                {
+                    out.push(key);
+                }
+            }
+        }
+        out
     }
 
     fn stop(&self, _room: &Room, _platform: &dyn Platform) {

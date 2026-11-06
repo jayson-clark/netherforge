@@ -121,16 +121,30 @@ pub struct Shared {
     pub managed_failures: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     /// Structures: the project's, its builds, scripts' saves, and the gradual work going.
     pub structures: RefCell<crate::structures::Structures>,
+    /// What services say of the reload running now (what kept running on each resource): read once it's done.
+    pub reloading: RefCell<crate::reload::Notes>,
     /// Lanes work goes to off the main thread, by name, made as they're first wanted (a biome search's).
     pub lanes: RefCell<std::collections::HashMap<&'static str, crate::http::Workers>>,
 }
 
 impl Shared {
+    /// Says that `count` things kept running on resource `kind:id`'s new version (live instances, windows kept,
+    /// players sent the rebuilt pack): its `reattached` in the reload's answer.
+    pub fn reattached(&self, kind: &'static str, id: &str, count: usize) {
+        *self
+            .reloading
+            .borrow_mut()
+            .reattached
+            .entry((kind, id.to_owned()))
+            .or_default() += count as i32;
+    }
+
     pub fn new(platform: Rc<dyn Platform>, store: Rc<crate::store::Store>) -> Rc<Shared> {
         Rc::new(Shared {
             mobs: crate::mob::Mobs::new(platform.clone()),
             lanes: RefCell::default(),
             structures: RefCell::default(),
+            reloading: RefCell::default(),
             managed_worlds: RefCell::default(),
             databases: RefCell::default(),
             managed_failures: Default::default(),
