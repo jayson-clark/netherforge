@@ -80,7 +80,8 @@ impl std::fmt::Debug for Link {
 
 pub struct NetworkLink {
     config: NetworkConfig,
-    /// When it was made: the plugin's start, which a server's time to be ready is counted from.
+    /// When the server's process started (the runtime shares the JVM's), which a server's time to be ready is
+    /// counted from, as Kotlin's `RuntimeMXBean.startTime` was; where that can't be read, when the link was made.
     pub created: Instant,
     pub mode: Mode,
     inbox: Arc<Inbox>,
@@ -138,7 +139,7 @@ impl NetworkLink {
                 shutdown: None,
                 last_failure: None,
             }),
-            created: Instant::now(),
+            created: process_started().unwrap_or_else(Instant::now),
             config,
         })
     }
@@ -581,5 +582,36 @@ impl Drop for NetworkLink {
         if let Some(mut client) = self.client.get_mut().take() {
             client.stop();
         }
+    }
+}
+
+/// When this process started, on Linux (`/proc/self/stat`'s start time, in the kernel's fixed 100 ticks a second, against
+/// `/proc/uptime`); none elsewhere.
+fn process_started() -> Option<Instant> {
+    let stat = std::fs::read_to_string("/proc/self/stat").ok()?;
+    let uptime = std::fs::read_to_string("/proc/uptime").ok()?;
+    process_age(&stat, &uptime).and_then(|age| Instant::now().checked_sub(age))
+}
+
+/// How long ago a process started, from its `/proc/<pid>/stat` and the system's `/proc/uptime`.
+fn process_age(stat: &str, uptime: &str) -> Option<std::time::Duration> {
+    // The command name, in parentheses, may hold spaces: fields count from after its last `)`.
+    let fields: Vec<&str> = stat.get(stat.rfind(')')? + 1..)?.split_whitespace().collect();
+    // `starttime` is field 22; after the name, field 3 is the first here.
+    let started_ticks: f64 = fields.get(22 - 3)?.parse().ok()?;
+    let up: f64 = uptime.split_whitespace().next()?.parse().ok()?;
+    let age = up - started_ticks / 100.0;
+    (age >= 0.0).then(|| std::time::Duration::from_secs_f64(age))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_process_age_is_read_from_its_stat_and_the_uptime() {
+        let stat = "4242 (Server thread (1)) S 1 4242 4242 0 -1 4194560 100 0 0 0 5 3 0 0 20 0 30 0 123450 0 0";
+        let age = super::process_age(stat, "1240.50 9000.00\n").unwrap();
+        assert_eq!(age.as_millis(), 6000);
+        assert_eq!(super::process_age(stat, "1000.00 1.00"), None);
+        assert_eq!(super::process_age("garbage", "1.0"), None);
     }
 }
