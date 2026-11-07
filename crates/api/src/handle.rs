@@ -273,6 +273,10 @@ impl netherforge_luau::json::Tags for SavedHandles {
     }
 
     fn encode(&self, value: &Value) -> Option<Result<(String, Vec<serde_json::Value>), String>> {
+        if let Value::Table(t) = value {
+            return crate::value_types::encode_location(t)
+                .map(|parts| Ok(("location".to_owned(), parts)));
+        }
         let Value::UserData(u) = value else {
             return None;
         };
@@ -296,6 +300,9 @@ impl netherforge_luau::json::Tags for SavedHandles {
     }
 
     fn revive(&self, lua: &Lua, tag: &str, parts: &[serde_json::Value]) -> Option<Value> {
+        if tag == "location" {
+            return crate::value_types::revive_location(lua, parts);
+        }
         let (class, _) = crate::handles::SAVEABLE.iter().find(|(_, t)| *t == tag)?;
         // Each saved class is keyed by one string.
         let [serde_json::Value::String(key)] = parts else {

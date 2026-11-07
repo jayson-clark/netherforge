@@ -18,6 +18,7 @@ use netherforge_runtime::screen::ProjectBytes;
 use netherforge_runtime::screen::video::ProjectPaths;
 use netherforge_runtime::server::ServerEvents;
 use netherforge_runtime::session::Session;
+use netherforge_runtime::shared::Shared;
 use netherforge_runtime::store::Store;
 
 use crate::JavaPlatform;
@@ -140,8 +141,10 @@ pub fn start(args: StartArgs) -> Result<Option<Rc<dyn PlatformEvents>>, String> 
     netherforge_runtime::network::wait_for_hub(&link, platform.log());
     session_config.network_link = Some(link);
 
-    let session =
-        Session::start_configured(session_platform, source, packages, store, session_config);
+    // Made before it runs, so its first run already has the profiler, the bridge's debugger and the server's lookups
+    // (a recipe's project item is built from its look as the session starts).
+    let session = Session::configured(session_platform, source, packages, store, session_config);
+    let shared = session.shared().clone();
     let events = Rc::new(ServerEvents::new(session));
     let info = platform.info();
     let profiler = Rc::new(Profiler::new(
@@ -155,8 +158,12 @@ pub fn start(args: StartArgs) -> Result<Option<Rc<dyn PlatformEvents>>, String> 
     if let Some(bridge) = &bridge {
         events.attach_bridge(bridge.clone());
     }
+    bind(&platform, &events, &shared);
+    events
+        .session_mut_now()
+        .expect("nothing holds a session that hasn't run")
+        .begin();
     let admin = AdminCommand::register(&events, config.state_dir.clone());
-    bind(&platform, &events);
     if let Some(bridge) = &bridge {
         bridge.connect();
     }
@@ -179,48 +186,49 @@ const MOST_REPORTED_ATS: usize = 20;
 
 /// Hands the server the runtime's events and the lookups it answers its text and items with (Kotlin's
 /// `platform.bind` and `bindText`), each reading the session running when it's asked.
-fn bind(platform: &Rc<dyn Platform>, events: &Rc<ServerEvents<'static>>) {
-    let weak: Weak<ServerEvents<'static>> = Rc::downgrade(events);
-    let on = move |f: &dyn Fn(&Session<'static>) -> Option<String>| -> Option<String> {
-        let events = weak.upgrade()?;
-        let session = events.try_session().ok()?;
-        f(&session)
-    };
+fn bind(platform: &Rc<dyn Platform>, events: &Rc<ServerEvents<'static>>, shared: &Rc<Shared>) {
+    // The lookups read what the session shares, not the session: the server asks them while it starts, and while a
+    // reload holds it.
+    let weak: Weak<Shared> = Rc::downgrade(shared);
+    let on =
+        move |f: &dyn Fn(&Shared) -> Option<String>| -> Option<String> { f(&*weak.upgrade()?) };
     let glyphs = {
         let on = on.clone();
         Box::new(move |reference: String| {
-            on(&|s| {
-                let shared = s.shared();
+            on(&|shared| {
                 let mut packs = shared.packs.try_borrow_mut().ok()?;
                 packs.text_glyph(&*shared.platform, &reference)
             })
         })
     };
     let items = {
-        let weak = Rc::downgrade(events);
+        let weak = Rc::downgrade(shared);
         Box::new(move |reference: String| {
-            let events = weak.upgrade()?;
-            let session = events.try_session().ok()?;
-            let items = session.shared().items.try_borrow().ok()?;
+            let shared = weak.upgrade()?;
+            let items = shared.items.try_borrow().ok()?;
             items.look(&reference)
         })
     };
     let blocks = {
         let on = on.clone();
-        Box::new(move |name: String| {
-            on(&|s| s.shared().blocks.try_borrow().ok()?.state_of(&name, None))
-        })
+        Box::new(move |name: String| on(&|s| s.blocks.try_borrow().ok()?.state_of(&name, None)))
     };
     let namespace = {
         let weak = Rc::downgrade(events);
+        let first = events
+            .try_session()
+            .map(|s| s.project().namespace().to_string())
+            .unwrap_or_default();
+        let last = RefCell::new(first);
         Box::new(move || {
-            weak.upgrade()
-                .and_then(|e| {
-                    e.try_session()
-                        .ok()
-                        .map(|s| s.project().namespace().to_string())
-                })
-                .unwrap_or_default()
+            if let Some(now) = weak.upgrade().and_then(|e| {
+                e.try_session()
+                    .ok()
+                    .map(|s| s.project().namespace().to_string())
+            }) {
+                *last.borrow_mut() = now;
+            }
+            last.borrow().clone()
         })
     };
     platform.bind(events.clone(), glyphs, items, blocks, namespace);
@@ -229,7 +237,7 @@ fn bind(platform: &Rc<dyn Platform>, events: &Rc<ServerEvents<'static>>) {
         let on = on.clone();
         Box::new(move |px: i32| {
             on(&|s| {
-                let built = s.shared().packs.try_borrow().ok()?.built.is_some();
+                let built = s.packs.try_borrow().ok()?.built.is_some();
                 built.then(|| netherforge_format::kind::resource_pack::fonts::offset(px))
             })
         })
@@ -239,8 +247,7 @@ fn bind(platform: &Rc<dyn Platform>, events: &Rc<ServerEvents<'static>>) {
         if !text.to_lowercase().contains("<at") {
             return text;
         }
-        on(&|s| {
-            let shared = s.shared();
+        on(&|shared| {
             let font = shared.font.borrow();
             let packs = shared.packs.try_borrow().ok()?;
             let width = match font.as_ref() {

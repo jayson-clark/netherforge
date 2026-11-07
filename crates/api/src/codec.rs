@@ -505,39 +505,53 @@ impl Codec for TextCodec {
 /// the spec changes; until then it's a `Vec3`.
 #[derive(Clone, Copy, Default)]
 pub struct LocationCodec;
+
+/// A location's field: in its slot (one the runtime made), or by name (a table a script wrote).
+fn location_field(t: &Table, name: &str, slot: i64) -> Value {
+    match t.raw_get::<Value>(slot) {
+        Ok(Value::Nil) | Err(_) => t.raw_get::<Value>(name).unwrap_or(Value::Nil),
+        Ok(value) => value,
+    }
+}
 impl Codec for LocationCodec {
     type T = values::Location;
     fn expected(&self) -> String {
         "Location".into()
     }
     fn accepts(&self, value: &Value) -> bool {
-        matches!(value, Value::Table(t) if t.raw_get::<Value>("world").is_ok_and(|w| HandleOf::<crate::handles::World>::default().accepts(&w)))
+        matches!(value, Value::Table(t) if HandleOf::<crate::handles::World>::default().accepts(&location_field(t, "world", 1)))
     }
     fn read(&self, lua: &Lua, value: Value, at: &str) -> ApiResult<values::Location> {
         let Value::Table(t) = &value else {
             return Err(mismatch(at, "Location", &value));
         };
-        let field = |name: &str| t.raw_get::<Value>(name).unwrap_or(Value::Nil);
         Ok(values::Location {
             world: HandleOf::<crate::handles::World>::default().read(
                 lua,
-                field("world"),
+                location_field(t, "world", 1),
                 &format!("{at}.world"),
             )?,
-            position: Vec3Codec.read(lua, field("position"), &format!("{at}.position"))?,
-            yaw: Opt(Num).read(lua, field("yaw"), &format!("{at}.yaw"))?,
-            pitch: Opt(Num).read(lua, field("pitch"), &format!("{at}.pitch"))?,
+            position: Vec3Codec.read(
+                lua,
+                location_field(t, "position", 2),
+                &format!("{at}.position"),
+            )?,
+            yaw: Opt(Num).read(lua, location_field(t, "yaw", 3), &format!("{at}.yaw"))?,
+            pitch: Opt(Num).read(lua, location_field(t, "pitch", 4), &format!("{at}.pitch"))?,
         })
     }
     fn push(&self, lua: &Lua, value: values::Location) -> mlua::Result<Value> {
         let t = lua.create_table()?;
         t.raw_set(
-            "world",
+            1,
             HandleOf::<crate::handles::World>::default().push(lua, value.world)?,
         )?;
-        t.raw_set("position", Vec3Codec.push(lua, value.position)?)?;
-        t.raw_set("yaw", value.yaw)?;
-        t.raw_set("pitch", value.pitch)?;
+        t.raw_set(2, Vec3Codec.push(lua, value.position)?)?;
+        t.raw_set(3, value.yaw)?;
+        t.raw_set(4, value.pitch)?;
+        if let Some(meta) = crate::value_types::location_metatable(lua) {
+            t.set_metatable(Some(meta))?;
+        }
         Ok(Value::Table(t))
     }
 }

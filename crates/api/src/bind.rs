@@ -118,7 +118,12 @@ pub fn install(host: &Host, api: Rc<dyn LuaApi>) -> mlua::Result<()> {
         classes.methods.insert(chain[0], methods);
     }
     lua.set_app_data(classes);
-    Ok(())
+    crate::value_types::install(lua)
+}
+
+/// A scope's own `vec3` library.
+pub fn vec3_for(lua: &Lua) -> mlua::Result<Table> {
+    crate::value_types::vec3_for(lua)
 }
 
 /// `scope`'s own `nf` (or the namespace `path` under it, `nf.server`): a table

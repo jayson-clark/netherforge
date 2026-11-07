@@ -792,3 +792,70 @@ print(arena:unload({{ delete = true }}), arena:is_managed())
         Session::start_configured(platform.clone(), &again, &NoPackages, store, config());
     assert_eq!(platform.lines(), ["true true"]);
 }
+
+#[test]
+fn vectors_and_locations_have_their_methods_and_vec3_builds_them() {
+    let files = Files::new(
+        &[],
+        &format!(
+            r#"{TRY}
+local v = vec3(3, 4, 0)
+print(tostring(v), v:length(), v.x, (v + vec3.up):unpack())
+print(tostring(vec3(1, 2, 3) * 2), tostring(-vec3.east), v == vec3(3, 4, 0))
+print(tostring(v:normalized()), tostring(v:flat():with_y(7)), v:dot(vec3.one))
+print(tostring(vec3.from_yaw_pitch(0, 0):round()), tostring(vec3(1, 0, 0):rotated(vec3.up, 90):round()))
+try(v.length, 5)
+try(v.dot, v, 1)
+try(function() vec3("a", 1, 2) end)
+try(function() vec3.zero = 1 end)
+local here = world:location(vec3(1, 2, 3), 90, 0)
+print(tostring(here), tostring(here:offset(vec3(0, 10, 0)).position), tostring(here:direction():round()))
+print(here == world:location(vec3(1, 2, 3), 90, 0), here:with_position(vec3.zero).yaw)
+try(function() here.yaw = 1 end)
+"#
+        ),
+    );
+    let platform = Fake::new();
+    let session = start(&files, &platform, Config::default());
+    let lines = printed(&session, &platform, 11);
+    assert_eq!(
+        lines,
+        [
+            "vec3(3, 4, 0) 5 3 3 5 0",
+            "vec3(2, 4, 6) vec3(-1, 0, 0) true",
+            "vec3(0.6000000238418579, 0.800000011920929, 0) vec3(3, 7, 0) 7",
+            "vec3(0, 0, 1) vec3(0, 0, -1)",
+            "false call Vec3 methods with ':' on a Vec3, like v:length()",
+            "false bad argument 'other' (Vec3 expected, got number)",
+            "false bad argument 'x' (number expected, got string)",
+            "false vec3 is shared by every script and can't be changed",
+            "location(\"world\", vec3(1, 2, 3), 90, 0) vec3(1, 12, 3) vec3(-1, 0, 0)",
+            "true 90",
+            "false locations can't be changed (setting 'yaw'): make a new one, like location:with_position(v)",
+        ]
+    );
+}
+
+#[test]
+fn a_location_goes_through_json_by_its_tag() {
+    let files = Files::new(
+        &[],
+        &format!(
+            r#"{TRY}
+local text = nf.json.encode({{ at = world:location(vec3(1, 2.5, 3), 90) }})
+print(text)
+local back = nf.json.decode(text).at
+print(tostring(back), back == world:location(vec3(1, 2.5, 3), 90))
+"#
+        ),
+    );
+    let platform = Fake::new();
+    let session = start(&files, &platform, Config::default());
+    assert_eq!(
+        printed(&session, &platform, 2),
+        [
+            r#"{"at":{"$location":["world",1,2.5,3,90,null]}}"#,
+            r#"location("world", vec3(1, 2.5, 3), 90, 0) true"#,
+        ]
+    );
+}

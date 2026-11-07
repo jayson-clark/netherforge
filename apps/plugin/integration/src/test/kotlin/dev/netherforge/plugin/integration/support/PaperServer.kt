@@ -167,6 +167,10 @@ class PaperServer(
         }
     }
 
+    /** The runtime the run chose (`-Pnetherforge.runtime=rust`), or none: the plugin's default. */
+    private fun runtime(): List<String> =
+        System.getProperty("netherforge.it.runtime").orEmpty().ifEmpty { null }?.let { listOf("-Dnetherforge.runtime=$it") }.orEmpty()
+
     /** Starts the JVM with [properties], its output in [log] (and the test's own output). */
     fun launch(properties: List<String>, log: String): Process {
         // A free port for each start, not one for the scenario: a port let go is the OS's to hand out again (to the
@@ -181,7 +185,7 @@ class PaperServer(
             "--enable-native-access=ALL-UNNAMED",
             // Test-only. The editor never does this: the user accepts the Mojang EULA in its UI.
             "-Dcom.mojang.eula.agree=true"
-        ) + properties + listOf("-jar", Adapter.paper.toString(), "--nogui")
+        ) + runtime() + properties + listOf("-jar", Adapter.paper.toString(), "--nogui")
         val process = ProcessBuilder(command)
             .directory(folder.toFile())
             .redirectErrorStream(true)

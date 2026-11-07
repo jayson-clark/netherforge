@@ -410,6 +410,16 @@ impl Around for Running<'_, '_> {
         self.session.player_quit(&event.player);
     }
 
+    /// The services first, so a world's configured spawn rates are in place before scripts hear of it.
+    fn world_load(
+        &self,
+        event: &mut netherforge_platform::game_event::World,
+        raise: &dyn Fn(&mut netherforge_platform::game_event::World),
+    ) {
+        self.session.world_loaded(&event.world);
+        raise(event)
+    }
+
     /// A player muted across the network says nothing, whatever scripts would do: they're told why.
     fn player_chat(
         &self,

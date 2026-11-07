@@ -85,7 +85,7 @@ class NativeRuntimeTest {
         try {
             runtime.tick()
             val log = platform.log.lines.joinToString("\n")
-            assertContains(log, "spawned\tlamp\t1, 64, 2")
+            assertContains(log, "spawned\tlamp\tvec3(1, 64, 2)")
             assertEquals(
                 2,
                 platform.entities.displays.size,

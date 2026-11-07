@@ -58,6 +58,7 @@ pub mod codec;
 pub mod events;
 pub mod handle;
 pub mod pending;
+pub mod value_types;
 pub mod values;
 
 pub use bind::{install, nf_for};

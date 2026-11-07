@@ -32,6 +32,7 @@ pub mod custom_blocks;
 pub mod cutscenes;
 pub mod data;
 pub mod databases;
+pub mod daylight;
 pub mod debug;
 pub mod definitions;
 pub mod dialog;

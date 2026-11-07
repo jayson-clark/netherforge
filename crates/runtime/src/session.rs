@@ -99,6 +99,8 @@ pub trait Service {
     fn plugins_changed(&self) {}
     /// A block was placed or broken (once scripts let it be): what's built from the world's blocks reads it again.
     fn block_changed(&self, _block: &BlockRef) {}
+    /// A world was loaded or created, before scripts hear of it.
+    fn world_loaded(&self, _platform: &dyn Platform, _world: &str) {}
 
     /// What's wrong as it runs, beyond the project's files (the particle budget's warning).
     fn problems(&self) -> Vec<Problem> {
@@ -315,6 +317,20 @@ impl<'a> Session<'a> {
         store: Rc<crate::store::Store>,
         config: Config,
     ) -> Session<'a> {
+        let mut session = Self::configured(platform, source, packages, store, config);
+        session.begin();
+        session
+    }
+
+    /// The session [`start_configured`](Self::start_configured) makes, before it runs anything: so what must be in
+    /// place for its first run (the server's lookups of its items, the profiler, the debugger) can be first.
+    pub fn configured(
+        platform: Rc<dyn Platform>,
+        source: &'a dyn ProjectSource,
+        packages: &'a dyn PackageSources,
+        store: Rc<crate::store::Store>,
+        config: Config,
+    ) -> Session<'a> {
         let project = load(source, packages);
         let shared = Shared::new(platform.clone(), store);
         shared.schedules.borrow_mut().now = config.wall_clock;
@@ -408,7 +424,7 @@ impl<'a> Session<'a> {
             }
         }
         shared.tests.borrow_mut().harness = config.testing.clone();
-        let mut session = Session {
+        Session {
             limits: {
                 let mut limits = config.limits.clone().unwrap_or_default();
                 if let Some(p) = config.performance {
@@ -445,10 +461,13 @@ impl<'a> Session<'a> {
             profiling: Default::default(),
             ticks: Default::default(),
             on_host: Default::default(),
-        };
-        session.refuse();
-        session.run();
-        session
+        }
+    }
+
+    /// Runs a [`configured`](Self::configured) session for the first time.
+    pub fn begin(&mut self) {
+        self.refuse();
+        self.run();
     }
 
     /// The policy this run is under, from the owner's and what the network's hub sent; whether it waits for the hub;
@@ -754,6 +773,12 @@ impl<'a> Session<'a> {
     pub fn chunk_loaded(&self, world: &str, chunk_x: i32, chunk_z: i32, generated: bool) {
         self.each(|s| s.chunk_loaded(world, chunk_x, chunk_z, generated));
         self.released();
+    }
+
+    /// A world was loaded: its configured spawn rates go in place before scripts hear of it.
+    pub fn world_loaded(&self, world: &str) {
+        let platform = self.platform.clone();
+        self.each(|s| s.world_loaded(&*platform, world));
     }
 
     /// Other plugins changed (`PlatformEvents::plugins_changed`).
@@ -1840,6 +1865,8 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         Box::new(crate::sky::SkiesService {
             shared: shared.clone(),
         }),
+        Box::new(crate::daylight::DaylightService::default()),
+        Box::new(crate::daylight::SpawnRatesService::default()),
         // Stops after every script that may hold a connection open, so theirs end `unloaded` as they go.
         Box::new(crate::http::api::HttpService {
             shared: shared.clone(),

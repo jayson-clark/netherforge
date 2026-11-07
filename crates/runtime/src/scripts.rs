@@ -307,6 +307,7 @@ impl Scripts {
         let lua = host.lua();
         let env = host.env(scope).expect("just opened");
         env.raw_set("nf", netherforge_api::nf_for(lua, scope)?)?;
+        env.raw_set("vec3", netherforge_api::bind::vec3_for(lua)?)?;
         // A scope's own `_G` is its environment.
         env.raw_set("_G", env.clone())?;
         let scripts = Rc::downgrade(&self.0);
@@ -834,6 +835,16 @@ impl Scripts {
             .borrow()
             .listeners
             .contains_key(&(key_of(target), event.to_owned()))
+    }
+
+    /// Whether anything listens for `event` on any target (a world's `dusk` on any world).
+    pub fn listening_anywhere(&self, event: &str) -> bool {
+        self.0
+            .state
+            .borrow()
+            .listeners
+            .keys()
+            .any(|(_, e)| e == event)
     }
 
     /// Raises built-in `event` on `target` with `payload` (its fields), and
