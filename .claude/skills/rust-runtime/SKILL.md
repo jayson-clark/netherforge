@@ -236,6 +236,20 @@ runtimes can't disagree about what crosses. `pnpm lint`'s generated-files check 
 - `crate::Runtime` is what every binding asks around its call: `requires` (the one
   capability check, before anything is read); the runtime's answers through format's `Requirement`).
 
+## Values (`crates/api/src/value_types.rs`)
+
+The spec's value types (`packages/api/src/spec/values.ts`) aren't generated: they're written once, in Luau, installed
+with the bindings.
+
+- **`Vec3` is Luau's native `vector`** (32-bit components). Its methods (`length`, `normalized`, `rotated`...) and
+  `tostring` (`vec3(1, 2, 3)`) come from the vector type's metatable (`Lua::set_type_metatable::<Vector>`); the
+  operators are the VM's own, so vector maths makes no call. `type(v)` is `"vector"`.
+- **`Location` is a table under a metatable** (`LocationCodec::push`): its fields in slots 1 to 4 behind `__index`, so
+  assigning one is `__newindex`'s error; methods, `==`, `tostring`. The codec reads a script's own table by name too.
+  In JSON (`nf.json`, saved tables, item data) it's `{"$location":[world,x,y,z,yaw,pitch]}` (`SavedHandles`).
+- **Each scope's `vec3`** is an empty table over the one library (`vec3_for`, set beside `nf` in `Scripts`).
+- `math.type`/`math.tointeger` are the host's (`crates/luau`): a whole number is an integer, as the terrain glue says.
+
 ## Handles (`crates/api/src/handle.rs`)
 
 - **A handle is one userdata type** (`HandleData`) for every class: its class (which can
@@ -1290,6 +1304,43 @@ types are format's (`bridge/`), so the editor's generated TypeScript is what the
 The profiler stream, the debugger and `/nf`: their sections. The web routes' listing is `/nf requires`' (Kotlin's
 bridge has no routes request).
 
+## Watched events (`session.rs`'s `update_watched`)
+
+The adapter delivers some events only on request (`WatchedEvent`: chat, moves, input, block spread..., chunk loads).
+After the session starts, at the end of each tick and when it stops, it tells `Platform::watch` what's wanted: an event
+of the generated `WATCHED` table any script listens to on any target (`Scripts::events_listened`), or one a service
+needs whoever listens (`Service::needs_watched`: custom blocks a chunk's load, a network chat). Never twice in a row the
+same. `Unported`'s `watch` does nothing (a fake delivers everything).
+
+## Daylight and spawn rates (`crates/runtime/src/daylight.rs`)
+
+`dusk`/`dawn` and `world_dusk`/`world_dawn` from each world's clock once a tick while something listens anywhere
+(`Scripts::listening_anywhere`), a crossing being a change of `DayPeriod` since the last look; `netherforge.json`'s
+`worlds` spawn limits, intervals and game rules at start and as a world loads (`Service::world_loaded`, from the
+`world_load` game event, before scripts hear of it).
+
+## World generators (`crates/runtime/src/terrains.rs`, `crates/ffi/src/terrain.rs`)
+
+- **The adapter drives every generator as a `TerrainSource`** (`apps/plugin/runtime/.../platform/terrain/`, Rust's in
+  `crates/platform/src/terrain.rs`): generate a chunk, surface height, a dry spawn column, the biome at a place, the
+  locate search's heights and `first_where`, each call naming the world (`TerrainWorld`: seed and heights). The Rust
+  runtime's is `RustTerrain` (format's compiled file bound once per world, a `LuauScripts` pool per thread); the Kotlin
+  runtime's compiled terrain is wrapped in the adapter as `CompiledTerrainSource`. `ProjectGenerator.source` carries it.
+- **It's called from every chunk thread**, which the generated glue's objects (main thread only) don't allow: a
+  `SharedTerrain` crosses into `crates/ffi`'s registry of thread-safe objects (`terrain::export`, ids from the same
+  numbers), which `nf_call` consults after the thread's own and `nf_release` drops at once. Its wire is written by hand
+  on both sides (`terrain.rs`, `Terrain.kt`): `EXTERNAL_WIRE` marks it `numbers` (no generated codec).
+- **The terrains' service** publishes the running terrains (`resolve_generators`: the blocks' states from the custom
+  blocks' plan, biome keys, structures read with `StructureOps::template` — `StructureTemplate` crosses as JSON — the
+  script's sources and blocks, a check of its body), says what scripts fail at on the chunk threads from the main
+  thread (`Failures`), and makes the worlds `netherforge.json` names with a terrain or a dimension type.
+- **The main world's generator** is asked for before the runtime starts: `nf_default_generator` (Kotlin's
+  `StartupGenerators.generatorFor`) reads the project, works the blocks' plan out from the files alone
+  (`custom_blocks::plan_of`), publishes every generator and answers the main world's.
+- Gaps: a package's generator's script (its files are the package's); the restart check for the main world's generator
+  (Kotlin's `StartupGenerators.check`: what the server was told is kept in `ASKED`, nothing reads it yet); failures heard
+  before the session starts aren't said; `biome_at` makes a sampler per call (Kotlin kept one per thread).
+
 ## Mobs (`crates/runtime/src/mob.rs`)
 
 Kotlin's `MobPaths` and `MobGoals` as one `Mobs` (in `Shared`, an `Rc` because the Platform holds goals' hooks),
@@ -1646,9 +1697,16 @@ an object registry and a loader written by hand on each side.
   pool"), and a release build strips debug info by default: the jar's build sets `CARGO_PROFILE_RELEASE_STRIP=none`
   on macOS (the library is about 54 MB then). After `/nf reload` fixed a module, the reload's answer still listed
   the old body's error: a failure reported before the reload is collected into its outcome (not looked into yet).
+- **Rust objects keep their identity** (`objects::export_keyed`, `Writer::export_rc`; `Native.proxy` on the JVM): the
+  same `Rc` handed out again is the same id, counted, and the JVM keeps one proxy per id (a second reference let go at
+  once), so the server sees the same object each time: a Lua goal it's asked to remove is the one it was given.
+- **The session is made before it runs** (`Session::configured`, then `begin`): the profiler, the bridge's debugger and
+  the server's lookups (an item's look, a block's state, which read `Shared`, not the session) are in place for its
+  first run, so a recipe's project item is built from its look as the session starts.
 - Gaps: every OS's library in a release jar (the release workflow), packages from git (only path dependencies,
-  `Folders`), the placeholder resolver off the main thread, the main world's generator (`getDefaultWorldGenerator`:
-  the terrains' service), the dev bridge with the editor (configured from the properties, not yet tried for real).
+  `Folders`), the placeholder resolver off the main thread, the dev bridge with the editor (configured from the
+  properties, not yet tried for real). The integration scenarios run on it with `-Pnetherforge.runtime=rust
+  -Pnetherforge.native=host`; `ShowcaseTest` (`:plugin:ffi:test`) is the quick loop, the whole showcase through FFM.
 
 ## Format (`crates/format`)
 
