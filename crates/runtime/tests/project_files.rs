@@ -493,7 +493,8 @@ fn a_pack_scripts_wrote_is_read_as_its_packages_and_one_with_errors_falls_back_t
         project
             .problems
             .iter()
-            .any(|p| p.message.contains("its last good copy is built instead")),
+            .any(|p| p.code.as_deref() == Some("runtime.written-pack")
+                && p.message.contains("its last good copy is built instead")),
         "{:?}",
         project.problems
     );

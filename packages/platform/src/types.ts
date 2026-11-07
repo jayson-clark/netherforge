@@ -1,7 +1,7 @@
 /**
  * The Platform spec's shape: what the runtime asks of a server (groups of operations, like
  * `teams` or `worlds`), what the server tells the runtime (`PlatformEvents`), and the types
- * that cross. One definition, from which each side's code is generated (see the rust-runtime
+ * that cross. One definition, from which each side's code is generated (see the plugin-runtime
  * skill, "The Platform boundary").
  *
  * Types are strings in Kotlin's spelling, which is what the spec was first read from:

@@ -1,5 +1,5 @@
 //! `nf.wasm` (Kotlin's `wasm/` and `WasmImpls`): the project's WebAssembly modules (`wasm/<id>/`) and everything
-//! scripts run of them, on **wasmtime** (see the rust-runtime skill for why).
+//! scripts run of them, on **wasmtime** (see the plugin-runtime skill for why).
 //!
 //! - **Compiling.** Every module that read without errors is compiled off the main thread as the session starts
 //!   (and again when its files change), on the pool: validated, its imports held to WASI's, compiled by Cranelift.

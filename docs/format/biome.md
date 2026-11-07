@@ -148,7 +148,7 @@ A biome has no carvers: the caves are the [terrain](terrain.md#caves)'s.
 The game learns biomes only while it starts, so they're in the
 [start-up datapack](advancement.md#on-the-server), as
 `data/<namespace>/worldgen/biome/<id>.json` in the game's own format for the
-server's version (1.21.11 to 26.2 keep a biome's mobs in a list of their own,
+server's version (26.1 to 26.2 keep a biome's mobs in a list of their own,
 26.3 as one of its attributes; NetherForge writes whichever the server reads).
 A biome with errors is left out of it, and so is anything that names it there
 (a structure that generates in it waits for it). A change needs a restart: on

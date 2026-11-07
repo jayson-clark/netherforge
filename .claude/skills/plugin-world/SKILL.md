@@ -1,9 +1,14 @@
 ---
 name: plugin-world
-description: The plugin's world features - custom blocks (note block carriers, records, placing, mining with BlockMining, breaking, falling, the game's blocks' rules), terrains and the main world's generator, dimension types and biomes, the start-up datapack and advancements, managed worlds, borders, structures and gradual placement, loot tables, mob goals, cutscenes, and screens (maps, frames, sending, aim, videos read off the main thread). Read before touching apps/plugin/runtime/.../block, .../terrain, .../world, .../structure, .../datapack, .../loot, .../mob, .../cutscene or .../screen.
+description: The plugin's world features - custom blocks (note block carriers, records, placing, mining with BlockMining, breaking, falling, the game's blocks' rules), terrains and the main world's generator, dimension types and biomes, the start-up datapack and advancements, managed worlds, borders, structures and gradual placement, loot tables, mob goals, cutscenes, and screens (maps, frames, sending, aim, videos read off the main thread). Read before touching crates/runtime/src's custom_blocks.rs, block_mining.rs, terrains.rs, world.rs, managed_worlds.rs, structures.rs, reload.rs (the start-up datapack), loot.rs, mob.rs, cutscenes.rs or screen/, or the adapter's PaperWorldGenerators.
 ---
 
 # Plugin world features
+
+> **The runtime is Rust now** (`crates/runtime`, see the plugin-runtime skill, which has a section for each area with
+> its files and the decisions the port took). What this skill says scripts see, and what the Kotlin adapter
+> (`apps/plugin/paper-common`, `paper-internals`, the testkit) does, holds. Where it names the Kotlin runtime's classes
+> (`apps/plugin/runtime/...`, deleted), read them as what the Rust module of the same area was ported from.
 
 What the runtime does in and to the world beyond centities (entities-and-physics) and windows (menus-and-dialogs). Each is a `RuntimeService` (plugin-runtime skill, "The session and its services") over the platform's groups.
 

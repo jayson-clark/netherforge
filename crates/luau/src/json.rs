@@ -1,6 +1,6 @@
 //! The one Luau↔JSON codec: what saved tables and item data are kept as, what
 //! `nf.json` reads and writes, and what the runtime reads script tables as.
-//! The prelude's `json.lua`, in Rust, with the numbers of the rust-runtime
+//! The prelude's `json.lua`, in Rust, with the numbers of the plugin-runtime
 //! skill ("Numbers").
 //!
 //! Plain values are JSON as they are: strings, booleans, numbers, tables keyed

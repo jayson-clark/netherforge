@@ -7,7 +7,7 @@ limits, and how to see and fix a script that's slowing the server down.
 
 ## The sandbox
 
-Scripts get the safe parts of Lua: `string`, `table`, `math`, `utf8`,
+Scripts get the safe parts of Luau: `string`, `table`, `math`, `utf8`, `bit32`,
 `coroutine`, and the basics (`pairs`, `ipairs`, `pcall`, `error`, `tostring`,
 `tonumber`, `type`, `select`, `setmetatable`, …). The shared library tables
 are read-only, so one script can't change `string.format` for another.
@@ -27,12 +27,12 @@ Everything runs on the server's main thread, one call at a time, so there are
 no threads to coordinate. A script that needs to do something later schedules
 it, or starts a task that waits (see [Waiting](modules.md#waiting)).
 
-## The instruction budget
+## The budget
 
 Every call into a script (its body, an event handler, a timer, a command, a
-task carrying on after a wait) may run a limited number of Lua instructions:
-**200,000** by default. That's plenty for normal work, and stops a runaway
-loop from freezing the server.
+task carrying on after a wait) may take a limited number of steps, a step
+being a function call or a turn of a loop: **200,000** by default. That's
+plenty for normal work, and stops a runaway loop from freezing the server.
 
 A centity, menu or dialog can set its own budget with `script.budget` in its
 JSON (at least 500), or with the **Budget** under its Script field in the
@@ -43,11 +43,11 @@ like any other error: in a handler, that call fails; in the body, the script
 is switched off. `pcall` can't catch it. The budget is per call, so a script
 that does a little every tick never runs out. When one call starts another
 (emitting a custom event, spawning a centity), the inner call has its own
-budget, and what it ran counts against the outer one's too. Functions of the
-API count as one instruction, however much work they do.
+budget, and what it ran counts against the outer one's too. A function of the
+API counts as one step, however much work it does.
 
 For long jobs, do a slice per tick. `nf.instructions_left()` says roughly how
-many instructions this call has left:
+many steps this call has left:
 
 ```lua
 local queue = {}

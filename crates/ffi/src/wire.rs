@@ -1,4 +1,4 @@
-//! The wire: what a call's arguments and answer are written as (the rust-runtime skill's "The FFM
+//! The wire: what a call's arguments and answer are written as (the plugin-runtime skill's "The FFM
 //! boundary" has the layout). [`Put`] writes a value, [`Take`] reads one; the spec's own types'
 //! are generated (`generated/codecs.rs`), the language's are here.
 

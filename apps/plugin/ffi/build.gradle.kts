@@ -1,5 +1,5 @@
 /*
- * The FFM glue's Kotlin half (see the rust-runtime skill, "The FFM boundary"): the Paper adapter
+ * The FFM glue's Kotlin half (see the plugin-runtime skill, "The FFM boundary"): the Paper adapter
  * calls the Rust runtime (crates/ffi's cdylib) through Java's foreign function API. Generated from
  * packages/platform and packages/api by `pnpm generate` (src/generated), on the wire, the object
  * registry and the loader written here. Java 25, for the foreign function API.

@@ -1,9 +1,14 @@
 ---
 name: plugin-bots
-description: The plugin's fake players - the bridge's bots extension (bots/join, bots/act), scripts' nf.bots behind requires.bots, the Bot handle, and how a bot joins and acts on a real server (Mojang-named code in paper-internals: BotConnection, the client's half, movement, BotScreen, BotDialogs, BotProtocol per version, aiming and what it looks at), with the contract suites that hold the fake to it. Read before touching .../bots, BotsBridge, PaperBots, FakeBots, or adding a player action or event.
+description: The plugin's fake players - the bridge's bots extension (bots/join, bots/act), scripts' nf.bots behind requires.bots, the Bot handle, and how a bot joins and acts on a real server (Mojang-named code in paper-internals: BotConnection, the client's half, movement, BotScreen, BotDialogs, BotProtocol per version, aiming and what it looks at), with the contract suites that hold the fake to it. Read before touching crates/runtime/src/bots.rs, the bridge's bots extension, PaperBots, paper-internals' bots, FakeBots, or adding a player action or event.
 ---
 
 # Plugin bots
+
+> **The runtime is Rust now** (`crates/runtime`, see the plugin-runtime skill, which has a section for each area with
+> its files and the decisions the port took). What this skill says scripts see, and what the Kotlin adapter
+> (`apps/plugin/paper-common`, `paper-internals`, the testkit) does, holds. Where it names the Kotlin runtime's classes
+> (`apps/plugin/runtime/...`, deleted), read them as what the Rust module of the same area was ported from.
 
 Bots are how tests, coding agents and scripts play the server as a player would. They live in the plugin jar (paper-internals), so every adapter has them.
 

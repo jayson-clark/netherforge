@@ -1,7 +1,7 @@
 /**
  * The Rust runtime's half of the bindings (`crates/api/src/generated/`), from the same
  * binding model as the Kotlin one (`bindings.ts`), so the two runtimes can't disagree about
- * what crosses (see the rust-runtime skill, "The API crate"):
+ * what crosses (see the plugin-runtime skill, "The API crate"):
  *
  *  - `handles.rs`: one struct per handle class, holding what identifies it (its root's key),
  *    with conversions up its chain (a `Mob` is a `Living` is an `Entity`), and `Handle`, any
@@ -403,7 +403,7 @@ export function apiRust(classes: ClassBinding[]): string {
     "/// Every class's implementation.",
     'pub trait LuaApi: crate::Runtime {',
     // Every class is unported until the runtime implements it: the port goes a class at a
-    // time (see the rust-runtime skill). A class's own trait has no defaults.
+    // time (see the plugin-runtime skill). A class's own trait has no defaults.
     ...withFunctions.map(
       (it) =>
         `    fn ${snake(it.cls.name).toLowerCase()}(&self) -> &dyn ${traitName(it)} { &crate::unported::Unported }`,

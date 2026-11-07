@@ -1896,7 +1896,7 @@ pub struct CommandArgument {
     pub max: Option<f64>,
     /// What a `choice` argument takes: single words. Required for `choice`, and only for it.
     pub choices: Option<Vec<String>>,
-    /// Tab completion of its own, instead of what its type offers. Gets the event so far (`event.arguments` holds the arguments before this one) and what has been typed of this argument; returns the suggestions. NetherForge keeps those starting with `partial`. Runs in the module's scope, within its instruction budget, every time a player's client asks, so keep it cheap.
+    /// Tab completion of its own, instead of what its type offers. Gets the event so far (`event.arguments` holds the arguments before this one) and what has been typed of this argument; returns the suggestions. NetherForge keeps those starting with `partial`. Runs in the module's scope, within its budget, every time a player's client asks, so keep it cheap.
     pub complete: Option<Function>,
 }
 

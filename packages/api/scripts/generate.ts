@@ -92,7 +92,7 @@ writeDir(
   '.kt',
 )
 
-// The Rust runtime's half (see the rust-runtime skill): the same bindings, as Rust, with the
+// The Rust runtime's half (see the plugin-runtime skill): the same bindings, as Rust, with the
 // functions the Kotlin runtime writes in the prelude (`impl: "lua"`) bound like every other.
 const boundRust = bindings(api, { handwritten: true })
 // The server's events for the Rust runtime: the sink in the platform's crate, the dispatch in the runtime's.

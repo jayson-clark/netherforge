@@ -1,5 +1,5 @@
 //! Modules and `require`: the Kotlin runtime's `Modules` and the prelude's
-//! `scopes` (`load_path`, `make_require`), in Rust. See the rust-runtime
+//! `scopes` (`load_path`, `make_require`), in Rust. See the plugin-runtime
 //! skill, "Modules".
 //!
 //! A module is a folder `modules/<id>/` with an `init.lua`, run in a scope of

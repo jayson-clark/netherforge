@@ -1,6 +1,6 @@
 # Your first script
 
-Scripts are Lua 5.4 files that sit next to the thing they belong to. A
+Scripts are [Luau](https://luau.org) files that sit next to the thing they belong to. A
 centity can have one script; it runs once for every spawned instance.
 
 ## Attach a script
@@ -80,5 +80,5 @@ end)
 ```
 
 [Scripting basics](scripting.md) explains when each event fires, the sandbox
-and the instruction budget. [Modules](modules.md) are where server-wide code
+and the budget. [Modules](modules.md) are where server-wide code
 goes: event listeners, commands and shared state.

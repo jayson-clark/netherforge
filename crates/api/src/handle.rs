@@ -4,7 +4,7 @@
 //! weak table by key), so two handles to the same thing are the same value and
 //! `a == b` works. A userdata can't be `rawset`, so no script can plant a method
 //! another's code calls; it's collected with the last script that holds it.
-//! See the rust-runtime skill, "Handles".
+//! See the plugin-runtime skill, "Handles".
 
 use std::cell::Cell;
 use std::collections::HashMap;

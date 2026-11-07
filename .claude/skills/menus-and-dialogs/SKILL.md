@@ -1,9 +1,14 @@
 ---
 name: menus-and-dialogs
-description: How NetherForge runs menus and dialogs on the server - shared vs per-player windows, locked clicks, each window's copy of the menu's one script and the dialog's one script, the events they listen to (click paths, open/close, drag, press, dialog close through the exit action), item tables (ItemDef in Lua spelling - kind, script data in the stack's PDC, opaque raw), skinned titles, what reload does to open windows, dialogs built per show with customClick callbacks, typed input values, dialog_list. Read before touching apps/plugin/runtime/.../menu, .../dialog, .../item, PaperMenus, PaperDialogs, PaperItems, or the Menu/Slot/Dialog/Button Lua API.
+description: How NetherForge runs menus and dialogs on the server - shared vs per-player windows, locked clicks, each window's copy of the menu's one script and the dialog's one script, the events they listen to (click paths, open/close, drag, press, dialog close through the exit action), item tables (ItemDef in Lua spelling - kind, script data in the stack's PDC, opaque raw), skinned titles, what reload does to open windows, dialogs built per show with customClick callbacks, typed input values, dialog_list. Read before touching crates/runtime/src/menu.rs, dialog.rs, items.rs, project_items.rs or recipes.rs, PaperMenus, PaperDialogs, PaperItems, or the Menu/Slot/Dialog/Button Lua API.
 ---
 
 # Menus and dialogs
+
+> **The runtime is Rust now** (`crates/runtime`, see the plugin-runtime skill, which has a section for each area with
+> its files and the decisions the port took). What this skill says scripts see, and what the Kotlin adapter
+> (`apps/plugin/paper-common`, `paper-internals`, the testkit) does, holds. Where it names the Kotlin runtime's classes
+> (`apps/plugin/runtime/...`, deleted), read them as what the Rust module of the same area was ported from.
 
 The spec users read: `docs/format/menu.md`, `docs/format/dialog.md`;
 the Lua API: `packages/api/src/spec/menu.ts` (classes `Menu`, `Slot`, `Dialog`,

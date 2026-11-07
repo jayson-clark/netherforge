@@ -1,9 +1,14 @@
 ---
 name: resource-packs
-description: How NetherForge turns resource_packs/ into one Minecraft resource pack and gets it to players - PackLayout.build, the pack format from the server's version.json, deterministic zips and SHA-1, the embedded HTTP server or an external URL, sending on join and only when the hash changed, rebuild on reload, skins as title glyphs, glyph characters for text (the <glyph:ui/coin> MiniMessage tag, nf.text.glyph), resource packs in the project's namespace, image facts (opaque width → bitmap advance). Read before touching format's resourcepack/, apps/plugin/runtime/.../pack, the resource-pack config, or anything that draws a skin or glyph.
+description: How NetherForge turns resource_packs/ into one Minecraft resource pack and gets it to players - PackLayout.build, the pack format from the server's version.json, deterministic zips and SHA-1, the embedded HTTP server or an external URL, sending on join and only when the hash changed, rebuild on reload, skins as title glyphs, glyph characters for text (the <glyph:ui/coin> MiniMessage tag, nf.text.glyph), resource packs in the project's namespace, image facts (opaque width → bitmap advance). Read before touching format's resourcepack/, crates/runtime/src/packs.rs, the resource-pack config, or anything that draws a skin or glyph.
 ---
 
 # Resource packs
+
+> **The runtime is Rust now** (`crates/runtime`, see the plugin-runtime skill, which has a section for each area with
+> its files and the decisions the port took). What this skill says scripts see, and what the Kotlin adapter
+> (`apps/plugin/paper-common`, `paper-internals`, the testkit) does, holds. Where it names the Kotlin runtime's classes
+> (`apps/plugin/runtime/...`, deleted), read them as what the Rust module of the same area was ported from.
 
 Spec: `docs/format/resource-pack.md`. Format side: `packages/format/.../resourcepack/` (`ResourcePackFile`,
 `CompiledResourcePack`, `PackFonts`, `PackLayout`, `pngSize`; `text/GlyphTags`). Plugin side:

@@ -1,9 +1,14 @@
 ---
 name: plugin-capabilities
-description: What a package must declare to use (requires) and everything behind those declarations - the one Requirements check, nf.http.request with its address guard and OkHttp, streams and WebSockets, inbound web routes and OAuth logins, WebAssembly (nf.wasm: Chicory, instances, programs, limits, the read-only WASI file system, test stand-ins), server networks (nf.network: the hub on the proxy, the link, channels, requests, shared maps, presence, sending players, the local network of dev servers and tests), Vault and PlaceholderAPI, server-owner settings, and the server's half of the threat model. Read before touching apps/plugin/runtime/.../session/Requirements, .../http, .../web, .../wasm, .../network, packages/network, apps/proxy, .../interop, .../settings, or adding any new power scripts can ask for.
+description: What a package must declare to use (requires) and everything behind those declarations - the one Requirements check, nf.http.request with its address guard and OkHttp, streams and WebSockets, inbound web routes and OAuth logins, WebAssembly (nf.wasm: Chicory, instances, programs, limits, the read-only WASI file system, test stand-ins), server networks (nf.network: the hub on the proxy, the link, channels, requests, shared maps, presence, sending players, the local network of dev servers and tests), Vault and PlaceholderAPI, server-owner settings, and the server's half of the threat model. Read before touching format's requirements, crates/runtime/src's http/, web/, wasm/, network/, interop.rs or settings.rs, packages/network, apps/proxy, or adding any new power scripts can ask for.
 ---
 
 # Plugin capabilities
+
+> **The runtime is Rust now** (`crates/runtime`, see the plugin-runtime skill, which has a section for each area with
+> its files and the decisions the port took). What this skill says scripts see, and what the Kotlin adapter
+> (`apps/plugin/paper-common`, `paper-internals`, the testkit) does, holds. Where it names the Kotlin runtime's classes
+> (`apps/plugin/runtime/...`, deleted), read them as what the Rust module of the same area was ported from.
 
 Powers a package has to ask for in its `netherforge.json`, and how each is held to what was asked. Anything new that reaches the network, storage, the server or another plugin goes behind a requirement checked here.
 

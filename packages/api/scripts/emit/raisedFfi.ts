@@ -1,7 +1,7 @@
 /**
  * The server's events across the FFM boundary: the Kotlin adapter calls the Rust runtime's
  * `GameEvents` (`RustGameEvents`, a proxy), which `game_events_dispatch` runs (see the
- * rust-runtime skill, "The FFM boundary"). A method's number is its event's place in the list; its
+ * plugin-runtime skill, "The FFM boundary"). A method's number is its event's place in the list; its
  * payload's fields are written in order (a lazy one as a function the runtime calls back if a
  * script listens), and the answer is whether it ended cancelled (a cancellable event's) and then
  * each writable field's value, which the proxy writes back into the payload.

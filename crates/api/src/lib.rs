@@ -1,7 +1,7 @@
 //! NetherForge's Lua API, as the Rust runtime implements it. `generated/` is
 //! written by `pnpm generate` from `packages/api` (never edit it): the handle
 //! types, the shapes and unions that cross, and one trait per class. The rest is
-//! what they're built from. See the rust-runtime skill, "The API crate".
+//! what they're built from. See the plugin-runtime skill, "The API crate".
 
 use std::future::Future;
 use std::pin::Pin;

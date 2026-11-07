@@ -32,7 +32,7 @@
 -- says what to do instead.
 --
 -- It runs under Lua 5.4 (the Kotlin runtime, terrain previews) and under Luau
--- (the Rust runtime, see the rust-runtime skill), so it uses only what both
+-- (the Rust runtime, see the plugin-runtime skill), so it uses only what both
 -- have: Luau's missing `math.tointeger` and `math.ult` are written out below.
 
 local raw, limits, spend, refuse = ...

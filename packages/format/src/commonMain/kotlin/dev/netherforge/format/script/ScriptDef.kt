@@ -12,7 +12,7 @@ import kotlinx.serialization.Serializable
 data class ScriptDef(
     /** Path relative to the resource's folder. */
     @Ref(RefKind.SCRIPT) val file: String,
-    /** Lua instructions one call into the script (its body, a handler, a timer) may use before it's aborted. */
+    /** Steps (function calls and turns of a loop) one call into the script (its body, a handler, a timer) may take before it's aborted. */
     val budget: Int? = null
 ) {
     /** The budget a call actually gets: [budget] or the default, raised to at least [MIN_BUDGET]. */

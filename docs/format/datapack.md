@@ -68,8 +68,7 @@ something worldgen needs, and are refused as unknown keys).
 
 The game's worldgen JSON changes between Minecraft versions, so a datapack says
 which ones its files are for, as every datapack does, by data pack format:
-1.21.11 reads format 94.1, 26.1.2 format 101.1, 26.2 format 107.1 and 26.3
-format 121 (a server's is in its jar's `version.json`, `pack_version.data_major`
+26.1.2 reads format 101.1, 26.2 format 107.1 and 26.3 format 121 (a server's is in its jar's `version.json`, `pack_version.data_major`
 and `data_minor`; the game's documentation lists them all).
 
 - A server whose format is outside `min_format` to `max_format` leaves the
@@ -86,9 +85,10 @@ a file in an overlay for the formats it's for. The example's placed feature is
 the same everywhere, so it's in `data/`; its configured feature changed twice
 (1.21.11's `forest_rock`, 26.1's `block_blob` with a `config`, and 26.3's
 without one, in the folder 26.3 calls `worldgen/feature`), so each shape is in
-an overlay of its own. 26.3 changed noise settings and density functions the
+an overlay of its own (the 1.21.11 one is for a server older than NetherForge
+supports, which a datapack may still carry). 26.3 changed noise settings and density functions the
 same way, so a pack replacing the overworld's terrain for every supported
-version has one overlay for 1.21.11 to 26.2 and one for 26.3.
+version has one overlay for 26.1 to 26.2 and one for 26.3.
 
 NetherForge applies the overlays itself as the server starts: the server gets
 exactly the files for its own format, in one datapack with NetherForge's own.

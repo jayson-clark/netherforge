@@ -3,7 +3,7 @@
  *
  * Every call across is one entry point each way: an object's id, a method's number, and its
  * arguments in a flat buffer; the answer comes back the same way. The wire (see the
- * rust-runtime skill, "The FFM boundary"):
+ * plugin-runtime skill, "The FFM boundary"):
  *
  *  - numbers little-endian at their width, `Boolean` a byte, a `String` its UTF-8 bytes after
  *    their count (u32), a `UUID` its two halves (most significant first);

@@ -1,5 +1,5 @@
 //! The codec, held to the prelude's `json.lua` (`CodecTest`) and to the
-//! numbers of the rust-runtime skill.
+//! numbers of the plugin-runtime skill.
 
 use netherforge_luau::json::{self, Encoded, NoTags};
 use netherforge_luau::mlua::Value;

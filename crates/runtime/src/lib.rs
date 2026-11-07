@@ -1,6 +1,6 @@
 //! NetherForge's runtime in Rust (phase 1 of the cost roadmap, ../ROADMAP.md): what a
 //! room runs. So far its scripts: scopes, events, timers and tasks. See the
-//! rust-runtime skill.
+//! plugin-runtime skill.
 
 use std::collections::BTreeMap;
 use std::rc::Rc;

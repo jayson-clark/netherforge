@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { api } from '../../src/spec/index.ts'
 import type { ApiSpec, EventSpec } from '../../src/types.ts'
 import { bindings } from './bindings.ts'
-import { dispatchKotlin, platformKotlin, raisedEvents } from './raised.ts'
+import { platformKotlin, raisedEvents } from './raised.ts'
+import { dispatchRust, snake } from './raisedRust.ts'
 
 /** The real spec with nf's event [name] changed by [change]. */
 function withEvent(name: string, change: (event: EventSpec) => void): ApiSpec {
@@ -18,14 +19,17 @@ const raise = (spec: ApiSpec) => raisedEvents(spec, bindings(spec))
 describe('raised events', () => {
   const events = raise(api)
   const platform = platformKotlin(events)
-  const dispatch = dispatchKotlin(events)
+  // The runtime's dispatch: the Rust runtime's bindings, with the hand-written functions bound too.
+  const dispatch = dispatchRust(raisedEvents(api, bindings(api, { handwritten: true })))
+  const fnOf = (method: string) =>
+    dispatch.slice(dispatch.indexOf(`fn ${snake(method)}<S: EventSession>`))
 
   it('gives every raised event a sink method and a dispatch', () => {
     expect(events.length).toBeGreaterThan(50)
     for (const event of events) {
       expect(platform).toContain(`fun ${event.method}(event: GameEvent.${event.payload.name})`)
       expect(dispatch).toContain(
-        `override fun ${event.method}(event: GameEvent.${event.payload.name})`,
+        `fn ${snake(event.method)}<S: EventSession>(s: &S, event: &mut game_event::`,
       )
     }
   })
@@ -42,23 +46,22 @@ describe('raised events', () => {
   })
 
   it('hears a player event on the player first, then on nf', () => {
-    const food = dispatch.slice(dispatch.indexOf('override fun playerChangeFood'))
+    const food = fnOf('playerChangeFood')
     expect(food).toContain(
-      'val stages = listOf(Events.PLAYER_CHANGE_FOOD to first, Events.NF_PLAYER_CHANGE_FOOD to null)',
+      'let stages = [("change_food", Some(Handle::Player(first.clone()))), ("player_change_food", None)];',
     )
-    expect(food).toContain('if (!session.listening(stages)) return false')
+    expect(food).toContain('if !s.listening(&stages) { return false; }')
   })
 
   it('keeps a writable number within its bounds', () => {
-    const food = dispatch.slice(dispatch.indexOf('override fun playerChangeFood'))
-    expect(food).toContain('event.food = payload.food.coerceIn(0L, 20L).toInt()')
+    expect(fnOf('playerChangeFood')).toContain('event.food = v.clamp(0, 20) as i32')
   })
 
   it('hands a lazy field over as a function, called only when something listens', () => {
     expect(platform).toMatch(/val blocks: \(\) -> List<BlockRef>/)
-    const explode = dispatch.slice(dispatch.indexOf('override fun entityExplode'))
-    expect(explode.indexOf('event.blocks()')).toBeGreaterThan(
-      explode.indexOf('session.listening(stages)'),
+    const explode = fnOf('entityExplode')
+    expect(explode.indexOf('(event.blocks)()')).toBeGreaterThan(
+      explode.indexOf('s.listening(&stages)'),
     )
   })
 

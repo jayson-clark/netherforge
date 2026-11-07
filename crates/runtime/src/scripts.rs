@@ -1,7 +1,7 @@
 //! Scripts: the scopes of a room's Luau state, and what they make that runs
 //! later: subscriptions to events, timers and tasks. The prelude's `events`,
 //! `tasks` and `scopes` modules and the Kotlin runtime's `Scripts`, in Rust.
-//! See the rust-runtime skill, "Scripts".
+//! See the plugin-runtime skill, "Scripts".
 //!
 //! - A **subscription** is filed under its target (a handle, or `nf`) and its
 //!   scope, and lives as long as both. Handlers run synchronously, in

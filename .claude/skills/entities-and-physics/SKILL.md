@@ -1,9 +1,14 @@
 ---
 name: entities-and-physics
-description: Centity node trees, transforms, animation and hitboxes as the server runs them, and the rigid-body physics solver - bodies, colliders, contacts (SAT), sequential impulses, inertia, sleeping, collision with world blocks and other centities' hitboxes, how physics writes node poses, the Lua velocity/impulse API, and the deliberate behaviour changes from the reference (client-only shapes fitted by the editor). Read before touching apps/plugin/runtime/.../centity or .../physics, PhysicsDef, or the Node physics API.
+description: Centity node trees, transforms, animation and hitboxes as the server runs them, and rigid-body physics (Rapier) - bodies, colliders, collision with world blocks and other centities' hitboxes, how physics writes node poses, the Lua velocity/impulse API, and the deliberate behaviour changes from the reference (client-only shapes fitted by the editor). Read before touching crates/runtime/src/centity (physics on Rapier included), PhysicsDef, or the Node physics API.
 ---
 
 # Entities and physics
+
+> **The runtime is Rust now** (`crates/runtime`, see the plugin-runtime skill, which has a section for each area with
+> its files and the decisions the port took). What this skill says scripts see, and what the Kotlin adapter
+> (`apps/plugin/paper-common`, `paper-internals`, the testkit) does, holds. Where it names the Kotlin runtime's classes
+> (`apps/plugin/runtime/...`, deleted), read them as what the Rust module of the same area was ported from.
 
 Spec: `docs/format/centity.md`. This skill is the runtime's side of
 centities: the tick pipeline, instances and their entities, natural
@@ -71,74 +76,28 @@ part along the face by `friction`, resting on a floor below `rest_speed`) or end
 stops it or launches it again ends that step (`instance.flight !== flight`). `end` raises `flight_end` and
 removes it unless `remove_on_end` is false. Tests: `FlightTest`.
 
-## Physics: where things are
+## Physics: Rapier
 
-| Path (`apps/plugin/runtime/.../`) | Owns                                                                              |
-| --------------------------------- | --------------------------------------------------------------------------------- |
-| `physics/Quat.kt`                 | orientation maths; euler convention identical to `Matrix4.rotateXYZ`              |
-| `physics/RigidBody.kt`            | `RigidBody`, `ColliderPart`, `BodyState` (velocity, sleep, …)                     |
-| `physics/Inertia.kt`              | inverse inertia of box compounds (parallel-axis) and spheres                      |
-| `physics/Contacts.kt`             | SAT (15 axes), manifolds, sphere cases, `BodyShape`                               |
-| `physics/PhysicsSolver.kt`        | slicing, sequential impulses, friction, restitution, bias separation              |
-| `physics/PhysicsCollider.kt`      | collider boxes from `physics.collider`/hitbox, centre of mass, origin             |
-| `centity/Physics.kt`              | the per-instance pass: snapshot, obstacles, solve, write back; script API helpers |
+The runtime's physics is Rapier, not the solver this skill once described (Kotlin's `physics/`, a port of the
+reference's sequential impulses, is gone with the Kotlin runtime). From the plugin-runtime skill's "Centities":
 
-The solver is a faithful Double port of the reference's
-(`centity/packages/core/.../physics`), pure and Platform-free. Tests:
-`physics/PhysicsTest`, `PhysicsPairTest`, `QuatTest` (solver alone) and
-`PhysicsCentityTest` (spawned centities on the fake world).
+**Physics on Rapier** (`physics.rs`, rapier3d-f64): one Rapier world per Minecraft world of a room. Every body
+is simulated together (a crate knocks over another centity's crate: the roadmap's deliberate change). World
+blocks are fixed colliders built per chunk section around awake bodies, read again after `SECTION_TICKS` (40)
+and dropped when idle; full cubes buried among full cubes are skipped. Hitboxes no body carries are fixed
+colliders, rebuilt when an instance's obstacles change. A body's collider is its hitbox boxes (or
+`physics.collider`, unit cube by default; one box for `shape: box`, a ball for `sphere`) scaled by the node; mass
+is `physics.mass` or the volume. Gravity is the body's gravity scale against a world gravity of 1. Physics
+writes the node's pose through the setters and remembers it; a node moved by anything else teleports its body.
+Bodies past `REANCHOR` (16) blocks move the anchor under them. `collide` (with the other body's node, any
+instance), `wake`, `sleep`. Collision groups: blocks, hitboxes, bodies (`physics.blocks`/`entities` filter).
+A block placed or broken (`block_place` scripts let through, `block_break`) drops its section and wakes the bodies
+near it (`Physics::block_changed`), so a crate on a broken block falls at once; changes no event names (explosions,
+pistons, fluids) still wait for the section's re-read. Not yet: the spec's `rigid_body()`, joints, materials and
+sensors.
 
-## How a tick moves bodies
-
-Order per instance: **animate → path → physics → scripts → sync** (path: see
-"Walking" below). After the
-solve, `Physics.report` raises the node events: `collide` for each thing a
-body started touching (`PhysicsSolver.Entry.touches`, keyed by the other body
-or, for obstacles, by which of six ways the surface faces, compared with
-`BodyState.touching` from its last simulated step, so resting contact never
-fires and a sleeper keeps its set), then `wake`/`sleep` when `asleep` differs
-from `BodyState.reportedAsleep` (whatever woke it: a hit, a script). Contacts
-are only turned into payloads when something listens (`Centities.listening`).
-
-1. **Snapshot** every node with `physics` against one composition. Each
-   carries a `BodyState` (on `Instance`, rebuilt by `redefine`: a reload
-   restarts bodies at rest from the file's pose). If the node's rotation
-   differs from what physics last wrote, a script or clip set it: re-seed the
-   orientation from the pose (and wake).
-2. **Obstacles**, in the simulation frame (relative to the anchor, the
-   world's axes: `Instance.placed()`, see Coordinate spaces): world blocks from `WorldOps.collisionBoxes` (live collision shapes, loaded
-   chunks only, region capped at 32 blocks a side) and the hitboxes of every
-   instance within 48 blocks whose boxes reach the body's region, **each box
-   separately**, found through `ObstacleGrid` (each instance's boxes measured
-   once per change and filed by 4-block cell; `Instance` marks itself dirty on
-   any pose, facing, visibility, display or anchor change) and listed in
-   instance order, since the solver's result depends on obstacle order — minus the body's own
-   subtree and the other bodies of its own instance (those are paired by the
-   solver, which is what shares momentum). Bodies of other instances are
-   immovable scenery. Sleeping bodies skip this unless due a support check
-   (every 20 ticks) or near something awake; unsupported sleepers wake.
-3. **Solve** all bodies together (`PhysicsSolver.solve`).
-4. **Write** translation (and rotation unless `rotates: false`) through
-   `Instance.set`, in the parent's frame (for a root, the centity's turn,
-   `Instance.turn()`) — the same path a script's setter takes, so sync and
-   read-back need nothing special. Only bodies that moved
-   are written, so a settled instance costs nothing.
-5. **Re-anchor** (`Physics.reanchor`): once a body is more than a chunk
-   (`REANCHOR`, 16 blocks) from the anchor horizontally, the anchor moves
-   under it (whole blocks) and every root node moves back by as much, so no
-   world position changes but the entities, chunk loading, tracking and the
-   index follow the body (the shift is world-axis, so it's turned back into
-   the centity's space for the root translations). Skipped while a clip plays (it writes root
-   translations itself). A script reading `Centity:position()` sees the
-   anchor move; node translations are relative to it, as always.
-
-Nodes a script adds (`add_node`/`add_child`) are bodies and hitboxes like
-declared ones (the snapshot, obstacle grid and click routing all read
-`Instance.definition`); see "Script-added nodes" below
-for how they're kept and dropped.
-
-Node poses aren't persisted: after a restart a body starts again from its
-authored pose, relative to the (possibly moved) anchor and yaw, which are.
+What scripts see of a body (below) is unchanged; what the solver did differently (contact events, sleeping,
+stacking) is Rapier's now, and its tests are `crates/runtime/tests/centities.rs`'s.
 
 ## Lua
 
@@ -273,32 +232,20 @@ Our own A*, not the game's pathfinder (centities aren't mobs). Where things are:
   hitboxes and its handlers were the old script's) end it without
   `path_end`. Not saved; an unloaded instance isn't ticked, so its walk waits.
 
-## Known limits (shared with the reference)
-
-- **Stacks are unstable**: two boxes resting on each other drift apart over a
-  few seconds (the pair normal tilts with the upper body's face). Body-on-world
-  contact is stable.
-- **A sleeping body is soft** against very slow contact (impulses on it aren't
-  integrated); its velocity is zeroed every step so nothing accumulates.
-- **Chains of touching bodies** resolve as one event (a Newton's cradle moves
-  the whole row).
-
 ## How to…
 
-**Tune or change the solver**: `physics/`, then the solver tests; check the
-per-instance behaviour in `PhysicsCentityTest` and on a real server
-(`pnpm test:integration` drops the example crate and waits for it to settle).
+**Tune or change physics**: `crates/runtime/src/centity/physics.rs`, then its tests in
+`crates/runtime/tests/centities.rs`, and on a real server (`pnpm test:integration` drops the example crate and
+waits for it to settle).
 
 **Add a `physics` field**: format (project-format skill): the field on
 `PhysicsDef`, its default and clamp in `ResolvedPhysics.of` (format's
 `centity/ResolvedPhysics.kt`; the compiler resolves every body once, so the
-solver only ever sees `ResolvedPhysics`), and the default in
-`codegen/Constants.kt` if the editor shows it → use it in the
-solver/collider → `docs/format/centity.md`.
+runtime only ever sees `ResolvedPhysics`; Rust's in `crates/format`), and the default in
+`codegen/Constants.kt` if the editor shows it → use it in `physics.rs` → `docs/format/centity.md`.
 
 **Add a body API**: `packages/api/` (`nodeClass`), `pnpm generate`, the new
-`NodeApi` method in `api/NodeImpl.kt` using `centities.physics` /
-`Instance.body`, a test.
+`NodeApi` method in `crates/runtime/src/centity/` using the room's physics, a test.
 
 ## Centities: the tick pipeline
 

@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 /// What the host holds scripts to, beyond each call's budget. The defaults
-/// and why they're those numbers are in the rust-runtime skill ("The host").
+/// and why they're those numbers are in the plugin-runtime skill ("The host").
 #[derive(Clone, Debug, PartialEq)]
 pub struct Limits {
     /// How long one call into a script may run, nested calls in included,

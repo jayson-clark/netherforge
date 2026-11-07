@@ -2,7 +2,7 @@
 //! operations, like `TeamOps`), what the server tells it (`PlatformEvents`),
 //! and the types they pass. `generated/` is written by `pnpm generate` from
 //! `packages/platform` (never edit it); the rest is what it's built from. See
-//! the rust-runtime skill, "The Platform boundary".
+//! the plugin-runtime skill, "The Platform boundary".
 
 pub mod chunk_grid;
 pub mod terrain;

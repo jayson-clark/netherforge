@@ -3,7 +3,7 @@ package dev.netherforge.plugin.ffi
 import java.util.UUID
 
 /**
- * Where a call's arguments or answer are written, as the Rust side reads them (the rust-runtime
+ * Where a call's arguments or answer are written, as the Rust side reads them (the plugin-runtime
  * skill's "The FFM boundary" has the layout): little-endian numbers, UTF-8 strings after their
  * byte count, a byte before an optional value, a count before a list's items.
  */

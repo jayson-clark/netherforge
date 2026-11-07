@@ -1,4 +1,4 @@
-//! The FFM glue between the Paper adapter and the Rust runtime (see the rust-runtime skill, "The
+//! The FFM glue between the Paper adapter and the Rust runtime (see the plugin-runtime skill, "The
 //! FFM boundary"). `generated/` is written by `pnpm generate` from `packages/platform` (never edit
 //! it): every spec type's codec, the server's interfaces as proxies (`JavaPlatform`...), and
 //! dispatchers for the runtime's (`dispatch_platform_events`...). The rest is what they stand on:

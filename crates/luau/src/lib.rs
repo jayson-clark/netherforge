@@ -1,6 +1,6 @@
 //! NetherForge's Luau host: one Luau state per room, a scope per script, and
 //! the guards that keep a script from stalling the server or taking its
-//! memory. The design is the rust-runtime skill's "The host".
+//! memory. The design is the plugin-runtime skill's "The host".
 
 mod clock;
 pub mod debug;

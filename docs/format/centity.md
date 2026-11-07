@@ -318,10 +318,10 @@ reloads it like any change to its file.
 "script": { "file": "script.lua", "budget": 200000 }
 ```
 
-| Key      | Meaning                                                                | Default |
-| -------- | ---------------------------------------------------------------------- | ------- |
-| `file`   | A `.lua` file in this centity's folder.                                | —       |
-| `budget` | Lua instructions one call into the script may use before it's stopped. | 200000  |
+| Key      | Meaning                                                                                           | Default |
+| -------- | ------------------------------------------------------------------------------------------------- | ------- |
+| `file`   | A `.lua` file in this centity's folder.                                                           | —       |
+| `budget` | Steps (function calls and turns of a loop) one call into the script may take before it's stopped. | 200000  |
 
 One copy of the script runs per spawned centity. In it, `this` is that
 centity (a [`Centity`](../reference/centity.md)). A tick handler sets its own

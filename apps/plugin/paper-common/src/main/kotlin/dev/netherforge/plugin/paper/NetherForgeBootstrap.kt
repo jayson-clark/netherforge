@@ -83,7 +83,6 @@ class NetherForgeBootstrap : PluginBootstrap {
             return null
         }
         val main = mainWorld(Path.of(""))
-        PaperDatapacks.mainWorld = main
         val refusal = DatapackRefusal.read(folder)
         val datapacks = object : DatapackOps {
             override val started: Map<String, ByteArray> get() = emptyMap()
@@ -105,6 +104,8 @@ class NetherForgeBootstrap : PluginBootstrap {
         // The server's folder is where it was started: what `project:` in config.yml is relative to.
         val start = NativeRuntime(NativeRuntime.bootstrap(log, datapacks))
             .startupDatapack(folder, Path.of("").toAbsolutePath(), settings) ?: return null
+        // Only a project's datapack is for a main world.
+        PaperDatapacks.mainWorld = main
         if (start.files.isNotEmpty()) context.logger.info("NetherForge's start-up datapack: ${start.files.size - 1} file(s)")
         return Built(start.files, start.hash, refusal.takeIf { start.leftOut }, start.canLeaveOut)
     }

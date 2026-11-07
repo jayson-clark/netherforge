@@ -1,9 +1,14 @@
 ---
 name: hot-reload
-description: The dev bridge between the NetherForge editor and the plugin on its dev server (JSON-RPC 2.0 over NDJSON, the hello and its token proofs and protocol version, requests, notifications and batched streams, threads, the bots extension, the relay and vscode-jsonrpc client in the editor) and what a save reloads (per-resource semantics, reattaching live centities, restarting modules and their dependents, problems, script errors with file:line). Read before touching format's bridge/, the plugin's bridge or reload code, or the editor's bridge client.
+description: The dev bridge between the NetherForge editor and the plugin on its dev server (JSON-RPC 2.0 over NDJSON, the hello and its token proofs and protocol version, requests, notifications and batched streams, threads, the bots extension, the relay and vscode-jsonrpc client in the editor) and what a save reloads (per-resource semantics, reattaching live centities, restarting modules and their dependents, problems, script errors with file:line). Read before touching format's bridge/, the runtime's bridge or reload code (crates/runtime/src/bridge, reload.rs), or the editor's bridge client.
 ---
 
 # Hot reload and the dev bridge
+
+> **The runtime is Rust now** (`crates/runtime`, see the plugin-runtime skill, which has a section for each area with
+> its files and the decisions the port took). What this skill says scripts see, and what the Kotlin adapter
+> (`apps/plugin/paper-common`, `paper-internals`, the testkit) does, holds. Where it names the Kotlin runtime's classes
+> (`apps/plugin/runtime/...`, deleted), read them as what the Rust module of the same area was ported from.
 
 ## The loop
 
@@ -268,7 +273,7 @@ semantics above).
 **On the Rust runtime** the same half is `crates/runtime/src/bridge/`
 (`client.rs`, `frames.rs`, `mod.rs` routing by thread, `requests.rs` the
 handlers and the bots extension) and `reload.rs` with `Session::reload`
-(the answer, `restart`); the rust-runtime skill's "Hot reload" and "The dev
+(the answer, `restart`); the plugin-runtime skill's "Hot reload" and "The dev
 bridge" say how it differs inside. A new request is a case in
 `requests.rs` too (and, while both serve the bridge, in `BridgeService`),
 held by `crates/runtime/tests/bridge.rs`, which also replays every request

@@ -1,13 +1,18 @@
 ---
 name: plugin-sandbox
-description: Inside the plugin's one Lua state - the sandbox (one hook, the instruction budget, time limits, the memory census, the standard library's caps and what a pattern costs, with the benchmarks behind every number), the profiler, the debugger (DAP over the bridge, breakpoints, stepping, freezing the tick), and the prelude's modules. Read before touching apps/plugin/runtime/.../lua, the prelude (lua/prelude.lua, lua/prelude/*.lua), format's lua/caps.lua, SandboxLimits, .../profile or .../debug.
+description: Inside the plugin's one Lua state - the sandbox (one hook, the instruction budget, time limits, the memory census, the standard library's caps and what a pattern costs, with the benchmarks behind every number), the profiler, the debugger (DAP over the bridge, breakpoints, stepping, freezing the tick), and the prelude's modules. Read before touching crates/luau (the host, its limits, timing and debugger), format's lua/caps.lua, crates/runtime/src/costs.rs, profile.rs or debug.rs.
 ---
 
 # Plugin sandbox, profiler and debugger
 
+> **The runtime is Rust now** (`crates/runtime`, see the plugin-runtime skill, which has a section for each area with
+> its files and the decisions the port took). What this skill says scripts see, and what the Kotlin adapter
+> (`apps/plugin/paper-common`, `paper-internals`, the testkit) does, holds. Where it names the Kotlin runtime's classes
+> (`apps/plugin/runtime/...`, deleted), read them as what the Rust module of the same area was ported from.
+
 What keeps a script from stalling the server, and the tools that look inside a running one. The Lua state itself (one state, a scope per script, handles, `require`) is the plugin-runtime skill's "Lua"; this is what runs inside it.
 
-This is the Kotlin runtime's. The Rust runtime's host, costs, profiler and debugger (on Luau: one interrupt, single-stepping for the debugger) are the rust-runtime skill's "The host", "What scripts cost and the profiler" and "The debugger".
+This is the Kotlin runtime's. The Rust runtime's host, costs, profiler and debugger (on Luau: one interrupt, single-stepping for the debugger) are the plugin-runtime skill's "The host", "What scripts cost and the profiler" and "The debugger".
 
 ## The sandbox: the hook, the budget, time, memory and the library's caps
 

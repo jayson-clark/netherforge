@@ -1,7 +1,7 @@
 # WebAssembly
 
 Lua scripts run on the server's main thread under an
-[instruction budget](./performance.md), which keeps one script from holding
+[budget](./performance.md#the-budget), which keeps one script from holding
 up the server, and also keeps serious computation out of Lua: a chess engine's
 search, pathfinding over a big grid, noise for a whole region, compression.
 **WebAssembly modules** are for that. Write the work in C, C++, Rust or

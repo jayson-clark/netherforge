@@ -430,3 +430,70 @@ fn a_packages_own_database_and_a_named_connection_on_mysql() {
     };
     assert_eq!(lines, SERVER_LINES);
 }
+
+#[test]
+fn an_own_database_on_a_server_needs_its_migrations_in_that_servers_dialect() {
+    // Nothing listens there: the dialect is checked before any connection is tried.
+    let mut connection = server_config("postgres", "127.0.0.1", 1);
+    connection.own_databases = ["shop".to_owned()].into();
+    let files = Files::new(
+        r#"{ "db": true }"#,
+        &[(
+            "migrations/001_init.sql",
+            "CREATE TABLE coins (player TEXT PRIMARY KEY);",
+        )],
+        "local db = nf.db()",
+    );
+    let mut config = netherforge_runtime::databases::DatabasesConfig::default();
+    config.connections.insert("network".into(), connection);
+    let platform = Rc::new(Fake::default());
+    let session = Session::start_configured(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        Rc::new(netherforge_runtime::store::Store::in_memory()),
+        Config {
+            databases: config,
+            ..Config::default()
+        },
+    );
+    let problems: Vec<String> = session
+        .problems()
+        .iter()
+        .map(|p| {
+            format!(
+                "{} {} {}",
+                p.code.clone().unwrap_or_default(),
+                p.file,
+                p.message
+            )
+        })
+        .collect();
+    assert!(
+        problems.iter().any(
+            |p| p.starts_with("migration.dialect migrations/001_init.sql")
+                && p.contains("migrations/postgres/001_init.sql")
+        ),
+        "{problems:?}"
+    );
+}
+
+/// A connection's settings, its server at `host:port`.
+fn server_config(
+    kind: &str,
+    host: &str,
+    port: u16,
+) -> netherforge_runtime::databases::ConnectionConfig {
+    netherforge_runtime::databases::ConnectionConfig {
+        kind: kind.into(),
+        host: host.into(),
+        port,
+        database: "game".into(),
+        username: "u".into(),
+        password: String::new(),
+        pool_size: 1,
+        packages: ["shop".to_owned()].into(),
+        ssl_mode: netherforge_runtime::databases::SslMode::Disable,
+        own_databases: BTreeSet::new(),
+    }
+}

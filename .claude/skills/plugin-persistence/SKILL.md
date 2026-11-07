@@ -1,9 +1,14 @@
 ---
 name: plugin-persistence
-description: What the plugin keeps and how - the namespacing rule, the store (one SQLite file, its lane, staged writes, migrations, errors), package databases (nf.db), remote MySQL/PostgreSQL connections, /nf data, spawned centities' records, saved data() tables, permissions, schedules, and the per-session state services keep for things the server forgets (boss bars, sidebars, teams, player lists, block data). Read before touching apps/plugin/runtime/.../store, .../data, .../schedule, .../scoreboard, a migration, or anything a restart must not lose.
+description: What the plugin keeps and how - the namespacing rule, the store (one SQLite file, its lane, staged writes, migrations, errors), package databases (nf.db), remote MySQL/PostgreSQL connections, /nf data, spawned centities' records, saved data() tables, permissions, schedules, and the per-session state services keep for things the server forgets (boss bars, sidebars, teams, player lists, block data). Read before touching crates/runtime/src/store.rs, data.rs, databases.rs, remote_db.rs, schedule.rs, bossbar.rs or team.rs, a migration, or anything a restart must not lose.
 ---
 
 # Plugin persistence
+
+> **The runtime is Rust now** (`crates/runtime`, see the plugin-runtime skill, which has a section for each area with
+> its files and the decisions the port took). What this skill says scripts see, and what the Kotlin adapter
+> (`apps/plugin/paper-common`, `paper-internals`, the testkit) does, holds. Where it names the Kotlin runtime's classes
+> (`apps/plugin/runtime/...`, deleted), read them as what the Rust module of the same area was ported from.
 
 Where everything that outlives a tick lives, and what outlives a session, a restart or a crash.
 
@@ -35,14 +40,7 @@ namespace leaves the old one's instances inert). Per-block and per-entity
 script data stays in PDC, where it travels with the chunk; node poses only
 in memory.
 
-- **The driver is the server's.** Every supported Paper bundles xerial's
-  `sqlite-jdbc` (`libs.versions.toml` pins the same version for tests), so
-  the runtime has it `compileOnly` and the jar ships none. `paper-plugin.yml`
-  names a `loader` (`NetherForgeLoader`, paper-common) that adds it from Maven
-  Central through Paper's `MavenLibraryResolver` only when the server has no
-  `org.sqlite.JDBC` (and fetches nothing else unless `config.yml` names a
-  remote connection: see "Remote databases"); the coordinates come from the catalog
-  (`netherforge-libraries.properties`, expanded at build time).
+- **SQLite is the runtime's own** (rusqlite, bundled into the library): nothing comes from the server or Maven.
 - **One connection, one lane** (`store/Database.kt`, the layer `nf.db` will
   sit on with a database per package): the connection is only used on the
   workers' `"store"` lane. Services **stage** writes on the main thread
@@ -84,83 +82,10 @@ in memory.
   `Map<String, Any?>` (NULL left out, a blob is a failure telling the script to
   `hex()` it). The `db` requirement is the generated primitive's.
   Tests: `PackageDatabaseTest` (a real file in the test's temp folder).
-- **Remote databases (`nf.db("network")`, W2.3).** The same `Database` Lua
-  class and the same `DatabaseImpl`, over a `SqlDatabase` (`store/SqlDatabase.kt`:
-  `onLane`, `prepare`, `lastInsertId`): `Database` (the package's SQLite) or
-  `RemoteDatabase` (`store/RemoteDatabases.kt`: a `javax.sql.DataSource`, HikariCP
-  in production, made on first use and never connecting on the main thread;
-  `initializationFailTimeout = -1`). The owner names connections in
-  `config.yml`'s `databases:` (`DatabasesConfig`, read on dev servers too:
-  type mysql|postgres, host, port, database, username, password, pool-size,
-  `packages`, `properties`; host and database names are matched against a
-  strict pattern so they can't add driver settings to the JDBC URL; a
-  connection that can't be read is in `invalid` with why, logged at start-up).
-  **Who may open one:** the package declares `requires.db` (S2, the generated
-  check) **and** the owner lists its namespace under the connection's
-  `packages` (`RemoteDatabases.problem`, called by `NfImpl.db`: errors at the
-  line, naming what to add, never a host, user or password). A package's
-  manifest never grants itself the server. **Lanes:** `database:<ns>:<name>`
-  per package and connection, so one package's statements run in order and
-  never wait on another's; the pool bounds how many run at once. **Errors:**
-  a failure to get a connection is logged with its cause (the address) and is
-  `nil, "the database connection \"x\" couldn't be reached"` to the script;
-  statements have a 30 s query timeout. **Migrations are the own SQLite
-  database's only** (`PackageSchemas` never touches a connection): they are
-  SQLite's dialect and a shared server's tables aren't the package's alone.
-  `last_insert_id` is MySQL's generated key for an `INSERT`/`REPLACE`
-  (`generatesKeys`), nil on PostgreSQL (use `RETURNING` through `db:query`).
-  Result values are normalised by `Cells.lua` (boolean to 1/0, decimal to
-  number, date to text, big integers to text). The loader
-  (`NetherForgeLoader`) fetches HikariCP (any connection) and PostgreSQL's
-  driver (a `postgres` one) from Maven Central (MySQL's is Paper's own) only
-  when the plugin folder's `config.yml` has such a connection: the loader runs
-  before the plugin, so it reads that file itself with Bukkit's
-  `YamlConfiguration` and `DatabasesConfig.read` (`Libraries.remoteTypes`).
-  A connection added to a running server has no libraries until the next
-  start: `HikariSources.missing` says so (the script's `nil, err` from the
-  pool, and an error in the log at enable). The runtime has the libraries
-  `compileOnly`, so they're never shaded. Tests: `RemoteDatabaseTest` (H2 in MySQL/PostgreSQL
-  mode as the server through `runtime.connectionSources`),
-  `DatabasesConfigTest`.
-- **A package's own database on a connection (`own-databases`).** A
-  connection's `ownDatabases` moves those packages' `nf.db()` there:
-  `RemoteDatabases.own(ns)` is an `OwnDatabase` (`store/OwnDatabase.kt`), a
-  `SqlDatabase` over the connection's `RemoteDatabase` that runs every piece of
-  the package's work in its space (PostgreSQL: the schema `<ns>`; MySQL: the
-  database `<database>_<ns>` through `setCatalog`, put back after, since the
-  pool is shared with `nf.db("<name>")`). **PostgreSQL keeps no session
-  state**, so it's correct behind a transaction pooler (PgBouncer's
-  `pool_mode = transaction`, which may run each transaction on another
-  backend and never resets one): every unit of work (`onLane`: a query, an
-  execute, a whole `db:transaction`) is one transaction starting with
-  `SELECT set_config('search_path', ?, true)` (`SET LOCAL`, bound), and
-  `Database.transaction` joins a transaction already open rather than
-  committing it early. Never `Connection.setSchema` or a session advisory
-  lock there. `DatabaseImpl.run` asks it before the SQLite file (same lane,
-  `database:<ns>`); `PackageSchemas` runs the dialect's files
-  (`MigrationFile.dialects`, `MigrationKind.dialectPathOf`;
-  `migration.dialect` when one lacks it) through `OwnDatabase.migrate`.
-  PostgreSQL: one transaction makes the schema and `nf_migrations`, then one
-  per missing step, each taking `pg_try_advisory_xact_lock` (polled to a
-  deadline, never a waiting lock, which would hold a start for ever),
-  re-reading `nf_migrations` and applying the step only if it's still
-  missing, so the lock, the step and its row commit together. The schema's
-  `CREATE SCHEMA` is under that lock too. MySQL: `GET_LOCK` with a timeout
-  around them all, each step in a transaction (split by
-  `SqlText.statements`). Lock keys come from a hash of the database and
-  namespace; `MigrationAhead` for applied versions the copy lacks
-  (`migration.ahead`). The space separates by name only: packages on one
-  connection share its user. `SharedOwnDatabaseTest` starts two servers on
-  two threads (each Lua state stays on its own) against
-  `TransactionPooler`: H2 in PostgreSQL mode with a few backends handed out
-  per transaction or autocommit statement, never reset, and the
-  transaction-scoped functions as aliases its commit and rollback end (H2's
-  own `set_config` does nothing, so the fake renames calls to
-  `fake_set_config`); `Locks.meet` makes the first lock holder wait until
-  the other has tried. `PgBouncerOwnDatabaseTest` runs the same tests on a
-  real PostgreSQL behind a real PgBouncer when `NETHERFORGE_TEST_PGBOUNCER`
-  and `NETHERFORGE_TEST_POSTGRES` are set (the nightly `pgbouncer` job), and
-  is skipped otherwise.
+- **MySQL and PostgreSQL** (`nf.db("network")`, and a package's own database there, `own-databases`): the Rust
+  runtime's `remote_db.rs`, its own drivers (no JDBC, nothing fetched). What scripts see, the pool, the own
+  databases' schemas, transactions behind a pooler and the migrations' lock are the plugin-runtime skill's "Package
+  databases".
 - `/nf data` (`admin/DataCommand.kt`) shows it: table sizes (by namespace), a
   table's first rows, one saved table's JSON (`show player|centity|named`),
   and `export` (every table into `exports/store-<time>.json` on the lane,

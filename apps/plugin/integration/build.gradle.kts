@@ -96,8 +96,8 @@ val contractJar = tasks.register<ShadowJar>("contractJar") {
     archiveBaseName.set("NetherForgeContract")
     archiveClassifier.set("")
     from(contract.output)
-    // The suites (the runtime's test fixtures) and what runs them: picked by file, since the fixtures and the
-    // runtime the plugin jar already has are one project's.
+    // The suites (the platform's test fixtures) and what runs them: picked by file, since the fixtures and the
+    // platform the plugin jar already has are one project's.
     val bundled = Regex("""(platform-.*-test-fixtures|junit-.*|opentest4j-.*|apiguardian-.*|kotlin-test.*)\.jar""")
     val runtimeClasspath = project.configurations["contractRuntimeClasspath"]
     inputs.files(runtimeClasspath)

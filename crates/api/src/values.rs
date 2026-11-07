@@ -5,7 +5,7 @@
 use crate::handles;
 
 /// A point or a direction: three numbers. Under Luau a script holds it as a
-/// native `vector` (see "Numbers" in the rust-runtime skill).
+/// native `vector` (see "Numbers" in the plugin-runtime skill).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Vec3 {
     pub x: f64,

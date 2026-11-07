@@ -1,6 +1,6 @@
 //! The runtime as the plugin runs it (Kotlin's `NetherForgeRuntime`'s enable and disable): what
 //! `nf_start` puts together on the server's platform, and `nf_stop` takes apart. See the
-//! rust-runtime skill, "The dev bridge" → Composition.
+//! plugin-runtime skill, "The dev bridge" → Composition.
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};

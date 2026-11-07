@@ -57,8 +57,8 @@ within a second, without a restart.
     types, datapacks, saved maps and structures.
   - **Resource packs**: pictures, glyphs for text, item and block looks,
     tooltips and sounds, built into one pack and sent to players.
-- **Lua 5.4, sandboxed**, with an instruction budget per call and memory and
-  time limits. Events on the things they're about (`this:on("click", ...)`),
+- **Luau, sandboxed**, run by a runtime written in Rust, with time and memory
+  limits on every call. Events on the things they're about (`this:on("click", ...)`),
   tasks that wait (`nf.wait`, `dialog:ask`), typed commands, schedules, saved
   data and SQL databases, the world, entities, players and real inventories,
   HTTP and web routes, WebAssembly, Vault and PlaceholderAPI. Completions and
@@ -77,8 +77,7 @@ within a second, without a restart.
 - **Deploying is pointing a server at the folder.** Put the plugin jar in
   `plugins/`, set `project:` in its `config.yml`, and `git pull` +
   `/nf reload` to update.
-- **Minecraft 1.21.11 and every 26.x**, on Paper, with one plugin jar per
-  version.
+- **Every Minecraft 26.x**, on Paper, with one plugin jar per version.
 - **macOS, Windows and Linux**, tested equally.
 - **No Minecraft assets shipped.** The editor reads textures and models from
   your own Minecraft install; the plugin asks the server.
