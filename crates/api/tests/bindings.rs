@@ -264,6 +264,18 @@ fn a_handle_cant_be_changed_or_called_with_a_dot() {
         message.contains("call BossBar methods with ':'"),
         "{message}"
     );
+    // Caught, it's a string at the script's line, as every binding's mistake is.
+    let caught: String = run(
+        &host,
+        s,
+        "local bar = nf.bossbars.create()\nlocal ok, err = pcall(function() bar.exists = nil end)\nreturn type(err) .. ' ' .. err",
+    )
+    .unwrap();
+    assert!(
+        caught.starts_with("string ")
+            && caught.contains(":2: a BossBar handle is shared by every script"),
+        "{caught}"
+    );
     let hidden: bool = run(
         &host,
         s,

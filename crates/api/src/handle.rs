@@ -9,7 +9,10 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 
-use mlua::{AnyUserData, Lua, MetaMethod, Table, UserData, UserDataFields, UserDataMethods, Value};
+use mlua::{
+    AnyUserData, Lua, MetaMethod, MultiValue, Table, UserData, UserDataFields, UserDataMethods,
+    Value,
+};
 use netherforge_luau::{Host, WeakHost};
 
 use crate::handles::{CHAINS, Handle};
@@ -73,12 +76,6 @@ impl UserData for HandleData {
                 None => Ok(Value::Nil),
             }
         });
-        methods.add_meta_method(MetaMethod::NewIndex, |_, this, (_, _): (Value, Value)| {
-            Err::<(), _>(mlua::Error::runtime(format!(
-                "{} is shared by every script and can't be changed",
-                a_or_an(&format!("{} handle", this.class()))
-            )))
-        });
         methods.add_meta_method(MetaMethod::Eq, |_, this, other: AnyUserData| {
             Ok(other
                 .borrow::<HandleData>()
@@ -98,6 +95,28 @@ impl UserData for HandleData {
     }
 
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        // Through the host's shim (`Host::script_function`), so a script assigning to a handle's field gets a string
+        // at its line, as from every binding, not mlua's error userdata. Made with the metatable, the first time a
+        // handle is: after `install` has recorded the host.
+        fields.add_meta_field_with(MetaMethod::NewIndex, |lua| {
+            let refuse = |_: &Lua, args: MultiValue| {
+                let class = match args.front() {
+                    Some(Value::UserData(u)) => u
+                        .borrow::<HandleData>()
+                        .map(|d| d.class())
+                        .unwrap_or("Handle"),
+                    _ => "Handle",
+                };
+                Err::<MultiValue, _>(mlua::Error::runtime(format!(
+                    "{} is shared by every script and can't be changed",
+                    a_or_an(&format!("{class} handle"))
+                )))
+            };
+            match host(lua) {
+                Some(host) => host.script_function(refuse),
+                None => lua.create_function(refuse),
+            }
+        });
         // `typeof(h)` says what it is. (mlua keeps `__metatable` for itself:
         // `getmetatable(h)` gives scripts nothing they can use.)
         fields.add_meta_field("__type", "handle");
@@ -203,6 +222,14 @@ fn cache_key(root: &str, key: &[KeyPart]) -> String {
         }
     }
     out
+}
+
+/// Whether Lua still holds the handle of class `root` (the top of its chain) with key `key`: once nothing does, its
+/// userdata leaves the weak table at the next full collection.
+pub fn held(lua: &Lua, root: &str, key: &[KeyPart]) -> bool {
+    cache(lua)
+        .and_then(|cache| cache.raw_get::<Value>(cache_key(root, key)))
+        .is_ok_and(|v| !v.is_nil())
 }
 
 fn push_key(

@@ -3,8 +3,9 @@
 //! BMP), resized, cropped, encoded as PNG, and shown on an image display (`node:set_image`), which keeps the
 //! pixels it shows itself. What scripts hold at once is bounded by `MAX_HELD` pixels.
 //!
-//! A picture goes when the session ends, not when Lua lets go of its handle (what's held at once is still bounded
-//! by `MAX_HELD`); `nf.images.download` fetches through `nf.http`'s guarded client.
+//! A picture Lua has let go of is let go of here when a new one needs the room: a hold that would pass `MAX_HELD`
+//! first runs a full collection and drops every picture whose handle is gone, then tries again. Every picture goes
+//! when the session ends. `nf.images.download` fetches through `nf.http`'s guarded client.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -116,6 +117,8 @@ pub struct Images {
     held: RefCell<HashMap<i64, Arc<Pixels>>>,
     next: Cell<i64>,
     pixels: Cell<u64>,
+    /// The room's Luau state, whose handles say which pictures scripts still hold.
+    lua: RefCell<Option<mlua::WeakLua>>,
 }
 
 impl Images {
@@ -124,9 +127,47 @@ impl Images {
         self.held.borrow().get(&number).cloned()
     }
 
+    /// The room whose scripts hold the pictures: a new room (a full reload) says so again.
+    pub fn attach(&self, lua: &mlua::Lua) {
+        *self.lua.borrow_mut() = Some(lua.weak());
+    }
+
+    /// How many pixels the pictures held have in all.
+    pub fn pixels_held(&self) -> u64 {
+        self.pixels.get()
+    }
+
+    /// Lets go of every picture whose handle Lua no longer holds, after a full collection. Called only as a picture
+    /// is about to be held, never between holding one and handing its handle over, so a picture being handed out is
+    /// never taken.
+    fn sweep(&self) {
+        let Some(lua) = self.lua.borrow().as_ref().and_then(|l| l.try_upgrade()) else {
+            return;
+        };
+        // Twice: a userdata with a finaliser is freed a cycle after it's found unreachable.
+        let _ = lua.gc_collect();
+        let _ = lua.gc_collect();
+        let mut held = self.held.borrow_mut();
+        held.retain(|number, _| {
+            netherforge_api::handle::held(
+                &lua,
+                "Image",
+                &[netherforge_api::handle::KeyPart::Int(*number)],
+            )
+        });
+        let total = held
+            .values()
+            .map(|p| u64::from(p.width()) * u64::from(p.height()))
+            .sum();
+        self.pixels.set(total);
+    }
+
     /// Keeps `pixels` and gives the handle it's keyed by; an error when scripts hold too much already.
     pub fn hold(&self, pixels: Arc<Pixels>) -> ApiResult<handles::Image> {
         let size = u64::from(pixels.width()) * u64::from(pixels.height());
+        if self.pixels.get() + size > MAX_HELD {
+            self.sweep();
+        }
         if self.pixels.get() + size > MAX_HELD {
             return Err(err(format!(
                 "scripts hold {} million pixels of images already: let go of images you no longer need",

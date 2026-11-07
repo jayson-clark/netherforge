@@ -3786,3 +3786,42 @@ fn the_bridges_bots_aim_at_a_centitys_node_and_say_which_node_they_look_at() {
         Some(netherforge_runtime::events::uuid_text(&Uuid(500)));
     assert_eq!(bots.bridge_state(elsewhere.clone()), elsewhere);
 }
+
+#[test]
+fn pictures_lua_let_go_of_make_room_for_new_ones() {
+    let platform = std::rc::Rc::new(Fake::default());
+    // 2048 by 2048 is 4.2 million pixels: seven fit in the 32 million scripts may hold.
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/game/init.lua",
+            r##"
+for i = 1, 20 do
+  local dropped = nf.images.fill(2048, 2048, "#ff0000")
+end
+print("twenty made, one at a time")
+local kept = {}
+for i = 1, 7 do
+  kept[i] = nf.images.fill(2048, 2048, "#00ff00")
+end
+local ok, err = pcall(nf.images.fill, 2048, 2048, "#0000ff")
+print(ok, err)
+print(kept[1]:pixel(0, 0), kept[7]:pixel(2047, 2047))
+kept = nil
+print(nf.images.fill(2048, 2048, "#0000ff"):pixel(0, 0))
+"##,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(
+        printed(&start),
+        [
+            "twenty made, one at a time",
+            "false\tmodules/game/init.lua:10: scripts hold 32 million pixels of images already: let go of images you no longer need",
+            "#00FF00\t#00FF00",
+            "#0000FF",
+        ],
+        "{start:?}"
+    );
+}

@@ -544,3 +544,41 @@ fn a_breakpoint_in_a_project_file_binds_by_its_place_on_disk_too() {
     );
     assert_eq!(stopped.1, "function (line 1) modules/m/init.lua:2");
 }
+
+#[test]
+fn a_packages_file_named_by_its_place_on_disk_is_its_package_path() {
+    let debugger = Debugger::new(
+        Arc::new(|_: Value| {}),
+        Some(std::path::PathBuf::from("/projects/demo")),
+    );
+    // A path dependency inside the project's folder, and one from the package cache.
+    debugger.set_packages(Arc::new(Mutex::new(vec![
+        (
+            "inner".to_owned(),
+            std::path::PathBuf::from("/projects/demo/packages/inner"),
+        ),
+        (
+            "acme".to_owned(),
+            std::path::PathBuf::from("/cache/acme@1.2.0"),
+        ),
+    ])));
+    assert_eq!(
+        debugger.source_path("/cache/acme@1.2.0/modules/api/init.lua"),
+        "acme:modules/api/init.lua"
+    );
+    // The package nested in the project's folder wins over the folder around it.
+    assert_eq!(
+        debugger.source_path("/projects/demo/packages/inner/modules/x/init.lua"),
+        "inner:modules/x/init.lua"
+    );
+    assert_eq!(
+        debugger.source_path("/projects/demo/modules/m/init.lua"),
+        "modules/m/init.lua"
+    );
+    // Anywhere else stays as it was; a path already relative too.
+    assert_eq!(debugger.source_path("/elsewhere/a.lua"), "/elsewhere/a.lua");
+    assert_eq!(
+        debugger.source_path("acme:modules/api/init.lua"),
+        "acme:modules/api/init.lua"
+    );
+}

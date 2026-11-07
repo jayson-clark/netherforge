@@ -489,8 +489,8 @@ centity is gone and revived when it's back. `centity:data()` is one of the saved
 (`crate::data`, below). The store commits on its own lane (see Persistence).
 
 **Images** (`crate::images`): pictures held by number, bounded by `MAX_HELD` pixels, decoded with the `image`
-crate (PNG, JPEG, GIF, BMP), encoded as PNG. Not yet: letting go when Lua drops a handle (they go with the
-session).
+crate (PNG, JPEG, GIF, BMP), encoded as PNG. A hold that would pass `MAX_HELD` first runs a full collection and lets
+go of every picture whose handle Lua no longer holds (`handle::held`); the rest go with the session.
 
 **The session's platform events**: `Session::entity_clicked`, and the centities service's hooks:
 `entities_loaded` (pushed whole and hidden again, strays removed), `player_joined`, `player_quit` (the natural

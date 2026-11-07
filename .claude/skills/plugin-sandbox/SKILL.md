@@ -78,8 +78,9 @@ The host is `crates/luau` (`Host`, `Limits`, `Guard`), on mlua's Luau.
   them). Every binding, `require` and `nf`'s `__newindex` go through one Luau shim (`SHIM`, without
   debug information): a failure comes back as a sentinel and its message, which the shim raises
   located at the script's line, as the caps' `refuse` does (`modules/shop/init.lua:3: no module
-"x"`); a waiting binding's `waiting` yields its task there. Not yet: a handle's metamethods
-  (assigning to a handle's field), which are mlua `UserData` methods and raise mlua's userdata.
+"x"`); a waiting binding's `waiting` yields its task there. A handle's `__newindex` (assigning to its field) is
+  made through the shim too, as a meta field built with the handles' metatable (`handle.rs`: mlua won't let it be
+  replaced afterwards); its other metamethods don't fail.
 
 ### The caps and what a pattern costs
 
@@ -206,8 +207,8 @@ N)`; Luau's names are where a function was defined, not Kotlin's call-site names
   any body runs (`Session::set_on_host`, installed by `ServerEvents::attach_bridge`/`attach_debugger`), so breakpoints in
   bodies hold on a full reload. The bridge's connection ending detaches: a held server goes on.
 - **Paths**: chunks are project or package paths; a `setBreakpoints` path that's absolute and under the project's folder
-  is mapped to its project path. Not yet: a package's file named by its place on disk (a path dependency's folder or the
-  package cache's checkout; Kotlin's `ProjectFiles.pathOf`), and a coroutine's stop listing the main thread's frames
-  below it.
+  is mapped to its project path, and one under a package's folder (a path dependency's, or the package cache's
+  checkout: `set_packages`, from the project files' `folders`) to its package path, the innermost folder winning. Not
+  yet: a coroutine's stop listing the main thread's frames below it.
 - Tests: `crates/luau/tests/debug.rs` (the host's half with a recording handler), `crates/runtime/tests/debugger.rs`
   (DAP end to end: a thread plays the editor while the test's thread is held in its tick).

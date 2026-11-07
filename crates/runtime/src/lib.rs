@@ -901,6 +901,9 @@ impl Room {
     /// A room whose API reaches what a session shares (its centities), when it's given.
     pub fn with(host: Host, grants: Grants, shared: Option<Rc<Shared>>) -> mlua::Result<Room> {
         let scripts = Scripts::new(host.clone())?;
+        if let Some(shared) = &shared {
+            shared.images.attach(host.lua());
+        }
         let worlds = shared
             .as_ref()
             .map(|shared| world::GameContext::new(shared.clone(), scripts.clone()));
