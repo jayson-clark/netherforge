@@ -541,19 +541,35 @@ impl Scripts {
     /// One server tick: timers that are due, waits that are over, then `tick`
     /// handlers on `nf`.
     pub fn tick(&self) {
+        self.tick_timed(&mut |_, _| {});
+    }
+
+    /// [`tick`](Self::tick), each part timed for the profiler under the tick phase it is (Kotlin's `TickPhase`):
+    /// `async` (what finished off the main thread), `timers` (`nf.after`, `nf.every`, a task's wait), `events`
+    /// (`nf.on("tick")`).
+    pub fn tick_timed(&self, time: &mut dyn FnMut(&'static str, u64)) {
         let now = {
             let mut state = self.0.state.borrow_mut();
             state.tick += 1;
             state.tick
         };
+        let host = self.host();
+        let mut at = host.now();
+        let mut part = |phase: &'static str, at: &mut u64| {
+            let now = host.now();
+            time(phase, now - *at);
+            *at = now;
+        };
         self.deliver_async();
+        part("async", &mut at);
         self.run_timers(now);
         self.check_wait_untils(now);
-        let host = self.host();
+        part("timers", &mut at);
         let lua = host.lua();
         if let Ok(payload) = lua.create_table() {
             self.raise(&Target::Nf, "tick", payload);
         }
+        part("events", &mut at);
     }
 
     fn run_timers(&self, now: u64) {

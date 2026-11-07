@@ -52,6 +52,8 @@ pub struct ServerEvents<'a> {
     after_tick: RefCell<Option<Rc<dyn Fn()>>>,
     /// The debugger, on a dev server: it outlives the session's runs.
     debugger: RefCell<Option<std::sync::Arc<crate::debug::Debugger>>>,
+    /// The Prometheus endpoint, when `metrics:` gives it a port.
+    metrics: RefCell<Option<Rc<crate::metrics::ServerMetrics>>>,
 }
 
 /// How often the runtime looks whether the network's policy changed, or the hub a project waits for is here.
@@ -74,6 +76,7 @@ impl<'a> ServerEvents<'a> {
             profiler: RefCell::new(profiler.clone()),
             after_tick: RefCell::new(None),
             debugger: RefCell::new(None),
+            metrics: RefCell::new(None),
         };
         events.set_profiler(profiler);
         events
@@ -89,6 +92,11 @@ impl<'a> ServerEvents<'a> {
         }
         session.set_profiler(Some(profiler.clone()));
         *self.profiler.borrow_mut() = profiler;
+    }
+
+    /// Serves the server's metrics from now on, gathered each second of ticks.
+    pub fn set_metrics(&self, metrics: Option<Rc<crate::metrics::ServerMetrics>>) {
+        *self.metrics.borrow_mut() = metrics;
     }
 
     /// What runs at the end of every tick, once nothing holds the session (`/nf`'s held work).
@@ -317,12 +325,8 @@ fn experience_back(s: &Running, out: &Emitted, field: &str, was: i32) -> i32 {
         .map_or(was, |v| v.clamp(0, i64::from(i32::MAX)) as i32)
 }
 
-impl<'a> PlatformEvents for ServerEvents<'a> {
-    fn game(&self) -> &dyn GameEvents {
-        &self.game
-    }
-
-    fn tick(&self) {
+impl<'a> ServerEvents<'a> {
+    fn run_tick(&self) {
         // What the editor asked since the last tick, before any script of this one runs.
         let bridge = self.bridge.borrow().clone();
         if let Some(bridge) = &bridge {
@@ -375,7 +379,25 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
             after();
         }
     }
+}
 
+impl<'a> PlatformEvents for ServerEvents<'a> {
+    fn game(&self) -> &dyn GameEvents {
+        &self.game
+    }
+
+    /// One tick, timed for the metrics (NetherForge's share of it).
+    fn tick(&self) {
+        let started = std::time::Instant::now();
+        self.run_tick();
+        let metrics = self.metrics.borrow().clone();
+        if let Some(metrics) = metrics {
+            metrics.record(started.elapsed().as_nanos() as u64);
+            if let Some(session) = self.any() {
+                metrics.tick(self.ticks.get(), Some(&session), session.platform());
+            }
+        }
+    }
     fn item_rendered(&self, stack: ItemData) -> ItemData {
         match self.open() {
             Some(s) => items(&s).render(stack),

@@ -101,6 +101,15 @@ pub trait Service {
     fn block_changed(&self, _block: &BlockRef) {}
     /// A world was loaded or created, before scripts hear of it.
     fn world_loaded(&self, _platform: &dyn Platform, _world: &str) {}
+    /// Whether the server must restart for what it holds to be as the project says (the main world's generator).
+    fn needs_restart(&self) -> bool {
+        false
+    }
+    /// The tick phase it runs in, as the profiler names it (Kotlin's `TickPhase`): `world` (what moves the world),
+    /// `effects` (what follows it), or `upkeep`.
+    fn phase(&self) -> &'static str {
+        "upkeep"
+    }
     /// The watched events it needs delivered even when no script listens (custom blocks read a chunk as it loads).
     fn needs_watched(&self) -> Vec<netherforge_platform::WatchedEvent> {
         Vec::new()
@@ -909,27 +918,27 @@ impl<'a> Session<'a> {
         let profiler = profiler.filter(|p| p.active());
         self.sync_profiling(host, profiler.is_some());
         let start = host.now();
-        let mut phases = indexmap::IndexMap::new();
-        room.scripts().tick();
+        // Kotlin's eight phases, in its order, as the profiler shows them.
+        let mut phases: indexmap::IndexMap<String, i64> =
+            TICK_PHASES.iter().map(|p| ((*p).to_owned(), 0)).collect();
+        room.scripts().tick_timed(&mut |phase, nanos| {
+            *phases.entry(phase.to_owned()).or_default() += nanos as i64;
+        });
         let mut at = host.now();
-        phases.insert("scripts".to_owned(), (at - start) as i64);
         for service in &self.services {
             service.tick(room, &*self.platform);
+            let now = host.now();
+            *phases.entry(service.phase().to_owned()).or_default() += (now - at) as i64;
             if let Some(p) = &profiler {
-                let now = host.now();
                 p.part(&format!("services/{}", service.name()), now - at);
-                at = now;
             }
+            at = now;
         }
         self.released();
         self.report();
         self.update_watched();
         self.shared.classed.borrow_mut().clear();
         let now = host.now();
-        phases.insert(
-            "services".to_owned(),
-            (now - (start + phases["scripts"] as u64)) as i64,
-        );
         self.accounts(room, tick, profiler.as_deref());
         let end = host.now();
         phases.insert("accounts".to_owned(), (end - now) as i64);
@@ -1220,7 +1229,8 @@ impl<'a> Session<'a> {
         let restart = order
             .iter()
             .any(|(kind, _)| crate::reload::STARTUP_KINDS.contains(kind))
-            && self.check_startup();
+            && self.check_startup()
+            || self.services.iter().any(|s| s.needs_restart());
         let notes = std::mem::take(&mut *self.shared.reloading.borrow_mut());
         let resources = crate::reload::outcomes(
             &order,
@@ -1243,7 +1253,8 @@ impl<'a> Session<'a> {
         self.refuse();
         self.run();
         let failed: Vec<Problem> = self.collected().into_iter().map(|f| f.problem).collect();
-        let restart = self.has_startup_resources() && self.check_startup();
+        let restart = (self.has_startup_resources() && self.check_startup())
+            || self.services.iter().any(|s| s.needs_restart());
         std::mem::take(&mut *self.shared.reloading.borrow_mut());
         let mut problems = self.problems();
         for problem in &failed {
@@ -1794,6 +1805,12 @@ fn kind_order(kind: &str) -> usize {
         .unwrap_or(usize::MAX)
 }
 
+/// Kotlin's tick phases, in its order (`TickPhase`): what the profiler shows a tick as. `save` is what's written down,
+/// which on the Rust runtime is the store's lane's, off the tick.
+const TICK_PHASES: [&str; 8] = [
+    "timers", "async", "events", "world", "effects", "upkeep", "accounts", "save",
+];
+
 /// The services a session runs, in the one order they start, tick and stop in.
 fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
     // Centities are defined before modules start: a module's body may spawn one. Their instances' scripts
@@ -2001,6 +2018,10 @@ impl CentitiesService {
 impl Service for CentitiesService {
     fn name(&self) -> &'static str {
         "centities"
+    }
+
+    fn phase(&self) -> &'static str {
+        "world"
     }
 
     fn reloads(&self) -> &'static [&'static str] {

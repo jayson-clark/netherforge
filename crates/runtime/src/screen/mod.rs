@@ -2308,6 +2308,10 @@ fn folders(project: &Define, kind: &str) -> BTreeMap<String, String> {
 }
 
 impl Service for ScreensService {
+    fn phase(&self) -> &'static str {
+        "effects"
+    }
+
     fn costs(&self, scope: netherforge_luau::ScopeId) -> Vec<(&'static str, usize)> {
         let screens = self.shared.screens.borrow();
         let count = screens

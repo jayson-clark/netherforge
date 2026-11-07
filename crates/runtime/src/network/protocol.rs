@@ -76,6 +76,14 @@ pub enum Lifecycle {
 }
 
 impl Lifecycle {
+    /// Every state, in the order of a life.
+    pub const ALL: &'static [Lifecycle] = &[
+        Lifecycle::Starting,
+        Lifecycle::Ready,
+        Lifecycle::Draining,
+        Lifecycle::Stopping,
+    ];
+
     pub fn word(self) -> &'static str {
         match self {
             Lifecycle::Starting => "starting",

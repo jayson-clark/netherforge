@@ -322,6 +322,10 @@ impl Service for SkiesService {
         "skies"
     }
 
+    fn phase(&self) -> &'static str {
+        "effects"
+    }
+
     fn reloads(&self) -> &'static [&'static str] {
         &["sky"]
     }

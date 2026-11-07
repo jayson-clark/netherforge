@@ -807,6 +807,10 @@ impl Service for EntitiesService {
         "entities"
     }
 
+    fn phase(&self) -> &'static str {
+        "world"
+    }
+
     fn start(&self, room: &Room, _project: &crate::session::Define) {
         *self.host.borrow_mut() = Some(room.host().clone());
     }

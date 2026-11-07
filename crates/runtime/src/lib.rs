@@ -52,6 +52,7 @@ pub mod living;
 pub mod loot;
 pub mod managed_worlds;
 pub mod menu;
+pub mod metrics;
 pub mod mob;
 pub mod modules;
 pub mod names;

@@ -2228,6 +2228,10 @@ impl Service for BlocksService {
         "blocks"
     }
 
+    fn phase(&self) -> &'static str {
+        "world"
+    }
+
     /// A chunk's blocks are read as it loads, whoever listens.
     fn needs_watched(&self) -> Vec<netherforge_platform::WatchedEvent> {
         if self.shared.blocks.borrow().usable() {

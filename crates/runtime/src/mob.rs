@@ -637,6 +637,10 @@ pub struct MobsService {
 }
 
 impl Service for MobsService {
+    fn phase(&self) -> &'static str {
+        "world"
+    }
+
     fn costs(&self, scope: netherforge_luau::ScopeId) -> Vec<(&'static str, usize)> {
         vec![("goals", self.mobs.count_owned(scope))]
     }

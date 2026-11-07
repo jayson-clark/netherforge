@@ -306,11 +306,12 @@ pub fn source_of(
             .into_iter()
             .find(|(t, _)| *t == target)
         {
-            return Some(format!(
-                "{}/{}",
-                project.place_of("datapack", &name),
-                path.file
-            ));
+            // A datapack's place is its `pack.mcmeta`: its files are beside it.
+            let place = project.place_of("datapack", &name);
+            let folder = place
+                .rsplit_once('/')
+                .map_or(place.as_str(), |(folder, _)| folder);
+            return Some(format!("{folder}/{}", path.file));
         }
     }
     for kind in crate::kinds::ALL {

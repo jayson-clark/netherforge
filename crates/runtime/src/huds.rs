@@ -462,6 +462,10 @@ impl Service for HudsService {
         "huds"
     }
 
+    fn phase(&self) -> &'static str {
+        "effects"
+    }
+
     fn tick(&self, room: &Room, platform: &dyn Platform) {
         if self.shared.huds.borrow().shown.is_empty() {
             return;

@@ -40,6 +40,33 @@ use crate::Room;
 use crate::session::{Define, Service};
 use crate::shared::Shared;
 
+thread_local! {
+    /// Each world the server asked a generator for as it started, and the one it was given (none: none): what the main
+    /// world runs with until the server restarts (`nf_default_generator` notes it).
+    static ASKED: RefCell<Vec<(String, Option<String>)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// The server asked for `world`'s generator as it started, and was given `id`.
+pub fn note_asked(world: &str, id: Option<String>) {
+    ASKED.with(|a| a.borrow_mut().push((world.to_owned(), id)));
+}
+
+/// What the server was given for `world` as it started; none when it didn't ask.
+pub fn asked(world: &str) -> Option<Option<String>> {
+    ASKED.with(|a| {
+        a.borrow()
+            .iter()
+            .rev()
+            .find(|(w, _)| w == world)
+            .map(|(_, id)| id.clone())
+    })
+}
+
+thread_local! {
+    /// The column a chunk thread last asked a biome of, by its generator, and the biome.
+    static LAST_COLUMN: RefCell<Option<((usize, i32, i32), String)>> = const { RefCell::new(None) };
+}
+
 /// The stone a file falls back on when it names none the server has.
 const DEFAULT_STONE: &str = "minecraft:stone";
 /// How far from where it's asked a spawn looks for dry ground.
@@ -141,9 +168,26 @@ impl TerrainSource for RustTerrain {
         self.of(world).dry_column_near(x, z, DRY_RADIUS)
     }
 
+    /// The server asks every 4x4x4 cell of a chunk in turn, a column's heights one after another: a file whose areas
+    /// are its columns' answers each column once per thread (`LAST_COLUMN`); one with volumes (or a script's biome
+    /// stage) is sampled at each place.
     fn biome_at(&self, world: TerrainWorld, x: i32, y: i32, z: i32) -> String {
         let generator = self.of(world);
-        generator.sampling(|sampler| generator.biome_at(x, y, z, sampler).to_owned())
+        if generator.point_areas() {
+            return generator.sampling(|sampler| generator.biome_at(x, y, z, sampler).to_owned());
+        }
+        let key = (Arc::as_ptr(&generator) as usize, x, z);
+        if let Some(biome) = LAST_COLUMN.with(|last| {
+            last.borrow()
+                .as_ref()
+                .filter(|(k, _)| *k == key)
+                .map(|(_, b)| b.clone())
+        }) {
+            return biome;
+        }
+        let biome = generator.column_biome_at(x, z).to_owned();
+        LAST_COLUMN.with(|last| *last.borrow_mut() = Some((key, biome.clone())));
+        biome
     }
 
     fn locate_heights(&self, world: TerrainWorld, y: i32, step: i32) -> Vec<i32> {
@@ -255,6 +299,9 @@ pub struct Terrains {
     failures: Failures,
     /// Each generator's file, for its problems.
     files: HashMap<String, String>,
+    /// Whether the main world's generator isn't the one the manifest names (a restart changes it), and what's said.
+    main_stale: bool,
+    main_problems: Vec<Problem>,
 }
 
 /// The terrains' service.
@@ -460,6 +507,107 @@ impl TerrainsService {
                 .world_manager()
                 .publish_generators(published.generators);
         }
+        self.check_main(project);
+    }
+
+    /// Whether the server's main world has the generator the manifest names for it (Kotlin's `StartupGenerators.check`);
+    /// when not, a restart is what changes it (a warning, once). A seed for the main world is the server's own
+    /// (`level-seed`), never the manifest's.
+    fn check_main(&self, project: &Define) {
+        use netherforge_format::codes::{RUNTIME_RESTART, RUNTIME_TERRAIN};
+        use netherforge_format::manifest::FILE_NAME;
+        let loaded = project.project;
+        let platform = project.platform;
+        // Nothing to check when the server asked for no generator and the manifest names none.
+        let names_terrain = loaded
+            .manifest
+            .as_ref()
+            .and_then(|m| m.worlds.as_ref())
+            .is_some_and(|w| w.0.iter().any(|(_, c)| c.terrain.is_some()));
+        if !names_terrain && ASKED.with(|a| a.borrow().is_empty()) {
+            let mut terrains = self.terrains.borrow_mut();
+            terrains.main_stale = false;
+            terrains.main_problems.clear();
+            return;
+        }
+        let main = platform.worlds().default_world();
+        let config = loaded
+            .manifest
+            .as_ref()
+            .and_then(|m| m.worlds.as_ref())
+            .and_then(|w| w.0.iter().find(|(name, _)| name.0 == main))
+            .map(|(_, c)| c.clone());
+        let reference = config.as_ref().and_then(|c| c.terrain.clone());
+        // Compared by name: deleting the file isn't a change of generator.
+        let wanted = reference
+            .as_deref()
+            .map(|r| generator_of(loaded, r).unwrap_or_else(|| r.to_owned()));
+        let asked_main = asked(&main);
+        let started = asked_main.clone().flatten();
+        let terrains: Vec<String> = loaded
+            .everywhere("terrain")
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        let stale = wanted != started
+            && (wanted.as_ref().is_some_and(|w| terrains.contains(w)) || started.is_some());
+        let path = format!("$.worlds.{main}");
+        let mut found = Vec::new();
+        let mut terrains_state = self.terrains.borrow_mut();
+        let was = terrains_state.main_stale;
+        let mut restart = |message: String, at: String| {
+            if !was {
+                platform.log().warn(message.clone());
+            }
+            found.push(RUNTIME_RESTART.at(FILE_NAME, message, Some(at)));
+        };
+        if !stale && asked_main.is_some() && reference.is_none() {
+            found.push(RUNTIME_TERRAIN.at(
+                FILE_NAME,
+                format!(
+                    "bukkit.yml asks NetherForge to generate the main world \"{main}\", but netherforge.json names no terrain for it: the server generates it itself"
+                ),
+                Some(path.clone()),
+            ));
+        } else if stale && asked_main.is_none() {
+            restart(
+                format!(
+                    "netherforge.json names terrain \"{}\" for the main world \"{main}\", but the server doesn't ask NetherForge to generate it: add `generator: NetherForge` under `worlds.{main}` in bukkit.yml and restart the server (the editor's dev server does this itself)",
+                    wanted.clone().unwrap_or_default()
+                ),
+                format!("{path}.terrain"),
+            );
+        } else if stale {
+            let had = match &started {
+                Some(id) => format!("generator \"{id}\""),
+                None => "no generator".to_owned(),
+            };
+            let now = match &wanted {
+                Some(id) => format!("\"{id}\""),
+                None => "none".to_owned(),
+            };
+            restart(
+                format!(
+                    "The main world \"{main}\" started with {had} and netherforge.json now names {now}: it generates as it started until the server restarts"
+                ),
+                if wanted.is_none() {
+                    path.clone()
+                } else {
+                    format!("{path}.terrain")
+                },
+            );
+        }
+        if config.as_ref().is_some_and(|c| c.seed.is_some()) {
+            found.push(RUNTIME_TERRAIN.at(
+                FILE_NAME,
+                format!(
+                    "\"{main}\" is the server's main world, whose seed is the server's (`level-seed` in server.properties): this one is ignored"
+                ),
+                Some(format!("{path}.seed")),
+            ));
+        }
+        terrains_state.main_stale = stale;
+        terrains_state.main_problems = found;
     }
 
     /// Makes the worlds `netherforge.json` names with a `terrain` or a `dimensionType` (Kotlin's `ensureMade`).
@@ -618,8 +766,13 @@ impl Service for TerrainsService {
             .iter()
             .chain(&terrains.world_problems)
             .chain(&terrains.failures.problems)
+            .chain(&terrains.main_problems)
             .cloned()
             .collect()
+    }
+
+    fn needs_restart(&self) -> bool {
+        self.terrains.borrow().main_stale
     }
 }
 

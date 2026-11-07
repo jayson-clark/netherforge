@@ -178,18 +178,20 @@ end)
     let tick = &first.ticks[4];
     assert_eq!(
         tick.phases.keys().collect::<Vec<_>>(),
-        ["scripts", "services", "accounts"]
+        [
+            "timers", "async", "events", "world", "effects", "upkeep", "accounts", "save"
+        ]
     );
     assert_eq!(tick.top.len(), 1);
     assert_eq!(tick.top[0].scope, "module shop");
     assert_eq!(tick.scripts, tick.top[0].nanos);
     assert!(tick.nanos >= tick.phases.values().sum::<i64>(), "{tick:?}");
-    // What the steps are made of: each service's share, within its step.
+    // What the steps are made of: each service's share, within its phase (the modules' is upkeep's).
     let modules = tick
         .parts
         .get("services/modules")
         .expect("the modules' part");
-    assert!(*modules <= tick.phases["services"], "{tick:?}");
+    assert!(*modules <= tick.phases["upkeep"], "{tick:?}");
 }
 
 #[test]

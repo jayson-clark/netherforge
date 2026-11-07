@@ -22,12 +22,16 @@ function steps.generate()
   local world = nf.worlds.get("it_gen")
     or nf.worlds.load("it_gen")
     or nf.worlds.create("it_gen", { seed = 7 })
-  for cx = -4, 4 do
-    for cz = -4, 4 do
-      world:load_chunk(vec3(cx * 16, 64, cz * 16))
+  -- A row of chunks a tick: generating them all in one call runs past a call's time limit on a loaded machine.
+  nf.task(function()
+    for cx = -4, 4 do
+      for cz = -4, 4 do
+        world:load_chunk(vec3(cx * 16, 64, cz * 16))
+      end
+      nf.wait(1)
     end
-  end
-  log("generated", world:name())
+    log("generated", world:name())
+  end)
 end
 
 -- The markers turn into centities on the tick after their chunk loads, so the count waits a few ticks (server

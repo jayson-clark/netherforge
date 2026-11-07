@@ -889,6 +889,10 @@ fn files(project: &Define) -> (BTreeMap<String, Option<String>>, BTreeMap<String
 }
 
 impl Service for ParticlesService {
+    fn phase(&self) -> &'static str {
+        "effects"
+    }
+
     fn costs(&self, scope: netherforge_luau::ScopeId) -> Vec<(&'static str, usize)> {
         vec![("effects", self.shared.particles.borrow().count_owned(scope))]
     }
