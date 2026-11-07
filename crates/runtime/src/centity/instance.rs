@@ -6,9 +6,6 @@
 //! survive a reload: a node that's still there keeps its entities, and the reconcile pass works out what's
 //! missing or stale. Local transforms are the source of truth, not matrices, so a script that writes a
 //! rotation reads the same numbers back.
-//!
-//! Not yet (each with its area): animations and tweens, bodies and physics, health, walks, flights,
-//! hitboxes' shapes, nodes scripts add.
 
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;

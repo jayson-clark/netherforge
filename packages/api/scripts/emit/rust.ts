@@ -496,6 +496,14 @@ export function codecsRust(bindings: Bindings, spec: ApiSpec): string {
       `    fn read(&self, lua: &Lua, value: Value, at: &str) -> crate::ApiResult<shapes::${name}> {`,
       `        let t = shape_table(&value, at, ${JSON.stringify(name)}, &[${fields.map((f) => JSON.stringify(f.name)).join(', ')}])?;`,
       `        let _ = (&lua, &t);`,
+      // A version gate: a field the server is too old for is a mistake when it's set.
+      ...fields.flatMap((f) =>
+        f.since
+          ? [
+              `        if !t.raw_get::<Value>(${JSON.stringify(f.name)}).map_or(true, |v| v.is_nil()) { crate::bind::gate(lua, &format!("'{at}.${f.name}'"), ${JSON.stringify(sinceVersion(f.since))})?; }`,
+            ]
+          : [],
+      ),
       `        Ok(shapes::${name} {`,
       ...fields.map(
         (f) =>
@@ -612,6 +620,11 @@ function glue(binding: ClassBinding, fn: FnBinding): string[] {
     args.push('&caller')
   }
   const scope = fn.method ? 'host_scope(lua)' : 'Some(caller.scope)'
+  // A version gate: on a server older than the feature, calling it says which version it needs.
+  if (fn.fn.since)
+    lines.push(
+      `crate::bind::gate(lua, ${JSON.stringify(called(binding, fn))}, ${JSON.stringify(sinceVersion(fn.fn.since))}).map_err(|e| mlua::Error::runtime(e.0))?;`,
+    )
   if (fn.fn.requires)
     lines.push(
       `api.requires(${scope}, ${JSON.stringify(fn.fn.requires)}, ${JSON.stringify(called(binding, fn))}).map_err(|e| mlua::Error::runtime(e.0))?;`,

@@ -43,13 +43,20 @@ if (native == "prebuilt") {
     }
 }
 if (native == "host") {
+    val mac = System.getProperty("os.name").lowercase().contains("mac")
     val cargoRelease = tasks.register<Exec>("cargoRelease") {
         description = "Builds crates/ffi's library, release, for the jar"
         workingDir = repoRoot
         commandLine("cargo", "build", "--release", "-p", "netherforge-ffi")
-        // macOS's `strip` (as of ld-27106) leaves a dylib that won't load ("mis-aligned LINKEDIT string pool"), and
-        // a release build strips its debug info by default.
-        if (System.getProperty("os.name").lowercase().contains("mac")) environment("CARGO_PROFILE_RELEASE_STRIP", "none")
+        // macOS's `strip` (as of ld-27106) leaves a dylib that won't load ("mis-aligned LINKEDIT string pool"), so
+        // cargo doesn't strip there; `strip -x` after does, safely (58 MB to 43 MB). Elsewhere cargo strips its symbols.
+        environment("CARGO_PROFILE_RELEASE_STRIP", if (mac) "none" else "symbols")
+    }
+    val stripRelease = tasks.register<Exec>("stripRelease") {
+        description = "Strips the library's local symbols on macOS, where cargo's own strip breaks it"
+        dependsOn(cargoRelease)
+        onlyIf { mac }
+        commandLine("strip", "-x", repoRoot.resolve("target/release/libnetherforge_ffi.dylib"))
     }
     val os = System.getProperty("os.name").lowercase()
     val (folder, file) = when {
@@ -63,7 +70,7 @@ if (native == "host") {
         else -> a
     }
     tasks.named<Copy>("processResources") {
-        dependsOn(cargoRelease)
+        dependsOn(stripRelease)
         from(repoRoot.resolve("target/release/$file")) { into("META-INF/netherforge/native/$folder-$arch") }
     }
 }

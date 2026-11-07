@@ -3,8 +3,8 @@
 //! BMP), resized, cropped, encoded as PNG, and shown on an image display (`node:set_image`), which keeps the
 //! pixels it shows itself. What scripts hold at once is bounded by `MAX_HELD` pixels.
 //!
-//! Not yet: letting go of a picture when Lua lets go of its handle (until then pictures go when the session
-//! ends, still bounded by `MAX_HELD`), and `nf.images.download`, which comes with HTTP.
+//! A picture goes when the session ends, not when Lua lets go of its handle (what's held at once is still bounded
+//! by `MAX_HELD`); `nf.images.download` fetches through `nf.http`'s guarded client.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;

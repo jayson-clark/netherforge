@@ -773,6 +773,14 @@ impl Scripts {
                 names.join(", ")
             )));
         }
+        // A version gate: an event this server's Minecraft is too old for is a mistake to listen for.
+        if let Some(since) = spec.and_then(|s| s.since) {
+            netherforge_api::bind::gate(
+                self.host().lua(),
+                &format!("the event \"{event}\""),
+                since,
+            )?;
+        }
         let every = match options.and_then(|o| o.every) {
             None => None,
             Some(_) if !spec.is_some_and(|s| s.options.contains(&"every")) => {

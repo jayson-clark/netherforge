@@ -62,6 +62,8 @@ struct Fake {
     managed: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     /// What the session said it watches, in order.
     watched: RefCell<Vec<String>>,
+    /// The game's report of what it refused of the start-up datapack, if it refused any.
+    refused: RefCell<Option<String>>,
 }
 
 impl Fake {
@@ -288,6 +290,17 @@ impl netherforge_platform::FakeWorldManagerOps for Fake {
     fn dimension_types(&self) -> Vec<String> {
         vec!["minecraft:overworld".into(), "test:deep".into()]
     }
+    fn publish_generators(
+        &self,
+        generators: std::collections::HashMap<String, netherforge_platform::ProjectGenerator>,
+    ) {
+        let mut names: Vec<&String> = generators.keys().collect();
+        names.sort();
+        self.managed
+            .lock()
+            .unwrap()
+            .push(format!("generators {names:?}"));
+    }
     fn load(&self, name: String, environment: String, terrain: Option<String>) -> bool {
         if !self.saved.borrow_mut().remove(&name) {
             return false;
@@ -326,6 +339,27 @@ impl netherforge_platform::FakeWorldManagerOps for Fake {
             what: format!("delete {name}"),
             log: self.managed.clone(),
         })
+    }
+}
+
+impl netherforge_platform::FakeDatapackOps for Fake {
+    fn started(&self) -> std::collections::HashMap<String, Vec<u8>> {
+        std::collections::HashMap::new()
+    }
+    fn refused(&self) -> Option<netherforge_format::startup::DatapackRefusal> {
+        self.refused
+            .borrow()
+            .clone()
+            .map(|report| netherforge_format::startup::DatapackRefusal {
+                hash: "abc".into(),
+                report,
+            })
+    }
+    fn format(&self) -> Option<Vec<i32>> {
+        Some(vec![94, 1])
+    }
+    fn main_world(&self) -> Option<String> {
+        None
     }
 }
 
@@ -420,6 +454,9 @@ impl FakePlatform for Fake {
         self
     }
     fn world_manager(&self) -> &dyn netherforge_platform::WorldManagerOps {
+        self
+    }
+    fn datapacks(&self) -> &dyn netherforge_platform::DatapackOps {
         self
     }
     fn entities(&self) -> &dyn netherforge_platform::EntityOps {
@@ -904,4 +941,176 @@ fn math_type_and_tointeger_read_whole_numbers_as_integers() {
     let platform = Fake::new();
     let session = start(&files, &platform, Config::default());
     assert_eq!(printed(&session, &platform, 1), ["integer float nil 4 nil"]);
+}
+
+#[test]
+fn what_netherforge_json_asks_of_worlds_the_server_cant_give_is_a_problem() {
+    let manifest = r#"{ "formatVersion": 1, "name": "Test", "namespace": "test", "version": "1.0.0", "minecraft": "26.3",
+  "worlds": { "world": { "terrain": "meadow", "seed": 5 }, "old": { "dimensionType": "deep" } } }"#;
+    let files = Files::new(
+        &[
+            ("netherforge.json", manifest),
+            (
+                "terrain/meadow.json",
+                r#"{ "terrain": { "base": 64, "seaLevel": -64 }, "layers": [{ "block": "minecraft:grass_block" }], "stone": { "block": "minecraft:stone" } }"#,
+            ),
+            (
+                "terrain/broken.json",
+                r#"{ "terrain": { "base": 64, "seaLevel": -64 }, "stone": { "block": "minecraft:stone" }, "script": {} }"#,
+            ),
+            (
+                "terrain/broken.lua",
+                "local x = 1\nerror(\"no islands today\")\n",
+            ),
+            (
+                "dimension_types/deep.json",
+                r#"{ "height": 384, "minY": -64 }"#,
+            ),
+        ],
+        "",
+    );
+    let platform = Fake::new();
+    platform.saved.borrow_mut().insert("old".into());
+    let session = start(&files, &platform, Config::default());
+    let problems = session.problems();
+    let of = |code: &str| -> Vec<String> {
+        problems
+            .iter()
+            .filter(|p| p.code.as_deref() == Some(code))
+            .map(|p| format!("{} {}", p.path.clone().unwrap_or_default(), p.message))
+            .collect()
+    };
+    assert_eq!(
+        of("runtime.terrain"),
+        [
+            "$.worlds.world.seed \"world\" is the server's main world, whose seed is the server's (`level-seed` in server.properties): this one is ignored"
+        ],
+        "{problems:?}"
+    );
+    assert_eq!(
+        of("runtime.dimension-type"),
+        [
+            "$.worlds.old.dimensionType World \"old\" was made without a dimension type of the project's, and keeps it: netherforge.json's \"test:deep\" is for a world made afresh (delete this one to have it made so)"
+        ],
+        "{problems:?}"
+    );
+    // A script that fails as it loads is a problem at its file and line as the generator is published.
+    let failed: Vec<&netherforge_format::problem::Problem> = problems
+        .iter()
+        .filter(|p| p.code.as_deref() == Some("terrain.script-failed"))
+        .collect();
+    assert_eq!(failed.len(), 1, "{problems:?}");
+    assert_eq!(
+        (failed[0].file.as_str(), failed[0].line),
+        ("terrain/broken.lua", Some(2))
+    );
+    assert!(
+        failed[0]
+            .message
+            .starts_with("The script didn't load, so only the file's own stages run:")
+            && failed[0].message.contains("no islands today"),
+        "{failed:?}"
+    );
+}
+
+#[test]
+fn what_the_server_refused_of_the_start_up_datapack_is_a_problem_until_it_restarts() {
+    let files = Files::new(&[], "");
+    let platform = Fake::new();
+    *platform.refused.borrow_mut() = Some(
+        "> Errors in registry minecraft:worldgen/noise:\n>> Errors in element minecraft:gone:\njava.lang.IllegalStateException: Missing referenced element".into(),
+    );
+    let session = start(&files, &platform, Config::default());
+    let problems: Vec<String> = session
+        .problems()
+        .into_iter()
+        .filter(|p| p.code.as_deref() == Some("runtime.datapack"))
+        .map(|p| format!("{} {}", p.file, p.message))
+        .collect();
+    assert_eq!(problems.len(), 1, "{problems:?}");
+    assert!(
+        problems[0].starts_with("netherforge.json ")
+            && problems[0].ends_with(
+                "minecraft:gone in minecraft:worldgen/noise: Missing referenced element"
+            ),
+        "{problems:?}"
+    );
+}
+
+/// Packages beside the project, each a set of files by namespace.
+struct Packages(BTreeMap<&'static str, Vec<(&'static str, &'static str)>>);
+
+impl netherforge_format::package::PackageSources for Packages {
+    fn open(
+        &self,
+        namespace: &str,
+        _: &netherforge_format::package::PackageRequest,
+    ) -> netherforge_format::package::PackageLookup<'_> {
+        use netherforge_format::package::{OpenedPackage, PackageLookup};
+        match self.0.get(namespace) {
+            Some(files) => {
+                let (manifest, rest) = files.split_first().expect("a manifest first");
+                let source = Files::new(rest, "");
+                source
+                    .texts
+                    .borrow_mut()
+                    .insert("netherforge.json".into(), manifest.1.into());
+                PackageLookup::Opened(OpenedPackage {
+                    source: Box::new(source),
+                    hash: None,
+                    commit: None,
+                    from: None,
+                })
+            }
+            None => PackageLookup::Missing(None),
+        }
+    }
+}
+
+#[test]
+fn a_packages_terrain_script_reads_its_packages_own_files() {
+    let manifest = r#"{ "formatVersion": 1, "name": "Test", "namespace": "test", "version": "1.0.0", "minecraft": "26.3",
+  "dependencies": { "acme": { "path": "../acme" } } }"#;
+    let files = Files::new(&[("netherforge.json", manifest)], "");
+    let packages = Packages(BTreeMap::from([(
+        "acme",
+        vec![
+            (
+                "netherforge.json",
+                r#"{ "formatVersion": 1, "name": "Acme", "namespace": "acme", "version": "1.0.0", "minecraft": "26.3" }"#,
+            ),
+            (
+                "terrain/hills.json",
+                r#"{ "terrain": { "base": 64, "seaLevel": -64 }, "stone": { "block": "minecraft:stone" }, "script": {} }"#,
+            ),
+            (
+                "terrain/hills.lua",
+                "local shape = require(\"shape\")\nerror(\"no hills past \" .. shape.height)\n",
+            ),
+            ("modules/shape/init.lua", "return { height = 90 }\n"),
+        ],
+    )]));
+    let platform = Fake::new();
+    let session = Session::start_configured(
+        platform.clone(),
+        &files,
+        &packages,
+        Rc::new(netherforge_runtime::store::Store::in_memory()),
+        Config::default(),
+    );
+    let problems = session.problems();
+    let failed: Vec<&netherforge_format::problem::Problem> = problems
+        .iter()
+        .filter(|p| p.code.as_deref() == Some("terrain.script-failed"))
+        .collect();
+    assert_eq!(failed.len(), 1, "{problems:?}");
+    // The package's module was found (its height is in the message), and the failure is at the package's file.
+    assert!(failed[0].message.contains("no hills past 90"), "{failed:?}");
+    assert_eq!(
+        (failed[0].file.as_str(), failed[0].line),
+        (
+            netherforge_format::kinds::package_path("acme", "terrain/hills.lua").as_str(),
+            Some(2)
+        )
+    );
 }

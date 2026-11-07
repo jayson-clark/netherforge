@@ -12,9 +12,9 @@
 //!   tick and its world goes to the script that asked; a script that stops first isn't called, and the world is
 //!   made and kept anyway.
 //!
-//! Not yet: the worlds `netherforge.json` makes as the session starts (`worlds` with a `terrain` or a
-//! `dimensionType`), which come with the terrains' service (the generators published to the server). A project
-//! terrain named here is checked against the project's terrains that have no errors.
+//! The worlds `netherforge.json` makes as the session starts (`worlds` with a `terrain` or a `dimensionType`) are
+//! the terrains' service's (`terrains.rs`, once the generators are published to the server). A project terrain
+//! named here is checked against the project's terrains that have no errors.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashSet};

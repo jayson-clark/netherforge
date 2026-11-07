@@ -291,6 +291,7 @@ pub fn read(
             .and_then(|r| r.trim().parse::<f64>().ok())
             .filter(|r| *r > 0.0 && r.is_finite())
             .unwrap_or(1.0);
+        config.session.wall_clock_rate = config.wall_clock_rate;
         return Ok(Some(config));
     }
     let Some(project) = text(settings, "project") else {

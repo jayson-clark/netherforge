@@ -40,6 +40,10 @@ impl Runtime for Fake {
     fn wait_on(&self, task: u64, wait: u64) {
         self.waits.borrow_mut().push((task, wait));
     }
+    /// A server on 26.3: anything newer is gated.
+    fn older_than(&self, since: &str) -> Option<String> {
+        (since > "26.3").then(|| "26.3".to_owned())
+    }
 }
 
 impl NfLooksApi for Fake {
@@ -382,4 +386,21 @@ first = { coroutine.resume(co) }",
         .unwrap();
     assert_eq!(bot.to_string().unwrap(), "Bot Alex");
     assert!(err.is_nil());
+}
+
+#[test]
+fn a_version_gate_names_what_needs_which_version_on_an_older_server() {
+    // Nothing in the spec is gated today: the generated glue calls this for what is (bindings.test.ts).
+    let (host, _) = setup();
+    let lua = host.lua();
+    assert_eq!(
+        netherforge_api::bind::gate(lua, "Thing:poke", "27.1"),
+        Err(ApiError(
+            "Thing:poke needs Minecraft 27.1 (this server runs 26.3)".into()
+        ))
+    );
+    assert_eq!(
+        netherforge_api::bind::gate(lua, "Thing:poke", "26.1"),
+        Ok(())
+    );
 }

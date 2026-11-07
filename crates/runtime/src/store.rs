@@ -11,7 +11,9 @@
 //! **The store has its own lane**: a commit is written there, off the main thread, as Kotlin's is; a read (rare: a
 //! table asked for the first time, start-up) waits for the commits before it, so it sees every write staged before it.
 //!
-//! Not yet: moving a file that isn't a database aside, and carrying a batch that couldn't be committed to the next.
+//! **A batch the database can't commit** (busy, full, failing) is kept on the lane and written with the next, the
+//! newer writes for the same keys winning: said in the log once, and again when the store writes again. **A file that
+//! isn't a database** is moved aside (`netherforge.db.unreadable`) and a new one started, saying so.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -49,6 +51,18 @@ pub struct InstanceRecord {
 
 type Write = Box<dyn Fn(&Connection) -> rusqlite::Result<()> + Send>;
 
+/// Whether `e` is the database's fault (busy, locked, full, failing), not the write's: its batch is tried again.
+fn databases_fault(e: &rusqlite::Error) -> bool {
+    use rusqlite::ErrorCode::*;
+    matches!(
+        e,
+        rusqlite::Error::SqliteFailure(f, _) if matches!(
+            f.code,
+            DatabaseBusy | DatabaseLocked | DiskFull | SystemIoFailure | CannotOpen | ReadOnly | OutOfMemory
+        )
+    )
+}
+
 /// How many commits the lane hasn't finished, and the signal it gives as each does.
 type Pending = Arc<(Mutex<u64>, Condvar)>;
 
@@ -62,13 +76,39 @@ pub struct Store {
     /// The store's own lane: commits are written there, off the main thread, one at a time in order.
     lane: crate::http::Workers,
     pending: Pending,
+    /// A batch the database couldn't commit, written with the next; and whether the last commit failed so.
+    carried: Arc<Mutex<(IndexMap<String, Write>, bool)>>,
 }
 
 impl Store {
     /// The store in `file`, made and migrated as needed.
     pub fn open(file: &Path) -> Result<Store, String> {
         let connection = Connection::open(file).map_err(|e| format!("{}: {e}", file.display()))?;
-        Store::with(connection)
+        let unreadable = matches!(
+            connection.query_row("PRAGMA schema_version", [], |r| r.get::<_, i64>(0)),
+            Err(rusqlite::Error::SqliteFailure(e, _)) if e.code == rusqlite::ErrorCode::NotADatabase
+        );
+        if !unreadable {
+            return Store::with(connection);
+        }
+        drop(connection);
+        let aside = file.with_extension("db.unreadable");
+        std::fs::rename(file, &aside).map_err(|e| format!("{}: {e}", file.display()))?;
+        let connection = Connection::open(file).map_err(|e| format!("{}: {e}", file.display()))?;
+        let store = Store::with(connection)?;
+        store.failed(format!(
+            "{} isn't a database: it was moved to {} and a new store started",
+            file.display(),
+            aside.display()
+        ));
+        Ok(store)
+    }
+
+    fn failed(&self, why: String) {
+        self.failures
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(why);
     }
 
     /// A store nothing outlives: what a session with no folder of its own keeps.
@@ -77,6 +117,10 @@ impl Store {
     }
 
     fn with(connection: Connection) -> Result<Store, String> {
+        // A commit waits this long for another connection's lock (a person's `sqlite3`) before it's carried.
+        connection
+            .busy_timeout(std::time::Duration::from_secs(1))
+            .map_err(|e| e.to_string())?;
         let store = Store {
             connection: Arc::new(Mutex::new(connection)),
             staged: RefCell::default(),
@@ -84,6 +128,7 @@ impl Store {
             written: Arc::default(),
             lane: crate::http::Workers::lane("NetherForge store"),
             pending: Arc::default(),
+            carried: Arc::default(),
         };
         store.migrate()?;
         Ok(store)
@@ -138,35 +183,59 @@ impl Store {
             return;
         }
         *self.pending.0.lock().unwrap_or_else(|e| e.into_inner()) += 1;
-        let (connection, failures, written, pending) = (
+        let (connection, failures, written, pending, carried) = (
             self.connection.clone(),
             self.failures.clone(),
             self.written.clone(),
             self.pending.clone(),
+            self.carried.clone(),
         );
         self.lane.submit(move || {
             {
                 let c = connection.lock().unwrap_or_else(|e| e.into_inner());
                 let failed =
                     |why: String| failures.lock().unwrap_or_else(|e| e.into_inner()).push(why);
-                if let Err(e) = c.execute_batch("BEGIN") {
-                    failed(format!("The store couldn't write: {e}"));
-                } else {
-                    for (key, write) in staged {
+                // What the last commit couldn't write goes first, so a newer write for the same key wins.
+                let mut carried = carried.lock().unwrap_or_else(|e| e.into_inner());
+                let mut batch = std::mem::take(&mut carried.0);
+                batch.extend(staged);
+                let mut done = 0;
+                // A write's own fault (bad SQL, a constraint) drops it alone; the database's fails the batch.
+                let mut own_faults = Vec::new();
+                let committed = c.execute_batch("BEGIN IMMEDIATE").and_then(|()| {
+                    for (key, write) in &batch {
                         let _ = c.execute_batch("SAVEPOINT one");
                         match write(&c) {
                             Ok(()) => {
                                 let _ = c.execute_batch("RELEASE one");
-                                written.fetch_add(1, Ordering::Relaxed);
+                                done += 1;
                             }
+                            Err(e) if databases_fault(&e) => return Err(e),
                             Err(e) => {
                                 let _ = c.execute_batch("ROLLBACK TO one; RELEASE one");
                                 failed(format!("The store couldn't write {key}: {e}"));
+                                own_faults.push(key.clone());
                             }
                         }
                     }
-                    if let Err(e) = c.execute_batch("COMMIT") {
-                        failed(format!("The store couldn't write: {e}"));
+                    c.execute_batch("COMMIT")
+                });
+                match committed {
+                    Ok(()) => {
+                        written.fetch_add(done, Ordering::Relaxed);
+                        if std::mem::take(&mut carried.1) {
+                            failed("The store is writing again".into());
+                        }
+                    }
+                    Err(e) => {
+                        let _ = c.execute_batch("ROLLBACK");
+                        if !std::mem::replace(&mut carried.1, true) {
+                            failed(format!(
+                                "The store couldn't write ({e}): what it holds is written with the next commit"
+                            ));
+                        }
+                        batch.retain(|key, _| !own_faults.contains(key));
+                        carried.0 = batch;
                     }
                 }
             }

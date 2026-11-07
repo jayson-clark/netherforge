@@ -24,7 +24,7 @@ import {
 } from './bindings.ts'
 import { useFeatures } from './common.ts'
 import { referencePages } from './docs.ts'
-import { bindRust } from './rust.ts'
+import { bindRust, codecsRust, eventsRust } from './rust.ts'
 import { luals } from './luals.ts'
 
 const handle: LuaClass = {
@@ -604,6 +604,15 @@ describe('version gates', () => {
       ],
     },
   )
+
+  it('give the runtime a gate for every gated function, event and option field, and nothing else', () => {
+    const model = bindings(gated)
+    expect(bindRust(model.classes)).toContain('crate::bind::gate(lua, "Thing:poke", "27.1")')
+    expect(eventsRust(gated)).toContain('since: Some("27.2")')
+    const codecs = codecsRust(model, gated)
+    expect(codecs).toContain(`crate::bind::gate(lua, &format!("'{at}.hard'"), "27.3")`)
+    expect(codecs).not.toContain("'{at}.soft'")
+  })
 
   it('are shown where each is documented', () => {
     const pages = referencePages(gated)

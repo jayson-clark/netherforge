@@ -58,7 +58,9 @@ export const RUST_EXTERNAL: Record<string, { path: string; interface?: boolean }
   GameDatapack: { path: 'netherforge_format::startup::GameDatapack' },
   StructureTemplate: { path: 'netherforge_format::kind::terrain::compiled::StructureTemplate' },
   'dev.netherforge.plugin.platform.terrain.TerrainSource': { path: 'crate::api::SharedTerrain' },
-  'dev.netherforge.plugin.datapack.DatapackRefusal': { path: 'netherforge_format::startup::DatapackRefusal' },
+  'dev.netherforge.plugin.datapack.DatapackRefusal': {
+    path: 'netherforge_format::startup::DatapackRefusal',
+  },
   Path: { path: 'std::path::PathBuf' },
 }
 

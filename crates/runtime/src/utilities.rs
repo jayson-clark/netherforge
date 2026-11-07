@@ -7,8 +7,8 @@
 //! generator's state is the session's, kept until it ends (the prelude's were collected with the handle).
 //! Noise is Kotlin's simplex noise over Java's `SplittableRandom`, so a seed is the same pattern.
 //!
-//! Not yet: `nf.time.format` and `parse` (Java's pattern language), `nf.text.glyph` and `space` (the built
-//! resource pack).
+//! `nf.time.format` and `parse` read Java's pattern language (`java_time.rs`); `nf.text.glyph` and `space` draw
+//! from the built resource pack (`packs.rs`).
 
 use std::cell::RefCell;
 use std::collections::HashMap;

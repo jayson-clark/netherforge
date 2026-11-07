@@ -12,8 +12,8 @@
 //! modified client can send a click for anything); a dialog in the server's registry (the pause screen's) is
 //! opened by the player themselves, and its custom clicks are presses and closes like any other.
 //!
-//! Not yet: `nf.dialogs.create` (dialogs from tables), `dialog:ask` (it waits for `wait_for` on a handle), and the
-//! runtime's own dialogs (`/nf settings`).
+//! Dialogs made in Lua (`nf.dialogs.create`) are `definitions.rs`'; the runtime's own (`/nf settings`) are
+//! `admin.rs`'.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::rc::{Rc, Weak};

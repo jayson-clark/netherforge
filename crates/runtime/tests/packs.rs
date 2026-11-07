@@ -12,7 +12,8 @@ use netherforge_platform::{FakePlatform, FakePlatformLog, PlatformError, Platfor
 use netherforge_runtime::session::Session;
 
 /// A game that reads resource pack format 75.
-struct Game;
+/// The game's facts, with the resource pack format it says it uses (none for a server that doesn't say).
+struct Game(Option<[i32; 2]>);
 
 impl GameData for Game {
     fn minecraft_version(&self) -> &str {
@@ -34,7 +35,7 @@ impl GameData for Game {
         None
     }
     fn resource_pack_format(&self) -> Option<[i32; 2]> {
-        Some([75, 0])
+        self.0
     }
 }
 
@@ -43,6 +44,8 @@ struct Fake {
     lines: RefCell<Vec<String>>,
     /// Whether Alex is online.
     alex: RefCell<bool>,
+    /// Whether the server doesn't say which resource pack format it uses.
+    no_format: bool,
 }
 
 fn alex() -> netherforge_platform::PlayerRef {
@@ -169,7 +172,11 @@ impl FakePlatform for Fake {
         self
     }
     fn game(&self) -> &dyn GameData {
-        &Game
+        if self.no_format {
+            &Game(None)
+        } else {
+            &Game(Some([75, 0]))
+        }
     }
     fn info(&self) -> ServerInfo {
         ServerInfo {
@@ -858,4 +865,73 @@ nf.on("demo:say", function() print("said", nf.players.get("Alex"):send_actionbar
         Some("actionbar 77 "),
         "{ended:?}"
     );
+}
+
+#[test]
+fn a_server_that_doesnt_say_its_pack_format_builds_no_pack_and_says_so() {
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "resource_packs/ui/pack.json",
+            r#"{ "name": "UI", "glyphs": { "coin": { "texture": "glyph/coin.png" } } }"#,
+        ),
+        ("resource_packs/ui/textures/glyph/coin.png", "png"),
+    ]);
+    let platform = std::rc::Rc::new(Fake {
+        no_format: true,
+        ..Fake::default()
+    });
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let problems: Vec<_> = session
+        .problems()
+        .into_iter()
+        .filter(|p| p.code.as_deref() == Some("runtime.pack-format"))
+        .collect();
+    assert_eq!(problems.len(), 1, "{problems:?}");
+    assert_eq!(problems[0].file, "resource_packs");
+    assert!(
+        platform
+            .take()
+            .iter()
+            .any(|l| l.starts_with("warn This server doesn't say which resource pack format"))
+    );
+}
+
+#[test]
+fn a_pack_the_network_says_a_player_loaded_elsewhere_isnt_sent_again() {
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "resource_packs/ui/pack.json",
+            r#"{ "name": "UI", "glyphs": { "coin": { "texture": "glyph/coin.png" } } }"#,
+        ),
+        ("resource_packs/ui/textures/glyph/coin.png", "png"),
+    ]);
+    // Nobody's online as the session starts: the first send is the test's.
+    let platform = std::rc::Rc::new(Fake::default());
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    platform.take();
+    let shared = session.shared().clone();
+    let sha1 = shared.packs.borrow().built.clone().unwrap().sha1;
+    let alex = netherforge_platform::Uuid(77);
+    // Another pack loaded elsewhere is no reason not to send this one.
+    assert!(
+        shared
+            .packs
+            .borrow_mut()
+            .send_unless(&*platform, alex, Some("0000"))
+    );
+    shared.packs.borrow_mut().forget(alex);
+    platform.take();
+    // This very pack, loaded on the server they came from: nothing sent, and it counts as loaded.
+    assert!(
+        !shared
+            .packs
+            .borrow_mut()
+            .send_unless(&*platform, alex, Some(&sha1))
+    );
+    assert!(!platform.take().iter().any(|l| l.starts_with("offer")));
+    let packs = shared.packs.borrow();
+    assert_eq!(packs.status(alex, None).as_deref(), Some("loaded"));
+    assert_eq!(packs.sent_to(alex), Some(sha1));
 }

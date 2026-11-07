@@ -7,9 +7,6 @@
 //! changed; `reconcile` makes them match its definition (after a reload, or when one went missing).
 //!
 //! `api` is the centity API scripts call and an instance's life around its script (`spawn`, `remove`, `tick`).
-//!
-//! Not yet (each with its area): hitboxes and clicks, saving placements,
-//! private instances (client entities), animations, physics and movement, health, natural spawning, ropes.
 
 pub mod animation;
 pub mod api;

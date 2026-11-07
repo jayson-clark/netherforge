@@ -497,3 +497,80 @@ fn server_config(
         own_databases: BTreeSet::new(),
     }
 }
+
+/// Starts the project, namespace `ahead_shop`, on `kind`'s server with these migrations (each in the server's
+/// dialect too): its problems.
+fn ahead_on(
+    kind: &str,
+    migrations: &[(&str, &str)],
+) -> Option<Vec<netherforge_format::problem::Problem>> {
+    let mut connection = server(kind, &["ahead_shop"])?;
+    connection.packages = ["ahead_shop".to_owned()].into();
+    let manifest = r#"{ "formatVersion": 1, "name": "Ahead", "namespace": "ahead_shop", "version": "1.0.0", "minecraft": "26.3", "requires": { "db": true } }"#;
+    let mut extra: Vec<(String, String)> = vec![("netherforge.json".into(), manifest.into())];
+    for (name, sql) in migrations {
+        extra.push((format!("migrations/{name}"), sql.to_string()));
+        extra.push((format!("migrations/{kind}/{name}"), sql.to_string()));
+    }
+    let extra: Vec<(&str, &str)> = extra
+        .iter()
+        .map(|(p, t)| (p.as_str(), t.as_str()))
+        .collect();
+    let files = Files::new(r#"{ "db": true }"#, &extra, "local db = nf.db()");
+    let mut config = netherforge_runtime::databases::DatabasesConfig::default();
+    config.connections.insert("network".into(), connection);
+    let platform = Rc::new(Fake::default());
+    let session = Session::start_configured(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        Rc::new(netherforge_runtime::store::Store::in_memory()),
+        Config {
+            databases: config,
+            ..Config::default()
+        },
+    );
+    Some(session.problems())
+}
+
+/// A server whose database has a migration this copy of the package lacks: a newer copy ran there.
+fn a_database_ahead_of_its_package_is_unavailable(kind: &str) {
+    let first = (
+        "001_init.sql",
+        "CREATE TABLE IF NOT EXISTS coins (player VARCHAR(64) PRIMARY KEY);",
+    );
+    let second = (
+        "002_more.sql",
+        "CREATE TABLE IF NOT EXISTS more (id INTEGER PRIMARY KEY);",
+    );
+    let Some(newer) = ahead_on(kind, &[first, second]) else {
+        return;
+    };
+    assert!(
+        !newer.iter().any(|p| p
+            .code
+            .as_deref()
+            .is_some_and(|c| c.starts_with("migration."))),
+        "{newer:?}"
+    );
+    let older = ahead_on(kind, &[first]).expect("the server is there");
+    let ahead: Vec<_> = older
+        .iter()
+        .filter(|p| p.code.as_deref() == Some("migration.ahead"))
+        .collect();
+    assert_eq!(ahead.len(), 1, "{older:?}");
+    assert!(
+        ahead[0].message.contains("has migrations 002 applied"),
+        "{ahead:?}"
+    );
+}
+
+#[test]
+fn a_database_ahead_of_its_package_on_postgres() {
+    a_database_ahead_of_its_package_is_unavailable("postgres");
+}
+
+#[test]
+fn a_database_ahead_of_its_package_on_mysql() {
+    a_database_ahead_of_its_package_is_unavailable("mysql");
+}

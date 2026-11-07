@@ -5,28 +5,26 @@ description: How NetherForge runs menus and dialogs on the server - shared vs pe
 
 # Menus and dialogs
 
-> **The runtime is Rust now** (`crates/runtime`, see the plugin-runtime skill, which has a section for each area with
-> its files and the decisions the port took). What this skill says scripts see, and what the Kotlin adapter
-> (`apps/plugin/paper-common`, `paper-internals`, the testkit) does, holds. Where it names the Kotlin runtime's classes
-> (`apps/plugin/runtime/...`, deleted), read them as what the Rust module of the same area was ported from.
-
 The spec users read: `docs/format/menu.md`, `docs/format/dialog.md`;
 the Lua API: `packages/api/src/spec/menu.ts` (classes `Menu`, `Slot`, `Dialog`,
 `Button`, shapes `Item`, `MenuClickEvent`, …) and the `menu`/`dialog`
 surfaces in `packages/api/src/spec/index.ts`. A project menu lives in
 `menus/<id>/menu.json`; an open window of it is a `Menu` in Lua and a
-`Menus.Window` in the runtime. (`Inventory` is kept for real inventories:
+window in `menu.rs`. (`Inventory` is kept for real inventories:
 a player's, a chest's.) `menu:slot(i)` and `dialog:button(key)` are handles
 keyed by the window or dialog id plus the index or key, checked when made
 while the window or dialog exists, answering nil once it's gone.
 
 | Path                                                           | Owns                                                           |
 | -------------------------------------------------------------- | -------------------------------------------------------------- |
-| `apps/plugin/runtime/.../menu/Menus.kt`                        | windows, their script, click dispatch, retiring, reload        |
-| `apps/plugin/runtime/.../item/LuaItems.kt`                     | item tables ↔ `ItemData`, strict reading                       |
-| `apps/plugin/runtime/.../dialog/Dialogs.kt`                    | one record per dialog, its script, press dispatch, reload      |
-| `apps/plugin/runtime/.../platform/Platform.kt`                 | `MenuOps`, `WindowSpec`, `ItemData`, `DialogOps`, `DialogSpec` |
-| `apps/plugin/runtime/.../platform/PlatformEvents.kt`           | `menuClicked/Dragged/Closed`, `dialogPressed`                  |
+| `crates/runtime/src/menu.rs`                                   | windows, their script, click dispatch, retiring, reload        |
+| `crates/runtime/src/items.rs`, `crates/api/src/codec.rs`       | item tables ↔ `ItemData`, strict reading, `ItemMatch`          |
+| `crates/runtime/src/project_items.rs`, `recipes.rs`            | project items and their scripts; recipes                       |
+| `crates/runtime/src/dialog.rs`                                 | one record per dialog, its script, press dispatch, reload      |
+| `crates/runtime/src/definitions.rs`                            | menus, dialogs and recipes made in Lua                         |
+| `crates/runtime/src/inventory.rs`                              | real inventories (`Inventory`)                                 |
+| `apps/plugin/platform/...` (Kotlin; `netherforge_platform`)    | `MenuOps`, `WindowSpec`, `ItemData`, `DialogOps`, `DialogSpec` |
+| `PlatformEvents` (same)                                        | `menu_clicked/dragged/closed`, `dialog_pressed`                |
 | `apps/plugin/paper-common/.../PaperMenus.kt`, `PaperEvents.kt` | Bukkit inventories (holder = window UUID), events              |
 | `apps/plugin/paper-common/.../PaperItems.kt`                   | `ItemData` ↔ `ItemStack`                                       |
 | `apps/plugin/paper-common/.../PaperDialogs.kt`                 | building Paper dialogs, the callbacks                          |
@@ -34,26 +32,25 @@ while the window or dialog exists, answering nil once it's gone.
 ## Menus
 
 - **A window** is to `menu.json` what an instance is to a centity. A
-  `shared` menu has one, made at load (in `Menus.define`, before any script
-  runs, so a module body finds it; its script starts in `start`), whose id is the menu's id
+  `shared` menu has one, made as the session starts (before any script
+  runs, so a module body finds it; its script starts with the other scripts), whose id is the menu's id
   (`nf.menus.shared("bank")` finds it); any other gets a fresh window (UUID id)
   per `player:open_menu`, retired when its last viewer closes it. Runtime
   ids are strings; the platform knows windows by a UUID the runtime picks.
 - **One script, a copy per window.** `menu.json`'s `script` runs once per
-  window in its own `Scope` (own globals, own budget, failures disable only
+  window in its own scope (own globals, own budget, failures disable only
   it), with `this` the window's `Menu`. A slot has no script: the script
   listens with `this:slot(13):on("click", ...)`. The body runs before anyone
   sees the window (fill it in there) and registers its handlers. A retired
-  window drops every handler on it and its slots (`scripts.dropTarget`),
-  whoever registered them.
-- **Clicks.** `menuClicked` → `Events.SLOT_CLICK` on the clicked slot
-  (clicks in the window only) → `MENU_CLICK` on the window →
-  `NF_MENU_CLICK`, one `MenuClickEvent` along the path until a handler stops
+  window drops every handler on it and its slots, whoever registered them.
+- **Clicks.** `menu_clicked` → the slot's `click` on the clicked slot
+  (clicks in the window only) → the window's `click` →
+  `nf.on("menu_click")`, one `MenuClickEvent` along the path until a handler stops
   it; the answer is whether it ended cancelled. A **locked** window starts any
   click with `movesItems` (a click in the window, a shift-click or
   double-click collect from below) already cancelled, and `event:uncancel()`
   lets one through; clicks that only rearrange the player's own bag start
-  uncancelled. Drags raise `MENU_DRAG` (the window only), precancelled on a
+  uncancelled. Drags raise the window's `drag` (the window only), precancelled on a
   locked window when they cover any of its own slots (`own_indices`, the bag
   below, never precancel).
 - **Outside our windows** a click or drag is `player_click_inventory` /
@@ -64,11 +61,11 @@ while the window or dialog exists, answering nil once it's gone.
   after both click listeners let it through) raises `player_swap_hands` with
   `in_inventory`. The fake bots mirror all three.
 - **Context**: `player:open_menu(menu, { context = v })`
-  keeps `v` (a `LuaRef`, the very value) on the new `Window`; the script reads
+  keeps `v` (a registry reference to the very value) on the new window; the script reads
   it with `this:context()` (its body already can) and every `MenuEvent`,
   `MenuClickEvent` and `MenuDragEvent` of the window carries it. Released
   when the window retires. A shared menu with a context is an error
-  (`PlayerImpl.openMenu`, checked before anything is kept).
+  (checked before anything is kept).
 - **`open`** (→ `menu_open`) is raised by the runtime when _it_ opens a window
   (it knows who), not from a server event: a retitle reopens windows and that
   mustn't look like an open. **`close`** (→ `menu_close`) comes from the
@@ -84,10 +81,10 @@ while the window or dialog exists, answering nil once it's gone.
   (white so the art isn't tinted by the container's title colour). The
   prefix is zero wide, so the words are drawn over the art from the vanilla
   title position. A dispenser, dropper or crafter centres its title on the
-  words, moving the prefix with them, so `Menus.composeTitle` shifts the
-  picture back by `MenuType.skinShift(width)`: the words' width from
-  `TextWidth` over the project's `fonts/default.json` and the resource packs' glyph
-  advances (`ProjectSession.measureText`), 0 for no words. When the words
+  words, moving the prefix with them, so the window's title shifts the
+  picture back by the menu type's skin shift for the words' width: measured by format's text width over the
+  project's `fonts/default.json` and the resource packs' glyph advances (the session's `Shared::font`), 0 for no
+  words. When the words
   can't be measured exactly the shift is 0 (the skin moves with them) and
   format has already warned (`font.needed`, `DefaultFontValidator.checkCentredTitle`).
   Saving `fonts/default.json` re-renders every title. No title and no skin falls back to the file's
@@ -97,18 +94,16 @@ while the window or dialog exists, answering nil once it's gone.
 
 ### Templates: menus made in Lua
 
-`nf.menus.create(definition)` makes a `Menus.Template`: a
-`CompiledMenu` from the definition (`api/Definitions.kt#menuFrom`: the table
-in `menu.json`'s shape, `slots` read as items by index, through
-`MenuKind.parse` and `MenuValidator`, the skin checked against the resource packs),
-with a UUID id and no script. `player:open_menu(template)`
-(`Menus.openTemplate`) makes a new window of it every time (never shared;
+`nf.menus.create(definition)` makes a template: a
+compiled menu from the definition (`definitions.rs`: the table in `menu.json`'s shape, `slots` read as items by
+index, through format's own parser and validator, the skin checked against the resource packs),
+with a UUID id and no script. `player:open_menu(template)` makes a new window of it every time (never shared;
 a context is fine). The window's `template` is the template's id: its
 `kind()` is nil, `menu:template()` hands the template back, and every event
 on it goes on to the template after the window (`slot → menu → template →
 nf` for clicks; `menu → template → nf` for open and close; `menu →
 template` for drags). A template belongs to the scope that created it
-(`Menus.removeOwned`, from its `scopeReleased`) or goes with
+(it goes when the scope is released) or goes with
 `template:remove()`: its windows retire and its handlers are dropped.
 
 ### Items
@@ -135,17 +130,12 @@ the opaque carry-through is `raw`): `PaperItems` keeps it as JSON text under `ne
 in the stack's persistent data container, so it goes wherever the item goes
 and is part of the lossless check; `data = {}` from Lua clears it, leaving it
 out leaves it alone. It holds what a `data()` table may (`Vec3`s,
-`Location`s, `Entity` (a `Player` too) and `Centity` handles): `RuntimeApi.item` reads the
-item table as the one Lua↔JSON codec would (so `ItemDef.data` is tagged JSON,
-easy to compare as JSON for item matching), but in Kotlin (`LuaHost.fieldsJson`),
-because the codec is Lua and its instructions are the script's: plain fields cost
-nothing, and plain `data` is written as the codec's very text (keys in Lua's `<`
-order, asked of Lua, floats spelled as it spells them, `CodecNumbers`); only typed
-values and odd keys fall back to the codec
-(`binding/ApiCostTest`'s item tables), and `LuaItems.write` hands it
-back as that JSON, which `pushValue` turns back into typed values. An item
-match (`ItemMatch`, a partial item) is read the same way. Reading is strict
-(`LuaItems.read`): unknown field, wrong type, something in `data` that can't
+`Location`s, `Entity` (a `Player` too) and `Centity` handles): the `Item` codec (`crates/api/src/codec.rs`'
+`ItemCodec`) encodes the table with the runtime's one JSON codec (`netherforge_luau::json`, Rust, with the handle
+tags of `SavedHandles`), so `ItemDef.data` is tagged JSON, easy to compare as JSON for item matching, and the
+encoding costs the script only what the host charges for the work; it pushes back by decoding the same JSON into
+typed values. An item match (`ItemMatch`, a partial item) is read the same way. Reading is strict
+(`items.rs`' `from_value`): unknown field, wrong type, something in `data` that can't
 be saved (named by key path: `item.data.f: a function can't be saved`),
 unknown item (`Rules.item` with live game data) or a resource pack reference the
 project doesn't have is an error at the script's line. Counts come back
@@ -166,15 +156,14 @@ surface).
   `Rules.item` allows that, `Projects.load` checks the item exists
   (`reference.item`, like every reference) and `ItemKind.checkStack` that a
   kind given too matches (`item.kind-mismatch`, pointing at the item's
-  `$.kind` too), and `LuaItems.read` does the same against the runtime's
-  items (`Items.idOf` resolves a reference to one of the project's ids).
+  `$.kind` too), and `items.rs` does the same against the runtime's
+  items (`project_items.rs` resolves a reference to one of the project's ids).
   A script's item table names things in its own package's terms both ways
-  (`PackageNames.item` in, `spell(item, to)` out, and the table remembers
-  which package it was spelled for: plugin-runtime, "Packages in a
-  session"); `LuaItems` only ever sees names as the project names them.
+  (in, and out again for the package it's handed to: plugin-runtime, "Packages in a
+  session"); `items.rs` only ever sees names as the project names them.
 - **Resolving and stamping is the platform's**, so every path (Lua tables,
   menu slots, dialog bodies, particle items, recipe results) gets it for
-  free: `Platform.bind` hands the adapter `Items.look` (`ItemLook`: the look
+  free: the Platform is handed each item's look (`ItemLook`: the look
   and its hash, `ProjectItems.hash`), and `PaperItems.toStack` resolves
   (`ProjectItems.resolve`: the stack's own fields win) and writes the item's
   **namespaced** id (`shop:ruby`, the project's namespace from
@@ -190,24 +179,20 @@ surface).
   one is rebuilt with `ProjectItems.restyle`, keeping count, damage, script
   data and, when the look sets none, enchantments, and then the old PDC is
   copied over without replacing, so other plugins' data stays). The runtime
-  (`item/Items.kt`) calls it on join, on `playerOpenInventory`, the tick after
+  (`project_items.rs`) calls it on join, the tick after
   a pickup, and for every online player when the item reloads.
-- **The script**: one per item, like a dialog's (`ScopeOwner.ItemScript`,
-  `this` the `ProjectItem`). Events are the player events with the item's
-  stage first on the same path (`ServerEvents.itemEvent`,
-  `Items.stage`): `use`, `interact`, `consume`, `drop`, `pickup` from the
-  event's own item; `hit`, `break_block`, `interact_entity` from what's held
-  (`Items.heldStage`, looked up only while some item listens, through
-  `Scripts.watch`).
+- **The script**: one per item, like a dialog's (`this` the `ProjectItem`). Events are the player events with the
+  item's stage first on the same path (`project_items.rs`' `stage`): `use`, `interact`, `consume`, `drop`,
+  `pickup` from the event's own item; `hit`, `break_block`, `interact_entity` from what's held (looked up only while
+  some item listens).
 
 - **Views** (`view` on the item, `item_view` on `nf`, `ItemViewEvent`): how a stack looks to the one player
   it's sent to, never stored. The adapter asks for every stack it sends a player's game:
-  `PlatformEvents.itemViewing(reference)` first (two map lookups while nobody listens; `Items.viewing`), then
-  `itemViewed(player, stack)` → `ItemView(name, lore)` or null (unchanged, or a handler failed: `Items.view`
-  compares `Scripts.handlerFailures` around the emit). `player:refresh_items()` only queues
-  (`Items.refreshView`); `Items.tick(UPKEEP)` calls `ItemViewOps.refresh` once per player, and for everyone
-  when any view handler is added or goes (`Scripts.counting`, which hears a reload's drop-and-re-add that
-  `watch` can't) or a session starts. Deferred on purpose: a `close` handler runs while the server still
+  `PlatformEvents.item_viewing(reference)` first (map lookups while nobody listens), then
+  `item_viewed(player, stack)` → `ItemView(name, lore)` or none (unchanged, or a handler failed).
+  `player:refresh_items()` only queues; the end of the tick calls `ItemViewOps.refresh` once per player, and for
+  everyone when any view handler is added or goes (counted, so a reload's drop-and-re-add is heard) or a session
+  starts. Deferred on purpose: a `close` handler runs while the server still
   has the closing window as `containerMenu`, and slot packets for it would be dropped by the game.
   **Paper** (`PaperItemViews`, paper-internals `ItemViews`): every window sends through the player's
   `ContainerSynchronizer`, which each window takes at `initMenu`, so `install` (on join, LOWEST) swaps the
@@ -236,12 +221,12 @@ and friends).
   kind that's a file rather than a folder: `RecipeKind`'s layout is
   `Layout.SingleFile(".json")` (the project-format skill's registry), which
   `Kinds.classify`, the loader and the editor's `KINDS` table all follow.
-- **Runtime** (`item/Recipes.kt`): the files' recipes and those scripts
-  register (each owned by its scope, removed in its service's `scopeReleased`
-  listener; `api/Definitions.kt#recipeFrom` holds a script's table to the
+- **Runtime** (`crates/runtime/src/recipes.rs`): the files' recipes and those scripts
+  register (each owned by its scope, removed when it's released; `definitions.rs` holds a script's table to the
   file's rules), pushed through `RecipeOps.add`/`remove` at once and sent to
   players once a tick (`resend`). An item's reload rebuilds the recipes naming
-  it.
+  it. A `station` recipe is never the server's: scripts offer it (`nf.recipes.available`) and make it
+  (`nf.recipes.craft`) from a player's inventory, near the blocks it names.
 - **Matching a project item is the adapter's** (`PaperRecipes`): it
   registers a project-item ingredient as a `MaterialChoice` of the item's
   kind, and at `LOWEST` priority (before `PaperGameEvents` and scripts)
@@ -257,7 +242,7 @@ and friends).
 
 ### Reload (`menus/<id>/…`)
 
-`Menus.reload`, reported as `menu:<id>` with `reattached` = windows kept:
+`menu.rs`' reload, reported as `menu:<id>` with `reattached` = windows kept:
 
 - Same container type and size: the **window is kept** (viewers stay open),
   contents kept **except slots whose authored item changed in the file**,
@@ -280,15 +265,15 @@ and friends).
   restarts); they go when the dialog is deleted, and a button's when a reload
   drops it. Body elements may have a `key`, which an opening's `body` option names.
 - **Openings**: `open_dialog`, `open_for` and `ask`
-  take `DialogOpenOptions`. `Dialogs.opened` checks `values` (by input key,
+  take `DialogOpenOptions`. `dialog.rs` checks `values` (by input key,
   the right kind for the input: text, boolean, an option id, a number in
   range), `body` (by body element key) and `title` against the file and
   returns the file as this opening draws it (a copy; nothing registered, the
-  platform builds it like any file). `context` (a `LuaRef`) is kept in the
-  player's `Opening` and handed to every press and the `close` of that
+  platform builds it like any file). `context` (a registry reference) is kept in the
+  player's opening and handed to every press and the `close` of that
   opening (a dialog a `dialog_list` led to counts as the same opening);
   released when the opening ends (a press that closes it, after the press is
-  heard; a close; a new dialog over it; a quit; the Lua state stopping). A
+  heard; a close; a new dialog over it; a quit; the session stopping). A
   mistake in the options is checked before the player is looked up, so it's
   an error even for someone offline.
 - **Buttons are callbacks**: `DialogAction.customClick(callback, options)`
@@ -297,19 +282,19 @@ and friends).
 - **Values** (`event.values`, by input key): text and option id as strings, a
   checkbox as its `onTrue`/`onFalse` string, a slider as a number. Built from
   the _file's_ inputs, so the keys are exactly the declared ones.
-- **Dispatch**: `BUTTON_PRESS` on the button → `DIALOG_PRESS` on the dialog →
-  `NF_DIALOG_PRESS`, one `DialogPressEvent` (`target` the button, `key` its
+- **Dispatch**: the button's `press` → the dialog's `press` →
+  `nf.on("dialog_press")`, one `DialogPressEvent` (`target` the button, `key` its
   key) until a handler stops it. A press for a dialog or button that no longer
   exists (reloaded since it was shown) is logged and ignored.
 - **`dialog_list`** builds its listed dialogs inline
   (`RegistrySet.valueSet`), each with its own callbacks, guarding cycles.
 - **`close`**: leaving is reported only through a dialog's
   exit action, so `PaperDialogs` gives every dialog an exit button whose
-  callback is `PlatformEvents.dialogClosed`: a `multi_action` dialog a "Back"
+  callback is `PlatformEvents.dialog_closed`: a `multi_action` dialog a "Back"
   one (`gui.back`), a `dialog_list` its own button with that callback (so it's
   never a `press`), and a notice or confirmation one in place of a missing
   button (`gui.ok`, `gui.yes`, `gui.no`). Escape on a notice is a press of its
-  button, on a confirmation of its second, when the file has them. `Dialogs`
+  button, on a confirmation of its second, when the file has them. `dialog.rs`
   keeps which project dialog each player has open (set on show, cleared by a
   press unless `afterAction` keeps the screen up) and raises `close` itself for
   closes the server causes: `player:close_dialog()` and another dialog shown
@@ -325,9 +310,8 @@ and friends).
   ids `<ns>:dialog/<dialog>/press/<index>` and `.../exit`
   (`DialogJson.pressId/exitId/click`); the game answers one with a custom click,
   which Paper raises as `PlayerCustomClickEvent`. `PaperDialogs.customClicked`
-  hands it to `PlatformEvents.customClicked(player, id, DialogAnswers)` and
-  `Dialogs.registryClicked` turns it into the same `pressed(dialog, button.key,
-values)` / `closed` a callback gives, so the dialog's one script can't tell
+  hands it to `PlatformEvents.custom_clicked(player, id, answers)` and
+  `dialog.rs` turns it into the same press / close a callback gives, so the dialog's one script can't tell
   them apart. Only a dialog in the registry set is heard, since the game takes
   a custom click from a player at any time (forging a press of a dialog `show`
   alone could open is ignored). Index, not key, because a resource location
@@ -338,14 +322,13 @@ values)` / `closed` a callback gives, so the dialog's one script can't tell
   refused, and a bad dialog fails the whole server's start), a `multi_action`
   needs at least one action (an empty one gets its exit button). Lua-made
   dialogs reject `pause_menu`/`quick_actions`. Available on every supported
-  version (dialogs are 1.21.6+).
-- **Made in Lua** (`nf.dialogs.create`): a `Record` with an
-  `owner` scope, a UUID id and no script, from `api/Definitions.kt#dialogFrom`
+  version.
+- **Made in Lua** (`nf.dialogs.create`): a record with an
+  owner scope, a UUID id and no script, from `definitions.rs`
   (snake_case keys to the file's camelCase, item bodies' items read as `Item`
-  tables, then `DialogKind.parse` and `DialogValidator`; a `dialog_list` may
+  tables, then format's parser and validator; a `dialog_list` may
   name any dialog the runtime has). Showing, presses, `close` and `ask` are
-  the same as a file's. `Dialogs.removeOwned` drops it (and its handlers)
-  when its scope stops; `ids()` lists only the project's.
+  the same as a file's. It (and its handlers) goes when its scope is released; `ids()` lists only the project's.
 - **`dialog:ask(player, options?)`** (in a task) is hand-written in the prelude: it
   checks `options` against the `DialogOpenOptions` shape (`check_shape`), then
   subscribes the task to the dialog's `press` and `close` and to
@@ -355,33 +338,32 @@ values)` / `closed` a callback gives, so the dialog's one script can't tell
 
 ## How to…
 
-**Real inventories** (`Inventory`, `api/InventoryImpl.kt`) are not windows:
+**Real inventories** (`Inventory`, `crates/runtime/src/inventory.rs`) are not windows:
 an `InventoryRef` the platform finds again on every call, its handle's key a
 string (`player/<uuid>`, `block/<x>/<y>/<z>/<world>`, …). Their item methods
-mirror `Menu`'s; taking, counting and finding go through `item/ItemMatch.kt`
-(`ItemMatch`: a kind, or a partial item read with `LuaItems.read(partial =
-true)`, fields compared as `LuaItems.write` spells them, `data` as a subset of
-the stack's tagged JSON) and `ItemSlots`, which work over any row of slots, so
-a menu can share them.
+mirror `Menu`'s; taking, counting and finding go through `items.rs`' `ItemMatch`
+(a kind, or a partial item, fields compared as the item table spells them, `data` as a subset of
+the stack's tagged JSON), which works over any row of slots, so a menu shares it. A storage is on screen only where
+a menu shows it: a change to it shows in every menu slot bound to it.
 
-**Add a field to items**: `ItemDef` (format, project-format skill), then
-`LuaItems` (read + write + `FIELDS`), `PaperItems` (both ways: a data
+**Add a field to items**: `ItemDef` (format, project-format skill, and its Rust copy in `crates/format`), then
+`items.rs` (read + write), `PaperItems` (both ways: a data
 component is written in `components` and read back only when
 `isDataOverridden`, so a kind's own defaults never show as fields), the `Item`
 shape in `packages/api/`, the editor's `ItemEditor`, a runtime test
-(`MenuTest`) and the integration scenario's components module.
+(`crates/runtime/tests/centities.rs`, whose shared fake has inventories and windows) and the integration scenario's
+components module.
 
 **Add a menu event**: `packages/api/` (`menuEvents` in `spec/menu.ts`, the
-payload in `menuShapes`) → `pnpm generate` (`Events.MENU_X`, its payload
-class) → raise it from `Menus` with `scripts.emit` → test.
+payload in `menuShapes`) → `pnpm generate` (the events registry and its typed payload) → raise it from `menu.rs`
+→ test.
 
 **Add a `Menu` (or `Slot`, `Dialog`, `Button`) method**: spec, `pnpm generate`,
-implement the new `MenuApi` method in `api/MenuImpl.kt`, a test in
-`MenuTest` (or `DialogTest`).
+implement the new `MenuApi` method in `menu.rs` (`DialogApi` in `dialog.rs`), and a test.
 
-**Change click semantics**: `Menus.click` (and `movesItems` in
-`PaperEvents`), plus `MenuTest`.
+**Change click semantics**: `menu.rs`' click (and `movesItems` in
+`PaperEvents`), plus a test.
 
 ```sh
-node tools/gradle.mjs :plugin:runtime:test --tests '*MenuTest*' --tests '*DialogTest*'
+cargo test -p netherforge-runtime --test centities
 ```

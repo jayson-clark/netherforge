@@ -4,8 +4,8 @@
 //! `values::Item` carries the table as JSON.
 //!
 //! Reading is strict: an unknown field or one of the wrong type is an error naming it, and so is a kind the
-//! server doesn't have. Not yet (with the items area): Kotlin's field-by-field messages, project items'
-//! looks, and `data`'s tagged values.
+//! server doesn't have (serde's message, its field names in Lua's spelling). A project item's look is resolved by
+//! the Platform (`project_items.rs`); `data`'s tagged values cross through the codec's handle tags.
 
 use netherforge_api::values;
 use netherforge_format::game::{GameData, Registry};

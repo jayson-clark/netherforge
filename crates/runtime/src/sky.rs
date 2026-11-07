@@ -7,8 +7,8 @@
 //! since has none (setting it is an error until a restart). Nothing here is kept: the session stopping puts
 //! everyone back under the world's own biomes.
 //!
-//! Not yet: saying a sky was left out because the server refused its twins (`DatapackOps::refused` is still a
-//! placeholder); such a sky reads as new since the server started.
+//! A sky whose twins the server refused as it started is said by the start-up check (`reload.rs`' refusal problems:
+//! `runtime.datapack` at the sky's file); setting it is the same error as for a sky added since the start.
 
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;

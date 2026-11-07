@@ -44,7 +44,12 @@ log(
   tostring(back.food.can_always_eat),
   back.food.eat_seconds
 )
-log("cooldown", string.format("%.1f", back.cooldown.seconds), back.cooldown.group, tostring(back.raw))
+log(
+  "cooldown",
+  string.format("%.1f", back.cooldown.seconds),
+  back.cooldown.group,
+  tostring(back.raw)
+)
 funnel:set_item(3, { kind = "minecraft:stick", hold = true })
 funnel:set_item(
   2,

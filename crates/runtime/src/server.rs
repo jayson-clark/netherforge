@@ -960,6 +960,14 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         let Some((name, status)) = changed else {
             return;
         };
+        // The project's pack loaded: the network hears it, for the next server they go to.
+        if name.is_none() && status == crate::packs::LOADED {
+            let shared = s.session().shared().clone();
+            let sent = shared.packs.borrow().sent_to(player);
+            if let Some(sha1) = sent {
+                crate::packs::tell_network_loaded(&shared, player, sha1);
+            }
+        }
         let who = PlayerRef {
             uuid: player,
             name: String::new(),

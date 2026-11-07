@@ -90,6 +90,13 @@ pub trait Runtime {
         false
     }
 
+    /// The Minecraft version this server runs, when it's older than `since`: a version the spec marks a function, an
+    /// event or an option field as needing (`since` a feature in format's feature table). None when it's new enough,
+    /// or the runtime doesn't know which it runs.
+    fn older_than(&self, _since: &str) -> Option<String> {
+        None
+    }
+
     /// What `handle` is now, when the runtime knows more than it did when it handed it out (Kotlin's
     /// `LuaMarshal.refine`): a `Player` that's a `Bot`, an `Entity` whose entity was unloaded then. Asked only for a
     /// handle of a class others extend, when it lacks a method a script called or isn't the class an argument

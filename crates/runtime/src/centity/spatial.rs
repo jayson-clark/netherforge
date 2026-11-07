@@ -2,7 +2,7 @@
 //! `QueryFilter` and `SpatialQueries`): every instance's shown hitbox boxes, measured once per change and filed
 //! by world cell, so a question looks only at the instances whose boxes come near it; the shapes questions
 //! ask (a box, a sphere, a cone, a swept sphere); and what they find among centities and the server's
-//! entities, nearest first. `touch` and flights ask them; `world:overlap_*` will, with worlds.
+//! entities, nearest first. `touch`, flights and `world:overlap_*`, `sweep` and `nearest` ask them.
 
 use std::collections::{HashMap, HashSet};
 

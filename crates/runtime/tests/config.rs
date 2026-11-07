@@ -174,6 +174,7 @@ fn the_dev_server_takes_its_project_and_network_from_the_editor() {
     );
     assert!(config.resolves_packages);
     assert_eq!(config.wall_clock_rate, 60.0);
+    assert_eq!(config.session.wall_clock_rate, 60.0);
     assert!(config.session.bots.enabled);
     assert_eq!(config.session.http.timeout_seconds, 9);
     let network = &config.session.network;

@@ -361,6 +361,13 @@ impl Runtime for Api {
         self.test.is_some()
     }
 
+    fn older_than(&self, since: &str) -> Option<String> {
+        use netherforge_format::names::MinecraftVersion;
+        let running = self.nf.shared.as_ref()?.platform.info().minecraft_version;
+        let server = MinecraftVersion::parse(&running)?;
+        (server < MinecraftVersion::parse(since)?).then_some(running)
+    }
+
     /// An entity's handle as the class it is now (a `Bot`, a `Mob`): Kotlin's `RuntimeApi.refine`.
     fn refine(&self, handle: &handles::Handle) -> Option<handles::Handle> {
         let shared = &self.worlds.as_ref()?.shared;

@@ -440,8 +440,9 @@ git diff                         # review every change before committing it
 
 A golden diff is a behaviour change. If you didn't expect it, it's a bug.
 
-What calls cost a script isn't held to a golden on the Rust runtime yet (the Kotlin runtime's
-`function-costs.tsv` counted Lua 5.4 instructions, which Luau has no counterpart of).
+What scripts do all the time costs them in steps of their budget, held to
+`crates/runtime/tests/data/scenario-costs.tsv` (`crates/runtime/tests/costs.rs`; the plugin-sandbox skill's "The
+cost golden"): `UPDATE_GOLDEN=1 cargo test -p netherforge-runtime --test costs` rewrites it.
 
 ```sh
 pnpm test:screenshots --update   # rewrites the preview pictures that changed (Docker)
@@ -466,23 +467,23 @@ request times out). The editor side runs against `MemoryBackend.testReloadRestar
 
 ## Which test for which change
 
-| You changed…                           | Add…                                                              |
-| -------------------------------------- | ----------------------------------------------------------------- |
-| a validation rule                      | a case in `packages/format/testdata/invalid/`                     |
-| canonical writing / a new field        | an example using it; `UPDATE_GOLDEN=1`                            |
-| compiler, composition, animation maths | a `commonTest` unit test                                          |
-| the bridge protocol                    | lines in `session.ndjson`                                         |
-| a Lua-visible behaviour                | a runtime test running a Lua script against the fake platform     |
-| a way a script could hang the server   | a case in `HangTest`: it must fail at the script's line, fast     |
-| the debugger (stops, stepping, values) | a case in `DebuggerTest` (an editor over a real bridge socket)    |
-| what a `Platform` capability does      | a case in its contract suite (runs on the fake and on Paper)      |
-| what an editor backend command does    | a case in `contract.json` (runs on MemoryBackend and on Rust)     |
-| something only real Paper can show     | an integration scenario                                           |
-| something only a player can do or see  | bot steps in the integration test's bot scenario                  |
-| a runtime subsystem                    | a `RuntimeService` in `ProjectSession`; `SessionTest` checks it   |
-| logic in a project's scripts           | a `*_test.lua` beside it (`nf.test`), run by `netherforge test`   |
-| what `nf.test` or the test runner does | a case in `ScriptTestRunnerTest` (`:plugin:test-runner:test`)     |
-| what the runtime keeps on a server     | a runtime test reading `runtime.store`; the layer: `DatabaseTest` |
+| You changed…                           | Add…                                                                             |
+| -------------------------------------- | -------------------------------------------------------------------------------- |
+| a validation rule                      | a case in `packages/format/testdata/invalid/`                                    |
+| canonical writing / a new field        | an example using it; `UPDATE_GOLDEN=1`                                           |
+| compiler, composition, animation maths | a `commonTest` unit test                                                         |
+| the bridge protocol                    | lines in `session.ndjson`                                                        |
+| a Lua-visible behaviour                | a runtime test running a Lua script against the fake platform                    |
+| a way a script could hang the server   | a case in `HangTest`: it must fail at the script's line, fast                    |
+| the debugger (stops, stepping, values) | a case in `DebuggerTest` (an editor over a real bridge socket)                   |
+| what a `Platform` capability does      | a case in its contract suite (runs on the fake and on Paper)                     |
+| what an editor backend command does    | a case in `contract.json` (runs on MemoryBackend and on Rust)                    |
+| something only real Paper can show     | an integration scenario                                                          |
+| something only a player can do or see  | bot steps in the integration test's bot scenario                                 |
+| a runtime subsystem                    | a `Service` in `session.rs`' `services()`; `tests/session.rs`                    |
+| logic in a project's scripts           | a `*_test.lua` beside it (`nf.test`), run by `netherforge test`                  |
+| what `nf.test` or the test runner does | a case in `crates/runtime/tests/testing.rs`; the jar: `:plugin:test-runner:test` |
+| what the runtime keeps on a server     | a runtime test reading its `Store`; the layer: `tests/store.rs`                  |
 
 The fake platform's entities (`FakeWorldEntities`: mobs by UUID, players as
 `FakePlayer`, which is a `FakeBody` too), inventories, boss bars and

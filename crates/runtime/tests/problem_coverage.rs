@@ -10,6 +10,13 @@ const TESTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests");
 /// Each code, and the test file (under `crates/runtime/tests`) that produces it.
 const PRODUCED_BY: &[(&str, &str)] = &[
     ("runtime.wasm", "wasm.rs"),
+    ("terrain.script-failed", "worlds.rs"),
+    ("migration.ahead", "databases.rs"),
+    ("runtime.blocks", "blocks.rs"),
+    ("runtime.terrain", "worlds.rs"),
+    ("runtime.dimension-type", "worlds.rs"),
+    ("runtime.datapack", "worlds.rs"),
+    ("runtime.pack-format", "packs.rs"),
     ("migration.failed", "databases.rs"),
     ("migration.dialect", "databases.rs"),
     ("video.stale", "screens.rs"),
@@ -34,15 +41,7 @@ const PRODUCED_BY: &[(&str, &str)] = &[
 ];
 
 /// Codes no Rust test produces yet (the integration scenarios do, on Paper): each a gap to close.
-const UNTESTED: &[&str] = &[
-    "terrain.script-failed",
-    "migration.ahead",
-    "runtime.blocks",
-    "runtime.terrain",
-    "runtime.dimension-type",
-    "runtime.datapack",
-    "runtime.pack-format",
-];
+const UNTESTED: &[&str] = &[];
 
 /// `reportedAtRuntime`'s codes, from format's `ProblemCodes.kt`: each constant's code string.
 fn reported_at_runtime() -> Vec<String> {

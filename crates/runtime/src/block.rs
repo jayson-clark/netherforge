@@ -1,8 +1,8 @@
 //! `Block` (Kotlin's `BlockImpl`): a position in a world, read live. Reads answer nil or false in a chunk that
 //! isn't loaded (nothing here loads one); a block state the server doesn't have is an error.
 //!
-//! Not yet: `custom` (custom blocks: until then no block is one of the project's) and `data` (blocks' saved
-//! data).
+//! `custom` answers the project's block placed there (`custom_blocks.rs`), and `data` its saved table
+//! (`block_data.rs`).
 
 use std::collections::BTreeMap;
 

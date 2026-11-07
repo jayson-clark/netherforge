@@ -1,8 +1,6 @@
 //! `Player` (Kotlin's `PlayerImpl`): a player by UUID. What needs them online answers nil or false while
 //! they're offline; what works either way (bans, the whitelist, when they first played) needs only a UUID.
 //! Their stats and buffs are the centities' stat sheets (`crate::stats`, `Holder::Player`).
-//!
-//! Not yet, each with its area: recipes (with items), menu templates, and resource packs.
 
 use std::collections::BTreeMap;
 

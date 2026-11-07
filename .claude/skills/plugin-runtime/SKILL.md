@@ -166,77 +166,8 @@ becomes.
 
 ## The host (`crates/luau`)
 
-What replaces `LuaHost`, the prelude's `guard` and `sandbox` modules, and the memory census.
-
-- **The base is the real globals, stripped.** `Host::new` removes every global not in `BASE` (a
-  whitelist: no `os`, `debug`, `getfenv`/`setfenv`, `loadstring`, `require`, `collectgarbage`,
-  `print`, `_G`), then `Lua::sandbox(true)` makes the globals and every library read-only. That
-  replaces the per-scope library proxies, and `rawset` on a library fails on its own. They have
-  to be the real globals, not a copy: a scope's environment is `safeenv` (as
-  `luaL_sandboxthread`'s proxy is, so `math.floor` is resolved at load time rather than looked
-  up per call), and in a `safeenv` environment **Luau resolves a builtin's name straight from
-  the real globals, past the environment's `__index`**. A copy left `os` and `_G` reachable from
-  every script (`what_scripts_dont_get` holds it). A scope that assigns a global of its own
-  name (`math = ...`) gets its own, as before.
-- **A scope** is an environment table over the base (`open_scope(name, memory_key)`). Chunks
-  are loaded into it under their project path (`@modules/m/init.lua`), so Luau's messages and
-  tracebacks speak the editor's language. A `Failure::Error` keeps the message and the
-  traceback apart (mlua appends one to every runtime error).
-- **One interrupt does the guarding.** Luau calls it on every function call and every loop's
-  backward jump, on every thread, so there's nothing to arm per coroutine and no hook for the
-  debugger to share. Each call in is a frame (`invoke(scope, budget, f, args)`):
-  - **The budget counts steps (interrupts), not instructions.** Luau doesn't count
-    instructions. A step is a call or a loop iteration, so a script's `budget` means "how many
-    iterations and calls", which is closer to what a developer can reason about anyway.
-  - **The time limit** is read from the injectable `Clock` every `clock_every` (256) steps. A
-    nested call in gets what's left of its caller's deadline, if that's sooner.
-  - **A nested call in's steps are charged to its caller** when it returns, so a loop of
-    call-ins can't outrun its own budget.
-  - **A stop is sticky.** The interrupt raises an error, which `pcall` can catch, so the frame
-    keeps the stop and its location: every interrupt after it raises again, and `invoke` reports
-    the call stopped whatever it returned.
-- **Memory is the allocator's.** `Limits::memory_bytes` is mlua's allocator limit for the
-  state, so an allocation past it fails (`Failure::Memory`), exactly. No census and no
-  periodic `collectgarbage("count")`.
-- **Memory per scope is Luau's memory categories.** `invoke` sets the running thread's
-  category (`lua_setmemcat`) to the scope's, and Luau charges every object to the category it
-  was allocated under and credits its free back to that category. So `scope_memory` is exact
-  at any moment, and a script churning garbage doesn't look like a leak
-  (`churning_garbage_isnt_a_leak`). Luau has only 256 categories (0 is the host's), so a
-  category is per **memory key**, not per scope: the runtime passes the script's resource, so
-  a centity's instances share one, and past 255 keys new ones share the last. A coroutine
-  inherits its creator's category, so a task stays its scope's wherever it's resumed from.
-- **Blame**: when an allocation fails, the scope holding the most is blamed if that's at
-  least a quarter of the limit (`take_blamed`), and the runtime stops it at the end of the
-  tick, as today.
-- **No proper tail calls.** Luau keeps a frame for `return f()`, so endless tail recursion is
-  a stack overflow (an error), not a loop for the budget to stop.
-
-- **The library's caps are format's `caps.lua`**, the same file the Kotlin runtime runs: it's
-  written for both dialects (Luau's missing `math.tointeger` and `math.ult` are written out in
-  it), so there's one cost model, not two. `install_caps` runs it before the libraries are
-  made read-only, with the library's own functions (`raw`, plus a native `getmetatable` that
-  sees past `__metatable`, since Luau has no `debug.getmetatable`), a `spend` that moves the
-  next look at the clock closer (`STEPS_PER_INTERRUPT`: a step of the caps' model is about a
-  nanosecond, an interrupt about five), and a `refuse` that raises at the script's line. The
-  caps and `refuse` are compiled without debug information, so the library's own errors (a bad
-  argument), which it locates at its caller, aren't located there. The host then locates such a
-  message at the traceback's first script frame. `tests/caps.rs` is `HangTest` on Luau.
-  - Luau's own `string.rep` has no separator (it's Lua 5.1's) and silently ignores one, so the
-    cap writes it, as Lua 5.4 does (`REP_IGNORES_SEP`, probed once).
-  - Luau's own `%d` (and `%x`, `%c`...) drops a fraction; the cap on `format` refuses one with
-    Lua 5.4's message.
-  - Luau has no `__gc` for tables, so the cap on `setmetatable` refusing `__gc` changes
-    nothing there. It stays for the Kotlin runtime.
-
-- **Rust functions scripts call raise strings** (`Host::script_function`, `waiting_function`).
-  mlua raises a Rust function's error as a userdata of its own, so `pcall` would hand a script a
-  value of type `userdata` where Lua and the Kotlin runtime give a string (Kosmoi's SDK inspects
-  them). Every binding, `require` and `nf`'s `__newindex` go through one Luau shim (`SHIM`, without
-  debug information): a failure comes back as a sentinel and its message, which the shim raises
-  located at the script's line, as the caps' `refuse` does (`modules/shop/init.lua:3: no module
-"x"`); a waiting binding's `waiting` yields its task there. Not yet: a handle's metamethods
-  (assigning to a handle's field), which are mlua `UserData` methods and raise mlua's userdata.
+The sandbox (the stripped base, one interrupt, the step budget, time, memory by the allocator and Luau's memory
+categories, the library's caps, scripts' errors as strings) is the plugin-sandbox skill's.
 
 ## The API crate (`crates/api`)
 
@@ -1347,7 +1278,7 @@ types are format's (`bridge/`), so the editor's generated TypeScript is what the
   Instances in `status` count inert records, as Kotlin's `count()` did.
 - **The debugger's hook** (`Debugger`, `Bridge::set_debugger`, `Bridge::dap_sender`): `dap` notifications go to it on the
   bridge's thread, its `refusal` refuses main-thread requests while paused, `detach` runs when the connection ends.
-  `crate::debug::Debugger` implements it (see "The debugger"); `ServerEvents::attach_bridge` sets it.
+  `crate::debug::Debugger` implements it (see the plugin-sandbox skill's "The debugger"); `ServerEvents::attach_bridge` sets it.
 - **Composition**: `Bridge::new(platform, BridgeConfig::of(&runtime_config, server_folder)?)` (`config::read` already took
   `netherforge.bridge.port` and `NETHERFORGE_BRIDGE_TOKEN`), start the session on `bridge.platform()`,
   `ServerEvents::new` (in an `Rc`, `'static`), `set_profiler(Profiler::new(<plugin folder>/profiles, server))`,
@@ -1564,7 +1495,7 @@ section: `schedules`, `http` with `allow-private` and `connections`, `web`, `was
 default; a value that can't be acted on (an `allow-private` entry, an S3 store missing a field) is an error. The dev
 server takes its project, bridge and network from the properties, its bots always on. A `project:` that's a bundle's
 URL is fetched into `bundles/` (`bundle_fetch.rs`, see "Project files"). `performance` goes into `session::Config::performance`
-(see "What scripts cost and the profiler").
+(see the plugin-sandbox skill's "What scripts cost and the profiler").
 
 **The policy** (`Session::refuse`, as each run starts): the owner's (`Config::policy`) and the network's for this
 server (the link's `state.policy`, from the hub's welcome) together (`Policy::and`). An owner's policy that can't be
@@ -1594,38 +1525,7 @@ again at the end of a tick (`player:refresh_items`), everyone's when a session s
 
 ## What scripts cost and the profiler (`crates/luau/src/timing.rs`, `crates/runtime/src/costs.rs`, `profile.rs`)
 
-Kotlin's prelude `timing`, `ScriptCosts`, `ScriptProfile`, `Profiler`, `ProfileReport` and `TickParts`; the plugin-sandbox
-skill's "The profiler" has the design, which is unchanged.
-
-- **The host times every call in** (`Host::invoke`): two reads of the clock a frame, its own time (less the frames
-  nested in it) charged to its scope, its slowest call kept per scope over this window and the last (`hot_spot`, where
-  a slow warning points), its time this tick (`over_tick` against `Limits::max_tick`, which `performance.max-ms-per-tick`
-  sets), and, while profiling (`set_profiling`), per function: keyed by the function's pointer, its kind the caller's
-  (`Host::next_kind`: an event's name from `run_handlers`, `timer`, `task`, `callback`, `command`, `complete`, `goal`,
-  `schedule`, `route`, `load` from `Modules::run_file`), its file and line read once per drain (`take_profile`). **Luau
-  says no `main` for a chunk's body** and gives it line 1, so a body is told by its `load` kind, and the profiler names it
-  by its file alone (line none), as Kotlin's did. A scope closed while profiling keeps its name until the next drain
-  (`scope_title`), so a reloaded module's old rows land with the new.
-- **The host's clock leaves paused time out** (`Host::now`, `add_paused`, `Guard::paused`): every deadline, cost and the
-  session's phase timing read it, so a tick held at a breakpoint is neither slow nor stopped.
-- **Costs** (`ScriptCosts`, in the session): `record` once a tick (the accounts) keeps a 100-tick window per live scope;
-  a scope averaging over `warn-ms` across `warn-ticks` (its first tick never counted) is `Slow`, warned about once per
-  `QUIET_TICKS` per script's place (log and the editor's console, `held back` counted) and a `script.slow` problem while
-  it runs; a scope whose timers or `tick` handlers waited (`Scripts` asks `over_tick` before each) is warned about once
-  per `QUIET_TICKS`. **A session made without the server's config (`Config::performance` none, every test's) warns of
-  nothing and holds nothing back**: tests run unoptimised, where 25 ms a tick is easy to reach.
-- **`Service::costs(scope)`**: what a scope owns, by the word `/nf scripts` shows it as (effects, cutscenes, goals,
-  gradual, connections, schedules, routes, logins, placeholders, wasm instances, wasm programs, screens, videos); the
-  session adds `waits` (`pending::waiting`). `Session::costs()` is `/nf scripts`' list, the most expensive first, with
-  subscriptions and tasks (`Scripts::held`) and the bytes its script's memory key holds (per key, so a centity's
-  instances each show the script's).
-- **Phases**: Rust's tick has three, `scripts` (timers, async values, `tick` handlers), `services` (each service's share
-  a part, `services/<name>`) and `accounts`. Kotlin's eight `TickPhase`s don't exist on the Rust runtime.
-- **The profiler** is `ServerEvents`' (it outlives sessions; `set_profiler` hands the adapter's, writing into the plugin's
-  `profiles/`); the session syncs the host's bookkeeping to `active()` at each tick's start and as each Lua state starts.
-  Samples go on the bridge's `profiler` stream while the editor subscribes (or to a test's `set_sink`). Reports are
-  written on a thread of their own; whoever asked is told on the main thread (`poll` each tick, `await_writes`). The
-  first run's bodies aren't profiled: the session starts before `ServerEvents` (and its profiler) exists.
+The plugin-sandbox skill's, with the cost golden (`crates/runtime/tests/costs.rs`).
 
 ## `/nf` (`crates/runtime/src/admin.rs`)
 
@@ -1647,40 +1547,7 @@ events weakly (so the adapter's events live as long as the plugin, as the test r
 
 ## The debugger (`crates/luau/src/debug.rs`, `crates/runtime/src/debug.rs`)
 
-Kotlin's `Debugger` and `prelude/debugger.lua`. The editor's DAP client (`apps/editor/src/core/debug`) is unchanged: the
-messages are DAP's, the same requests answered, the same events (`initialized`, `stopped`, `continued`).
-
-- **Lines come from Luau's single-stepping** (`lua_singlestep`, the `debugstep` callback before every instruction), on
-  every thread (`userthread` keeps the set; a new thread inherits its maker's), only while there are breakpoints or a
-  step or pause is under way: a server nobody debugs runs the plain VM. A new line is a change of thread, stack depth
-  or line; only then is the chunk read. Luau picks the stepping VM as a call enters from the host, so a change applies
-  from the next call in: the config is handed over at each tick's start anyway. `lua_breakpoint` (bytecode patching)
-  was the alternative: it needs every function each chunk made, and stepping needs single steps regardless.
-- **A stop** calls a Rust function on the stopped thread from the callback (kept in the registry), so mlua reads that
-  thread's stack as a callback's: frames, locals (chunks are compiled with debug level 2 for their names: nothing at run
-  time), upvalues and the scope's globals (`lua_getfenv`), all copied at once; values read raw. The runtime's
-  `HostHandler` holds there: it sends `stopped`, answers `stackTrace`/`scopes`/`variables` from the debugger's inbox,
-  takes new configuration at once, calls `PauseOps::hold` once a second, and returns how to go on; the time held goes to
-  `Guard::paused`. A frame's name is Luau's debug name (a local function's), `(body)` for a chunk, else `function (line
-N)`; Luau's names are where a function was defined, not Kotlin's call-site names.
-- **Steps** count stack depth: over stops at the next line at or above the step's depth, out above it, in anywhere. On the
-  main thread a step belongs to the host's call in (`Frame::serial`): a nested call in runs through, and once the call
-  returns the step ends. In a task it follows the thread (a freed thread ends it).
-- **Break on errors**: while on, `Host::invoke` calls through `xpcall` with a Rust message handler that stops at the error
-  with its stack whole and appends the traceback; then the error is raised again, so it's reported as ever. Only errors
-  no `pcall` catches reach it. Not in tasks (a task's resume catches its error first).
-- **Handles** show as Kotlin's (`Player Steve`, `Centity tower 1a2b3c4d` with its position, `Node top of tower 1a2b3c4d`,
-  `World world`, else class and keys); events as `Event <name>`, expanding to their fields (the view's chain, raw).
-- **Configuration** arrives on the bridge's thread (`bridge::Debugger::receive`) and waits under a mutex with a version;
-  `Debugger::sync` hands it to the host at each tick's start (`ServerEvents::tick`) and each new Lua state gets it before
-  any body runs (`Session::set_on_host`, installed by `ServerEvents::attach_bridge`/`attach_debugger`), so breakpoints in
-  bodies hold on a full reload. The bridge's connection ending detaches: a held server goes on.
-- **Paths**: chunks are project or package paths; a `setBreakpoints` path that's absolute and under the project's folder
-  is mapped to its project path. Not yet: a package's file named by its place on disk (a path dependency's folder or the
-  package cache's checkout; Kotlin's `ProjectFiles.pathOf`), and a coroutine's stop listing the main thread's frames
-  below it.
-- Tests: `crates/luau/tests/debug.rs` (the host's half with a recording handler), `crates/runtime/tests/debugger.rs`
-  (DAP end to end: a thread plays the editor while the test's thread is held in its tick).
+The plugin-sandbox skill's.
 
 ## Commands (`crates/runtime/src/commands.rs`)
 

@@ -9,7 +9,9 @@
 //! from the plugin's own HTTP server (`PackServer`) at `<base>/<sha1>.zip`, or from a URL the server owner serves it
 //! at (the plugin writes `resource-pack.zip` for them); they get it as they join and again only when the hash has
 //! changed. With an owner's S3-compatible store (`pack_storage.rs`) each build is uploaded on a thread of its own, and
-//! nobody's sent one until it's there. Not yet: what the network knows a player loaded.
+//! nobody's sent one until it's there. In a network whose proxy keeps packs on a switch, a player who loaded this
+//! very pack on the server they came from isn't sent it again (the hub's `PlayerState.pack`), and the hub is told
+//! when a player's game loads ours (`PackLoaded`), for the next server they go to.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::Write as _;
@@ -636,6 +638,17 @@ impl Packs {
     /// Sends the current pack to `player` unless they already have this one. The first send takes every other pack
     /// they have off (what another server of a network sent); later ones replace only the project's.
     pub fn send(&mut self, platform: &dyn Platform, player: Uuid) -> bool {
+        self.send_unless(platform, player, None)
+    }
+
+    /// [`send`](Self::send), knowing the hash of the pack the network says `player`'s game loaded already on the
+    /// server they came from: one that matches isn't sent, and counts as loaded.
+    pub fn send_unless(
+        &mut self,
+        platform: &dyn Platform,
+        player: Uuid,
+        loaded_elsewhere: Option<&str>,
+    ) -> bool {
         let Some(pack) = &self.built else {
             return false;
         };
@@ -649,6 +662,16 @@ impl Packs {
             return false;
         }
         let first = !self.sent.contains_key(&player);
+        // Loaded already on the server they came from (the proxy kept it): nothing to download, nothing to reload.
+        if first && loaded_elsewhere == Some(pack.sha1.as_str()) {
+            let sha1 = pack.sha1.clone();
+            self.sent.insert(player, sha1);
+            self.statuses
+                .entry(player)
+                .or_default()
+                .insert(pack_id(), LOADED.to_owned());
+            return false;
+        }
         let offer = PackOffer {
             id: pack_id(),
             url,
@@ -740,6 +763,11 @@ impl Packs {
         self.sent.remove(&player);
         self.statuses.remove(&player);
         self.pushed.remove(&player);
+    }
+
+    /// The hash of the project's pack `player` was sent (or had already).
+    pub fn sent_to(&self, player: Uuid) -> Option<String> {
+        self.sent.get(&player).cloned()
     }
 
     /// What `player`'s game said last about the project's pack, or `onDemand` pack `name`.
@@ -1026,10 +1054,12 @@ impl Service for PacksService {
     }
 
     fn player_joined(&self, player: &netherforge_platform::PlayerRef) {
-        self.shared
-            .packs
-            .borrow_mut()
-            .send(&*self.shared.platform, player.uuid);
+        let elsewhere = loaded_elsewhere(&self.shared, player.uuid);
+        self.shared.packs.borrow_mut().send_unless(
+            &*self.shared.platform,
+            player.uuid,
+            elsewhere.as_deref(),
+        );
     }
 
     fn player_quit(&self, player: &netherforge_platform::PlayerRef) {
@@ -1075,5 +1105,32 @@ impl Service for PacksService {
 
     fn problems(&self) -> Vec<Problem> {
         self.problems.borrow().clone()
+    }
+}
+
+/// The hash of the project's pack `player`'s game loaded already, as the network knows it (from the server they came
+/// from, when the proxy keeps packs on a switch); none when it doesn't know.
+fn loaded_elsewhere(shared: &Shared, player: Uuid) -> Option<String> {
+    let network = shared.network.borrow();
+    let link = network.link.as_ref()?;
+    let state = link.state.borrow();
+    if !state.connected || !state.keeps_packs {
+        return None;
+    }
+    state
+        .players
+        .get(&crate::events::uuid_text(&player))?
+        .pack
+        .clone()
+}
+
+/// `player`'s game loaded the project's pack `sha1`: the network hears it, for the next server they go to.
+pub(crate) fn tell_network_loaded(shared: &Shared, player: Uuid, sha1: String) {
+    let network = shared.network.borrow();
+    if let Some(link) = network.link.as_ref().filter(|l| l.connected()) {
+        link.send(crate::network::protocol::ServerFrame::PackLoaded {
+            player: crate::events::uuid_text(&player),
+            sha1,
+        });
     }
 }

@@ -13,8 +13,9 @@
 //! with its centity, by the sweep (or at once, when the runtime did it).
 //!
 //! Holding the carriers still (and the vanilla note block's tuning and sounding) is the adapter's
-//! (`BlockOps::freeze`); this only holds blocks. Breaking, clicks, placing from items, mining, falling and the
-//! game's own blocks' rules come with the next slices.
+//! (`BlockOps::freeze`). Breaking (`breaking`, `exploded`, `break_naturally`), placing from items
+//! (`place_from_item`), picking, falling (`block_updated`, `falling_landed`) and the game's own blocks' rules
+//! (`game_drops`, `world_broke`) are here; mining is `block_mining.rs`'.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};

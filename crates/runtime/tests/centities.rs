@@ -2274,7 +2274,18 @@ print(bank:item(0).count, #bank:viewers())
 this:slot(2):set_rule({ kinds = { "minecraft:diamond" }, max = 1 })
 print(this:slot(2):accepts({ kind = "minecraft:emerald" }), this:slot(2):rule().max)
 print(pcall(this:slot(2).set_rule, this:slot(2), { max = 0 }))
+this:slot(3):set_rule({ property = "accessory" })
+print(this:slot(3):accepts({ item = "ring" }), this:slot(3):accepts({ item = "plain" }), this:slot(3):accepts({ item = "cursed" }), this:slot(3):accepts({ kind = "minecraft:emerald" }))
 "#,
+        ),
+        (
+            "items/ring/item.json",
+            r#"{ "kind": "minecraft:gold_nugget", "properties": { "accessory": true } }"#,
+        ),
+        ("items/plain/item.json", r#"{ "kind": "minecraft:stick" }"#),
+        (
+            "items/cursed/item.json",
+            r#"{ "kind": "minecraft:stick", "properties": { "accessory": false } }"#,
         ),
         (
             "modules/open/init.lua",
@@ -2293,6 +2304,8 @@ print(pcall(this:slot(2).set_rule, this:slot(2), { max = 0 }))
             "5\t0",
             "false\t1",
             "false\tmenus/vault/script.lua:12: bad argument 'rule.max' (at least 1, got 0)",
+            // A project item with the property, and not `false`.
+            "true\tfalse\tfalse\tfalse",
         ]
     );
     let window = Uuid(*platform.windows.borrow().keys().next().expect("a window"));

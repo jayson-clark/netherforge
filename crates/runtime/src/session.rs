@@ -9,10 +9,6 @@
 //! tick and hear every hook in (stop is the reverse), and a kind of resource
 //! reloads through the one service that says it reloads it. A new subsystem is
 //! a service registered there; nothing else names it.
-//!
-//! Not yet: the game's facts from the Platform (format reads without them, so
-//! its checks that need the game say nothing), packages' modules (a module is
-//! the project's own), the bridge to the editor, and every service but modules.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -139,6 +135,9 @@ pub struct Config {
     pub time_zone: Option<String>,
     /// The wall clock schedules read, in Unix milliseconds, fixed: for tests. The system's when none.
     pub wall_clock: Option<i64>,
+    /// How many times as fast the wall clock runs (the integration tests' `-Dnetherforge.test.wall-clock-rate`, a
+    /// dev server's only): 0 and 1 are the real one.
+    pub wall_clock_rate: f64,
     /// The scripts' data directory (`plugins/NetherForge/data/`): none, and `nf.files` finds nothing there.
     pub data_dir: Option<std::path::PathBuf>,
     /// `files:` in `config.yml`: what each package may keep there.
@@ -361,6 +360,7 @@ impl<'a> Session<'a> {
         let project = load(source, packages);
         let shared = Shared::new(platform.clone(), store);
         shared.schedules.borrow_mut().now = config.wall_clock;
+        shared.schedules.borrow_mut().rate = config.wall_clock_rate;
         shared.packs.borrow_mut().config = config.pack.clone();
         shared.packs.borrow_mut().prebuilt = config.prebuilt_pack.clone();
         *shared.provided_packages.borrow_mut() = config.provided_packages.clone();

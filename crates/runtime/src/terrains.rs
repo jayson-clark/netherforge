@@ -15,8 +15,9 @@
 //! (Kotlin's `ManagedWorlds.ensureMade`), after the blocks have started, so the chunks they generate are read for custom
 //! blocks.
 //!
-//! Not yet: a package's generator's script (its files are the package's), and the main world's generator, which the
-//! server asks for before any session (Kotlin's `StartupGenerators`).
+//! A package's generator's script reads its package's own files, by the package's paths. The main world's generator,
+//! which the server asks for before any session (Kotlin's `StartupGenerators`), is the adapter's composition's
+//! (`crates/ffi/src/compose.rs`); `check_main` here says when the manifest and the server disagree.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -275,20 +276,34 @@ impl Failures {
         id: &str,
         failure: &ScriptFailure,
         platform: &dyn Platform,
-        file_of: &dyn Fn(&str) -> String,
+        _file_of: &dyn Fn(&str) -> String,
     ) {
         let said = self.said.entry(id.to_owned()).or_default();
         let key = format!("{}\n{}", failure.stage, failure.message);
         if said.len() >= MAX_FAILURES || !said.insert(key) {
             return;
         }
-        let message = format!(
-            "the script's {} failed, so the file's own result stands there: {}",
-            failure.stage, failure.message
-        );
+        let message = if failure.stage == "load" {
+            format!(
+                "The script didn't load, so only the file's own stages run: {}",
+                failure.message
+            )
+        } else {
+            format!(
+                "The script's {} stage failed, so the file's own result stands there: {}",
+                failure.stage, failure.message
+            )
+        };
         platform.log().warn(format!("terrain {id}: {message}"));
-        self.problems
-            .push(netherforge_format::codes::RUNTIME_TERRAIN.at(&file_of(id), message, None));
+        // At the file and line it failed at: a package's generator (`acme:hills`) names its package's files.
+        let (file, line) = failure.location();
+        let file = match id.split_once(':') {
+            Some((namespace, _)) => netherforge_format::kinds::package_path(namespace, &file),
+            None => file,
+        };
+        let mut problem = netherforge_format::codes::TERRAIN_SCRIPT_FAILED.at(&file, message, None);
+        problem.line = line;
+        self.problems.push(problem);
     }
 }
 
@@ -357,13 +372,26 @@ pub fn resolve_generators(p: &Publishing, failures: &mut Failures) -> Published 
         let terrain = link(compiled, p, &mut problem);
         let namespace = id.split_once(':').map(|(ns, _)| ns.to_owned());
         // A script reads its own files and its package's modules, once, here: a chunk thread never reads a file.
+        // A package's generator reads its package's own files, by the package's paths, as the package's code does.
         let sources = match (&terrain.script, &namespace) {
             (Some(script), None) => netherforge_format::kind::terrain::scripts::sources_of(
                 script,
                 &own_files,
                 &|path| p.source.read(path),
             ),
-            _ => BTreeMap::new(),
+            (Some(script), Some(namespace)) => match loaded.packages.get(namespace) {
+                Some(package) => {
+                    let source = &package.resolved.source;
+                    let files: Vec<String> = source.files().iter().cloned().collect();
+                    netherforge_format::kind::terrain::scripts::sources_of(
+                        script,
+                        &files,
+                        &|path| source.read(path),
+                    )
+                }
+                None => BTreeMap::new(),
+            },
+            (None, _) => BTreeMap::new(),
         };
         let terrain = if terrain.script.is_some() {
             let texts: Vec<&str> = sources.values().map(String::as_str).collect();

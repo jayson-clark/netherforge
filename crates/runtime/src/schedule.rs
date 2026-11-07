@@ -13,7 +13,8 @@
 //! gap (`02:30` on the night clocks jump from 02:00 to 03:00 is 03:30), and one that happens twice is the first.
 //!
 //! The zone is `config.yml`'s `schedules.time-zone` (`crate::config` reads it into `session::Config::time_zone`).
-//! Not yet: the test servers' scaled clock (`config::RuntimeConfig::wall_clock_rate` is read, not applied).
+//! The integration tests' dev servers run the wall clock faster (`-Dnetherforge.test.wall-clock-rate`, Kotlin's
+//! `ScaledClock`): from the first time it's read in the process, so a reload doesn't set it back.
 
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
@@ -270,15 +271,26 @@ pub struct Schedules {
     last_runs: HashMap<String, BTreeMap<String, i64>>,
     /// The wall clock, in Unix milliseconds, when a test sets one.
     pub now: Option<i64>,
+    /// How many times as fast the wall clock runs: 0 and 1 are the real one.
+    pub rate: f64,
 }
 
 impl Schedules {
     pub fn now(&self) -> DateTime<Utc> {
         match self.now {
             Some(millis) => DateTime::from_timestamp_millis(millis).unwrap_or_default(),
+            None if self.rate > 0.0 && self.rate != 1.0 => scaled_now(self.rate),
             None => Utc::now(),
         }
     }
+}
+
+/// The wall clock `rate` times as fast, from the first time it's read in this process.
+fn scaled_now(rate: f64) -> DateTime<Utc> {
+    static START: std::sync::OnceLock<DateTime<Utc>> = std::sync::OnceLock::new();
+    let start = *START.get_or_init(Utc::now);
+    let real = (Utc::now() - start).num_milliseconds() as f64;
+    start + chrono::Duration::milliseconds((real * rate) as i64)
 }
 
 /// `nf.schedule` and `Schedule`, for one room.
@@ -536,5 +548,24 @@ impl Service for SchedulesService {
         let mut schedules = self.shared.schedules.borrow_mut();
         schedules.entries.clear();
         schedules.last_runs.clear();
+    }
+}
+
+#[cfg(test)]
+mod scaled_tests {
+    use super::*;
+
+    #[test]
+    fn a_faster_wall_clock_runs_that_many_times_as_fast_and_the_real_one_doesnt() {
+        let fast = Schedules {
+            rate: 1000.0,
+            ..Schedules::default()
+        };
+        let real = Schedules::default();
+        let (a, ra) = (fast.now(), real.now());
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        let (b, rb) = (fast.now(), real.now());
+        assert!((b - a).num_seconds() >= 20, "{a} {b}");
+        assert!((rb - ra).num_seconds() < 5, "{ra} {rb}");
     }
 }

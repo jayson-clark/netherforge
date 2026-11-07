@@ -18,7 +18,14 @@
 import { asyncValue } from '../../src/async.ts'
 import { acceptsNil, parseLuaType, withoutNil, type TypeNode } from '../../src/luaType.ts'
 import { requirementSentence } from '../../src/requirements.ts'
-import type { ApiSpec, CommandArgumentType, EventSpec, Fn, LuaClass } from '../../src/types.ts'
+import type {
+  ApiSpec,
+  CommandArgumentType,
+  EventSpec,
+  FeatureId,
+  Fn,
+  LuaClass,
+} from '../../src/types.ts'
 import { eventAlias, eventedClasses } from './common.ts'
 
 /** How one value crosses: one node per node of the type grammar. */
@@ -144,7 +151,8 @@ export interface ClassBinding {
 /** A shape some binding reads or pushes, which gets a data class. */
 export interface ShapeBinding {
   shape: LuaClass
-  fields: { name: string; codec: Codec; doc: string }[]
+  /** Each field, with the feature it needs (`since`) when the spec gates it. */
+  fields: { name: string; codec: Codec; doc: string; since?: FeatureId }[]
   /** Some binding reads it from Lua (a parameter, an option table's field, an event's writable field). */
   read: boolean
   /** Some binding pushes it to Lua (a return, an event's payload). */
@@ -487,6 +495,7 @@ export function bindings(spec: ApiSpec, options: { handwritten?: boolean } = {})
               name: field.name,
               codec: it.kind === 'any' ? { kind: 'optional' as const, inner: it } : it,
               doc: field.doc,
+              ...(field.since ? { since: field.since } : {}),
             }
           })
         }

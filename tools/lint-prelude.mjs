@@ -38,9 +38,7 @@ const common = {
 }
 
 /** Each folder checked, and what it adds to [common]. */
-const targets = [
-  { dir: path.join(root, 'packages/format/src'), settings: {} },
-]
+const targets = [{ dir: path.join(root, 'packages/format/src'), settings: {} }]
 
 const work = mkdtempSync(path.join(tmpdir(), 'netherforge-lint-prelude-'))
 try {

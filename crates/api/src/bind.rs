@@ -61,6 +61,20 @@ pub fn waiting(lua: &Lua) -> mlua::Result<Value> {
         .ok_or_else(|| mlua::Error::runtime("the API isn't installed"))
 }
 
+/// A version gate (Kotlin's `gates.lua`): `what` (`Thing:poke`, `'PokeOptions.hard'`, `the event "shake"`) needs
+/// Minecraft `since`, an error naming both versions on a server older than that. Only what the spec gates asks.
+pub fn gate(lua: &Lua, what: &str, since: &str) -> crate::ApiResult<()> {
+    let older = lua
+        .app_data_ref::<Installed>()
+        .and_then(|i| i.api.older_than(since));
+    match older {
+        Some(running) => Err(crate::ApiError(format!(
+            "{what} needs Minecraft {since} (this server runs {running})"
+        ))),
+        None => Ok(()),
+    }
+}
+
 /// `binding` as scripts call it, through the host's wrapper (`Host::script_function`): its failure raised as a
 /// string at the script's line. A Luau function can yield where a Rust one can't (without mlua's async
 /// machinery, which would drive tasks itself), so a waiting binding returns `waiting` and the wrapper yields its

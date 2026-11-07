@@ -1,14 +1,9 @@
 ---
 name: lua-api
-description: Adding or changing anything a NetherForge Lua script can call - the spec in packages/api/ comes first, then pnpm generate (api.json, LuaLS stubs, docs/reference, and the runtime's bindings - bindings.lua, the Kotlin LuaApi interfaces, primitives, the event registry and typed payloads), then implementing the generated interface (or the prelude, for impl lua), then the conformance test. The type grammar, the binding model, events on classes, and the API's naming, error and nil-vs-error conventions. Read before touching packages/api/, the prelude (lua/prelude.lua and lua/prelude/*.lua), the runtime's implementations (crates/runtime) or its generated bindings (crates/api).
+description: Adding or changing anything a NetherForge Lua script can call - the spec in packages/api/ comes first, then pnpm generate (api.json, LuaLS stubs, docs/reference, and the runtime's Rust bindings in crates/api - a trait per class, the glue, codecs, the event registry and typed payloads, version gates), then implementing the generated trait in crates/runtime, then a runtime test. The type grammar, the binding model, events on classes, and the API's naming, error and nil-vs-error conventions. Read before touching packages/api/, the runtime's implementations (crates/runtime) or its generated bindings (crates/api).
 ---
 
 # The Lua API
-
-> **The runtime is Rust now** (`crates/runtime`, see the plugin-runtime skill, which has a section for each area with
-> its files and the decisions the port took). What this skill says scripts see, and what the Kotlin adapter
-> (`apps/plugin/paper-common`, `paper-internals`, the testkit) does, holds. Where it names the Kotlin runtime's classes
-> (`apps/plugin/runtime/...`, deleted), read them as what the Rust module of the same area was ported from.
 
 ## One source, five consumers
 
@@ -21,12 +16,13 @@ global, namespace, handle class, event (on the class it's about) and payload sha
 | LuaLS users (VS Code, nvim) | `packages/api/generated/luals/nf.lua` (`---@meta` stubs), `surfaces/` |
 | the docs                    | `docs/reference/*.md`                                                 |
 | the runtime's bindings      | `crates/api/src/generated/` (Rust)                                    |
-| the conformance test        | `packages/api/generated/api.json`                                     |
+| tools reading the whole API | `packages/api/generated/api.json`                                     |
 
 **Terrain scripts have an API of their own** (W5.6): `packages/api/src/terrain.ts` (`terrainApi`:
 `Terrain`, `Noise`, `Chunk`, the `TerrainStages` a script returns, what the sandbox removes). It isn't `nf`'s and
-nothing of the runtime is generated from it: the script runs in format's own Lua states (`TerrainScriptGlue`, see
-project-format's "Lua stages"), on the server's chunk threads and in the editor's preview. `pnpm generate` writes its
+nothing of the runtime is generated from it: the script runs in `crates/terrain`'s own Luau states (its
+`glue.luau`; format's Kotlin `TerrainScriptGlue` for the editor's JS side, see project-format's "Lua stages"), on the
+server's chunk threads and in the editor's preview. `pnpm generate` writes its
 stubs (`generated/luals/terrain.lua`, classes on local tables, no `nf`), its page (`docs/reference/terrain-scripts.md`,
 `emit/terrain.ts`, reusing `fnDoc`/`fieldsTable`/`fnStub`) and `generated/terrain.json`, which format's
 `TerrainScriptApiTest` holds the glue to. Change the spec first, as for `nf`.
@@ -84,8 +80,8 @@ The runtime is Rust; how its bindings work is the plugin-runtime skill's "The AP
   `NAMING_EXCEPTIONS` there, each with its reason; an
   exception or action verb nothing needs any more fails the test.
 - Errors a script sees name fields in Lua spelling: a format message that
-  names a file field (`maxStackSize`) goes through `luaSpelling`
-  (`api/Definitions.kt`) on its way to Lua.
+  names a file field (`maxStackSize`) is put in Lua spelling (`crates/runtime/src/definitions.rs`) on its way to
+  Lua.
 - Namespaces are called with `.` (`nf.centities.spawn`), handles with `:`
   (`this:play_animation`). A handle method called with `.` errors with a hint.
 - **`nf` and its namespaces.** `nf` holds the core verbs (`on`, `emit`,
@@ -97,11 +93,9 @@ The runtime is Rust; how its bindings work is the plugin-runtime skill's "The AP
   fields), each field by its own type's codec, so a field may be anything a
   parameter may (a handle, a list of handles, a map, a union, another shape).
   An `any` field (a `context`) is the Lua value itself, which the
-  implementation `keep()`s as a `LuaRef` (the very value, in the registry until
-  `host.unref`) to hold past the call and hands back through `pushValue`.
-- **JSON.** The prelude's one Lua↔JSON codec (the `json` module:
-  `host.json_encode` and `json_decode`, reached through `LuaHost.encodeData`,
-  `json`, `keepData` and every `JsonElement` `pushValue` pushes) is what
+  implementation keeps as a registry reference (the very value) to hold past the call and hands back as it was.
+- **JSON.** The runtime's one Lua↔JSON codec (`crates/luau/src/json.rs`, Rust, with the API crate's handle tags,
+  `SavedHandles`) is what
   `data()` tables, `Item.data` (and the item table as a whole), `nf.json`,
   `File:read_json`/`write_json` and the tables `nf.menus.create`,
   `nf.dialogs.create` and `nf.recipes.create` take all go through, so a value
@@ -113,22 +107,20 @@ The runtime is Rust; how its bindings work is the plugin-runtime skill's "The AP
   sorted, and a script's own key that would read as a tag (`$vec3`, `$$vec3`)
   written with one more `$` (any other key, `$ref`, as it is, so JSON for
   another service is what the script said). A handle class becomes saveable
-  with `saveable: true` on the class at the top of its chain (the generator writes `saved_handles` into `bindings.lua`). What can't be written is a problem at its
+  with `saveable: true` on the class at the top of its chain (the generator lists it in `handles.rs`' `SAVEABLE`, which `SavedHandles` reads). What can't be written is a problem at its
   key path saying what can't be done (`data.fn: a function can't be saved`,
   `value.fn: a function can't be written as JSON`): logged and skipped for a
-  saved table (`data/ScriptData.kt`), an error anywhere else. Anything new that
+  saved table (`crates/runtime/src/data.rs`), an error anywhere else. Anything new that
   turns script values into JSON or back (`block:data()`, a database row) uses
   the same codec.
 - **A typo is an error; a condition is `nil`/`false`.** An unknown event,
-  centity id or animation is an error at the script's line (a
-  `LuaApiException` from Kotlin, or `want()` in Lua for argument types).
+  centity id or animation is an error at the script's line (an `ApiError` from the implementation, raised by the
+  binding's shim at the script's line).
   A player who logged off, a removed centity, a path outside the data folder,
   a block state the server doesn't have: `nil` or `false`, never an error, so
   code holding a handle from earlier needn't guard every call.
-- Argument _type_ errors come from the codecs, in Kotlin, located at the
-  caller's line (`LuaCall.arg`); a hand-written function raises its own in Lua
-  (`want`, `want_opt`) with a level that points at the caller. Kotlin can
-  throw for everything else; the error handler finds the script's frame.
+- Argument _type_ errors come from the codecs (`crates/api/src/codec.rs`), located at the caller's line; the
+  implementation returns an `ApiError` for everything else, and the shim raises it there too.
 - Every position, offset, rotation, velocity, direction and scale is a
   `Vec3`, and every getter returns one value (`translation()` → `Vec3?`, one
   nil check). A place to put something is `Location|Vec3`, a bare vector
@@ -138,14 +130,13 @@ The runtime is Rust; how its bindings work is the plugin-runtime skill's "The AP
   `nf.server.unix_time()` is the wall clock, for timestamps only.
 - Text players see is MiniMessage, typed `Text`.
 - **Version gates**: a function, event or option-table field
-  newer than the oldest supported Minecraft has `since` in the spec. The docs
-  and stubs say so, `VersionGates.kt` lists it, and the runtime's `gated` core
-  primitive hands the prelude every gate newer than the server: it replaces
-  such a function with one that errors "`X` needs Minecraft V (this server
-  runs W)", and `:on` and `check_shape` refuse such an event or field the
-  same way, as does a shape's codec in Kotlin (`LuaHost.gates`, from
-  `RuntimeApi.gates`). Nothing is gated while the target is the oldest
-  supported version.
+  newer than the oldest supported Minecraft has `since` (a feature of format's feature table) in the spec. The docs
+  and stubs say so, and the generator puts the gate in the Rust glue: a gated function's binding, a gated option
+  field's codec (when the script set it) and a gated event's `EventType.since` (checked by `:on`) each ask
+  `netherforge_api::bind::gate`, which asks the runtime's `Runtime::older_than` (the server's version against the
+  feature's, `crates/runtime/src/lib.rs`) and errors "`X` needs Minecraft V (this server runs W)". Nothing ungated
+  pays for it. Nothing is gated while the feature table is empty; `bindings.test.ts`' version gates use made-up
+  features, and `crates/api/tests/bindings.rs` the gate itself.
 - Values that are data, not handles, are plain tables: an item is an `Item`
   table (`ItemDef` in Lua spelling, strict on read: `kind` is its definition,
   `data` the script's own data saved on the stack, and an opaque `raw` field
@@ -156,8 +147,8 @@ The runtime is Rust; how its bindings work is the plugin-runtime skill's "The AP
   any file beside it that it requires (it runs in the script's scope); a
   module gets nothing extra.
   Parts of a resource are reached from it: `this:node(name)`,
-  `this:slot(index)`, `this:button(key)`. The conformance test checks each
-  surface's globals and that `this` is the class it declares. LuaLS can't
+  `this:slot(index)`, `this:button(key)`. The runtime's tests check each
+  surface's `this` is the class it declares. LuaLS can't
   tell surfaces apart (it ignores nested `.luarc.json`), so `nf.lua` types
   `this` as the union `Centity|Menu|Dialog|ProjectItem`, `luals/surfaces/<surface>.lua`
   types it per surface, and new scripts start with
@@ -165,14 +156,14 @@ The runtime is Rust; how its bindings work is the plugin-runtime skill's "The AP
 - Things a script registers belong to its scope and go when it unloads; a
   handler on a handle also goes when the handle's thing does. So do things a
   script _makes_ (a playing particle effect, a playing cutscene (whose player is put back), a menu template, a dialog from
-  `nf.dialogs.create`): the runtime files each under its scope and ends it in
-  its service's `scopeReleased` (see plugin-runtime, "The session and its services"), after the scope's own subscriptions are
+  `nf.dialogs.create`): the runtime files each under its scope and ends it when the scope is released (each
+  service hears it: plugin-runtime, "Sessions"), after the scope's own subscriptions are
   gone (so only other scopes' handlers hear an effect's `end`).
 - **Made in Lua, held to the files' rules.** `nf.menus.create` and
   `nf.dialogs.create` take a table in the file's shape in Lua spelling
   (snake_case keys, `Item` tables), turned into the format's model and run
   through the same strict parser and validator as `menu.json`/`dialog.json`
-  (`api/Definitions.kt`); a problem's JSON path comes back in Lua spelling
+  (`crates/runtime/src/definitions.rs`); a problem's JSON path comes back in Lua spelling
   (`definition.inputs[1].max_length`, 1-based list positions). Their ids are
   UUIDs, which never collide with a folder id.
 - **Events live on the handle they're about**: a bare
@@ -183,7 +174,7 @@ The runtime is Rust; how its bindings work is the plugin-runtime skill's "The AP
   fields do. Custom events have a `:` in their name (`nf.emit`,
   `centity:emit`). The script body is load; there are no hooks.
 - **Spec flags beyond the signature** (`Fn` in `types.ts`): `since` (version gate, see
-  minecraft-versions), `waits` (task-only: hand-written in the prelude's `running_task`,
+  minecraft-versions), `waits` (task-only: the binding returns `Waiting` and its shim yields the task,
   `---@async` in the stubs so LuaLS's `not-yieldable` flags a handler calling it; an `async`
   function's callback form is not marked) and `requires` (`moderation`, `http`, `db` or
   `plugin:<name>`; `src/requirements.ts` says how each is declared and what it lets scripts do).
@@ -209,34 +200,23 @@ The runtime is Rust; how its bindings work is the plugin-runtime skill's "The AP
   and the returns `T?, string?` (the "Async failure" decision: the one
   exception to one return, which `spec.test.ts` allows for `async` only), and
   the doc sentence on both forms. The generated binding is the same for every
-  one: `async.begin(what, callback)` (the prelude's `tasks` module) checks the
-  callback or, without one, that a task is running (the error at the
-  script's line, before anything starts) and makes its waker; the primitive is
-  called straight from the API function (so its argument errors point at the
-  script), and Kotlin's interface returns a `CompletionStage<T>`, which the
-  primitive hands to `Marshal.await` with the waker (`call.keep`), answering
-  the wait's id; in a task, `async.wait` suspends until the waker resumes it
-  with `value, err`, and ending the task cancels the wait (`async.cancel`).
-  The callback form returns nothing. Delivery is the runtime's `AsyncWork`
-  (plugin-runtime, "Threading"); a failure the script should read is a
-  `WorkFailed`. A handle method's wait belongs to the scope whose code called
-  it (`async.begin` hands that scope back, and the binding passes it to the
-  primitive); a namespace function's to the scope whose `nf` it is. The callback
+  one (`crates/api/src/pending.rs`): it reads the callback, or, without one, asks `Runtime::waiting_task` that a task
+  is running (the error at the script's line, before anything starts); the trait's method returns a `Pending<T>`,
+  which `pending::defer` files under the calling scope, and in a task the binding yields until the value is
+  delivered (`wait_on`), resuming it with `value, err`; ending the task cancels the wait. The callback form returns
+  nothing. Values are delivered at a tick boundary (plugin-runtime, "Async values"); a failure the script should
+  read is the pending's error. A handle method's wait belongs to the scope whose code called it; a namespace
+  function's to the scope whose `nf` it is. The callback
   is always the last argument, so a call without options passes `nil` for them
   (`world:locate_biome("minecraft:desert", nil, function(position, err) ... end)`).
-  A parameter can't take a name the binding's own locals use (`waker`, `task`,
-  `token`, `scope`, `wait_id`, `value`, `err`) or the chunk's (`prim`, `want`, ...):
-  generate says so, for every generated function, since a shadowed one is a bug
-  (and a lint failure in `bindings.lua`).
   An async function's value can't be optional: a search that finds nothing
   (`World:locate_biome`) is `nil, err` saying so, like any other failure.
 - **Handlers are synchronous; tasks wait.** Only code
   running in an `nf.task` may call something that waits (`nf.wait`,
   `wait_until`, `wait_for`, `dialog:ask`); anywhere else it's an error that
-  says to start a task. A new waiting function is hand-written in the
-  prelude's `tasks` module: `running_task(what)` straight from the API
-  function (it's what refuses handlers, foreign coroutines and C callbacks),
-  then `sleep` or `wait_events`. A wait that listens to a handle ends the task
+  says to start a task. A new waiting function is `waits: true` in the spec: its implementation registers the
+  task's wake-up and returns `Waiting` (`crates/runtime/src/scripts.rs` has `nf.wait`, `wait_until`, `wait_for`),
+  and `Runtime::waiting_task` is what refuses handlers and foreign coroutines. A wait that listens to a handle ends the task
   if the handle goes. Its doc says "Only in a task".
 - A parameter named `...` (last) is a vararg: `nf.task(callback, ...)`. LuaLS and
   the docs print it as is; the conformance test accepts a function that takes
@@ -267,21 +247,15 @@ the connection is `""` for the package's own SQLite file, else a name from
 `config.yml`'s `databases:`, W2.3), the model for a handle whose thing lives
 for the plugin's life rather than a session. One class, one `DatabaseImpl`,
 whichever it is: what differs is the `SqlDatabase` behind it (see the
-plugin-persistence skill). `NfImpl.db(caller, name)` checks the name exists and
-lists the calling package (`RemoteDatabases.problem`), an error at the line;
-the `db` requirement is the generated primitive's, as for `nf.db()`. Its three functions are `asyncFunction`s (`spec/db.ts`), so the
-Kotlin interface (`DatabaseApi`) returns `CompletionStage`s: `DatabaseImpl`
-validates on the main thread (SQL that isn't one statement, a param SQLite has
-no value for: errors at the script's line) and starts the work on the
-database's lane; what only the database can say is a `WorkFailed`, the
-script's `nil, err`. `params` is a `table` read while the call lasts and
-converted to Kotlin values before the work starts (a Lua value must never
-cross to the worker). The handle isn't checked against the calling package:
-a handle only comes from its package's `nf.db()`, and `PackageNames.calling()`
-is the scope running, which for a package's module called by another
-package's script is the caller's. An async function in `ConformanceTest`
-returns nothing when it's given its callback, so its `returns` aren't
-checked there; tests that use it in a task cover those.
+plugin-persistence skill). `nf.db(name)` (`crates/runtime/src/databases.rs`) checks the name exists and
+lists the calling package, an error at the line; the `db` requirement is the generated binding's, as for
+`nf.db()`. Its three functions are `asyncFunction`s (`spec/db.ts`), so the trait (`DatabaseApi`) returns
+`Pending`s: the implementation validates on the main thread (SQL that isn't one statement, a param SQL has no
+value for: errors at the script's line) and starts the work on the database's lane; what only the database can say
+is the script's `nil, err`. `params` is a `table` read while the call lasts and converted to Rust values before the
+work starts (a Lua value must never cross to the worker). The handle isn't checked against the calling package: a
+handle only comes from its package's `nf.db()`, and the calling package is the scope running, which for a package's
+module called by another package's script is the caller's.
 
 ## Handles to a connection: `HttpStream`, `WebSocket`
 
@@ -300,8 +274,9 @@ What `nf.wasm` makes belongs to the scope that made it, and only a namespace fun
 `Caller`); a sync handle method gets none (its binding never calls `marshal.caller`). So the module is a string
 every `nf.wasm` function takes (`instantiate`, `run`, `start`, `functions`: each with `requires: 'wasm'`), not a
 handle whose methods would make things. `WasmInstance` (keyed by number) and `WasmProcess` (number and the module's
-server name, spelled for the reader by `module()`) are what they make. A call's `args` is a `table`, read in Kotlin
-like `Database`'s params so integers stay 64-bit; results are `any[]` (integers and numbers as they are). A program is
+server name, spelled for the reader by `module()`) are what they make. A call's `args` is a `table`, read in Rust
+like `Database`'s params (a whole number in the safe range is an integer); results are `any[]` (an `i64` outside the
+safe range as a string of its digits). A program is
 like a WebSocket: returned at once, events after (`output`, `end`), limits ending it rather than erroring. The
 naming rules made `args`/`env` `arguments`/`environment`.
 
@@ -343,7 +318,7 @@ are top-level.
    but a function. A handler's assignment is checked at its line by the payload
    field's codec (the event core's `__newindex` calls the `events.check`
    primitive with the first stage's owner and event), and after the handlers
-   `LuaHost.emit` reads every writable field back with it into the payload, so
+   the runtime's emit (`crates/runtime/src/scripts.rs`) reads every writable field back with it into the payload, so
    a value changed in place (an item in a list) counts too; one that can't be
    read leaves the field as it was, with a warning in the log. A new
    `player_*` event on `nf` is on `Player` too, without the prefix
@@ -436,8 +411,7 @@ goes on the class it applies to**, so no class has one that can only answer
   list everything a class has. The conformance test holds each method table to
   own + everything up the chain.
 - A class with events of its own declares `on`/`once`
-  (`eventFunctions('Mob', ...)`), and `schema.event_functions` lists it, so the
-  prelude's `handwritten` gets the shared `on`/`once` bodies for it.
+  (`eventFunctions('Mob', ...)`), and the runtime's `on`/`once` (`scripts.rs`) serve every evented class.
 
 ## Blocks
 
@@ -455,10 +429,10 @@ The player's advancement functions (`grant_advancement`, `revoke_advancement`,
 `has_advancement`, `advancement_progress`) take **project ids**: bare is the
 project's own (`"treasure_hunter"`), `ns:id` a package's exported one,
 `minecraft:` the game's; `grant`/`revoke` take an optional criterion name.
-The id is resolved by `Advancements` (the `names` resolver, as for items),
+The id is resolved by the advancements service (named as the calling package names it, as for items),
 so an unknown one is a script error, not a silent false.
 
-**Settings.** `nf.config(name)` (spec `nf.ts`, `NfImpl.kt`) gives the caller's
+**Settings.** `nf.config(name)` (spec `nf.ts`, `crates/runtime/src/settings.rs`) gives the caller's
 own package's setting, typed, and an unknown name is an error (it's a typo, not
 absence). It also records that the scope read it, which is what `OwnerSettings`
 restarts it by; a script that listens for `setting_changed` (events.ts: `setting`,
@@ -466,39 +440,19 @@ restarts it by; a script that listens for `setting_changed` (events.ts: `setting
 
 ## Gotchas
 
-- Never name a Kotlin `Lua.*` extension after a luajava member
-  (`ref`, `push`, `type`, …): members win silently, which is why the
-  generated reads are `argString`. See plugin-runtime.
 - `nf` is built per scope; don't store functions from it in another scope's
   tables and expect the registrations to belong to that other scope.
 - A handler's error never disables its scope (only a failing body does): it's
-  reported through `Scripts.onError`, rate-limited in `ScriptReports`, and
-  the subscription is cancelled after `Scripts.MAX_ERRORS` in a row.
-- The event core's error levels count frames: `on`/`once`/`emit` call
-  `subscribe`/`emit_custom` as a statement, never a tail call, so `level 3`
-  is the script's line.
+  reported (rate-limited) by `Scripts`, and the subscription is cancelled after `MAX_ERRORS` in a row.
 - `packages/api/src/spec.test.ts` (vitest) checks the spec itself: unique names,
   every type parses and names only declared types, every handle class says
   what identifies it, everything documented. `scripts/emit/bindings.test.ts`
-  covers the binding model (its decisions on small made-up specs, not the emitted text); the runtime's `CodecTest` holds the codecs'
-  messages, `ConformanceTest` round-trips a sample of every shape that
-  crosses (every field set to a value of its declared type) through its codec,
-  and `HandleTest` holds the handle table to its promises: a handle Lua lets
-  go of leaves it (`LuaHost.collectGarbage`, `sweepHandles`), one handed out
-  while its entity was unloaded becomes its class, and a player's name is
-  looked up. A test that needs a handle Lua no longer holds collects first:
-  one still held keeps what its entry knew.
-- **What calls cost a script is golden** (`function-costs.tsv`, `scenario-costs.tsv`; testing
-  skill, "Goldens"). Every check a binding makes is inline, its checker called only to raise
-  the error (`type_of(x) ~= "number"`, a handle's set, a choice set's `has`, `genuine_mt(v) ~=
-Vec3_mt`), and a namespace under `nf` is filled when a script first reaches it
-  (`namespaces[path]`, the prelude's `scopes.lazy`): a scope is made for every centity spawned.
-  JSON a script hands over is read in Kotlin (`PlainJson`, exactly as the codec would
-  write it, floats through `CodecNumbers`), the codec only for what Kotlin can't say the same.
-- `BindingBenchmark` times the hot bindings (a node's transform, a handle back,
-  a handle and a union as arguments, an option table); run it before and after
-  changing the codecs or the prelude's handles (it's skipped unless
-  `NETHERFORGE_BENCH=1`).
+  covers the binding model (its decisions on small made-up specs, not the emitted text) and a few emitted lines
+  (version gates); `crates/api/tests/bindings.rs` runs the generated glue end to end on a fake (arguments, callers,
+  mistakes, shapes, handles, unported classes, gates), and `crates/runtime/tests/` the implementations.
+- **What scripts do all the time is golden** (`crates/runtime/tests/data/scenario-costs.tsv`, in steps; the
+  plugin-sandbox skill's "The cost golden"). A namespace under `nf` is made when a script first reaches it
+  (`bind.rs`' `namespace`), so a scope made for every centity spawned costs nothing it doesn't use.
 - **The LuaLS stubs are checked by running LuaLS.** `scripts/emit/luals.check.test.ts`
   runs `lua-language-server --check` over `examples/showcase` and
   `scripts/emit/luals-probe/` (events on every class, `Vec3` maths both ways,
@@ -524,6 +478,6 @@ Vec3_mt`), and a namespace under `nf` is filled when a script first reaches it
 ```sh
 pnpm generate
 pnpm --filter @netherforge/api test lint
-node tools/gradle.mjs :plugin:runtime:test --tests '*ConformanceTest*'
+cargo test -p netherforge-api -p netherforge-runtime
 LUA_LANGUAGE_SERVER=/path/to/bin/lua-language-server pnpm --filter @netherforge/api exec vitest run luals
 ```

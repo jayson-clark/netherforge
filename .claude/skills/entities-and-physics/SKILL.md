@@ -5,15 +5,18 @@ description: Centity node trees, transforms, animation and hitboxes as the serve
 
 # Entities and physics
 
-> **The runtime is Rust now** (`crates/runtime`, see the plugin-runtime skill, which has a section for each area with
-> its files and the decisions the port took). What this skill says scripts see, and what the Kotlin adapter
-> (`apps/plugin/paper-common`, `paper-internals`, the testkit) does, holds. Where it names the Kotlin runtime's classes
-> (`apps/plugin/runtime/...`, deleted), read them as what the Rust module of the same area was ported from.
-
 Spec: `docs/format/centity.md`. This skill is the runtime's side of
 centities: the tick pipeline, instances and their entities, natural
 spawning, hitboxes and click routing (the sections at the end), where
 shapes come from, and physics.
+
+The code is `crates/runtime/src/centity/` (one module per part: `instance.rs`, `api.rs`, `animation.rs`,
+`keyframes.rs`, `hitboxes.rs`, `spatial.rs`, `movers.rs`, `flights.rs`, `pathing.rs`, `paths.rs`, `world_shapes.rs`,
+`physics.rs`, `natural.rs`, `drawing.rs`, `ropes.rs`, `saving.rs`, …; the plugin-runtime skill's "Centities" has the
+map). The types kept their names from the Kotlin runtime it was ported from (`Centities`, `Instance`, `Mover`,
+`Flight`, `Walk`, `Space`, `Walker`), their methods in snake_case (`Centities.setHidden` below is
+`Centities::set_hidden`). Its tests are `crates/runtime/tests/centities.rs` (the shared fake in `tests/support`) and
+each module's own.
 
 ## Shapes the server can and can't know
 
@@ -35,7 +38,7 @@ The plugin never needs a client-only fact (game-data skill). So:
 
 ## Spatial queries and `touch`
 
-`world:overlap_box`/`overlap_sphere`/`overlap_cone`, `sweep` and `nearest` (`centity/Spatial.kt`):
+`world:overlap_box`/`overlap_sphere`/`overlap_cone`, `sweep` and `nearest` (`centity/spatial.rs`):
 a `QueryShape` (its broad-phase `region`, the `origin` distances and the line of sight are measured
 from, and `test(box)`, the narrow phase) run by `SpatialQueries` against centities' hitboxes through
 `Centities.obstacles` (the same `ObstacleGrid` physics uses, whose `Obstacles.nodes` says which node
@@ -46,14 +49,14 @@ test against the box grown by the radius) and halves its way in at an edge or a 
 casts one block ray first and shortens the capsule to it, so nothing past the block is found.
 `world:raycast`'s centity half uses the grid too. `touch` is `Centities.touches()`, after the whole
 pass so every instance has moved: `SpatialQueries.contacts` per listening instance, compared with
-`Instance.touching`. Tests: `SpatialQueryTest`.
+`Instance.touching`. Tests: `spatial.rs`' own and `crates/runtime/tests/centities.rs`.
 
 ## Bodies (`centity.json`'s `body`)
 
 A centity's `body` moves the whole centity, where a node's `physics` moves one node. Format: `BodyDef`
 (the file), `ResolvedBody` (defaults and clamps, what the validator's `centity.body-*` problems say),
 `CompiledCentity.body`. Runtime: `Instance.mover` (a `Mover`: settings, velocity, walk, what its last
-move found; reset by `redefine`) and `centity/Movers.kt`, stepped in the pipeline after a walk and
+move found; reset by `redefine`) and `centity/movers.rs`, stepped in the pipeline after a walk and
 before physics (skipped while `move_to` walks it). One step: drag, then gravity (less in a liquid,
 read from the block at its middle), then the walk's approach (so a walk lands on exactly the speed it
 asks for); then the move, Minecraft's way: one `RegionShapes` read of the blocks around the swept box
@@ -62,19 +65,19 @@ blocked sideways move on the ground is tried again from `stepHeight` higher and 
 further. A body that starts overlapping a block rises out. `jumpSpeed` halves its way to the launch
 speed whose apex, integrated tick by tick exactly as the step does, is the height asked. The anchor is
 set directly (only into a chunk whose entities are loaded), as a walk sets it; `land` and `bump` are
-raised from what the step returns. Tests: `CentityBodyTest`.
+raised from what the step returns. Tests: `crates/runtime/tests/centities.rs`.
 
 ## Flights (`centity:launch`)
 
 `Instance.flight` (a `Flight`: the launch's options resolved, with its velocity, age, bounces, whether it's
-`still` (stuck or resting) and `hitAt`, what it hit and when), stepped by `centity/Flights.kt` first in the
+`still` (stuck or resting) and `hitAt`, what it hit and when), stepped by `centity/flights.rs` first in the
 pipeline; while it flies a walk is ended and the body waits. One step: homing (the nearest a `Sphere` query
 finds, turned toward by at most its rate), gravity after its delay, drag; one block ray from here to there,
 then one `Capsule` query up to the block for what the path touches, in order, each raising `hit` (cancelled:
 it passes) and using a `pierce` or ending it; then the block: stick, bounce (the normal part by `bounce`, the
 part along the face by `friction`, resting on a floor below `rest_speed`) or end. A handler that removes it,
 stops it or launches it again ends that step (`instance.flight !== flight`). `end` raises `flight_end` and
-removes it unless `remove_on_end` is false. Tests: `FlightTest`.
+removes it unless `remove_on_end` is false. Tests: `crates/runtime/tests/centities.rs`.
 
 ## Physics: Rapier
 
@@ -172,15 +175,14 @@ nothing.
 
 Our own A*, not the game's pathfinder (centities aren't mobs). Where things are:
 
-| Path (`apps/plugin/runtime/.../`) | Owns                                                                                          |
-| --------------------------------- | --------------------------------------------------------------------------------------------- |
-| `pathing/Space.kt`                | `BlockShapes` (a block's collision boxes, null = unloaded), `Walker`, `Space.clear`/`floorAt` |
-| `pathing/PathSearch.kt`           | the shared `AStar` core, `GroundSearch` (walk), `AirSearch` (fly), smoothing, `NODE_LIMIT`    |
-| `centity/WorldShapes.kt`          | `BlockShapes` from `WorldOps.collisionBoxes`: `RegionShapes` (one call), `BrickShapes` (8³)   |
-| `centity/CentityPaths.kt`         | `Walk` (on `Instance.walk`), `move_to`'s start, the per-tick step, re-paths, `path_end`       |
+| Path (`crates/runtime/src/centity/`) | Owns                                                                                                                                                     |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pathing.rs`                         | `Space` (a block's collision boxes, none = unloaded), `Walker`, `clear`/`floor_at`; the shared A*, `ground` (walk), `air` (fly), smoothing, `NODE_LIMIT` |
+| `world_shapes.rs`                    | the blocks of one region from `WorldOps.collision_boxes`: one call, filed by block                                                                       |
+| `paths.rs`                           | `Walk` (on `Instance.walk`), `move_to`'s start, the per-tick step, re-paths, doors, `path_end`                                                           |
 
-- **Platform-free search**, tested alone (`pathing/PathSearchTest`) against a
-  map of blocks, and on spawned centities in `CentityPathTest`. It only asks
+- **Platform-free search**, tested alone (`pathing.rs`' own tests) against a
+  map of blocks, and on spawned centities in `crates/runtime/tests/centities.rs`. It only asks
   `BlockShapes`, i.e. the live **collision** shapes (`GameData`'s server
   facts): a fence is 1.5 tall, a carpet nothing. Unloaded chunks are walls,
   never loaded. Other centities' hitboxes aren't obstacles.
@@ -239,9 +241,9 @@ Our own A*, not the game's pathfinder (centities aren't mobs). Where things are:
 waits for it to settle).
 
 **Add a `physics` field**: format (project-format skill): the field on
-`PhysicsDef`, its default and clamp in `ResolvedPhysics.of` (format's
-`centity/ResolvedPhysics.kt`; the compiler resolves every body once, so the
-runtime only ever sees `ResolvedPhysics`; Rust's in `crates/format`), and the default in
+`PhysicsDef`, its default and clamp in `ResolvedPhysics` (format's, Kotlin's for the editor and Rust's in
+`crates/format/src/kind/centity`; the compiler resolves every body once, so the runtime only ever sees the resolved
+one), and the default in
 `codegen/Constants.kt` if the editor shows it → use it in `physics.rs` → `docs/format/centity.md`.
 
 **Add a body API**: `packages/api/` (`nodeClass`), `pnpm generate`, the new
@@ -249,7 +251,7 @@ runtime only ever sees `ResolvedPhysics`; Rust's in `crates/format`), and the de
 
 ## Centities: the tick pipeline
 
-After the centity pipeline, `ParticleEffects.tick()` makes one pass over
+After the centity pipeline, the particle effects (`crates/runtime/src/effects.rs`) make one pass over
 every playing particle effect (so a centity moved this tick is where its
 effect plays this tick): follow its target (gone: it ends `target_gone`),
 step its `EffectSampler` (always: its time is the server's), find viewers
@@ -266,18 +268,16 @@ entities-and-physics), **physics**
 (bodies move and write their nodes' translation/rotation, then `collide`,
 `wake`, `sleep`; see entities-and-physics), **scripts** (`tick`, only when
 something listens; the rate is each handler's `every`: it runs where
-`(tick + phase) % every == 0`, the phase the centity's (`Scripts.phaseOf`, a
-hash of its handle, so a crowd spreads over the ticks) or the subscription's
-id on `nf`; the event core tells Kotlin each handler's rate and phase
-(`events.listening`), and `Scripts.due` raises `tick` only on ticks one is
-due), **sync** (compose world matrices,
+`(tick + phase) % every == 0`, the phase the centity's (a hash of its handle, so a crowd spreads over the ticks)
+or the subscription's id on `nf`; `Scripts` keeps each handler's rate and phase and raises `tick` only on ticks one
+is due), **sync** (compose world matrices,
 push only what changed).
 
-### Natural spawning (`centity/NaturalSpawner.kt`)
+### Natural spawning (`centity/natural.rs`)
 
-A `RuntimeService` registered after `Centities` that runs a centity's
-`spawning` block (format's `SpawningDef`, carried on `CompiledCentity.spawning`)
-in `TickPhase.WORLD`. It spawns, keeps and removes through `Centities` and
+A session service registered after the centities that runs a centity's
+`spawning` block (format's `SpawningDef`, carried on the compiled centity)
+each tick. It spawns, keeps and removes through `Centities` and
 holds nothing that outlives the session (its per-player due times and the
 resolved rules are rebuilt).
 
@@ -313,8 +313,8 @@ resolved rules are rebuilt).
   `EntityOps.setPersistent(false)` (so a crash can't leave them in a chunk),
   `flush`/`savePlacements` never write it to the store, and a restart doesn't
   know it (its stray entities are removed by `entitiesLoaded`, as any tagged
-  entity nobody owns is). `InstanceRecord.natural` only carries it across a
-  full reload's `Handover`. `Centities.keep` clears the flag, makes the
+  entity nobody owns is). A full reload keeps it: the centities are the session's shared state (`Shared`), which
+  outlives the reload. `Centities.keep` clears the flag, makes the
   entities persistent again and marks it dirty so the store gets it.
   `spawning.keepOnInteract` calls it from `Centities.click`, once a click has
   picked a node (a click through a `raycast` node's padding keeps nothing),
@@ -322,13 +322,14 @@ resolved rules are rebuilt).
   A natural instance whose centity is deleted is discarded, never made inert.
 - **Script-temporary** (`nf.centities.spawn(kind, place, { temporary, lifetime })`): `Instance.temporary`, with
   `owner` (the spawning scope's id) and `expires` (a server tick). Persistence treats `Instance.transient`
-  (natural or temporary) alike: never staged, entities non-persistent. `Centities.scopeReleased` removes the
+  (natural or temporary) alike: never staged, entities non-persistent. A scope's release removes the
   owner's, `pass()` removes the expired before anything ticks (unloaded ones too), and `stop()` removes every
   temporary one before the scripts stop, so a full reload or a restart leaves nothing behind. `set_lifetime`
-  makes a normal instance temporary (the store forgets its row); `keep` ends both kinds. Tests: `TemporaryCentityTest`.
+  makes a normal instance temporary (the store forgets its row); `keep` ends both kinds. Tests:
+  `crates/runtime/tests/centities.rs`.
   Every `NaturalSpawner.PASS_INTERVAL` ticks a sweep removes the natural
   instances with no player within their `despawnDistance` (in their world).
-- **Tests.** `NaturalSpawningTest` runs it on the fake: `FakeWorlds.biomes`,
+- **Tests.** `crates/runtime/tests/centities.rs` runs it on the fake: `FakeWorlds.biomes`,
   `defaultBiome`, `lights` and `defaultLight` set a place's biome and light,
   `NaturalSpawner.random` takes a seed.
 
@@ -336,7 +337,7 @@ resolved rules are rebuilt).
 
 `nf.centities.spawn(..., { temporary = true, viewers = { ... } })` sets `Instance.viewers` (null: public) before
 anything is made, and `Centities.ops(instance)` sends every entity call of a private one to
-`Platform.clientEntities` (`ClientEntityOps`, `platform/Displays.kt`) instead of `Platform.entities`. Nothing else
+`Platform.client_entities` (`ClientEntityOps`, from `:plugin:platform`'s `Displays.kt`) instead of `Platform.entities`. Nothing else
 in the pipeline knows: sync, reconcile, riding, poses and clicks are the same code. The differences:
 
 - **Why it exists.** A real entity hidden with `hide_from` is still in the server's tracker, which checks every
@@ -345,9 +346,9 @@ in the pipeline knows: sync, reconcile, riding, poses and clicks are the same co
   and `CraftPlayer.canSee` at 100 players: 550 ms ticks, growing as players². Client entities aren't in a
   world, so the tracker never sees them.
 - **Who sees it.** `Instance.sees(player)`: a viewer of a private one, or anyone a public one isn't hidden
-  from (`CentityClicks` asks it). `Centities.setHidden` on a private instance edits `viewers` and pushes
+  from (the click routing asks it). `Centities.setHidden` on a private instance edits `viewers` and pushes
   `setViewers` to each entity; `hiddenFrom` stays empty. New entities get the viewers in `showNew`.
-- **Only temporary.** `spawn` requires it (`NfImpl` says so as a Lua error first) and `keep` refuses: nothing
+- **Only temporary.** `spawn` requires it (a Lua error first) and `keep` refuses: nothing
   private is ever in the store, and `stop()` removes temporary instances, so no record or handover carries one.
 - **On Paper** (`paper-common/PaperClientEntities`, a `PaperEntities` whose `make` is `World.createEntity`, so
   every display set-up is shared): packets from `paper-internals/version/ClientEntityWire` (add entity with its
@@ -360,7 +361,8 @@ in the pipeline knows: sync, reconcile, riding, poses and clicks are the same co
   `PaperClientEntities.clicked`: an interaction the player's client has, within 8 blocks of their eyes. Paper
   bots find these through `ClientEntityLookup` to click them.
 - **On the fake**: `FakeClientEntities` (a `FakeEntities`; `seenBy(player)`), and fake bots see and click the
-  hitboxes they're viewers of. Tests: `PrivateCentityTest`, and `ClientEntityOpsContract` on both servers.
+  hitboxes they're viewers of. Tests: `crates/runtime/tests/centities.rs`, and `ClientEntityOpsContract` on both
+  servers.
 
 ## Instances: transforms, anchors, looks and loading
 
@@ -396,7 +398,7 @@ in the pipeline knows: sync, reconcile, riding, poses and clicks are the same co
   `Instance.jumps` (set by `setVisible` and `set(…, instant = true)`, read up the parent chain like `edited`,
   cleared by `markSynced`) sends that node's next pose with 0 interpolation ticks, so showing, hiding and
   `{ instant = true }` moves land at once while later moves still ease. `cullSize` widens the client's culling box.
-- **Rects, images and anchored text** (`centity/DisplayDrawing.kt`, geometry in format's `DisplayGlyphs`): what the
+- **Rects, images and anchored text** (`centity/drawing.rs`, geometry in format's display glyphs): what the
   entity shows isn't the node's content but `DisplayDrawing.drawn(content)`: a rect is a text display whose text is
   one space character and whose background is the colour, an image rows of the engine's pixel glyphs one
   `<color>` per run, anchored text the text with a line width that never wraps; each with a `fit`, a matrix in the
@@ -408,7 +410,7 @@ in the pipeline knows: sync, reconcile, riding, poses and clicks are the same co
   changed it: smooth at 20 Hz), 0 when forced; the roots' least, capped at
   59, is the anchor entity's teleport duration (`Instance.moveTicks`), so a
   moving centity glides too.
-- **Clips as keyframes** (`centity/Keyframes.kt`). While only clips move a
+- **Clips as keyframes** (`centity/keyframes.rs`). While only clips move a
   node (`Instance.edited`: not it or a node above it set by a script or
   physics, hidden, re-eased, the centity not turned, no clip started,
   stopped or moved since the last sync: `AnimationPlayer.version`), sync
@@ -454,7 +456,7 @@ in the pipeline knows: sync, reconcile, riding, poses and clicks are the same co
   which also drops handlers on removed nodes) rebuild the per-node arrays by
   node name and renumber `BodyState.touching`; both set `needsReconcile`, so
   the same tick's sync spawns or retires the entities. The table a script
-  passes is read by `nodeFrom` (`api/Definitions.kt`): Lua spelling to the
+  passes is read by `centity/definitions.rs`: Lua spelling to the
   file's `NodeDef`, then format's `CentityValidator.validateNode` and
   `CentityCompiler.compileNode` (the file's one node model, not a parallel
   one). Added nodes are runtime state: `redefine` (any reload of the centity)
@@ -481,7 +483,7 @@ in the pipeline knows: sync, reconcile, riding, poses and clicks are the same co
 
 ## Hitboxes and clicks
 
-Picking and ray tests are `CentityClicks` (`Centities.click`, `clickTarget`, `aim` and `raycast` hand them
+Picking and ray tests are `centity/api.rs`' (`CentityContext::click`, `click_target`, `aim` and `raycast` hand them
 over): it reads who owns an entity, the instances' boxes and the obstacle grid, and never changes an instance
 but to keep a natural one a click reached.
 

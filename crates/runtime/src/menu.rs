@@ -15,8 +15,7 @@
 //! it takes and how many; `shift_into` moves a shift-click from below into a storage's bound slots, offering it to
 //! each slot's handlers.
 //!
-//! Not yet: a rule's `property` (project items' properties). Skins in titles are drawn from the built pack: before
-//! there is one, the words show on their own.
+//! Skins in titles are drawn from the built pack: before there is one, the words show on their own.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::rc::{Rc, Weak};
@@ -2098,11 +2097,6 @@ impl GameContext {
                 WEARABLE.join(", ")
             )));
         }
-        if rule.property.is_some() {
-            return Err(err(
-                "rule.property isn't on the Rust runtime yet (it needs project items' properties)",
-            ));
-        }
         let max = match rule.max {
             Some(max) if max < 1 => {
                 return Err(err(format!(
@@ -2112,8 +2106,12 @@ impl GameContext {
             Some(max) => Some(max.min(i64::from(i32::MAX)) as i32),
             None => None,
         };
-        let any = items.is_none() && kinds.is_none() && rule.wearable.is_none();
+        let any = items.is_none()
+            && kinds.is_none()
+            && rule.wearable.is_none()
+            && rule.property.is_none();
         let wearable = rule.wearable.clone();
+        let property = rule.property.clone();
         let context = self.clone();
         let takes = move |stack: &ItemData| -> bool {
             if any {
@@ -2153,7 +2151,13 @@ impl GameContext {
                     });
                 worn.as_ref() == Some(w)
             });
-            by_item || by_kind || by_wear
+            // A project item with the key in its `properties`, and not `false`.
+            let by_property = property.as_ref().is_some_and(|key| {
+                project
+                    .as_ref()
+                    .is_some_and(|p| context.shared.items.borrow().has_property(p, key))
+            });
+            by_item || by_kind || by_wear || by_property
         };
         Ok(Rule {
             source: rule,

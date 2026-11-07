@@ -10,7 +10,8 @@
 //! `nf.data(name)` is per package: each package has its own tables by name, under its namespace. A thing's
 //! table (`player:data()`, `centity:data()`) is the thing's, one for every package's scripts.
 //!
-//! Not yet: tagged values in saved tables (a handle, a location), which the codec reports and skips.
+//! Tagged values (a location, a handle that can be saved) go through the codec's tags (`SavedHandles`); one that
+//! can't be saved (a `Task`) is said in the log, by its key path, and left out.
 
 use std::collections::HashMap;
 use std::rc::Rc;

@@ -24,5 +24,14 @@ getrandom = "0.4"
 specta = { version = "=2.0.0-rc.25", features = ["derive", "indexmap"] }
 specta-typescript = "0.0.12"
 
+# The library the release workflow ships in the plugin jar: whole-program optimized, its symbols stripped (macOS's
+# `strip` leaves a dylib that won't load, so the workflow turns this off there and runs `strip -x` after). Its links
+# take minutes, so a local jar's library is a plain release build.
+[profile.dist]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

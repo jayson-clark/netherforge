@@ -66,6 +66,8 @@ struct Fake {
     falling: RefCell<bool>,
     /// What `block:data()` saved, by position.
     data: RefCell<HashMap<At, String>>,
+    /// Whether the server refuses to hold its carriers' states still.
+    refuses_freeze: bool,
 }
 
 fn alex() -> netherforge_platform::PlayerRef {
@@ -308,7 +310,7 @@ impl netherforge_platform::FakeBlockOps for Fake {
         None
     }
     fn freeze(&self, _: netherforge_format::kind::block::BlockCarrier) -> bool {
-        true
+        !self.refuses_freeze
     }
     fn watch(&self, _: Vec<String>, falling: Vec<String>) {
         self.lines
@@ -1004,4 +1006,34 @@ nf.on("demo:break", function() w:set_block(vector.create(1, 64, 1), "minecraft:s
         .unwrap();
     assert!(platform.data.borrow().is_empty());
     assert!(platform.records.borrow().is_empty());
+}
+
+#[test]
+fn a_server_that_wont_hold_its_carriers_still_is_a_problem_with_the_blocks() {
+    let platform = std::rc::Rc::new(Fake {
+        refuses_freeze: true,
+        ..Fake::new()
+    });
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("blocks/ruby_ore/block.json", "{}"),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let problems = session.problems();
+    let problem = problems
+        .iter()
+        .find(|p| p.code.as_deref() == Some("runtime.blocks"))
+        .unwrap_or_else(|| panic!("{problems:?}"));
+    assert!(
+        problem
+            .message
+            .contains("won't stop working note block states out"),
+        "{problem:?}"
+    );
+    assert!(
+        platform
+            .take()
+            .iter()
+            .any(|l| l.starts_with("error This server won't"))
+    );
 }

@@ -143,17 +143,19 @@ jobs:
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
-          # macOS's `strip` leaves a dylib that won't load ("mis-aligned LINKEDIT string pool").
-          CARGO_PROFILE_RELEASE_STRIP: ${{ runner.os == 'macOS' && 'none' || 'debuginfo' }}
+          # macOS's `strip` leaves a dylib that won't load ("mis-aligned LINKEDIT string pool"): cargo doesn't strip
+          # there, and `strip -x` after does.
+          CARGO_PROFILE_DIST_STRIP: ${{ runner.os == 'macOS' && 'none' || 'symbols' }}
         run: |
           if [ -n "$TARGET" ]; then
             rustup target add "$TARGET"
-            cargo build --release -p netherforge-ffi --target "$TARGET"
-            out="target/$TARGET/release"
+            cargo build --profile dist -p netherforge-ffi --target "$TARGET"
+            out="target/$TARGET/dist"
           else
-            cargo build --release -p netherforge-ffi
-            out="target/release"
+            cargo build --profile dist -p netherforge-ffi
+            out="target/dist"
           fi
+          if [ "$RUNNER_OS" = macOS ]; then strip -x "$out/${{ matrix.file }}"; fi
           mkdir -p "native/${{ matrix.folder }}"
           cp "$out/${{ matrix.file }}" "native/${{ matrix.folder }}/"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -127,6 +127,15 @@ impl ProjectItems {
     }
 
     /// Every item's id, sorted.
+    /// Whether item `id` has `key` in its `properties`, as anything but `false` (a slot rule's `property`).
+    pub fn has_property(&self, id: &str, key: &str) -> bool {
+        self.records
+            .get(id)
+            .and_then(|r| r.file.properties.as_ref())
+            .and_then(|properties| properties.get(&netherforge_format::canonical::Key::from(key)))
+            .is_some_and(|v| v.0 != serde_json::Value::Bool(false))
+    }
+
     pub fn ids(&self) -> Vec<String> {
         let mut ids: Vec<String> = self.records.keys().cloned().collect();
         ids.sort();
