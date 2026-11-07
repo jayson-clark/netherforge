@@ -54,6 +54,8 @@ pub struct ServerEvents<'a> {
     debugger: RefCell<Option<std::sync::Arc<crate::debug::Debugger>>>,
     /// The Prometheus endpoint, when `metrics:` gives it a port.
     metrics: RefCell<Option<Rc<crate::metrics::ServerMetrics>>>,
+    /// The local control endpoint, when `control:` gives it a socket or port.
+    control: RefCell<Option<Rc<crate::control::ServerControl>>>,
 }
 
 /// How often the runtime looks whether the network's policy changed, or the hub a project waits for is here.
@@ -77,6 +79,7 @@ impl<'a> ServerEvents<'a> {
             after_tick: RefCell::new(None),
             debugger: RefCell::new(None),
             metrics: RefCell::new(None),
+            control: RefCell::new(None),
         };
         events.set_profiler(profiler);
         events
@@ -97,6 +100,11 @@ impl<'a> ServerEvents<'a> {
     /// Serves the server's metrics from now on, gathered each second of ticks.
     pub fn set_metrics(&self, metrics: Option<Rc<crate::metrics::ServerMetrics>>) {
         *self.metrics.borrow_mut() = metrics;
+    }
+
+    /// Answers the local control endpoint from now on: its actions done and its snapshot made each tick.
+    pub fn set_control(&self, control: Option<Rc<crate::control::ServerControl>>) {
+        *self.control.borrow_mut() = control;
     }
 
     /// What runs at the end of every tick, once nothing holds the session (`/nf`'s held work).
@@ -373,6 +381,14 @@ impl<'a> ServerEvents<'a> {
             && let Some(session) = self.any()
         {
             session.platform().shutdown_server(reason);
+        }
+        let control = self.control.borrow().clone();
+        if let Some(control) = control {
+            let session = self.any();
+            let platform = session.as_ref().map(|s| s.platform_rc());
+            if let Some(platform) = platform {
+                control.tick(ticks, session.as_deref(), &*platform);
+            }
         }
         let after = self.after_tick.borrow().clone();
         if let Some(after) = after {

@@ -90,6 +90,8 @@ pub struct Fake {
     pub storage: RefCell<Option<std::path::PathBuf>>,
     /// The worlds saved, in order.
     pub saved_worlds: RefCell<Vec<String>>,
+    /// Each world's saving turned off or on, in order.
+    pub saving: RefCell<Vec<(String, bool)>>,
     /// Why the server was asked to stop.
     pub shutdown: RefCell<Option<String>>,
 }
@@ -119,6 +121,7 @@ impl Default for Fake {
             spawns: RefCell::default(),
             storage: RefCell::default(),
             saved_worlds: RefCell::default(),
+            saving: RefCell::default(),
             shutdown: RefCell::default(),
         }
     }
@@ -1167,6 +1170,23 @@ impl netherforge_platform::FakeWorldManagerOps for Fake {
             dimension: storage.join("dimensions").join("minecraft").join(dimension),
         })
     }
+    fn set_saving(&self, name: String, saving: bool) -> bool {
+        self.saving.borrow_mut().push((name, saving));
+        true
+    }
+}
+
+/// A server ticking at its best.
+impl netherforge_platform::FakePerformanceOps for Fake {
+    fn ticks_per_second(&self) -> f64 {
+        20.0
+    }
+    fn tick_milliseconds(&self) -> f64 {
+        5.0
+    }
+    fn last_tick_milliseconds(&self) -> f64 {
+        5.0
+    }
 }
 
 /// A structure saved as a line of its size and one per block of stone in it.
@@ -1287,6 +1307,9 @@ impl FakePlatform for Fake {
         self
     }
     fn world_manager(&self) -> &dyn netherforge_platform::WorldManagerOps {
+        self
+    }
+    fn performance(&self) -> &dyn netherforge_platform::PerformanceOps {
         self
     }
     fn structures(&self) -> &dyn netherforge_platform::StructureOps {

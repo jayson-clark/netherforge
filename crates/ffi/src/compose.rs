@@ -59,6 +59,7 @@ pub struct Running {
     bridge: Option<Rc<Bridge>>,
     profiler: Rc<Profiler>,
     metrics: Option<Rc<netherforge_runtime::metrics::ServerMetrics>>,
+    control: Option<Rc<netherforge_runtime::control::ServerControl>>,
     _admin: Option<Rc<AdminCommand>>,
 }
 
@@ -192,6 +193,9 @@ pub fn start(args: StartArgs) -> Result<Option<Rc<dyn PlatformEvents>>, String> 
     let metrics = netherforge_runtime::metrics::ServerMetrics::start(&config.metrics, &*platform)
         .map(Rc::new);
     events.set_metrics(metrics.clone());
+    let control = netherforge_runtime::control::ServerControl::start(&config.control, &*platform)
+        .map(Rc::new);
+    events.set_control(control.clone());
     if let Some(bridge) = &bridge {
         events.attach_bridge(bridge.clone());
         if let Some(debugger) = events.debugger() {
@@ -216,6 +220,7 @@ pub fn start(args: StartArgs) -> Result<Option<Rc<dyn PlatformEvents>>, String> 
         bridge,
         profiler,
         metrics,
+        control,
         _admin: admin,
     });
     RUNNING.with(|r| *r.borrow_mut() = Some(running));
@@ -416,6 +421,9 @@ pub fn stop() {
     running.profiler.await_writes();
     if let Some(bridge) = &running.bridge {
         bridge.stop();
+    }
+    if let Some(control) = &running.control {
+        control.stop(&*running.platform);
     }
     if let Some(metrics) = &running.metrics {
         metrics.stop();

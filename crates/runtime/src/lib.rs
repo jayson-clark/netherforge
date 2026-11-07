@@ -28,6 +28,7 @@ pub mod bundle_fetch;
 pub mod centity;
 pub mod commands;
 pub mod config;
+pub mod control;
 pub mod costs;
 pub mod custom_blocks;
 pub mod cutscenes;
