@@ -2100,7 +2100,7 @@ impl Platform for Unported {
     }
 
     fn watch(&self, _: crate::api::WatchedEvent, _: bool) {
-        unported("Platform::watch")
+        // Nothing to do.
     }
 
     fn export_game_data(&self) -> netherforge_format::game::GameDataBundle {

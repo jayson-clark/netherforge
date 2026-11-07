@@ -837,6 +837,17 @@ impl Scripts {
             .contains_key(&(key_of(target), event.to_owned()))
     }
 
+    /// Every event something listens for, on any target.
+    pub fn events_listened(&self) -> std::collections::HashSet<String> {
+        self.0
+            .state
+            .borrow()
+            .listeners
+            .keys()
+            .map(|(_, e)| e.clone())
+            .collect()
+    }
+
     /// Whether anything listens for `event` on any target (a world's `dusk` on any world).
     pub fn listening_anywhere(&self, event: &str) -> bool {
         self.0

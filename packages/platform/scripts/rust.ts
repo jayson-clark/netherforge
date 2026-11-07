@@ -351,6 +351,12 @@ function trait(d: InterfaceDecl, cx: Context): string[] {
  * means and hands back `&Unported` for the rest, so it's written as the
  * runtime's ported parts need it, and the compiler holds it to the spec.
  */
+/**
+ * What `Unported` answers by doing nothing rather than a panic: telling the server something it may ignore. A fake that
+ * doesn't watch events delivers them all.
+ */
+const QUIET = new Set(['Platform::watch'])
+
 function unported(all: Decl[], cx: Context): string[] {
   const lines = [
     `// ${GENERATED_BY}`,
@@ -378,7 +384,11 @@ function unported(all: Decl[], cx: Context): string[] {
       const name = m.signature.slice(3, m.signature.indexOf('('))
       lines.push(
         `    ${m.unnamed} {`,
-        group ? '        &Unported' : `        unported("${d.name}::${name}")`,
+        group
+          ? '        &Unported'
+          : QUIET.has(`${d.name}::${name}`)
+            ? '        // Nothing to do.'
+            : `        unported("${d.name}::${name}")`,
         '    }',
         '',
       )

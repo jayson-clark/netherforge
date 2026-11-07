@@ -101,6 +101,10 @@ pub trait Service {
     fn block_changed(&self, _block: &BlockRef) {}
     /// A world was loaded or created, before scripts hear of it.
     fn world_loaded(&self, _platform: &dyn Platform, _world: &str) {}
+    /// The watched events it needs delivered even when no script listens (custom blocks read a chunk as it loads).
+    fn needs_watched(&self) -> Vec<netherforge_platform::WatchedEvent> {
+        Vec::new()
+    }
 
     /// What's wrong as it runs, beyond the project's files (the particle budget's warning).
     fn problems(&self) -> Vec<Problem> {
@@ -221,6 +225,8 @@ pub struct Session<'a> {
     costs: std::cell::RefCell<crate::costs::ScriptCosts>,
     performance: Option<crate::config::PerformanceConfig>,
     warned: std::cell::RefCell<Warned>,
+    /// What the adapter was last told of each watched event (`Platform::watch`).
+    watching: std::cell::RefCell<HashMap<netherforge_platform::WatchedEvent, bool>>,
     /// The runtime's profiler, which outlives sessions (`ServerEvents` hands it over), and whether this run's Lua
     /// state keeps per-function times for it now.
     profiler: std::cell::RefCell<Option<Rc<crate::profile::Profiler>>>,
@@ -457,6 +463,7 @@ impl<'a> Session<'a> {
             performance: config.performance,
             clock: config.clock.clone(),
             warned: Default::default(),
+            watching: Default::default(),
             profiler: Default::default(),
             profiling: Default::default(),
             ticks: Default::default(),
@@ -641,6 +648,7 @@ impl<'a> Session<'a> {
         self.room = Some(room);
         self.released();
         self.report();
+        self.update_watched();
         let uses = netherforge_format::requirement::combined(&self.project);
         log.info(if uses.is_empty() {
             "Requires nothing beyond what every project may do".to_owned()
@@ -912,6 +920,7 @@ impl<'a> Session<'a> {
         }
         self.released();
         self.report();
+        self.update_watched();
         self.shared.classed.borrow_mut().clear();
         let now = host.now();
         phases.insert(
@@ -1567,7 +1576,34 @@ impl<'a> Session<'a> {
         self.costs.borrow_mut().clear();
         self.warned.borrow_mut().problems.clear();
         self.room = None;
+        self.update_watched();
         self.services = services(&self.shared);
+    }
+
+    /// Tells the adapter which of the events it watches only on request are wanted now (Kotlin's `ProjectSession.watch`):
+    /// those a script listens to, on any target, and those a service needs while the session runs. Never twice in a row
+    /// the same; everything goes once the session stops.
+    fn update_watched(&self) {
+        let (listened, needed): (std::collections::HashSet<String>, Vec<_>) = match &self.room {
+            Some(room) => (
+                room.scripts().events_listened(),
+                self.services
+                    .iter()
+                    .flat_map(|s| s.needs_watched())
+                    .collect(),
+            ),
+            None => Default::default(),
+        };
+        let mut watching = self.watching.borrow_mut();
+        for (event, stages) in crate::events::WATCHED {
+            let now =
+                needed.contains(event) || stages.iter().any(|(_, name)| listened.contains(*name));
+            if watching.get(event).copied().unwrap_or(false) == now {
+                continue;
+            }
+            watching.insert(*event, now);
+            self.platform.watch(*event, now);
+        }
     }
 
     /// What the scripts reported since the last time, to the log (Kotlin's `ScriptReports`): a body that

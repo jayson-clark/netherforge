@@ -60,6 +60,8 @@ struct Fake {
     saved: RefCell<BTreeSet<String>>,
     /// What the world manager was asked, in order (file work included, from its lane).
     managed: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    /// What the session said it watches, in order.
+    watched: RefCell<Vec<String>>,
 }
 
 impl Fake {
@@ -390,6 +392,11 @@ impl netherforge_platform::FakeBlockOps for Fake {
 }
 
 impl FakePlatform for Fake {
+    fn watch(&self, event: netherforge_platform::WatchedEvent, listening: bool) {
+        self.watched
+            .borrow_mut()
+            .push(format!("{event:?} {listening}"));
+    }
     fn info(&self) -> ServerInfo {
         ServerInfo {
             minecraft_version: "26.3".into(),
@@ -858,4 +865,32 @@ print(tostring(back), back == world:location(vec3(1, 2.5, 3), 90))
             r#"location("world", vec3(1, 2.5, 3), 90, 0) true"#,
         ]
     );
+}
+
+#[test]
+fn the_server_is_told_which_watched_events_scripts_listen_to() {
+    let files = Files::new(
+        &[],
+        &format!(
+            r#"{TRY}
+local chat = nf.on("player_chat", function() end)
+world:on("block_grow", function() end)
+nf.after(2, function() chat:cancel() print("cancelled") end)
+"#
+        ),
+    );
+    let platform = Fake::new();
+    let mut session = start(&files, &platform, Config::default());
+    assert_eq!(
+        *platform.watched.borrow(),
+        ["PlayerChat true", "BlockGrow true"]
+    );
+    printed(&session, &platform, 1);
+    session.tick();
+    assert_eq!(
+        platform.watched.borrow().last().unwrap(),
+        "PlayerChat false"
+    );
+    session.stop();
+    assert_eq!(platform.watched.borrow().last().unwrap(), "BlockGrow false");
 }

@@ -2195,6 +2195,15 @@ impl Service for BlocksService {
         "blocks"
     }
 
+    /// A chunk's blocks are read as it loads, whoever listens.
+    fn needs_watched(&self) -> Vec<netherforge_platform::WatchedEvent> {
+        if self.shared.blocks.borrow().usable() {
+            vec![netherforge_platform::WatchedEvent::ChunkLoad]
+        } else {
+            Vec::new()
+        }
+    }
+
     fn reloads(&self) -> &'static [&'static str] {
         &[KIND, "game_block"]
     }

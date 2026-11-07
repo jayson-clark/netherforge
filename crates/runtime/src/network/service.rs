@@ -1547,6 +1547,17 @@ impl Service for NetworkService {
         "network"
     }
 
+    /// A player muted across the network says nothing, whoever listens to chat.
+    fn needs_watched(&self) -> Vec<netherforge_platform::WatchedEvent> {
+        let network = self.shared.network.borrow();
+        match &network.link {
+            Some(link) if link.mode != crate::network::Mode::Off => {
+                vec![netherforge_platform::WatchedEvent::PlayerChat]
+            }
+            _ => Vec::new(),
+        }
+    }
+
     fn start(&self, room: &Room, project: &crate::session::Define) {
         let grants = crate::session::grants(project.project);
         {
