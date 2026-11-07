@@ -26,7 +26,3 @@ pub struct StructureTemplate(pub Dynamic);
 /// format's `terrain` `CompiledTerrain`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompiledTerrain(pub Dynamic);
-
-/// format's `datapack` `GameDatapack`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct GameDatapack(pub Dynamic);

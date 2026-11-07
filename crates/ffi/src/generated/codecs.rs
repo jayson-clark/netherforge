@@ -1364,15 +1364,15 @@ impl Take for netherforge_format::kind::dialog::DialogFile {
     }
 }
 
-impl Put for external::GameDatapack {
+impl Put for netherforge_format::startup::GameDatapack {
     fn put(self, w: &mut Writer) {
-        self.0.put(w);
+        w.json(&self);
     }
 }
 
-impl Take for external::GameDatapack {
+impl Take for netherforge_format::startup::GameDatapack {
     fn take(r: &mut Reader) -> Self {
-        external::GameDatapack(Dynamic::take(r))
+        r.json("GameDatapack")
     }
 }
 

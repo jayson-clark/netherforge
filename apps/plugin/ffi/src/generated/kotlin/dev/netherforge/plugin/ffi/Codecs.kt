@@ -836,14 +836,9 @@ internal fun putDialogFile(w: Writer, v: dev.netherforge.format.dialog.DialogFil
 
 internal fun takeDialogFile(r: Reader): dev.netherforge.format.dialog.DialogFile = CanonicalJson.json.decodeFromString(dev.netherforge.format.dialog.DialogFile.serializer(), r.string())
 
-/** `GameDatapack` has no Rust type yet: it crosses as nothing, and can't come back. */
-@Suppress("UNUSED_PARAMETER")
-internal fun putGameDatapack(w: Writer, v: dev.netherforge.format.datapack.GameDatapack) = w.dynamic(null)
+internal fun putGameDatapack(w: Writer, v: dev.netherforge.format.datapack.GameDatapack) = w.string(CanonicalJson.json.encodeToString(dev.netherforge.format.datapack.GameDatapack.serializer(), v))
 
-internal fun takeGameDatapack(r: Reader): dev.netherforge.format.datapack.GameDatapack {
-    r.dynamic()
-    throw UnsupportedOperationException("GameDatapack doesn't cross from the Rust runtime yet")
-}
+internal fun takeGameDatapack(r: Reader): dev.netherforge.format.datapack.GameDatapack = CanonicalJson.json.decodeFromString(dev.netherforge.format.datapack.GameDatapack.serializer(), r.string())
 
 internal fun putDisplayDef(w: Writer, v: dev.netherforge.format.centity.DisplayDef) = w.string(CanonicalJson.json.encodeToString(dev.netherforge.format.centity.DisplayDef.serializer(), v))
 

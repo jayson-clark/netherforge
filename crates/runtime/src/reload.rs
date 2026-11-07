@@ -198,7 +198,7 @@ impl StartupCheck {
             &ServerText(platform),
             main.as_deref(),
             true,
-            &netherforge_format::startup::GameDatapack::default(),
+            &datapacks.game(),
             &|_| false,
         );
         let now: HashMap<String, Vec<u8>> = entries

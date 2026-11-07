@@ -55,6 +55,45 @@ pub struct GameDatapack {
     pub overworld: Option<Value>,
 }
 
+/// As it crosses from the server: `{"biomes": {"minecraft:plains": {...}}, "overworld": {...}}`.
+impl serde::Serialize for GameDatapack {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let biomes: Map<String, Value> = self
+            .biomes
+            .iter()
+            .map(|(key, biome)| (key.to_string(), biome.clone()))
+            .collect();
+        json!({ "biomes": biomes, "overworld": self.overworld.clone().unwrap_or(Value::Null) })
+            .serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for GameDatapack {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = Value::deserialize(deserializer)?;
+        let biomes = value
+            .get("biomes")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .filter_map(|(key, biome)| {
+                let (namespace, path) = key.split_once(':')?;
+                biome.is_object().then(|| {
+                    (
+                        ResourceKey {
+                            namespace: namespace.to_owned(),
+                            path: path.to_owned(),
+                        },
+                        biome.clone(),
+                    )
+                })
+            })
+            .collect();
+        let overworld = value.get("overworld").filter(|o| o.is_object()).cloned();
+        Ok(GameDatapack { biomes, overworld })
+    }
+}
+
 /// What a kind's writer can ask while the pack is built.
 pub struct Context<'a> {
     pub project: &'a Project<'a>,

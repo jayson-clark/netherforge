@@ -693,6 +693,9 @@ impl netherforge_platform::FakeDatapackOps for Fake {
     fn main_world(&self) -> Option<String> {
         Some("world".into())
     }
+    fn game(&self) -> netherforge_format::startup::GameDatapack {
+        Default::default()
+    }
     fn text_json(&self, text: String, _: Box<dyn Fn(String) -> Option<String>>) -> String {
         serde_json::Value::String(text).to_string()
     }

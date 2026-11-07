@@ -55,6 +55,7 @@ export const RUST_EXTERNAL: Record<string, { path: string; interface?: boolean }
   BotEvents: { path: 'netherforge_format::bridge::BotEvents' },
   BotAction: { path: 'netherforge_format::bridge::BotAction' },
   BotActResult: { path: 'netherforge_format::bridge::BotActResult' },
+  GameDatapack: { path: 'netherforge_format::startup::GameDatapack' },
   Path: { path: 'std::path::PathBuf' },
 }
 

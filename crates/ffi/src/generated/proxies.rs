@@ -179,7 +179,7 @@ impl DatapackOps for JavaDatapackOps {
         self.obj.call("DatapackOps::main_world", 3, move |w| {  let _ = w; })
     }
 
-    fn game(&self) -> external::GameDatapack {
+    fn game(&self) -> netherforge_format::startup::GameDatapack {
         self.obj.call("DatapackOps::game", 4, move |w| {  let _ = w; })
     }
 

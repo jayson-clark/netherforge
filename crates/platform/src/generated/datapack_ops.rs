@@ -29,7 +29,7 @@ pub trait DatapackOps {
     fn main_world(&self) -> Option<String>;
 
     /// The game's own data pack, what the start-up datapack builds on (a sky's twins of its biomes); none by default.
-    fn game(&self) -> external::GameDatapack;
+    fn game(&self) -> netherforge_format::startup::GameDatapack;
 
     fn text_json(&self, text: String, glyph: Box<dyn Fn(String) -> Option<String>>) -> String;
 }

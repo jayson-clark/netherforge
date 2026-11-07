@@ -359,7 +359,7 @@ impl DatapackOps for Unported {
         unported("DatapackOps::main_world")
     }
 
-    fn game(&self) -> external::GameDatapack {
+    fn game(&self) -> netherforge_format::startup::GameDatapack {
         unported("DatapackOps::game")
     }
 
@@ -387,7 +387,7 @@ pub trait FakeDatapackOps {
         <Unported as DatapackOps>::main_world(&Unported)
     }
 
-    fn game(&self) -> external::GameDatapack {
+    fn game(&self) -> netherforge_format::startup::GameDatapack {
         <Unported as DatapackOps>::game(&Unported)
     }
 
@@ -413,7 +413,7 @@ impl<T: FakeDatapackOps> DatapackOps for T {
         FakeDatapackOps::main_world(self)
     }
 
-    fn game(&self) -> external::GameDatapack {
+    fn game(&self) -> netherforge_format::startup::GameDatapack {
         FakeDatapackOps::game(self)
     }
 
