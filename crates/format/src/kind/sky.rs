@@ -48,9 +48,6 @@ pub struct SkyFile {
     pub fade: Option<i32>,
 }
 
-/// The feature a sky that doesn't darken at night needs.
-pub const NIGHT_FEATURE: &str = "sky-night";
-
 impl Document for SkyFile {
     /// Each sky's twin of every biome the server has, per step of its fade, and its night.
     fn datapack(
@@ -66,7 +63,7 @@ impl Document for SkyFile {
         self.schema = schema;
     }
 
-    fn validate(&self, cx: &Context, sink: &mut ProblemSink) {
+    fn validate(&self, _cx: &Context, sink: &mut ProblemSink) {
         let colors = [
             &self.sky,
             &self.fog,
@@ -81,10 +78,6 @@ impl Document for SkyFile {
                 "A sky gives at least one colour: sky, fog, clouds, water, waterFog or light",
                 Some("$".into()),
             );
-        }
-        // A sky held through the night is a timeline on a world clock of its own: clocks are 26.1's.
-        if self.darkens == Some(false) {
-            cx.require_feature(NIGHT_FEATURE, sink, "$.darkens");
         }
         // Night holds only the sky's and the fog's colours.
         if self.darkens == Some(false) && self.sky.is_none() && self.fog.is_none() {

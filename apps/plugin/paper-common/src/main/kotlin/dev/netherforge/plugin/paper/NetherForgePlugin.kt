@@ -1,8 +1,6 @@
 package dev.netherforge.plugin.paper
 
-import dev.netherforge.plugin.Folia
-import dev.netherforge.plugin.GameDataExport
-import dev.netherforge.plugin.RuntimeConfig
+import dev.netherforge.plugin.ffi.RustRuntime
 import org.bukkit.configuration.ConfigurationSection
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
@@ -37,7 +35,7 @@ class NetherForgePlugin :
     /** This adapter's own: what its Minecraft version does differently. The contract suites' plugin makes its platform with it. */
     val version: PaperVersion by lazy { PaperVersion.load() }
 
-    private var runtime: ProjectRuntime? = null
+    private var runtime: RustRuntime? = null
     private var platform: PaperPlatform? = null
     private var ticker: BukkitTask? = null
 
@@ -55,27 +53,10 @@ class NetherForgePlugin :
         saveDefaultConfig()
         val settings = config.plain()
         export = GameDataExport.read(settings, server.worldContainer.toPath())
-        val chosen = ProjectRuntimes.chosen(settings)
-        val runtimes = ProjectRuntimes.named(chosen, javaClass.classLoader)
-        if (runtimes == null) {
-            logger.severe(
-                "NetherForge has no runtime called \"$chosen\" (-D${ProjectRuntimes.PROPERTY} or config.yml's runtime:): this jar has " +
-                    "the Kotlin runtime, and the 26.x adapters' have the Rust one (\"rust\")"
-            )
-            server.pluginManager.disablePlugin(this)
-            return
-        }
-
         var built: PaperPlatform? = null
         val platform = { built ?: PaperPlatform(this, version).also { built = it } }
-        runtime = runtimes.create(this, platform, settings)
-        if (runtime == null && export == null) {
-            logger.warning(RuntimeConfig.NO_PROJECT)
-            built?.close()
-            return
-        }
+        runtime = RustRuntime(dataFolder.toPath(), server.worldContainer.toPath(), server.ip, settings, platform)
         this.platform = platform()
-        if (runtimes != ProjectRuntimes.Kotlin) logger.info("Running the project on the ${runtimes.name} runtime")
         server.pluginManager.registerEvents(this, this)
     }
 
@@ -107,7 +88,10 @@ class NetherForgePlugin :
         val runtime = runtime ?: return
         if (started) return
         started = true
-        runtime.enable()
+        if (!runtime.enable()) {
+            logger.warning(RustRuntime.NO_PROJECT)
+            return
+        }
         ticker = server.scheduler.runTaskTimer(
             this,
             Runnable {

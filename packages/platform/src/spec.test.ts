@@ -8,7 +8,7 @@ import { GENERICS, namesIn, parseType, PRIMITIVES } from './type.ts'
 
 const kotlinDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../../../apps/plugin/runtime/src/main/kotlin/dev/netherforge/plugin/platform',
+  '../../../apps/plugin/platform/src/main/kotlin/dev/netherforge/plugin/platform',
 )
 
 /** A declaration without its docs: what the two sides must agree on. */

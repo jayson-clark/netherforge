@@ -249,7 +249,7 @@ impl TestContext {
     /// Waits until what scripts started off the main thread is done, so a test sees it land at a known tick.
     pub(crate) fn settle(&self) -> ApiResult<()> {
         let started = Instant::now();
-        while !self.shared().wasm.borrow().quiet() {
+        while !self.shared().wasm.borrow().quiet() || !self.shared().databases.borrow().quiet() {
             if started.elapsed() > SETTLE {
                 return err(format!(
                     "the runtime's workers or WebAssembly were still busy after {}ms",

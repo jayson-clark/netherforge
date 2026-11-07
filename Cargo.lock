@@ -1636,6 +1636,7 @@ name = "netherforge-ffi"
 version = "0.0.0"
 dependencies = [
  "netherforge-format",
+ "netherforge-luau",
  "netherforge-platform",
  "netherforge-runtime",
  "serde",

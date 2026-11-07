@@ -6,8 +6,10 @@
 #             drafted unless it passes.
 # 1. prepare: checks every version agrees with the tag and CHANGELOG.md has an
 #    entry, then creates a *draft* GitHub release with that entry as its notes.
-# 2. plugin:  builds the Paper plugin jars (one per supported Minecraft version), the
-#    Velocity plugin (a network's hub) and the script test runner, and attaches them.
+# 2. native:  builds the Rust runtime's library (crates/ffi) on each OS and architecture.
+#    plugin:  builds the Paper plugin jars (one per supported Minecraft version) with
+#    every OS's library in them, the Velocity plugin (a network's hub) and the script
+#    test runner, and attaches them.
 # 3. cli:     builds the `netherforge` command and stages its npm package, as a check:
 #    npm.yml publishes `@netherforge/cli` once the release is published. (The LuaLS
 #    stubs and JSON Schemas aren't attached: `netherforge setup` writes them.)
@@ -107,9 +109,61 @@ jobs:
           fi
           echo "id=$id" >> "$GITHUB_OUTPUT"
 
+  native:
+    name: Runtime library (${{ matrix.folder }})
+    needs: prepare
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          # The oldest glibc a supported server is likely to have: the library links against the runner's.
+          - os: ubuntu-22.04
+            folder: linux-x86_64
+            file: libnetherforge_ffi.so
+          - os: ubuntu-22.04-arm
+            folder: linux-aarch64
+            file: libnetherforge_ffi.so
+          - os: macos-latest
+            folder: macos-aarch64
+            file: libnetherforge_ffi.dylib
+          - os: macos-latest
+            folder: macos-x86_64
+            file: libnetherforge_ffi.dylib
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            folder: windows-x86_64
+            file: netherforge_ffi.dll
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Build
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          # macOS's `strip` leaves a dylib that won't load ("mis-aligned LINKEDIT string pool").
+          CARGO_PROFILE_RELEASE_STRIP: ${{ runner.os == 'macOS' && 'none' || 'debuginfo' }}
+        run: |
+          if [ -n "$TARGET" ]; then
+            rustup target add "$TARGET"
+            cargo build --release -p netherforge-ffi --target "$TARGET"
+            out="target/$TARGET/release"
+          else
+            cargo build --release -p netherforge-ffi
+            out="target/release"
+          fi
+          mkdir -p "native/${{ matrix.folder }}"
+          cp "$out/${{ matrix.file }}" "native/${{ matrix.folder }}/"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-${{ matrix.folder }}
+          path: native/
+
   plugin:
     name: Plugin jars
-    needs: prepare
+    needs: [prepare, native]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -123,8 +177,14 @@ jobs:
           distribution: temurin
           java-version: '25'
       - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: native-*
+          path: ${{ runner.temp }}/native
+          merge-multiple: true
       - name: Build
-        run: node tools/gradle.mjs assemble
+        # Every OS's library in the plugin jars and the test runner (`META-INF/netherforge/native/<os>-<arch>/`).
+        run: node tools/gradle.mjs assemble -Pnetherforge.native=prebuilt "-Pnetherforge.native.dir=$RUNNER_TEMP/native"
       - name: Collect assets
         env:
           VERSION: ${{ needs.prepare.outputs.version }}

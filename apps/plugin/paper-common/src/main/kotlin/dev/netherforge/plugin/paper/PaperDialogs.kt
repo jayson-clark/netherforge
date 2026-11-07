@@ -10,7 +10,6 @@ import dev.netherforge.format.dialog.MessageBody
 import dev.netherforge.format.dialog.OptionInput
 import dev.netherforge.format.dialog.RangeInput
 import dev.netherforge.format.dialog.TextInput
-import dev.netherforge.plugin.dialog.Dialogs
 import dev.netherforge.plugin.platform.DialogAnswers
 import dev.netherforge.plugin.platform.DialogOps
 import dev.netherforge.plugin.platform.DialogSpec
@@ -281,23 +280,35 @@ class PaperDialogs(private val plugin: Plugin, private val logger: Logger) : Dia
         }
     }
 
-    /** What the player answered, by input key ([Dialogs.values]). */
-    private fun values(spec: DialogSpec, view: DialogResponseView): Map<String, Any> = Dialogs.values(
-        spec.file,
-        object : DialogAnswers {
-            override fun text(key: String) = view.getText(key)
-
-            override fun bool(key: String) = view.getBoolean(key)
-
-            override fun number(key: String) = view.getFloat(key)?.toDouble()
+    /**
+     * What the player answered, by input key: each input's value as a script reads it (a boolean as its `onTrue` or
+     * `onFalse`), and nothing for one the game sent that the dialog couldn't have (out of its range, too long, not one
+     * of its options).
+     */
+    private fun values(spec: DialogSpec, view: DialogResponseView): Map<String, Any> = buildMap {
+        for (input in spec.file.inputs) {
+            val value: Any? = runCatching {
+                when (input) {
+                    is BooleanInput -> view.getBoolean(input.key)?.let { if (it) input.onTrue ?: "true" else input.onFalse ?: "false" }
+                    is RangeInput -> view.getFloat(input.key)?.toDouble()?.takeIf { n ->
+                        n.isFinite() && n >= minOf(input.start, input.end) && n <= maxOf(input.start, input.end)
+                    }
+                    is TextInput -> view.getText(input.key)?.takeIf { it.length <= (input.maxLength ?: DEFAULT_MAX_LENGTH) }
+                    is OptionInput -> view.getText(input.key)?.takeIf { id -> input.options.any { it.id == id } }
+                }
+            }.getOrNull()
+            if (value != null) put(input.key, value)
         }
-    )
+    }
 
     private fun translated(key: String): Component = Component.translatable(key)
 
     private fun text(miniMessage: String): Component = mini.deserialize(miniMessage)
 
     private companion object {
+        /** The game's own most for a text input that doesn't say. */
+        const val DEFAULT_MAX_LENGTH = 32
+
         val CALLBACK_LIFETIME: Duration = Duration.ofDays(1)
     }
 }

@@ -29,14 +29,8 @@ use crate::events::{parse_uuid, uuid_text};
 pub const FILE: &str = "netherforge.db";
 /// The store's migrations' scope in the `migrations` table.
 const SCOPE: &str = "netherforge";
-/// Every migration, in order: the Kotlin runtime's own files.
-const MIGRATIONS: &[(i64, &str, &str)] = &[(
-    1,
-    "init",
-    include_str!(
-        "../../../apps/plugin/runtime/src/main/resources/dev/netherforge/plugin/store/migrations/001_init.sql"
-    ),
-)];
+/// Every migration, in order.
+const MIGRATIONS: &[(i64, &str, &str)] = &[(1, "init", include_str!("../migrations/001_init.sql"))];
 
 /// A spawned centity as the store keeps it, so it comes back after a restart (Kotlin's `InstanceRecord`).
 #[derive(Clone, Debug, PartialEq)]

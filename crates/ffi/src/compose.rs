@@ -227,6 +227,44 @@ pub fn start(args: StartArgs) -> Result<Option<Rc<dyn PlatformEvents>>, String> 
     Ok(Some(events))
 }
 
+/// The start-up datapack for the project `config.yml` names, which the server's bootstrap hands it before it loads
+/// its worlds, long before the runtime starts (Kotlin's `NetherForgeBootstrap.build`): its files, the whole datapack's
+/// hash, whether the refusal on record left something out, and whether a refusal could; none when there's no project
+/// or the server doesn't say its data pack format. The platform is the bootstrap's: only its datapacks and log answer.
+pub fn startup_datapack(
+    args: StartArgs,
+) -> Result<Option<netherforge_runtime::reload::ForStart>, String> {
+    let platform: Rc<dyn Platform> = Rc::new(JavaPlatform::new(args.platform));
+    let settings = json(args.settings);
+    let properties = args.properties;
+    let env = args.env;
+    let server = ServerAddress {
+        directory: args.server_folder.clone(),
+        ip: args.server_ip,
+    };
+    let Some(config) = config::read(
+        &args.plugin_folder,
+        &settings,
+        &server,
+        &|key| properties.get(key).cloned(),
+        &|key| env.get(key).cloned(),
+    )?
+    else {
+        return Ok(None);
+    };
+    let source = project_files(&config);
+    let loaded = netherforge_format::project::load(
+        &source,
+        netherforge_format::project::Options {
+            packages: &source,
+            ..Default::default()
+        },
+    );
+    Ok(netherforge_runtime::reload::for_start(
+        &loaded, &source, &*platform,
+    ))
+}
+
 /// The project's generator for world `world`, which the server asks for before it loads the world, long before the
 /// runtime starts (`bukkit.yml`'s `worlds.<name>.generator: NetherForge`; Kotlin's `StartupGenerators.generatorFor`):
 /// the one `netherforge.json` names for it, its id as published, or none. Every generator of the project is published
@@ -323,7 +361,11 @@ const MOST_REPORTED_ATS: usize = 20;
 
 /// Hands the server the runtime's events and the lookups it answers its text and items with (Kotlin's
 /// `platform.bind` and `bindText`), each reading the session running when it's asked.
-fn bind(platform: &Rc<dyn Platform>, events: &Rc<ServerEvents<'static>>, shared: &Rc<Shared>) {
+pub(crate) fn bind(
+    platform: &Rc<dyn Platform>,
+    events: &Rc<ServerEvents<'static>>,
+    shared: &Rc<Shared>,
+) {
     // The lookups read what the session shares, not the session: the server asks them while it starts, and while a
     // reload holds it.
     let weak: Weak<Shared> = Rc::downgrade(shared);

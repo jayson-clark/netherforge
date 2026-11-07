@@ -145,6 +145,16 @@ fn trimmed(traceback: Option<String>) -> Option<String> {
     })
 }
 
+/// An error's message without the place Luau puts in front of it (`tests/a_test.lua:2: `), which `source` says.
+fn bare(error: &ScriptError) -> String {
+    if let (Some(file), Some(line)) = (&error.file, error.line)
+        && let Some(rest) = error.message.strip_prefix(&format!("{file}:{line}: "))
+    {
+        return rest.to_owned();
+    }
+    error.message.clone()
+}
+
 fn place_of(error: &ScriptError) -> Option<Place> {
     error.file.as_ref().map(|file| Place {
         file: file.clone(),
@@ -245,7 +255,7 @@ impl<S: TestServer> Runner<'_, S> {
         report(&TestEvent::FileLoaded {
             file: file.to_owned(),
             tests: loaded.names.clone(),
-            message: loaded.failure.as_ref().map(|f| f.message.clone()),
+            message: loaded.failure.as_ref().map(bare),
             source: loaded.failure.as_ref().and_then(place_of),
         });
         if let Some(failure) = loaded.failure {
@@ -256,7 +266,7 @@ impl<S: TestServer> Runner<'_, S> {
                     name: format!("(running {file})"),
                     status: Status::Errored,
                     duration_millis: 0,
-                    message: Some(failure.message.clone()),
+                    message: Some(bare(&failure)),
                     source: place_of(&failure),
                     traceback: trimmed(failure.traceback),
                     logs,
@@ -308,7 +318,7 @@ fn run_test<S: TestServer>(
     if let TestOutcome::Failed(failure) = outcome {
         return TestResult {
             status: Status::Failed,
-            message: Some(failure.message.clone()),
+            message: Some(bare(&failure)),
             source: place_of(&failure),
             traceback: trimmed(failure.traceback),
             ..base
@@ -330,7 +340,7 @@ fn run_test<S: TestServer>(
     };
     TestResult {
         status: Status::Errored,
-        message: Some(format!("a script failed {when}: {}{more}", first.message)),
+        message: Some(format!("a script failed {when}: {}{more}", bare(first))),
         source: place_of(first),
         traceback: trimmed(first.traceback.clone()),
         ..base

@@ -745,17 +745,15 @@ impl Take for WorldSettings {
 
 impl Put for ProjectGenerator {
     fn put(self, w: &mut Writer) {
-        self.terrain.put(w);
         self.states.put(w);
         self.biomes.put(w);
-        self.scripts.put(w);
         self.source.put(w);
     }
 }
 
 impl Take for ProjectGenerator {
     fn take(r: &mut Reader) -> Self {
-        ProjectGenerator { terrain: <Option<external::CompiledTerrain> as Take>::take(r), states: <Vec<String> as Take>::take(r), biomes: <HashMap<String, String> as Take>::take(r), scripts: <Option<external::TerrainScripts> as Take>::take(r), source: <Option<netherforge_platform::api::SharedTerrain> as Take>::take(r) }
+        ProjectGenerator { states: <Vec<String> as Take>::take(r), biomes: <HashMap<String, String> as Take>::take(r), source: <netherforge_platform::api::SharedTerrain as Take>::take(r) }
     }
 }
 

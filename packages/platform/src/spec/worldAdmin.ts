@@ -44,12 +44,8 @@ export default {
     {
       kind: 'record',
       name: 'ProjectGenerator',
-      doc: "A project's terrain as an adapter runs it on the server's chunk\nthreads: the compiled file, the block state (canonical text) each of its\n[palette][CompiledTerrain.palette] entries is written into a chunk as, and\nthe biome each of its [areas' biomes][CompiledTerrain.biomes] is on the\nserver. A custom block's state is the note block state it's held as, which\nthe project's blocks adopt when the chunk loads; a biome is the server's key\nfor it (`minecraft:plains`, a project biome's `showcase:ruby_grove`). Immutable,\nso it's shared with every thread.\n\nA file with a script has [scripts]: what its Lua runs with (luajava, its\nfiles read when it was published, and who hears of its failures), which\nthe adapter hands [CompiledTerrain.bind]. The states it runs in are the\nbound generator's, one per chunk thread at a time; the adapter closes a\nreplaced generator ([dev.netherforge.format.terrain.TerrainGenerator.close])\nso they go.\n\nThe Rust runtime has no [terrain] (format's Kotlin form) to hand over: it gives [source] instead, its own generator,\nwhich the adapter's chunk threads call across FFM. One of the two is there.",
+      doc: "A project's terrain as an adapter runs it on the server's chunk threads: the runtime's generator ([source], which\nthe chunk threads call across FFM), the block state (canonical text) each of its palette's entries is written into\na chunk as, and the biome each of its areas' biomes is on the server. A custom block's state is the note block\nstate it's held as, which the project's blocks adopt when the chunk loads; a biome is the server's key for it\n(`minecraft:plains`, a project biome's `showcase:ruby_grove`). Immutable, so it's shared with every thread; the\nadapter closes a replaced generator's source so what it keeps goes.",
       fields: [
-        {
-          name: 'terrain',
-          type: 'CompiledTerrain?',
-        },
         {
           name: 'states',
           type: 'List<String>',
@@ -59,14 +55,8 @@ export default {
           type: 'Map<String, String>',
         },
         {
-          name: 'scripts',
-          type: 'TerrainScripts?',
-          default: 'null',
-        },
-        {
           name: 'source',
-          type: 'dev.netherforge.plugin.platform.terrain.TerrainSource?',
-          default: 'null',
+          type: 'dev.netherforge.plugin.platform.terrain.TerrainSource',
         },
       ],
     },
@@ -577,7 +567,7 @@ export default {
         },
         {
           name: 'template',
-          doc: "The blocks of the structure in [file] as a terrain places them (its first palette, air included, every\nstate in full as the server reads it), or null when it can't be read as one. A decoration of a generator is\nlinked to it ([dev.netherforge.format.terrain.CompiledTerrain.withStructures]).",
+          doc: "The blocks of the structure in [file] as a terrain places them (its first palette, air included, every\nstate in full as the server reads it), or null when it can't be read as one. A decoration of a generator is\nlinked to it (the runtime's terrains).",
           params: [
             {
               name: 'file',

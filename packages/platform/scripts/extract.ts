@@ -1,5 +1,5 @@
 /**
- * Writes the spec from the Kotlin runtime's `platform/` interfaces, one spec file per Kotlin
+ * Writes the spec from the adapter's Kotlin `platform/` interfaces (`:plugin:platform`), one spec file per Kotlin
  * file: how the spec was first written. Once the Kotlin side is generated from the spec this
  * goes; until then `kotlin.test.ts` holds the two to each other, and a change to a Kotlin
  * interface is made in the spec with `pnpm --filter @netherforge/platform extract`.
@@ -13,7 +13,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '../../..')
 export const KOTLIN_PLATFORM = path.join(
   root,
-  'apps/plugin/runtime/src/main/kotlin/dev/netherforge/plugin/platform',
+  'apps/plugin/platform/src/main/kotlin/dev/netherforge/plugin/platform',
 )
 const out = path.join(here, '../src/spec')
 

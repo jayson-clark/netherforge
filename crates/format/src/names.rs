@@ -138,7 +138,7 @@ pub fn is_game_id(id: &str) -> bool {
 pub struct MinecraftVersion(pub Vec<u32>);
 
 /// The oldest Minecraft version NetherForge supports.
-pub const OLDEST_SUPPORTED: &str = "1.21.11";
+pub const OLDEST_SUPPORTED: &str = "26.1";
 
 impl MinecraftVersion {
     pub fn parse(text: &str) -> Option<MinecraftVersion> {

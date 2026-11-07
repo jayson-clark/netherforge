@@ -1,6 +1,9 @@
 package dev.netherforge.plugin.testrunner
 
 import dev.netherforge.plugin.testkit.FakePlatform
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -51,11 +54,13 @@ class ExampleTestsTest {
                     }
                 }
             }
-            val results = mutableListOf<TestResult>()
-            val end = ScriptTestRunner(temp.resolve(project), FakePlatform.GAME).run { if (it is TestResult) results += it }
-            assertEquals(emptyList(), results.filter { it.status != Status.PASSED }.map { "${it.file}: ${it.name}: ${it.message}" })
+            val lines = mutableListOf<String>()
+            val code = ScriptTestRunner(temp.resolve(project), FakePlatform.GAME).run(json = true) { lines += it }
+            val results = lines.map { Json.parseToJsonElement(it).jsonObject }.filter { it["event"]?.jsonPrimitive?.content == "result" }
+            val notPassed = results.filter { it["status"]?.jsonPrimitive?.content != "passed" }
+            assertEquals(emptyList(), notPassed.map { "${it["file"]}: ${it["name"]}: ${it["message"]}" }, lines.joinToString("\n"))
             assertTrue(results.size >= minimum, "only ${results.size} tests ran")
-            assertTrue(end.ok)
+            assertEquals(0, code)
         } finally {
             temp.toFile().deleteRecursively()
         }

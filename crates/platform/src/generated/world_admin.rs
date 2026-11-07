@@ -24,33 +24,17 @@ pub struct WorldSettings {
     pub dimension_type: Option<String>,
 }
 
-/// A project's terrain as an adapter runs it on the server's chunk
-/// threads: the compiled file, the block state (canonical text) each of its
-/// [palette][CompiledTerrain.palette] entries is written into a chunk as, and
-/// the biome each of its [areas' biomes][CompiledTerrain.biomes] is on the
-/// server. A custom block's state is the note block state it's held as, which
-/// the project's blocks adopt when the chunk loads; a biome is the server's key
-/// for it (`minecraft:plains`, a project biome's `showcase:ruby_grove`). Immutable,
-/// so it's shared with every thread.
-///
-/// A file with a script has [scripts]: what its Lua runs with (luajava, its
-/// files read when it was published, and who hears of its failures), which
-/// the adapter hands [CompiledTerrain.bind]. The states it runs in are the
-/// bound generator's, one per chunk thread at a time; the adapter closes a
-/// replaced generator ([dev.netherforge.format.terrain.TerrainGenerator.close])
-/// so they go.
-///
-/// The Rust runtime has no [terrain] (format's Kotlin form) to hand over: it gives [source] instead, its own generator,
-/// which the adapter's chunk threads call across FFM. One of the two is there.
+/// A project's terrain as an adapter runs it on the server's chunk threads: the runtime's generator ([source], which
+/// the chunk threads call across FFM), the block state (canonical text) each of its palette's entries is written into
+/// a chunk as, and the biome each of its areas' biomes is on the server. A custom block's state is the note block
+/// state it's held as, which the project's blocks adopt when the chunk loads; a biome is the server's key for it
+/// (`minecraft:plains`, a project biome's `showcase:ruby_grove`). Immutable, so it's shared with every thread; the
+/// adapter closes a replaced generator's source so what it keeps goes.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProjectGenerator {
-    pub terrain: Option<external::CompiledTerrain>,
     pub states: Vec<String>,
     pub biomes: HashMap<String, String>,
-    /// Default: `null`.
-    pub scripts: Option<external::TerrainScripts>,
-    /// Default: `null`.
-    pub source: Option<crate::api::SharedTerrain>,
+    pub source: crate::api::SharedTerrain,
 }
 
 pub trait WorldManagerOps {
@@ -251,7 +235,7 @@ pub trait StructureOps {
 
     /// The blocks of the structure in [file] as a terrain places them (its first palette, air included, every
     /// state in full as the server reads it), or null when it can't be read as one. A decoration of a generator is
-    /// linked to it ([dev.netherforge.format.terrain.CompiledTerrain.withStructures]).
+    /// linked to it (the runtime's terrains).
     fn template(&self, file: std::path::PathBuf) -> Option<netherforge_format::kind::terrain::compiled::StructureTemplate>;
 
     /// Places the structure in [file] with its smallest corner at [at]. False when the world has gone or the file can't be read.

@@ -2,27 +2,17 @@
  * The FFM glue's Kotlin half (see the rust-runtime skill, "The FFM boundary"): the Paper adapter
  * calls the Rust runtime (crates/ffi's cdylib) through Java's foreign function API. Generated from
  * packages/platform and packages/api by `pnpm generate` (src/generated), on the wire, the object
- * registry and the loader written here. Java 25: the foreign function API isn't in Java 21, so
- * only the 26.x adapters can carry it.
+ * registry and the loader written here. Java 25, for the foreign function API.
  */
 
 plugins {
     id("netherforge.kotlin-jvm")
 }
 
-kotlin.compilerOptions {
-    jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25)
-    freeCompilerArgs.set(freeCompilerArgs.get().filterNot { it.startsWith("-Xjdk-release=") } + "-Xjdk-release=25")
-}
-tasks.withType<JavaCompile>().configureEach { options.release.set(25) }
-
 dependencies {
     // The Platform's Kotlin interfaces and the server's events, and format's types they carry.
-    api(project(":plugin:runtime"))
+    api(project(":plugin:platform"))
     implementation(libs.serialization.json)
-    // The plugin's runtime choice (ProjectRuntimes), which the 26.x adapters carry this module for.
-    compileOnly(project(":plugin:paper-common"))
-    compileOnly(libs.paper.api)
 
     testImplementation(project(":plugin:testkit"))
     testImplementation(kotlin("test"))
@@ -40,11 +30,18 @@ ktlint {
 val repoRoot: File by rootProject.extra
 
 /*
- * The library in the jar, for this machine only, when the build is asked for it (`-Pnetherforge.native=host`):
- * a release build, at `META-INF/netherforge/native/<os>-<arch>/`. Without it, a server running the Rust runtime
- * names a library (-Dnetherforge.ffi.library). Every OS's, for a release, comes with the release workflow.
+ * The library in the jar, at `META-INF/netherforge/native/<os>-<arch>/`: this machine's, a release build, unless the
+ * build says otherwise (`-Pnetherforge.native=none`: a server then names one, -Dnetherforge.ffi.library). A release
+ * jar carries every OS's: the release workflow builds each and puts them in (`-Pnetherforge.native=prebuilt`, from
+ * `-Pnetherforge.native.dir=<dir>/<os>-<arch>/<file>`).
  */
-val native = providers.gradleProperty("netherforge.native").orNull
+val native = providers.gradleProperty("netherforge.native").getOrElse("host")
+if (native == "prebuilt") {
+    val dir = providers.gradleProperty("netherforge.native.dir").map { File(it) }
+    tasks.named<Copy>("processResources") {
+        from(dir) { into("META-INF/netherforge/native") }
+    }
+}
 if (native == "host") {
     val cargoRelease = tasks.register<Exec>("cargoRelease") {
         description = "Builds crates/ffi's library, release, for the jar"

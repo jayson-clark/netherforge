@@ -20,7 +20,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const generated = [
   'packages/api/generated',
   'docs/reference',
-  'apps/plugin/runtime/src/generated',
+  'apps/plugin/platform/src/generated',
   // The Rust runtime's bindings and Platform.
   'crates/api/src/generated',
   'crates/platform/src/generated',

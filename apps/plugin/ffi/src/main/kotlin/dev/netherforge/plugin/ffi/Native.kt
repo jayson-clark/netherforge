@@ -41,6 +41,9 @@ object Native {
         ValueLayout.ADDRESS
     )
 
+    /** Whether a library is loaded. */
+    val isLoaded: Boolean @Synchronized get() = loaded != null
+
     /** Loads the library at [library] (once; the same path again is nothing) and hands it the JVM's entry points. */
     @Synchronized
     fun load(library: Path) {

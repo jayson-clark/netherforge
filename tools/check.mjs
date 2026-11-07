@@ -77,8 +77,8 @@ const plans = {
       ['cargo', 'clippy', '--workspace', '--all-targets', '--', '-D', 'warnings'],
     ],
     ['Lua: stylua', ['pnpm', 'exec', 'stylua', '--check', ...luaDirs]],
-    // The prelude's modules and format's terrain glue, type-checked by the pinned LuaLS (the editor's own; fetched, cached).
-    ['Lua: lua-language-server (the plugin, format)', ['node', 'tools/lint-prelude.mjs']],
+    // Format's terrain glue, type-checked by the pinned LuaLS (the editor's own; fetched, cached).
+    ['Lua: lua-language-server (format)', ['node', 'tools/lint-prelude.mjs']],
     ['Generated files are up to date', ['node', 'tools/generated-check.mjs']],
     ['Editor skills name files that exist', ['node', 'tools/skill-paths.mjs']],
     ['Versions agree with VERSION', ['node', 'tools/release.mjs', '--check']],

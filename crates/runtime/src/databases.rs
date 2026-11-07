@@ -382,6 +382,8 @@ pub struct Databases {
     remotes: HashMap<String, Arc<crate::remote_db::Remote>>,
     /// Each package's lane for each connection.
     lanes: HashMap<(String, String), crate::http::Workers>,
+    /// Work given to a lane and not yet done: what a test run waits for before each tick.
+    in_flight: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl Databases {
@@ -432,6 +434,21 @@ impl Databases {
     pub fn describe_own(&mut self, namespace: &str) -> Option<String> {
         let name = self.own(namespace)?;
         Some(self.remote(&name).describe(namespace))
+    }
+
+    /// Whether no work is waiting on a lane.
+    pub fn quiet(&self) -> bool {
+        self.in_flight.load(std::sync::atomic::Ordering::Acquire) == 0
+    }
+
+    /// Counts work while it runs: [`quiet`](Self::quiet) is false until it's done.
+    fn counted(&self, work: impl FnOnce() + Send + 'static) -> impl FnOnce() + Send + 'static {
+        let in_flight = self.in_flight.clone();
+        in_flight.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        move || {
+            work();
+            in_flight.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+        }
     }
 
     /// What went wrong reaching the servers since last asked, for the server's log.
@@ -1020,15 +1037,20 @@ impl DatabaseContext {
         if let Some(name) = databases.own(&this.namespace) {
             let remote = databases.remote(&name);
             let namespace = this.namespace.clone();
-            databases.lane(&namespace, &name).submit(move || {
+            let lane = databases.lane(&namespace, &name);
+            let job = databases.counted(move || {
                 let _ = send.send(remote.run(Some(&namespace), &work));
             });
+            lane.submit(job);
             return receive;
         }
         let database = databases.database(&this.namespace);
+        let in_flight = databases.in_flight.clone();
+        in_flight.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
         drop(databases);
         database.submit(Box::new(move |c| {
             let _ = send.send(c.and_then(|c| sqlite_work(c, &work)));
+            in_flight.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
         }));
         receive
     }

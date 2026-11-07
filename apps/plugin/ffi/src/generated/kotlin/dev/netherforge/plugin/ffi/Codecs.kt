@@ -446,14 +446,12 @@ internal fun putWorldSettings(w: Writer, v: WorldSettings) {
 internal fun takeWorldSettings(r: Reader): WorldSettings = WorldSettings(generator = r.string(), environment = r.string(), seed = r.opt { r.long() }, structures = r.bool(), keepSpawnLoaded = r.bool(), terrain = r.opt { r.string() }, dimensionType = r.opt { r.string() })
 
 internal fun putProjectGenerator(w: Writer, v: ProjectGenerator) {
-    w.opt(v.terrain) { x0 -> putCompiledTerrain(w, x0) }
     w.list(v.states) { x0 -> w.string(x0) }
     w.map(v.biomes, { x0 -> w.string(x0) }) { x0 -> w.string(x0) }
-    w.opt(v.scripts) { x0 -> putTerrainScripts(w, x0) }
-    w.opt(v.source) { x0 -> putTerrainSource(w, x0) }
+    putTerrainSource(w, v.source)
 }
 
-internal fun takeProjectGenerator(r: Reader): ProjectGenerator = ProjectGenerator(terrain = r.opt { takeCompiledTerrain(r) }, states = r.list { r.string() }, biomes = r.map({ r.string() }) { r.string() }, scripts = r.opt { takeTerrainScripts(r) }, source = r.opt { takeTerrainSource(r) })
+internal fun takeProjectGenerator(r: Reader): ProjectGenerator = ProjectGenerator(states = r.list { r.string() }, biomes = r.map({ r.string() }) { r.string() }, source = takeTerrainSource(r))
 
 internal fun putWorldFiles(w: Writer, v: WorldFiles) {
     putPath(w, v.level)

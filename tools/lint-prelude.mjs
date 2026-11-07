@@ -3,9 +3,6 @@
  * Type-checks the Lua we ship with the pinned lua-language-server, the same binary and version
  * the editor runs (`tools/luals.mjs` fetches it, cached):
  *
- *  - the plugin's (the prelude's modules, the caps, the generated bindings and schema):
- *    `--check` over `apps/plugin/runtime/src`, with the prelude's modules resolvable by `require`
- *    as they are at runtime (`src/luals/input.lua` says what the Kotlin host hands the entry);
  *  - format's (`packages/format/src/commonMain/lua`, the terrain scripts' glue): `--check` over
  *    `packages/format/src` (`src/luals/terrain-host.lua` says what the Kotlin host hands it).
  *
@@ -20,8 +17,6 @@ import { fileURLToPath } from 'node:url'
 import { binaryIn, fetchLuals } from './luals.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const src = path.join(root, 'apps/plugin/runtime/src')
-const lua = 'dev/netherforge/plugin/lua'
 
 /** What every check runs with. */
 const common = {
@@ -44,20 +39,6 @@ const common = {
 
 /** Each folder checked, and what it adds to [common]. */
 const targets = [
-  {
-    dir: src,
-    settings: {
-      // `require("std")` finds the prelude's module of that name.
-      'runtime.path': [
-        path.join(src, 'main/resources', lua, 'prelude/?.lua'),
-        path.join(src, 'generated/lua', lua, 'prelude/?.lua'),
-        path.join(src, 'luals/?.lua'),
-      ].map((it) => it.split(path.sep).join('/')),
-      // The prelude resumes and yields coroutines itself: `await` is how scripts are held to
-      // waiting only in tasks, which the generated stubs (not these modules) mark.
-      'diagnostics.disable': ['await-in-sync'],
-    },
-  },
   { dir: path.join(root, 'packages/format/src'), settings: {} },
 ]
 
@@ -72,7 +53,7 @@ try {
     console.error(`\n${lines.length} problem(s) in our Lua`)
     process.exitCode = 1
   } else {
-    console.log("lua-language-server: the plugin's and format's Lua type-check")
+    console.log("lua-language-server: format's Lua type-checks")
   }
 } catch (error) {
   console.error(`lint-prelude: ${error.message}`)

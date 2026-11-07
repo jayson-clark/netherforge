@@ -178,6 +178,74 @@ impl netherforge_format::startup::TextJson for ServerText<'_> {
     }
 }
 
+/// What a server loads as it starts (Kotlin's `StartupDatapackFiles.forStart`): the whole datapack, unless the
+/// refusal on record is about exactly these files, when it's the datapack without what the refusal named.
+pub struct ForStart {
+    pub files: HashMap<String, Vec<u8>>,
+    /// The whole datapack's hash, which a refusal is recorded against.
+    pub hash: String,
+    /// Whether the refusal on record left something out.
+    pub refused: bool,
+    /// Whether the whole datapack has anything a refusal could leave out (the project's datapacks, a sky's twins), so
+    /// whether one is worth hearing.
+    pub can_leave_out: bool,
+}
+
+/// The start-up datapack for `project`, as the server builds it; none when the server doesn't say its data pack format.
+pub fn for_start(
+    project: &netherforge_format::project::Project,
+    source: &dyn netherforge_format::project::ProjectSource,
+    platform: &dyn netherforge_platform::Platform,
+) -> Option<ForStart> {
+    let datapacks = platform.datapacks();
+    let format = datapacks.format().filter(|f| f.len() == 2)?;
+    let format = [format[0], format[1]];
+    let main = datapacks.main_world();
+    let game = datapacks.game();
+    let build =
+        |pass_through: bool,
+         leave_out: &dyn Fn(&netherforge_format::reference::ResourceKey) -> bool| {
+            netherforge_format::startup::build(
+                project,
+                format,
+                &ServerText(platform),
+                main.as_deref(),
+                pass_through,
+                &game,
+                leave_out,
+            )
+            .into_iter()
+            .filter_map(|(path, entry)| match entry {
+                netherforge_format::startup::Entry::Text(text) => Some((path, text.into_bytes())),
+                netherforge_format::startup::Entry::Copy(from) => {
+                    source.bytes(&from).map(|bytes| (path, bytes))
+                }
+            })
+            .collect::<HashMap<String, Vec<u8>>>()
+        };
+    let whole = build(true, &|_| false);
+    let hash = hash_of(&whole);
+    let refusal = datapacks.refused().filter(|r| r.hash == hash);
+    let refused = refusal.is_some();
+    let files = match refusal {
+        Some(refused) => {
+            let (pass_through, skies) = leaves_out(&refused, project.namespace());
+            build(pass_through, &|sky| {
+                skies.as_ref().is_none_or(|s| s.contains(sky))
+            })
+        }
+        None => whole.clone(),
+    };
+    // The least a refusal could leave out: what it would if it named nothing it could tell.
+    let can_leave_out = build(false, &|_| true) != whole;
+    Some(ForStart {
+        files,
+        hash,
+        refused,
+        can_leave_out,
+    })
+}
+
 impl StartupCheck {
     /// Builds the datapack from `project` as it reads and answers whether it differs from what the server started
     /// with; a change is said once (a warning: the server runs what it started with until it restarts). A server that
@@ -189,51 +257,13 @@ impl StartupCheck {
         source: &dyn netherforge_format::project::ProjectSource,
         platform: &dyn netherforge_platform::Platform,
     ) -> bool {
-        let datapacks = platform.datapacks();
-        let Some(format) = datapacks.format().filter(|f| f.len() == 2) else {
+        let Some(start) = for_start(project, source, platform) else {
             self.stale = false;
             return false;
         };
-        let format = [format[0], format[1]];
-        let main = datapacks.main_world();
-        let game = datapacks.game();
-        let build =
-            |pass_through: bool,
-             leave_out: &dyn Fn(&netherforge_format::reference::ResourceKey) -> bool| {
-                netherforge_format::startup::build(
-                    project,
-                    format,
-                    &ServerText(platform),
-                    main.as_deref(),
-                    pass_through,
-                    &game,
-                    leave_out,
-                )
-                .into_iter()
-                .filter_map(|(path, entry)| match entry {
-                    netherforge_format::startup::Entry::Text(text) => {
-                        Some((path, text.into_bytes()))
-                    }
-                    netherforge_format::startup::Entry::Copy(from) => {
-                        source.bytes(&from).map(|bytes| (path, bytes))
-                    }
-                })
-                .collect::<HashMap<String, Vec<u8>>>()
-            };
-        let whole = build(true, &|_| false);
-        let refusal = datapacks.refused();
         self.note_refusal(project, platform);
-        let now = match refusal.filter(|r| r.hash == hash_of(&whole)) {
-            Some(refused) => {
-                let (pass_through, skies) = leaves_out(&refused, project.namespace());
-                build(pass_through, &|sky| {
-                    skies.as_ref().is_none_or(|s| s.contains(sky))
-                })
-            }
-            None => whole,
-        };
         let was = self.stale;
-        self.stale = now != datapacks.started();
+        self.stale = start.files != platform.datapacks().started();
         if self.stale && !was {
             platform.log().warn(restart_message());
         }

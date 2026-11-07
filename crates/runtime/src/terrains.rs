@@ -424,11 +424,9 @@ pub fn resolve_generators(p: &Publishing, failures: &mut Failures) -> Published 
         generators.insert(
             id.clone(),
             ProjectGenerator {
-                terrain: None,
                 states,
                 biomes: keys,
-                scripts: None,
-                source: Some(source),
+                source,
             },
         );
     }

@@ -77,6 +77,25 @@ pub fn to_value(item: &ItemData) -> values::Item {
 
 /// A script's table as a stack; `at` names it in an error (`item`, `event.item`).
 pub fn from_value(item: &values::Item, at: &str, game: &dyn GameData) -> Result<ItemData, String> {
+    read_item(item, at, game, true)
+}
+
+/// [`from_value`] for an item whose kind is a stand-in (an overrides table's, which the look fills in): its kind
+/// isn't looked up in the server's registry.
+pub fn from_value_any_kind(
+    item: &values::Item,
+    at: &str,
+    game: &dyn GameData,
+) -> Result<ItemData, String> {
+    read_item(item, at, game, false)
+}
+
+fn read_item(
+    item: &values::Item,
+    at: &str,
+    game: &dyn GameData,
+    known_kind: bool,
+) -> Result<ItemData, String> {
     let parsed: Value =
         serde_json::from_str(&item.0).map_err(|e| format!("bad argument '{at}' ({e})"))?;
     let Value::Object(mut table) = parsed else {
@@ -101,7 +120,8 @@ pub fn from_value(item: &values::Item, at: &str, game: &dyn GameData) -> Result<
     if def.kind.is_empty() && def.item.is_none() {
         return Err(format!("bad argument '{at}' (an item needs a kind)"));
     }
-    if !def.kind.is_empty()
+    if known_kind
+        && !def.kind.is_empty()
         && game.lacks(
             Registry::Item,
             &netherforge_format::game::normalize(&def.kind),
@@ -114,7 +134,8 @@ pub fn from_value(item: &values::Item, at: &str, game: &dyn GameData) -> Result<
     }
     // Format's rules for an item, as a project file's (Kotlin's `Rules.item`): a stackable sword is refused here too.
     let mut sink = netherforge_format::problem::ProblemSink::new("item");
-    netherforge_format::item::check(&def, "item", &mut sink, Some(game));
+    // A stand-in kind isn't the server's to know, nor what its rules say of one.
+    netherforge_format::item::check(&def, "item", &mut sink, known_kind.then_some(game));
     if let Some(problem) = sink
         .problems
         .iter()

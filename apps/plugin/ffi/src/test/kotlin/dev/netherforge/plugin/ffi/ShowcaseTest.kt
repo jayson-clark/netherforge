@@ -30,7 +30,8 @@ class ShowcaseTest {
             repeat(40) { runtime.tick() }
             // The fake has no dimension types, so the worlds of the showcase's own aren't made (as on the Kotlin runtime),
             // and it never asks for the main world's generator.
-            val fakes = Regex("""World "\w+" isn't made: the server has no dimension type|the server doesn't ask NetherForge to generate it""")
+            val fakes =
+                Regex("""World "\w+" isn't made: the server has no dimension type|the server doesn't ask NetherForge to generate it""")
             val wrong = platform.log.lines
                 .filter { "WARN" in it || "ERROR" in it || "error" in it.lowercase() }
                 .filterNot { fakes.containsMatchIn(it) }

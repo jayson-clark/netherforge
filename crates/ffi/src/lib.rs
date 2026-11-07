@@ -15,6 +15,7 @@ pub mod game_events;
 pub mod generated;
 pub mod objects;
 pub mod terrain;
+pub mod testing;
 pub mod wire;
 
 pub use generated::*;

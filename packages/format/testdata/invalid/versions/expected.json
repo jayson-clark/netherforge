@@ -2,7 +2,7 @@
   {
     "severity": "error",
     "file": "netherforge.json",
-    "message": "NetherForge supports Minecraft 1.21.11 and later",
+    "message": "NetherForge supports Minecraft 26.1 and later",
     "path": "$.minecraft",
     "code": "project.minecraft-old"
   },

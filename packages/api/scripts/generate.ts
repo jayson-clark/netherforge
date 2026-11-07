@@ -8,10 +8,9 @@
  *    `luals/surfaces/*.lua`, what `this` is in each kind of script, and `luals/gates.json`,
  *    the functions a project may not be able to use, which the editor marks for its project;
  *  - `docs/reference/*.md`: the API reference;
- *  - the plugin runtime's bindings: `src/generated/lua/.../bindings.lua` (the calls
- *    into Kotlin) and `src/generated/kotlin/.../api/*.kt` (the interfaces the runtime
- *    implements, the primitives, the shapes and unions that cross, the event registry, and
- *    the server's events from the adapter's sink to the scripts: `emit/raised.ts`).
+ *  - the Rust runtime's bindings (`crates/api/src/generated`), the server's events from the
+ *    adapter's sink to the scripts (`emit/raised*.ts`), and the Kotlin `GameEvents` and
+ *    argument types the Paper adapter raises them with (`apps/plugin/platform/src/generated`).
  *
  * Run with `pnpm generate` from the repo root. Output is deterministic, so a
  * second run is never a diff; `pnpm lint` checks exactly that.
@@ -27,18 +26,7 @@ import { api } from '../src/spec/index.ts'
 import { bindings } from './emit/bindings.ts'
 import { REFERENCE_OWN_PAGES, referencePages } from './emit/docs.ts'
 import { checkLayout } from './emit/layout.ts'
-import {
-  apiKotlin,
-  argumentCodecsKotlin,
-  argumentTypesKotlin,
-  eventsKotlin,
-  gatesKotlin,
-  handlesKotlin,
-  primitivesKotlin,
-  shapesKotlin,
-  unionsKotlin,
-} from './emit/kotlin.ts'
-import { bindingsLua, schemaLua } from './emit/lua.ts'
+import { argumentTypesKotlin } from './emit/kotlin.ts'
 import {
   apiRust,
   argumentCodecsRust,
@@ -51,8 +39,8 @@ import {
   unionsRust,
   unportedRust,
 } from './emit/rust.ts'
-import { raisableKotlin, raisableRust } from './emit/raisable.ts'
-import { dispatchKotlin, platformKotlin, raisedEvents } from './emit/raised.ts'
+import { raisableRust } from './emit/raisable.ts'
+import { platformKotlin, raisedEvents } from './emit/raised.ts'
 import { dispatchRust, gameEventsRust } from './emit/raisedRust.ts'
 import { gameEventsFfiKotlin, gameEventsFfiRust } from './emit/raisedFfi.ts'
 import { luals, lualsGates, lualsSurfaces } from './emit/luals.ts'
@@ -93,30 +81,10 @@ writeDir(
   '.md',
 )
 
-const runtime = 'apps/plugin/runtime/src/generated'
 const bound = bindings(api)
-const classes = bound.classes
 const raised = raisedEvents(api, bound)
-write(`${runtime}/lua/dev/netherforge/plugin/lua/bindings.lua`, bindingsLua(classes, api))
-write(`${runtime}/lua/dev/netherforge/plugin/lua/prelude/schema.lua`, schemaLua(api))
 writeDir(
-  `${runtime}/kotlin/dev/netherforge/plugin/binding`,
-  new Map([
-    ['LuaHandle.kt', handlesKotlin(classes)],
-    ['LuaApi.kt', apiKotlin(classes)],
-    ['LuaPrimitives.kt', primitivesKotlin(classes)],
-    ['LuaShapes.kt', shapesKotlin(api, bound)],
-    ['LuaUnions.kt', unionsKotlin(bound)],
-    ['Events.kt', eventsKotlin(api)],
-    ['VersionGates.kt', gatesKotlin(api)],
-    ['GameEventDispatch.kt', dispatchKotlin(raised)],
-    ['RaisableEvents.kt', raisableKotlin(api, raised)],
-    ['ArgumentCodecs.kt', argumentCodecsKotlin(bound)],
-  ]),
-  '.kt',
-)
-writeDir(
-  `${runtime}/kotlin/dev/netherforge/plugin/platform`,
+  'apps/plugin/platform/src/generated/kotlin/dev/netherforge/plugin/platform',
   new Map([
     ['GameEvents.kt', platformKotlin(raised)],
     ['CommandArguments.kt', argumentTypesKotlin(bound)],

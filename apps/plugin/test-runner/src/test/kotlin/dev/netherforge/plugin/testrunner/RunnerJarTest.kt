@@ -4,6 +4,10 @@ import dev.netherforge.format.bridge.Bridge
 import dev.netherforge.format.game.GameDataBundle
 import dev.netherforge.format.project.FormatVersion
 import dev.netherforge.plugin.testkit.FakePlatform
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
@@ -16,7 +20,7 @@ import kotlin.test.assertTrue
 
 /**
  * The built jar run the way `netherforge test` runs it (`java -jar`): the shadow jar carries the runtime, the fake platform, format,
- * Lua's natives and SQLite, with a manifest that allows native access, so what the unit tests can't see (a service file lost in the
+ * the Rust runtime's library, with a manifest that allows native access, so what the unit tests can't see (a service file lost in the
  * merge, a missing driver) shows here. Also what the exit code and the output formats are.
  */
 class RunnerJarTest {
@@ -62,10 +66,11 @@ class RunnerJarTest {
         val junit = root.resolve("out/junit.xml")
         val (code, output) = run(root.toString(), "--game-data", gameData(root), "--json", "--junit", junit.toString())
         assertEquals(1, code, output)
-        val events = output.lines().filter { it.startsWith("{") }.map { EventJson.decodeFromString(TestEvent.serializer(), it) }
-        val result = events.filterIsInstance<TestResult>().single()
-        assertEquals(Status.FAILED, result.status)
-        assertEquals(Place("tests/a_test.lua", 2), result.source)
+        val events = output.lines().filter { it.startsWith("{") }.map { Json.parseToJsonElement(it).jsonObject }
+        val result = events.single { it["event"]?.jsonPrimitive?.content == "result" }
+        assertEquals("failed", result["status"]?.jsonPrimitive?.content)
+        val source = result["source"]!!.jsonObject
+        assertEquals("tests/a_test.lua" to 2, source["file"]!!.jsonPrimitive.content to source["line"]!!.jsonPrimitive.int)
         assertTrue("""<failure message="nope"""" in junit.readText(), junit.readText())
     }
 

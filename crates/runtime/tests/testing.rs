@@ -419,11 +419,11 @@ fn a_projects_tests_run_each_on_a_server_of_its_own() {
         lines,
         [
             r#"{"event":"start","project":"/p","version":"dev"}"#,
-            r#"{"event":"file","file":"tests/broken_test.lua","tests":["first"],"message":"tests/broken_test.lua:2: not finished","source":{"file":"tests/broken_test.lua","line":2}}"#,
-            r#"{"event":"result","file":"tests/broken_test.lua","name":"(running tests/broken_test.lua)","status":"errored","durationMillis":0,"message":"tests/broken_test.lua:2: not finished","source":{"file":"tests/broken_test.lua","line":2},"traceback":"\ttests/broken_test.lua:2: in function <tests/broken_test.lua:1>"}"#,
+            r#"{"event":"file","file":"tests/broken_test.lua","tests":["first"],"message":"not finished","source":{"file":"tests/broken_test.lua","line":2}}"#,
+            r#"{"event":"result","file":"tests/broken_test.lua","name":"(running tests/broken_test.lua)","status":"errored","durationMillis":0,"message":"not finished","source":{"file":"tests/broken_test.lua","line":2},"traceback":"\ttests/broken_test.lua:2: in function <tests/broken_test.lua:1>"}"#,
             r#"{"event":"file","file":"tests/greeter_test.lua","tests":["greets","fails at its line","time passes","players join and chat","a script's error fails it","a terrain stood in for"]}"#,
             r#"{"event":"result","file":"tests/greeter_test.lua","name":"greets","status":"passed","durationMillis":0}"#,
-            r#"{"event":"result","file":"tests/greeter_test.lua","name":"fails at its line","status":"failed","durationMillis":0,"message":"tests/greeter_test.lua:11: one isn't two","source":{"file":"tests/greeter_test.lua","line":11},"traceback":"\ttests/greeter_test.lua:11: in function <tests/greeter_test.lua:10>"}"#,
+            r#"{"event":"result","file":"tests/greeter_test.lua","name":"fails at its line","status":"failed","durationMillis":0,"message":"one isn't two","source":{"file":"tests/greeter_test.lua","line":11},"traceback":"\ttests/greeter_test.lua:11: in function <tests/greeter_test.lua:10>"}"#,
             r#"{"event":"result","file":"tests/greeter_test.lua","name":"time passes","status":"passed","durationMillis":0,"logs":["tests/greeter_test.lua:18: counted\t5"]}"#,
             r#"{"event":"result","file":"tests/greeter_test.lua","name":"players join and chat","status":"passed","durationMillis":0}"#,
             r#"{"event":"result","file":"tests/greeter_test.lua","name":"a script's error fails it","status":"errored","durationMillis":0,"message":"a script failed while the test ran: module greeter: player_chat handler failed: it went boom","source":{"file":"modules/greeter/init.lua","line":6},"traceback":"\tmodules/greeter/init.lua:6: in function <modules/greeter/init.lua:5>\n\ttests/greeter_test.lua:33: in function <tests/greeter_test.lua:31>"}"#,
@@ -468,7 +468,7 @@ fn a_projects_tests_run_each_on_a_server_of_its_own() {
 <testsuites tests="2" failures="0" errors="1" time="0.000">
   <testsuite name="tests/broken_test.lua" tests="1" failures="0" errors="1" time="0.000">
     <testcase classname="tests/broken_test.lua" name="(running tests/broken_test.lua)" time="0.000">
-      <error message="tests/broken_test.lua:2: not finished">tests/broken_test.lua:2
+      <error message="not finished">tests/broken_test.lua:2
 	tests/broken_test.lua:2: in function &lt;tests/broken_test.lua:1&gt;</error>
     </testcase>
   </testsuite>
@@ -843,7 +843,7 @@ end)
     assert_eq!(
         results[2].message.as_deref(),
         Some(
-            "tests/weather_test.lua:29: the request to https://api.weather.example/now?city=oslo wasn't answered: nf.test.http's handler answered nil"
+            "the request to https://api.weather.example/now?city=oslo wasn't answered: nf.test.http's handler answered nil"
         )
     );
     assert_eq!(results[2].source.as_ref().and_then(|s| s.line), Some(29));

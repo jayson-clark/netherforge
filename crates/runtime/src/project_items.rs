@@ -467,7 +467,7 @@ impl GameContext {
                 "kind".into(),
                 serde_json::Value::String("minecraft:stone".into()),
             );
-            let item = crate::items::from_value(
+            let item = crate::items::from_value_any_kind(
                 &values::Item(json.to_string()),
                 "overrides",
                 self.shared.platform.game(),

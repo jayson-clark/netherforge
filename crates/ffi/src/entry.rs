@@ -155,6 +155,68 @@ pub unsafe extern "C" fn nf_default_generator(
     }
 }
 
+/// The start-up datapack ([crate::compose::startup_datapack]): an error's message, or none, or the files (sorted by
+/// path), the hash, whether a refusal left something out, and whether one could.
+///
+/// # Safety
+/// As [nf_call].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nf_startup_datapack(
+    args: *const u8,
+    len: usize,
+    out_len: *mut usize,
+) -> *const u8 {
+    objects::drain_released();
+    let args = unsafe { bytes(args, len) };
+    unsafe {
+        answer(out_len, |w| {
+            let mut r = Reader::new(args);
+            let start = <crate::compose::StartArgs as crate::wire::Take>::take(&mut r);
+            match crate::compose::startup_datapack(start) {
+                Err(why) => {
+                    w.u8(0);
+                    why.put(w);
+                }
+                Ok(None) => w.u8(1),
+                Ok(Some(start)) => {
+                    w.u8(2);
+                    let mut files: Vec<(String, Vec<u8>)> = start.files.into_iter().collect();
+                    files.sort();
+                    w.count(files.len());
+                    for (path, bytes) in files {
+                        path.put(w);
+                        bytes.put(w);
+                    }
+                    start.hash.put(w);
+                    start.refused.put(w);
+                    start.can_leave_out.put(w);
+                }
+            }
+        })
+    }
+}
+
+/// Runs a project's script tests ([crate::testing::run]): the exit code.
+///
+/// # Safety
+/// As [nf_call].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nf_test_run(
+    args: *const u8,
+    len: usize,
+    out_len: *mut usize,
+) -> *const u8 {
+    objects::drain_released();
+    let args = unsafe { bytes(args, len) };
+    unsafe {
+        answer(out_len, |w| {
+            let mut r = Reader::new(args);
+            let args = <crate::testing::TestArgs as crate::wire::Take>::take(&mut r);
+            crate::testing::run(args).put(w);
+        })
+    }
+}
+
 /// Stops the runtime ([crate::compose::stop]).
 ///
 /// # Safety

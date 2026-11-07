@@ -1,7 +1,10 @@
 package dev.netherforge.plugin.ffi
 
+import dev.netherforge.plugin.datapack.StartupDatapackFiles
+import dev.netherforge.plugin.platform.DatapackOps
 import dev.netherforge.plugin.platform.Platform
 import dev.netherforge.plugin.platform.PlatformEvents
+import dev.netherforge.plugin.platform.PlatformLog
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
@@ -24,6 +27,12 @@ class NativeRuntime(private val platform: Platform) {
         )
     }
     private val stop by lazy { Native.function("nf_stop", FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)) }
+    private val startupDatapack by lazy {
+        Native.function(
+            "nf_startup_datapack",
+            FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS)
+        )
+    }
     private val defaultGenerator by lazy {
         Native.function(
             "nf_default_generator",
@@ -55,6 +64,42 @@ class NativeRuntime(private val platform: Platform) {
         w.string(world)
         return answer { at, out -> defaultGenerator.invokeExact(at, w.size.toLong(), out) as MemorySegment }
             .let { bytes -> read(bytes, w) { r -> r.opt { r.string() } } }
+    }
+
+    /**
+     * The start-up datapack for the project [settings] name, which the server's bootstrap hands it before it loads its
+     * worlds and before [start]: null when there's no project, or the server doesn't say its data pack format. Built
+     * on [platform], which only needs to answer [Platform.log] and [Platform.datapacks] ([bootstrap]).
+     */
+    fun startupDatapack(
+        pluginFolder: Path,
+        serverFolder: Path,
+        settings: Map<String, Any?>,
+        properties: Map<String, String> = System.getProperties().stringPropertyNames().associateWith { System.getProperty(it) },
+        environment: Map<String, String> = System.getenv()
+    ): StartupDatapackFiles.Start? {
+        val w = Writer()
+        putPlatform(w, platform)
+        putPath(w, pluginFolder)
+        putPath(w, serverFolder)
+        w.string("")
+        w.dynamic(settings)
+        w.map(properties, { w.string(it) }) { w.string(it) }
+        w.map(environment, { w.string(it) }) { w.string(it) }
+        return answer { at, out -> startupDatapack.invokeExact(at, w.size.toLong(), out) as MemorySegment }
+            .let { bytes ->
+                read(bytes, w) { r ->
+                    when (r.byte().toInt()) {
+                        0 -> throw IllegalArgumentException(r.string())
+                        1 -> null
+                        else -> {
+                            val files = LinkedHashMap<String, ByteArray>()
+                            repeat(r.count()) { files[r.string()] = r.bytes() }
+                            StartupDatapackFiles.Start(files, r.string(), r.bool(), r.bool())
+                        }
+                    }
+                }
+            }
     }
 
     /**
@@ -115,5 +160,27 @@ class NativeRuntime(private val platform: Platform) {
         val r = Reader(call(w))
         if (r.byte().toInt() != 0) throw r.error()
         return take(r)
+    }
+
+    companion object {
+        /**
+         * The server as its bootstrap knows it, before it has worlds or players: only [log] and [datapacks] answer
+         * (what [startupDatapack] asks), anything else is a mistake that says so.
+         */
+        fun bootstrap(log: PlatformLog, datapacks: DatapackOps): Platform =
+            java.lang.reflect.Proxy.newProxyInstance(Platform::class.java.classLoader, arrayOf(Platform::class.java)) {
+                    proxy,
+                    method,
+                    args
+                ->
+                when (method.name) {
+                    "getLog" -> log
+                    "getDatapacks" -> datapacks
+                    "hashCode" -> System.identityHashCode(proxy)
+                    "equals" -> proxy === args?.firstOrNull()
+                    "toString" -> "the bootstrap's platform"
+                    else -> throw UnsupportedOperationException("the server's bootstrap has no ${method.name}")
+                }
+            } as Platform
     }
 }

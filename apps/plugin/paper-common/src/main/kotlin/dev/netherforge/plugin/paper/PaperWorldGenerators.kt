@@ -23,29 +23,19 @@ import java.util.concurrent.atomic.AtomicReference
 import java.util.logging.Logger
 
 /**
- * The project's terrains on Paper (`terrain/<id>.json`, format's
- * [dev.netherforge.format.terrain.CompiledTerrain]): a Bukkit [ChunkGenerator]
- * and [BiomeProvider] per world that ask the published generator by id each
- * time, so hot reload swaps it for the chunks generated afterwards.
+ * The project's terrains on Paper (`terrain/<id>.json`): a Bukkit [ChunkGenerator] and [BiomeProvider] per world
+ * that ask the published generator by id each time, so hot reload swaps it for the chunks generated afterwards.
  *
  * **Threads.** The server calls a generator from its chunk threads, so
- * [isParallelCapable][ChunkGenerator.isParallelCapable] is true and nothing
- * here touches the main thread's world: a published generator is immutable
- * (format's compiled file, its bound generators' noise only read, the
- * [BlockData] prepared on the main thread when it was published), and the
- * published set is one atomic reference.
+ * [isParallelCapable][ChunkGenerator.isParallelCapable] is true and nothing here touches the main thread's world: a
+ * published generator is the runtime's [TerrainSource] (across FFM, from any thread), its [BlockData] prepared on the
+ * main thread when it was published, and the published set is one atomic reference.
  *
- * What a chunk gets is [TerrainGenerator.generate]'s blocks written as chunk
- * data (runs of one block, air left out); a custom block's note block state is
- * written like any, and the runtime's blocks adopt it when the chunk loads.
- * The biomes are the areas' (the project's own from the server's registry,
- * which has them from the start-up datapack), and the game then decorates the
- * chunk with their features. A file's Lua stages run inside [TerrainGenerator.generate],
- * in a Lua state of the generator's for each chunk thread at a time (format's
- * `TerrainScripts`), never the plugin's own.
- *
- * Every generator is driven as a [TerrainSource]: the Rust runtime's is its own (across FFM, from any thread), the
- * Kotlin runtime's is its compiled file wrapped here ([CompiledTerrainSource]).
+ * What a chunk gets is the generator's blocks written as chunk data (runs of one block, air left out); a custom
+ * block's note block state is written like any, and the runtime's blocks adopt it when the chunk loads. The biomes
+ * are the areas' (the project's own from the server's registry, which has them from the start-up datapack), and the
+ * game then decorates the chunk with their features. A file's Lua stages run inside the generator, in a Luau state
+ * of its own for each chunk thread, never the scripts' own.
  */
 class PaperWorldGenerators(private val logger: Logger) {
     /** A published generator, ready for the chunk threads: its source, its blocks as [BlockData] and its biomes. */
@@ -110,7 +100,7 @@ class PaperWorldGenerators(private val logger: Logger) {
     }
 
     private fun prepare(id: String, project: ProjectGenerator): Prepared {
-        val source = project.source ?: CompiledTerrainSource(requireNotNull(project.terrain), project.scripts)
+        val source = project.source
         val stone = source.stone
         val blocks = project.states.mapIndexed { index, state ->
             if (index == 0) {
