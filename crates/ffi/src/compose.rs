@@ -7,7 +7,6 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 
-use netherforge_format::package::Folders;
 use netherforge_platform::{Dynamic, Platform, PlatformEvents};
 use netherforge_runtime::admin::AdminCommand;
 use netherforge_runtime::bridge::{Bridge, BridgeConfig};
@@ -22,9 +21,10 @@ use netherforge_runtime::shared::Shared;
 use netherforge_runtime::store::Store;
 
 use crate::JavaPlatform;
-use crate::disk::DiskProject;
 use crate::objects::JavaRef;
 use crate::wire::{Reader, Take};
+use netherforge_runtime::config::RuntimeConfig;
+use netherforge_runtime::project_files::{FilesConfig, ProjectFiles};
 
 /// What the plugin starts the runtime with: the server's platform, its folders and address, and
 /// `config.yml`'s values with the JVM's properties and environment.
@@ -89,6 +89,19 @@ fn json(value: Dynamic) -> serde_json::Value {
     }
 }
 
+/// Where the runtime reads its project and packages: a project, or a bundle, with the server's own packages.
+fn project_files(config: &RuntimeConfig) -> ProjectFiles {
+    ProjectFiles::new(FilesConfig {
+        configured: config.project.clone(),
+        resolves: config.resolves_packages,
+        package_cache: config.package_cache.clone(),
+        bundles: config.bundles.clone(),
+        provided: config.provided_packages.clone(),
+        written_packs: config.session.data_dir.clone(),
+        kept_packs: Some(config.state_dir.join("written-packs")),
+    })
+}
+
 /// Starts the runtime: the events the server's adapter calls, or none when there's no project to run. An error says
 /// why `config.yml` can't be acted on.
 pub fn start(args: StartArgs) -> Result<Option<Rc<dyn PlatformEvents>>, String> {
@@ -119,11 +132,7 @@ pub fn start(args: StartArgs) -> Result<Option<Rc<dyn PlatformEvents>>, String> 
     let session_platform = bridge.as_ref().map_or(platform.clone(), |b| b.platform());
 
     // The project's folder and its packages' outlive every session of the plugin's life.
-    let source: &'static DiskProject =
-        Box::leak(Box::new(DiskProject::new(config.project.clone())));
-    let packages: &'static Folders = Box::leak(Box::new(Folders {
-        root: config.project.clone(),
-    }));
+    let source: &'static ProjectFiles = Box::leak(Box::new(project_files(&config)));
     std::fs::create_dir_all(&config.state_dir)
         .map_err(|e| format!("{}: {e}", config.state_dir.display()))?;
     let store = Rc::new(Store::open(&config.state_dir.join("netherforge.db"))?);
@@ -133,6 +142,14 @@ pub fn start(args: StartArgs) -> Result<Option<Rc<dyn PlatformEvents>>, String> 
         netherforge_format::project::ProjectSource::bytes(source, path)
     })));
     session_config.paths = Some(ProjectPaths(Rc::new(|path: &str| source.path_of(path))));
+    session_config.written_pack_files = Some(netherforge_runtime::session::WrittenPackFiles(
+        Rc::new(|| source.written_pack_files()),
+    ));
+    session_config.prebuilt_pack = Some(netherforge_runtime::packs::PrebuiltPack(Rc::new(|| {
+        source
+            .bundled_pack()
+            .ok_or_else(|| source.bundled_pack_ignored())
+    })));
     // The network's link is the plugin's: it outlives sessions, and the first waits for the hub.
     let link = Link(NetworkLink::new(session_config.network.clone()));
     {
@@ -144,7 +161,7 @@ pub fn start(args: StartArgs) -> Result<Option<Rc<dyn PlatformEvents>>, String> 
 
     // Made before it runs, so its first run already has the profiler, the bridge's debugger and the server's lookups
     // (a recipe's project item is built from its look as the session starts).
-    let session = Session::configured(session_platform, source, packages, store, session_config);
+    let session = Session::configured(session_platform, source, source, store, session_config);
     let shared = session.shared().clone();
     let events = Rc::new(ServerEvents::new(session));
     let info = platform.info();
@@ -161,6 +178,9 @@ pub fn start(args: StartArgs) -> Result<Option<Rc<dyn PlatformEvents>>, String> 
     events.set_metrics(metrics.clone());
     if let Some(bridge) = &bridge {
         events.attach_bridge(bridge.clone());
+        if let Some(debugger) = events.debugger() {
+            debugger.set_packages(source.folders());
+        }
     }
     bind(&platform, &events, &shared);
     events
@@ -208,14 +228,11 @@ pub fn default_generator(args: StartArgs, world: &str) -> Option<String> {
         &|key| env.get(key).cloned(),
     )
     .ok()??;
-    let source = Rc::new(DiskProject::new(config.project.clone()));
-    let packages = Folders {
-        root: config.project.clone(),
-    };
+    let source = Rc::new(project_files(&config));
     let loaded = netherforge_format::project::load(
         &*source,
         netherforge_format::project::Options {
-            packages: &packages,
+            packages: &*source,
             ..Default::default()
         },
     );

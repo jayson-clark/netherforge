@@ -12,7 +12,8 @@
 //! `http.allow-private` entry that isn't one, an S3 store without its bucket) is an error, since an allowance the owner
 //! meant but that silently didn't apply would look like a bug in the package.
 //!
-//! Not yet: a `project:` that's a bundle's URL (Kotlin fetches it into `bundles/`), which comes with bundles.
+//! A `project:` that's a bundle's URL is fetched into `bundles/` in the plugin's folder the first time
+//! ([`crate::bundle_fetch`]), and run from there.
 
 use std::path::{Path, PathBuf};
 
@@ -295,14 +296,18 @@ pub fn read(
     let Some(project) = text(settings, "project") else {
         return Ok(None);
     };
-    if project.starts_with("https://") || project.starts_with("http://") {
-        return Err(format!(
-            "project: {project} is a bundle's address, which this runtime doesn't fetch yet: download the bundle and name its folder"
-        ));
-    }
+    let project = project.trim();
+    let folder = if crate::bundle_fetch::is_reference(project) {
+        crate::bundle_fetch::folder(project, &plugin_folder.join("bundles"), &|line| {
+            eprintln!("{line}")
+        })
+        .map_err(|why| format!("project: {why}"))?
+    } else {
+        normalize(&server.directory.join(project))
+    };
     session.pack = pack(section(settings, "resource-pack"), server, env)?;
     session.pack.state_dir = Some(plugin_folder.to_owned());
-    let mut config = base(normalize(&server.directory.join(project.trim())), session);
+    let mut config = base(folder, session);
     let bundles = section(settings, "bundles");
     config.bundles = BundlesConfig {
         require_signature: boolean(bundles, "require-signature").unwrap_or(false),

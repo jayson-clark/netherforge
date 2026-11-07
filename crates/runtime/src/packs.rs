@@ -316,9 +316,18 @@ struct Uploads {
 }
 
 /// The pack as last built, what scripts and menus read of it, and what each player's client was sent and said.
+/// The pack a bundle was built with and its file, or why it isn't used though it has one (none: it has none).
+#[derive(Clone)]
+pub struct PrebuiltPack(pub Rc<dyn Fn() -> Result<Bundled, Option<String>>>);
+
+/// A bundle's built pack, and its file.
+pub type Bundled = (netherforge_format::bundle::BundledResourcePack, PathBuf);
+
 #[derive(Default)]
 pub struct Packs {
     pub config: PackConfig,
+    /// The bundle's own pack, sent as it is when it's for this server's format.
+    pub prebuilt: Option<PrebuiltPack>,
     server: Option<PackServer>,
     /// Whether the server couldn't start: said once.
     server_failed: bool,
@@ -354,6 +363,42 @@ pub struct Packs {
 impl Packs {
     /// Rebuilds from `project`: what's wrong with the build that the format didn't already say (the server not
     /// knowing its pack format). With no packs, blocks or videos in the tree there's no pack.
+    /// The bundle's own pack, when it was built for `format` and its file is the one its manifest names; none to build
+    /// one here. A bundle's files are checked against its manifest, and this one against its SHA-1, so it's what was
+    /// built.
+    fn bundled(&self, platform: &dyn Platform, format: [i32; 2]) -> Option<Vec<u8>> {
+        let log = platform.log();
+        let (pack, file) = match (self.prebuilt.as_ref()?.0)() {
+            Ok(found) => found,
+            Err(why) => {
+                if let Some(why) = why {
+                    log.info(format!(
+                        "Building the resource pack here rather than sending the bundle's: {why}"
+                    ));
+                }
+                return None;
+            }
+        };
+        if pack.format != [i64::from(format[0]), i64::from(format[1])] {
+            let shown: Vec<String> = pack.format.iter().map(i64::to_string).collect();
+            log.info(format!(
+                "The bundle's resource pack is for pack format {}, not this server's: building one",
+                shown.join(".")
+            ));
+            return None;
+        }
+        match std::fs::read(&file) {
+            Ok(bytes) if sha1_hex(&bytes) == pack.sha1 => Some(bytes),
+            _ => {
+                log.warn(format!(
+                    "The bundle's {} isn't the one it was built with: building the resource pack here",
+                    netherforge_format::bundle::RESOURCE_PACK_FILE
+                ));
+                None
+            }
+        }
+    }
+
     pub fn rebuild(&mut self, platform: &dyn Platform, project: &Define) -> Vec<Problem> {
         let loaded = project.project;
         self.home = Some(loaded.namespace().to_owned());
@@ -409,18 +454,21 @@ impl Packs {
             compiled.values().partition(|p| p.on_demand);
         let read = |path: &str| read_bytes(project, path);
         let size = |path: &str| read(path).and_then(|b| png_size(&b));
-        let bytes = zip(&files(
-            &build::build(
-                &joined,
-                format,
-                &description,
-                plan.as_ref(),
-                loaded.vanilla.as_ref(),
-                &videos,
-                &size,
-            ),
-            &read,
-        ));
+        let bytes = match self.bundled(platform, format) {
+            Some(bytes) => bytes,
+            None => zip(&files(
+                &build::build(
+                    &joined,
+                    format,
+                    &description,
+                    plan.as_ref(),
+                    loaded.vanilla.as_ref(),
+                    &videos,
+                    &size,
+                ),
+                &read,
+            )),
+        };
         let mut on_demand = BTreeMap::new();
         for pack in separate {
             let own_description = pack

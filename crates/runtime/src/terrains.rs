@@ -40,6 +40,9 @@ use crate::Room;
 use crate::session::{Define, Service};
 use crate::shared::Shared;
 
+/// A chunk thread's last column asked: its generator, x and z, and the biome there.
+type LastColumn = ((usize, i32, i32), String);
+
 thread_local! {
     /// Each world the server asked a generator for as it started, and the one it was given (none: none): what the main
     /// world runs with until the server restarts (`nf_default_generator` notes it).
@@ -64,7 +67,7 @@ pub fn asked(world: &str) -> Option<Option<String>> {
 
 thread_local! {
     /// The column a chunk thread last asked a biome of, by its generator, and the biome.
-    static LAST_COLUMN: RefCell<Option<((usize, i32, i32), String)>> = const { RefCell::new(None) };
+    static LAST_COLUMN: RefCell<Option<LastColumn>> = const { RefCell::new(None) };
 }
 
 /// The stone a file falls back on when it names none the server has.

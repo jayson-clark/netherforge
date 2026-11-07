@@ -312,6 +312,17 @@ pub trait PackageSources {
     fn checks_lock(&self) -> bool {
         true
     }
+
+    /// As a load starts: a host that decides where the project and its packages are on every load (a bundle, the
+    /// server's own packages) decides it again.
+    fn prepare(&self) {}
+
+    /// The project as it loaded, for the host to add what it finds wrong besides format's problems (a bundle that
+    /// isn't what it was built as): true to load it again, the host having changed what it reads (a resource pack
+    /// with errors left out).
+    fn checked(&self, _project: &mut crate::project::Project<'_>) -> bool {
+        false
+    }
 }
 
 /// Nowhere: every dependency is missing.

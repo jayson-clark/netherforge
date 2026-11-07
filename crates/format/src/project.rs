@@ -257,6 +257,16 @@ struct Reading {
 /// (and each package) can name what the packages it depends on export, and
 /// nothing else of theirs.
 pub fn load<'a>(source: &dyn ProjectSource, options: Options<'a>) -> Project<'a> {
+    loop {
+        let mut project = load_once(source, options);
+        if !options.packages.checked(&mut project) {
+            return project;
+        }
+    }
+}
+
+fn load_once<'a>(source: &dyn ProjectSource, options: Options<'a>) -> Project<'a> {
+    options.packages.prepare();
     let mut root = read(source, None, &options);
     let mut problems = std::mem::take(&mut root.problems);
     let lock_text = root

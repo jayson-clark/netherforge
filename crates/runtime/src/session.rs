@@ -151,6 +151,10 @@ pub struct Config {
     pub bytes: Option<crate::screen::ProjectBytes>,
     /// Where the project's files are on disk (videos' frames, read a frame at a time): the adapter's.
     pub paths: Option<crate::screen::video::ProjectPaths>,
+    /// The resource pack a bundle was built with, sent as it is when it's for this server's format: the adapter's.
+    pub prebuilt_pack: Option<crate::packs::PrebuiltPack>,
+    /// The `pack.json` of every resource pack packages' scripts wrote now: what `nf.packs.rebuild` reads again.
+    pub written_pack_files: Option<WrittenPackFiles>,
     /// `http:` in `config.yml`: the owner's limits on `nf.http`.
     pub http: crate::http::HttpConfig,
     /// What stands in for the network's own answers (where names lead, where connections go): tests'.
@@ -195,6 +199,10 @@ pub struct Config {
     pub clock: Option<Rc<dyn netherforge_luau::Clock>>,
 }
 
+/// The `pack.json` of every resource pack packages' scripts wrote, as a reload names them.
+#[derive(Clone)]
+pub struct WrittenPackFiles(pub Rc<dyn Fn() -> Vec<String>>);
+
 /// Why a project can't run: what the log says, and the problem to report if format didn't.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Refusal {
@@ -230,6 +238,7 @@ pub struct Session<'a> {
     /// Whether the server must restart for what it learns only as it starts.
     startup: std::cell::RefCell<crate::reload::StartupCheck>,
     clock: Option<Rc<dyn netherforge_luau::Clock>>,
+    written_pack_files: Option<WrittenPackFiles>,
     /// What each scope's code costs (`/nf scripts`, slow-script warnings), and the warnings already given.
     costs: std::cell::RefCell<crate::costs::ScriptCosts>,
     performance: Option<crate::config::PerformanceConfig>,
@@ -350,6 +359,7 @@ impl<'a> Session<'a> {
         let shared = Shared::new(platform.clone(), store);
         shared.schedules.borrow_mut().now = config.wall_clock;
         shared.packs.borrow_mut().config = config.pack.clone();
+        shared.packs.borrow_mut().prebuilt = config.prebuilt_pack.clone();
         {
             let mut http = shared.http.borrow_mut();
             http.config = config.http.clone();
@@ -471,6 +481,7 @@ impl<'a> Session<'a> {
             costs: std::cell::RefCell::new(crate::costs::ScriptCosts::new(config.performance)),
             performance: config.performance,
             clock: config.clock.clone(),
+            written_pack_files: config.written_pack_files.clone(),
             warned: Default::default(),
             watching: Default::default(),
             profiler: Default::default(),
@@ -1559,13 +1570,25 @@ impl<'a> Session<'a> {
         if !std::mem::take(&mut self.shared.packs.borrow_mut().wanted) {
             return;
         }
-        let paths: Vec<String> = self
-            .source
-            .files()
-            .iter()
-            .filter(|p| p.starts_with("resource_packs/"))
-            .cloned()
+        if self.refusal.is_some() {
+            return;
+        }
+        // The packs there were, and those the packages' scripts have written now (`nf.files`' packs/), new ones
+        // included.
+        let mut paths: Vec<String> = self
+            .project
+            .everywhere("resource_pack")
+            .into_iter()
+            .map(|(name, _)| match name.split_once(':') {
+                Some((ns, id)) => format!("{ns}:resource_packs/{id}/pack.json"),
+                None => format!("resource_packs/{name}/pack.json"),
+            })
             .collect();
+        if let Some(written) = &self.written_pack_files {
+            paths.extend((written.0)());
+        }
+        paths.sort();
+        paths.dedup();
         if !paths.is_empty() {
             self.reload(&paths);
         }
@@ -2154,6 +2177,17 @@ fn load<'a>(source: &dyn ProjectSource, packages: &'a dyn PackageSources) -> Loa
 /// target Minecraft version this server doesn't run.
 fn refusal(platform: &dyn Platform, project: &Loaded) -> Option<Refusal> {
     let file = netherforge_format::manifest::FILE_NAME;
+    // A bundle that isn't what it was built as, or dependencies a production server won't resolve.
+    if let Some(problem) = project
+        .problems
+        .iter()
+        .find(|p| crate::project_files::refuses(p))
+    {
+        return Some(Refusal {
+            message: format!("{}: {}", problem.file, problem.message),
+            problem: None,
+        });
+    }
     if let Some(problem) = project
         .problems
         .iter()

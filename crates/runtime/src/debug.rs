@@ -85,8 +85,13 @@ pub struct Debugger {
     seq: AtomicI64,
     /// The project's folder, for an editor that names files by where they are on disk.
     project: Option<PathBuf>,
+    /// Every package's folder by namespace, as the last load found them (`ProjectFiles::folders`).
+    packages: Mutex<Option<PackageFolders>>,
     hold_every: Duration,
 }
+
+/// Each package's folder by namespace, which the project's loads keep up to date for another thread.
+pub type PackageFolders = Arc<Mutex<Vec<(String, PathBuf)>>>;
 
 impl Debugger {
     /// A debugger sending its messages with `send`, mapping absolute paths under `project` to project paths.
@@ -98,6 +103,7 @@ impl Debugger {
     pub fn with_hold(send: Send, project: Option<PathBuf>, hold_every: Duration) -> Arc<Debugger> {
         Arc::new(Debugger {
             state: Mutex::default(),
+            packages: Mutex::default(),
             signal: Condvar::new(),
             send,
             seq: AtomicI64::new(0),
@@ -177,13 +183,41 @@ impl Debugger {
         if !file.is_absolute() {
             return slashed;
         }
-        match &self.project {
-            Some(project) => file
-                .strip_prefix(project)
-                .map(|p| p.to_string_lossy().replace('\\', "/"))
-                .unwrap_or(slashed),
-            None => slashed,
+        // A package nested in another folder wins over the folder around it.
+        let mut best: Option<(usize, String)> = None;
+        let mut consider = |folder: &std::path::Path, namespace: Option<&str>| {
+            let Ok(local) = file.strip_prefix(folder) else {
+                return;
+            };
+            let local = local.to_string_lossy().replace('\\', "/");
+            let depth = folder.components().count();
+            if !local.is_empty() && best.as_ref().is_none_or(|(d, _)| depth > *d) {
+                let path = match namespace {
+                    Some(ns) => format!("{ns}:{local}"),
+                    None => local,
+                };
+                best = Some((depth, path));
+            }
+        };
+        if let Some(project) = &self.project {
+            consider(project, None);
         }
+        let packages = self
+            .packages
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(packages) = packages {
+            for (namespace, folder) in packages.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+                consider(folder, Some(namespace));
+            }
+        }
+        best.map_or(slashed, |(_, path)| path)
+    }
+
+    /// Maps files in packages' folders to their package paths, as `folders` says where they are.
+    pub fn set_packages(&self, folders: PackageFolders) {
+        *self.packages.lock().unwrap_or_else(|e| e.into_inner()) = Some(folders);
     }
 
     /// One request from the editor, on the bridge's thread.

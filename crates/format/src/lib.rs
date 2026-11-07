@@ -5,6 +5,7 @@
 pub mod animation;
 pub mod block_state;
 pub mod bridge;
+pub mod bundle;
 pub mod canonical;
 pub mod document;
 pub mod features;

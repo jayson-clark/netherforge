@@ -20,15 +20,17 @@ class ShowcaseTest {
             pluginFolder = plugin,
             serverFolder = plugin.parent,
             serverIp = "",
-            settings = mapOf("project" to showcase.toString()),
-            properties = emptyMap(),
+            settings = emptyMap(),
+            // As the editor's dev server runs it: its packages resolve from where its netherforge.json points.
+            properties = mapOf("netherforge.project" to showcase.toString()),
             environment = emptyMap()
         )
         try {
             assertTrue(started, platform.log.lines.joinToString("\n"))
             repeat(40) { runtime.tick() }
-            // The fake has no dimension types, so the worlds of the showcase's own aren't made (as on the Kotlin runtime).
-            val fakes = Regex("""World "\w+" isn't made: the server has no dimension type""")
+            // The fake has no dimension types, so the worlds of the showcase's own aren't made (as on the Kotlin runtime),
+            // and it never asks for the main world's generator.
+            val fakes = Regex("""World "\w+" isn't made: the server has no dimension type|the server doesn't ask NetherForge to generate it""")
             val wrong = platform.log.lines
                 .filter { "WARN" in it || "ERROR" in it || "error" in it.lowercase() }
                 .filterNot { fakes.containsMatchIn(it) }
