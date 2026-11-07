@@ -5,6 +5,7 @@
 //! the rust-runtime skill, "The Platform boundary".
 
 pub mod chunk_grid;
+pub mod terrain;
 #[rustfmt::skip]
 mod generated;
 
@@ -18,11 +19,14 @@ pub mod api {
 
     pub use command_arguments::*;
     pub use game_events::*;
+    // The chunk threads' generators, whose wire is written by hand.
+    pub use crate::terrain::SharedTerrain;
 }
 
 pub use api::{ArgumentType, GameEvents, WatchedEvent, game_event};
 
 pub use generated::*;
+pub use terrain::{GeneratedChunk, GeneratedLoot, SharedTerrain, TerrainSource, TerrainWorld};
 
 /// A player's or an entity's UUID.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]

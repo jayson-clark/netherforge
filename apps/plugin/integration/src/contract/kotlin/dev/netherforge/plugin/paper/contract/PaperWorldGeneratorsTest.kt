@@ -98,9 +98,9 @@ class PaperWorldGeneratorsTest : PlatformContract() {
         try {
             val world = main { Bukkit.getWorld(name)!! }
             assertEquals(-64, world.minHeight)
-            val bound = project.terrain.bind(world.seed, world.minHeight, world.maxHeight)
+            val bound = project.terrain!!.bind(world.seed, world.minHeight, world.maxHeight)
             val expected = bound.generate(2, -3)
-            val palette = project.terrain.palette
+            val palette = project.terrain!!.palette
             var ores = 0
             var rubies = 0
             // A chunk nothing holds open is unloaded again: it's read in the same step it's loaded.
@@ -163,7 +163,7 @@ class PaperWorldGeneratorsTest : PlatformContract() {
         create(name, "contract_volumes", 20260714L)
         try {
             val world = main { Bukkit.getWorld(name)!! }
-            val bound = project.terrain.bind(world.seed, world.minHeight, world.maxHeight)
+            val bound = project.terrain!!.bind(world.seed, world.minHeight, world.maxHeight)
             // A cold column: the rich biome over the ground, the volume's below -16.
             val (x, z) = (0 until 400).map { it * 37 to it * -11 }.first { (x, z) -> bound.biomeAt(x, z) == ContractBiomes.RICH }
             val (above, below) = main {
@@ -191,7 +191,7 @@ class PaperWorldGeneratorsTest : PlatformContract() {
         create(name, "contract_loot", 20260714L)
         try {
             val world = main { Bukkit.getWorld(name)!! }
-            val bound = project.terrain.bind(world.seed, world.minHeight, world.maxHeight)
+            val bound = project.terrain!!.bind(world.seed, world.minHeight, world.maxHeight)
             val (cx, cz, places) = (0 until 64).asSequence().map { it % 8 to it / 8 }
                 .map { (cx, cz) -> Triple(cx, cz, bound.generate(cx, cz).lootPlaces(cx, cz)) }
                 .first { it.third.isNotEmpty() }
@@ -332,7 +332,7 @@ class PaperWorldGeneratorsTest : PlatformContract() {
         create(name, "contract_decorated", 4242L)
         try {
             val world = main { Bukkit.getWorld(name)!! }
-            val bound = project.terrain.bind(world.seed, world.minHeight, world.maxHeight)
+            val bound = project.terrain!!.bind(world.seed, world.minHeight, world.maxHeight)
             val counts = HashMap<String, Int>()
             for ((cx, cz) in listOf(0 to 0, 1 to 0, -3 to 5)) {
                 val expected = bound.generate(cx, cz)
@@ -370,14 +370,14 @@ class PaperWorldGeneratorsTest : PlatformContract() {
         create(name, "contract_hills", 99L)
         try {
             val world = main { Bukkit.getWorld(name)!! }
-            val bound = project.terrain.bind(world.seed, world.minHeight, world.maxHeight)
+            val bound = project.terrain!!.bind(world.seed, world.minHeight, world.maxHeight)
             val spawn = assertNotNull(main { platform.worlds.spawnLocation(name) })
             val column = bound.dryColumnNear(0, 0)
             if (column != null) {
                 assertEquals(column.first, spawn.x.toInt())
                 assertEquals(column.second, spawn.z.toInt())
             }
-            assertTrue(spawn.y >= project.terrain.seaLevel, "the spawn is above the sea: ${spawn.y}")
+            assertTrue(spawn.y >= project.terrain!!.seaLevel, "the spawn is above the sea: ${spawn.y}")
         } finally {
             drop(name)
         }
@@ -615,7 +615,7 @@ class PaperWorldGeneratorsTest : PlatformContract() {
                 assertEquals(-128 to 384, platform.worlds.heights(name))
                 assertTrue(platform.worlds.loadChunk(name, 0, 0))
                 // The generator was bound to the world's own heights: its floor is at the bottom, stone above it, as format makes it.
-                val expected = project.terrain.bind(world.seed, world.minHeight, world.maxHeight).generate(0, 0)
+                val expected = project.terrain!!.bind(world.seed, world.minHeight, world.maxHeight).generate(0, 0)
                 for (y in listOf(-128, -127, -100, -65, 0, 40)) {
                     assertEquals(
                         project.states[expected[3, y, 5]].substringBefore('['),

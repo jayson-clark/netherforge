@@ -446,13 +446,14 @@ internal fun putWorldSettings(w: Writer, v: WorldSettings) {
 internal fun takeWorldSettings(r: Reader): WorldSettings = WorldSettings(generator = r.string(), environment = r.string(), seed = r.opt { r.long() }, structures = r.bool(), keepSpawnLoaded = r.bool(), terrain = r.opt { r.string() }, dimensionType = r.opt { r.string() })
 
 internal fun putProjectGenerator(w: Writer, v: ProjectGenerator) {
-    putCompiledTerrain(w, v.terrain)
+    w.opt(v.terrain) { x0 -> putCompiledTerrain(w, x0) }
     w.list(v.states) { x0 -> w.string(x0) }
     w.map(v.biomes, { x0 -> w.string(x0) }) { x0 -> w.string(x0) }
     w.opt(v.scripts) { x0 -> putTerrainScripts(w, x0) }
+    w.opt(v.source) { x0 -> putTerrainSource(w, x0) }
 }
 
-internal fun takeProjectGenerator(r: Reader): ProjectGenerator = ProjectGenerator(terrain = takeCompiledTerrain(r), states = r.list { r.string() }, biomes = r.map({ r.string() }) { r.string() }, scripts = r.opt { takeTerrainScripts(r) })
+internal fun takeProjectGenerator(r: Reader): ProjectGenerator = ProjectGenerator(terrain = r.opt { takeCompiledTerrain(r) }, states = r.list { r.string() }, biomes = r.map({ r.string() }) { r.string() }, scripts = r.opt { takeTerrainScripts(r) }, source = r.opt { takeTerrainSource(r) })
 
 internal fun putWorldFiles(w: Writer, v: WorldFiles) {
     putPath(w, v.level)
@@ -789,14 +790,9 @@ internal fun takeTerrainScripts(r: Reader): dev.netherforge.format.terrain.Terra
     throw UnsupportedOperationException("TerrainScripts doesn't cross from the Rust runtime yet")
 }
 
-/** `StructureTemplate` has no Rust type yet: it crosses as nothing, and can't come back. */
-@Suppress("UNUSED_PARAMETER")
-internal fun putStructureTemplate(w: Writer, v: dev.netherforge.format.terrain.StructureTemplate) = w.dynamic(null)
+internal fun putStructureTemplate(w: Writer, v: dev.netherforge.format.terrain.StructureTemplate) = w.string(CanonicalJson.json.encodeToString(dev.netherforge.format.terrain.StructureTemplate.serializer(), v))
 
-internal fun takeStructureTemplate(r: Reader): dev.netherforge.format.terrain.StructureTemplate {
-    r.dynamic()
-    throw UnsupportedOperationException("StructureTemplate doesn't cross from the Rust runtime yet")
-}
+internal fun takeStructureTemplate(r: Reader): dev.netherforge.format.terrain.StructureTemplate = CanonicalJson.json.decodeFromString(dev.netherforge.format.terrain.StructureTemplate.serializer(), r.string())
 
 /** `CompiledTerrain` has no Rust type yet: it crosses as nothing, and can't come back. */
 @Suppress("UNUSED_PARAMETER")
@@ -882,7 +878,7 @@ internal fun putCommandSender(w: Writer, v: CommandSender) {
     w.java(Objects.export(v, ::dispatchCommandSender))
 }
 
-internal fun takeCommandHandler(r: Reader): CommandHandler = RustCommandHandler(r.rust())
+internal fun takeCommandHandler(r: Reader): CommandHandler = Native.proxy(r.rust(), ::RustCommandHandler)
 
 internal fun putCommandOps(w: Writer, v: CommandOps) = w.java(Objects.export(v, ::dispatchCommandOps))
 
@@ -904,7 +900,7 @@ internal fun putPluginOps(w: Writer, v: PluginOps) = w.java(Objects.export(v, ::
 
 internal fun putEconomyOps(w: Writer, v: EconomyOps) = w.java(Objects.export(v, ::dispatchEconomyOps))
 
-internal fun takePlaceholderResolver(r: Reader): PlaceholderResolver = RustPlaceholderResolver(r.rust())
+internal fun takePlaceholderResolver(r: Reader): PlaceholderResolver = Native.proxy(r.rust(), ::RustPlaceholderResolver)
 
 internal fun putPlaceholderOps(w: Writer, v: PlaceholderOps) = w.java(Objects.export(v, ::dispatchPlaceholderOps))
 
@@ -918,7 +914,7 @@ internal fun putLootOps(w: Writer, v: LootOps) = w.java(Objects.export(v, ::disp
 
 internal fun putMannequinOps(w: Writer, v: MannequinOps) = w.java(Objects.export(v, ::dispatchMannequinOps))
 
-internal fun takeGoalCallbacks(r: Reader): GoalCallbacks = RustGoalCallbacks(r.rust())
+internal fun takeGoalCallbacks(r: Reader): GoalCallbacks = Native.proxy(r.rust(), ::RustGoalCallbacks)
 
 internal fun putMobGoalOps(w: Writer, v: MobGoalOps) = w.java(Objects.export(v, ::dispatchMobGoalOps))
 
@@ -934,7 +930,7 @@ internal fun putPauseOps(w: Writer, v: PauseOps) = w.java(Objects.export(v, ::di
 
 internal fun putPlatformLog(w: Writer, v: PlatformLog) = w.java(Objects.export(v, ::dispatchPlatformLog))
 
-internal fun takePlatformEvents(r: Reader): PlatformEvents = RustPlatformEvents(r.rust())
+internal fun takePlatformEvents(r: Reader): PlatformEvents = Native.proxy(r.rust(), ::RustPlatformEvents)
 
 internal fun putPlayerViewOps(w: Writer, v: PlayerViewOps) = w.java(Objects.export(v, ::dispatchPlayerViewOps))
 

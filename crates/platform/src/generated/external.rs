@@ -15,10 +15,6 @@ pub struct GameIds(pub Dynamic);
 #[derive(Clone, Debug, PartialEq)]
 pub struct TerrainScripts(pub Dynamic);
 
-/// format's `terrain` `StructureTemplate`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct StructureTemplate(pub Dynamic);
-
 /// format's `terrain` `CompiledTerrain`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompiledTerrain(pub Dynamic);

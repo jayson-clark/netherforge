@@ -77,6 +77,7 @@ pub mod stats;
 pub mod store;
 pub mod structures;
 pub mod team;
+pub mod terrains;
 pub mod testing;
 pub mod utilities;
 pub mod wasm;

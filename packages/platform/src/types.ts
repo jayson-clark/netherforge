@@ -102,6 +102,7 @@ export const EXTERNAL: Record<string, string> = {
   GameEvents: 'api',
   WatchedEvent: 'api',
   'dev.netherforge.plugin.datapack.DatapackRefusal': 'runtime:datapack',
+  'dev.netherforge.plugin.platform.terrain.TerrainSource': 'runtime:platform.terrain',
   BlockCarrier: 'block',
   Vec3: 'math',
   Matrix4: 'math',

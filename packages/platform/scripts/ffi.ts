@@ -44,6 +44,8 @@ const KOTLIN_EXTERNAL: Record<string, string> = {
   WatchedEvent: 'dev.netherforge.plugin.platform.WatchedEvent',
   'dev.netherforge.plugin.datapack.DatapackRefusal':
     'dev.netherforge.plugin.datapack.DatapackRefusal',
+  'dev.netherforge.plugin.platform.terrain.TerrainSource':
+    'dev.netherforge.plugin.platform.terrain.TerrainSource',
   BlockCarrier: 'dev.netherforge.format.block.BlockCarrier',
   Vec3: 'dev.netherforge.format.math.Vec3',
   Matrix4: 'dev.netherforge.format.math.Matrix4',
@@ -81,6 +83,8 @@ const EXTERNAL_WIRE: Record<string, 'numbers' | 'entry' | 'placeholder' | 'inter
   Box: 'numbers',
   Matrix4: 'numbers',
   Path: 'numbers',
+  // Called from every chunk thread, which the generated glue's objects don't allow: written by hand on both sides.
+  'dev.netherforge.plugin.platform.terrain.TerrainSource': 'numbers',
   ArgumentType: 'entry',
   WatchedEvent: 'entry',
   GameData: 'interface',
@@ -424,7 +428,9 @@ function rustCodecs(m: Model, fns: ReturnType<typeof functionTypes>): string[] {
       lines.push(
         `impl Put for Rc<dyn ${name}> {`,
         '    fn put(self, w: &mut Writer) {',
-        `        w.export(Rc::new(move |method, r: &mut Reader, w: &mut Writer| dispatch_${snake(name).replace(/^r#/, '')}(&self, method, r, w)));`,
+        // The same Rc is the same object to the JVM (a goal it's asked to remove is the one it was given).
+        '        let key = Rc::as_ptr(&self) as *const () as usize;',
+        `        w.export_rc(key, move || Rc::new(move |method, r: &mut Reader, w: &mut Writer| dispatch_${snake(name).replace(/^r#/, '')}(&self, method, r, w)));`,
         '    }',
         '}',
         '',
@@ -898,7 +904,7 @@ function kotlinCodecs(k: KotlinCx): string[] {
         )
     } else {
       lines.push(
-        `internal fun take${name}(r: Reader): ${KOTLIN_EXTERNAL[name] ?? name} = Rust${name}(r.rust())`,
+        `internal fun take${name}(r: Reader): ${KOTLIN_EXTERNAL[name] ?? name} = Native.proxy(r.rust(), ::Rust${name})`,
         '',
       )
     }

@@ -2012,6 +2012,39 @@ fn java_hash(text: &str) -> i32 {
         .fold(0i32, |h, c| h.wrapping_mul(31).wrapping_add(i32::from(c)))
 }
 
+/// The states the project's blocks are held in (the plan), worked out from its files alone: what the server's main
+/// world's generator writes before any session runs (the session works out the same plan as it starts).
+pub fn plan_of(
+    project: &netherforge_format::project::Project,
+    game: &dyn netherforge_format::game::GameData,
+) -> Option<Plan> {
+    let running: BTreeMap<String, BlockFile> = project
+        .running::<BlockFile>()
+        .into_iter()
+        .map(|(id, f)| (id, f.clone()))
+        .collect();
+    let mut every: BTreeMap<String, Option<&BlockFile>> = BTreeMap::new();
+    let mut carriers_of = BTreeMap::new();
+    let mut rotations = BTreeMap::new();
+    for (id, resource) in project.present(KIND) {
+        if let Some(model) = resource.model::<BlockFile>() {
+            carriers_of.insert(id.clone(), model.carrier.unwrap_or_default());
+            rotations.insert(id.clone(), model.rotation.unwrap_or(BlockRotation::None));
+        }
+        every.insert(id.clone(), running.get(&id));
+    }
+    if every.is_empty() {
+        return None;
+    }
+    carriers::plan(
+        &every,
+        project.namespace(),
+        Some(game),
+        &carriers_of,
+        &rotations,
+    )
+}
+
 /// Defines the blocks from the project: running files, folders, the plan of states, and its problems.
 fn define(shared: &Shared, project: &Define) {
     let platform = &*shared.platform;

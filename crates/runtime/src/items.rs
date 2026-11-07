@@ -112,6 +112,16 @@ pub fn from_value(item: &values::Item, at: &str, game: &dyn GameData) -> Result<
             def.kind
         ));
     }
+    // Format's rules for an item, as a project file's (Kotlin's `Rules.item`): a stackable sword is refused here too.
+    let mut sink = netherforge_format::problem::ProblemSink::new("item");
+    netherforge_format::item::check(&def, "item", &mut sink, Some(game));
+    if let Some(problem) = sink
+        .problems
+        .iter()
+        .find(|p| p.severity == netherforge_format::problem::Severity::Error)
+    {
+        return Err(lua_spelling(&problem.message));
+    }
     Ok(ItemData {
         def,
         raw,

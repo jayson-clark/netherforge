@@ -27,7 +27,11 @@ class ShowcaseTest {
         try {
             assertTrue(started, platform.log.lines.joinToString("\n"))
             repeat(40) { runtime.tick() }
-            val wrong = platform.log.lines.filter { "WARN" in it || "ERROR" in it || "error" in it.lowercase() }
+            // The fake has no dimension types, so the worlds of the showcase's own aren't made (as on the Kotlin runtime).
+            val fakes = Regex("""World "\w+" isn't made: the server has no dimension type""")
+            val wrong = platform.log.lines
+                .filter { "WARN" in it || "ERROR" in it || "error" in it.lowercase() }
+                .filterNot { fakes.containsMatchIn(it) }
             assertEquals(emptyList(), wrong, platform.log.lines.joinToString("\n"))
         } finally {
             runtime.stop()

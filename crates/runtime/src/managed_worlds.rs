@@ -94,6 +94,31 @@ pub struct ManagedWorlds {
     pub paths: Option<ProjectPaths>,
 }
 
+impl ManagedWorlds {
+    /// How the project made `name`, if it did.
+    pub fn made_with(&self, name: &str) -> Option<OwnedWorld> {
+        self.created.get(name).cloned()
+    }
+
+    /// The project made (or loaded) `name` so: kept in the store, the project's from now on.
+    pub fn remember(
+        &mut self,
+        shared: &Shared,
+        name: &str,
+        environment: &str,
+        terrain: Option<String>,
+        dimension_type: Option<String>,
+    ) {
+        let owned = OwnedWorld {
+            environment: environment.to_owned(),
+            terrain,
+            dimension_type,
+        };
+        shared.store.own_world(&self.namespace, name, &owned);
+        self.created.insert(name.to_owned(), owned);
+    }
+}
+
 /// The managed worlds' side of the API.
 #[derive(Clone)]
 pub struct ManagedContext {

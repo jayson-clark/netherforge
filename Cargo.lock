@@ -1482,6 +1482,7 @@ dependencies = [
  "netherforge-format",
  "netherforge-luau",
  "netherforge-platform",
+ "netherforge-terrain",
  "rapier3d-f64",
  "regex",
  "ring",

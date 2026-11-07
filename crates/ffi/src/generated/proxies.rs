@@ -1957,7 +1957,7 @@ impl StructureOps for JavaStructureOps {
         self.obj.call("StructureOps::size", 0, move |w| { file.put(w); let _ = w; })
     }
 
-    fn template(&self, file: std::path::PathBuf) -> Option<external::StructureTemplate> {
+    fn template(&self, file: std::path::PathBuf) -> Option<netherforge_format::kind::terrain::compiled::StructureTemplate> {
         self.obj.call("StructureOps::template", 1, move |w| { file.put(w); let _ = w; })
     }
 

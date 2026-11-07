@@ -56,6 +56,8 @@ export const RUST_EXTERNAL: Record<string, { path: string; interface?: boolean }
   BotAction: { path: 'netherforge_format::bridge::BotAction' },
   BotActResult: { path: 'netherforge_format::bridge::BotActResult' },
   GameDatapack: { path: 'netherforge_format::startup::GameDatapack' },
+  StructureTemplate: { path: 'netherforge_format::kind::terrain::compiled::StructureTemplate' },
+  'dev.netherforge.plugin.platform.terrain.TerrainSource': { path: 'crate::api::SharedTerrain' },
   'dev.netherforge.plugin.datapack.DatapackRefusal': { path: 'netherforge_format::startup::DatapackRefusal' },
   Path: { path: 'std::path::PathBuf' },
 }
@@ -358,6 +360,9 @@ function trait(d: InterfaceDecl, cx: Context): string[] {
  */
 const QUIET = new Set(['Platform::watch'])
 
+/** What `Unported` answers with `None`: a server that says nothing of its datapacks has no format and no refusal. */
+const NONE = new Set(['DatapackOps::format', 'DatapackOps::refused'])
+
 function unported(all: Decl[], cx: Context): string[] {
   const lines = [
     `// ${GENERATED_BY}`,
@@ -389,7 +394,9 @@ function unported(all: Decl[], cx: Context): string[] {
           ? '        &Unported'
           : QUIET.has(`${d.name}::${name}`)
             ? '        // Nothing to do.'
-            : `        unported("${d.name}::${name}")`,
+            : NONE.has(`${d.name}::${name}`)
+              ? '        None'
+              : `        unported("${d.name}::${name}")`,
         '    }',
         '',
       )

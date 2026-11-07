@@ -64,6 +64,12 @@ impl Writer {
         self.u8(objects::RUST);
         self.u64(objects::export(dispatch));
     }
+
+    /// One of Rust's objects made from the `Rc` at [key]: the same reference each time ([objects::export_keyed]).
+    pub fn export_rc(&mut self, key: usize, make: impl FnOnce() -> Dispatch) {
+        self.u8(objects::RUST);
+        self.u64(objects::export_keyed(key, make));
+    }
 }
 
 /// Where a call's arguments or answer are read from.

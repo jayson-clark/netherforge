@@ -90,12 +90,16 @@ pub unsafe extern "C" fn nf_call(
     let args = unsafe { bytes(args, len) };
     unsafe {
         answer(out_len, |w| {
-            let Some(dispatch) = objects::exported(id) else {
+            let mut r = Reader::new(args);
+            if let Some(dispatch) = objects::exported(id) {
+                return dispatch(method, &mut r, w);
+            }
+            // A thread-safe object (a world generator) answers any thread.
+            let Some(dispatch) = crate::terrain::shared(id) else {
                 panic!(
                     "the Rust runtime has no object {id} on this thread (let go, or called off the main thread)"
                 )
             };
-            let mut r = Reader::new(args);
             dispatch(method, &mut r, w);
         })
     }
@@ -124,6 +128,29 @@ pub unsafe extern "C" fn nf_start(args: *const u8, len: usize, out_len: *mut usi
                 Ok(events) => events.put(w),
                 Err(why) => panic!("{why}"),
             }
+        })
+    }
+}
+
+/// The project's generator for a world the server is about to load ([crate::compose::default_generator]), with the
+/// [len] bytes at [args]: what `nf_start` takes, then the world's name.
+///
+/// # Safety
+/// As [nf_call].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nf_default_generator(
+    args: *const u8,
+    len: usize,
+    out_len: *mut usize,
+) -> *const u8 {
+    objects::drain_released();
+    let args = unsafe { bytes(args, len) };
+    unsafe {
+        answer(out_len, |w| {
+            let mut r = Reader::new(args);
+            let start = <crate::compose::StartArgs as crate::wire::Take>::take(&mut r);
+            let world = <String as crate::wire::Take>::take(&mut r);
+            crate::compose::default_generator(start, &world).put(w);
         })
     }
 }

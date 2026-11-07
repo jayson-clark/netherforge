@@ -50,16 +50,23 @@ data class WorldSettings(
  * bound generator's, one per chunk thread at a time; the adapter closes a
  * replaced generator ([dev.netherforge.format.terrain.TerrainGenerator.close])
  * so they go.
+ *
+ * The Rust runtime has no [terrain] (format's Kotlin form) to hand over: it gives [source] instead, its own generator,
+ * which the adapter's chunk threads call across FFM. One of the two is there.
  */
 class ProjectGenerator(
-    val terrain: CompiledTerrain,
+    val terrain: CompiledTerrain?,
     val states: List<String>,
     val biomes: Map<String, String>,
-    val scripts: TerrainScripts? = null
+    val scripts: TerrainScripts? = null,
+    val source: dev.netherforge.plugin.platform.terrain.TerrainSource? = null
 ) {
     init {
-        require(states.size == terrain.palette.size) { "a state for every block of the palette" }
-        require(biomes.keys.containsAll(terrain.biomes)) { "a key for every biome of the areas" }
+        require(terrain != null || source != null) { "a compiled terrain or a source" }
+        terrain?.let { terrain ->
+            require(states.size == terrain.palette.size) { "a state for every block of the palette" }
+            require(biomes.keys.containsAll(terrain.biomes)) { "a key for every biome of the areas" }
+        }
     }
 }
 

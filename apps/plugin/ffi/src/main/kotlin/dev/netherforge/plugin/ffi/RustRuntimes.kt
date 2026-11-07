@@ -42,8 +42,17 @@ class RustRuntimes : ProjectRuntimes {
                 runtime = null
             }
 
-            // The terrains' service (generators the server asks for) isn't on the Rust runtime yet.
-            override fun defaultWorldGenerator(world: String): String? = null
+            /** Asked before [enable], as the server loads its main world: the generators are published then. */
+            override fun defaultWorldGenerator(world: String): String? {
+                Native.load(library(plugin.dataFolder.toPath()))
+                return NativeRuntime(platform()).defaultGenerator(
+                    world = world,
+                    pluginFolder = plugin.dataFolder.toPath(),
+                    serverFolder = plugin.server.worldContainer.toPath(),
+                    serverIp = plugin.server.ip,
+                    settings = settings
+                )
+            }
         }
 
     companion object {

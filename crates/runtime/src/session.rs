@@ -649,6 +649,9 @@ impl<'a> Session<'a> {
         self.released();
         self.report();
         self.update_watched();
+        self.startup
+            .borrow_mut()
+            .note_refusal(&self.project, &*self.platform);
         let uses = netherforge_format::requirement::combined(&self.project);
         log.info(if uses.is_empty() {
             "Requires nothing beyond what every project may do".to_owned()
@@ -1864,6 +1867,12 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         Box::new(crate::custom_blocks::BlocksService {
             shared: shared.clone(),
             scripts: Default::default(),
+        }),
+        // After the blocks: a terrain's custom blocks are written as their states, and the worlds it makes are read
+        // for them.
+        Box::new(crate::terrains::TerrainsService {
+            shared: shared.clone(),
+            terrains: Default::default(),
         }),
         // After items: a recipe's project items are built from their looks.
         Box::new(crate::recipes::RecipesService {

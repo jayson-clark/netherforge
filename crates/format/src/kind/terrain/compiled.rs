@@ -282,14 +282,16 @@ pub struct LinkedTemplate {
 
 /// A project structure's blocks as the server's or the editor's reader gives
 /// them (format never reads a `.nbt`): its palette in block states, four
-/// numbers a block, and the states with a block entity (where loot can go).
-#[derive(Clone, Debug, PartialEq)]
+/// numbers a block, and the states with a block entity (where loot can go). As it crosses from the server, JSON.
+#[derive(Clone, Debug, PartialEq, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StructureTemplate {
     pub size_x: i32,
     pub size_y: i32,
     pub size_z: i32,
     pub palette: Vec<String>,
     pub blocks: Vec<i32>,
+    #[serde(default)]
     pub with_entity: std::collections::BTreeSet<usize>,
 }
 

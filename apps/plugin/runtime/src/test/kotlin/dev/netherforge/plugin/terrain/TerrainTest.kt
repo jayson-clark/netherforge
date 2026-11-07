@@ -48,7 +48,7 @@ class TerrainTest {
             val published = assertNotNull(manager.generators["hills"])
             assertEquals(listOf("hills"), manager.generators.keys.toList())
             // Every block of the palette is written as a state: vanilla blocks as they are, the ore as its note block state.
-            val palette = published.terrain.palette
+            val palette = published.terrain!!.palette
             assertEquals(palette.size, published.states.size)
             val ruby = published.states[palette.indexOf(TerrainBlock.Custom("ruby_ore"))]
             assertEquals(server.runtime.session.customBlocks.stateOf("ruby_ore"), ruby)
@@ -123,8 +123,8 @@ class TerrainTest {
             val result = server.reload("terrain/hills.json")
             assertTrue(result.resources.single().ok)
             assertEquals(before + 1, manager.publications)
-            assertEquals(90, manager.generators.getValue("hills").terrain.base)
-            assertEquals(70, old.terrain.base, "what a running generator holds is never changed under it")
+            assertEquals(90, manager.generators.getValue("hills").terrain!!.base)
+            assertEquals(70, old.terrain!!.base, "what a running generator holds is never changed under it")
             // A block added before the ore's moves its state: the ore is written as the new one.
             val rubyBefore = server.runtime.session.customBlocks.stateOf("ruby_ore")
             server.write("blocks/aaa/block.json", "{}")
@@ -132,7 +132,7 @@ class TerrainTest {
             val rubyAfter = server.runtime.session.customBlocks.stateOf("ruby_ore")
             assertTrue(rubyBefore != rubyAfter)
             val terrain = manager.generators.getValue("hills")
-            assertEquals(rubyAfter, terrain.states[terrain.terrain.palette.indexOf(TerrainBlock.Custom("ruby_ore"))])
+            assertEquals(rubyAfter, terrain.states[terrain.terrain!!.palette.indexOf(TerrainBlock.Custom("ruby_ore"))])
             // A file with errors keeps the last good generator published.
             server.write("terrain/hills.json", hills.replace("\"base\": 70", "\"base\": 90000"))
             server.reload("terrain/hills.json")
@@ -146,7 +146,7 @@ class TerrainTest {
         val game = FakePlatform.GAME.copy(blocks = FakePlatform.GAME.blocks - "minecraft:note_block")
         TestServer(files + mapOf("modules/t/init.lua" to module), FakePlatform(game = game)).use { server ->
             val published = assertNotNull(server.platform.worldManager.generators["hills"])
-            val ruby = published.terrain.palette.indexOf(TerrainBlock.Custom("ruby_ore"))
+            val ruby = published.terrain!!.palette.indexOf(TerrainBlock.Custom("ruby_ore"))
             assertEquals("minecraft:stone", published.states[ruby], "the ore is stone replacing stone")
             val problem = server.runtime.session.problems().single { it.code == "runtime.terrain" }
             assertEquals("terrain/hills.json", problem.file)
@@ -168,11 +168,11 @@ class TerrainTest {
         server(extra).use { server ->
             val manager = server.platform.worldManager
             val linked = manager.generators.getValue("hills").terrain
-            val tree = assertNotNull(linked.templates["tree"])
+            val tree = assertNotNull(linked!!.templates["tree"])
             assertEquals(listOf(1, 2, 1), listOf(tree.sizeX, tree.sizeY, tree.sizeZ))
-            assertTrue(TerrainBlock.Vanilla("minecraft:oak_log[axis=y]") in linked.palette, "its blocks are in the palette")
+            assertTrue(TerrainBlock.Vanilla("minecraft:oak_log[axis=y]") in linked!!.palette, "its blocks are in the palette")
             // The one that can't be read isn't placed, and says so.
-            assertEquals(null, linked.templates["rock"])
+            assertEquals(null, linked!!.templates["rock"])
             val problem = server.runtime.session.problems().single { it.code == "runtime.terrain" }
             assertEquals("terrain/hills.json", problem.file)
             assertTrue("\"rock\"" in problem.message, problem.message)
@@ -180,8 +180,8 @@ class TerrainTest {
             server.write("structures/tree.nbt", "size 1 3 1\n0 0 0 minecraft:birch_log[axis=y]")
             assertTrue(server.reload("structures/tree.nbt").resources.all { it.ok })
             val again = manager.generators.getValue("hills").terrain
-            assertEquals(3, again.templates.getValue("tree").sizeY)
-            assertTrue(TerrainBlock.Vanilla("minecraft:birch_log[axis=y]") in again.palette)
+            assertEquals(3, again!!.templates.getValue("tree").sizeY)
+            assertTrue(TerrainBlock.Vanilla("minecraft:birch_log[axis=y]") in again!!.palette)
         }
     }
 
@@ -221,7 +221,7 @@ class TerrainTest {
             assertEquals("hills", server.runtime.defaultWorldGenerator("world"))
             val published = assertNotNull(server.platform.worldManager.generators["hills"])
             // The ore's state is the one the session holds the block in: the same plan, from the same files.
-            val ruby = published.states[published.terrain.palette.indexOf(TerrainBlock.Custom("ruby_ore"))]
+            val ruby = published.states[published.terrain!!.palette.indexOf(TerrainBlock.Custom("ruby_ore"))]
             assertEquals(server.runtime.session.customBlocks.stateOf("ruby_ore"), ruby)
         }
         mainWorld(worlds).use { started ->
@@ -234,7 +234,7 @@ class TerrainTest {
             started.write("terrain/hills.json", hills.replace("\"base\": 70", "\"base\": 80"))
             val result = started.reload("terrain/hills.json")
             assertFalse(result.restart)
-            assertEquals(80, started.platform.worldManager.generators.getValue("hills").terrain.base)
+            assertEquals(80, started.platform.worldManager.generators.getValue("hills").terrain!!.base)
         }
     }
 
@@ -356,7 +356,7 @@ class TerrainTest {
     )
 
     private fun TestServer.generator(id: String = "hills") = platform.worldManager.generators.getValue(id).let { published ->
-        published.terrain.bind(42, -64, 320, published.scripts)
+        published.terrain!!.bind(42, -64, 320, published.scripts)
     }
 
     @Test
@@ -365,9 +365,9 @@ class TerrainTest {
             val published = server.platform.worldManager.generators.getValue("hills")
             assertEquals(setOf("terrain/hills.lua", "modules/lift/init.lua", "modules/t/init.lua"), published.scripts?.sources?.keys)
             val generator = server.generator()
-            val plain = published.terrain.bind(42, -64, 320)
+            val plain = published.terrain!!.bind(42, -64, 320)
             assertEquals(plain.surfaceAt(3, 9) + 5, generator.surfaceAt(3, 9))
-            val glowstone = published.terrain.palette.indexOf(TerrainBlock.Vanilla("minecraft:sea_lantern"))
+            val glowstone = published.terrain!!.palette.indexOf(TerrainBlock.Vanilla("minecraft:sea_lantern"))
             assertEquals(glowstone, generator.generate(0, 0)[0, generator.surfaceAt(0, 0) + 1, 0])
             generator.close()
             assertEquals(emptyList(), server.runtime.session.problems().filter { it.file.startsWith("terrain/") })
@@ -445,12 +445,12 @@ class TerrainTest {
             val published = server.platform.worldManager.generators.getValue("lib:hills")
             assertEquals(setOf("terrain/hills.lua", "modules/lift/init.lua"), published.scripts?.sources?.keys)
             val generator = server.generator("lib:hills")
-            assertEquals(published.terrain.bind(42, -64, 320).surfaceAt(3, 9) + 5, generator.surfaceAt(3, 9))
+            assertEquals(published.terrain!!.bind(42, -64, 320).surfaceAt(3, 9) + 5, generator.surfaceAt(3, 9))
             // Its own loot table and block, named bare by its script, are the ones its file lists in full.
             val chunk = generator.generate(0, 0)
             val loot = chunk.lootPlaces(0, 0).single()
-            assertEquals("lib:treasure", published.terrain.loot[loot.table])
-            val amber = published.terrain.palette.indexOf(TerrainBlock.Custom("lib:amber"))
+            assertEquals("lib:treasure", published.terrain!!.loot[loot.table])
+            val amber = published.terrain!!.palette.indexOf(TerrainBlock.Custom("lib:amber"))
             assertEquals(amber, chunk[loot.x, loot.y + 1, loot.z])
             generator.close()
             server.tick()
@@ -524,13 +524,13 @@ class TerrainTest {
         server(mapOf("terrain/hills.json" to threeD, "terrain/hills.lua" to densityStages)).use { server ->
             assertEquals(emptyList(), server.runtime.session.problems().filter { it.file.startsWith("terrain/") })
             val published = server.platform.worldManager.generators.getValue("hills")
-            assertNotNull(published.terrain.density)
+            assertNotNull(published.terrain!!.density)
             val generator = server.generator()
             val chunks = java.util.concurrent.Executors.newFixedThreadPool(3)
             try {
                 val places = (-2..2).flatMap { x -> (-2..2).map { z -> x to z } }
                 val made = places.map { (x, z) -> chunks.submit<IntArray> { generator.generate(x, z).blocks } }.map { it.get() }
-                val alone = published.terrain.bind(42, -64, 320, published.scripts)
+                val alone = published.terrain!!.bind(42, -64, 320, published.scripts)
                 for ((i, place) in places.withIndex()) {
                     assertTrue(made[i].contentEquals(alone.generate(place.first, place.second).blocks), "chunk $place")
                 }

@@ -135,6 +135,24 @@ object Native {
         cleaner.register(proxy) { nfRelease.invokeExact(id) }
     }
 
+    /** The proxies of Rust's objects, one per object while it's held: Rust hands the same object out as the same id. */
+    private val proxies = HashMap<Long, java.lang.ref.WeakReference<Any>>()
+
+    /**
+     * The proxy for Rust's object [id] (made by [make], which tracks it, the first time): the same proxy while one is
+     * held, so the server sees the same object each time. A second reference is let go at once (Rust counted it).
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun <T : Any> proxy(id: Long, make: (Long) -> T): T = synchronized(proxies) {
+        val held = proxies[id]?.get() as T?
+        if (held != null) {
+            nfRelease.invokeExact(id)
+            return held
+        }
+        proxies.values.removeIf { it.get() == null }
+        make(id).also { proxies[id] = java.lang.ref.WeakReference(it) }
+    }
+
     /** Rust calls method [method] of the JVM's object [id]: the answer's place, its length written to [outLen]. */
     @JvmStatic
     fun javaCall(id: Long, method: Int, args: MemorySegment, len: Long, outLen: MemorySegment): MemorySegment {

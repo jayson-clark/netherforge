@@ -39,13 +39,18 @@ pub struct WorldSettings {
 /// bound generator's, one per chunk thread at a time; the adapter closes a
 /// replaced generator ([dev.netherforge.format.terrain.TerrainGenerator.close])
 /// so they go.
+///
+/// The Rust runtime has no [terrain] (format's Kotlin form) to hand over: it gives [source] instead, its own generator,
+/// which the adapter's chunk threads call across FFM. One of the two is there.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProjectGenerator {
-    pub terrain: external::CompiledTerrain,
+    pub terrain: Option<external::CompiledTerrain>,
     pub states: Vec<String>,
     pub biomes: HashMap<String, String>,
     /// Default: `null`.
     pub scripts: Option<external::TerrainScripts>,
+    /// Default: `null`.
+    pub source: Option<crate::api::SharedTerrain>,
 }
 
 pub trait WorldManagerOps {
@@ -247,7 +252,7 @@ pub trait StructureOps {
     /// The blocks of the structure in [file] as a terrain places them (its first palette, air included, every
     /// state in full as the server reads it), or null when it can't be read as one. A decoration of a generator is
     /// linked to it ([dev.netherforge.format.terrain.CompiledTerrain.withStructures]).
-    fn template(&self, file: std::path::PathBuf) -> Option<external::StructureTemplate>;
+    fn template(&self, file: std::path::PathBuf) -> Option<netherforge_format::kind::terrain::compiled::StructureTemplate>;
 
     /// Places the structure in [file] with its smallest corner at [at]. False when the world has gone or the file can't be read.
     fn place(&self, file: std::path::PathBuf, world: String, at: BlockVector, placement: StructurePlacement) -> bool;

@@ -222,14 +222,7 @@ impl StartupCheck {
             };
         let whole = build(true, &|_| false);
         let refusal = datapacks.refused();
-        if self.refusal.is_none() {
-            self.refusal = Some(
-                refusal
-                    .as_ref()
-                    .map(|r| refusal_problems(r, project, format))
-                    .unwrap_or_default(),
-            );
-        }
+        self.note_refusal(project, platform);
         let now = match refusal.filter(|r| r.hash == hash_of(&whole)) {
             Some(refused) => {
                 let (pass_through, skies) = leaves_out(&refused, project.namespace());
@@ -245,6 +238,29 @@ impl StartupCheck {
             platform.log().warn(restart_message());
         }
         self.stale
+    }
+
+    /// What the server refused as it started, as problems: worked out once (it doesn't change until a restart), as the
+    /// session starts, so they're said whether or not anything reloads.
+    pub fn note_refusal(
+        &mut self,
+        project: &netherforge_format::project::Project,
+        platform: &dyn netherforge_platform::Platform,
+    ) {
+        if self.refusal.is_some() {
+            return;
+        }
+        let datapacks = platform.datapacks();
+        let problems = match (
+            datapacks.refused(),
+            datapacks.format().filter(|f| f.len() == 2),
+        ) {
+            (Some(refused), Some(format)) => {
+                refusal_problems(&refused, project, [format[0], format[1]])
+            }
+            _ => Vec::new(),
+        };
+        self.refusal = Some(problems);
     }
 
     /// `runtime.datapack` while the server runs without what it refused, and `runtime.restart` while it's out of date.

@@ -348,11 +348,11 @@ impl DatapackOps for Unported {
     }
 
     fn refused(&self) -> Option<netherforge_format::startup::DatapackRefusal> {
-        unported("DatapackOps::refused")
+        None
     }
 
     fn format(&self) -> Option<Vec<i32>> {
-        unported("DatapackOps::format")
+        None
     }
 
     fn main_world(&self) -> Option<String> {
@@ -4823,7 +4823,7 @@ impl StructureOps for Unported {
         unported("StructureOps::size")
     }
 
-    fn template(&self, _: std::path::PathBuf) -> Option<external::StructureTemplate> {
+    fn template(&self, _: std::path::PathBuf) -> Option<netherforge_format::kind::terrain::compiled::StructureTemplate> {
         unported("StructureOps::template")
     }
 
@@ -4851,7 +4851,7 @@ pub trait FakeStructureOps {
         <Unported as StructureOps>::size(&Unported, file)
     }
 
-    fn template(&self, file: std::path::PathBuf) -> Option<external::StructureTemplate> {
+    fn template(&self, file: std::path::PathBuf) -> Option<netherforge_format::kind::terrain::compiled::StructureTemplate> {
         <Unported as StructureOps>::template(&Unported, file)
     }
 
@@ -4877,7 +4877,7 @@ impl<T: FakeStructureOps> StructureOps for T {
         FakeStructureOps::size(self, file)
     }
 
-    fn template(&self, file: std::path::PathBuf) -> Option<external::StructureTemplate> {
+    fn template(&self, file: std::path::PathBuf) -> Option<netherforge_format::kind::terrain::compiled::StructureTemplate> {
         FakeStructureOps::template(self, file)
     }
 

@@ -15,6 +15,7 @@ netherforge-luau = { path = "../luau" }
 netherforge-api = { path = "../api" }
 netherforge-format = { path = "../format", features = ["bridge-auth"] }
 netherforge-platform = { path = "../platform" }
+netherforge-terrain = { path = "../terrain" }
 serde.workspace = true
 serde_json.workspace = true
 # config.yml, read in one place (`config.rs`).

@@ -14,6 +14,7 @@ pub mod game_events;
 #[rustfmt::skip]
 pub mod generated;
 pub mod objects;
+pub mod terrain;
 pub mod wire;
 
 pub use generated::*;

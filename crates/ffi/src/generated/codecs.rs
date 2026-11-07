@@ -749,12 +749,13 @@ impl Put for ProjectGenerator {
         self.states.put(w);
         self.biomes.put(w);
         self.scripts.put(w);
+        self.source.put(w);
     }
 }
 
 impl Take for ProjectGenerator {
     fn take(r: &mut Reader) -> Self {
-        ProjectGenerator { terrain: <external::CompiledTerrain as Take>::take(r), states: <Vec<String> as Take>::take(r), biomes: <HashMap<String, String> as Take>::take(r), scripts: <Option<external::TerrainScripts> as Take>::take(r) }
+        ProjectGenerator { terrain: <Option<external::CompiledTerrain> as Take>::take(r), states: <Vec<String> as Take>::take(r), biomes: <HashMap<String, String> as Take>::take(r), scripts: <Option<external::TerrainScripts> as Take>::take(r), source: <Option<netherforge_platform::api::SharedTerrain> as Take>::take(r) }
     }
 }
 
@@ -1268,15 +1269,15 @@ impl Take for external::TerrainScripts {
     }
 }
 
-impl Put for external::StructureTemplate {
+impl Put for netherforge_format::kind::terrain::compiled::StructureTemplate {
     fn put(self, w: &mut Writer) {
-        self.0.put(w);
+        w.json(&self);
     }
 }
 
-impl Take for external::StructureTemplate {
+impl Take for netherforge_format::kind::terrain::compiled::StructureTemplate {
     fn take(r: &mut Reader) -> Self {
-        external::StructureTemplate(Dynamic::take(r))
+        r.json("StructureTemplate")
     }
 }
 
@@ -1519,7 +1520,8 @@ impl Take for Rc<dyn CommandSender> {
 
 impl Put for Rc<dyn CommandHandler> {
     fn put(self, w: &mut Writer) {
-        w.export(Rc::new(move |method, r: &mut Reader, w: &mut Writer| dispatch_command_handler(&self, method, r, w)));
+        let key = Rc::as_ptr(&self) as *const () as usize;
+        w.export_rc(key, move || Rc::new(move |method, r: &mut Reader, w: &mut Writer| dispatch_command_handler(&self, method, r, w)));
     }
 }
 
@@ -1645,7 +1647,8 @@ impl Take for Box<dyn EconomyOps> {
 
 impl Put for Rc<dyn PlaceholderResolver> {
     fn put(self, w: &mut Writer) {
-        w.export(Rc::new(move |method, r: &mut Reader, w: &mut Writer| dispatch_placeholder_resolver(&self, method, r, w)));
+        let key = Rc::as_ptr(&self) as *const () as usize;
+        w.export_rc(key, move || Rc::new(move |method, r: &mut Reader, w: &mut Writer| dispatch_placeholder_resolver(&self, method, r, w)));
     }
 }
 
@@ -1723,7 +1726,8 @@ impl Take for Box<dyn MannequinOps> {
 
 impl Put for Rc<dyn GoalCallbacks> {
     fn put(self, w: &mut Writer) {
-        w.export(Rc::new(move |method, r: &mut Reader, w: &mut Writer| dispatch_goal_callbacks(&self, method, r, w)));
+        let key = Rc::as_ptr(&self) as *const () as usize;
+        w.export_rc(key, move || Rc::new(move |method, r: &mut Reader, w: &mut Writer| dispatch_goal_callbacks(&self, method, r, w)));
     }
 }
 
@@ -1813,7 +1817,8 @@ impl Take for Box<dyn PlatformLog> {
 
 impl Put for Rc<dyn PlatformEvents> {
     fn put(self, w: &mut Writer) {
-        w.export(Rc::new(move |method, r: &mut Reader, w: &mut Writer| dispatch_platform_events(&self, method, r, w)));
+        let key = Rc::as_ptr(&self) as *const () as usize;
+        w.export_rc(key, move || Rc::new(move |method, r: &mut Reader, w: &mut Writer| dispatch_platform_events(&self, method, r, w)));
     }
 }
 

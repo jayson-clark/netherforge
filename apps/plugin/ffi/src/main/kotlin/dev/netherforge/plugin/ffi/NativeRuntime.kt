@@ -24,6 +24,38 @@ class NativeRuntime(private val platform: Platform) {
         )
     }
     private val stop by lazy { Native.function("nf_stop", FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)) }
+    private val defaultGenerator by lazy {
+        Native.function(
+            "nf_default_generator",
+            FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS)
+        )
+    }
+
+    /**
+     * The project's generator for [world], which the server asks for before it loads the world and before [start]: its
+     * id as published (every generator of the project is), or null when `netherforge.json` names none for it.
+     */
+    fun defaultGenerator(
+        world: String,
+        pluginFolder: Path,
+        serverFolder: Path,
+        serverIp: String,
+        settings: Map<String, Any?>,
+        properties: Map<String, String> = System.getProperties().stringPropertyNames().associateWith { System.getProperty(it) },
+        environment: Map<String, String> = System.getenv()
+    ): String? {
+        val w = Writer()
+        putPlatform(w, platform)
+        putPath(w, pluginFolder)
+        putPath(w, serverFolder)
+        w.string(serverIp)
+        w.dynamic(settings)
+        w.map(properties, { w.string(it) }) { w.string(it) }
+        w.map(environment, { w.string(it) }) { w.string(it) }
+        w.string(world)
+        return answer { at, out -> defaultGenerator.invokeExact(at, w.size.toLong(), out) as MemorySegment }
+            .let { bytes -> read(bytes, w) { r -> r.opt { r.string() } } }
+    }
 
     /**
      * Starts the project [settings] (`config.yml`'s values) and the JVM's [properties] and [environment] say runs,

@@ -188,27 +188,83 @@ impl Kept {
     }
 }
 
-thread_local! {
-    static EXPORTED: RefCell<HashMap<u64, Dispatch>> = RefCell::new(HashMap::new());
+/// One object handed out: what runs its calls, how many references the JVM holds, and what it was made from.
+struct Exported {
+    dispatch: Dispatch,
+    count: usize,
+    key: Option<usize>,
 }
 
-static NEXT: AtomicU64 = AtomicU64::new(1);
+thread_local! {
+    static EXPORTED: RefCell<HashMap<u64, Exported>> = RefCell::new(HashMap::new());
+    /// The objects made from an `Rc`, by its address: handed out again, one is the same id (and counted), so the JVM
+    /// sees the same object (a goal it's asked to remove is the one it was given).
+    static KEYED: RefCell<HashMap<usize, u64>> = RefCell::new(HashMap::new());
+}
+
+/// Every object's id, the main thread's and the thread-safe ones' (`crate::terrain`) alike.
+pub(crate) static NEXT: AtomicU64 = AtomicU64::new(1);
 static RELEASED: Mutex<Vec<u64>> = Mutex::new(Vec::new());
 
 /// Hands [dispatch] out: its id, which the JVM calls it by.
 pub fn export(dispatch: Dispatch) -> u64 {
     let id = NEXT.fetch_add(1, Ordering::Relaxed);
-    EXPORTED.with(|e| e.borrow_mut().insert(id, dispatch));
+    EXPORTED.with(|e| {
+        e.borrow_mut().insert(
+            id,
+            Exported {
+                dispatch,
+                count: 1,
+                key: None,
+            },
+        )
+    });
+    id
+}
+
+/// Hands out the object made from the `Rc` at [key] (made by [make] the first time): the same id each time, counted, so
+/// it stays one object to the JVM until it lets go of every reference.
+pub fn export_keyed(key: usize, make: impl FnOnce() -> Dispatch) -> u64 {
+    if let Some(id) = KEYED.with(|k| k.borrow().get(&key).copied()) {
+        let counted = EXPORTED.with(|e| {
+            e.borrow_mut()
+                .get_mut(&id)
+                .map(|exported| exported.count += 1)
+                .is_some()
+        });
+        if counted {
+            return id;
+        }
+    }
+    let id = NEXT.fetch_add(1, Ordering::Relaxed);
+    EXPORTED.with(|e| {
+        e.borrow_mut().insert(
+            id,
+            Exported {
+                dispatch: make(),
+                count: 1,
+                key: Some(key),
+            },
+        )
+    });
+    KEYED.with(|k| k.borrow_mut().insert(key, id));
     id
 }
 
 /// What object [id] runs, if this thread handed it out and it wasn't let go.
 pub fn exported(id: u64) -> Option<Dispatch> {
-    EXPORTED.with(|e| e.borrow().get(&id).cloned())
+    EXPORTED.with(|e| {
+        e.borrow()
+            .get(&id)
+            .map(|exported| exported.dispatch.clone())
+    })
 }
 
 /// Queues the JVM letting go of [id], from any thread.
 pub fn release(id: u64) {
+    if crate::terrain::release(id) {
+        return;
+    }
     RELEASED.lock().unwrap_or_else(|e| e.into_inner()).push(id);
 }
 
@@ -224,10 +280,19 @@ pub fn drain_released() {
     EXPORTED.with(|e| {
         let mut e = e.borrow_mut();
         for id in ids {
-            match e.remove(&id) {
-                Some(d) => gone.push(d),
-                None => elsewhere.push(id),
+            let Some(exported) = e.get_mut(&id) else {
+                elsewhere.push(id);
+                continue;
+            };
+            exported.count -= 1;
+            if exported.count > 0 {
+                continue;
             }
+            let exported = e.remove(&id).expect("just found");
+            if let Some(key) = exported.key {
+                KEYED.with(|k| k.borrow_mut().remove(&key));
+            }
+            gone.push(exported.dispatch);
         }
     });
     drop(gone);
