@@ -183,6 +183,9 @@ pub struct GameDataBundle {
     /// Each map colour by its index, `0xAARRGGBB` (written as Kotlin's signed `Int`s).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub map_colors: Option<Vec<i32>>,
+    /// Each item that takes damage → how much it takes before it breaks (the live server's; empty in an older bundle).
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub durability: IndexMap<String, u32>,
     #[serde(default = "bundle_schema")]
     pub schema: i32,
     /// `map_colors` as `u32`s, made when the bundle is read.
@@ -207,6 +210,7 @@ impl GameDataBundle {
             particles: IndexMap::new(),
             map_colors: None,
             schema: BUNDLE_SCHEMA,
+            durability: IndexMap::new(),
             map_colors_u32: None,
         }
     }
@@ -253,9 +257,10 @@ impl GameData for GameDataBundle {
     fn tag(&self, key: &str, id: &str) -> Option<&BTreeSet<String>> {
         self.tags.get(key)?.get(id)
     }
-    /// Cached game data doesn't know durability: checks that need it say nothing.
-    fn item_durability(&self, _id: &str) -> u32 {
-        0
+    /// What the server said; a bundle that says nothing of durability (the editor's cache) leaves checks that need it
+    /// saying nothing.
+    fn item_durability(&self, id: &str) -> u32 {
+        self.durability.get(id).copied().unwrap_or(0)
     }
     fn particle(&self, id: &str) -> Option<ParticleData> {
         self.particles.get(id).copied()

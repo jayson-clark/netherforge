@@ -347,7 +347,7 @@ impl DatapackOps for Unported {
         unported("DatapackOps::started")
     }
 
-    fn refused(&self) -> Option<external::DatapackRefusal> {
+    fn refused(&self) -> Option<netherforge_format::startup::DatapackRefusal> {
         unported("DatapackOps::refused")
     }
 
@@ -375,7 +375,7 @@ pub trait FakeDatapackOps {
         <Unported as DatapackOps>::started(&Unported)
     }
 
-    fn refused(&self) -> Option<external::DatapackRefusal> {
+    fn refused(&self) -> Option<netherforge_format::startup::DatapackRefusal> {
         <Unported as DatapackOps>::refused(&Unported)
     }
 
@@ -401,7 +401,7 @@ impl<T: FakeDatapackOps> DatapackOps for T {
         FakeDatapackOps::started(self)
     }
 
-    fn refused(&self) -> Option<external::DatapackRefusal> {
+    fn refused(&self) -> Option<netherforge_format::startup::DatapackRefusal> {
         FakeDatapackOps::refused(self)
     }
 

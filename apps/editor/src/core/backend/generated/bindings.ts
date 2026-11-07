@@ -899,6 +899,8 @@ export type GameDataBundle_Deserialize = {
 	particles?: { [key in string]: ParticleData },
 	/**  Each map colour by its index, `0xAARRGGBB` (written as Kotlin's signed `Int`s). */
 	mapColors?: number[],
+	/**  Each item that takes damage → how much it takes before it breaks (the live server's; empty in an older bundle). */
+	durability?: { [key in string]: number },
 	schema?: number,
 };
 
@@ -932,6 +934,8 @@ export type GameDataBundle_Serialize = {
 	particles?: { [key in string]: ParticleData },
 	/**  Each map colour by its index, `0xAARRGGBB` (written as Kotlin's signed `Int`s). */
 	mapColors?: number[],
+	/**  Each item that takes damage → how much it takes before it breaks (the live server's; empty in an older bundle). */
+	durability?: { [key in string]: number },
 	schema: number,
 };
 

@@ -28,9 +28,19 @@ impl DiskProject {
     }
 
     /// Where [path] (a project path) is on disk, if it's a file of the project.
+    /// A folder holding some of the project's files (a map's `maps/arena`) is one too.
     pub fn path_of(&self, path: &str) -> Option<PathBuf> {
         let file = self.root.join(path);
-        (self.files.borrow().contains(path) && file.is_file()).then_some(file)
+        let files = self.files.borrow();
+        if files.contains(path) {
+            return file.is_file().then_some(file);
+        }
+        let folder = format!("{}/", path.trim_end_matches('/'));
+        let holds = files
+            .range(folder.clone()..)
+            .next()
+            .is_some_and(|f| f.starts_with(&folder));
+        (holds && file.is_dir()).then_some(file)
     }
 }
 

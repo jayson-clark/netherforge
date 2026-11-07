@@ -55,6 +55,15 @@ pub struct GameDatapack {
     pub overworld: Option<Value>,
 }
 
+/// The server refused the start-up datapack as it started (Kotlin's `DatapackRefusal`): the game's own `report`, kept
+/// with the `hash` of the start-up datapack it was about, which the adapter writes as the server refuses it. The
+/// runtime's `reload` reads it (what it leaves out, its problems).
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct DatapackRefusal {
+    pub hash: String,
+    pub report: String,
+}
+
 /// As it crosses from the server: `{"biomes": {"minecraft:plains": {...}}, "overworld": {...}}`.
 impl serde::Serialize for GameDatapack {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {

@@ -7,10 +7,6 @@
 
 use super::Dynamic;
 
-/// The runtime's `DatapackRefusal`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct DatapackRefusal(pub Dynamic);
-
 /// format's `game` `GameIds`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GameIds(pub Dynamic);

@@ -572,7 +572,7 @@ impl Codec for ItemCodec {
         json_of(lua, &value, at, "Item").map(values::Item)
     }
     fn push(&self, lua: &Lua, value: values::Item) -> mlua::Result<Value> {
-        netherforge_luau::json::decode(lua, &value.0, &netherforge_luau::json::NoTags)
+        netherforge_luau::json::decode(lua, &value.0, &crate::handle::SavedHandles)
             .map_err(mlua::Error::runtime)
     }
 }
@@ -601,7 +601,7 @@ fn json_of(lua: &Lua, value: &Value, at: &str, expected: &str) -> ApiResult<Stri
     }
     let host = crate::handle::host(lua).ok_or_else(|| ApiError("no host".into()))?;
     let encoded =
-        netherforge_luau::json::encode(&host, value, at, "read", &netherforge_luau::json::NoTags)
+        netherforge_luau::json::encode(&host, value, at, "read", &crate::handle::SavedHandles)
             .map_err(|stopped| ApiError(stopped.0.to_string()))?;
     if let Some(problem) = encoded.problems.into_iter().next() {
         return Err(ApiError(format!("bad argument '{at}' ({problem})")));

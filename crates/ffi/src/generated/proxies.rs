@@ -167,7 +167,7 @@ impl DatapackOps for JavaDatapackOps {
         self.obj.call("DatapackOps::started", 0, move |w| {  let _ = w; })
     }
 
-    fn refused(&self) -> Option<external::DatapackRefusal> {
+    fn refused(&self) -> Option<netherforge_format::startup::DatapackRefusal> {
         self.obj.call("DatapackOps::refused", 1, move |w| {  let _ = w; })
     }
 

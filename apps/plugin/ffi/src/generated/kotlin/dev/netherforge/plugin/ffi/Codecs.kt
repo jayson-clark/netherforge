@@ -751,14 +751,9 @@ internal fun putWatchedEvent(w: Writer, v: dev.netherforge.plugin.platform.Watch
 
 internal fun takeWatchedEvent(r: Reader): dev.netherforge.plugin.platform.WatchedEvent = r.entry(dev.netherforge.plugin.platform.WatchedEvent.entries, "WatchedEvent")
 
-/** `DatapackRefusal` has no Rust type yet: it crosses as nothing, and can't come back. */
-@Suppress("UNUSED_PARAMETER")
-internal fun putDatapackRefusal(w: Writer, v: dev.netherforge.plugin.datapack.DatapackRefusal) = w.dynamic(null)
+internal fun putDatapackRefusal(w: Writer, v: dev.netherforge.plugin.datapack.DatapackRefusal) = w.string(CanonicalJson.json.encodeToString(dev.netherforge.plugin.datapack.DatapackRefusal.serializer(), v))
 
-internal fun takeDatapackRefusal(r: Reader): dev.netherforge.plugin.datapack.DatapackRefusal {
-    r.dynamic()
-    throw UnsupportedOperationException("DatapackRefusal doesn't cross from the Rust runtime yet")
-}
+internal fun takeDatapackRefusal(r: Reader): dev.netherforge.plugin.datapack.DatapackRefusal = CanonicalJson.json.decodeFromString(dev.netherforge.plugin.datapack.DatapackRefusal.serializer(), r.string())
 
 internal fun putBlockCarrier(w: Writer, v: dev.netherforge.format.block.BlockCarrier) = w.string(CanonicalJson.json.encodeToString(dev.netherforge.format.block.BlockCarrier.serializer(), v))
 

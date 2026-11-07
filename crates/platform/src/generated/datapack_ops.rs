@@ -18,7 +18,7 @@ pub trait DatapackOps {
     /// The refusal on record the server started without the project's datapacks for
     /// ([dev.netherforge.plugin.datapack.DatapackRefusal]: it refused [started] with them the last time); null when it
     /// started with them, as it does unless they refused it.
-    fn refused(&self) -> Option<external::DatapackRefusal>;
+    fn refused(&self) -> Option<netherforge_format::startup::DatapackRefusal>;
 
     /// The server's data pack format, `[major, minor]` (from the game's `version.json`); null when it doesn't say.
     fn format(&self) -> Option<Vec<i32>>;

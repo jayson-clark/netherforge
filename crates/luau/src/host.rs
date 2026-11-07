@@ -849,6 +849,30 @@ fn install_caps(lua: &Lua, guard: &Rc<RefCell<Guard>>) -> mlua::Result<()> {
         table.raw_set(name, f)?;
     }
     globals.raw_set("setmetatable", caps.get::<Function>("setmetatable")?)?;
+    // Lua 5.4's `math.type` and `math.tointeger`, which scripts written for it use: a double can't tell 3 from 3.0, so
+    // a whole number that fits a 64-bit integer is an integer (as the terrain's glue says too).
+    let math: Table = globals.get("math")?;
+    let whole = |n: f64| n.is_finite() && n == n.trunc() && n.abs() < 9.223_372_036_854_776e18;
+    math.raw_set(
+        "type",
+        lua.create_function(move |_, value: Value| {
+            Ok(match value {
+                Value::Integer(_) => Some("integer"),
+                Value::Number(n) => Some(if whole(n) { "integer" } else { "float" }),
+                _ => None,
+            })
+        })?,
+    )?;
+    math.raw_set(
+        "tointeger",
+        lua.create_function(move |_, value: Value| {
+            Ok(match value {
+                Value::Integer(i) => Some(i as f64),
+                Value::Number(n) if whole(n) => Some(n),
+                _ => None,
+            })
+        })?,
+    )?;
     Ok(())
 }
 

@@ -696,6 +696,9 @@ impl netherforge_platform::FakeDatapackOps for Fake {
     fn game(&self) -> netherforge_format::startup::GameDatapack {
         Default::default()
     }
+    fn refused(&self) -> Option<netherforge_format::startup::DatapackRefusal> {
+        None
+    }
     fn text_json(&self, text: String, _: Box<dyn Fn(String) -> Option<String>>) -> String {
         serde_json::Value::String(text).to_string()
     }

@@ -1184,15 +1184,15 @@ impl Take for netherforge_platform::api::WatchedEvent {
     }
 }
 
-impl Put for external::DatapackRefusal {
+impl Put for netherforge_format::startup::DatapackRefusal {
     fn put(self, w: &mut Writer) {
-        self.0.put(w);
+        w.json(&self);
     }
 }
 
-impl Take for external::DatapackRefusal {
+impl Take for netherforge_format::startup::DatapackRefusal {
     fn take(r: &mut Reader) -> Self {
-        external::DatapackRefusal(Dynamic::take(r))
+        r.json("DatapackRefusal")
     }
 }
 

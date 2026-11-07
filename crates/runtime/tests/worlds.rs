@@ -894,3 +894,14 @@ nf.after(2, function() chat:cancel() print("cancelled") end)
     session.stop();
     assert_eq!(platform.watched.borrow().last().unwrap(), "BlockGrow false");
 }
+
+#[test]
+fn math_type_and_tointeger_read_whole_numbers_as_integers() {
+    let files = Files::new(
+        &[],
+        r#"print(math.type(3), math.type(2.5), math.type("3"), math.tointeger(4), math.tointeger(4.5))"#,
+    );
+    let platform = Fake::new();
+    let session = start(&files, &platform, Config::default());
+    assert_eq!(printed(&session, &platform, 1), ["integer float nil 4 nil"]);
+}
