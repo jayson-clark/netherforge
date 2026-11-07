@@ -194,9 +194,13 @@ fn lookup(lua: &Lua, scope: ScopeId, path: &'static str, name: &str) -> mlua::Re
         let call = binding.call;
         let host = crate::handle::host(lua)
             .ok_or_else(|| mlua::Error::runtime("the API isn't installed"))?;
+        let weak = host.downgrade();
         let f = wrapped(&host, binding, move |lua, args: MultiValue| {
             let args: Vec<Value> = args.into_vec();
-            call(lua, &*api, Some(scope), &args)
+            match weak.upgrade() {
+                Some(host) => host.calling(scope, || call(lua, &*api, Some(scope), &args)),
+                None => call(lua, &*api, Some(scope), &args),
+            }
         })?;
         return Ok(Value::Function(f));
     }

@@ -164,7 +164,7 @@ impl GameContext {
     pub(crate) fn calling_namespace(&self) -> String {
         self.scripts
             .host()
-            .running_scope()
+            .calling_scope()
             .and_then(|scope| self.scripts.namespace(scope))
             .unwrap_or_else(|| self.shared.centities.borrow().home().to_owned())
     }

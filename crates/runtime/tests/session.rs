@@ -370,6 +370,46 @@ fn a_call_is_held_to_the_package_whose_code_makes_it() {
 }
 
 #[test]
+fn a_function_another_packages_timer_runs_names_things_as_its_own_package() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", &depending("")),
+        (
+            "modules/shop/init.lua",
+            "local api = require('acme:api') api.later(function() print(nf.looks.qualify('p/box')) end) api.later(api.mine)",
+        ),
+    ]);
+    let packages = Packages(BTreeMap::from([(
+        "acme",
+        vec![
+            (
+                "netherforge.json",
+                package_manifest("acme", r#", "exports": { "modules": ["api"] }"#),
+            ),
+            (
+                "modules/api/init.lua",
+                "return { later = function(f) nf.after(1, f) end, mine = function() print(nf.looks.qualify('p/gem')) end }"
+                    .into(),
+            ),
+        ],
+    )]));
+    let session = Session::start(platform.clone(), &files, &packages);
+    platform.take();
+    session.tick();
+    session.tick();
+    let lines = platform.take();
+    // The project's function, run by acme's timer, is still the project's code; acme's own is acme's.
+    assert!(
+        lines.iter().any(|l| l.starts_with("info [module shop] demo:p/box")),
+        "{lines:?}"
+    );
+    assert!(
+        lines.iter().any(|l| l.contains("acme:p/gem")),
+        "{lines:?}"
+    );
+}
+
+#[test]
 fn a_module_in_group_folders_is_required_by_its_id() {
     let platform = std::rc::Rc::new(Fake::default());
     let files = Files::new(&[

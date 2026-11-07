@@ -105,6 +105,9 @@ pub(crate) struct Guard {
     pub(crate) paused: u64,
     timing: Timing,
     serials: u64,
+    /// The scopes whose `nf` made the bindings running now, each with how many frames were open when it was
+    /// called (`Host::calling`): a call is its caller's only in the frame it was made in.
+    callers: Vec<(usize, ScopeId)>,
 }
 
 impl Guard {
@@ -193,6 +196,7 @@ impl Host {
             paused: 0,
             timing: Timing::default(),
             serials: 0,
+            callers: Vec::new(),
         }));
         // The caps go into the real `string` and `table` before they're made
         // read-only, so the string metatable (`("x"):rep(n)`) reaches them too.
@@ -581,6 +585,33 @@ impl Host {
     /// The scope whose call is running, if any.
     pub fn running_scope(&self) -> Option<ScopeId> {
         self.0.guard.borrow().frames.last().map(|f| f.scope)
+    }
+
+    /// Runs `f`, a binding `scope`'s code called, with `scope` as [`Host::calling_scope`] until it returns.
+    pub fn calling<R>(&self, scope: ScopeId, f: impl FnOnce() -> R) -> R {
+        struct Pop<'a>(&'a RefCell<Guard>);
+        impl Drop for Pop<'_> {
+            fn drop(&mut self) {
+                self.0.borrow_mut().callers.pop();
+            }
+        }
+        {
+            let mut guard = self.0.guard.borrow_mut();
+            let depth = guard.frames.len();
+            guard.callers.push((depth, scope));
+        }
+        let _pop = Pop(&self.0.guard);
+        f()
+    }
+
+    /// The scope whose code made the call running now: the one whose `nf` the binding came from (a module's
+    /// function a timer of another package runs is still its own module's), else the running call's scope.
+    pub fn calling_scope(&self) -> Option<ScopeId> {
+        let guard = self.0.guard.borrow();
+        match guard.callers.last() {
+            Some(&(depth, scope)) if depth == guard.frames.len() => Some(scope),
+            _ => guard.frames.last().map(|f| f.scope),
+        }
     }
 
     /// Bytes the state uses, every scope and the host together.

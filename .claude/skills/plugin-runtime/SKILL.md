@@ -378,7 +378,10 @@ dead: body failed: … (modules/dead/init.lua:2). It's disabled until it's reloa
 - **Grants are per package** (`Grants`, by namespace): a call is held to the `requires` of the
   package whose code makes it, which the binding knows (the scope `nf` was bound to, or the running
   scope's for a handle method), so Kotlin's rule for a tail call hiding the caller isn't needed. A
-  call no scope makes passes only when every package declares it. The policy (`policy.json`) comes
+  call no scope makes passes only when every package declares it. Names (`calling_namespace`: a bare
+  look, resource or file) follow the same caller: a binding runs under `Host::calling` with its `nf`'s scope,
+  so a project's function another package's timer runs still names things as the project's (the running
+  scope is the timer's owner). Only in the frame the binding was called in; a call back into Luau is its own. The policy (`policy.json`) comes
   with the server's config.
 
 - **A service's hooks take `&self`** (Kotlin's `RuntimeService`'s): `player_joined` (before scripts hear),
