@@ -22,7 +22,7 @@ use sha2::{Digest, Sha256};
 
 use crate::error::{Context, Error, ErrorCode, Result, bail};
 use crate::fs::{ProjectRoot, atomic};
-use palette::{Dither, Palette};
+use palette::Palette;
 
 /// A video's file, as far as converting it goes (format's `VideoFile`; unknown keys are format's to refuse).
 #[derive(Debug, Clone, Deserialize)]
@@ -195,7 +195,7 @@ pub fn info(root: &ProjectRoot, folder: &str) -> Result<VideoInfo> {
         .resolve(&format!("{folder}/{}", settings.source))
         .ok()
         .filter(|p| p.is_file());
-    let header = nfv::Header::read(&frames);
+    let header = nfv::read_header(&frames);
     let source_changed = match (&header, &source) {
         (Some(h), Some(s)) => Some(hash_file(s)? != h.source_sha256),
         _ => None,
@@ -278,7 +278,7 @@ pub fn convert(
             "A video is 1 to 20 frames a second: fix {folder}/{FILE} first"
         );
     }
-    let dither = Dither::parse(settings.dither.as_deref()).ok_or_else(|| {
+    let dither = palette::parse_dither(settings.dither.as_deref()).ok_or_else(|| {
         Error::new(
             ErrorCode::Invalid,
             format!("{folder}/{FILE} names a dither there isn't"),
@@ -387,7 +387,7 @@ pub fn convert(
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
             Err(e) => return Err(e).context(|| "Couldn't read ffmpeg's frames".to_string()),
         }
-        writer.add(palette.dither(&frame, width, height, dither))?;
+        writer.add(palette::dither(&mut palette, &frame, width, height, dither))?;
         let done = writer.frames() as u32;
         if done.is_multiple_of(fps as u32) {
             report("frames", done, total.max(done));
@@ -619,7 +619,7 @@ mod tests {
                 && dir.join("audio/0.ogg").is_file()
                 && dir.join("audio/1.ogg").is_file()
         );
-        let header = nfv::Header::read(&dir.join(FRAMES)).unwrap();
+        let header = nfv::read_header(&dir.join(FRAMES)).unwrap();
         assert_eq!(
             (
                 header.columns,
@@ -666,7 +666,7 @@ mod tests {
         assert!(!made.audio);
         assert!(!tmp.path().join("videos/clip").join(AUDIO).exists());
         assert!(
-            !nfv::Header::read(&tmp.path().join("videos/clip").join(FRAMES))
+            !nfv::read_header(&tmp.path().join("videos/clip").join(FRAMES))
                 .unwrap()
                 .audio
         );

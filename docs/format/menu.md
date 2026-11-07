@@ -65,10 +65,10 @@ A slot has no script of its own. The menu's script handles a slot's clicks with
 "script": { "file": "script.lua", "budget": 200000 }
 ```
 
-| Key      | Meaning                                                                | Default |
-| -------- | ---------------------------------------------------------------------- | ------- |
-| `file`   | A `.lua` file in this menu's folder.                                   | —       |
-| `budget` | Lua instructions one call into the script may use before it's stopped. | 200000  |
+| Key      | Meaning                                                                                           | Default |
+| -------- | ------------------------------------------------------------------------------------------------- | ------- |
+| `file`   | A `.lua` file in this menu's folder.                                                              | —       |
+| `budget` | Steps (function calls and turns of a loop) one call into the script may take before it's stopped. | 200000  |
 
 Every window gets its own copy of the script, started when the window is made:
 when it's opened for someone, or at load for a `shared` menu. In it, `this` is
@@ -275,7 +275,7 @@ defaults to `none`. Everything else is the same as `true`, `useEffects`'
 defaults included: a posed hold doesn't slow the player either. Written back,
 `{ "animation": "none" }` and `{}` read as `true`. A name that isn't one of
 these is `item.hold-animation` (a near miss like `tridnet` says which was
-meant). Every supported Minecraft version (1.21.11 to 26.3) has the same ones:
+meant). Every supported Minecraft version (26.1 to 26.3) has the same ones:
 
 | `animation` | First person                                                                 | Third person                                                     |
 | ----------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------- |

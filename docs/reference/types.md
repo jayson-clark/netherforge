@@ -96,7 +96,7 @@ One argument of a command. Its `type` decides what may be typed, what tab comple
 | `min` | `number?` | The smallest value an `integer` or `number` argument takes. |
 | `max` | `number?` | The largest value an `integer` or `number` argument takes. |
 | `choices` | `string[]?` | What a `choice` argument takes: single words. Required for `choice`, and only for it. |
-| `complete` | `(fun(event: `[`CommandEvent`](types.md#commandevent)`, partial: string): string[])?` | Tab completion of its own, instead of what its type offers. Gets the event so far (`event.arguments` holds the arguments before this one) and what has been typed of this argument; returns the suggestions. NetherForge keeps those starting with `partial`. Runs in the module's scope, within its instruction budget, every time a player's client asks, so keep it cheap. |
+| `complete` | `(fun(event: `[`CommandEvent`](types.md#commandevent)`, partial: string): string[])?` | Tab completion of its own, instead of what its type offers. Gets the event so far (`event.arguments` holds the arguments before this one) and what has been typed of this argument; returns the suggestions. NetherForge keeps those starting with `partial`. Runs in the module's scope, within its budget, every time a player's client asks, so keep it cheap. |
 
 ### CommandEvent {#commandevent}
 

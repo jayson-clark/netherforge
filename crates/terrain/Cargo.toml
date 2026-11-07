@@ -1,0 +1,16 @@
+[package]
+name = "netherforge-terrain"
+description = "Terrain scripts on Luau: format's generator's stages run by the runtime's host (format's TerrainScripts)"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+mlua.workspace = true
+netherforge-luau = { path = "../luau" }
+netherforge-format = { path = "../format" }
+
+[lints]
+workspace = true

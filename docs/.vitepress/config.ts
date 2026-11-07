@@ -90,6 +90,7 @@ function formatSidebar(): DefaultTheme.SidebarItem[] {
         'settings.md',
         'migrations.md',
         'wasm.md',
+        'features.md',
         'problems.md',
       ],
     ],

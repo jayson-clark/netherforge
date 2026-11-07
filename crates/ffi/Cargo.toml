@@ -1,0 +1,23 @@
+[package]
+name = "netherforge-ffi"
+description = "The FFM glue between the Paper adapter (Kotlin) and the Rust runtime: the wire, the server's interfaces as proxies, and the entry points the JVM calls"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+# The plugin loads the cdylib; the rlib is for this crate's own tests.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+netherforge-format = { path = "../format" }
+netherforge-platform = { path = "../platform" }
+netherforge-runtime = { path = "../runtime" }
+netherforge-luau = { path = "../luau" }
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

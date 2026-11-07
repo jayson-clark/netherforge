@@ -1,0 +1,186 @@
+package dev.netherforge.plugin.ffi
+
+import dev.netherforge.plugin.datapack.StartupDatapackFiles
+import dev.netherforge.plugin.platform.DatapackOps
+import dev.netherforge.plugin.platform.Platform
+import dev.netherforge.plugin.platform.PlatformEvents
+import dev.netherforge.plugin.platform.PlatformLog
+import java.lang.foreign.FunctionDescriptor
+import java.lang.foreign.MemorySegment
+import java.lang.foreign.ValueLayout
+import java.nio.file.Path
+
+/**
+ * The Rust runtime on [platform], as the plugin runs it: [start] reads `config.yml`'s values and
+ * starts the project (Kotlin's `NetherForgeRuntime.enable`), the server calls the [events] it
+ * answers with (bound into the platform too), and [stop] ends it. The library is [Native]'s.
+ */
+class NativeRuntime(private val platform: Platform) {
+    /** The runtime's events, once started with a project to run. */
+    var events: PlatformEvents? = null
+        private set
+
+    private val start by lazy {
+        Native.function(
+            "nf_start",
+            FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS)
+        )
+    }
+    private val stop by lazy { Native.function("nf_stop", FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)) }
+    private val startupDatapack by lazy {
+        Native.function(
+            "nf_startup_datapack",
+            FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS)
+        )
+    }
+    private val defaultGenerator by lazy {
+        Native.function(
+            "nf_default_generator",
+            FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS)
+        )
+    }
+
+    /**
+     * The project's generator for [world], which the server asks for before it loads the world and before [start]: its
+     * id as published (every generator of the project is), or null when `netherforge.json` names none for it.
+     */
+    fun defaultGenerator(
+        world: String,
+        pluginFolder: Path,
+        serverFolder: Path,
+        serverIp: String,
+        settings: Map<String, Any?>,
+        properties: Map<String, String> = System.getProperties().stringPropertyNames().associateWith { System.getProperty(it) },
+        environment: Map<String, String> = System.getenv()
+    ): String? {
+        val w = Writer()
+        putPlatform(w, platform)
+        putPath(w, pluginFolder)
+        putPath(w, serverFolder)
+        w.string(serverIp)
+        w.dynamic(settings)
+        w.map(properties, { w.string(it) }) { w.string(it) }
+        w.map(environment, { w.string(it) }) { w.string(it) }
+        w.string(world)
+        return answer { at, out -> defaultGenerator.invokeExact(at, w.size.toLong(), out) as MemorySegment }
+            .let { bytes -> read(bytes, w) { r -> r.opt { r.string() } } }
+    }
+
+    /**
+     * The start-up datapack for the project [settings] name, which the server's bootstrap hands it before it loads its
+     * worlds and before [start]: null when there's no project, or the server doesn't say its data pack format. Built
+     * on [platform], which only needs to answer [Platform.log] and [Platform.datapacks] ([bootstrap]).
+     */
+    fun startupDatapack(
+        pluginFolder: Path,
+        serverFolder: Path,
+        settings: Map<String, Any?>,
+        properties: Map<String, String> = System.getProperties().stringPropertyNames().associateWith { System.getProperty(it) },
+        environment: Map<String, String> = System.getenv()
+    ): StartupDatapackFiles.Start? {
+        val w = Writer()
+        putPlatform(w, platform)
+        putPath(w, pluginFolder)
+        putPath(w, serverFolder)
+        w.string("")
+        w.dynamic(settings)
+        w.map(properties, { w.string(it) }) { w.string(it) }
+        w.map(environment, { w.string(it) }) { w.string(it) }
+        return answer { at, out -> startupDatapack.invokeExact(at, w.size.toLong(), out) as MemorySegment }
+            .let { bytes ->
+                read(bytes, w) { r ->
+                    when (r.byte().toInt()) {
+                        0 -> throw IllegalArgumentException(r.string())
+                        1 -> null
+                        else -> {
+                            val files = LinkedHashMap<String, ByteArray>()
+                            repeat(r.count()) { files[r.string()] = r.bytes() }
+                            StartupDatapackFiles.Start(files, r.string(), r.bool(), r.bool())
+                        }
+                    }
+                }
+            }
+    }
+
+    /**
+     * Starts the project [settings] (`config.yml`'s values) and the JVM's [properties] and [environment] say runs,
+     * from [pluginFolder] on the server in [serverFolder] at [serverIp]: false when there's none. A value that can't
+     * be acted on is thrown as the runtime words it.
+     */
+    fun start(
+        pluginFolder: Path,
+        serverFolder: Path,
+        serverIp: String,
+        settings: Map<String, Any?>,
+        properties: Map<String, String> = System.getProperties().stringPropertyNames().associateWith { System.getProperty(it) },
+        environment: Map<String, String> = System.getenv()
+    ): Boolean {
+        val w = Writer()
+        putPlatform(w, platform)
+        putPath(w, pluginFolder)
+        putPath(w, serverFolder)
+        w.string(serverIp)
+        w.dynamic(settings)
+        w.map(properties, { w.string(it) }) { w.string(it) }
+        w.map(environment, { w.string(it) }) { w.string(it) }
+        events = answer { at, out -> start.invokeExact(at, w.size.toLong(), out) as MemorySegment }
+            .let { bytes -> read(bytes, w) { r -> r.opt { takePlatformEvents(r) } } }
+        return events != null
+    }
+
+    /** One server tick. */
+    fun tick() {
+        events?.tick()
+    }
+
+    /** Stops the project: its services, what it was writing, the dev bridge. */
+    fun stop() {
+        if (events == null) return
+        events = null
+        val out = java.lang.foreign.Arena.ofConfined().use { arena ->
+            val len = arena.allocate(ValueLayout.JAVA_LONG)
+            val at = stop.invokeExact(len) as MemorySegment
+            at.reinterpret(len.get(ValueLayout.JAVA_LONG, 0)).toArray(ValueLayout.JAVA_BYTE)
+        }
+        val r = Reader(out)
+        if (r.byte().toInt() != 0) throw r.error()
+    }
+
+    private fun answer(call: (MemorySegment, MemorySegment) -> MemorySegment): (Writer) -> ByteArray = { w ->
+        java.lang.foreign.Arena.ofConfined().use { arena ->
+            val args = arena.allocate(maxOf(1L, w.size.toLong()))
+            MemorySegment.copy(w.bytes, 0, args, ValueLayout.JAVA_BYTE, 0, w.size)
+            val len = arena.allocate(ValueLayout.JAVA_LONG)
+            val at = call(args, len)
+            at.reinterpret(len.get(ValueLayout.JAVA_LONG, 0)).toArray(ValueLayout.JAVA_BYTE)
+        }
+    }
+
+    private fun <T> read(call: (Writer) -> ByteArray, w: Writer, take: (Reader) -> T): T {
+        val r = Reader(call(w))
+        if (r.byte().toInt() != 0) throw r.error()
+        return take(r)
+    }
+
+    companion object {
+        /**
+         * The server as its bootstrap knows it, before it has worlds or players: only [log] and [datapacks] answer
+         * (what [startupDatapack] asks), anything else is a mistake that says so.
+         */
+        fun bootstrap(log: PlatformLog, datapacks: DatapackOps): Platform =
+            java.lang.reflect.Proxy.newProxyInstance(Platform::class.java.classLoader, arrayOf(Platform::class.java)) {
+                    proxy,
+                    method,
+                    args
+                ->
+                when (method.name) {
+                    "getLog" -> log
+                    "getDatapacks" -> datapacks
+                    "hashCode" -> System.identityHashCode(proxy)
+                    "equals" -> proxy === args?.firstOrNull()
+                    "toString" -> "the bootstrap's platform"
+                    else -> throw UnsupportedOperationException("the server's bootstrap has no ${method.name}")
+                }
+            } as Platform
+    }
+}

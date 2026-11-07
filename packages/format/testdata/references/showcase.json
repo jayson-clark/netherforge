@@ -1018,6 +1018,15 @@
   },
   {
     "file": "menus/shop/menu.json",
+    "path": "$.slots[\"12\"].item.lore[0]",
+    "kind": "glyph",
+    "text": "ui/coin",
+    "target": "showcase:ui/coin",
+    "start": 6,
+    "end": 21
+  },
+  {
+    "file": "menus/shop/menu.json",
     "path": "$.slots[\"12\"].item.item",
     "kind": "item",
     "text": "library:gem",
@@ -1025,7 +1034,7 @@
   },
   {
     "file": "menus/shop/menu.json",
-    "path": "$.slots[\"12\"].item.lore[0]",
+    "path": "$.slots[\"13\"].item.lore[0]",
     "kind": "glyph",
     "text": "ui/coin",
     "target": "showcase:ui/coin",
@@ -1038,15 +1047,6 @@
     "kind": "item",
     "text": "ruby",
     "target": "showcase:ruby"
-  },
-  {
-    "file": "menus/shop/menu.json",
-    "path": "$.slots[\"13\"].item.lore[0]",
-    "kind": "glyph",
-    "text": "ui/coin",
-    "target": "showcase:ui/coin",
-    "start": 6,
-    "end": 21
   },
   {
     "file": "menus/shop/menu.json",

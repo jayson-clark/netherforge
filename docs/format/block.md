@@ -259,10 +259,10 @@ changes nothing in the world.
 "script": { "file": "script.lua", "budget": 200000 }
 ```
 
-| Key      | Meaning                                                                | Default |
-| -------- | ---------------------------------------------------------------------- | ------- |
-| `file`   | A `.lua` file in this block's folder.                                  | —       |
-| `budget` | Lua instructions one call into the script may use before it's stopped. | 200000  |
+| Key      | Meaning                                                                                           | Default |
+| -------- | ------------------------------------------------------------------------------------------------- | ------- |
+| `file`   | A `.lua` file in this block's folder.                                                             | —       |
+| `budget` | Steps (function calls and turns of a loop) one call into the script may take before it's stopped. | 200000  |
 
 The script runs once for the block, not once per placed block, from load until
 the block is reloaded, like an item's. In it, `this` is the block (a

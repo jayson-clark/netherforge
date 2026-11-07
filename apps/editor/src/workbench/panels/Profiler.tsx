@@ -6,7 +6,7 @@
  * and calls; a function's place opens its script at the line.
  */
 import { useState } from 'react'
-import type { SourceRef } from '@netherforge/format/types'
+import type { SourceRef } from '@/core/bridge/protocol'
 import { sortRows, type HandlerRow, type ScopeRow, type SortKey } from '@/core/store/profiler'
 import { useApp, useProfiler, useRun } from '@/state/providers'
 import { Button } from '@/ui/Button'

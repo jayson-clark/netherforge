@@ -61,7 +61,7 @@ class CompiledEmitter(
 )
 
 /** Keys sorted by tick, never empty. Holds the first value before the first key and the last after the last. */
-class NumberCurve(private val times: IntArray, private val values: DoubleArray, private val easings: Array<Easing>) {
+class NumberCurve(val times: IntArray, val values: DoubleArray, val easings: Array<Easing>) {
 
     fun at(tick: Double): Double {
         val i = segment(times, tick)
@@ -89,7 +89,7 @@ class NumberCurve(private val times: IntArray, private val values: DoubleArray, 
 }
 
 /** Colours as `0xRRGGBB`, interpolated per channel in sRGB. Otherwise like [NumberCurve]. */
-class ColorCurve(private val times: IntArray, private val colors: IntArray, private val easings: Array<Easing>) {
+class ColorCurve(val times: IntArray, val colors: IntArray, val easings: Array<Easing>) {
 
     fun at(tick: Double): Int {
         val i = segment(times, tick)

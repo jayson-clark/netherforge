@@ -579,7 +579,7 @@ const nfTable: LuaClass = {
     {
       name: 'task',
       impl: 'lua',
-      doc: "Starts a task: `callback` runs now, with the extra arguments, until it first waits ({waits}), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.",
+      doc: "Starts a task: `callback` runs now, with the extra arguments, until it first waits ({waits}), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.",
       params: [
         {
           name: 'callback',
@@ -692,7 +692,7 @@ const nfTable: LuaClass = {
     {
       name: 'instructions_left',
       impl: 'lua',
-      doc: "Lua instructions this call may still run before it's stopped. A loop over a lot of work can check it and leave the rest for the next tick. In a call nested in another (a task started by a handler, a centity spawned by one) it's the least of its own budget and what its caller has left, since what it runs is charged to the caller when it returns. Coarse: it's updated every thousand instructions.",
+      doc: "Steps (function calls and turns of a loop) this call may still take before it's stopped. A loop over a lot of work can check it and leave the rest for the next tick. In a call nested in another (a task started by a handler, a centity spawned by one) it's the least of its own budget and what its caller has left, since what it runs is charged to the caller when it returns.",
       params: [],
       returns: [{ type: 'integer' }],
     },

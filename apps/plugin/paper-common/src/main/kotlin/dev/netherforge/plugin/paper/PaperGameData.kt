@@ -140,7 +140,10 @@ class PaperGameData(private val registries: ServerRegistries, private val readMa
             packFormat = resourcePackFormat,
             dataPackFormat = dataPackFormat,
             particles = particleRegistry.stream().toList().sortedBy { it.key.toString() }.associate { it.key.toString() to kindOf(it) },
-            mapColors = mapColors
+            mapColors = mapColors,
+            durability = itemRegistry.stream().toList().mapNotNull { item ->
+                (item.getDefaultData(DataComponentTypes.MAX_DAMAGE) ?: 0).takeIf { it > 0 }?.let { item.key.toString() to it }
+            }.sortedBy { it.first }.toMap()
         )
     }
 

@@ -656,7 +656,7 @@ databases:
 | `password`      | Its password. Never logged, and never readable by a script.                                                  | empty                   |
 | `pool-size`     | The most statements running at once on this connection (1 to 32).                                            | `4`                     |
 | `packages`      | The namespaces of the packages allowed to use it. A package that isn't listed is refused.                    | none                    |
-| `properties`    | Extra driver properties, like `sslMode: REQUIRED`.                                                           | none                    |
+| `ssl-mode`      | `disable`, `prefer` (encrypted when the server offers it) or `require` (encrypted, its certificate checked). | `prefer`                |
 | `own-databases` | The namespaces of packages whose own database (`nf.db()`) lives here instead of in a SQLite file. See below. | none                    |
 
 A package needs **two yeses** to use one of these: it asks for a database in
@@ -719,11 +719,9 @@ databases:
   package's work is one transaction that picks the package's schema for
   itself (`SET LOCAL search_path`), and the migration lock belongs to the
   migration's transaction, so nothing depends on getting the same backend
-  twice. Two things PgBouncer needs from you in transaction mode: version
-  1.21 or later with `max_prepared_statements` set (the PostgreSQL driver
-  prepares statements it runs often), or else `prepareThreshold: 0` under
-  the connection's `properties`. Behind a pooler, set `pool-size` for the
-  pooler's client connections, not the database's.
+  twice. Statements are prepared unnamed, inside each piece's own
+  transaction, so PgBouncer needs nothing else from you. Behind a pooler,
+  set `pool-size` for the pooler's client connections, not the database's.
 - A dev server reads this section too: leave `own-databases` out of its
   `config.yml`, and the project is written and tested on SQLite as before.
 

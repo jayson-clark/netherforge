@@ -1,0 +1,8 @@
+{
+  "biomes": [
+    "#minecraft:is_forest"
+  ],
+  "step": "underground_structures",
+  "heightmap": "none",
+  "startHeight": -20
+}

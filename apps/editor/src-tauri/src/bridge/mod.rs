@@ -41,7 +41,7 @@ use tokio::task::AbortHandle;
 
 use crate::error::{Error, ErrorCode, Result};
 use frames::{Frame, FrameReader};
-use protocol::Hello;
+use protocol::HelloParams as Hello;
 
 pub const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 /// The hello is a nonce, a version and a path, the proof a hash: nothing a stranger gets to make bigger.
@@ -440,7 +440,7 @@ mod tests {
     /// The plugin's nonce in these tests.
     const NONCE: &str = "00112233445566778899aabbccddeeff0011223344556677";
 
-    fn hello_line(protocol: u64) -> String {
+    fn hello_line(protocol: i32) -> String {
         format!(
             "{{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"hello\",\"params\":{{\"nonce\":\"{NONCE}\",\"protocol\":{protocol},\"pluginVersion\":\"0.1.0\",\"minecraft\":\"26.3\",\"project\":\"/p\"}}}}\n"
         )
@@ -458,7 +458,7 @@ mod tests {
     );
 
     /// Connects as the plugin and says hello; the editor's answer is left to read.
-    async fn plugin_with(bridge: &Bridge, protocol: u64) -> Plugin {
+    async fn plugin_with(bridge: &Bridge, protocol: i32) -> Plugin {
         let stream = TcpStream::connect(("127.0.0.1", bridge.port()))
             .await
             .unwrap();

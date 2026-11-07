@@ -44,7 +44,7 @@ data class SkyFile(
     val light: String? = null,
     /**
      * Whether night darkens its [sky] and [fog], as it does the game's (default true). False holds them through the
-     * night: a red sky stays red. 26.1 and later ([NIGHT_FEATURE]), where each such sky is also a timeline of the
+     * night: a red sky stays red. Each such sky is also a timeline of the
      * game's ([SkyNight]).
      */
     val darkens: Boolean? = null,
@@ -76,9 +76,6 @@ data class SkyFile(
         const val SCHEMA = "../.netherforge/schema/sky.schema.json"
         const val DEFAULT_FADE = 3
         const val MAX_FADE = 8
-
-        /** The feature (the game's world clocks, 26.1) a sky that doesn't [darkens] needs. */
-        const val NIGHT_FEATURE = "sky-night"
     }
 }
 
@@ -136,7 +133,6 @@ object SkyValidator {
             sink.report(ProblemCodes.SKY_FADE, "fade is 1 to ${SkyFile.MAX_FADE} steps, not $fade", "$.fade")
         }
         if (file.darkens == false) {
-            requireFeature(SkyFile.NIGHT_FEATURE, "$.darkens")
             if (file.heldAtNight.isEmpty()) {
                 sink.report(
                     ProblemCodes.SKY_NIGHT,

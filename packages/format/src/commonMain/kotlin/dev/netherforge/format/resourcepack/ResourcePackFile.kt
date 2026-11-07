@@ -59,7 +59,7 @@ data class ResourcePackFile(
      * `models/` (`block/red_mushroom`, `item/lantern`), without `.json`, to a model file of the pack (`mushroom.json`, a
      * path under its `models/` folder). Every block or item drawn with the model takes its shape.
      */
-    val models: Map<String, String> = emptyMap(),
+    @Ref(RefKind.MODEL) val models: Map<String, String> = emptyMap(),
     /** What it does to the HUD: the game's elements it hides, and elements of its own scripts fill in ([HudDef]). */
     val hud: HudDef? = null,
     /**

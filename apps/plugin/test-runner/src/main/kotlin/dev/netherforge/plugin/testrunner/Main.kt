@@ -1,6 +1,8 @@
 package dev.netherforge.plugin.testrunner
 
-import java.nio.file.Files
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import java.nio.file.Path
 import kotlin.system.exitProcess
 
@@ -66,24 +68,22 @@ internal class Arguments(
 }
 
 /** Runs the arguments' tests, printing to [out]; the process's exit code. */
-internal fun run(args: Arguments, out: (String) -> Unit): Int {
-    val text = TextReport(out)
-    val results = mutableListOf<TestResult>()
-    val finished = try {
-        ScriptTestRunner(args.project, GameDataFile.read(args.gameData), args.packages).run(args.filter) { event ->
-            if (event is TestResult) results += event
-            if (args.json) out(EventJson.encodeToString(TestEvent.serializer(), event)) else text.event(event)
+internal fun run(args: Arguments, out: (String) -> Unit): Int = try {
+    ScriptTestRunner(args.project, GameDataFile.read(args.gameData), args.packages).run(args.filter, args.json, args.junit, out)
+} catch (e: ScriptTestRunner.Refused) {
+    val message = e.message.orEmpty()
+    out(
+        if (args.json) {
+            buildJsonObject {
+                put("event", "error")
+                put("message", message)
+                putJsonArray("problems") {}
+            }.toString()
+        } else {
+            "Can't run the project's tests: $message"
         }
-    } catch (e: ScriptTestRunner.Refused) {
-        val failed = RunFailed(e.message.orEmpty(), e.problems)
-        out(if (args.json) EventJson.encodeToString(TestEvent.serializer(), failed) else "Can't run the project's tests: ${e.message}")
-        return 2
-    }
-    args.junit?.let { file ->
-        file.toAbsolutePath().parent?.let(Files::createDirectories)
-        Files.writeString(file, JUnitReport.write(results, finished.durationMillis))
-    }
-    return if (finished.ok) 0 else 1
+    )
+    2
 }
 
 fun main(args: Array<String>) {
@@ -94,6 +94,6 @@ fun main(args: Array<String>) {
     }
     val code = run(arguments) { println(it) }
     System.out.flush()
-    // Lua's native library and the runtime's threads can outlive main: the exit code is the result.
+    // The runtime's threads can outlive main: the exit code is the result.
     exitProcess(code)
 }

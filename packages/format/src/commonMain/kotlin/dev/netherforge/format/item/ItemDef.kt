@@ -40,15 +40,6 @@ data class ItemDef(
      * (`""`) until the item is resolved.
      */
     val kind: String = "",
-    /**
-     * A project item (`items/<id>/item.json`, or a package's as
-     * `<namespace>:<id>`): the stack is one of those. The item's definition
-     * supplies every field this leaves out, and the stack carries the item's
-     * namespaced id (in its persistent data container) wherever it goes.
-     */
-    @Ref(RefKind.ITEM) val item: ResourceRef? = null,
-    /** How many. At least one, at most the stack's own limit. */
-    val count: Int? = null,
     /** Display name, MiniMessage. */
     @MiniMessage val name: String? = null,
     /** Tooltip lines under the name, each MiniMessage. */
@@ -60,17 +51,8 @@ data class ItemDef(
     /** Hide the whole tooltip; for decorative filler panes. */
     val hideTooltip: Boolean? = null,
     val unbreakable: Boolean? = null,
-    /** Durability used, not left: 0 is pristine. */
-    val damage: Int? = null,
     /** `<pack>/<key>`: a custom look from one of the project's resource packs (the `item_model` component). */
     @Ref(RefKind.ITEM_MODEL) val itemModel: ResourceRef? = null,
-    /**
-     * Drawn as nothing, wherever it's drawn: in a slot, on the ground, and in a hand, where the player's own arm isn't
-     * drawn either, as with anything held. It's an empty look every built resource pack has ([INVISIBLE_MODEL]), in
-     * place of [itemModel]. With a [hold], what a launcher's pointer is: no arm in the way, and the right button
-     * pressed (`player_use_item`) and let go (`player_stop_using_item`).
-     */
-    val invisible: Boolean? = null,
     /** `<pack>/<key>`: a custom tooltip frame from one of the project's packs (the `tooltip_style` component). */
     @Ref(RefKind.TOOLTIP) val tooltipStyle: ResourceRef? = null,
     /** Worn as armour or equipment, drawn as a pack's equipment look (the `equippable` component). */
@@ -93,6 +75,13 @@ data class ItemDef(
     @Ref(RefKind.ADVENTURE_BLOCK) val canBreak: List<String>? = null,
     /** The blocks it can be placed on in adventure mode (the `can_place_on` component), written as [canBreak]'s. */
     @Ref(RefKind.ADVENTURE_BLOCK) val canPlaceOn: List<String>? = null,
+    /**
+     * Drawn as nothing, wherever it's drawn: in a slot, on the ground, and in a hand, where the player's own arm isn't
+     * drawn either, as with anything held. It's an empty look every built resource pack has ([INVISIBLE_MODEL]), in
+     * place of [itemModel]. With a [hold], what a launcher's pointer is: no arm in the way, and the right button
+     * pressed (`player_use_item`) and let go (`player_stop_using_item`).
+     */
+    val invisible: Boolean? = null,
     /**
      * The tooltip lines to hide (the `tooltip_display` component), by the component that draws them:
      * `unbreakable`, `attribute_modifiers`, `can_break` ([TooltipComponent.ALL]). The components still
@@ -117,6 +106,17 @@ data class ItemDef(
      * component). Left out, the game's (a fifth of the speed, no sprinting), or for a [hold], full speed.
      */
     val useEffects: UseEffectsDef? = null,
+    /**
+     * A project item (`items/<id>/item.json`, or a package's as
+     * `<namespace>:<id>`): the stack is one of those. The item's definition
+     * supplies every field this leaves out, and the stack carries the item's
+     * namespaced id (in its persistent data container) wherever it goes.
+     */
+    @Ref(RefKind.ITEM) val item: ResourceRef? = null,
+    /** How many. At least one, at most the stack's own limit. */
+    val count: Int? = null,
+    /** Durability used, not left: 0 is pristine. */
+    val damage: Int? = null,
     /**
      * The map a filled map shows (the `map_id` component): a screen's map (`screen:item`), or any of the game's, by
      * its number. Only a `minecraft:filled_map` draws it.

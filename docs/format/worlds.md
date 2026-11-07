@@ -250,8 +250,8 @@ structure that generates (or is picked by one that does) asks for a restart, as
 itself, and `/nf reload` says so on a production server. A structure that doesn't
 generate is read at the next placement, as before.
 
-The same files are written for every Minecraft version NetherForge supports (the
-last 1.21.x and every 26.x), so nothing here depends on the project's target
+The same files are written for every Minecraft version NetherForge supports
+(every 26.x), so nothing here depends on the project's target
 version; with game data, the biomes and tags are checked against the target's. A
 structure in a project biome that has errors waits for it, out of the datapack.
 

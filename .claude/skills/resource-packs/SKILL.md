@@ -1,14 +1,16 @@
 ---
 name: resource-packs
-description: How NetherForge turns resource_packs/ into one Minecraft resource pack and gets it to players - PackLayout.build, the pack format from the server's version.json, deterministic zips and SHA-1, the embedded HTTP server or an external URL, sending on join and only when the hash changed, rebuild on reload, skins as title glyphs, glyph characters for text (the <glyph:ui/coin> MiniMessage tag, nf.text.glyph), resource packs in the project's namespace, image facts (opaque width → bitmap advance). Read before touching format's resourcepack/, apps/plugin/runtime/.../pack, the resource-pack config, or anything that draws a skin or glyph.
+description: How NetherForge turns resource_packs/ into one Minecraft resource pack and gets it to players - PackLayout.build, the pack format from the server's version.json, deterministic zips and SHA-1, the embedded HTTP server or an external URL, sending on join and only when the hash changed, rebuild on reload, skins as title glyphs, glyph characters for text (the <glyph:ui/coin> MiniMessage tag, nf.text.glyph), resource packs in the project's namespace, image facts (opaque width → bitmap advance). Read before touching format's resourcepack/, crates/runtime/src/packs.rs, the resource-pack config, or anything that draws a skin or glyph.
 ---
 
 # Resource packs
 
 Spec: `docs/format/resource-pack.md`. Format side: `packages/format/.../resourcepack/` (`ResourcePackFile`,
 `CompiledResourcePack`, `PackFonts`, `PackLayout`, `pngSize`; `text/GlyphTags`). Plugin side:
-`apps/plugin/runtime/.../pack/` (`Packs`, `PackZip`, `PackServer`), delivery via
-`Platform.resourcePacks`.
+`crates/runtime/src/packs.rs` (`Packs`, the zip, `PackServer`, `PacksService`), `pack_storage.rs` (S3-compatible
+storage), `written_packs.rs` (packs scripts write), delivery via `Platform.resource_packs`. Format's Rust copy of
+the build is `crates/format/src/kind/resource_pack` and its `build` (the same layout, so the zip and the editor's
+preview agree).
 
 ## Resource packs live in the project's namespace
 
@@ -71,7 +73,7 @@ A converted video's sound is in the pack too, though no resource pack holds it: 
 each running video that keeps its sound and has `audio.ogg`, and `PackLayout.build(..., videos)` copies it to
 `assets/<ns>/sounds/video.<id>.ogg` (event `video.<id>`) and each piece `audio/<n>.ogg` to `video.<id>/<n>.ogg`
 (event `video.<id>.<n>`), all `stream: true`. A pack id has no `.`, so neither can collide with a pack's
-`<pack>/<key>`. `PackService` follows `VideoKind`, so converting again rebuilds and resends the pack.
+`<pack>/<key>`. `PacksService` follows the video kind, so converting again rebuilds and resends the pack.
 
 ## Sounds
 
@@ -187,8 +189,8 @@ advance))`: it nets to zero width, so the words start where a vanilla title
   `space` provider (`PackFonts.advances`, `spaceAdvance` reads one back), so `<space:N>` (the
   adapter's `space` resolver: `PackFonts.offset`, never bold or obfuscated, nothing while
   `Packs.built` is null) works in any text. `<at:N:from=…:align=…>…</at>` takes no width: the
-  adapter's MiniMessage `preProcessor` hands every text to the runtime's `ProjectSession.layoutText`
-  (`Platform.bindText`), which is `TextWidth.layout`: it walks the text once, measuring each line
+  adapter's MiniMessage `preProcessor` hands every text to the runtime's layout (`Platform.bind_text`, bound in
+  `crates/ffi/src/compose.rs`), which is format's text width layout: it walks the text once, measuring each line
   and each `<at>`'s inside with the style around it, and puts `<space>` moves before the tag and
   where it closes (its `</at>`, a tag closing it, `<reset>`, the text's end). What it can't measure
   stays as written (the `at` resolver only scopes, so the inside draws in line) and is warned about
@@ -221,25 +223,24 @@ and previous build) and never at the owner's external URL. `player:push_resource
 `Packs.packId(name)` with `PackOffer.replacing = false`; the project's pack is sent `replacing` only the first time a
 player gets it this session (taking off what another server sent), and beside the pushed ones after. `sendAll`
 resends the project's pack to whoever lacks its build and each pushed pack to whoever has an older one, so
-`PackService` calls it after every rebuild. Statuses are kept per pack id, and `Packs.onStatus` (set by
-`PackService.start`) raises `player_resource_pack_status`. `nf.packs.rebuild` sets
-`ProjectSession.packsWanted`; `NetherForgeRuntime.tick` reloads every pack's `pack.json` after the session's tick,
-out of every script's way. `resource_pack.on-demand` refuses what every player needs (blocks, the HUD, the game's
+`PacksService` calls it after every rebuild. Statuses are kept per pack id (`Packs::status_changed`), and the
+server's events raise `player_resource_pack_status` from them. `nf.packs.rebuild` sets `Packs.wanted`;
+`Session::rebuild_packs` reloads every pack's `pack.json` after the session's tick, out of every script's way. `resource_pack.on-demand` refuses what every player needs (blocks, the HUD, the game's
 textures, models, sounds) in such a pack.
 
 ## Packs scripts write
 
 `packs/<name>/` in a package's `nf.files` folder (`<data>/<namespace>/packs/<name>/pack.json`) is that package's
-resource pack `<name>`: `WrittenPacks` (in `project/`, used by `ProjectFiles`) lays it into the package's source as
+resource pack `<name>`: `written_packs.rs` (used by `project_files.rs`) lays it into the package's source as
 `resource_packs/<name>/` (`over` for a package's source, `withPacks` for the project's files, `sourceOf` for reads),
 so format loads, checks and numbers it like any other, and `nf.packs.rebuild` (whose reload also names
 `writtenPackFiles()`, new packs included) builds it. It's never in a package's hash (`ProjectFiles.hash` reads the
 `DiskProjectSource` alone), and a bundle's `resource-pack.zip` isn't used while there's one (`readsWrittenPacks`):
 it was built without them, and they can renumber glyphs. A written pack named like one in `resource_packs/` isn't
 read (`runtime.written-pack`). Since an error in any pack keeps the whole last build (and at start there's none),
-`WrittenPacks.load` loads again while a written pack has errors: from its last good copy (`<state>/written-packs/`,
+`written_packs.rs` loads again while a written pack has errors: from its last good copy (`<state>/written-packs/`,
 copied after each clean load, kept across restarts), then without it, its problems reported as warnings at the
-script's file (`shown`, which `ProjectSession.projectProblems` maps every problem through).
+script's file (every problem the session reports is mapped through it).
 
 ## Bundles that leave packages out
 
@@ -269,7 +270,7 @@ in atlas" and draws it from only one, which left blocks drawing the missing text
 `parent`): its item model is just `{ "parent": "<ns>:block/<pack>/<key>" }`, which inherits the
 game's block display transforms, so it's a 3D cube in slots and the hand like a vanilla block item. A block drawn by a centity gets `<key>_hidden` (only the
 particle texture), or `assets/<ns>/models/block/hidden.json` (nothing) without a look. `Packs.rebuild`
-asks for the plan with `BlockCarriers.plan(snapshot.everywhere(BlockKind)...)` and `PackService` follows
+asks for the plan with format's `carriers::plan` over every block of the project and `PacksService` follows
 `BlockKind`, so a project with blocks and no resource pack still builds one, and adding a block changes the hash.
 
 ## Equipment looks

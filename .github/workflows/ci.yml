@@ -80,8 +80,6 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
-        with:
-          rust: 'false'
       - name: The pinned Paper build
         id: paper
         env:
@@ -137,8 +135,6 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
-        with:
-          rust: 'false'
       - run: pnpm build
       - run: pnpm --filter @netherforge/editor exec playwright install --with-deps chromium
       - run: pnpm test:e2e

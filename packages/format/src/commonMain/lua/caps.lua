@@ -30,6 +30,10 @@
 -- a pattern that only backtracks on unlucky input is refused on a long enough
 -- string even when the string at hand would have been quick; the message
 -- says what to do instead.
+--
+-- It runs under Lua 5.4 (the Kotlin runtime, terrain previews) and under Luau
+-- (the Rust runtime, see the plugin-runtime skill), so it uses only what both
+-- have: Luau's missing `math.tointeger` and `math.ult` are written out below.
 
 local raw, limits, spend, refuse = ...
 
@@ -38,7 +42,28 @@ local type, tostring, tonumber, select, rawget, setmetatable, pcall =
 local byte, sub, char = string.byte, string.sub, string.char
 local format, find, gsub, gmatch, concat = raw.format, raw.find, raw.gsub, raw.gmatch, raw.concat
 local pack, unpack = table.pack, table.unpack
-local tointeger, log, max, floor, ult = math.tointeger, math.log, math.max, math.floor, math.ult
+local log, max, floor = math.log, math.max, math.floor
+
+-- A whole number (or a string of one) as an integer, else nil: Lua 5.4's own,
+-- or the same for Luau's numbers, which are all floats.
+local tointeger = math.tointeger
+  or function(x)
+    local n = tonumber(x)
+    if n ~= nil and n == floor(n) and n - n == 0 then
+      return n
+    end
+    return nil
+  end
+
+-- Whether `a < b` as unsigned 64-bit integers: Lua 5.4's own, or the same for
+-- whole numbers in Luau (a negative one is above every non-negative one).
+local ult = math.ult
+  or function(a, b)
+    if (a < 0) == (b < 0) then
+      return a < b
+    end
+    return b < 0
+  end
 local raw_getmetatable = raw.getmetatable
 
 local MAX_STRING = limits.max_string
@@ -686,6 +711,10 @@ end
 
 -- ---------------------------------------------------------------- making strings
 
+-- Whether the library's own `rep` ignores a separator: Luau's is Lua 5.1's,
+-- and would return "aa" for `rep("a", 2, "-")` without a word.
+local REP_IGNORES_SEP = raw.rep("a", 2, "-") == "aa"
+
 function caps.string.rep(s, n, sep)
   if
     sep == nil
@@ -707,6 +736,14 @@ function caps.string.rep(s, n, sep)
     end
     making("string.rep", size > count and size or count + 0.0)
   end
+  if REP_IGNORES_SEP and sep ~= nil and sep ~= "" and count ~= nil then
+    -- As Lua 5.4 does it: the separator between each copy, none at the ends.
+    if count <= 0 then
+      return ""
+    end
+    local between = tostring(sep)
+    return raw.rep(tostring(s) .. between, count - 1) .. tostring(s)
+  end
   return raw.rep(s, n, sep)
 end
 
@@ -717,12 +754,17 @@ local NUMBER_TEXT = 520
 -- What a format string makes, kept per format string: `fixed`, the most its
 -- own text and its number conversions come to, and in its array part the
 -- arguments whose size depends on their text: `%s` by its argument's
--- position, `%q` by its position negated. A spec the library would refuse
--- ends it: the library stops there too.
+-- position, `%q` by its position negated; and in `whole` the arguments an
+-- integer conversion takes (`%d`, `%x`, `%c`...). A spec the library would
+-- refuse ends it: the library stops there too.
 local formats, formats_count = {}, 0
 
+-- `d`, `i`, `o`, `u`, `x`, `X`, `c`: the conversions that take an integer.
+local INTEGER_CONVERSIONS =
+  { [100] = true, [105] = true, [111] = true, [117] = true, [120] = true, [88] = true, [99] = true }
+
 local function format_spec(fmt)
-  local spec = { fixed = #fmt + 0.0 }
+  local spec = { fixed = #fmt + 0.0, whole = {} }
   local i, arg = 1, 0
   while true do
     local at = find(fmt, "%", i, true)
@@ -745,6 +787,9 @@ local function format_spec(fmt)
         spec.fixed = spec.fixed + 2
       else
         spec.fixed = spec.fixed + NUMBER_TEXT
+        if INTEGER_CONVERSIONS[letter] then
+          spec.whole[#spec.whole + 1] = arg
+        end
       end
       i = spec_end + 2
     end
@@ -762,6 +807,17 @@ function caps.string.format(fmt, ...)
     return raw.format(fmt, ...)
   end
   local spec = formats[fmt] or format_spec(fmt)
+  -- Lua 5.4 refuses a number with a fraction where an integer goes; Luau would
+  -- drop the fraction and say nothing (`%d` of 2.5 is "2"), so it's refused here.
+  local whole = spec.whole
+  for k = 1, #whole do
+    local n = tonumber((select(whole[k], ...)))
+    if n ~= nil and tointeger(n) == nil then
+      refuse(
+        format("bad argument #%d to 'format' (number has no integer representation)", whole[k] + 1)
+      )
+    end
+  end
   local size = spec.fixed
   local args
   for k = 1, #spec do

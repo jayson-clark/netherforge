@@ -5,17 +5,17 @@
  * backend that runs it logs each request (`bridgeLog`) and owns the
  * connection; this reads what it needs of the backend through `PluginHost`.
  */
+import type { GameDataBundle } from '@netherforge/format/types'
 import type {
   BridgeRequests,
   BotEvent,
   BotInfo,
-  GameDataBundle,
   HandlerTime,
   LoadedWorld,
   PlayerPosition,
   ProfileSample,
   ProfileTick,
-} from '@netherforge/format/types'
+} from '@/core/bridge/protocol'
 import { writeNbt } from '@netherforge/structures/nbt'
 import { bytesToBase64 } from '@/core/backend/base64'
 import {

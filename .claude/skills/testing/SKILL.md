@@ -14,7 +14,7 @@ quarantined the same day (see CI).
 
 1. **Unit tests, next to the code.** No network, no real clock (inject one),
    temp dirs only. Nothing sleeps for a time and asserts what happened
-   meanwhile: move an injected clock (`TestServer(clock = …)`,
+   meanwhile: move an injected clock (`Config::clock` in a runtime test,
    `BridgeClient(clock = …)`), or wait for a condition with a generous
    deadline (10 s) and assert on the condition. `DebuggerTest`'s paused time
    and `BridgeClientTest`'s giving up are the models.
@@ -24,23 +24,18 @@ quarantined the same day (see CI).
      (`commonTest/.../terrain/TerrainTest.kt`); the shared helpers
      (`TestFiles`, `withLua`, `ProblemGoldens`) and the tests of the whole
      (`GoldenTest`, `ProblemCoverageTest`) are at the root.
-   - `apps/plugin/runtime`: JUnit against the **fake `Platform`**
-     (`FakePlatform`, in `:plugin:testkit`'s main sources so a project's own
-     script tests can use it too), running real Lua 5.4 scripts in a temp
-     project through `TestServer` (see the plugin-runtime skill). A test
-     lives in the package of what it tests (`screen/ScreenTest`,
-     `wasm/WasmModulesTest`, `binding/ConformanceTest`); the shared support
-     (`TestServer`, `LuaChecks`, `NfvFiles`) is at the root. A Lua
-     check is written with `LuaChecks` (`runtime/src/test/.../LuaChecks.kt`),
-     never a copy of its own: `check(label, got, want)`, `near(label, got,
-want[, tolerance])` and `fails(label, fn, message)` log `FAIL <label>: got
-…, want …` only for what's wrong, and the script logs `done` last, so
-     `assertEquals(LuaChecks.DONE, result)` fails naming each bad expression
-     and fails too when the script never ran. `LuaChecks.run(body, files,
-setup, after)` runs it as the console's `/run`, `runModuleBody` as a
-     module's body, `LuaChecks.command(body)` is the file for a server a test
-     builds itself, and `server.runChecks()` / `server.output()` (errors as
-     `ERROR …`, then logged lines) read the result.
+   - **The runtime** (`crates/*`): `cargo test --workspace`. Each test file under
+     `crates/runtime/tests/` runs real Luau scripts in a session on a **fake
+     Platform** (`FakePlatform`'s defaults are `Unported`, so a test overrides
+     only what it needs: `tests/support/mod.rs` is the shared one with
+     entities, players, worlds, commands and bots; others have their own small
+     `Fake`), reading what the scripts printed from the fake's log. A server
+     test of MySQL or PostgreSQL runs when `NETHERFORGE_TEST_POSTGRES` /
+     `NETHERFORGE_TEST_MYSQL` names one (`host:port:user:database`). See the
+     plugin-runtime skill, a section per area.
+   - **Through FFM** (`:plugin:ffi:test`): the Rust runtime on the testkit's
+     Kotlin `FakePlatform` (`ShowcaseTest`: the whole showcase, the quick loop
+     for the boundary; `NativeRuntimeTest`).
    - **A project's own script tests** (`*_test.lua`, `nf.test`): `netherforge
 test` and the editor's Tests panel run them with `:plugin:test-runner`
      (`apps/plugin/test-runner`, the jar `NetherForgeTest-<version>.jar`). It
@@ -50,14 +45,18 @@ test` and the editor's Tests panel run them with `:plugin:test-runner`
      finds the cache itself or takes `--game-data`; the editor passes it; no
      data, or another schema, is exit 2 saying to start the dev server once;
      see the game-data skill). `FakePlatform(supported, game)` takes the game;
-     its default, `GAME`, is for the runtime's own tests and the runner's
-     (`ScriptTestRunner(project, game)` is always given one). (The file's
-     body runs once per test, declaring cases with `nf.test.case`; the runner
-     picks one), reports text, JSON lines (`--json`, what the editor reads) or
-     JUnit XML (`--junit`), and exits 1 on a failure or error, 2 when the
-     project can't run. `ScriptTestRunnerTest` runs small temp projects (what
-     fails, what errors, isolation, `advance`, `raise`, `click`, `release` and `input`, `require`, the filter,
-     the output formats); `ExampleTestsTest` runs `examples/showcase/tests/` (so
+     its default, `GAME`, is for the runner's own tests
+     (`ScriptTestRunner(project, game)` is always given one). The runner
+     itself is the Rust runtime's (`crates/runtime/src/testing/runner.rs`,
+     called through `nf_test_run`: the JVM only makes the fake servers). The
+     file's body runs once per test, declaring cases with `nf.test.case`; the
+     runner picks one, reports text, JSON lines (`--json`, what the editor
+     reads) or JUnit XML (`--junit`), and exits 1 on a failure or error, 2 when
+     the project can't run. `crates/runtime/tests/testing.rs` runs small
+     projects (what fails, what errors, isolation, `advance`, `raise`, `click`,
+     `release` and `input`, `require`, the filter, the output formats);
+     `RunnerJarTest` runs the built jar as `netherforge test` does;
+     `ExampleTestsTest` runs `examples/showcase/tests/` (so
      the example is exercised, and `nf.test` is checked on the real project) and
      `examples/network/tests/` (the network demo, on the runner's fake network).
      The **project templates** (`examples/template_minigame`, `template_shop`,
@@ -73,8 +72,8 @@ test` and the editor's Tests panel run them with `:plugin:test-runner`
      CI. CI has no real game data (only a live server exports it), so
      `ExampleTestsTest` runs them on the small `FakePlatform.GAME` fixture: a
      block or item a template names has to be in it.
-     The runtime half (`testing/ScriptTests`, `NfTestImpl`, the `testOnly`
-     namespace, `RaisableEvents`) is in the plugin-runtime and lua-api skills.
+     The runtime half (`crates/runtime/src/testing/`) is in the plugin-runtime
+     skill ("Script test runs").
      A script test's network is a `Hub` in the JVM (`NetworkLink` `LOCAL`,
      ready at once, its other servers `TestPeer`s): `nf.test.network_server`
      (with `state` and `accepting`), `network_status`, `network_role` (the
@@ -134,19 +133,20 @@ test` and the editor's Tests panel run them with `:plugin:test-runner`
      golden can't (it needs game data, which goldens load without; JSON can't
      hold it; it's too big for a file). The test named must exist and name the
      code. A code only the plugin reports while a project runs is in
-     `ProblemCodes.reportedAtRuntime`, and the runtime's own `ProblemCoverageTest`
-     (`apps/plugin/runtime/src/test/.../ProblemCoverageTest.kt`) names the runtime
-     test that produces each. `untested` lists the gaps: an entry there is a gap
+     `ProblemCodes.reportedAtRuntime`, and the runtime's own coverage test
+     (`crates/runtime/tests/problem_coverage.rs`, which reads that list from
+     format's file) names the Rust test that produces each, or lists it in its
+     `UNTESTED` gaps. `untested` lists the gaps: an entry there is a gap
      to close, never a place to park a new code. A new rule adds a golden case,
      not an entry.
    - `packages/format/testdata/references/<example>.json` is every reference
      each example makes, as the walker finds it.
    - Packages: `examples/showcase` depends on `examples/library` (`../library`),
-     so anything that copies the showcase copies library beside it (the runtime's
-     `TestServer.example`, the CLI's tests, the integration test's
-     `copyExample`, the editor's seed). `TestServer` runs the showcase's files
-     as the dev server runs them (`TestServer.isShowcase`: bots and web routes
-     on, the main world generated by NetherForge), and its expo builds 32
+     so anything that copies the showcase copies library beside it (the test
+     runner's `ExampleTestsTest`, the CLI's tests, the integration test's
+     `copyExample`, the editor's seed). The dev server runs the showcase's files
+     with bots and web routes on and the main world generated by NetherForge,
+     and its expo builds 32
      booths at tick 20, so a runtime test that counts what's in the world
      (centities, particle effects, menu windows) or stands at the origin
      filters to what it made or works elsewhere. `examples/showcase/netherforge.lock` is
@@ -224,12 +224,9 @@ test` and the editor's Tests panel run them with `:plugin:test-runner`
      (project names, its plugin) gives a diagnostic, a project name completed
      and a definition across a `require` (`luals.node.test.ts`). Both run the
      pinned LuaLS, which `pnpm test` fetches first (`tools/luals.mjs`, cached).
-   - The plugin's own Lua (the prelude's modules, the caps, the generated
-     bindings and schema) is type-checked by `pnpm lint` (`tools/lint-prelude.mjs`):
-     the same pinned LuaLS, `--check` over `apps/plugin/runtime/src`, and any
-     diagnostic, an unused local included, fails it. `PreludeModulesTest` holds
-     the module list to the folder and every module to half of Lua's limit of
-     200 locals.
+   - Format's own Lua (the terrain scripts' glue) is type-checked by `pnpm lint`
+     (`tools/lint-prelude.mjs`): the same pinned LuaLS, `--check` over
+     `packages/format/src`, and any diagnostic, an unused local included, fails it.
    - **Platform contracts**: one abstract suite per `Ops` interface (below),
      run against the fake here and against Paper in the integration test, so
      the fake can't say anything the real server doesn't.
@@ -376,16 +373,14 @@ test` and the editor's Tests panel run them with `:plugin:test-runner`
      clicking a block and a mob, and a death and respawn (its `actions`
      fixture), and a ban keeping a bot out (last). Anything player-facing
      gets a step there.
-   - **A package's database** (`nf.db()`): `PackageDatabaseTest` writes real
-     SQLite files under the test server's state folder. Async work finishes
-     on the workers, so `server.tick(n)` (which waits for the workers each
-     tick) between a task's awaits; a task that awaits N calls needs N ticks.
-     `RemoteDatabaseTest` is the same for a named connection (`nf.db("network")`):
-     H2 in MySQL or PostgreSQL mode is the server, handed to the runtime as
-     `TestServer(connectionSources = ...)` with `databases = DatabasesConfig(...)`;
-     one script is run against both and must answer alike. The pool itself
-     (HikariCP) and the real drivers aren't exercised: that needs a MySQL or
-     PostgreSQL server.
+   - **A package's database** (`nf.db()`): `crates/runtime/tests/databases.rs`
+     writes real SQLite files in a temp folder; async work finishes on the
+     lanes, so a test ticks until the script has printed what it waits for. The
+     same script runs against a real PostgreSQL and MySQL when
+     `NETHERFORGE_TEST_POSTGRES` / `NETHERFORGE_TEST_MYSQL` name one
+     (`host:port:user:database`, the password in `..._PASSWORD`), its own
+     database and a named connection both; the nightly job runs it behind
+     PgBouncer in transaction mode.
 4. **Editor UI flows**: `pnpm test:e2e`, Playwright against the e2e web build
    (`vite build --mode e2e`), which runs on the memory backend with an
    in-memory project, in the spec files under
@@ -445,12 +440,9 @@ git diff                         # review every change before committing it
 
 A golden diff is a behaviour change. If you didn't expect it, it's a bug.
 
-`apps/plugin/runtime/testdata/function-costs.tsv` (`ConformanceTest`: every API function, called
-with sample arguments) and `scenario-costs.tsv` (`ApiCostTest`: vector maths, item tables, JSON,
-events, spawning a scripted centity) hold what calls cost a script, in instructions of its budget
-(`CostGolden`, counting every instruction). A cost that moves past `CostGolden.allowance` either
-way fails: dearer is a regression; cheaper means rewriting the golden, so the next regression back
-can't hide. Same `UPDATE_GOLDEN=1`.
+What scripts do all the time costs them in steps of their budget, held to
+`crates/runtime/tests/data/scenario-costs.tsv` (`crates/runtime/tests/costs.rs`; the plugin-sandbox skill's "The
+cost golden"): `UPDATE_GOLDEN=1 cargo test -p netherforge-runtime --test costs` rewrites it.
 
 ```sh
 pnpm test:screenshots --update   # rewrites the preview pictures that changed (Docker)
@@ -475,23 +467,23 @@ request times out). The editor side runs against `MemoryBackend.testReloadRestar
 
 ## Which test for which change
 
-| You changed…                           | Add…                                                              |
-| -------------------------------------- | ----------------------------------------------------------------- |
-| a validation rule                      | a case in `packages/format/testdata/invalid/`                     |
-| canonical writing / a new field        | an example using it; `UPDATE_GOLDEN=1`                            |
-| compiler, composition, animation maths | a `commonTest` unit test                                          |
-| the bridge protocol                    | lines in `session.ndjson`                                         |
-| a Lua-visible behaviour                | a runtime test running a Lua script against the fake platform     |
-| a way a script could hang the server   | a case in `HangTest`: it must fail at the script's line, fast     |
-| the debugger (stops, stepping, values) | a case in `DebuggerTest` (an editor over a real bridge socket)    |
-| what a `Platform` capability does      | a case in its contract suite (runs on the fake and on Paper)      |
-| what an editor backend command does    | a case in `contract.json` (runs on MemoryBackend and on Rust)     |
-| something only real Paper can show     | an integration scenario                                           |
-| something only a player can do or see  | bot steps in the integration test's bot scenario                  |
-| a runtime subsystem                    | a `RuntimeService` in `ProjectSession`; `SessionTest` checks it   |
-| logic in a project's scripts           | a `*_test.lua` beside it (`nf.test`), run by `netherforge test`   |
-| what `nf.test` or the test runner does | a case in `ScriptTestRunnerTest` (`:plugin:test-runner:test`)     |
-| what the runtime keeps on a server     | a runtime test reading `runtime.store`; the layer: `DatabaseTest` |
+| You changed…                           | Add…                                                                             |
+| -------------------------------------- | -------------------------------------------------------------------------------- |
+| a validation rule                      | a case in `packages/format/testdata/invalid/`                                    |
+| canonical writing / a new field        | an example using it; `UPDATE_GOLDEN=1`                                           |
+| compiler, composition, animation maths | a `commonTest` unit test                                                         |
+| the bridge protocol                    | lines in `session.ndjson`                                                        |
+| a Lua-visible behaviour                | a runtime test running a Lua script against the fake platform                    |
+| a way a script could hang the server   | a case in `HangTest`: it must fail at the script's line, fast                    |
+| the debugger (stops, stepping, values) | a case in `DebuggerTest` (an editor over a real bridge socket)                   |
+| what a `Platform` capability does      | a case in its contract suite (runs on the fake and on Paper)                     |
+| what an editor backend command does    | a case in `contract.json` (runs on MemoryBackend and on Rust)                    |
+| something only real Paper can show     | an integration scenario                                                          |
+| something only a player can do or see  | bot steps in the integration test's bot scenario                                 |
+| a runtime subsystem                    | a `Service` in `session.rs`' `services()`; `tests/session.rs`                    |
+| logic in a project's scripts           | a `*_test.lua` beside it (`nf.test`), run by `netherforge test`                  |
+| what `nf.test` or the test runner does | a case in `crates/runtime/tests/testing.rs`; the jar: `:plugin:test-runner:test` |
+| what the runtime keeps on a server     | a runtime test reading its `Store`; the layer: `tests/store.rs`                  |
 
 The fake platform's entities (`FakeWorldEntities`: mobs by UUID, players as
 `FakePlayer`, which is a `FakeBody` too), inventories, boss bars and
@@ -502,7 +494,7 @@ one. `EntityTest` and `InventoryTest` are the models.
 
 ## Platform contract suites
 
-`apps/plugin/runtime/src/testFixtures/kotlin/.../contract/` (Gradle's
+`apps/plugin/platform/src/testFixtures/kotlin/.../contract/` (Gradle's
 `java-test-fixtures`): an abstract JUnit class per `Ops` interface
 (`WorldOpsContract`, `MenuOpsContract`, …) saying what it promises: what's
 set reads back, what's refused (offline players, missing worlds, unloaded
@@ -511,7 +503,7 @@ platform, records every `PlatformEvents`/`GameEvents` call and answers
 "unchanged" unless a test puts the event in `cancelling`). A concrete
 subclass per server says which one through `connect()`:
 
-- **The fake**: `runtime/src/test/.../contract/FakeContracts.kt`, a fresh
+- **The fake**: `platform/src/test/.../contract/FakeContracts.kt`, a fresh
   `FakePlatform` per test (`FakeContractServer`: `main` runs inline, `ticks`
   runs the fake's own later-queue and the mobs' AI).
 - **Paper**: the integration project's `contract` source set is a plugin of
@@ -599,7 +591,7 @@ then fix the adapter. A new `Ops` method gets a case in its suite; a new
 `PaperContracts.kt`.
 
 ```sh
-node tools/gradle.mjs :plugin:runtime:test --tests '*FakeWorldOpsTest*'                 # one suite on the fake
+node tools/gradle.mjs :plugin:platform:test --tests '*FakeWorldOpsTest*'                # one suite on the fake
 node tools/gradle.mjs :plugin:integration:integrationTest-26.3 --tests '*ContractScenario*'   # every suite on Paper 26.3
 ```
 
@@ -611,7 +603,8 @@ The Paper run's server log is `apps/plugin/integration/build/integration/<minecr
 ```sh
 pnpm test                 # everything fast: Gradle check, vitest, cargo test
 node tools/gradle.mjs :format:allTests
-node tools/gradle.mjs :plugin:runtime:test
+cargo test --workspace     # the runtime
+node tools/gradle.mjs :plugin:ffi:test :plugin:platform:test :plugin:test-runner:test
 node tools/gradle.mjs :network:test :hub:test
 pnpm test:integration   # every version, the `full` scope
 node tools/gradle.mjs :plugin:integration:integrationTest-26.2 -Pnetherforge.integration.scope=pr   # what a PR runs on 26.2
@@ -659,16 +652,17 @@ never retried silently. Quarantining one: open an issue (what fails, a link to
 the run), then tag the test with it:
 
 - **Integration (Kotlin)**: `@Quarantined("https://github.com/<owner>/<repo>/issues/<n>")`
-  (the runtime test fixtures' annotation, below, the JUnit tag `quarantine`) on the
+  (the platform's test fixtures' annotation, below, the JUnit tag `quarantine`) on the
   scenario class, or on a step no later step builds on; its `QuarantineTest`
   holds the link to an issue's URL. Every normal run leaves it out; nightly runs
   `-Pnetherforge.integration.scope=quarantine` on its own, without failing,
   so a pass there says the fix worked.
-- **The runtime's and the test runner's tests**: `@Quarantined(issue =
-"https://github.com/<owner>/<repo>/issues/<n>")` (runtime test fixtures,
+- **The JVM tests (the platform's, the test runner's)**: `@Quarantined(issue =
+"https://github.com/<owner>/<repo>/issues/<n>")` (the platform's test fixtures,
   `dev.netherforge.plugin.Quarantined`, the same `quarantine` tag) on the test
   method or class. Their `test` tasks leave it out; `quarantinedTest` runs
-  only it (`node tools/gradle.mjs :plugin:runtime:quarantinedTest`).
+  only it (`node tools/gradle.mjs :plugin:test-runner:quarantinedTest`). A flaky
+  Rust test is `#[ignore = "<issue URL>"]`.
   `QuarantineTest` (one in each) fails on a link that isn't an issue's URL
   and on the tag put on by hand, without one.
 - **Other unit tests (Kotlin, JUnit 5)**: `@Tag("quarantine")` with the issue's

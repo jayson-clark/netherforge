@@ -24,8 +24,7 @@ import {
 } from './bindings.ts'
 import { useFeatures } from './common.ts'
 import { referencePages } from './docs.ts'
-import { gatesKotlin, primitivesKotlin, shapesKotlin } from './kotlin.ts'
-import { bindingsLua } from './lua.ts'
+import { bindRust, codecsRust, eventsRust } from './rust.ts'
 import { luals } from './luals.ts'
 
 const handle: LuaClass = {
@@ -355,8 +354,6 @@ describe('the shapes that cross', () => {
     // A Leaf holds an `any`, so a Tree does too; a recursive shape doesn't loop.
     expect(pins({ kind: 'shape', name: 'Tree' }, byName)).toBe(true)
     expect(pins({ kind: 'shape', name: 'Plain' }, byName)).toBe(false)
-    // The Kotlin emitter can't name a codec inside its own construction, so it names it lazily.
-    expect(shapesKotlin(it, bindings(it))).toMatch(/LuaLazy\([^)]*\)\s*\{\s*Tree\.Codec\s*\}/)
   })
 })
 
@@ -510,29 +507,6 @@ describe('hand-written functions', () => {
       kind: 'any',
     })
   })
-
-  it("can't take a parameter the wrapper's own names need", () => {
-    for (const name of ['hand', 'self']) {
-      const it = spec(fn({ impl: 'lua', params: [{ name, type: 'number', doc: '' }] }))
-      expect(() => bindingsLua(bindings(it).classes, it)).toThrow(
-        new RegExp(`a parameter can't be called ${name}`),
-      )
-    }
-    // Nor can an async binding's parameter shadow its own locals.
-    for (const name of ['token', 'wait_id', 'prim']) {
-      const it = spec(
-        asyncFunction({
-          name: 'fetch',
-          doc: 'd',
-          params: [{ name, type: 'string', doc: '' }],
-          value: { name: 'thing', type: 'Thing', doc: 'the thing' },
-        }),
-      )
-      expect(() => bindingsLua(bindings(it).classes, it)).toThrow(
-        new RegExp(`a parameter can't be called ${name}`),
-      )
-    }
-  })
 })
 
 describe('what the generator refuses', () => {
@@ -588,10 +562,10 @@ describe('requirements', () => {
         requires: 'moderation',
       }),
     )
-    const kotlin = primitivesKotlin(bindings(it).classes)
-    const check = kotlin.indexOf('marshal.requires("moderation", "Thing:ban")')
+    const rust = bindRust(bindings(it, { handwritten: true }).classes)
+    const check = rust.indexOf('"moderation", "Thing:ban"')
     expect(check).toBeGreaterThan(-1)
-    expect(check).toBeLessThan(kotlin.indexOf('"why"'))
+    expect(check).toBeLessThan(rust.indexOf('"why"'))
   })
 
   it('say how to declare them, wherever the function is documented', () => {
@@ -631,15 +605,13 @@ describe('version gates', () => {
     },
   )
 
-  it('give the runtime every gated function, event and option field with its version, and nothing else', () => {
-    const gates = gatesKotlin(gated)
-    for (const entry of [
-      '"Thing.poke" to "27.1"',
-      '"Thing.shake" to "27.2"',
-      '"PokeOptions.hard" to "27.3"',
-    ])
-      expect(gates).toContain(entry)
-    expect(gates).not.toContain('PokeOptions.soft')
+  it('give the runtime a gate for every gated function, event and option field, and nothing else', () => {
+    const model = bindings(gated)
+    expect(bindRust(model.classes)).toContain('crate::bind::gate(lua, "Thing:poke", "27.1")')
+    expect(eventsRust(gated)).toContain('since: Some("27.2")')
+    const codecs = codecsRust(model, gated)
+    expect(codecs).toContain(`crate::bind::gate(lua, &format!("'{at}.hard'"), "27.3")`)
+    expect(codecs).not.toContain("'{at}.soft'")
   })
 
   it('are shown where each is documented', () => {

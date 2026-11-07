@@ -22,7 +22,7 @@ import {
   type MessageReader,
   type MessageWriter,
 } from 'vscode-jsonrpc/browser'
-import type { BridgeEvents, BridgeRequests } from '@netherforge/format/types'
+import type { BridgeEvents, BridgeRequests } from '@/core/bridge/protocol'
 import { BackendError } from '@/core/backend/types'
 import type { ErrorCode } from '@/core/backend/generated/bindings'
 

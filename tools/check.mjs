@@ -49,6 +49,7 @@ const plans = {
     ['lua-language-server (pinned)', ['node', 'tools/luals.mjs']],
     ['TypeScript: unit tests', ['pnpm', '-r', '--if-present', 'test']],
     ['Rust: editor backend', ['cargo', 'test', '--manifest-path', cargoManifest], hasEditor],
+    ['Rust: runtime crates', ['cargo', 'test', '--workspace']],
   ],
   lint: [
     formatJs,
@@ -70,9 +71,14 @@ const plans = {
       ],
       hasEditor,
     ],
+    ['Rust: rustfmt (runtime crates)', ['cargo', 'fmt', '--all', '--check']],
+    [
+      'Rust: clippy (runtime crates)',
+      ['cargo', 'clippy', '--workspace', '--all-targets', '--', '-D', 'warnings'],
+    ],
     ['Lua: stylua', ['pnpm', 'exec', 'stylua', '--check', ...luaDirs]],
-    // The prelude's modules and format's terrain glue, type-checked by the pinned LuaLS (the editor's own; fetched, cached).
-    ['Lua: lua-language-server (the plugin, format)', ['node', 'tools/lint-prelude.mjs']],
+    // Format's terrain glue, type-checked by the pinned LuaLS (the editor's own; fetched, cached).
+    ['Lua: lua-language-server (format)', ['node', 'tools/lint-prelude.mjs']],
     ['Generated files are up to date', ['node', 'tools/generated-check.mjs']],
     ['Editor skills name files that exist', ['node', 'tools/skill-paths.mjs']],
     ['Versions agree with VERSION', ['node', 'tools/release.mjs', '--check']],
@@ -81,6 +87,7 @@ const plans = {
     ['Kotlin: ktlint', gradle('ktlintFormat')],
     ['Prettier', ['pnpm', 'exec', 'prettier', '--write', '.']],
     ['Rust: rustfmt', ['cargo', 'fmt', '--manifest-path', cargoManifest], hasEditor],
+    ['Rust: rustfmt (runtime crates)', ['cargo', 'fmt', '--all']],
     ['Lua: stylua', ['pnpm', 'exec', 'stylua', ...luaDirs]],
   ],
   generate: [
@@ -91,6 +98,8 @@ const plans = {
       ['pnpm', '--filter', '@netherforge/api', 'generate'],
       existsSync(path.join(root, 'packages/api/package.json')),
     ],
+    // The Rust runtime's Platform traits and types, from the Platform spec.
+    ['Platform outputs', ['pnpm', '--filter', '@netherforge/platform', 'generate']],
     // The UI's command bindings and the commands permission, from the Rust command list.
     [
       'Editor command bindings',

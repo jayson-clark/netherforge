@@ -8,10 +8,9 @@
  *    `luals/surfaces/*.lua`, what `this` is in each kind of script, and `luals/gates.json`,
  *    the functions a project may not be able to use, which the editor marks for its project;
  *  - `docs/reference/*.md`: the API reference;
- *  - the plugin runtime's bindings: `src/generated/lua/.../bindings.lua` (the calls
- *    into Kotlin) and `src/generated/kotlin/.../api/*.kt` (the interfaces the runtime
- *    implements, the primitives, the shapes and unions that cross, the event registry, and
- *    the server's events from the adapter's sink to the scripts: `emit/raised.ts`).
+ *  - the Rust runtime's bindings (`crates/api/src/generated`), the server's events from the
+ *    adapter's sink to the scripts (`emit/raised*.ts`), and the Kotlin `GameEvents` and
+ *    argument types the Paper adapter raises them with (`apps/plugin/platform/src/generated`).
  *
  * Run with `pnpm generate` from the repo root. Output is deterministic, so a
  * second run is never a diff; `pnpm lint` checks exactly that.
@@ -27,20 +26,23 @@ import { api } from '../src/spec/index.ts'
 import { bindings } from './emit/bindings.ts'
 import { REFERENCE_OWN_PAGES, referencePages } from './emit/docs.ts'
 import { checkLayout } from './emit/layout.ts'
+import { argumentTypesKotlin } from './emit/kotlin.ts'
 import {
-  apiKotlin,
-  argumentCodecsKotlin,
-  argumentTypesKotlin,
-  eventsKotlin,
-  gatesKotlin,
-  handlesKotlin,
-  primitivesKotlin,
-  shapesKotlin,
-  unionsKotlin,
-} from './emit/kotlin.ts'
-import { bindingsLua, schemaLua } from './emit/lua.ts'
-import { raisableKotlin } from './emit/raisable.ts'
-import { dispatchKotlin, platformKotlin, raisedEvents } from './emit/raised.ts'
+  apiRust,
+  argumentCodecsRust,
+  argumentTypesRust,
+  bindRust,
+  codecsRust,
+  eventsRust,
+  handlesRust,
+  shapesRust,
+  unionsRust,
+  unportedRust,
+} from './emit/rust.ts'
+import { raisableRust } from './emit/raisable.ts'
+import { platformKotlin, raisedEvents } from './emit/raised.ts'
+import { dispatchRust, gameEventsRust } from './emit/raisedRust.ts'
+import { gameEventsFfiKotlin, gameEventsFfiRust } from './emit/raisedFfi.ts'
 import { luals, lualsGates, lualsSurfaces } from './emit/luals.ts'
 import { terrainReference, terrainStubs } from './emit/terrain.ts'
 import { terrainApi } from '../src/terrain.ts'
@@ -79,33 +81,54 @@ writeDir(
   '.md',
 )
 
-const runtime = 'apps/plugin/runtime/src/generated'
 const bound = bindings(api)
-const classes = bound.classes
 const raised = raisedEvents(api, bound)
-write(`${runtime}/lua/dev/netherforge/plugin/lua/bindings.lua`, bindingsLua(classes, api))
-write(`${runtime}/lua/dev/netherforge/plugin/lua/prelude/schema.lua`, schemaLua(api))
 writeDir(
-  `${runtime}/kotlin/dev/netherforge/plugin/binding`,
-  new Map([
-    ['LuaHandle.kt', handlesKotlin(classes)],
-    ['LuaApi.kt', apiKotlin(classes)],
-    ['LuaPrimitives.kt', primitivesKotlin(classes)],
-    ['LuaShapes.kt', shapesKotlin(api, bound)],
-    ['LuaUnions.kt', unionsKotlin(bound)],
-    ['Events.kt', eventsKotlin(api)],
-    ['VersionGates.kt', gatesKotlin(api)],
-    ['GameEventDispatch.kt', dispatchKotlin(raised)],
-    ['RaisableEvents.kt', raisableKotlin(api, raised)],
-    ['ArgumentCodecs.kt', argumentCodecsKotlin(bound)],
-  ]),
-  '.kt',
-)
-writeDir(
-  `${runtime}/kotlin/dev/netherforge/plugin/platform`,
+  'apps/plugin/platform/src/generated/kotlin/dev/netherforge/plugin/platform',
   new Map([
     ['GameEvents.kt', platformKotlin(raised)],
     ['CommandArguments.kt', argumentTypesKotlin(bound)],
   ]),
   '.kt',
+)
+
+// The Rust runtime's half (see the plugin-runtime skill): the same bindings, as Rust, with the
+// functions the Kotlin runtime writes in the prelude (`impl: "lua"`) bound like every other.
+const boundRust = bindings(api, { handwritten: true })
+// The server's events for the Rust runtime: the sink in the platform's crate, the dispatch in the runtime's.
+const raisedRust = raisedEvents(api, boundRust)
+writeDir(
+  'crates/api/src/generated',
+  new Map([
+    ['handles.rs', handlesRust(boundRust.classes)],
+    ['shapes.rs', shapesRust(boundRust)],
+    ['unions.rs', unionsRust(boundRust)],
+    ['api.rs', apiRust(boundRust.classes)],
+    ['codecs.rs', codecsRust(boundRust, api)],
+    ['bindings.rs', bindRust(boundRust.classes)],
+    ['unported.rs', unportedRust(boundRust.classes)],
+    ['events.rs', eventsRust(api)],
+    ['arguments.rs', argumentCodecsRust(boundRust)],
+    ['raisable.rs', raisableRust(api, raisedRust)],
+  ]),
+  '.rs',
+)
+writeDir(
+  'crates/platform/src/api',
+  new Map([
+    ['game_events.rs', gameEventsRust(raisedRust)],
+    ['command_arguments.rs', argumentTypesRust(boundRust)],
+  ]),
+  '.rs',
+)
+writeDir(
+  'crates/runtime/src/generated',
+  new Map([['game_event_dispatch.rs', dispatchRust(raisedRust)]]),
+  '.rs',
+)
+// The server's events across the FFM boundary: the adapter's proxy and the runtime's dispatcher.
+write('crates/ffi/src/generated/events/game_events.rs', gameEventsFfiRust(raisedRust))
+write(
+  'apps/plugin/ffi/src/generated/kotlin/dev/netherforge/plugin/ffi/events/RustGameEvents.kt',
+  gameEventsFfiKotlin(raised),
 )

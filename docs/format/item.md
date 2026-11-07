@@ -148,10 +148,10 @@ doesn't change its stacks' look, so they're never rewritten for it.
 "script": { "file": "script.lua", "budget": 200000 }
 ```
 
-| Key      | Meaning                                                                | Default |
-| -------- | ---------------------------------------------------------------------- | ------- |
-| `file`   | A `.lua` file in this item's folder.                                   | —       |
-| `budget` | Lua instructions one call into the script may use before it's stopped. | 200000  |
+| Key      | Meaning                                                                                           | Default |
+| -------- | ------------------------------------------------------------------------------------------------- | ------- |
+| `file`   | A `.lua` file in this item's folder.                                                              | —       |
+| `budget` | Steps (function calls and turns of a loop) one call into the script may take before it's stopped. | 200000  |
 
 The script runs once for the item, not once per stack, from load until the
 item is reloaded, like a dialog's. In it, `this` is the item (a

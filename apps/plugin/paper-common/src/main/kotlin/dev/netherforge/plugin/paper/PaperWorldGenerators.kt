@@ -1,9 +1,9 @@
 package dev.netherforge.plugin.paper
 
-import dev.netherforge.format.terrain.ChunkBuffer
-import dev.netherforge.format.terrain.CompiledTerrain
 import dev.netherforge.format.terrain.TerrainGenerator
 import dev.netherforge.plugin.platform.ProjectGenerator
+import dev.netherforge.plugin.platform.terrain.TerrainSource
+import dev.netherforge.plugin.platform.terrain.TerrainWorld
 import org.bukkit.Bukkit
 import org.bukkit.HeightMap
 import org.bukkit.Location
@@ -23,49 +23,30 @@ import java.util.concurrent.atomic.AtomicReference
 import java.util.logging.Logger
 
 /**
- * The project's terrains on Paper (`terrain/<id>.json`, format's
- * [dev.netherforge.format.terrain.CompiledTerrain]): a Bukkit [ChunkGenerator]
- * and [BiomeProvider] per world that ask the published generator by id each
- * time, so hot reload swaps it for the chunks generated afterwards.
+ * The project's terrains on Paper (`terrain/<id>.json`): a Bukkit [ChunkGenerator] and [BiomeProvider] per world
+ * that ask the published generator by id each time, so hot reload swaps it for the chunks generated afterwards.
  *
  * **Threads.** The server calls a generator from its chunk threads, so
- * [isParallelCapable][ChunkGenerator.isParallelCapable] is true and nothing
- * here touches the main thread's world: a published generator is immutable
- * (format's compiled file, its bound generators' noise only read, the
- * [BlockData] prepared on the main thread when it was published), and the
- * published set is one atomic reference.
+ * [isParallelCapable][ChunkGenerator.isParallelCapable] is true and nothing here touches the main thread's world: a
+ * published generator is the runtime's [TerrainSource] (across FFM, from any thread), its [BlockData] prepared on the
+ * main thread when it was published, and the published set is one atomic reference.
  *
- * What a chunk gets is [TerrainGenerator.generate]'s blocks written as chunk
- * data (runs of one block, air left out); a custom block's note block state is
- * written like any, and the runtime's blocks adopt it when the chunk loads.
- * The biomes are the areas' (the project's own from the server's registry,
- * which has them from the start-up datapack), and the game then decorates the
- * chunk with their features. A file's Lua stages run inside [TerrainGenerator.generate],
- * in a Lua state of the generator's for each chunk thread at a time (format's
- * `TerrainScripts`), never the plugin's own.
+ * What a chunk gets is the generator's blocks written as chunk data (runs of one block, air left out); a custom
+ * block's note block state is written like any, and the runtime's blocks adopt it when the chunk loads. The biomes
+ * are the areas' (the project's own from the server's registry, which has them from the start-up datapack), and the
+ * game then decorates the chunk with their features. A file's Lua stages run inside the generator, in a Luau state
+ * of its own for each chunk thread, never the scripts' own.
  */
 class PaperWorldGenerators(private val logger: Logger) {
-    /** A published generator, ready for the chunk threads: its blocks as [BlockData], its biomes, and the world-bound generators made from it. */
-    private class Prepared(val project: ProjectGenerator, val blocks: Array<BlockData?>, val biomes: Map<String, Biome>) {
-        private val bound = ConcurrentHashMap<WorldShape, TerrainGenerator>()
-
-        fun boundTo(seed: Long, minY: Int, maxY: Int): TerrainGenerator =
-            bound.computeIfAbsent(WorldShape(seed, minY, maxY)) { project.terrain.bind(seed, minY, maxY, project.scripts) }
-
+    /** A published generator, ready for the chunk threads: its source, its blocks as [BlockData] and its biomes. */
+    private class Prepared(val source: TerrainSource, val blocks: Array<BlockData?>, val biomes: Map<String, Biome>) {
         /** Lets go of the Lua states its script ran in (chunks being made with it finish, and theirs go then). */
-        fun close() = bound.values.forEach { it.close() }
+        fun close() = source.close()
 
         fun biome(id: String): Biome = biomes[id] ?: Biome.PLAINS
     }
 
-    private data class WorldShape(val seed: Long, val minY: Int, val maxY: Int)
-
-    private class ThreadSampler(val generator: TerrainGenerator, val sampler: TerrainGenerator.Sampler, var uses: Int = 0)
-
     private companion object {
-        /** How many places one thread's sampler answers before it's made again. */
-        const val SAMPLER_USES = 1 shl 14
-
         /** How many generated chunks' containers wait for their chunk to load. */
         const val PENDING_CHUNKS = 16384
 
@@ -95,8 +76,8 @@ class PaperWorldGenerators(private val logger: Logger) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<ChunkAt, List<LootPlace>>?) = size > PENDING_CHUNKS
     }
 
-    private fun lootOf(terrain: CompiledTerrain, buffer: ChunkBuffer, x: Int, z: Int) =
-        buffer.lootPlaces(x, z).map { LootPlace(it.x, it.y, it.z, terrain.loot[it.table]) }
+    private fun TerrainSource.loot(world: TerrainWorld, x: Int, z: Int) =
+        generate(world, x, z).loot.map { LootPlace(it.x, it.y, it.z, it.table) }
 
     /**
      * The containers chunk ([x], [z]) of [world] fills from loot tables, once, as it first loads: what its making
@@ -107,9 +88,8 @@ class PaperWorldGenerators(private val logger: Logger) {
         val chunks = world.generator as? ProjectChunks ?: return emptyList()
         synchronized(pendingLoot) { pendingLoot.remove(ChunkAt(world.name, x, z)) }?.let { return it }
         val prepared = chunks.holder.current() ?: return emptyList()
-        if (prepared.project.terrain.loot.isEmpty()) return emptyList()
-        val buffer = prepared.boundTo(world.seed, world.minHeight, world.maxHeight).generate(x, z)
-        return lootOf(prepared.project.terrain, buffer, x, z)
+        if (!prepared.source.hasLoot) return emptyList()
+        return prepared.source.loot(TerrainWorld(world.seed, world.minHeight, world.maxHeight), x, z)
     }
 
     /** Publishes [generators] (on the main thread: block data is made here, once, not on the chunk threads). */
@@ -120,7 +100,8 @@ class PaperWorldGenerators(private val logger: Logger) {
     }
 
     private fun prepare(id: String, project: ProjectGenerator): Prepared {
-        val stone = project.terrain.palette[project.terrain.stone].label
+        val source = project.source
+        val stone = source.stone
         val blocks = project.states.mapIndexed { index, state ->
             if (index == 0) {
                 null
@@ -139,7 +120,7 @@ class PaperWorldGenerators(private val logger: Logger) {
                 logger.warning("Terrain $id: this server has no biome \"$key\" (until it restarts, for a new one); it's plains")
             }
         }
-        return Prepared(project, blocks, biomes)
+        return Prepared(source, blocks, biomes)
     }
 
     /** What one world holds of its generator: the last one published under its id, so a generator that's gone keeps generating. */
@@ -167,8 +148,8 @@ class PaperWorldGenerators(private val logger: Logger) {
     fun locator(world: World, biome: Biome): Locator? {
         val chunks = world.generator as? ProjectChunks ?: return null
         val prepared = chunks.holder.current() ?: return null
-        val generator = prepared.boundTo(world.seed, world.minHeight, world.maxHeight)
-        return ProjectLocator(chunks.holder, prepared, generator, generator.areasWhere { prepared.biome(it) == biome })
+        val wanted = prepared.source.biomes.filter { prepared.biome(it) == biome }.toSet()
+        return ProjectLocator(chunks.holder, prepared, TerrainWorld(world.seed, world.minHeight, world.maxHeight), wanted)
     }
 
     /** A `/locate biome` of one world: see [locator]. */
@@ -187,12 +168,13 @@ class PaperWorldGenerators(private val logger: Logger) {
     private inner class ProjectLocator(
         private val holder: Holder,
         private val prepared: Prepared,
-        private val generator: TerrainGenerator,
-        private val wanted: BooleanArray
+        private val world: TerrainWorld,
+        private val wanted: Set<String>
     ) : Locator {
         override fun search(x: Int, y: Int, z: Int, pool: ExecutorService, threads: Int, stop: () -> Boolean): Located {
-            if (wanted.none { it }) return Located(null)
-            val ys = generator.locateHeights(y, LOCATE_HEIGHT_STEP)
+            if (wanted.isEmpty()) return Located(null)
+            val source = prepared.source
+            val ys = source.locateHeights(world, y, LOCATE_HEIGHT_STEP)
             var r = 0
             while (r <= LOCATE_RADIUS) {
                 val batch = ArrayList<Pair<Int, Int>>()
@@ -205,16 +187,17 @@ class PaperWorldGenerators(private val logger: Logger) {
                 val run = (batch.size + threads - 1) / threads
                 val tasks = (batch.indices step run).map { start ->
                     pool.submit {
-                        generator.sampling { sampler ->
-                            for (i in start until minOf(start + run, batch.size)) {
-                                if (i > best.get() || stop()) return@sampling
-                                val (dx, dz) = batch[i]
-                                val at = sampler.firstWhere(x + dx, z + dz, ys, wanted) ?: continue
-                                found[i] = at
-                                best.accumulateAndGet(i, ::minOf)
-                                return@sampling
-                            }
+                        // One run of neighbouring columns at once: they share the areas their heights are blended from.
+                        if (start > best.get() || stop()) return@submit
+                        val end = minOf(start + run, batch.size)
+                        val columns = IntArray(2 * (end - start))
+                        for (i in start until end) {
+                            columns[2 * (i - start)] = x + batch[i].first
+                            columns[2 * (i - start) + 1] = z + batch[i].second
                         }
+                        val (k, at) = source.firstWhere(world, columns, ys, wanted) ?: return@submit
+                        found[start + k] = at
+                        best.accumulateAndGet(start + k, ::minOf)
                     }
                 }
                 for (task in tasks) task.get()
@@ -236,9 +219,9 @@ class PaperWorldGenerators(private val logger: Logger) {
     private inner class ProjectChunks(val holder: Holder, private val biomes: ProjectBiomes) : ChunkGenerator() {
         override fun generateNoise(info: WorldInfo, random: Random, chunkX: Int, chunkZ: Int, data: ChunkGenerator.ChunkData) {
             val prepared = holder.current() ?: return
-            val buffer = prepared.boundTo(info.seed, data.minHeight, data.maxHeight).generate(chunkX, chunkZ)
-            if (prepared.project.terrain.loot.isNotEmpty()) {
-                val loot = if (buffer.loot.isEmpty()) emptyList() else lootOf(prepared.project.terrain, buffer, chunkX, chunkZ)
+            val buffer = prepared.source.generate(TerrainWorld(info.seed, data.minHeight, data.maxHeight), chunkX, chunkZ)
+            if (prepared.source.hasLoot) {
+                val loot = buffer.loot.map { LootPlace(it.x, it.y, it.z, it.table) }
                 synchronized(pendingLoot) { pendingLoot[ChunkAt(info.name, chunkX, chunkZ)] = loot }
             }
             val height = buffer.height
@@ -262,10 +245,9 @@ class PaperWorldGenerators(private val logger: Logger) {
 
         override fun getBaseHeight(info: WorldInfo, random: Random, x: Int, z: Int, heightMap: HeightMap): Int {
             val prepared = holder.current() ?: return info.minHeight
-            val generator = prepared.boundTo(info.seed, info.minHeight, info.maxHeight)
-            val top = generator.surfaceAt(x, z)
+            val top = prepared.source.surfaceAt(TerrainWorld(info.seed, info.minHeight, info.maxHeight), x, z)
             // The first free block above what the map counts: the ground, or the sea over it for the maps that see water.
-            val sea = prepared.project.terrain.seaLevel
+            val sea = prepared.source.seaLevel
             return when (heightMap) {
                 HeightMap.OCEAN_FLOOR, HeightMap.OCEAN_FLOOR_WG -> top + 1
                 else -> maxOf(top, sea) + 1
@@ -274,9 +256,9 @@ class PaperWorldGenerators(private val logger: Logger) {
 
         override fun getFixedSpawnLocation(world: World, random: Random): Location? {
             val prepared = holder.current() ?: return null
-            val generator = prepared.boundTo(world.seed, world.minHeight, world.maxHeight)
-            val (x, z) = generator.dryColumnNear(0, 0) ?: return null
-            return Location(world, x + 0.5, generator.surfaceAt(x, z) + 1.0, z + 0.5)
+            val shape = TerrainWorld(world.seed, world.minHeight, world.maxHeight)
+            val (x, z) = prepared.source.dryColumnNear(shape, 0, 0) ?: return null
+            return Location(world, x + 0.5, prepared.source.surfaceAt(shape, x, z) + 1.0, z + 0.5)
         }
 
         // Each of these asks for the game's own stage to run *after* ours, filling in what ours left (the game's noise
@@ -298,7 +280,7 @@ class PaperWorldGenerators(private val logger: Logger) {
 
         override fun shouldGenerateStructures() = vanillaStructures()
 
-        private fun vanillaStructures() = holder.current()?.project?.terrain?.vanillaStructures == true
+        private fun vanillaStructures() = holder.current()?.source?.vanillaStructures == true
 
         override fun isParallelCapable() = true
     }
@@ -313,24 +295,10 @@ class PaperWorldGenerators(private val logger: Logger) {
         @Volatile private var possible: Set<Biome>? = null
         private val outside = ConcurrentHashMap.newKeySet<Biome>()
 
-        /**
-         * What this thread last asked biomes of: one sampler per chunk thread, kept while it asks the same generator
-         * (the server asks every 4x4x4 cell of a chunk in turn, and a place's area needs its column's height), and
-         * started again now and then so what it keeps stays small.
-         */
-        private val samplers = ThreadLocal<ThreadSampler>()
-
-        private fun samplerFor(generator: TerrainGenerator): TerrainGenerator.Sampler {
-            val kept = samplers.get()
-            if (kept != null && kept.generator === generator && kept.uses++ < SAMPLER_USES) return kept.sampler
-            return ThreadSampler(generator, generator.sampler()).also(samplers::set).sampler
-        }
-
         override fun getBiome(info: WorldInfo, x: Int, y: Int, z: Int): Biome {
             val prepared = holder.current() ?: return Biome.PLAINS
-            val generator = prepared.boundTo(info.seed, info.minHeight, info.maxHeight)
             // The game asks the corner of each 4x4x4 cell: a place's own area (a volume, the script's biome stage), else its column's.
-            val biome = prepared.biome(generator.biomeAt(x, y, z, samplerFor(generator)))
+            val biome = prepared.biome(prepared.source.biomeAt(TerrainWorld(info.seed, info.minHeight, info.maxHeight), x, y, z))
             val started = possible ?: return biome
             if (biome in started) return biome
             if (outside.add(biome)) {
@@ -344,7 +312,7 @@ class PaperWorldGenerators(private val logger: Logger) {
 
         override fun getBiomes(info: WorldInfo): List<Biome> {
             val prepared = holder.current() ?: return listOf(Biome.PLAINS)
-            val started = possible ?: LinkedHashSet(prepared.project.terrain.biomes.map { prepared.biome(it) }).also { possible = it }
+            val started = possible ?: LinkedHashSet(prepared.source.biomes.map { prepared.biome(it) }).also { possible = it }
             return started.toList()
         }
     }

@@ -1,0 +1,3827 @@
+//! Centities on the Rust runtime against a fake Platform that records what's asked of the server's
+//! entities: an instance spawned as an anchor and its displays, synced each tick writing only what changed,
+//! moved onto a reloaded definition, and removed.
+
+mod support;
+use support::*;
+
+#[test]
+fn an_instance_is_drawn_synced_reloaded_and_removed() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &lamp(1.0)),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    assert!(session.refusal().is_none(), "{:?}", session.problems());
+    platform.take();
+
+    // Spawned: its anchor, a display per node with its offset in its pose, each riding the anchor.
+    let lamp = session
+        .spawn("lamp", place(10.0, 64.0, 5.0), 0.0)
+        .expect("spawned");
+    let calls = platform.take();
+    assert_eq!(calls[0], "anchor 1 at world 10 64 5");
+    assert_eq!(
+        calls[1],
+        "display 2 base block at world 10 64 5 offset 0 0 0"
+    );
+    assert_eq!(
+        calls[2],
+        "display 3 head block at world 10 64 5 offset 0 1 0"
+    );
+    assert!(calls.contains(&"mount 2 on 1".to_owned()), "{calls:?}");
+    assert!(calls.contains(&"mount 3 on 1".to_owned()), "{calls:?}");
+    assert!(
+        session
+            .spawn("nothing", place(0.0, 0.0, 0.0), 0.0)
+            .is_none()
+    );
+    assert!(
+        session
+            .spawn(
+                "lamp",
+                Location {
+                    world: "nether".into(),
+                    ..place(0.0, 0.0, 0.0)
+                },
+                0.0
+            )
+            .is_none()
+    );
+
+    // Nothing changed: nothing is sent.
+    session.tick();
+    session.tick();
+    assert_eq!(platform.take(), Vec::<String>::new());
+
+    // Turned a quarter: every display turns (its rotation is in its pose); the head, straight above, stays above.
+    session.centities().get_mut(lamp).unwrap().turn_to(90.0);
+    session.tick();
+    assert_eq!(
+        platform.take(),
+        ["pose 2 0 0 0 eased 1", "pose 3 0 1 0 eased 1"]
+    );
+
+    // A reload moves the instance onto the new definition: only what changed is re-posed.
+    files.write("centities/lamp/centity.json", &self::lamp(2.0));
+    session.reload(&["centities/lamp/centity.json".into()]);
+    let calls = platform.take();
+    let poses: Vec<&String> = calls.iter().filter(|c| c.starts_with("pose")).collect();
+    assert!(
+        poses.iter().any(|c| c.starts_with("pose 3 0 2 0")),
+        "{calls:?}"
+    );
+    assert!(
+        !calls.iter().any(|c| c.starts_with("display")),
+        "kept: {calls:?}"
+    );
+
+    // Removed: its entities go.
+    assert!(session.centities().remove(&*platform, lamp));
+    let calls = platform.take();
+    for id in [1, 2, 3] {
+        assert!(calls.contains(&format!("remove {id}")), "{calls:?}");
+    }
+    assert!(session.centities().get(lamp).is_none());
+}
+
+/// The lamp, with a script.
+fn scripted_lamp() -> String {
+    let lamp = lamp(1.0);
+    let end = lamp.rfind('}').expect("an object");
+    format!(
+        r#"{}, "script": {{ "file": "script.lua" }} }}"#,
+        lamp[..end].trim_end()
+    )
+}
+
+/// What scripts printed, in order: the log's `info [who] line` without the location.
+fn printed(calls: &[String]) -> Vec<String> {
+    calls
+        .iter()
+        .filter_map(|c| c.strip_prefix("info ["))
+        .map(|c| {
+            let (_, rest) = c.split_once("] ").expect("a label");
+            rest.rsplit_once(" (")
+                .map_or(rest, |(line, _)| line)
+                .to_owned()
+        })
+        .collect()
+}
+
+#[test]
+fn scripts_spawn_instances_and_an_instance_runs_its_own_script() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &scripted_lamp()),
+        (
+            "centities/lamp/script.lua",
+            r#"
+print("body", this:kind(), this:node("head"):translation().y)
+this:node("head"):set_translation(vector.create(0, 3, 0), { instant = true })
+local ticks = 0
+this:on("spawn", function(e) print("spawn", e.centity == this) end)
+this:on("tick", function() ticks += 1 end)
+this:on("remove", function() print("remove after", ticks, "ticks", this:exists()) end)
+"#,
+        ),
+        (
+            "modules/game/init.lua",
+            r#"
+local lamp = nf.centities.spawn("lamp", vector.create(1, 64, 2))
+print("spawned", lamp:exists(), lamp:position().x, #lamp:nodes(), lamp:node("nope"))
+print("found", nf.centities.get(lamp:id()) == lamp, #nf.centities.all({ kind = "lamp" }))
+print("world", lamp:node("head"):world_position().y)
+print(pcall(nf.centities.spawn, "lmap", vector.create(0, 0, 0)))
+nf.after(3, function()
+    lamp:remove()
+    print("gone", lamp:exists(), lamp:position(), nf.centities.get(lamp:id()))
+    lamp:on("tick", function() print("never") end)
+end)
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    assert!(session.refusal().is_none(), "{:?}", session.problems());
+    assert_eq!(
+        printed(&platform.take()),
+        [
+            "body\tlamp\t1",
+            "spawn\ttrue",
+            "spawned\ttrue\t1\t2\tnil",
+            "found\ttrue\t1",
+            "world\t67",
+            "false\tmodules/game/init.lua:6: no centity \"lmap\" in this project (did you mean \"lamp\"?)",
+        ]
+    );
+    for _ in 0..4 {
+        session.tick();
+    }
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        ["remove after\t2\tticks\ttrue", "gone\tfalse\tnil\tnil"],
+        "{calls:?}"
+    );
+    assert!(calls.contains(&"remove 1".to_owned()), "{calls:?}");
+    assert!(session.centities().all().next().is_none());
+}
+
+#[test]
+fn a_reload_restarts_an_instances_script_without_spawn() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = scripted_lamp();
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &centity),
+        (
+            "centities/lamp/script.lua",
+            r#"print("v1"); this:on("spawn", function() print("spawn") end)"#,
+        ),
+        (
+            "modules/game/init.lua",
+            r#"local lamp = nf.centities.spawn("lamp", vector.create(0, 64, 0))
+lamp:node("head"):on("click", function() end)"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(printed(&start), ["v1", "spawn"], "{start:?}");
+    files.write(
+        "centities/lamp/script.lua",
+        r#"print("v2", this:node("head") ~= nil); this:on("spawn", function() print("spawn") end)"#,
+    );
+    session.reload(&["centities/lamp/script.lua".into()]);
+    assert_eq!(printed(&platform.take()), ["v2\ttrue"]);
+}
+
+#[test]
+fn a_clip_is_sent_ahead_as_keyframes_and_its_end_is_heard() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let lamp = lamp(1.0);
+    let end = lamp.rfind('}').expect("an object");
+    let centity = format!(
+        r#"{}, "animations": {{ "rise": {{ "loop": "once", "tracks": {{ "head": {{ "translation": [
+  {{ "time": 0, "value": [0, 1, 0] }}, {{ "time": 1, "value": [0, 3, 0] }} ] }} }} }} }}, "script": {{ "file": "script.lua" }} }}"#,
+        lamp[..end].trim_end()
+    );
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &centity),
+        (
+            "centities/lamp/script.lua",
+            r#"
+this:on("animation_start", function(e) print("start", e.animation) end)
+this:on("animation_end", function(e) print("end", e.animation) end)
+"#,
+        ),
+        (
+            "modules/game/init.lua",
+            r#"
+local lamp = nf.centities.spawn("lamp", vector.create(0, 64, 0))
+print(lamp:play_animation("rise"), lamp:is_animation_playing("rise"), table.concat(lamp:animations(), ","))
+print(pcall(lamp.play_animation, lamp, "fall"))
+nf.after(10, function() print("at", string.format("%.3f", lamp:animation_tick("rise"))) end)
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(
+        printed(&start),
+        [
+            "start\trise",
+            "true\ttrue\trise",
+            "false\tmodules/game/init.lua:4: lamp has no animation \"fall\" (it has: rise)",
+        ],
+        "{start:?}"
+    );
+    let mut poses = Vec::new();
+    let mut lines = Vec::new();
+    for _ in 0..25 {
+        session.tick();
+        let calls = platform.take();
+        lines.extend(printed(&calls));
+        poses.extend(calls.into_iter().filter(|c| c.starts_with("pose 3 ")));
+    }
+    // Timers run before the clips move on: nine ticks in.
+    assert_eq!(lines[0], "at\t9.000", "{lines:?}");
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    assert_eq!(lines[1], "end\trise", "{lines:?}");
+    // A pose now (the clip just started), one planned most of the way, and back to rest at the end.
+    assert!(poses.len() <= 4, "{poses:?}");
+    assert!(poses.iter().any(|p| p.ends_with("eased 17")), "{poses:?}");
+    assert!(
+        poses.last().unwrap().starts_with("pose 3 0 1 0"),
+        "{poses:?}"
+    );
+}
+
+#[test]
+fn a_click_goes_to_the_hitbox_the_line_of_sight_meets_and_up_its_path() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = r#"{ "nodes": {
+  "base": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} },
+  "head": { "parent": "base", "transform": { "translation": [0, 1, 0] }, "hitbox": {} }
+}, "script": { "file": "script.lua" } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", centity),
+        (
+            "centities/lamp/script.lua",
+            r#"
+local function said(where)
+    return function(e)
+        print(where, e.target:name(), e.click, e.hit_position and e.hit_position.y)
+    end
+end
+this:node("head"):on("click", said("head"))
+this:node("base"):on("click", said("base"))
+this:on("click", function(e)
+    said("centity")(e)
+    if e.target:name() == "base" then e:stop() end
+end)
+nf.on("centity_click", said("nf"))
+nf.after(3, function() this:node("head"):set_clickable(false) end)
+"#,
+        ),
+        (
+            "modules/game/init.lua",
+            r#"
+nf.centities.spawn("lamp", vector.create(10, 64, 0))
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    // A hitbox for each node, each a unit cube where its node is: off the anchor, so standing on its own.
+    let hitboxes: Vec<&String> = start.iter().filter(|c| c.starts_with("hitbox")).collect();
+    assert_eq!(
+        hitboxes,
+        [
+            "hitbox 2 base at world 10.5 64 0.5 size 1 1",
+            "hitbox 3 head at world 10.5 65 0.5 size 1 1"
+        ],
+        "{start:?}"
+    );
+    let player = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let down = |x: f64, z: f64| Ray {
+        world: "world".into(),
+        x,
+        y: 70.0,
+        z,
+        dx: 0.0,
+        dy: -1.0,
+        dz: 0.0,
+    };
+    // The client picked the base, but the line of sight meets the head's top first.
+    assert!(session.entity_clicked(Uuid(2), &player, ClickButton::Right, Some(down(10.5, 0.5))));
+    // What scripts print is logged with the next tick's report.
+    session.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        [
+            "head\thead\tright\t66",
+            "base\thead\tright\t66",
+            "centity\thead\tright\t66",
+            "nf\thead\tright\t66"
+        ]
+    );
+    // Without a line of sight, the entity the client picked; the centity's handler stops it there.
+    assert!(session.entity_clicked(Uuid(2), &player, ClickButton::Left, None));
+    session.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        ["base\tbase\tleft\tnil", "centity\tbase\tleft\tnil"]
+    );
+    // Not one of ours.
+    assert!(!session.entity_clicked(Uuid(999), &player, ClickButton::Left, None));
+    // The head takes no clicks: its hitbox collapses, and the same line of sight reaches the base.
+    session.tick();
+    let calls = platform.take();
+    assert!(
+        calls.iter().any(|c| c.starts_with("resize 3 0.01 0.01")),
+        "{calls:?}"
+    );
+    assert!(session.entity_clicked(Uuid(3), &player, ClickButton::Right, Some(down(10.5, 0.5))));
+    session.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        ["base\tbase\tright\t65", "centity\tbase\tright\t65"]
+    );
+}
+
+#[test]
+fn a_script_changes_looks_displays_and_turns() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = r##"{ "nodes": {
+  "base": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} },
+  "label": { "parent": "base", "transform": { "translation": [0, 2, 0] }, "display": { "type": "text", "text": "hi" } },
+  "panel": { "display": { "type": "rect", "color": "#ff0000" } }
+} }"##;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/sign/centity.json", centity),
+        (
+            "modules/game/init.lua",
+            r##"
+local sign = nf.centities.spawn("sign", vector.create(0, 64, 0))
+print(sign:is_glowing(), sign:set_glowing(true), sign:is_glowing())
+print(sign:set_glow_color("#00ff00"), sign:glow_color(), sign:node("label"):glow_color())
+print(pcall(sign.set_glow_color, sign, "green"))
+local label = sign:node("label")
+print(label:set_display_text_style({ alignment = "left", opacity = 128 }))
+local style = label:display_text_style()
+print(style.alignment, style.opacity, style.line_width, style.shadow)
+local panel = sign:node("panel")
+print(panel:display_size().x, panel:set_display_size(vector.create(2, 0.5, 0)), panel:display_size().y)
+print(pcall(panel.set_display_size, panel, vector.create(0, 1, 0)))
+print(panel:display_anchor(), panel:set_display_anchor("bottom"), panel:display_anchor())
+print(sign:node("base"):set_brightness({ block_light = 15, sky_light = 3 }), sign:node("base"):brightness().sky_light)
+local b = sign:bounds()
+print(b.min.y, b.max.y)
+sign:look_at(vector.create(10, 64, 0))
+print(sign:yaw())
+label:rotate(vector.create(0, 1, 0), 90)
+print(string.format("%.3f", label:rotation().y), string.format("%.3f", label:world_rotation().y))
+label:look_at(vector.create(0, 66, 5))
+print(string.format("%.1f %.1f", label:rotation().x, label:rotation().y))
+"##,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(
+        printed(&start),
+        [
+            "false\ttrue\ttrue",
+            "true\t#00ff00\tnil",
+            "false\tmodules/game/init.lua:5: bad argument 'color' (#RRGGBB expected, got \"green\")",
+            "true",
+            "left\t128\t200\tfalse",
+            "1\ttrue\t0.5",
+            "false\tmodules/game/init.lua:12: bad argument 'size' (a width and height more than 0, got 0 by 1)",
+            "center\ttrue\tbottom",
+            "true\t3",
+            "64\t65",
+            "-90",
+            "90.000\t0.000",
+            "0.0 -90.0",
+        ],
+        "{start:?}"
+    );
+}
+
+#[test]
+fn a_script_adds_and_removes_nodes_and_tweens_one() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &lamp(1.0)),
+        (
+            "modules/game/init.lua",
+            r#"
+local lamp = nf.centities.spawn("lamp", vector.create(0, 64, 0))
+local arm = lamp:add_node("arm", { transform = { translation = vector.create(1, 0, 0) }, display = { type = "block", block = "minecraft:oak_log" } })
+local hand = arm:add_child("hand", { display = { type = "block", block = "minecraft:glass" }, hitbox = {} })
+print(#lamp:nodes(), hand:parent():name(), hand:world_position().x)
+print(pcall(lamp.add_node, lamp, "arm", {}))
+print(pcall(lamp.add_node, lamp, "x", { display = { type = "block", blok = "minecraft:stone" } }))
+print(pcall(lamp.add_node, lamp, "y", { itemTransform = 1 }))
+print(pcall(lamp.node(lamp, "base").remove, lamp:node("base")))
+arm:tween({ translation = vector.create(3, 0, 0), ticks = 4, easing = "linear" })
+nf.after(2, function() print("tween", arm:translation().x, arm:is_tweening()) end)
+nf.after(6, function()
+    print("tween", arm:translation().x, arm:is_tweening())
+    print(arm:remove(), #lamp:nodes(), lamp:node("hand"))
+end)
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(
+        printed(&start)
+            .get(..5)
+            .unwrap_or_else(|| panic!("{start:?}")),
+        [
+            "4\tarm\t1",
+            "false\tmodules/game/init.lua:6: bad argument 'name' (the centity already has a node called \"arm\")",
+            "false\tmodules/game/init.lua:7: definition.display: Unknown key \"blok\"",
+            "false\tmodules/game/init.lua:8: definition.itemTransform: Lua spells keys in snake_case, so it's item_transform",
+            "false\tmodules/game/init.lua:9: node \"base\" is declared by centity.json; only nodes a script added can be removed",
+        ],
+        "{start:?}"
+    );
+    // The added nodes' entities are made at the next sync.
+    session.tick();
+    let calls = platform.take();
+    assert!(calls.iter().any(|c| c.contains(" arm block")), "{calls:?}");
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("hitbox") && c.contains("hand")),
+        "{calls:?}"
+    );
+    for _ in 0..6 {
+        session.tick();
+    }
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        ["tween\t1.5\ttrue", "tween\t3\tfalse", "true\t2\tnil"],
+        "{calls:?}"
+    );
+}
+
+#[test]
+fn a_rope_is_laid_between_its_ends_each_tick() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = r#"{ "nodes": {
+  "line": { "display": { "type": "block", "block": "minecraft:chain" }, "rope": { "links": 4, "linkLength": 1 } }
+} }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/line/centity.json", centity),
+        (
+            "modules/game/init.lua",
+            r#"
+local line = nf.centities.spawn("line", vector.create(0, 64, 0))
+local rope = line:node("line")
+print(rope:is_rope(), line:node("base") == nil, #line:nodes())
+local link = line:node("line[1]")
+print(pcall(link.rope_between, link, vector.create(0, 64, 0), vector.create(1, 64, 0)))
+rope:rope_between(vector.create(0, 65, 0), vector.create(2, 65, 0))
+nf.after(2, function()
+    local shown = 0
+    for _, node in line:nodes() do
+        if node:name() ~= "line" and node:is_visible() then shown += 1 end
+    end
+    print("shown", shown, string.format("%.2f", link:world_position().x))
+end)
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    let lines = printed(&start);
+    assert_eq!(
+        lines.first().map(String::as_str),
+        Some("true\ttrue\t5"),
+        "{start:?}"
+    );
+    assert!(
+        lines.get(1).is_some_and(|l| l.contains("isn't a rope")),
+        "{start:?}"
+    );
+    for _ in 0..3 {
+        session.tick();
+    }
+    // Taut over two blocks: two of its four links, the first halfway along its block.
+    assert_eq!(printed(&platform.take()), ["shown\t2\t0.50"]);
+}
+
+#[test]
+fn temporary_centities_go_with_their_scope_or_their_lifetime_and_a_private_one_is_its_viewers_alone()
+ {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &lamp(1.0)),
+        (
+            "modules/game/init.lua",
+            r#"
+local timed = nf.centities.spawn("lamp", vector.create(0, 64, 0), { lifetime = 3 })
+timed:on("remove", function() print("timed gone") end)
+local kept = nf.centities.spawn("lamp", vector.create(5, 64, 0), { temporary = true })
+print(kept:is_temporary(), kept:keep(), kept:is_temporary(), timed:lifetime())
+local scoped = nf.centities.spawn("lamp", vector.create(9, 64, 0), { temporary = true })
+-- Private, with no viewers yet: its client entities are sent to nobody.
+local mine = nf.centities.spawn("lamp", vector.create(0, 70, 0), { temporary = true, viewers = {} })
+print(#mine:viewers())
+print(pcall(nf.centities.spawn, "lamp", vector.create(0, 0, 0), { viewers = {} }))
+print(pcall(nf.centities.spawn, "lamp", vector.create(0, 0, 0), { lifetime = 0 }))
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    let lines = printed(&start);
+    assert_eq!(
+        lines.first().map(String::as_str),
+        Some("true\ttrue\tfalse\t3"),
+        "{start:?}"
+    );
+    assert_eq!(lines.get(1).map(String::as_str), Some("0"), "{start:?}");
+    assert!(
+        lines
+            .get(2)
+            .is_some_and(|l| l.contains("only a temporary centity can be private")),
+        "{start:?}"
+    );
+    assert!(
+        lines
+            .get(3)
+            .is_some_and(|l| l.contains("at least 1 expected, got 0")),
+        "{start:?}"
+    );
+    assert!(
+        start
+            .iter()
+            .any(|c| c.starts_with("viewers ") && c.ends_with(' ')),
+        "{start:?}"
+    );
+    // A temporary one's entities aren't saved; keeping one makes them so again.
+    assert!(
+        start.contains(&"persistent 1 false".to_owned()),
+        "{start:?}"
+    );
+    assert!(start.contains(&"persistent 4 true".to_owned()), "{start:?}");
+    for _ in 0..3 {
+        session.tick();
+    }
+    assert_eq!(printed(&platform.take()), ["timed gone"]);
+    assert_eq!(session.centities().all().count(), 3);
+    // The module reloads: what it spawned temporary goes with its scope; the kept one stays.
+    files.write("modules/game/init.lua", "");
+    session.reload(&["modules/game/init.lua".into()]);
+    platform.take();
+    assert_eq!(session.centities().all().count(), 1);
+}
+
+#[test]
+fn a_centity_takes_buffs_and_damage_and_dies() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = lamp(1.0);
+    let end = centity.rfind('}').expect("an object");
+    let centity = format!(
+        r#"{}, "health": {{ "max": 10, "bar": {{ "segments": 5 }} }} }}"#,
+        centity[..end].trim_end()
+    );
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/dummy/centity.json", &centity),
+        (
+            "buffs/frail.json",
+            r#"{ "stats": { "defense": -4 }, "blockedBy": ["ironskin"], "stacking": "add" }"#,
+        ),
+        (
+            "buffs/ironskin.json",
+            r#"{ "stats": { "defense": 6 }, "cures": ["frail"] }"#,
+        ),
+        (
+            "modules/game/init.lua",
+            r#"
+local d = nf.centities.spawn("dummy", vector.create(0, 64, 0))
+d:on("buff_end", function(e) print("ended", e.buff, e.reason) end)
+d:on("damage", function(e) e.amount = e.amount / 2 end)
+d:on("death", function(e) print("died", e.cause) end)
+d:on("remove", function() print("removed") end)
+print(d:add_buff("frail", 5), d:stat("defense"), d:buff_ticks("frail"))
+print(d:add_buff("ironskin", 2), d:stat("defense"), d:has_buff("frail"), d:add_buff("frail", 5))
+print(pcall(d.add_buff, d, "slow", 5))
+d:set_modifiers("gear", { defense = 1 })
+print(d:stat("defense"), d:node("health_bar") ~= nil, d:node("health_bar"):display_text())
+print(d:damage(4), d:health(), d:node("health_bar"):is_visible())
+nf.after(4, function()
+    print(#d:buffs(), d:damage(100, { cause = "fall" }), d:exists())
+end)
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(
+        printed(&start),
+        [
+            "true\t-4\t5",
+            "ended\tfrail\tcured",
+            "true\t6\tfalse\tfalse",
+            "false\tmodules/game/init.lua:9: there's no buff \"slow\" (buffs/slow.json)",
+            "7\ttrue\t<red>▮▮▮▮▮<dark_gray>",
+            "2\t8\ttrue",
+        ],
+        "{start:?}"
+    );
+    for _ in 0..5 {
+        session.tick();
+    }
+    let lines = printed(&platform.take());
+    assert_eq!(
+        lines,
+        [
+            "ended\tironskin\texpired",
+            "died\tfall",
+            "removed",
+            "0\t8\tfalse"
+        ],
+        "{lines:?}"
+    );
+}
+
+#[test]
+fn a_body_falls_lands_walks_into_a_wall_and_jumps() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = lamp(1.0);
+    let end = centity.rfind('}').expect("an object");
+    let centity = format!(
+        r#"{}, "body": {{ "width": 0.6, "height": 1.8 }} }}"#,
+        centity[..end].trim_end()
+    );
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/walker/centity.json", &centity),
+        (
+            "modules/game/init.lua",
+            r#"
+local w = nf.centities.spawn("walker", vector.create(8.5, 66, 0.5))
+w:on("land", function(e) print("landed", e.speed > 0, w:position().y, w:is_on_ground()) end)
+w:on("bump", function(e) print("bump", e.normal.x) end)
+print(w:has_body(), w:body().height, w:is_on_ground())
+nf.after(30, function()
+    w:set_walk_velocity(vector.create(4, 0, 0))
+end)
+nf.after(50, function()
+    print("at wall", string.format("%.1f", w:position().x), w:wall() and w:wall().x)
+    w:set_walk_velocity(nil)
+    print(w:jump(1.25), w:is_on_ground(), w:velocity().y > 0)
+end)
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(printed(&start), ["true\t1.8\tfalse"], "{start:?}");
+    let mut lines = Vec::new();
+    for _ in 0..52 {
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    assert_eq!(lines[0], "landed\ttrue\t64\ttrue", "{lines:?}");
+    assert!(lines.iter().any(|l| l == "bump\t-1"), "{lines:?}");
+    // It stops with its side against the wall's face, at x 10.
+    assert!(lines.iter().any(|l| l == "at wall\t9.7\t-1"), "{lines:?}");
+    assert!(lines.iter().any(|l| l == "true\tfalse\ttrue"), "{lines:?}");
+}
+
+#[test]
+fn centities_hear_what_their_hitboxes_start_touching() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let block = r#"{ "nodes": { "cube": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/cube/centity.json", block),
+        (
+            "modules/game/init.lua",
+            r#"
+local a = nf.centities.spawn("cube", vector.create(0, 64, 0))
+local b = nf.centities.spawn("cube", vector.create(0.5, 64, 0))
+a:on("touch", function(e) print("touch", e.node:name(), e.other == b, e.other_node:name(), e.entity) end)
+nf.after(3, function() b:teleport(vector.create(5, 64, 0)) end)
+nf.after(5, function() b:teleport(vector.create(1, 64, 0)) end)
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    platform.take();
+    let mut lines = Vec::new();
+    for _ in 0..7 {
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    // Once as they start touching, not again while they do; again after they part and meet (faces touching).
+    assert_eq!(
+        lines,
+        [
+            "touch\tcube\ttrue\tcube\tnil",
+            "touch\tcube\ttrue\tcube\tnil"
+        ],
+        "{lines:?}"
+    );
+}
+
+#[test]
+fn a_launched_centity_hits_what_it_meets_and_ends_on_a_block() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let cube = r#"{ "nodes": { "cube": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/cube/centity.json", cube),
+        (
+            "modules/game/init.lua",
+            r#"
+local target = nf.centities.spawn("cube", vector.create(5, 64, 0))
+local shot = nf.centities.spawn("cube", vector.create(0, 64.5, 0.5))
+shot:on("hit", function(e) print("hit", e.target == target, e.node:name()) end)
+shot:on("flight_end", function(e) print("end", e.reason, e.target == target) end)
+print(shot:launch({ velocity = vector.create(20, 0, 0) }), shot:is_launched(), shot:velocity().x)
+local ball = nf.centities.spawn("cube", vector.create(-5, 66, 0.5))
+ball:on("flight_end", function(e) print("ball", e.reason, e.normal and e.normal.y, e.block ~= nil) end)
+ball:launch({ velocity = vector.create(0, -10, 0), radius = 0 })
+print(pcall(ball.launch, ball, { velocity = vector.create(1, 0, 0), bounce = 2 }))
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    let lines = printed(&start);
+    assert_eq!(
+        lines.first().map(String::as_str),
+        Some("true\ttrue\t20"),
+        "{start:?}"
+    );
+    assert!(
+        lines
+            .get(1)
+            .is_some_and(|l| l.contains("0 to 1 expected, got 2")),
+        "{start:?}"
+    );
+    let mut lines = Vec::new();
+    for _ in 0..20 {
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    assert!(lines.contains(&"hit\ttrue\tcube".to_owned()), "{lines:?}");
+    assert!(lines.contains(&"end\thit\ttrue".to_owned()), "{lines:?}");
+    assert!(
+        lines.contains(&"ball\tblock\t1\ttrue".to_owned()),
+        "{lines:?}"
+    );
+    // Both flights removed what flew; the target stays.
+    assert_eq!(session.centities().all().count(), 1);
+}
+
+#[test]
+fn a_centity_walks_to_a_place() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let walker = r#"{ "nodes": { "body": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": { "boxes": [{ "min": [-0.3, 0, -0.3], "max": [0.3, 1.8, 0.3] }] } } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/walker/centity.json", walker),
+        (
+            "modules/game/init.lua",
+            r#"
+local w = nf.centities.spawn("walker", vector.create(8.5, 64, 0.5))
+w:on("path_end", function(e) print("arrived", e.reached, math.floor(w:position().x)) end)
+print(w:move_to(vector.create(2.5, 64, 0.5)), w:has_path(), w:path_target().x)
+print(w:move_to(vector.create(12.5, 64, 0.5)), w:has_path())
+print(w:move_to(vector.create(2.5, 64, 0.5), { speed = 8 }))
+print(pcall(w.move_to, w, vector.create(0, 64, 0), { speed = 50 }))
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    let lines = printed(&start);
+    assert_eq!(
+        lines.first().map(String::as_str),
+        Some("true\ttrue\t2.5"),
+        "{start:?}"
+    );
+    // The wall at x 10 is endless: a partial path, as close as it gets (Kotlin walks it too).
+    assert_eq!(
+        lines.get(1).map(String::as_str),
+        Some("true\ttrue"),
+        "{start:?}"
+    );
+    assert!(lines.get(3).is_some_and(|l| l.contains("options.speed must be more than 0 and at most 20, not 50")), "{start:?}");
+    let mut lines = Vec::new();
+    for _ in 0..40 {
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    assert_eq!(lines, ["arrived\ttrue\t2"], "{lines:?}");
+}
+
+#[test]
+fn a_physics_body_falls_lands_settles_and_is_pushed() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let crate_ = r#"{ "nodes": { "box": { "display": { "type": "block", "block": "minecraft:barrel" }, "physics": {} } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/crate/centity.json", crate_),
+        (
+            "modules/game/init.lua",
+            r#"
+local c = nf.centities.spawn("crate", vector.create(0.5, 67, 0.5))
+local b = c:node("box")
+b:on("collide", function(e) print("collide", e.other, e.hit_normal.y > 0.5, e.speed > 1) end)
+b:on("sleep", function() print("sleep", string.format("%.2f", b:world_position().y), b:is_on_ground()) end)
+b:on("wake", function() print("wake") end)
+print(b:mass(), b:has_gravity(), b:is_physics_enabled())
+nf.after(120, function()
+    print(b:apply_impulse(vector.create(0, 5, 0)), b:velocity().y > 0)
+end)
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(printed(&start), ["1\ttrue\ttrue"], "{start:?}");
+    let mut lines = Vec::new();
+    for _ in 0..130 {
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    assert!(
+        lines
+            .first()
+            .is_some_and(|l| l == "collide\tnil\ttrue\ttrue"),
+        "{lines:?}"
+    );
+    // It comes to rest on the floor at y 64 (its unit cube's bottom is its origin).
+    assert!(lines.iter().any(|l| l == "sleep\t64.00\ttrue"), "{lines:?}");
+    assert!(lines.iter().any(|l| l == "true\ttrue"), "{lines:?}");
+    assert!(lines.iter().any(|l| l == "wake"), "{lines:?}");
+}
+
+#[test]
+fn a_body_lands_on_another_centitys_hitbox_and_on_another_centitys_body() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let crate_ = r#"{ "nodes": { "box": { "display": { "type": "block", "block": "minecraft:barrel" }, "physics": {} } } }"#;
+    let table = r#"{ "nodes": { "top": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/crate/centity.json", crate_),
+        ("centities/table/centity.json", table),
+        (
+            "modules/game/init.lua",
+            r#"
+nf.centities.spawn("table", vector.create(0, 64, 0))
+local a = nf.centities.spawn("crate", vector.create(0, 66, 0))
+local b = nf.centities.spawn("crate", vector.create(5, 64, 0))
+local c = nf.centities.spawn("crate", vector.create(5, 67, 0))
+nf.after(100, function()
+    print(string.format("%.2f %.2f %.2f",
+        a:node("box"):world_position().y, b:node("box"):world_position().y, c:node("box"):world_position().y))
+end)
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    platform.take();
+    let mut lines = Vec::new();
+    for _ in 0..101 {
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    // On the table's hitbox; on the floor; on the other crate.
+    assert_eq!(lines, ["65.00 64.00 65.00"], "{lines:?}");
+}
+
+#[test]
+fn an_instance_and_its_data_outlive_the_session_and_its_centity_going_away() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let store = std::rc::Rc::new(netherforge_runtime::store::Store::in_memory());
+    let centity = scripted_lamp();
+    let script = r#"
+this:on("spawn", function() print("spawn") end)
+local data = this:data()
+data.visits = (data.visits or 0) + 1
+print("visits", data.visits)
+"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &centity),
+        ("centities/lamp/script.lua", script),
+        ("modules/game/init.lua", ""),
+    ]);
+    {
+        let session = Session::start_with(platform.clone(), &files, &NoPackages, store.clone());
+        session
+            .spawn("lamp", place(3.0, 64.0, 3.0), 90.0)
+            .expect("spawned");
+        session.tick();
+        let calls = platform.take();
+        assert_eq!(printed(&calls), ["visits\t1", "spawn"], "{calls:?}");
+    }
+    // The session stopped: its instance stays in the world, its entities with it.
+    let calls = platform.take();
+    assert!(!calls.iter().any(|c| c.starts_with("remove")), "{calls:?}");
+    assert_eq!(store.instances().len(), 1);
+    let id = store.instances()[0].id;
+    {
+        let mut session = Session::start_with(platform.clone(), &files, &NoPackages, store.clone());
+        let calls = platform.take();
+        // Restored, not spawned: no new entities, no `spawn`, the data as it was saved.
+        assert_eq!(printed(&calls), ["visits\t2"], "{calls:?}");
+        session.tick();
+        let calls = platform.take();
+        assert!(
+            !calls
+                .iter()
+                .any(|c| c.starts_with("anchor") || c.starts_with("display")),
+            "{calls:?}"
+        );
+        assert_eq!(session.centities().get(id).map(|i| i.yaw()), Some(90.0));
+        // Its centity goes: it's inert, kept; back, it's an instance again.
+        files.delete("centities/lamp/centity.json");
+        session.reload(&["centities/lamp/centity.json".into()]);
+        assert!(session.centities().get(id).is_none());
+        assert_eq!(session.centities().inert().count(), 1);
+        session.tick();
+        assert_eq!(store.instances().len(), 1);
+        files.add("centities/lamp/centity.json", &centity);
+        session.reload(&["centities/lamp/centity.json".into()]);
+        session.tick();
+        assert!(session.centities().get(id).is_some());
+        assert_eq!(printed(&platform.take()), ["visits\t3"]);
+    }
+}
+
+#[test]
+fn a_script_draws_a_picture_on_an_image_display() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity =
+        r#"{ "nodes": { "screen": { "display": { "type": "image", "width": 2, "height": 2 } } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/screen/centity.json", centity),
+        (
+            "modules/game/init.lua",
+            r##"
+local s = nf.centities.spawn("screen", vector.create(0, 64, 0)):node("screen")
+local red = nf.images.fill(2, 2, "#ff0000")
+print(red:width(), red:pixel(1, 1), red:pixel(5, 5), s:image())
+print(s:set_image(red), s:image():pixel(0, 0))
+local copy = nf.images.decode(red:encode())
+print(copy:height(), copy:pixel(0, 1), red:cropped(1, 0, 1, 2):width())
+print(pcall(nf.images.fill, 0, 2, "#ff0000"))
+"##,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(
+        printed(&start),
+        [
+            "2\t#FF0000\tnil\tnil",
+            "true\t#FF0000",
+            "2\t#FF0000\t1",
+            "false\tmodules/game/init.lua:8: an image is 1 to 2048 pixels each way, not 0 by 2",
+        ],
+        "{start:?}"
+    );
+    session.tick();
+    let calls = platform.take();
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("update ") && !c.ends_with("runs 0")),
+        "{calls:?}"
+    );
+}
+
+#[test]
+fn an_instance_hears_its_chunk_unload_and_load_and_strays_go() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &scripted_lamp()),
+        (
+            "centities/lamp/script.lua",
+            r#"
+this:on("chunk_unload", function() print("unload") end)
+this:on("chunk_load", function() print("load") end)
+local ticks = 0
+this:on("tick", function() ticks += 1 end)
+nf.every(1, function() if ticks == 5 then print("five") end end)
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    session
+        .spawn("lamp", place(0.0, 64.0, 0.0), 0.0)
+        .expect("spawned");
+    platform.take();
+    session.tick();
+    platform.unloaded.set(true);
+    for _ in 0..10 {
+        session.tick();
+    }
+    platform.unloaded.set(false);
+    for _ in 0..5 {
+        session.tick();
+    }
+    // One tick, ten without (unloaded), then five more: its tick handler ran six times.
+    let lines = printed(&platform.take());
+    assert_eq!(lines, ["unload", "load", "five"], "{lines:?}");
+    // A tagged entity no instance knows is a stray.
+    let stray = netherforge_platform::EntityTag {
+        instance: Uuid(12345),
+        node: "x".into(),
+        role: EntityRole::Display,
+    };
+    session.entities_loaded(&std::collections::HashMap::from([(Uuid(999), stray)]), &[]);
+    assert!(platform.take().contains(&"remove 999".to_owned()));
+}
+
+#[test]
+fn centities_appear_near_a_player_by_their_rules_and_go_when_nobody_is_near() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let wisp = r#"{ "nodes": { "glow": { "display": { "type": "block", "block": "minecraft:glowstone" } } },
+  "spawning": { "cap": 2, "light": { "min": 10 }, "blocks": ["minecraft:stone"], "when": "calm" } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/wisp/centity.json", wisp),
+        (
+            "modules/game/init.lua",
+            r#"
+local calm = false
+nf.spawning.condition("calm", function(check) return calm and check.centity == "wisp" end)
+nf.after(20, function() calm = true end)
+nf.on("centity_natural_spawn", function(e) print("appears", e.centity, e.location.position.y) end)
+print(pcall(nf.spawning.condition, "calm", function() end))
+"#,
+        ),
+    ]);
+    *platform.player.borrow_mut() = Some(place(0.5, 64.0, 0.5));
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = printed(&platform.take());
+    assert!(
+        start
+            .first()
+            .is_some_and(|l| l.contains("already registered")),
+        "{start:?}"
+    );
+    // Not calm yet: nothing appears (calm comes at tick 20's start, before its pass).
+    for _ in 0..19 {
+        session.tick();
+    }
+    let early = platform.take();
+    assert_eq!(session.centities().all().count(), 0, "{early:?}");
+    for _ in 0..61 {
+        session.tick();
+    }
+    let lines = printed(&platform.take());
+    let count = session.centities().all().count();
+    assert!((1..=2).contains(&count), "{count} {lines:?}");
+    assert!(lines.iter().all(|l| l == "appears\twisp\t64"), "{lines:?}");
+    for instance in session.centities().all() {
+        let a = instance.anchor();
+        let distance = (a.x * a.x + a.z * a.z).sqrt();
+        assert!(
+            instance.natural && a.y == 64.0 && (23.0..=49.0).contains(&distance),
+            "{a:?}"
+        );
+    }
+    // The player goes far away: at the next sweep these go (others may appear where they are now).
+    let old: Vec<Uuid> = session.centities().all().map(|i| i.id).collect();
+    *platform.player.borrow_mut() = Some(place(5000.5, 64.0, 0.5));
+    for _ in 0..20 {
+        session.tick();
+    }
+    assert!(old.iter().all(|id| session.centities().get(*id).is_none()));
+    assert!(session.centities().all().all(|i| i.anchor().x > 4000.0));
+}
+
+fn alex() -> netherforge_platform::PlayerRef {
+    netherforge_platform::PlayerRef {
+        uuid: Uuid(0x0f1b_0c7e_6a43_3d1f_9a8c_2b5e_8f1a_0c11),
+        name: "Alex".into(),
+    }
+}
+
+#[test]
+fn the_servers_own_events_reach_scripts_and_their_answers_go_back() {
+    use netherforge_platform::{BlockRef, PlatformEvents};
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/rules/init.lua",
+            r#"
+nf.on("player_interact", function(e) print("interact", e.click, e.block ~= nil, e.face, e.hand); e:cancel() end)
+nf.on("block_break", function(e)
+    print("break", e.state, #e.drops, e.drops[1].kind, e.experience)
+    e.drops = {}
+    e.experience = 7
+end)
+nf.on("entity_damage", function(e) print("damage", e.amount, e.cause, e.attacker ~= nil); e.amount = e.amount * 2 end)
+nf.on("player_death", function(e) print("death", e.cause, e.message); e.message = nil; e.keep_inventory = true end)
+nf.on("entity_death", function(e) print("entity death", #e.drops, e.experience) end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    platform.take();
+    let block = BlockRef {
+        world: "world".into(),
+        x: 3,
+        y: 63,
+        z: 4,
+        id: "minecraft:dirt".into(),
+        state: "minecraft:dirt".into(),
+    };
+    assert!(server.player_interact(
+        alex(),
+        ClickButton::Right,
+        Some(block.clone()),
+        Some("up".into()),
+        None,
+        "main_hand".into()
+    ));
+    let answer = server
+        .block_break(
+            alex(),
+            block.clone(),
+            Box::new(|| vec![stack("minecraft:dirt")]),
+            0,
+        )
+        .expect("not cancelled");
+    assert_eq!(answer.drops, Some(vec![]));
+    assert_eq!(answer.experience, 7);
+    assert_eq!(
+        server.entity_damaged(Uuid(5), 3.0, "entity_attack".into(), Some(alex().uuid)),
+        Some(6.0)
+    );
+    // Keeping the inventory drops nothing from it; the message is gone.
+    let death = server.player_died(
+        alex(),
+        None,
+        "fall".into(),
+        Some("Alex fell".into()),
+        false,
+        vec![stack("minecraft:dirt")],
+        10,
+    );
+    assert_eq!(death.message, None);
+    assert!(death.keep_inventory);
+    assert_eq!(death.drops, Some(vec![]));
+    assert_eq!(death.experience, 10);
+    // What handlers printed is logged with the next tick.
+    server.tick();
+    let lines = printed(&platform.take());
+    assert_eq!(
+        lines,
+        [
+            "interact\tright\ttrue\tup\tmain_hand",
+            "break\tminecraft:dirt\t1\tminecraft:dirt\t0",
+            "damage\t3\tentity_attack\ttrue",
+            "death\tfall\tAlex fell",
+            "entity death\t0\t10",
+        ],
+        "{lines:?}"
+    );
+    // Nothing listens to dropping an item: it goes through, and nothing was built for it.
+    assert!(!server.player_drop_item(alex(), stack("minecraft:dirt")));
+    // Once the session stops, every answer is "unchanged".
+    server.session_mut().stop();
+    assert!(!server.player_interact(
+        alex(),
+        ClickButton::Left,
+        None,
+        None,
+        None,
+        "main_hand".into()
+    ));
+    assert_eq!(
+        server.entity_damaged(Uuid(5), 3.0, "fall".into(), None),
+        Some(3.0)
+    );
+}
+
+#[test]
+fn a_body_resting_on_a_block_falls_when_the_block_is_broken() {
+    use netherforge_platform::{BlockRef, PlatformEvents};
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    let crate_ = r#"{ "nodes": { "box": { "display": { "type": "block", "block": "minecraft:barrel" }, "physics": {} } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/crate/centity.json", crate_),
+        (
+            "modules/game/init.lua",
+            r#"
+local b = nf.centities.spawn("crate", vector.create(0.5, 65, 0.5)):node("box")
+b:on("sleep", function() print("sleep", string.format("%.2f", b:world_position().y)) end)
+b:on("wake", function() print("wake") end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let mut lines = Vec::new();
+    for _ in 0..120 {
+        server.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    assert_eq!(lines, ["sleep\t64.00"], "{lines:?}");
+    // The floor under it goes, wider than the crate.
+    for x in -1..=1 {
+        for z in -1..=1 {
+            let block = BlockRef {
+                world: "world".into(),
+                x,
+                y: 63,
+                z,
+                id: "minecraft:stone".into(),
+                state: "minecraft:stone".into(),
+            };
+            server.block_break(alex(), block, Box::new(Vec::new), 0);
+            platform.broken.borrow_mut().insert((x, 63, z));
+        }
+    }
+    // It wakes at once, not when the blocks would next have been read again.
+    server.tick();
+    server.tick();
+    assert_eq!(printed(&platform.take()), ["wake"]);
+    let mut lines = Vec::new();
+    for _ in 0..120 {
+        server.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    assert_eq!(lines, ["sleep\t63.00"], "{lines:?}");
+}
+
+#[test]
+fn a_world_answers_from_the_server_and_its_centities() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let table = r#"{ "nodes": { "top": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/table/centity.json", table),
+        (
+            "modules/look/init.lua",
+            r#"
+local w = nf.worlds.default()
+print(w:name(), w:exists(), w:time_of_day(), w:is_day(), w:is_night(), w:day_count(), w:moon_phase(), w:weather())
+print(w:min_height(), w:max_height(), w:block(vector.create(1.5, 63.2, -0.5)):world():name(), w:border() ~= nil)
+local box = w:blocks(vector.create(9, 63, 0), vector.create(10, 64, 0), { what = "class" })
+print(box.size_x, box.size_y, box.size_z, table.concat(box.cells, ","))
+local f = w:flood(vector.create(0, 64, 0), { through = { "minecraft:air" }, bounds = { min = vector.create(0, 64, 0), max = vector.create(12, 64, 0) }, kinds = true })
+print(#f.positions, #f.edges, f.edge_kinds[1], f.stopped)
+local down = w:raycast(vector.create(0.5, 70, 0.5), vector.create(0, -1, 0), 20)
+print(down.block ~= nil, string.format("%.1f", down.distance), down.normal.y)
+local t = nf.centities.spawn("table", vector.create(3.5, 64, 0.5))
+local hit = w:raycast(vector.create(0.5, 64.5, 0.5), vector.create(1, 0, 0), 20)
+print(hit.centity == t, hit.node:name(), string.format("%.2f", hit.distance))
+local near = w:overlap_sphere(vector.create(3.5, 64.5, 0.5), 2, { entities = false })
+print(#near, near[1].centity == t, w:nearest(vector.create(3.5, 64.5, 0.5), 2).node:name())
+print(#w:centities(), #w:centities({ kind = "nope" }), #w:entities({ kind = "zombie", tag = "guard" }), #w:entities({ living = false }))
+print(w:game_rule("keep_inventory"), pcall(w.game_rule, w, "nope"))
+print(#nf.worlds.all(), nf.worlds.get("nether"))
+w:on("dusk", function() end)
+local b = w:block(vector.create(2, 63, 2))
+print(b:kind(), b:is_solid(), b:relative("up"):is_air(), b:relative(vector.create(0, 1, 0)) == b:relative("up"), b:position().y)
+print(b:set_state("stone", { update = false }), pcall(b.set_state, b, "minecraft:stone[facing=up]"))
+print(w:fill_blocks(vector.create(0, 319, 0), vector.create(1, 321, 0), "glass"), pcall(w.fill_blocks, w, vector.create(0, 0, 0), vector.create(99, 99, 99), "glass"))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let all = platform.take();
+    let lines = printed(&all);
+    assert!(!all.iter().any(|l| l.starts_with("warn")), "{all:?}");
+    assert_eq!(
+        lines,
+        [
+            "world\ttrue\t6000\ttrue\tfalse\t0\tfull_moon\tclear",
+            "-64\t320\tworld\ttrue",
+            "2\t2\t1\t2,2,0,2",
+            "10\t1\tminecraft:stone\tbounds",
+            "true\t6.0\t1",
+            "true\ttop\t3.00",
+            "1\ttrue\ttop",
+            "1\t0\t1\t0",
+            "true\tfalse\tmodules/look/init.lua:17: no game rule \"nope\" on this server",
+            "1\tnil",
+            "minecraft:stone\ttrue\ttrue\ttrue\t63",
+            "true\tfalse\tmodules/look/init.lua:22: state: minecraft:stone has no property \"facing\" (it has: none)",
+            "2\tfalse\tmodules/look/init.lua:23: that box is 1000000 blocks, and one fill_blocks changes at most 32768: spread it over several ticks",
+        ],
+        "{lines:?}"
+    );
+    assert!(
+        all.contains(&"set 2 63 2 minecraft:stone false".to_owned()),
+        "{all:?}"
+    );
+}
+
+#[test]
+fn entities_answer_from_the_server_and_keep_what_it_forgets() {
+    use netherforge_platform::{PlatformEvents, game_event};
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/zoo/init.lua",
+            r#"
+local z = nf.worlds.default():entities({ kind = "zombie" })[1]
+print(z:kind(), z:is_mob(), z:is_living(), z:is_player(), z:tags()[1], z:has_tag("guard"), z:position().x)
+print(pcall(z.add_tag, z, "no spaces"))
+print(z:health(), z:max_health(), z:set_health(5), pcall(z.set_health, z, 50))
+print(z:set_custom_name("<red>Bob"), z:data().kills)
+z:data().kills = 3
+local alex = nf.worlds.default():players()[1]
+print(z:hide_from(alex), z:is_hidden_from(alex))
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "minecraft:zombie\ttrue\ttrue\tfalse\tguard\ttrue\t5",
+            "false\tmodules/zoo/init.lua:4: \"no spaces\" isn't a tag: letters, digits, _, -, . and +",
+            "20\t20\ttrue\tfalse\tmodules/zoo/init.lua:5: health must be from 0 to max_health() (20), not 50",
+            "true\t2",
+            "true\ttrue",
+        ]
+    );
+    assert!(
+        calls.contains(&"number 500 HEALTH 5".to_owned()),
+        "{calls:?}"
+    );
+    assert!(calls.contains(&"hide 500 from 77".to_owned()), "{calls:?}");
+    // A save writes the changed table back; the next save, unchanged, doesn't.
+    server.world_saving("world".into());
+    assert!(
+        platform
+            .take()
+            .contains(&r#"data 500 Some("{\"kills\":3}")"#.to_owned())
+    );
+    server.world_saving("world".into());
+    assert!(!platform.take().iter().any(|c| c.starts_with("data")));
+    // The server forgot who it was hidden from when Alex left: it's hidden again as they join.
+    let mut join = game_event::PlayerJoin {
+        player: netherforge_platform::PlayerRef {
+            uuid: Uuid(77),
+            name: "Alex".into(),
+        },
+        first_join: false,
+        message: None,
+    };
+    server.game().player_join(&mut join);
+    assert!(platform.take().contains(&"hide 500 from 77".to_owned()));
+    // The session ends: it shows again.
+    server.session_mut().stop();
+    assert!(platform.take().contains(&"show 500 to 77".to_owned()));
+}
+
+#[test]
+fn a_player_answers_while_online_and_takes_buffs() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("buffs/swift.json", r#"{ "stats": { "speed": 2 } }"#),
+        (
+            "modules/greet/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+print(alex:name(), alex:is_player(), alex:game_mode(), alex:send_message("<green>hi"))
+print(alex:send_title("Welcome", nil, { stay = 40 }), pcall(alex.send_title, alex, "x", nil, { stay = -1 }))
+print(pcall(alex.set_food, alex, 30))
+print(alex:storage("bank", 27) ~= nil, pcall(alex.storage, alex, "Bank!", 27))
+alex:on("buff_add", function(e) print("buff", e.buff, e.ticks, e.player == alex); e.ticks = 5 end)
+print(alex:add_buff("swift", 100), alex:buff_ticks("swift"), alex:stat("speed"), #alex:buffs())
+alex:on("buff_end", function(e) print("ended", e.buff, e.reason) end)
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "Alex\ttrue\tsurvival\ttrue",
+            "true\tfalse\tmodules/greet/init.lua:4: options.stay can't be negative",
+            "false\tmodules/greet/init.lua:5: food must be from 0 to 20, not 30",
+            "true\tfalse\tmodules/greet/init.lua:6: \"Bank!\" isn't a storage name (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+            "buff\tswift\t100\ttrue",
+            "true\t5\t2\t1",
+        ]
+    );
+    assert!(
+        calls.contains(&"message 77 <green>hi".to_owned()),
+        "{calls:?}"
+    );
+    assert!(
+        calls.contains(&"title 77 Welcome/ 10 40 20".to_owned()),
+        "{calls:?}"
+    );
+    let mut lines = Vec::new();
+    for _ in 0..6 {
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    assert_eq!(lines, ["ended\tswift\texpired"]);
+}
+
+#[test]
+fn saved_tables_are_saved_when_they_change_and_carried_into_a_restart() {
+    use netherforge_platform::{PlatformEvents, game_event};
+    use netherforge_runtime::data::Owner;
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let store = std::rc::Rc::new(netherforge_runtime::store::Store::in_memory());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/scores/init.lua",
+            r#"
+local s = nf.data("scores")
+print(s.top, pcall(nf.data, "Bad Name"))
+s.top = (s.top or 0) + 1
+if s.spot then print("spot", s.home == nf.worlds.default(), s.spot.world:name(), s.spot.position.y) end
+s.home = nf.worlds.default()
+s.spot = nf.worlds.default():location(vector.create(1, 2, 3))
+s.timer = nf.after(1000, function() end)
+nf.worlds.default():players()[1]:data().coins = 3
+local alex = nf.worlds.default():players()[1]
+alex:session().streak = 4
+nf.on("player_quit", function(e) print("quit", e.player:session().streak) end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start_with(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        store.clone(),
+    ));
+    let first = printed(&platform.take());
+    assert_eq!(
+        first,
+        [
+            "nil\tfalse\tmodules/scores/init.lua:3: \"Bad Name\" isn't a data table name (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)"
+        ]
+    );
+    // Their table is saved as they leave.
+    let alex = netherforge_platform::PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    server.game().player_quit(&mut game_event::PlayerQuit {
+        player: alex,
+        message: None,
+    });
+    store.commit();
+    assert_eq!(
+        store.data(&Owner::Player(Uuid(77))).as_deref(),
+        Some(r#"{"coins":3}"#)
+    );
+    // A restart (netherforge.json changed) starts from the table as the last session left it.
+    server
+        .session_mut()
+        .reload(&["netherforge.json".to_owned()]);
+    let raw = platform.take();
+    assert!(
+        raw.contains(
+            &"warn Saving nf.data(\"scores\")'s data: data.timer: a Task handle can't be saved"
+                .to_owned()
+        ),
+        "{raw:?}"
+    );
+    let restarted = printed(&raw);
+    assert!(
+        restarted.contains(&"spot\ttrue\tworld\t2".to_owned()),
+        "{restarted:?}"
+    );
+    // What the quit's handler printed is told as the old session stops, then the new one's first lines.
+    assert_eq!(
+        restarted[..2],
+        [
+            "quit\t4",
+            "1\tfalse\tmodules/scores/init.lua:3: \"Bad Name\" isn't a data table name (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)"
+        ]
+    );
+    server.session_mut().stop();
+    let named = Owner::Named {
+        namespace: "demo".into(),
+        name: "scores".into(),
+    };
+    let text = store.data(&named).expect("saved");
+    assert!(
+        text.contains(r#""home":{"$world":["world"]}"#) && text.contains(r#""top":2"#),
+        "{text}"
+    );
+}
+
+#[test]
+fn permissions_scripts_set_are_kept_and_held_while_the_project_runs() {
+    use netherforge_platform::{PlatformEvents, game_event};
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let store = std::rc::Rc::new(netherforge_runtime::store::Store::in_memory());
+    let manifest = r#"{ "formatVersion": 1, "name": "Demo", "namespace": "demo", "version": "1.0.0", "minecraft": "26.3", "allow": { "permissions": ["shop"] } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", manifest),
+        (
+            "modules/vip/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+alex:set_permission("shop.vip", true)
+print(pcall(alex.set_permission, alex, "admin.ban", true))
+print(pcall(alex.set_permission, alex, "Not A Node", true))
+print(alex:permissions()["shop.vip"], alex:unset_permission("nope"))
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start_with(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        store.clone(),
+    ));
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "false\tmodules/vip/init.lua:4: Player:set_permission needs permission \"admin.ban\", which package \"demo\" hasn't allowed: add it (or a node above it) to allow.permissions in its netherforge.json (it lists: shop)",
+            "false\tmodules/vip/init.lua:5: \"Not A Node\" isn't a permission node (lowercase letters, digits, _ and -, in parts separated by dots (like shop.vip), at most 255 characters)",
+            "true\tfalse",
+        ]
+    );
+    assert!(
+        calls.contains(&"permissions 77 [shop.vip=true]".to_owned()),
+        "{calls:?}"
+    );
+    // They come back: the server forgot, and it's applied again.
+    let alex = netherforge_platform::PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    server.game().player_join(&mut game_event::PlayerJoin {
+        player: alex,
+        first_join: false,
+        message: None,
+    });
+    assert!(
+        platform
+            .take()
+            .contains(&"permissions 77 [shop.vip=true]".to_owned())
+    );
+    // The project stops: everyone loses what it set; the store keeps it for the next run.
+    server.session_mut().stop();
+    assert!(platform.take().contains(&"permissions 77 []".to_owned()));
+    store.commit();
+    assert_eq!(
+        store
+            .permissions_of("demo")
+            .get(&Uuid(77))
+            .and_then(|n| n.get("shop.vip")),
+        Some(&true)
+    );
+}
+
+#[test]
+fn schedules_run_at_their_times_and_catch_up_what_they_missed() {
+    // 2026-03-28 23:00 UTC is 23:00 in London, the night before the clocks go forward at 01:00.
+    let start = 1_774_738_800_000i64;
+    let platform = std::rc::Rc::new(Fake::default());
+    let store = std::rc::Rc::new(netherforge_runtime::store::Store::in_memory());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/clock/init.lua",
+            r#"
+local nightly = nf.schedule.daily("1:30", function() print("nightly") end, { id = "nightly", catch_up = true })
+print(nightly:is_active(), nightly:next_run())
+print(pcall(nf.schedule.daily, "25:00", function() end))
+print(pcall(nf.schedule.weekly, "someday", "10:00", function() end))
+print(pcall(nf.schedule.cron, "* * *", function() end) == false)
+print(pcall(nf.schedule.daily, "1:00", function() end, { catch_up = true }))
+local cron = nf.schedule.cron("0 */6 * * *", function() print("cron") end)
+print(cron:next_run())
+"#,
+        ),
+    ]);
+    let config = netherforge_runtime::session::Config {
+        time_zone: Some("Europe/London".into()),
+        wall_clock: Some(start),
+        ..Default::default()
+    };
+    let mut session =
+        Session::start_configured(platform.clone(), &files, &NoPackages, store.clone(), config);
+    let lines = printed(&platform.take());
+    // 01:30 is in the gap the clocks skip that night: it's 02:30 BST, 01:30 UTC.
+    let half_past_one_utc = start + 2 * 3_600_000 + 1_800_000;
+    assert_eq!(
+        lines,
+        [
+            format!("true\t{half_past_one_utc}"),
+            "false\tmodules/clock/init.lua:4: bad argument 'time' (\"25:00\" isn't a time of day: \"HH:mm\" on a 24-hour clock, like \"18:00\")".to_owned(),
+            "false\tmodules/clock/init.lua:5: bad argument 'day' (\"someday\" isn't a weekday: \"mon\", \"tue\", \"wed\", \"thu\", \"fri\", \"sat\" or \"sun\")".to_owned(),
+            "true".to_owned(),
+            "false\tmodules/clock/init.lua:7: options.catch_up needs an options.id: that's what the schedule's last run is kept under".to_owned(),
+            // The next six-hourly time in London is 00:00 GMT, an hour on.
+            format!("{}", start + 3_600_000),
+        ]
+    );
+    // Its time comes: it runs once, however late the tick.
+    session.set_wall_clock(Some(half_past_one_utc + 60_000));
+    session.tick();
+    let ran = printed(&platform.take());
+    assert!(ran.contains(&"nightly".to_owned()), "{ran:?}");
+    // The server is off over the next night's run: with catch_up it runs as its script starts.
+    session.stop();
+    session.set_wall_clock(Some(half_past_one_utc + 26 * 3_600_000));
+    session.reload(&["netherforge.json".to_owned()]);
+    platform.take();
+    session.tick();
+    assert!(printed(&platform.take()).contains(&"nightly".to_owned()));
+}
+
+#[test]
+fn particles_and_sounds_are_checked_and_sent_to_who_is_near() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/fx/init.lua",
+            r##"
+local w = nf.worlds.default()
+print(w:spawn_particle("dust", vector.create(1, 64, 1), { color = "#ff0000", size = 2, count = 3 }))
+w:spawn_particle("flame", vector.create(500, 64, 0))
+print(pcall(w.spawn_particle, w, "flame", vector.create(0, 0, 0), { color = "#ff0000" }))
+print(pcall(w.spawn_particle, w, "dust", vector.create(0, 0, 0), { color = "red" }))
+print(pcall(w.spawn_particle, w, "smoke", vector.create(0, 0, 0)))
+print(w:play_sound("entity.pig.ambient", vector.create(0, 64, 0), { pitch = 1.5 }))
+print(pcall(w.play_sound, w, "x", vector.create(0, 64, 0), { pitch = 3 }))
+local alex = w:players()[1]
+print(alex:play_sound("block.note_block.pling"), pcall(alex.spawn_particle, alex, "flame", vector.create(0, 0, 0), { viewers = {} }))
+"##,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "true",
+            "false\tmodules/fx/init.lua:5: particle \"minecraft:flame\" doesn't take options.color",
+            "false\tmodules/fx/init.lua:6: options.color must be \"#rrggbb\", not \"red\"",
+            "false\tmodules/fx/init.lua:7: no particle \"minecraft:smoke\" on this server",
+            "true",
+            "false\tmodules/fx/init.lua:9: options.pitch must be 0.5 to 2, not 3",
+            "true\tfalse\tmodules/fx/init.lua:11: options.viewers: player:spawn_particle is only for that player (world:spawn_particle takes viewers)",
+        ]
+    );
+    let sent: Vec<&String> = calls
+        .iter()
+        .filter(|c| c.starts_with("particle") || c.starts_with("sound"))
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            "particle world minecraft:dust x3 Some(Dust { color: 16711680, size: 2.0 }) to Alex",
+            "sound world minecraft:entity.pig.ambient 1 1.5",
+            "sound to 77 minecraft:block.note_block.pling",
+        ]
+    );
+}
+
+#[test]
+fn a_world_spawns_entities_with_their_tags_and_data() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/farm/init.lua",
+            r#"
+local w = nf.worlds.default()
+local pig = w:spawn_entity("pig", vector.create(3, 64, 0), { custom_name = "Wilbur", tags = { "farm" }, data = { home = w, age = 2 } })
+print(pig ~= nil, pcall(w.spawn_entity, w, "dragon", vector.create(0, 64, 0)))
+print(pcall(w.spawn_entity, w, "pig", vector.create(0, 64, 0), { tags = { "no spaces" } }))
+print(pcall(w.spawn_entity, w, "pig", vector.create(0, 64, 0), { data = 5 }))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "true\tfalse\tmodules/farm/init.lua:4: \"dragon\" isn't an entity this server can spawn",
+            "false\tmodules/farm/init.lua:5: \"no spaces\" isn't a tag: letters, digits, _, -, . and +",
+            "false\tmodules/farm/init.lua:6: options.data must be a table of your own values, like { guard = true }",
+        ]
+    );
+    assert!(
+        calls.contains(&r#"spawn minecraft:pig at 3 Some("Wilbur") ["farm"] Some("{\"age\":2,\"home\":{\"$world\":[\"world\"]}}")"#.to_owned()),
+        "{calls:?}"
+    );
+}
+
+#[test]
+fn a_worlds_sky_fades_a_step_at_a_time() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("skies/dusk.json", r##"{ "sky": "#203060", "fade": 3 }"##),
+        ("skies/storm.json", r##"{ "sky": "#404040" }"##),
+        (
+            "modules/sky/init.lua",
+            r#"
+local w = nf.worlds.default()
+print(w:set_sky("dusk", { fade_ticks = 6 }), w:sky())
+print(pcall(w.set_sky, w, "storm"))
+print(pcall(w.set_sky, w, "nope"))
+nf.after(4, function() w:clear_sky({ fade_ticks = 6 }) end)
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert!(!start.iter().any(|l| l.starts_with("warn")), "{start:?}");
+    assert_eq!(
+        printed(&start),
+        [
+            "true\tdusk",
+            "false\tmodules/sky/init.lua:4: sky \"storm\" is new since the server started: a sky's colours are biomes, which the game learns as it starts, so restart it",
+            "false\tmodules/sky/init.lua:5: there's no sky \"nope\" (skies/nope.json)",
+        ]
+    );
+    let mut shown = Vec::new();
+    for tick in 1..=14 {
+        session.tick();
+        shown.extend(
+            platform
+                .take()
+                .into_iter()
+                .filter(|c| c.starts_with("sky"))
+                .map(|c| format!("{tick}: {c}")),
+        );
+    }
+    // A player who hadn't seen the world is shown its sky at once; cleared over six ticks, its three steps go one
+    // every two.
+    assert_eq!(
+        shown,
+        [
+            "1: sky 77 Some((\"demo:dusk\", 3))",
+            "4: sky 77 Some((\"demo:dusk\", 2))",
+            "6: sky 77 Some((\"demo:dusk\", 1))",
+            "8: sky 77 None",
+        ]
+    );
+}
+
+#[test]
+fn advancements_are_checked_against_the_server() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/goals/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+print(alex:grant_advancement("minecraft:story/mine_diamond", "diamond"))
+print(pcall(alex.grant_advancement, alex, "minecraft:story/mine_diamond", "gold"))
+print(pcall(alex.grant_advancement, alex, "minecraft:nope"))
+print(pcall(alex.grant_advancement, alex, "explorer"))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "true",
+            "false\tmodules/goals/init.lua:4: advancement \"minecraft:story/mine_diamond\" has no criterion \"gold\" (it has \"diamond\")",
+            "false\tmodules/goals/init.lua:5: the server has no advancement \"minecraft:nope\"",
+            "false\tmodules/goals/init.lua:6: the server has no advancement \"demo:explorer\"",
+        ]
+    );
+    assert!(calls.contains(&"grant 77 minecraft:story/mine_diamond Some(\"diamond\")".to_owned()));
+}
+
+#[test]
+fn the_small_namespaces_answer_as_the_prelude_did() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/util/init.lua",
+            r#"
+print(nf.math.lerp(0, 10, 0.25), nf.math.clamp(12, 0, 10), nf.math.remap(5, 0, 10, 100, 200), nf.math.ease("ease_in", 0.5))
+print(pcall(nf.math.clamp, 1, 5, 2))
+local text = nf.json.encode({ home = nf.worlds.default(), list = { 1, 2.5, "x" } })
+print(text, nf.json.decode(text).home == nf.worlds.default(), nf.json.decode("not json"))
+local a, b = nf.random.new(42), nf.random.new(42)
+print(a:integer(1, 100) == b:integer(1, 100), a:number() == b:number(), a:pick({ "x" }), a:weighted({ only = 1, never = 0 }))
+local list = { 1, 2, 3, 4, 5 }
+a:shuffle(list)
+print(#list, pcall(a.weighted, a, { bad = -1 }))
+print(nf.time.duration(90061000), nf.time.duration(-5000), nf.time.parse_duration("1h 30m"), nf.time.parse_duration("250ms"), nf.time.parse_duration("1h 1h"))
+print(nf.server.tick(), #nf.random.uuid())
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "2.5\t10\t150\t0.25",
+            "false\tmodules/util/init.lua:3: bad argument 'min' (5 is greater than max, 2)",
+            r#"{"home":{"$world":["world"]},"list":[1,2.5,"x"]}	true	nil"#,
+            "true\ttrue\tx\tonly",
+            "5\tfalse\tmodules/util/init.lua:10: bad argument 'weights' (the weight of bad must be a number from 0 up, not -1)",
+            "1d 1h 1m 1s\t-5s\t5400000\t250\tnil",
+            "0\t36",
+        ]
+    );
+}
+
+#[test]
+fn nf_time_formats_and_parses_clock_times_with_java_patterns() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/clock/init.lua",
+            r#"
+local utc = { zone = "UTC" }
+local moment = 1791050400000 -- 2026-10-03 18:00 UTC
+print(nf.time.format(0, "yyyy-MM-dd HH:mm:ss", utc), nf.time.format(moment, "EEEE, d MMMM yyyy 'at' h a", utc))
+print(nf.time.format(moment, "HH:mm XXX", { zone = "Europe/London" }), nf.time.format(moment, "HH:mm", { zone = "-05:00" }))
+print(nf.time.parse("2026-10-03 18:00", "yyyy-MM-dd HH:mm", utc) == moment, nf.time.parse("2026-10-03 19:00", "yyyy-MM-dd HH:mm", { zone = "Europe/London" }) == moment)
+print(nf.time.parse("2026-10-03 20:00 +02:00", "yyyy-MM-dd HH:mm XXX", utc) == moment, nf.time.parse("2026-10-03", "yyyy-MM-dd", utc) == moment - 18 * 3600000)
+print(nf.time.parse("2026-10-03 6 PM", "yyyy-MM-dd h a", utc) == moment, nf.time.parse(nf.time.format(moment, "dd MMM yyyy HH:mm", utc), "dd MMM yyyy HH:mm", utc) == moment)
+print(nf.time.parse("tomorrow", "yyyy-MM-dd", utc), nf.time.parse("2026-02-30", "yyyy-MM-dd", utc), nf.time.parse("2026-10-03 25:00", "yyyy-MM-dd HH:mm", utc))
+print(pcall(nf.time.format, 0, "yyyy-bb"))
+print(pcall(nf.time.parse, "18:00", "HH:mm"))
+print(pcall(nf.time.format, 0, "HH", { zone = "Mars/Olympus" }))
+print(type(nf.time.format(0, "HH:mm")))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "1970-01-01 00:00:00\tSaturday, 3 October 2026 at 6 PM",
+            "19:00 +01:00\t13:00",
+            "true\ttrue",
+            "true\ttrue",
+            "true\ttrue",
+            "nil\tnil\tnil",
+            "false\tmodules/clock/init.lua:10: bad time pattern \"yyyy-bb\": Unknown pattern letter: b",
+            "false\tmodules/clock/init.lua:11: the pattern \"HH:mm\" needs a year, month and day",
+            "false\tmodules/clock/init.lua:12: options.zone: there's no time zone \"Mars/Olympus\" (try \"UTC\", \"Europe/London\" or \"+02:00\")",
+            "string",
+        ]
+    );
+}
+
+#[test]
+fn nf_looks_qualify_writes_a_look_in_full() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/looks/init.lua",
+            r#"
+print(nf.looks.qualify("p/box"), nf.looks.qualify("lib:gems/gem"))
+print(pcall(nf.looks.qualify, "box"))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "demo:p/box\tlib:gems/gem",
+            "false\tmodules/looks/init.lua:3: \"box\" isn't a look: write <pack>/<key>, or <namespace>:<pack>/<key> for another package's",
+        ]
+    );
+}
+
+#[test]
+fn boss_bars_show_follow_a_centity_and_go_with_their_script() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let boss = r#"{ "nodes": { "body": { "display": { "type": "block", "block": "minecraft:stone" } } }, "health": { "max": 10 } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/boss/centity.json", boss),
+        (
+            "modules/arena/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local bar = nf.bossbars.create({ text = "Wave 1", progress = 0.5 })
+print(bar:show_to(alex), #alex:bossbars(), pcall(bar.set_progress, bar, 2))
+local boss = nf.centities.spawn("boss", vector.create(10, 64, 0))
+local health = nf.bossbars.create({ text = "Boss" })
+print(health:attach(boss, { range = 20 }), health:attached() == boss)
+boss:damage(5)
+alex:sidebar():set_lines({ "Kills: 3" })
+print(alex:sidebar():lines()[1], #alex:sidebar():lines())
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "true\t1\tfalse\tmodules/arena/init.lua:4: progress must be from 0 to 1, not 2",
+            "true\ttrue",
+            "Kills: 3\t1",
+        ]
+    );
+    session.tick();
+    let ticked = platform.take();
+    let bars: Vec<&String> = calls
+        .iter()
+        .chain(&ticked)
+        .filter(|c| c.starts_with("bar") || c.starts_with("sidebar"))
+        .collect();
+    assert_eq!(
+        bars,
+        [
+            "bar 1 made Wave 1 0.5",
+            "bar 1 shown to 77",
+            "bar 2 made Boss 1",
+            "bar 2 shown to 77",
+            "sidebar 77  [\"Kills: 3\"]",
+            "bar 2 Boss 0.5",
+        ]
+    );
+    // The module's reloaded: its bars go with its old scope.
+    session.reload(&["modules/arena/init.lua".to_owned()]);
+    let reloaded = platform.take();
+    assert!(
+        reloaded.contains(&"bar 1 removed".to_owned())
+            && reloaded.contains(&"bar 2 removed".to_owned()),
+        "{reloaded:?}"
+    );
+}
+
+#[test]
+fn teams_are_the_projects_own_on_the_scoreboard_and_go_at_the_end() {
+    use netherforge_platform::{PlatformEvents, game_event};
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/teams/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local zombie = nf.worlds.default():entities()[1]
+local blue = nf.teams.create("blue", { prefix = "[B] " })
+print(blue:add_member(alex), blue:add_member(zombie), alex:team() == blue, #blue:members(), blue:members()[1]:is_player())
+print(pcall(nf.teams.create, "blue"), pcall(nf.teams.create, "no spaces"))
+print(blue:set_color("blue"), blue:color(), #nf.teams.all())
+alex:set_below_name("Level 3")
+print(alex:below_name(), alex:set_listed_for(alex, false), alex:is_listed_for(alex))
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            // Entries sorted: the zombie's UUID before "Alex".
+            "true\ttrue\ttrue\t2\tfalse",
+            "false\tfalse\tmodules/teams/init.lua:6: a team's name is letters, digits and _ - . +, not \"no spaces\"",
+            "true\tblue\t1",
+            "Level 3\ttrue\tfalse",
+        ]
+    );
+    // A crash's leftover of ours goes before anything runs; another plugin's stays.
+    assert!(
+        calls.contains(&"team nf.stale removed".to_owned())
+            && !calls.contains(&"team red removed".to_owned())
+    );
+    assert!(
+        calls.contains(&"team nf.blue [B]  Some(\"blue\")".to_owned()),
+        "{calls:?}"
+    );
+    // They come back: out of their own list again.
+    let alex = netherforge_platform::PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    server.game().player_join(&mut game_event::PlayerJoin {
+        player: alex,
+        first_join: false,
+        message: None,
+    });
+    assert!(
+        platform
+            .take()
+            .contains(&"listed 77 for 77 false".to_owned())
+    );
+    server.session_mut().stop();
+    let stopped = platform.take();
+    for line in [
+        "team nf.blue removed",
+        "below cleared",
+        "listed 77 for 77 true",
+    ] {
+        assert!(stopped.contains(&line.to_owned()), "{line} {stopped:?}");
+    }
+}
+
+#[test]
+fn a_worlds_border_is_read_and_set() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/border/init.lua",
+            r#"
+local border = nf.worlds.default():border()
+print(border:size(), border:damage().buffer, border:warning().ticks, border:set_size(500, { ticks = 200 }))
+print(pcall(border.set_size, border, 0), border:set_damage({ amount = 1 }), pcall(border.set_damage, border, { buffer = -1 }))
+print(select(2, pcall(border.set_size, border, 0)))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "1000\t5\t300\ttrue",
+            "false\ttrue\tfalse\tmodules/border/init.lua:4: damage.buffer can't be negative",
+            "modules/border/init.lua:5: a border's size must be from 1 to 59999968, not 0",
+        ]
+    );
+    assert!(
+        calls.contains(&"border size 500 over 200".to_owned())
+            && calls.contains(&"border damage 1 5".to_owned()),
+        "{calls:?}"
+    );
+}
+
+#[test]
+fn an_inventory_gives_counts_finds_and_takes_matching_stacks() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/bag/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local bag = alex:inventory()
+print(bag:kind(), bag:size(), bag:holder() == alex)
+bag:add_item({ kind = "minecraft:bread", count = 5 })
+bag:add_item({ kind = "minecraft:emerald", count = 3, data = { coin = true, mint = "x" } })
+bag:set_item(4, { kind = "minecraft:bread", count = 2 })
+print(bag:count_item("bread"), bag:count_item({ data = { coin = true } }), bag:first_slot("emerald"), bag:has_item("bread", 8))
+print(bag:remove_item("bread", 6), bag:count_item("bread"), bag:item(4).count, bag:item(0))
+print(pcall(bag.item, bag, 9))
+print(pcall(bag.remove_item, bag, { colour = 1 }))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    let lines = printed(&calls);
+    assert_eq!(
+        lines[..4],
+        [
+            "player\t9\ttrue",
+            "7\t3\t1\tfalse",
+            "6\t1\t1\tnil",
+            "false\tmodules/bag/init.lua:10: slot 9 is outside this inventory: it has 9 slots, 0 to 8",
+        ],
+        "{lines:?}"
+    );
+    assert!(
+        lines[4].starts_with(
+            "false\tmodules/bag/init.lua:11: bad argument 'match' (unknown field `colour`"
+        ),
+        "{lines:?}"
+    );
+}
+
+#[test]
+fn a_menu_window_runs_its_script_hears_clicks_and_goes_when_closed() {
+    use netherforge_platform::PlatformEvents;
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let shop = r#"{ "name": "Shop", "rows": 1, "locked": true, "slots": { "4": { "item": { "kind": "minecraft:emerald" } } }, "script": { "file": "script.lua" } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("menus/shop/menu.json", shop),
+        (
+            "menus/shop/script.lua",
+            r#"
+print("window", this:size(), this:title(), this:item(4).kind, this:context())
+this:slot(4):on("click", function(e) print("slot", e.index, e.cancelled, e.context); e:uncancel() end)
+this:on("click", function(e) print("menu", e.index, e.in_menu, e.cancelled) end)
+this:on("close", function(e) print("closed", e.player:name()) end)
+"#,
+        ),
+        (
+            "modules/open/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local menu = alex:open_menu("shop", { context = "gift" })
+print(menu ~= nil, alex:menu() == menu, menu:kind(), pcall(menu.slot, menu, 9))
+nf.on("menu_click", function(e) print("nf", e.index, e.cancelled) end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "window\t9\tShop\tminecraft:emerald\tgift",
+            "true\ttrue\tshop\tfalse\tmodules/open/init.lua:4: slot 9 is outside this window: it has 9 slots, 0 to 8",
+        ]
+    );
+    assert!(
+        calls.contains(&"window made 9 \"Shop\"".to_owned()),
+        "{calls:?}"
+    );
+    let window = Uuid(*platform.windows.borrow().keys().next().expect("a window"));
+    let alex = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let click = |slot: i32, top: bool| netherforge_platform::MenuClick {
+        player: alex.clone(),
+        slot: Some(slot),
+        top,
+        click: "left".into(),
+        hotbar: None,
+        item: None,
+        cursor: None,
+        moves_items: true,
+    };
+    // A locked window's click starts cancelled; the slot's handler lets this one through.
+    assert!(!server.menu_clicked(window, click(4, true)));
+    // A click in the window off that slot stays cancelled; one in their own bag below isn't the window's.
+    assert!(server.menu_clicked(window, click(2, true)));
+    server.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        [
+            "slot\t4\ttrue\tgift",
+            "menu\t4\ttrue\tfalse",
+            "nf\t4\tfalse",
+            "menu\t2\ttrue\ttrue",
+            "nf\t2\ttrue",
+        ]
+    );
+    // They close it: its close, and next tick it's retired with its handlers.
+    platform
+        .windows
+        .borrow_mut()
+        .get_mut(&window.0)
+        .expect("open")
+        .1
+        .clear();
+    server.menu_closed(window, alex.clone());
+    server.tick();
+    let closed = platform.take();
+    assert_eq!(printed(&closed), ["closed\tAlex"]);
+    assert!(
+        closed.contains(&"window destroyed".to_owned()),
+        "{closed:?}"
+    );
+    assert!(!server.menu_clicked(window, click(4, true)));
+}
+
+#[test]
+fn a_menu_slot_bound_to_a_storage_writes_through_and_a_rule_lets_in_what_fits() {
+    use netherforge_platform::PlatformEvents;
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let vault =
+        r#"{ "name": "Vault", "rows": 1, "locked": false, "script": { "file": "script.lua" } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("menus/vault/menu.json", vault),
+        (
+            "menus/vault/script.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local bank = alex:storage("bank", 9)
+bank:set_item(0, { kind = "minecraft:emerald", count = 2 })
+print(this:slot(0):bind(bank), this:item(0).count, this:slot(0):binding().index)
+this:set_item(1, { kind = "minecraft:bread" })
+print(this:slot(1):bind(bank), bank:item(1))
+this:slot(0):set_item({ kind = "minecraft:emerald", count = 5 })
+print(bank:item(0).count, #bank:viewers())
+this:slot(2):set_rule({ kinds = { "minecraft:diamond" }, max = 1 })
+print(this:slot(2):accepts({ kind = "minecraft:emerald" }), this:slot(2):rule().max)
+print(pcall(this:slot(2).set_rule, this:slot(2), { max = 0 }))
+this:slot(3):set_rule({ property = "accessory" })
+print(this:slot(3):accepts({ item = "ring" }), this:slot(3):accepts({ item = "plain" }), this:slot(3):accepts({ item = "cursed" }), this:slot(3):accepts({ kind = "minecraft:emerald" }))
+"#,
+        ),
+        (
+            "items/ring/item.json",
+            r#"{ "kind": "minecraft:gold_nugget", "properties": { "accessory": true } }"#,
+        ),
+        ("items/plain/item.json", r#"{ "kind": "minecraft:stick" }"#),
+        (
+            "items/cursed/item.json",
+            r#"{ "kind": "minecraft:stick", "properties": { "accessory": false } }"#,
+        ),
+        (
+            "modules/open/init.lua",
+            "nf.worlds.default():players()[1]:open_menu('vault')",
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "true\t2\t0",
+            // Bound, the slot shows the storage's (empty): the bread it held isn't the storage's.
+            "true\tnil",
+            "5\t0",
+            "false\t1",
+            "false\tmenus/vault/script.lua:12: bad argument 'rule.max' (at least 1, got 0)",
+            // A project item with the property, and not `false`.
+            "true\tfalse\tfalse\tfalse",
+        ]
+    );
+    let window = Uuid(*platform.windows.borrow().keys().next().expect("a window"));
+    // The game put something in a bound slot by hand: the storage holds it once the click is done.
+    platform
+        .windows
+        .borrow_mut()
+        .get_mut(&window.0)
+        .expect("open")
+        .0[1] = Some(stack("minecraft:apple"));
+    server.menu_changed(window, vec![1]);
+    assert_eq!(
+        platform.storages.borrow()["demo:bank"][1]
+            .as_ref()
+            .map(|i| i.def.kind.clone()),
+        Some("minecraft:apple".to_owned())
+    );
+    let alex = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let click = |cursor: netherforge_platform::ItemData| netherforge_platform::MenuClick {
+        player: alex.clone(),
+        slot: Some(2),
+        top: true,
+        click: "left".into(),
+        hotbar: None,
+        item: None,
+        cursor: Some(cursor),
+        moves_items: true,
+    };
+    // An emerald the rule doesn't take is refused; three diamonds put one in, the rest stay on the cursor.
+    assert!(server.menu_clicked(window, click(stack("minecraft:emerald"))));
+    let mut diamonds = stack("minecraft:diamond");
+    diamonds.def.count = Some(3);
+    assert!(server.menu_clicked(window, click(diamonds)));
+    let moved = platform.take();
+    assert!(
+        moved.contains(&"cursor 77 Some((\"minecraft:diamond\", Some(2)))".to_owned()),
+        "{moved:?}"
+    );
+    assert_eq!(
+        platform.windows.borrow()[&window.0].0[2]
+            .as_ref()
+            .and_then(|i| i.def.count),
+        Some(1)
+    );
+}
+
+#[test]
+fn a_dialog_is_shown_pressed_and_closed_with_its_context() {
+    use netherforge_platform::PlatformEvents;
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let guestbook = r#"{ "type": "notice", "title": "Sign", "inputs": [ { "type": "text", "key": "line", "maxLength": 8 } ], "buttons": [ { "key": "sign", "label": "Sign" } ], "script": { "file": "script.lua" } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("dialogs/guestbook/dialog.json", guestbook),
+        (
+            "dialogs/guestbook/script.lua",
+            r#"
+this:button("sign"):on("press", function(e) print("signed", e.values.line, e.context, e.key) end)
+this:on("close", function(e) print("left", e.context) end)
+print(this:title(), this:buttons()[1], this:inputs()[1], this:button("sign"):label(), pcall(this.button, this, "nope"))
+"#,
+        ),
+        (
+            "modules/visit/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+print(alex:open_dialog("guestbook", { context = "visit", values = { line = "hi" } }))
+print(pcall(alex.open_dialog, alex, "guestbook", { values = { line = "far too long" } }))
+print(pcall(alex.open_dialog, alex, "guestbook", { values = { colour = "x" } }))
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    let lines = printed(&calls);
+    assert_eq!(lines[0], "true", "{lines:?}");
+    assert_eq!(
+        lines[1],
+        "false\tmodules/visit/init.lua:4: options.values.line is 12 characters, more than the input's max_length of 8"
+    );
+    assert_eq!(
+        lines[2],
+        "false\tmodules/visit/init.lua:5: dialog guestbook has no input \"colour\" (it has: line)"
+    );
+    assert!(lines[3].starts_with("Sign\tsign\tline\tSign\tfalse\tdialogs/guestbook/script.lua:4: dialog guestbook has no button \"nope\" (it has: sign)"), "{lines:?}");
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("dialog guestbook to 77 \"Sign\"")
+                && c.contains("initial: Some")
+                && c.contains("hi")),
+        "{calls:?}"
+    );
+    let alex = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let pressed = std::collections::HashMap::from([(
+        "line".to_owned(),
+        netherforge_platform::Dynamic::String("hello".into()),
+    )]);
+    server.dialog_pressed(
+        alex.clone(),
+        "guestbook".into(),
+        "sign".into(),
+        pressed.clone(),
+    );
+    // Pressed, the notice closed: a second press of it is a client's invention, ignored.
+    server.dialog_pressed(alex.clone(), "guestbook".into(), "sign".into(), pressed);
+    server.tick();
+    let after = platform.take();
+    assert_eq!(printed(&after), ["signed\thello\tvisit\tsign"], "{after:?}");
+    assert!(
+        after.iter().any(
+            |l| l.contains("pressed \"sign\" on dialog guestbook, which isn't on their screen")
+        )
+    );
+}
+
+#[test]
+fn dialog_ask_waits_for_their_press_or_close() {
+    use netherforge_platform::PlatformEvents;
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let confirm = r#"{ "type": "confirmation", "title": "Sure?", "buttons": [ { "key": "yes", "label": "Yes" }, { "key": "no", "label": "No" } ] }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("dialogs/confirm/dialog.json", confirm),
+        (
+            "modules/ask/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local confirm = nf.dialogs.get("confirm")
+print(pcall(confirm.ask, confirm, alex))
+nf.task(function()
+  local first = confirm:ask(alex)
+  print("first", first and first.key, first and first.player == alex)
+  print("second", confirm:ask(alex))
+  confirm:open_for(alex)
+  local pressed = nf.wait_for(confirm, "press")
+  print("third", pressed.key)
+end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert!(
+        printed(&calls)[0]
+            .starts_with("false\tmodules/ask/init.lua:4: dialog:ask only works inside a task"),
+        "{calls:?}"
+    );
+    let alex = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let none = std::collections::HashMap::new();
+    server.tick();
+    let shown = platform.take();
+    assert!(
+        calls
+            .iter()
+            .chain(&shown)
+            .any(|c| c.starts_with("dialog confirm to 77")),
+        "{calls:?} {shown:?}"
+    );
+    server.dialog_pressed(alex.clone(), "confirm".into(), "yes".into(), none.clone());
+    server.tick();
+    assert_eq!(printed(&platform.take()), ["first\tyes\ttrue"]);
+    server.dialog_closed(alex.clone(), "confirm".into());
+    server.tick();
+    assert_eq!(printed(&platform.take()), ["second\tnil"]);
+    // wait_for on a handle: the dialog's own press.
+    server.dialog_pressed(alex.clone(), "confirm".into(), "no".into(), none);
+    server.tick();
+    assert_eq!(printed(&platform.take()), ["third\tno"]);
+}
+
+#[test]
+fn a_dialog_made_in_lua_is_checked_as_its_file_and_shown() {
+    use netherforge_platform::PlatformEvents;
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/made/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local d = nf.dialogs.create({
+  title = "Name it",
+  inputs = { { type = "text", key = "name", max_length = 8 } },
+  body = { { type = "item", item = { kind = "minecraft:bread", count = 2 } } },
+  buttons = { { key = "ok", label = "Ok" } },
+})
+d:button("ok"):on("press", function(e) print("named", e.values.name) end)
+print(d:title(), d:inputs()[1], d:exists(), pcall(nf.dialogs.get, d:id()))
+print(alex:open_dialog(d))
+print(pcall(nf.dialogs.create, { title = "x", inputs = { { type = "text", key = "a", maxLength = 2 } } }))
+print(pcall(nf.dialogs.create, { title = "x", script = { file = "a.lua" } }))
+print(pcall(nf.dialogs.create, { title = "x", type = "dialog_list", dialogs = { "nope" } }))
+print(pcall(nf.dialogs.create, { title = "x", body = { { type = "item", item = { kind = "minecraft:bread", colour = 1 } } } }))
+print(pcall(nf.dialogs.create, { title = "x", columns = 3 }))
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    let lines = printed(&calls);
+    assert!(
+        lines[0].starts_with("Name it\tname\ttrue\tfalse\t"),
+        "{lines:?}"
+    );
+    assert_eq!(lines[1], "true");
+    assert_eq!(
+        &lines[2..],
+        [
+            "false\tmodules/made/init.lua:12: definition.inputs[1].maxLength: Lua spells keys in snake_case, so it's max_length",
+            "false\tmodules/made/init.lua:13: definition.script: a dialog made in Lua has no script of its own; put handlers on the Dialog it returns",
+            "false\tmodules/made/init.lua:14: definition.dialogs[1]: no dialog \"nope\" in this project",
+            "false\tmodules/made/init.lua:15: bad argument 'definition.body[1].item' (unknown field `colour`, expected one of `kind`, `name`, `lore`, `enchantments`, `glint`, `hide_tooltip`, `unbreakable`, `item_model`, `tooltip_style`, `equipment`, `color`, `profile`, `max_stack_size`, `rarity`, `attribute_modifiers`, `can_break`, `can_place_on`, `invisible`, `hidden_tooltip_components`, `food`, `cooldown`, `hold`, `use_effects`, `item`, `count`, `damage`, `map`, `data`)",
+            "false\tmodules/made/init.lua:16: definition.columns: Only a multi_action dialog lays its buttons out in columns",
+        ],
+        "{lines:?}"
+    );
+    let shown = calls
+        .iter()
+        .find(|c| c.starts_with("dialog "))
+        .expect("shown");
+    let id = shown.split(' ').nth(1).unwrap().to_owned();
+    let alex = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let values = std::collections::HashMap::from([(
+        "name".to_owned(),
+        netherforge_platform::Dynamic::String("Rex".into()),
+    )]);
+    server.dialog_pressed(alex, id, "ok".into(), values);
+    server.tick();
+    assert_eq!(printed(&platform.take()), ["named\tRex"]);
+}
+
+#[test]
+fn a_menu_template_opens_windows_whose_events_reach_it() {
+    use netherforge_platform::PlatformEvents;
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/made/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local t = nf.menus.create({ rows = 2, title = "Made", locked = true, slots = { [3] = { kind = "minecraft:emerald", count = 2 } } })
+print(t:exists(), t:size(), t:rows(), t:title(), t:is_locked(), t:item(3).kind, t:item(3).count, t:item(4))
+print(pcall(t.item, t, 18))
+t:on("click", function(e) print("template", e.index, e.cancelled, e.context) end)
+t:on("open", function(e) print("opened", e.context) end)
+local menu = alex:open_menu(t, { context = "c" })
+print(menu:kind(), menu:template() == t, #t:windows(), menu:item(3).kind)
+nf.on("menu_click", function(e) print("nf", e.index) end)
+print(pcall(nf.menus.create, { rows = 2, colour = "red" }))
+print(pcall(nf.menus.create, { rows = 9 }))
+print(pcall(nf.menus.create, { slots = { [40] = { kind = "minecraft:stone" } } }))
+print(pcall(nf.menus.create, { slots = { [1] = { kind = "minecraft:stone", colour = 1 } } }))
+_G.t = t
+nf.task(function() nf.wait(1); print("removed", t:remove(), t:exists(), menu:exists(), t:remove()) end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    let lines = printed(&calls);
+    assert_eq!(
+        lines[..4],
+        [
+            "true\t18\t2\tMade\ttrue\tminecraft:emerald\t2\tnil",
+            "false\tmodules/made/init.lua:5: slot 18 is outside this template's windows: they have 18 slots, 0 to 17",
+            "opened\tc",
+            "nil\ttrue\t1\tminecraft:emerald",
+        ],
+        "{lines:?}"
+    );
+    assert_eq!(
+        lines[4..7],
+        [
+            "false\tmodules/made/init.lua:11: unknown field 'definition.colour' (fields: locked, rows, skin, slots, title, type)",
+            "false\tmodules/made/init.lua:12: definition.rows: A chest has 1 to 6 rows",
+            "false\tmodules/made/init.lua:13: definition.slots[40]: This menu has 27 slots (0–26)",
+        ],
+        "{lines:?}"
+    );
+    assert!(lines[7].starts_with(
+        "false\tmodules/made/init.lua:14: bad argument 'definition.slots[1]' (unknown field `colour`"
+    ));
+    let window = Uuid(*platform.windows.borrow().keys().next().expect("a window"));
+    let alex = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let click = netherforge_platform::MenuClick {
+        player: alex,
+        slot: Some(3),
+        top: true,
+        click: "left".into(),
+        hotbar: None,
+        item: None,
+        cursor: None,
+        moves_items: true,
+    };
+    assert!(server.menu_clicked(window, click));
+    server.tick();
+    let after = platform.take();
+    assert_eq!(
+        printed(&after),
+        [
+            "template\t3\ttrue\tc",
+            "nf\t3",
+            "removed\ttrue\tfalse\tfalse\tfalse"
+        ],
+        "{after:?}"
+    );
+    assert!(after.contains(&"window destroyed".to_owned()), "{after:?}");
+}
+
+#[test]
+fn encoding_and_crypto_write_what_the_kotlin_runtime_wrote() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/enc/init.lua",
+            r#"
+local e, c = nf.encoding, nf.crypto
+print(e.url_encode("a b/c~é"), e.url_decode("a%20b%2Fc+"), e.url_decode("%zz"))
+print(e.form_encode({ name = "Steve Jobs", n = 2, half = 0.5, ok = true, metadata = { player = "x" }, items = { "a", "b" }, none = {} }))
+print(pcall(e.form_encode, { "a" }))
+print(pcall(e.form_encode, { f = print }))
+local form = e.form_decode("a=1&b=x+y&a=2&c")
+print(form.a, form.b, form.c, e.form_decode("a=%"))
+print(e.base64_encode("hi?>"), e.base64_encode("hi?>", { url_safe = true, padding = false }), e.base64_decode("aGk_Pg"), e.base64_decode("!!"))
+print(e.hex_encode("Hi"), e.hex_decode("4869"), e.hex_decode("486"), e.hex_decode("zz"))
+print(c.hash("abc"))
+print(c.hash("abc", { algorithm = "sha1" }), c.hash("abc", { encoding = "base64" }))
+print(c.sign("The quick brown fox jumps over the lazy dog", { secret = "key" }))
+"#,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "a%20b%2Fc~%C3%A9\ta b/c+\tnil",
+            "half=0.5&items%5B0%5D=a&items%5B1%5D=b&metadata%5Bplayer%5D=x&n=2&name=Steve+Jobs&ok=true",
+            "false\tmodules/enc/init.lua:5: bad argument 'fields' (a form's names are strings: a table of them expected, got a list)",
+            "false\tmodules/enc/init.lua:6: fields.f: a function can't be put in a form",
+            "1\tx y\t\tnil",
+            "aGk/Pg==\taGk_Pg\thi?>\tnil",
+            "4869\tHi\tnil\tnil",
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            "a9993e364706816aba3e25717850c26c9cd0d89d\tungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=",
+            "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8",
+        ]
+    );
+}
+
+#[test]
+fn a_module_declares_a_command_that_reads_typed_arguments() {
+    use netherforge_platform::{ArgumentValue, CommandInput, SuggestionRequest};
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/cmd/init.lua",
+            r#"
+print(nf.commands.register("greet", {
+  description = "Says hello",
+  arguments = {
+    { name = "times", type = "integer", min = 1, max = 5, default = 1 },
+    { name = "who", type = "word", default = false, complete = function(event, partial) return { "alex", "amy", "bo" } end },
+  },
+  subcommands = {
+    admin = { permission = "greet.admin", handler = function(e) print("admin", e.label) end },
+    shout = { players_only = true, arguments = { { name = "text", type = "text" } }, handler = function(e) print("shout", e.arguments.text, e.player:name()) end },
+  },
+}, function(e) print("greet", e.arguments.times, e.arguments.who, e.input, e.player and e.player:name(), e.sender:is_console()) end))
+print(nf.commands.register("vanilla", function() end))
+print(pcall(nf.commands.register, "Bad", function() end))
+print(pcall(nf.commands.register, "x", { arguments = { { name = "a", type = "word", default = "z" }, { name = "b", type = "word" } } }, function() end))
+print(pcall(nf.commands.register, "y", { arguments = { { name = "n", type = "integer", default = 9, max = 5 } } }, function() end))
+print(pcall(nf.commands.register, "z", { arguments = { { name = "c", type = "choice" } } }, function() end))
+print(pcall(nf.commands.register, "w", {}))
+print(pcall(nf.commands.register, "v", { arguments = { { name = "n", type = "integer", default = "x" } } }, function() end))
+print(nf.commands.register("boom", function() error("kaboom") end))
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    let lines = printed(&calls);
+    assert_eq!(
+        lines,
+        [
+            "true",
+            "false",
+            "false\tmodules/cmd/init.lua:14: \"Bad\" can't be a command name (lowercase letters, digits, _ and -, starting with a letter)",
+            "false\tmodules/cmd/init.lua:15: argument 'b' in 'definition' has no default but comes after 'a', which has one: optional arguments must come last",
+            "false\tmodules/cmd/init.lua:16: 'definition.arguments[1].default' (9) is outside min and max",
+            "false\tmodules/cmd/init.lua:17: 'definition.arguments[1]' is a choice, so it needs choices",
+            "false\tmodules/cmd/init.lua:18: 'definition' has neither a handler nor subcommands",
+            "false\tmodules/cmd/init.lua:19: bad argument 'definition.arguments[1].default' (whole number or false expected, got string)",
+            "true",
+        ],
+        "{calls:?}"
+    );
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.contains("/vanilla is already a command")),
+        "{calls:?}"
+    );
+    let (spec, handler) = platform
+        .commands
+        .borrow()
+        .get("greet")
+        .cloned()
+        .expect("registered");
+    assert_eq!(spec.syntax.arguments.len(), 2);
+    assert!(spec.syntax.arguments[0].optional);
+    let alex = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let sender = |player: Option<PlayerRef>, allowed: bool| {
+        std::rc::Rc::new(TestSender {
+            player,
+            allowed,
+            replies: RefCell::new(Vec::new()),
+        })
+    };
+    let input = |path: &[&str], arguments: Vec<(&str, ArgumentValue)>, text: &str| CommandInput {
+        path: path.iter().map(|s| s.to_string()).collect(),
+        arguments: arguments
+            .into_iter()
+            .map(|(k, v)| (k.to_owned(), v))
+            .collect(),
+        text: text.into(),
+    };
+    let console = sender(None, true);
+    handler.run(console.clone(), "greet".into(), input(&[], vec![], ""));
+    let player = sender(Some(alex.clone()), false);
+    handler.run(
+        player.clone(),
+        "greet".into(),
+        input(
+            &[],
+            vec![
+                (
+                    "times",
+                    ArgumentValue::Integer(netherforge_platform::ArgumentValueInteger { value: 3 }),
+                ),
+                (
+                    "who",
+                    ArgumentValue::Text(netherforge_platform::ArgumentValueText {
+                        text: "bo".into(),
+                    }),
+                ),
+            ],
+            "3 bo",
+        ),
+    );
+    handler.run(
+        player.clone(),
+        "greet".into(),
+        input(&["admin"], vec![], "admin"),
+    );
+    handler.run(
+        console.clone(),
+        "greet".into(),
+        input(&["shout"], vec![], "shout hi"),
+    );
+    let text = ArgumentValue::Text(netherforge_platform::ArgumentValueText {
+        text: "hi there".into(),
+    });
+    handler.run(
+        player.clone(),
+        "greet".into(),
+        input(&["shout"], vec![("text", text)], "shout hi there"),
+    );
+    session.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        [
+            "greet\t1\tfalse\t\tnil\ttrue",
+            "greet\t3\tbo\t3 bo\tAlex\tfalse",
+            "shout\thi there\tAlex",
+        ]
+    );
+    assert_eq!(
+        *console.replies.borrow(),
+        ["<red>Only players can use /greet shout."]
+    );
+    assert_eq!(
+        *player.replies.borrow(),
+        ["<red>You don't have permission to use /greet admin."]
+    );
+    let completion = handler.suggest(
+        player.clone(),
+        SuggestionRequest {
+            path: Vec::new(),
+            argument: "who".into(),
+            arguments: Default::default(),
+            partial: "a".into(),
+        },
+    );
+    assert_eq!(completion.suggestions, ["alex", "amy"]);
+    let (_, boom) = platform
+        .commands
+        .borrow()
+        .get("boom")
+        .cloned()
+        .expect("registered");
+    let typed = sender(None, true);
+    boom.run(typed.clone(), "boom".into(), input(&[], vec![], ""));
+    assert_eq!(typed.replies.borrow().len(), 1);
+    assert!(
+        typed.replies.borrow()[0].starts_with("<red>/boom failed: modules/cmd/init.lua:20: kaboom"),
+        "{:?}",
+        typed.replies.borrow()
+    );
+    platform.take();
+    let mut session = session;
+    session.stop();
+    let stopped = platform.take();
+    assert!(
+        stopped.contains(&"command unregistered /greet".to_owned()),
+        "{stopped:?}"
+    );
+    assert!(platform.commands.borrow().is_empty());
+}
+
+#[test]
+fn a_project_item_makes_stacks_and_hears_its_own_use_first() {
+    use netherforge_platform::PlatformEvents;
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let ruby = r#"{ "kind": "minecraft:emerald", "name": "<red>Ruby", "properties": { "worth": 5 }, "script": { "file": "script.lua" } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("items/ruby/item.json", ruby),
+        (
+            "items/ruby/script.lua",
+            r#"
+this:on("use", function(e) print("item use", e.item.item, e.hand); e:cancel() end)
+this:on("render", function(e) e.lore = { "worth " .. this:properties().worth } end)
+this:on("view", function(e) e.display_name = "<gold>Ruby for " .. e.player:name() end)
+"#,
+        ),
+        (
+            "modules/give/init.lua",
+            r#"
+nf.on("player_use_item", function(e) print("nf use", e.cancelled) end)
+nf.task(function()
+  nf.wait(1)
+  local stack = nf.items.create("ruby", { count = 3 })
+  print(stack.kind, stack.item, stack.count, stack.name, stack.lore[1])
+  print(nf.items.id(stack), nf.items.id({ kind = "minecraft:stone" }), #nf.items.all(), nf.items.get("ruby"):exists(), nf.items.get("nope"))
+  print(nf.items.get("ruby"):create().count, pcall(nf.items.create, "nope"))
+end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    server.tick();
+    server.tick();
+    let calls = platform.take();
+    assert!(!calls.iter().any(|l| l.starts_with("warn")), "{calls:?}");
+    assert_eq!(
+        printed(&calls),
+        [
+            "minecraft:emerald\truby\t3\t<red>Ruby\tworth 5",
+            "ruby\tnil\t1\ttrue\tnil",
+            "1\tfalse\tmodules/give/init.lua:8: there's no item \"nope\" (items/nope)",
+        ],
+        "{calls:?}"
+    );
+    let alex = PlayerRef {
+        uuid: Uuid(77),
+        name: "Alex".into(),
+    };
+    let stack = netherforge_platform::ItemData {
+        def: netherforge_format::item::ItemDef {
+            kind: "minecraft:emerald".into(),
+            item: Some("ruby".into()),
+            count: Some(1),
+            ..Default::default()
+        },
+        raw: None,
+        look: None,
+    };
+    assert!(server.player_use_item(alex.clone(), stack.clone(), "main_hand".into()));
+    assert!(server.item_viewing(Some("demo:ruby".into())));
+    assert!(!server.item_viewing(Some("demo:other".into())));
+    let view = server.item_viewed(Uuid(77), stack).expect("a view");
+    assert_eq!(view.name.as_deref(), Some("<gold>Ruby for Alex"));
+    server.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        ["item use\truby\tmain_hand", "nf use\ttrue"]
+    );
+}
+
+#[test]
+fn a_particle_effect_plays_follows_and_ends_with_its_reason() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    // Two points every 2 ticks for 4 ticks: ticks 0 and 2.
+    let puff = r##"{ "duration": 4, "emitters": { "main": { "particle": "minecraft:flame", "burst": 2, "every": 2 } } }"##;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &lamp(1.0)),
+        ("particles/puff/effect.json", puff),
+        ("particles/broken/effect.json", r#"{ "duration": 0 }"#),
+        (
+            "modules/fx/init.lua",
+            r##"
+local w = nf.worlds.default()
+local e = nf.particles.play("puff", vector.create(1, 64, 1))
+e:on("end", function(ev) print("end", ev.reason, ev.effect == e, e:is_active(), e:stop()) end)
+print(e:kind(), e:is_active(), e:location().position.x)
+print(pcall(nf.particles.play, "puf", vector.create(0, 0, 0)))
+print(pcall(nf.particles.play, "broken", vector.create(0, 0, 0)))
+print(pcall(nf.particles.play, "puff", vector.create(0, 0, 0), { scale = 20 }))
+print(pcall(nf.particles.play, "puff", vector.create(0, 0, 0), { offset = vector.create(0, 1, 0) }))
+print(pcall(nf.particles.play, "puff", vector.create(0, 0, 0), { follow = w }))
+local lamp = nf.centities.spawn("lamp", vector.create(5, 64, 0))
+local glow = nf.particles.play("puff", vector.create(0, 0, 0), { loop = true, follow = lamp, offset = vector.create(0, 2, 0) })
+glow:on("end", function(ev) print("glow end", ev.reason) end)
+local far = nf.particles.play("puff", vector.create(500, 64, 0), { loop = true })
+print(far:teleport(vector.create(2, 64, 2)), far:location().position.x)
+nf.after(3, function()
+  print("glow at", glow:location().position.x, glow:location().position.y)
+  lamp:remove()
+end)
+nf.after(6, function() print(far:stop(), far:stop(), far:is_active(), far:location()) end)
+"##,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "puff\ttrue\t1",
+            "false\tmodules/fx/init.lua:6: no particle effect \"puf\" in this project (did you mean \"puff\"?)",
+            "false\tmodules/fx/init.lua:7: particle effect \"broken\" has errors, and there's no earlier version to play: duration must be from 1 to 72000",
+            "false\tmodules/fx/init.lua:8: options.scale must be more than 0 and at most 16, not 20",
+            "false\tmodules/fx/init.lua:9: options.offset only goes with options.follow",
+            "false\tmodules/fx/init.lua:10: bad argument 'options.follow' (Centity, Node, Player or Entity or nil expected, got World)",
+            "true\t2",
+        ]
+    );
+    let mut ticked = Vec::new();
+    for _ in 0..8 {
+        session.tick();
+        ticked.extend(platform.take());
+    }
+    assert_eq!(
+        printed(&ticked),
+        [
+            "glow at\t5\t66",
+            "glow end\ttarget_gone",
+            "end\tfinished\ttrue\ttrue\tfalse",
+            "true\tfalse\tfalse\tnil",
+        ]
+    );
+    // Two points on its ticks 0 and 2: the puff's four, the glow's two before its lamp went, and the loop's six
+    // (ticks 0, 2 and 4) before it stopped, each sent on its own.
+    let sent: Vec<&String> = ticked
+        .iter()
+        .filter(|c| c.starts_with("particle"))
+        .collect();
+    assert_eq!(sent.len(), 12, "{sent:?}");
+    assert!(
+        sent.iter()
+            .all(|c| *c == "particle world minecraft:flame x1 None to Alex")
+    );
+    // A reload of the module ends what its old scope played, `unloaded`, which another module hears.
+    let again = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("particles/puff/effect.json", puff),
+        (
+            "modules/a_watch/init.lua",
+            r#"nf.on("demo:played", function(ev) ev.effect:on("end", function(e) print("over", e.reason) end) end)"#,
+        ),
+        (
+            "modules/fx/init.lua",
+            r#"nf.emit("demo:played", { effect = nf.particles.play("puff", vector.create(0, 64, 0), { loop = true }) })"#,
+        ),
+    ]);
+    drop(session);
+    let mut session = Session::start(platform.clone(), &again, &NoPackages);
+    let started = platform.take();
+    assert!(
+        !started.iter().any(|c| c.starts_with("warn")),
+        "{started:?}"
+    );
+    session.tick();
+    session.reload(&["modules/fx/init.lua".to_owned()]);
+    let all = platform.take();
+    let reloaded = printed(&all);
+    assert_eq!(reloaded, ["over\tunloaded"], "{all:?}");
+}
+
+#[test]
+fn an_effects_file_with_errors_keeps_its_last_good_version_and_a_deleted_one_ends_it() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let puff = r##"{ "duration": 4, "loop": true, "emitters": { "main": { "particle": "minecraft:flame", "burst": 2, "every": 2 } } }"##;
+    // 256 points a tick, the most one effect may: seventeen of them are past the pass's budget of 4096.
+    let flood = r##"{ "duration": 4, "emitters": { "main": { "particle": "minecraft:flame", "burst": 256, "every": 1 } } }"##;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("particles/puff/effect.json", puff),
+        ("particles/flood/effect.json", flood),
+        (
+            "modules/fx/init.lua",
+            r#"
+local e = nf.particles.play("puff", vector.create(0, 64, 0))
+e:on("end", function(ev) print("end", ev.reason) end)
+nf.on("demo:again", function() print(pcall(nf.particles.play, "puff", vector.create(0, 64, 0)) and "played") end)
+for _ = 1, 17 do nf.particles.play("flood", vector.create(0, 64, 0)) end
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    session.tick();
+    let ticked = platform.take();
+    assert!(
+        ticked
+            .iter()
+            .any(|c| c.starts_with("warn particle budget exceeded: 2 effects skipped (more than 4096 points in a tick, from flood)")),
+        "{ticked:?}"
+    );
+    let budget: Vec<String> = session
+        .problems()
+        .iter()
+        .filter(|p| p.code.as_deref() == Some("particles.budget"))
+        .map(|p| p.file.clone())
+        .collect();
+    assert_eq!(budget, ["particles/flood/effect.json"]);
+    // A file with errors: the playing one keeps going, and a new play plays the last good version.
+    files.write("particles/puff/effect.json", r#"{ "duration": 0 }"#);
+    session.reload(&["particles/puff/effect.json".to_owned()]);
+    let room = session.room().unwrap();
+    let payload = mlua::Value::Table(room.host().lua().create_table().unwrap());
+    room.scripts()
+        .emit_custom(
+            netherforge_runtime::Target::Nf,
+            "demo:again".into(),
+            payload,
+        )
+        .unwrap();
+    session.tick();
+    assert_eq!(printed(&platform.take()), ["played"]);
+    // Deleted: what plays of it ends `removed`.
+    files.delete("particles/puff/effect.json");
+    session.reload(&["particles/puff/effect.json".to_owned()]);
+    assert_eq!(printed(&platform.take()), ["end\tremoved"]);
+}
+
+#[test]
+fn loot_tables_roll_the_same_for_a_seed_and_fill_empty_slots() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    // 100 sticks (two stacks of 64 and 36), a nested table's bread, and the game's table.
+    let treasure = r#"{ "pools": {
+        "a": { "entries": [ { "type": "item", "item": { "kind": "stick" }, "count": { "min": 100, "max": 100 } } ] },
+        "b": { "entries": [ { "type": "table", "table": "food" } ] },
+        "c": { "entries": [ { "type": "vanilla", "table": "minecraft:chests/simple" } ] }
+    } }"#;
+    let food = r#"{ "pools": { "main": { "entries": [ { "type": "item", "item": { "kind": "minecraft:bread" } } ] } } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("loot/treasure.json", treasure),
+        ("loot/food.json", food),
+        (
+            "modules/chest/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+local function show(items)
+  local out = {}
+  for _, i in items do table.insert(out, i.kind .. "x" .. i.count) end
+  return table.concat(out, " ")
+end
+local here = { location = { world = nf.worlds.default(), position = vector.create(3, 64, 3) }, seed = 7 }
+print(show(nf.loot.roll("treasure", here)))
+print(show(nf.loot.roll("demo:treasure", here)) == show(nf.loot.roll("treasure", here)))
+print(pcall(nf.loot.roll, "nope"))
+print(pcall(nf.loot.roll, "minecraft:chests/simple"))
+print(pcall(nf.loot.roll, "minecraft:chests/none", here))
+print(show(nf.loot.roll("minecraft:chests/simple", { player = alex, seed = 2 })))
+local bag = alex:storage("bag", 5)
+bag:set_item(1, { kind = "minecraft:dirt" })
+print(nf.loot.fill("treasure", bag, { seed = 7 }), bag:count_item("minecraft:dirt"), bag:count_item("minecraft:stick"))
+local pouch = alex:storage("pouch", 2)
+print(nf.loot.fill("treasure", pouch, { seed = 7 }), pouch:count_item("minecraft:stick"))
+"#,
+        ),
+    ]);
+    let server = netherforge_runtime::server::ServerEvents::new(Session::start(
+        platform.clone(),
+        &files,
+        &NoPackages,
+    ));
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "minecraft:stickx64 minecraft:stickx36 minecraft:breadx1 minecraft:diamondx1",
+            "true",
+            "false\tmodules/chest/init.lua:11: there's no loot table \"nope\" (loot/nope.json)",
+            "false\tmodules/chest/init.lua:12: the game's loot table \"minecraft:chests/simple\" is rolled at a place: give the roll a location, a player or a looted entity",
+            "false\tmodules/chest/init.lua:13: neither the project nor the server has a loot table \"minecraft:chests/none\"",
+            "minecraft:diamondx1",
+            // Four stacks and four empty slots: nothing is left over, and the dirt stays.
+            "0\t1\t100",
+            // Two slots: the sticks take them, and the bread and the diamond are left out.
+            "2\t100",
+        ],
+        "{calls:?}"
+    );
+    // A container the world's generation made names the project's table: rolled as it's opened.
+    let chest = place(3.0, 64.0, 3.0);
+    use netherforge_platform::PlatformEvents;
+    let rolled = server
+        .generated_loot("demo:food".into(), None, chest.clone())
+        .unwrap();
+    assert_eq!(
+        rolled
+            .iter()
+            .map(|i| i.def.kind.as_str())
+            .collect::<Vec<_>>(),
+        ["minecraft:bread"]
+    );
+    assert_eq!(
+        server.generated_loot("demo:gone".into(), None, chest),
+        Some(Vec::new())
+    );
+    assert!(platform.take().iter().any(|l| {
+        l.contains("names the loot table \"demo:gone\", which isn't running: it's left empty")
+    }),);
+}
+
+#[test]
+fn recipes_go_to_the_server_and_station_recipes_are_crafted_from_the_inventory() {
+    let platform = std::rc::Rc::new(Fake::default());
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    {
+        let mut slots = platform.inventory.borrow_mut();
+        let mut sticks = stack("minecraft:stick");
+        sticks.def.count = Some(5);
+        slots[0] = Some(sticks);
+    }
+    let torch = r#"{ "type": "shapeless", "ingredients": ["minecraft:stick", "minecraft:coal"], "result": { "kind": "minecraft:torch", "count": 4 } }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("recipes/torch.json", torch),
+        (
+            "modules/forge/init.lua",
+            r#"
+local alex = nf.worlds.default():players()[1]
+nf.recipes.register("staff", {
+  type = "station",
+  materials = { { ingredient = "minecraft:stick", count = 2 } },
+  stations = { "minecraft:stone" },
+  result = { kind = "minecraft:blaze_rod" },
+})
+nf.recipes.register("altar", {
+  type = "station",
+  materials = { { ingredient = "minecraft:stick" } },
+  stations = { "minecraft:crafting_table" },
+  result = { kind = "minecraft:gold_ingot" },
+})
+print(table.concat(nf.recipes.all(), " "))
+print(pcall(nf.recipes.register, "torch", { type = "station", materials = { { ingredient = "minecraft:stick" } }, result = { kind = "minecraft:stone" } }))
+print(pcall(nf.recipes.register, "Bad Id", { type = "station", result = { kind = "minecraft:stone" } }))
+print(pcall(nf.recipes.register, "x", { type = "station", colour = 1, result = { kind = "minecraft:stone" } }))
+print(pcall(nf.recipes.register, "x", { type = "station", materials = { { ingredient = { item = "ruby" } } }, result = { kind = "minecraft:stone" } }))
+print(pcall(nf.recipes.remove, "torch"))
+local staff = nf.recipes.get("staff")
+print(staff.id, staff.result.kind, staff.materials[1].kind, staff.materials[1].count, staff.station_range, nf.recipes.get("torch"))
+local function offered(options)
+  local out = {}
+  for _, r in nf.recipes.available(alex, options) do table.insert(out, r.id .. "x" .. r.times) end
+  return table.concat(out, " ")
+end
+print(offered(), offered({ all = true }), offered({ stations = { "minecraft:crafting_table" } }))
+nf.on("recipe_craft", function(e) e.result = { kind = "minecraft:blaze_rod", name = "Staff of " .. e.player:name() } end)
+print(nf.recipes.craft(alex, "staff", { times = 5 }), nf.recipes.craft(alex, "altar"), pcall(nf.recipes.craft, alex, "torch"))
+local inv = alex:inventory()
+print(inv:count_item("minecraft:stick"), inv:count_item("minecraft:blaze_rod"), inv:item(2).name)
+print(alex:discover_recipe("torch"), alex:discover_recipe("minecraft:bread"), pcall(alex.discover_recipe, alex, "torh"))
+print(nf.recipes.remove("altar"), nf.recipes.remove("altar"))
+"#,
+        ),
+    ]);
+    let mut session = Session::start(platform.clone(), &files, &NoPackages);
+    let calls = platform.take();
+    assert_eq!(
+        printed(&calls),
+        [
+            "torch altar staff",
+            "false\tmodules/forge/init.lua:16: recipe \"torch\" is recipes/torch.json's; pick another id",
+            "false\tmodules/forge/init.lua:17: \"Bad Id\" isn't a usable recipe id (lowercase letters, digits and _, starting with a letter or digit, at most 64 characters)",
+            "false\tmodules/forge/init.lua:18: unknown field 'definition.colour' (fields: addition, base, category, cooking_time, experience, group, ingredient, ingredients, key, materials, pattern, result, station_range, stations, template, type)",
+            "false\tmodules/forge/init.lua:19: definition.materials[1].ingredient: there's no item \"ruby\"",
+            "false\tmodules/forge/init.lua:20: recipe \"torch\" is recipes/torch.json's; delete the file to remove it",
+            "staff\tminecraft:blaze_rod\tminecraft:stick\t2\t4\tnil",
+            "staffx2\taltarx0 staffx2\taltarx5 staffx2",
+            "2\t0\tfalse\tmodules/forge/init.lua:30: recipe \"torch\" isn't a station recipe: the game makes it",
+            "1\t2\tStaff of Alex",
+            "true\ttrue\tfalse\tmodules/forge/init.lua:33: the project has no recipe \"torh\" (it has: torch, altar, staff)",
+            "true\tfalse",
+        ],
+        "{calls:?}"
+    );
+    let server: Vec<&String> = calls.iter().filter(|c| c.starts_with("recipe")).collect();
+    assert_eq!(
+        server,
+        [
+            "recipe add torch",
+            "recipe discover 77 torch",
+            "recipe discover 77 minecraft:bread",
+        ]
+    );
+    session.tick();
+    assert_eq!(
+        platform
+            .take()
+            .iter()
+            .filter(|c| c.starts_with("recipe"))
+            .collect::<Vec<_>>(),
+        ["recipe resend"]
+    );
+    // The module reloads registering nothing: what it registered went with its old scope.
+    files.write(
+        "modules/forge/init.lua",
+        r#"print(table.concat(nf.recipes.all(), " "))"#,
+    );
+    session.reload(&["modules/forge/init.lua".to_owned()]);
+    assert_eq!(printed(&platform.take()), ["torch"]);
+    // The session ends, and the file's recipe goes with it.
+    drop(session);
+    let after: Vec<String> = platform
+        .take()
+        .into_iter()
+        .filter(|c| c.starts_with("recipe"))
+        .collect();
+    assert_eq!(after, ["recipe remove torch", "recipe resend"]);
+}
+
+// ---- bots ----
+
+const BOTS_MANIFEST: &str = r#"{ "formatVersion": 1, "name": "Demo", "namespace": "demo", "version": "1.0.0", "minecraft": "26.3", "requires": { "bots": true } }"#;
+
+fn bots_session<'a>(
+    platform: &std::rc::Rc<Fake>,
+    files: &'a Files,
+    bots: netherforge_runtime::bots::BotsConfig,
+) -> Session<'a> {
+    Session::start_configured(
+        platform.clone(),
+        files,
+        &NoPackages,
+        std::rc::Rc::new(netherforge_runtime::store::Store::in_memory()),
+        netherforge_runtime::session::Config {
+            bots,
+            ..Default::default()
+        },
+    )
+}
+
+fn bots_on() -> netherforge_runtime::bots::BotsConfig {
+    netherforge_runtime::bots::BotsConfig {
+        enabled: true,
+        max: 20,
+    }
+}
+
+/// The server's tick, then the session's: a join lands, and its bot is delivered.
+fn bot_ticks(platform: &Fake, session: &Session, ticks: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    for _ in 0..ticks {
+        platform.bots.tick();
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    lines
+}
+
+#[test]
+fn a_bot_joins_in_a_task_as_a_new_player_a_player_too_with_the_pack_loaded_and_its_skin() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", BOTS_MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"
+nf.task(function()
+  local bot, err = nf.bots.join("Sparring", vector.create(4.5, 64, 0.5), { skin = { texture = "dGV4dHVyZQ==", signature = "c2ln" } })
+  print("joined", err, bot:is_player(), bot:name(), tostring(bot):match("^%a+"))
+  print("listed", nf.bots.all()[1] == bot, nf.players.get("Sparring") == bot)
+  print("where", bot:position().x, bot:position().z)
+end)
+"#,
+        ),
+    ]);
+    let session = bots_session(&platform, &files, bots_on());
+    platform.take();
+    assert_eq!(
+        bot_ticks(&platform, &session, 3),
+        [
+            "joined\tnil\ttrue\tSparring\tBot",
+            "listed\ttrue\ttrue",
+            "where\t4.5\t0.5"
+        ]
+    );
+    let joins = platform.bots.joins.borrow();
+    assert_eq!(joins[0].pack, BotPackAnswer::Loaded);
+    let skin = joins[0].script.as_ref().unwrap().skin.as_ref().unwrap();
+    assert_eq!(
+        (skin.value.as_str(), skin.signature.as_deref()),
+        ("dGV4dHVyZQ==", Some("c2ln"))
+    );
+    assert_eq!(
+        joins[0].at.as_ref().unwrap().world.as_deref(),
+        Some("world")
+    );
+}
+
+#[test]
+fn a_bots_controls_are_its_clients_actions_and_a_click_on_a_node_aims_at_its_hitbox() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = r#"{ "nodes": {
+  "root": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} }
+} }"#;
+    let files = Files::new(&[
+        ("netherforge.json", BOTS_MANIFEST),
+        ("centities/c/centity.json", centity),
+        (
+            "modules/t/init.lua",
+            r#"
+nf.task(function()
+  local bot = nf.bots.join("Sparring", vector.create(0.5, 64, 0.5))
+  local at, err = bot:walk_to(vector.create(2.5, 64, 0.5), { sprint = true })
+  print("walked", at.x, at.z, err)
+  print("look", bot:look_at(vector.create(4, 65, 0)), bot:jump(), bot:set_sneaking(true), bot:chat("hello"))
+  local zombie = nf.worlds.default():entities()[1]
+  print("attack", bot:attack(zombie), bot:stop())
+  local tower = nf.centities.spawn("c", vector.create(3.5, 64, 2.5))
+  print("click a node", bot:interact(tower:node("root")))
+  print("respawn when alive", bot:respawn())
+  print("mined", bot:break_block(vector.create(0.5, 70.2, 3)))
+  print("slot", bot:click_slot(3, "shift_left"), bot:drop_item(true), bot:use_block(vector.create(1.2, 63.9, 0), "north", true))
+end)
+"#,
+        ),
+    ]);
+    let session = bots_session(&platform, &files, bots_on());
+    platform.take();
+    let lines = bot_ticks(&platform, &session, 4);
+    assert_eq!(
+        lines,
+        [
+            "walked\t2.5\t0.5\tnil",
+            "look\ttrue\ttrue\ttrue\ttrue",
+            "attack\ttrue\ttrue",
+            "click a node\ttrue",
+            "respawn when alive\tfalse",
+            "mined\ttrue\tnil",
+            "slot\ttrue\ttrue\ttrue",
+        ]
+    );
+    let acted = platform.bots.acted.borrow();
+    let actions: Vec<&BotAction> = acted.iter().map(|(_, a, _)| a).collect();
+    assert_eq!(
+        actions[0],
+        &BotAction::WalkTo {
+            x: 2.5,
+            z: 0.5,
+            sprint: true,
+            timeout_ticks: 200
+        }
+    );
+    assert_eq!(
+        actions[1..5],
+        [
+            &BotAction::LookAt {
+                x: 4.0,
+                y: 65.0,
+                z: 0.0
+            },
+            &BotAction::Jump,
+            &BotAction::Sneak { on: true },
+            &BotAction::Chat {
+                message: "hello".into()
+            },
+        ]
+    );
+    assert!(
+        matches!(actions[5], BotAction::Attack { entity: Some(e), .. } if e == &netherforge_runtime::events::uuid_text(&Uuid(500)))
+    );
+    assert_eq!(actions[6], &BotAction::Stop);
+    // The node's hitbox, which only the runtime knows: its interaction entity, and the middle of its box.
+    let (_, click, aim) = &acted[7];
+    assert!(matches!(click, BotAction::Interact { entity: None, .. }));
+    let aim = aim.as_ref().unwrap();
+    assert_eq!((aim.at.0, aim.at.1, aim.at.2), (4.0, 64.5, 3.0));
+    // Mined from below the bot's eyes' block: the face toward them is the bottom.
+    assert_eq!(
+        actions[9],
+        &BotAction::BreakBlock {
+            x: 0,
+            y: 70,
+            z: 3,
+            face: "down".into()
+        }
+    );
+    assert_eq!(
+        actions[10],
+        &BotAction::ClickSlot {
+            slot: 3,
+            click: netherforge_format::bridge::BotClick::ShiftLeft,
+            hotbar: None
+        }
+    );
+    assert_eq!(
+        actions[12],
+        &BotAction::UseBlock {
+            x: 1,
+            y: 63,
+            z: 0,
+            face: "north".into(),
+            hand: netherforge_format::bridge::BotHand::Off
+        }
+    );
+}
+
+#[test]
+fn a_bot_leaves_with_the_script_that_joined_it() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", BOTS_MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"nf.bots.join("Sparring", nil, nil, function(bot) print("in", bot:name()) end)"#,
+        ),
+    ]);
+    let mut session = bots_session(&platform, &files, bots_on());
+    platform.take();
+    assert_eq!(bot_ticks(&platform, &session, 2), ["in\tSparring"]);
+    assert!(platform.bots.by_name("Sparring").is_some());
+    files.write("modules/t/init.lua", "-- no bots now");
+    session.reload(&["modules/t/init.lua".into()]);
+    assert!(platform.bots.by_name("Sparring").is_none());
+    // And every bot leaves as the session stops.
+    files.write(
+        "modules/t/init.lua",
+        r#"nf.bots.join("Again", nil, nil, function() end)"#,
+    );
+    session.reload(&["modules/t/init.lua".into()]);
+    bot_ticks(&platform, &session, 2);
+    assert!(platform.bots.by_name("Again").is_some());
+    session.stop();
+    assert!(platform.bots.online.borrow().is_empty());
+}
+
+#[test]
+fn the_owner_decides_whether_there_are_bots_and_how_many_and_a_busy_name_is_no_bot() {
+    let joining = r#"
+nf.task(function()
+  local first, err1 = nf.bots.join("One")
+  local second, err2 = nf.bots.join("Two")
+  local again, err3 = nf.bots.join("One")
+  print(first ~= nil, err1, second ~= nil, err2, again ~= nil, err3)
+end)
+"#;
+    let files = Files::new(&[
+        ("netherforge.json", BOTS_MANIFEST),
+        ("modules/t/init.lua", joining),
+    ]);
+    let platform = std::rc::Rc::new(Fake::default());
+    let one = netherforge_runtime::bots::BotsConfig {
+        enabled: true,
+        max: 1,
+    };
+    let session = bots_session(&platform, &files, one);
+    platform.take();
+    let many = "1 bots are online already, as many as this server allows (bots.max in config.yml)";
+    assert_eq!(
+        bot_ticks(&platform, &session, 4),
+        [format!("true\tnil\tfalse\t{many}\tfalse\t{many}")]
+    );
+    assert!(
+        !session
+            .problems()
+            .iter()
+            .any(|p| p.code.as_deref() == Some("runtime.bots-disabled"))
+    );
+    drop(session);
+
+    let platform = std::rc::Rc::new(Fake::default());
+    let session = bots_session(&platform, &files, Default::default());
+    platform.take();
+    let off = "bots are off on this server: the server owner turns them on with bots.enabled in config.yml";
+    assert_eq!(
+        bot_ticks(&platform, &session, 4),
+        [format!("false\t{off}\tfalse\t{off}\tfalse\t{off}")]
+    );
+    let problems = session.problems();
+    let problem = problems
+        .iter()
+        .find(|p| p.code.as_deref() == Some("runtime.bots-disabled"))
+        .unwrap();
+    assert_eq!(problem.path.as_deref(), Some("$.requires.bots"));
+    assert_eq!(problem.file, "netherforge.json");
+    drop(session);
+
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", BOTS_MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"nf.task(function() local bot, err = nf.bots.join("Alex"); print(bot, err) end)"#,
+        ),
+    ]);
+    let session = bots_session(&platform, &files, bots_on());
+    assert_eq!(
+        bot_ticks(&platform, &session, 1),
+        ["nil\tsomeone called Alex is online already"]
+    );
+}
+
+#[test]
+fn a_scripts_mistakes_are_errors_and_a_package_must_declare_bots() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", BOTS_MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"
+print(pcall(nf.bots.join, "no spaces", nil, nil, function() end))
+nf.task(function()
+  local bot = nf.bots.join("Sparring")
+  print(pcall(bot.walk_to, bot, vector.create(9, 64, 9), { timeout = 0 }))
+end)
+"#,
+        ),
+    ]);
+    let session = bots_session(&platform, &files, bots_on());
+    let mut lines = printed(&platform.take());
+    lines.extend(bot_ticks(&platform, &session, 2));
+    assert_eq!(
+        lines,
+        [
+            "false\tmodules/t/init.lua:2: bad argument 'name' (3 to 16 letters, digits or _ expected, got \"no spaces\")",
+            "false\tmodules/t/init.lua:5: bad argument 'options.timeout' (1 to 500 ticks expected, got 0)",
+        ]
+    );
+    drop(session);
+
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("modules/t/init.lua", "print(pcall(nf.bots.all))"),
+    ]);
+    let _session = bots_session(&platform, &files, bots_on());
+    let lines = printed(&platform.take());
+    assert!(
+        lines[0].starts_with("false") && lines[0].contains(r#""requires": { "bots": true }"#),
+        "{lines:?}"
+    );
+}
+
+#[test]
+fn a_bot_that_has_left_answers_false_and_its_walk_nil_and_why() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", BOTS_MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"
+nf.task(function()
+  local bot = nf.bots.join("Sparring")
+  print(bot:leave(), bot:leave(), bot:jump())
+  print(bot:walk_to(vector.create(9, 64, 9)))
+end)
+"#,
+        ),
+    ]);
+    let session = bots_session(&platform, &files, bots_on());
+    platform.take();
+    assert_eq!(
+        bot_ticks(&platform, &session, 3),
+        ["true\tfalse\tfalse", "nil\tthe bot has left"]
+    );
+}
+
+#[test]
+fn a_player_handle_that_is_a_bot_becomes_one_when_a_bot_method_is_called() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", BOTS_MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"
+nf.on("player_join", function(e)
+  local player = e.player
+  print("joined as", tostring(player):match("^%a+"), player:is_player())
+  print("a bot's method", player:jump(), tostring(player):match("^%a+"))
+  print("nothing", player.no_such_method)
+end)
+nf.bots.join("Sparring", nil, nil, function() end)
+"#,
+        ),
+    ]);
+    use netherforge_platform::PlatformEvents;
+    let server =
+        netherforge_runtime::server::ServerEvents::new(bots_session(&platform, &files, bots_on()));
+    platform.take();
+    platform.bots.tick();
+    let bot = platform.bots.by_name("Sparring").unwrap();
+    server
+        .game()
+        .player_join(&mut netherforge_platform::game_event::PlayerJoin {
+            player: bot.player(),
+            first_join: true,
+            message: None,
+        });
+    server.tick();
+    assert_eq!(
+        printed(&platform.take()),
+        [
+            "joined as\tPlayer\ttrue",
+            "a bot's method\ttrue\tBot",
+            "nothing\tnil"
+        ]
+    );
+}
+
+#[test]
+fn the_bridges_bots_aim_at_a_centitys_node_and_say_which_node_they_look_at() {
+    use netherforge_format::bridge::{BotState, BotTarget, BotTargetKind};
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = r#"{ "nodes": {
+  "root": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} },
+  "bare": { "display": { "type": "block", "block": "minecraft:stone" } }
+} }"#;
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/c/centity.json", centity),
+    ]);
+    let session = bots_session(&platform, &files, Default::default());
+    let id = session.spawn("c", place(3.5, 64.0, 2.5), 0.0).unwrap();
+    let text = netherforge_runtime::events::uuid_text(&id);
+    let bots = session.bots().unwrap();
+    let interact = |centity: Option<&str>, node: Option<&str>| BotAction::Interact {
+        entity: None,
+        centity: centity.map(Into::into),
+        node: node.map(Into::into),
+        hand: Default::default(),
+        x: None,
+        y: None,
+        z: None,
+    };
+    let aim = bots
+        .bridge_aim(&interact(Some(&text), None))
+        .unwrap()
+        .unwrap();
+    assert_eq!((aim.at.0, aim.at.1, aim.at.2), (4.0, 64.5, 3.0));
+    let by_node = bots
+        .bridge_aim(&interact(Some(&text), Some("root")))
+        .unwrap()
+        .unwrap();
+    assert_eq!(by_node, aim);
+    assert_eq!(bots.bridge_aim(&BotAction::Jump), Ok(None));
+    assert_eq!(bots.bridge_aim(&interact(None, None)), Ok(None));
+    assert_eq!(
+        bots.bridge_aim(&interact(None, Some("root"))),
+        Err("`node` names a node of the centity given as `centity`, and there's none".into())
+    );
+    assert_eq!(
+        bots.bridge_aim(&interact(Some(&text), Some("nope"))),
+        Err("centity c has no node \"nope\"".into())
+    );
+    assert_eq!(
+        bots.bridge_aim(&interact(Some(&text), Some("bare"))),
+        Err("node \"bare\" of centity c has no hitbox to click".into())
+    );
+    assert_eq!(
+        bots.bridge_aim(&interact(Some("x"), None)),
+        Err("no centity instance \"x\"".into())
+    );
+    // A bot looking at the node's hitbox: which node it is comes from the runtime.
+    let state = BotState {
+        name: "Probe".into(),
+        uuid: netherforge_runtime::events::uuid_text(&Uuid(77)),
+        world: "world".into(),
+        x: 0.0,
+        y: 64.0,
+        z: 0.0,
+        yaw: 0.0,
+        pitch: 0.0,
+        on_ground: true,
+        health: 20.0,
+        food: 20,
+        game_mode: "survival".into(),
+        dead: false,
+        sneaking: false,
+        sprinting: false,
+        selected_slot: 0,
+        inventory: Vec::new(),
+        menu: None,
+        dialog: None,
+        boss_bars: Vec::new(),
+        sidebar: None,
+        title: None,
+        subtitle: None,
+        action_bar: None,
+        resource_packs: Vec::new(),
+        entities: Vec::new(),
+        target: Some(BotTarget {
+            kind: BotTargetKind::Entity,
+            x: 3.5,
+            y: 64.5,
+            z: 2.5,
+            distance: 4.0,
+            block_x: None,
+            block_y: None,
+            block_z: None,
+            face: None,
+            state: None,
+            entity: Some(netherforge_runtime::events::uuid_text(&aim.entity)),
+            entity_type: Some("minecraft:interaction".into()),
+            centity: None,
+            node: None,
+        }),
+        teams: Vec::new(),
+        player_list: Vec::new(),
+        events: 0,
+    };
+    let seen = bots.bridge_state(state.clone()).target.unwrap();
+    assert_eq!(
+        (seen.centity.as_deref(), seen.node.as_deref()),
+        (Some(text.as_str()), Some("root"))
+    );
+    // Anything else is as the bot said.
+    let mut elsewhere = state;
+    elsewhere.target.as_mut().unwrap().entity =
+        Some(netherforge_runtime::events::uuid_text(&Uuid(500)));
+    assert_eq!(bots.bridge_state(elsewhere.clone()), elsewhere);
+}
+
+#[test]
+fn pictures_lua_let_go_of_make_room_for_new_ones() {
+    let platform = std::rc::Rc::new(Fake::default());
+    // 2048 by 2048 is 4.2 million pixels: seven fit in the 32 million scripts may hold.
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/game/init.lua",
+            r##"
+for i = 1, 20 do
+  local dropped = nf.images.fill(2048, 2048, "#ff0000")
+end
+print("twenty made, one at a time")
+local kept = {}
+for i = 1, 7 do
+  kept[i] = nf.images.fill(2048, 2048, "#00ff00")
+end
+local ok, err = pcall(nf.images.fill, 2048, 2048, "#0000ff")
+print(ok, err)
+print(kept[1]:pixel(0, 0), kept[7]:pixel(2047, 2047))
+kept = nil
+print(nf.images.fill(2048, 2048, "#0000ff"):pixel(0, 0))
+"##,
+        ),
+    ]);
+    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    let start = platform.take();
+    assert_eq!(
+        printed(&start),
+        [
+            "twenty made, one at a time",
+            "false\tmodules/game/init.lua:10: scripts hold 32 million pixels of images already: let go of images you no longer need",
+            "#00FF00\t#00FF00",
+            "#0000FF",
+        ],
+        "{start:?}"
+    );
+}

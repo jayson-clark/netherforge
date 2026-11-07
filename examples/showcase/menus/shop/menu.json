@@ -8,21 +8,21 @@
     "11": {
       "item": {
         "kind": "minecraft:bread",
-        "count": 4,
         "name": "<yellow>Bread",
-        "lore": ["<gray><glyph:ui/coin> 2"]
+        "lore": ["<gray><glyph:ui/coin> 2"],
+        "count": 4
       }
     },
     "12": {
       "item": {
-        "item": "library:gem",
-        "lore": ["<gray><glyph:ui/coin> 20"]
+        "lore": ["<gray><glyph:ui/coin> 20"],
+        "item": "library:gem"
       }
     },
     "13": {
       "item": {
-        "item": "ruby",
-        "lore": ["<gray><glyph:ui/coin> 50"]
+        "lore": ["<gray><glyph:ui/coin> 50"],
+        "item": "ruby"
       }
     },
     "15": {

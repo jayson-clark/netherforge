@@ -9,9 +9,11 @@ project folder as it is. A project that depends on
 ## What you need
 
 - A **Paper** server for the Minecraft version your project targets (the
-  `minecraft` in `netherforge.json`): 1.21.11 or any 26.x.
-  [Folia](https://papermc.io/software/folia) isn't supported.
-- **Java 25** or newer (Java 21 is enough for 1.21.11).
+  `minecraft` in `netherforge.json`): any 26.x.
+  [Folia](https://papermc.io/software/folia) isn't supported yet.
+- **Java 25** or newer.
+- A server on **Linux** (x86-64 or ARM64), **macOS** (Apple silicon or Intel)
+  or **Windows** (x86-64): the plugin jar carries the runtime for each.
 - The **plugin jar** for that version, `NetherForge-<version>-paper-<minecraft>.jar`,
   from the [releases page](https://github.com/jayson-clark/netherforge/releases/latest).
   Use the same NetherForge version as the editor you author with.

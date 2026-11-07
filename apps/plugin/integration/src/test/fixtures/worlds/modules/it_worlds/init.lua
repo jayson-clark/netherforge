@@ -50,10 +50,10 @@ function steps.void()
   )
   log(
     "border",
-    border:size(),
+    string.format("%.1f", border:size()),
     tostring(border:center()),
-    border:damage().amount,
-    border:damage().buffer,
+    string.format("%.1f", border:damage().amount),
+    string.format("%.1f", border:damage().buffer),
     border:warning().distance,
     border:warning().ticks,
     border:contains(vec3(19, 64, 19)),

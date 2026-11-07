@@ -13,7 +13,7 @@ nf.commands.register(
     scene:on("end", function(done)
       log("probe ended", done.reason, tostring(done.player:game_mode()))
     end)
-    log("probe started", tostring(scene:length()))
+    log("probe started", string.format("%.1f", scene:length()))
   end
 )
 

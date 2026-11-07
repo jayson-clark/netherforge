@@ -188,7 +188,9 @@ data class CompiledClimateNoise(val name: String, val noise: NoiseDef)
  * [blocks] four numbers per block (x, y, z from the smallest corner, and its index in [palette]). Format never
  * reads a `structures/<id>.nbt` itself (it's Minecraft's binary format): the server reads it with the game's own
  * structure loader, the editor with its NBT reader, and each hands the result to [CompiledTerrain.withStructures].
+ * Serializable as it crosses to the Rust runtime.
  */
+@kotlinx.serialization.Serializable
 class StructureTemplate(
     val sizeX: Int,
     val sizeY: Int,

@@ -73,6 +73,8 @@ class StructureGenerationScenario : Scenario("structures") {
     @Test
     @Order(3)
     fun `the world generates it and its marker becomes the centity, once`() {
+        editor.run("it-structures make")
+        editor.logged("made", "it_gen")
         editor.run("it-structures generate")
         editor.logged("generated", "it_gen")
         // The server found it (a datapack structure it can't use never generates one).
@@ -89,6 +91,8 @@ class StructureGenerationScenario : Scenario("structures") {
     fun `a restart leaves the count where it was`() {
         val before = guards()
         restart()
+        editor.run("it-structures make")
+        editor.logged("made", "it_gen")
         editor.run("it-structures generate")
         editor.logged("generated", "it_gen")
         assertEquals(before, guards())

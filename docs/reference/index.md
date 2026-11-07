@@ -2,7 +2,7 @@
 
 # Lua API reference
 
-Everything a NetherForge script can call. Scripts are Lua 5.4. New to scripting NetherForge? Start with [Your first script](../guide/first-script.md) and [Scripting basics](../guide/scripting.md), then come back here to look things up.
+Everything a NetherForge script can call. Scripts are Luau. New to scripting NetherForge? Start with [Your first script](../guide/first-script.md) and [Scripting basics](../guide/scripting.md), then come back here to look things up.
 
 Calls on `nf` and its namespaces use a dot (`nf.players.online()`); calls on a handle, like a player or a centity, use a colon (`player:send_message("hi")`).
 

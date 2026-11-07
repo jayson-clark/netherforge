@@ -3,14 +3,11 @@ package dev.netherforge.plugin.paper.contract
 import dev.netherforge.format.biome.BiomeKind
 import dev.netherforge.format.game.BlockState
 import dev.netherforge.format.json.CanonicalJson
-import dev.netherforge.format.lua.LuajavaPlatform
 import dev.netherforge.format.terrain.GeneratedLoot
 import dev.netherforge.format.terrain.StructureTemplate
 import dev.netherforge.format.terrain.TerrainBlock
 import dev.netherforge.format.terrain.TerrainCompiler
 import dev.netherforge.format.terrain.TerrainKind
-import dev.netherforge.format.terrain.TerrainScriptFailure
-import dev.netherforge.format.terrain.TerrainScripts
 import dev.netherforge.plugin.contract.ContractServer
 import dev.netherforge.plugin.contract.PlatformContract
 import dev.netherforge.plugin.platform.BlockVector
@@ -30,8 +27,7 @@ import kotlin.test.assertTrue
  * world made with one are what format's generator makes for the world's seed (columns' tops, layers, the sea, the floor,
  * an ore's custom block state, the biome areas, areas' own terrain blended across their borders, and decorations: blocks
  * and a structure read by the server's own loader, across chunk borders), the spawn is on dry ground, and publishing a
- * changed generator shapes only the chunks generated afterwards. A file's Lua stages run on the server's chunk threads and
- * make the same blocks as format's generator with the same script. Its areas are the project's biomes ([ContractBiomes],
+ * changed generator shapes only the chunks generated afterwards. Its areas are the project's biomes ([ContractBiomes],
  * registered by [ContractBootstrap] as a project's are): the server has them, `/locate biome` finds them, and the game
  * decorates the generator's ground with exactly the features a project biome lists, or a game biome's own.
  */
@@ -55,11 +51,11 @@ class PaperWorldGeneratorsTest : PlatformContract() {
         }
         // The areas' biomes as the runtime resolves them: the project's in the contract server's namespace.
         return ProjectGenerator(
-            terrain,
             states,
             terrain.biomes.associateWith {
                 requireNotNull(BiomeKind.keyOf(it, ContractServer.NAMESPACE))
-            }
+            },
+            CompiledTerrainSource(terrain, null)
         )
     }
 
@@ -98,9 +94,9 @@ class PaperWorldGeneratorsTest : PlatformContract() {
         try {
             val world = main { Bukkit.getWorld(name)!! }
             assertEquals(-64, world.minHeight)
-            val bound = project.terrain.bind(world.seed, world.minHeight, world.maxHeight)
+            val bound = project.terrain!!.bind(world.seed, world.minHeight, world.maxHeight)
             val expected = bound.generate(2, -3)
-            val palette = project.terrain.palette
+            val palette = project.terrain!!.palette
             var ores = 0
             var rubies = 0
             // A chunk nothing holds open is unloaded again: it's read in the same step it's loaded.
@@ -163,7 +159,7 @@ class PaperWorldGeneratorsTest : PlatformContract() {
         create(name, "contract_volumes", 20260714L)
         try {
             val world = main { Bukkit.getWorld(name)!! }
-            val bound = project.terrain.bind(world.seed, world.minHeight, world.maxHeight)
+            val bound = project.terrain!!.bind(world.seed, world.minHeight, world.maxHeight)
             // A cold column: the rich biome over the ground, the volume's below -16.
             val (x, z) = (0 until 400).map { it * 37 to it * -11 }.first { (x, z) -> bound.biomeAt(x, z) == ContractBiomes.RICH }
             val (above, below) = main {
@@ -191,7 +187,7 @@ class PaperWorldGeneratorsTest : PlatformContract() {
         create(name, "contract_loot", 20260714L)
         try {
             val world = main { Bukkit.getWorld(name)!! }
-            val bound = project.terrain.bind(world.seed, world.minHeight, world.maxHeight)
+            val bound = project.terrain!!.bind(world.seed, world.minHeight, world.maxHeight)
             val (cx, cz, places) = (0 until 64).asSequence().map { it % 8 to it / 8 }
                 .map { (cx, cz) -> Triple(cx, cz, bound.generate(cx, cz).lootPlaces(cx, cz)) }
                 .first { it.third.isNotEmpty() }
@@ -214,82 +210,6 @@ class PaperWorldGeneratorsTest : PlatformContract() {
             eventually("the runtime asked for the container's loot") {
                 events.of("generatedLoot").any { it[0] == "contract_loot" }
             }
-        } finally {
-            drop(name)
-        }
-    }
-
-    /** A file whose script raises ridges (height), caps them (terrain) and scatters lanterns (decorate) with its own noise and random. */
-    private val scripted = """
-        { "terrain": { "base": 70, "seaLevel": 40, "noises": { "hills": { "noise": { "frequency": 0.01 }, "amplitude": 6 } } },
-          "layers": [{ "block": "minecraft:grass_block" }, { "block": "minecraft:dirt", "thickness": 3 }],
-          "script": { "blocks": ["minecraft:mossy_cobblestone", "minecraft:sea_lantern"], "noises": { "ridges": { "fractal": "ridged", "frequency": 0.02 } } },
-          "biomes": { "only": { "biome": "${ContractBiomes.BARE}" } } }
-    """.trimIndent()
-
-    private val stages = """
-        local terrain = ...
-        local ridges = terrain.noise("ridges")
-        local stages = {}
-        function stages.height(x, z, height)
-          return height + math.max(0, ridges:at(x, z)) * 10
-        end
-        function stages.terrain(chunk)
-          for x = chunk:min_x(), chunk:min_x() + 15 do
-            for z = chunk:min_z(), chunk:min_z() + 15 do
-              local top = terrain.height(x, z)
-              if top > 74 then chunk:fill(x, top - 1, z, x, top, z, "minecraft:mossy_cobblestone") end
-            end
-          end
-        end
-        function stages.decorate(chunk)
-          for _ = 1, 6 do
-            local x, z = chunk:min_x() + math.random(0, 15), chunk:min_z() + math.random(0, 15)
-            chunk:set(x, terrain.height(x, z) + 1, z, "minecraft:sea_lantern")
-          end
-        end
-        return stages
-    """.trimIndent()
-
-    @Test
-    fun `a generator's Lua stages run on the server's chunk threads and make what format's generator makes`() {
-        val failures = java.util.concurrent.ConcurrentLinkedQueue<TerrainScriptFailure>()
-        val compiled = TerrainCompiler.compile(
-            (TerrainKind.parse(scripted, "terrain/test.json") as CanonicalJson.Parsed.Ok).value,
-            "terrain/test.lua"
-        )
-        val scripts = TerrainScripts(LuajavaPlatform, mapOf("terrain/test.lua" to stages)) { failures += it }
-        val biomes = compiled.biomes.associateWith { requireNotNull(BiomeKind.keyOf(it, ContractServer.NAMESPACE)) }
-        val project = ProjectGenerator(compiled, compiled.palette.map { (it as TerrainBlock.Vanilla).state }, biomes, scripts)
-        main { manager.publishGenerators(mapOf("contract_scripted" to project)) }
-        val name = worldNamed()
-        create(name, "contract_scripted", 99L)
-        try {
-            val world = main { Bukkit.getWorld(name)!! }
-            val bound = compiled.bind(world.seed, world.minHeight, world.maxHeight, TerrainScripts(LuajavaPlatform, scripts.sources) {})
-            var scripted = 0
-            for ((cx, cz) in listOf(0 to 0, 3 to -2, -5 to 4)) {
-                val expected = bound.generate(cx, cz)
-                main {
-                    assertTrue(platform.worlds.loadChunk(name, cx, cz))
-                    for (lx in 0 until 16) {
-                        for (lz in 0 until 16) {
-                            for (y in 30 until 130) {
-                                val want = project.states[expected[lx, y, lz]]
-                                val got = assertNotNull(platform.blocks.get(name, cx * 16 + lx, y, cz * 16 + lz))
-                                assertEquals(
-                                    want.substringBefore('['),
-                                    got.state.substringBefore('['),
-                                    "${cx * 16 + lx},$y,${cz * 16 + lz}"
-                                )
-                                if (want == "minecraft:mossy_cobblestone" || want == "minecraft:sea_lantern") scripted++
-                            }
-                        }
-                    }
-                }
-            }
-            assertTrue(scripted > 0, "the script's blocks are in the world")
-            assertEquals(emptyList(), failures.toList())
         } finally {
             drop(name)
         }
@@ -332,7 +252,7 @@ class PaperWorldGeneratorsTest : PlatformContract() {
         create(name, "contract_decorated", 4242L)
         try {
             val world = main { Bukkit.getWorld(name)!! }
-            val bound = project.terrain.bind(world.seed, world.minHeight, world.maxHeight)
+            val bound = project.terrain!!.bind(world.seed, world.minHeight, world.maxHeight)
             val counts = HashMap<String, Int>()
             for ((cx, cz) in listOf(0 to 0, 1 to 0, -3 to 5)) {
                 val expected = bound.generate(cx, cz)
@@ -370,99 +290,14 @@ class PaperWorldGeneratorsTest : PlatformContract() {
         create(name, "contract_hills", 99L)
         try {
             val world = main { Bukkit.getWorld(name)!! }
-            val bound = project.terrain.bind(world.seed, world.minHeight, world.maxHeight)
+            val bound = project.terrain!!.bind(world.seed, world.minHeight, world.maxHeight)
             val spawn = assertNotNull(main { platform.worlds.spawnLocation(name) })
             val column = bound.dryColumnNear(0, 0)
             if (column != null) {
                 assertEquals(column.first, spawn.x.toInt())
                 assertEquals(column.second, spawn.z.toInt())
             }
-            assertTrue(spawn.y >= project.terrain.seaLevel, "the spawn is above the sea: ${spawn.y}")
-        } finally {
-            drop(name)
-        }
-    }
-
-    /** 3D ground: leaning into overhangs, islands over it, caves and flowers on every top, and a density stage adding ledges. */
-    private val threeD = """
-        { "terrain": { "base": 70, "seaLevel": 40, "noises": { "hills": { "noise": { "frequency": 0.01 }, "amplitude": 6 } },
-            "density": { "noises": { "o": { "noise": { "frequency": 0.03, "octaves": 2 }, "amplitude": 12, "squash": 2 } },
-                         "islands": { "y": 140, "thickness": 24, "threshold": 0.1 } } },
-          "layers": [{ "block": "minecraft:grass_block" }, { "block": "minecraft:dirt", "thickness": 3 }],
-          "caves": { "caverns": { "threshold": 0.4 } },
-          "decorations": { "flowers": { "block": "minecraft:poppy", "count": 40 } },
-          "script": {},
-          "biomes": { "only": { "biome": "${ContractBiomes.BARE}" } } }
-    """.trimIndent()
-
-    private val densityStage = """
-        return {
-          density = function(x, y, z, value)
-            if y >= 96 and y <= 104 and x % 32 == 0 then return value + 6 end
-            return value
-          end,
-        }
-    """.trimIndent()
-
-    @Test
-    fun `a 3D generator's chunks are what format's generator makes, islands and overhangs, and the heightmap is its topmost ground`() {
-        val failures = java.util.concurrent.ConcurrentLinkedQueue<TerrainScriptFailure>()
-        val compiled = TerrainCompiler.compile(
-            (TerrainKind.parse(threeD, "terrain/test.json") as CanonicalJson.Parsed.Ok).value,
-            "terrain/test.lua"
-        )
-        val scripts = TerrainScripts(LuajavaPlatform, mapOf("terrain/test.lua" to densityStage)) { failures += it }
-        val biomes = compiled.biomes.associateWith { requireNotNull(BiomeKind.keyOf(it, ContractServer.NAMESPACE)) }
-        val project = ProjectGenerator(compiled, compiled.palette.map { (it as TerrainBlock.Vanilla).state }, biomes, scripts)
-        main { manager.publishGenerators(mapOf("contract_3d" to project)) }
-        val name = worldNamed()
-        create(name, "contract_3d", 31L)
-        try {
-            val world = main { Bukkit.getWorld(name)!! }
-            val bound = compiled.bind(world.seed, world.minHeight, world.maxHeight, TerrainScripts(LuajavaPlatform, scripts.sources) {})
-            var overhung = 0
-            var flowers = 0
-            for ((cx, cz) in listOf(0 to 0, 2 to -1, -3 to 3, 5 to 5)) {
-                val expected = bound.generate(cx, cz)
-                main {
-                    assertTrue(platform.worlds.loadChunk(name, cx, cz))
-                    for (lx in 0 until 16) {
-                        for (lz in 0 until 16) {
-                            val x = cx * 16 + lx
-                            val z = cz * 16 + lz
-                            var tops = 0
-                            for (y in -63 until 200) {
-                                val want = project.states[expected[lx, y, lz]]
-                                val got = assertNotNull(platform.blocks.get(name, x, y, z)).state
-                                assertEquals(want.substringBefore('['), got.substringBefore('['), "$x,$y,$z")
-                                if (want == "minecraft:poppy") flowers++
-                                val solid = want != "minecraft:air" && want != "minecraft:water" && want != "minecraft:poppy"
-                                val above = project.states[expected[lx, y + 1, lz]]
-                                if (solid && (above == "minecraft:air" || above == "minecraft:poppy")) tops++
-                            }
-                            if (tops > 1) overhung++
-                            // The world's own heightmap (what the game asks where to put things) is the generator's topmost ground.
-                            val top = bound.surfaceAt(x, z)
-                            val flower = project.states[expected[lx, top + 1, lz]] == "minecraft:poppy"
-                            assertEquals(
-                                if (flower) top + 1 else top,
-                                world.getHighestBlockYAt(x, z, org.bukkit.HeightMap.WORLD_SURFACE),
-                                "$x,$z"
-                            )
-                        }
-                    }
-                }
-            }
-            assertTrue(overhung > 0, "columns with more than one top")
-            assertTrue(flowers > 0, "flowers on the tops")
-            assertEquals(emptyList(), failures.toList())
-            // The spawn is on the topmost ground of the column the generator picks.
-            val spawn = assertNotNull(main { platform.worlds.spawnLocation(name) })
-            val (sx, sz) = assertNotNull(bound.dryColumnNear(0, 0))
-            assertEquals(sx, spawn.x.toInt())
-            assertEquals(sz, spawn.z.toInt())
-            assertEquals(bound.surfaceAt(sx, sz) + 1, spawn.y.toInt())
-            bound.close()
+            assertTrue(spawn.y >= project.terrain!!.seaLevel, "the spawn is above the sea: ${spawn.y}")
         } finally {
             drop(name)
         }
@@ -615,7 +450,7 @@ class PaperWorldGeneratorsTest : PlatformContract() {
                 assertEquals(-128 to 384, platform.worlds.heights(name))
                 assertTrue(platform.worlds.loadChunk(name, 0, 0))
                 // The generator was bound to the world's own heights: its floor is at the bottom, stone above it, as format makes it.
-                val expected = project.terrain.bind(world.seed, world.minHeight, world.maxHeight).generate(0, 0)
+                val expected = project.terrain!!.bind(world.seed, world.minHeight, world.maxHeight).generate(0, 0)
                 for (y in listOf(-128, -127, -100, -65, 0, 40)) {
                     assertEquals(
                         project.states[expected[3, y, 5]].substringBefore('['),

@@ -210,7 +210,8 @@ first validation): use a module-level empty constant.
 - **Save** then hot reload: if the bridge is connected, `bridgeRequest('reload', { paths: [path] })`, result logged in the console.
 - **The dev bridge** is JSON-RPC (`core/bridge/client.ts`, vscode-jsonrpc
   over the backend's relay; see the hot-reload skill): `backend.bridgeRequest(method,
-params)` typed by format's `BridgeRequests`, and `backend.onBridgeEvent(event,
+params)` typed by `BridgeRequests` (`core/bridge/protocol.ts`, generated
+  from format's Rust `bridge`), and `backend.onBridgeEvent(event,
 fn)` typed by `BridgeEvents` for `console`, `problems` and `status`. Don't
   switch over message types; subscribe to the event you need. The memory
   backend answers requests itself and records each as `{ method, params }` in

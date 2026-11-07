@@ -253,10 +253,14 @@ pub async fn`, returning `crate::error::Result<T>`. Payload types derive
    a case or in `EXCLUDED` with why. See "The contract suite".
 
 Bridge frames are relayed as text both ways, so a new request, notification
-or stream needs no Rust change: declare it in format's `Bridge.kt` and the UI
-gets its types from the generated contract. Rust changes only with the
-handshake (the hello, `PROTOCOL`, which `protocol.rs` checks against the
-recorded session) or the backend's own requests.
+or stream needs no backend change: it's declared in `crates/format`'s
+`bridge` (see the hot-reload skill) and the UI gets its types from the
+bindings, which the builder takes as `bridge::typescript_types()`. The
+handshake (`protocol.rs`) is format's too: `HelloParams`, `PROTOCOL` and the
+proofs (`bridge::auth`, the `bridge-auth` feature); the backend adds only its
+leniency toward a hello it can't read (still answered with a protocol
+mismatch) and its own requests' ids. The backend takes `netherforge-format`
+with `specta` and `bridge-auth`; `commands::Json` is format's `bridge::Json`.
 
 ## The contract suite
 

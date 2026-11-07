@@ -43,7 +43,7 @@ data class CameraPose(val position: Vec3, val yaw: Double, val pitch: Double)
  *
  * Both lists are sorted by time and never empty.
  */
-class CameraPath(private val positions: List<Keyframe>, private val rotations: List<RotationKey>) {
+class CameraPath(val positions: List<Keyframe>, val rotations: List<RotationKey>) {
     init {
         require(positions.isNotEmpty() && rotations.isNotEmpty()) { "a camera path needs at least one key on each track" }
     }
