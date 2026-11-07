@@ -17,11 +17,16 @@ function steps.prepare()
   log("prepared", marker ~= nil)
 end
 
--- A world the game generates structures in, loaded around its spawn so the ruin generates.
+-- A world the game generates structures in. Making it is a call of its own: the game makes its spawn as it does, which
+-- takes most of a call's time limit.
+function steps.make()
+  local world = nf.worlds.get("it_gen") or nf.worlds.load("it_gen") or nf.worlds.create("it_gen", { seed = 7 })
+  log("made", world:name())
+end
+
+-- The world loaded around its spawn so the ruin generates.
 function steps.generate()
-  local world = nf.worlds.get("it_gen")
-    or nf.worlds.load("it_gen")
-    or nf.worlds.create("it_gen", { seed = 7 })
+  local world = nf.worlds.get("it_gen") or nf.worlds.load("it_gen")
   -- A row of chunks a tick: generating them all in one call runs past a call's time limit on a loaded machine.
   nf.task(function()
     for cx = -4, 4 do
