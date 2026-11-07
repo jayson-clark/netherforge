@@ -155,6 +155,8 @@ pub struct Config {
     pub prebuilt_pack: Option<crate::packs::PrebuiltPack>,
     /// The `pack.json` of every resource pack packages' scripts wrote now: what `nf.packs.rebuild` reads again.
     pub written_pack_files: Option<WrittenPackFiles>,
+    /// The packages the server provides that the project loaded (`namespace version (from folder)`).
+    pub provided_packages: Option<WrittenPackFiles>,
     /// `http:` in `config.yml`: the owner's limits on `nf.http`.
     pub http: crate::http::HttpConfig,
     /// What stands in for the network's own answers (where names lead, where connections go): tests'.
@@ -199,7 +201,8 @@ pub struct Config {
     pub clock: Option<Rc<dyn netherforge_luau::Clock>>,
 }
 
-/// The `pack.json` of every resource pack packages' scripts wrote, as a reload names them.
+/// Lines the adapter gives on asking: the `pack.json` of every resource pack packages' scripts wrote, as a reload
+/// names them; the packages the server provides.
 #[derive(Clone)]
 pub struct WrittenPackFiles(pub Rc<dyn Fn() -> Vec<String>>);
 
@@ -360,6 +363,7 @@ impl<'a> Session<'a> {
         shared.schedules.borrow_mut().now = config.wall_clock;
         shared.packs.borrow_mut().config = config.pack.clone();
         shared.packs.borrow_mut().prebuilt = config.prebuilt_pack.clone();
+        *shared.provided_packages.borrow_mut() = config.provided_packages.clone();
         {
             let mut http = shared.http.borrow_mut();
             http.config = config.http.clone();

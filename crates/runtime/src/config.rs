@@ -22,7 +22,7 @@ use netherforge_format::names;
 use netherforge_format::policy::Policy;
 use serde_json::{Map, Value};
 
-use crate::databases::{ConnectionConfig, DatabasesConfig};
+use crate::databases::{ConnectionConfig, DatabasesConfig, SslMode};
 use crate::network::NetworkConfig;
 use crate::session::Config;
 
@@ -838,13 +838,23 @@ fn connection(fields: &Value) -> Result<ConnectionConfig, String> {
         Some(_) => int(fields, "pool-size").ok_or("`pool-size` isn't a number")?,
     }
     .clamp(1, MAX_POOL_SIZE as i64) as usize;
-    let properties = match fields.get("properties") {
-        None | Some(Value::Null) => Default::default(),
-        Some(Value::Object(map)) => map
-            .iter()
-            .map(|(k, v)| (k.clone(), scalar(v).unwrap_or_else(|| v.to_string())))
-            .collect(),
-        Some(_) => return Err("`properties` isn't a section of driver properties".into()),
+    if fields.get("properties").is_some_and(|v| !v.is_null()) {
+        return Err(
+            "`properties` isn't read: a connection's TLS is `ssl-mode` (disable, prefer or require)".into(),
+        );
+    }
+    let ssl_mode = match text(fields, "ssl-mode").map(|m| m.trim().to_lowercase()) {
+        None => SslMode::Prefer,
+        Some(mode) => match mode.as_str() {
+            "disable" => SslMode::Disable,
+            "prefer" => SslMode::Prefer,
+            "require" => SslMode::Require,
+            _ => {
+                return Err(format!(
+                    "`ssl-mode` is \"{mode}\", which isn't disable, prefer or require"
+                ));
+            }
+        },
     };
     Ok(ConnectionConfig {
         kind,
@@ -857,7 +867,7 @@ fn connection(fields: &Value) -> Result<ConnectionConfig, String> {
         password: fields.get("password").and_then(scalar).unwrap_or_default(),
         pool_size,
         packages: namespaces(fields.get("packages"), "packages")?,
-        properties,
+        ssl_mode,
         own_databases: namespaces(fields.get("own-databases"), "own-databases")?,
     })
 }

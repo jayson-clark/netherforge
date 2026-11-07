@@ -145,6 +145,22 @@ pub fn start(args: StartArgs) -> Result<Option<Rc<dyn PlatformEvents>>, String> 
     session_config.written_pack_files = Some(netherforge_runtime::session::WrittenPackFiles(
         Rc::new(|| source.written_pack_files()),
     ));
+    session_config.provided_packages = Some(netherforge_runtime::session::WrittenPackFiles(
+        Rc::new(|| {
+            source
+                .provided_in_use()
+                .iter()
+                .map(|p| {
+                    format!(
+                        "{} {} (from {})",
+                        p.namespace,
+                        p.version,
+                        p.folder.display()
+                    )
+                })
+                .collect()
+        }),
+    ));
     session_config.prebuilt_pack = Some(netherforge_runtime::packs::PrebuiltPack(Rc::new(|| {
         source
             .bundled_pack()

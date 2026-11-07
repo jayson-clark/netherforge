@@ -626,24 +626,53 @@ impl AdminCommand {
         let tree: Vec<String> = std::iter::once(project.namespace().to_owned())
             .chain(project.packages.keys().cloned())
             .collect();
-        let grants: Vec<String> = session
+        let mut owner: Vec<String> = session
             .shared()
-            .http
+            .provided_packages
             .borrow()
-            .config
-            .allow_private
-            .iter()
-            .map(|a| {
-                let missing = if tree.contains(&a.namespace) {
-                    String::new()
-                } else {
-                    format!(" (no package \"{}\" in this project)", a.namespace)
-                };
-                format!(
-                    "http.allow-private: {} may reach {}:{}{missing}",
-                    a.namespace, a.host, a.port
-                )
-            })
+            .as_ref()
+            .map(|p| (p.0)())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|p| format!("package {p}, provided by the server (packages.provided)"))
+            .collect();
+        let mut sorted = tree.clone();
+        sorted.sort();
+        for namespace in &sorted {
+            if let Some(at) = session
+                .shared()
+                .databases
+                .borrow_mut()
+                .describe_own(namespace)
+            {
+                owner.push(format!(
+                    "the own database of {namespace}: on the {at} (own-databases)"
+                ));
+            }
+        }
+        let grants: Vec<String> = owner
+            .into_iter()
+            .chain(
+                session
+                    .shared()
+                    .http
+                    .borrow()
+                    .config
+                    .allow_private
+                    .iter()
+                    .map(|a| {
+                        let missing = if tree.contains(&a.namespace) {
+                            String::new()
+                        } else {
+                            format!(" (no package \"{}\" in this project)", a.namespace)
+                        };
+                        format!(
+                            "http.allow-private: {} may reach {}:{}{missing}",
+                            a.namespace, a.host, a.port
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )
             .collect();
         if !grants.is_empty() {
             sender.reply("<gold>Given by this server's config.yml:".into());

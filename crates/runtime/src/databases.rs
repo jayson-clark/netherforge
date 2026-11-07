@@ -17,9 +17,8 @@
 //! - **Numbers** follow the skill's rule: a whole number in the safe range binds as an integer, any other as a real;
 //!   an integer column's value past the safe range comes back as a string of its digits.
 //!
-//! Not yet: the MySQL and PostgreSQL connections the owner names in `databases:` (`nf.db("network")`) are read and
-//! checked (who may open one), but the Rust runtime has no driver for them, so their work fails saying so; and a
-//! package's own database on such a connection (`own-databases`) stays its SQLite file.
+//! - **MySQL and PostgreSQL** (`databases:`): a connection the owner names (`nf.db("network")`), and a package's own
+//!   database on one (`own-databases`), are [`crate::remote_db`]'s; the handle and its three calls are the same.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -182,8 +181,19 @@ pub struct ConnectionConfig {
     pub password: String,
     pub pool_size: usize,
     pub packages: BTreeSet<String>,
-    pub properties: BTreeMap<String, String>,
+    /// Whether the connection is encrypted: `ssl-mode`.
+    pub ssl_mode: SslMode,
     pub own_databases: BTreeSet<String>,
+}
+
+/// `ssl-mode`: never encrypted, encrypted when the server offers it, or always (its certificate checked against the
+/// platform's trust).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SslMode {
+    Disable,
+    #[default]
+    Prefer,
+    Require,
 }
 
 /// The password is never in a log line.
@@ -310,14 +320,14 @@ fn open(file: Option<&std::path::Path>) -> Result<Connection, String> {
 
 /// One step of a database's schema: `NNN_name.sql`.
 #[derive(Clone, Debug)]
-struct Migration {
-    version: i64,
-    name: String,
-    sql: String,
+pub struct Migration {
+    pub version: i64,
+    pub name: String,
+    pub sql: String,
 }
 
 impl Migration {
-    fn file_name(&self) -> String {
+    pub fn file_name(&self) -> String {
         format!("{:03}_{}.sql", self.version, self.name)
     }
 }
@@ -368,6 +378,10 @@ pub struct Databases {
     open: HashMap<String, Rc<PackageDatabase>>,
     /// Why a package's database can't be used, by namespace, and the problem that says it.
     failures: BTreeMap<String, Problem>,
+    /// The named connections' pools, made the first time work asks for one, shared by every package granted it.
+    remotes: HashMap<String, Arc<crate::remote_db::Remote>>,
+    /// Each package's lane for each connection.
+    lanes: HashMap<(String, String), crate::http::Workers>,
 }
 
 impl Databases {
@@ -384,6 +398,48 @@ impl Databases {
                 })
             })
             .clone()
+    }
+
+    /// The pool of connection `name` (one `problem` let through).
+    fn remote(&mut self, name: &str) -> Arc<crate::remote_db::Remote> {
+        let config = self.config.connections[name].clone();
+        self.remotes
+            .entry(name.to_owned())
+            .or_insert_with(|| Arc::new(crate::remote_db::Remote::new(name, config)))
+            .clone()
+    }
+
+    /// The lane `namespace`'s work on connection `name` runs on.
+    fn lane(&mut self, namespace: &str, name: &str) -> crate::http::Workers {
+        self.lanes
+            .entry((namespace.to_owned(), name.to_owned()))
+            .or_insert_with(|| {
+                crate::http::Workers::lane(&format!("NetherForge database:{namespace}:{name}"))
+            })
+            .clone()
+    }
+
+    /// The connection `namespace`'s own database is on (`own-databases`), or none for its SQLite file.
+    pub fn own(&self, namespace: &str) -> Option<String> {
+        self.config
+            .connections
+            .iter()
+            .find(|(_, c)| c.own_databases.contains(namespace))
+            .map(|(name, _)| name.clone())
+    }
+
+    /// Where `namespace`'s own database is, as the log and `/nf requires` say it.
+    pub fn describe_own(&mut self, namespace: &str) -> Option<String> {
+        let name = self.own(namespace)?;
+        Some(self.remote(&name).describe(namespace))
+    }
+
+    /// What went wrong reaching the servers since last asked, for the server's log.
+    pub fn take_logs(&self) -> Vec<String> {
+        self.remotes
+            .values()
+            .flat_map(|r| std::mem::take(&mut *r.logs.lock().unwrap_or_else(|e| e.into_inner())))
+            .collect()
     }
 
     /// Why `namespace`'s database can't be used (its migrations failed), or none when it can.
@@ -411,9 +467,16 @@ impl Databases {
     }
 }
 
-/// A migration as the session found it: its id, its file (a project or package path), whether it has errors, and
-/// its text.
-type MigrationFile = (String, String, bool, Option<String>);
+/// A migration as the session found it: its id, its file (a project or package path), whether it has errors, its
+/// text, and each server's version of it (`migrations/postgres/`, `migrations/mysql/`) by dialect, at its path.
+#[derive(Clone, Debug)]
+struct MigrationFile {
+    id: String,
+    path: String,
+    errors: bool,
+    text: Option<String>,
+    dialects: BTreeMap<String, (String, Option<String>)>,
+}
 
 /// Every package's migrations, by namespace: each one's id (the file's name without `.sql`), its file as a project
 /// or package path, whether it has errors, and its text.
@@ -427,17 +490,36 @@ fn migrations_of(define: &Define) -> BTreeMap<String, Vec<MigrationFile>> {
                    package: bool| {
         for r in resources.iter().filter(|r| r.found.kind.id == "migration") {
             let path = r.found.kind.path_of(&r.found.id, &r.found.group);
-            let shown = if package {
-                package_path(namespace, &path)
-            } else {
-                path.clone()
+            let shown = |path: &str| {
+                if package {
+                    package_path(namespace, path)
+                } else {
+                    path.to_owned()
+                }
             };
-            out.entry(namespace.to_owned()).or_default().push((
-                r.found.id.clone(),
-                shown,
-                r.errors,
-                read(&path),
-            ));
+            let (folder, file) = path.rsplit_once('/').unwrap_or(("", &path));
+            let dialects = netherforge_format::kind::files::DIALECTS
+                .iter()
+                .filter(|d| {
+                    r.found
+                        .inside
+                        .iter()
+                        .any(|f| f.starts_with(&format!("{d}/")))
+                })
+                .map(|d| {
+                    let at = format!("{folder}/{d}/{file}");
+                    ((*d).to_owned(), (shown(&at), read(&at)))
+                })
+                .collect();
+            out.entry(namespace.to_owned())
+                .or_default()
+                .push(MigrationFile {
+                    id: r.found.id.clone(),
+                    path: shown(&path),
+                    errors: r.errors,
+                    text: read(&path),
+                    dialects,
+                });
         }
     };
     add(
@@ -456,20 +538,21 @@ fn migrations_of(define: &Define) -> BTreeMap<String, Vec<MigrationFile>> {
         );
     }
     for list in out.values_mut() {
-        list.sort();
+        list.sort_by(|a, b| a.id.cmp(&b.id));
     }
     out
 }
 
 /// Brings `namespace`'s database up to date with its migrations, or records why it can't be.
-fn apply(shared: &Shared, namespace: &str, migrations: &[(String, String, bool, Option<String>)]) {
+fn apply(shared: &Shared, namespace: &str, migrations: &[MigrationFile]) {
     let platform = &*shared.platform;
     let mut databases = shared.databases.borrow_mut();
     databases.failures.remove(namespace);
     if migrations.is_empty() {
         return;
     }
-    if let Some((_, path, _, _)) = migrations.iter().find(|(_, _, errors, _)| *errors) {
+    if let Some(broken) = migrations.iter().find(|m| m.errors) {
+        let path = &broken.path;
         databases.fail(
             platform,
             namespace,
@@ -478,26 +561,120 @@ fn apply(shared: &Shared, namespace: &str, migrations: &[(String, String, bool, 
         );
         return;
     }
+    let own = databases.own(namespace).map(|name| databases.remote(&name));
+    // On a server of another dialect, every step is that server's version of it: SQLite's SQL isn't theirs.
+    if let Some(remote) = &own {
+        let dialect = remote.dialect.id();
+        if let Some(without) = migrations
+            .iter()
+            .find(|m| !m.dialects.contains_key(dialect))
+        {
+            let (folder, file) = without.path.rsplit_once('/').unwrap_or(("", &without.path));
+            let message = format!(
+                "The database of {namespace} is unavailable: it's on the {}, and its migrations have no {dialect} versions ({folder}/{dialect}/{file})",
+                remote.describe(namespace)
+            );
+            platform.log().error(message.clone(), None);
+            databases.failures.insert(
+                namespace.to_owned(),
+                codes::MIGRATION_DIALECT.at(&without.path, message, None),
+            );
+            return;
+        }
+    }
     let mut steps = Vec::new();
-    for (id, path, _, text) in migrations {
+    for m in migrations {
+        let (path, text) = match &own {
+            None => (m.path.clone(), m.text.clone()),
+            Some(remote) => m.dialects[remote.dialect.id()].clone(),
+        };
         let Some(sql) = text else {
             databases.fail(
                 platform,
                 namespace,
-                path,
+                &path,
                 format!("{path} couldn't be read"),
             );
             return;
         };
-        let Some(version) = netherforge_format::kind::files::migration_number(id) else {
+        let Some(version) = netherforge_format::kind::files::migration_number(&m.id) else {
             continue;
         };
-        let name = id.split_once('_').map_or(id.as_str(), |(_, n)| n);
+        let name = m.id.split_once('_').map_or(m.id.as_str(), |(_, n)| n);
         steps.push(Migration {
             version: i64::from(version),
             name: name.to_owned(),
             sql: sql.clone(),
         });
+    }
+    let path_of = |file: &str| -> String {
+        let found = migrations.iter().find(|m| format!("{}.sql", m.id) == file);
+        match (found, &own) {
+            (Some(m), Some(remote)) => m.dialects[remote.dialect.id()].0.clone(),
+            (Some(m), None) => m.path.clone(),
+            (None, _) => migrations[0].path.clone(),
+        }
+    };
+    if let Some(remote) = own.clone() {
+        drop(databases);
+        let scope = namespace.to_owned();
+        let (send, receive) = mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = send.send(remote.migrate(&scope, &steps));
+        });
+        let applied = receive.recv();
+        let mut databases = shared.databases.borrow_mut();
+        for line in databases.take_logs() {
+            platform.log().error(line, None);
+        }
+        match applied {
+            Ok(Ok(())) => {}
+            Ok(Err(crate::remote_db::MigrateError::Failed(file, why))) => {
+                databases.fail(
+                    platform,
+                    namespace,
+                    &path_of(&file),
+                    format!("couldn't apply {file}: {why}"),
+                );
+            }
+            Ok(Err(crate::remote_db::MigrateError::Ahead(versions))) => {
+                let shown: Vec<String> = versions.iter().map(|v| format!("{v:03}")).collect();
+                let last = migrations
+                    .iter()
+                    .map(|m| m.path.clone())
+                    .max()
+                    .unwrap_or_default();
+                let where_ = databases.describe_own(namespace).unwrap_or_default();
+                let message = format!(
+                    "The database of {namespace} is unavailable: the {where_} has migrations {} applied, which this server's copy of {namespace} doesn't have: a newer copy ran there, so run that one here too",
+                    shown.join(", ")
+                );
+                platform.log().error(message.clone(), None);
+                databases.failures.insert(
+                    namespace.to_owned(),
+                    codes::MIGRATION_AHEAD.at(&last, message, None),
+                );
+            }
+            Ok(Err(crate::remote_db::MigrateError::Open(why))) => {
+                let path = migrations[0].path.clone();
+                databases.fail(
+                    platform,
+                    namespace,
+                    &path,
+                    format!("couldn't open the database: {why}"),
+                );
+            }
+            Err(_) => {
+                let path = migrations[0].path.clone();
+                databases.fail(
+                    platform,
+                    namespace,
+                    &path,
+                    "couldn't open the database".into(),
+                );
+            }
+        }
+        return;
     }
     let database = databases.database(namespace);
     let scope = namespace.to_owned();
@@ -510,10 +687,7 @@ fn apply(shared: &Shared, namespace: &str, migrations: &[(String, String, bool, 
     match applied {
         Some(Ok(())) => {}
         Some(Err((file, why))) => {
-            let path = migrations
-                .iter()
-                .find(|(id, _, _, _)| format!("{id}.sql") == file)
-                .map_or_else(|| migrations[0].1.clone(), |(_, p, _, _)| p.clone());
+            let path = path_of(&file);
             let why = if file.is_empty() {
                 why
             } else {
@@ -522,7 +696,7 @@ fn apply(shared: &Shared, namespace: &str, migrations: &[(String, String, bool, 
             databases.fail(platform, namespace, &path, why);
         }
         None => {
-            let path = migrations[0].1.clone();
+            let path = migrations[0].path.clone();
             databases.fail(
                 platform,
                 namespace,
@@ -535,6 +709,50 @@ fn apply(shared: &Shared, namespace: &str, migrations: &[(String, String, bool, 
 
 // ---- statements ---------------------------------------------------------------
 
+/// `sql`'s statements, split at each `;` outside strings, quoted names and comments: for a server that runs one at a
+/// time (MySQL's migrations).
+pub fn statements(sql: &str) -> Vec<String> {
+    let chars: Vec<char> = sql.chars().collect();
+    let (mut out, mut current) = (Vec::new(), String::new());
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        let end = match c {
+            '\'' | '"' | '`' => {
+                let mut j = i + 1;
+                while j < chars.len() && chars[j] != c {
+                    j += if chars[j] == '\\' { 2 } else { 1 };
+                }
+                (j + 1).min(chars.len())
+            }
+            '-' if chars.get(i + 1) == Some(&'-') => (i..chars.len())
+                .find(|&j| chars[j] == '\n')
+                .unwrap_or(chars.len()),
+            '#' => (i..chars.len())
+                .find(|&j| chars[j] == '\n')
+                .unwrap_or(chars.len()),
+            '/' if chars.get(i + 1) == Some(&'*') => (i + 2..chars.len().saturating_sub(1))
+                .find(|&j| chars[j] == '*' && chars[j + 1] == '/')
+                .map_or(chars.len(), |j| j + 2),
+            ';' => {
+                if !current.trim().is_empty() {
+                    out.push(std::mem::take(&mut current).trim().to_owned());
+                }
+                current.clear();
+                i += 1;
+                continue;
+            }
+            _ => i + 1,
+        };
+        current.extend(&chars[i..end]);
+        i = end;
+    }
+    if !current.trim().is_empty() {
+        out.push(current.trim().to_owned());
+    }
+    out
+}
+
 /// What the database said, without where in the text it was (the script has the text).
 fn said(e: rusqlite::Error) -> String {
     match e {
@@ -546,7 +764,7 @@ fn said(e: rusqlite::Error) -> String {
 
 /// A value a statement binds.
 #[derive(Clone, Debug)]
-enum Param {
+pub enum Param {
     Null,
     Integer(i64),
     Real(f64),
@@ -566,7 +784,7 @@ impl rusqlite::ToSql for Param {
 
 /// A column's value as a script reads it.
 #[derive(Clone, Debug)]
-enum Cell {
+pub enum Cell {
     Integer(i64),
     Real(f64),
     Text(String),
@@ -574,12 +792,12 @@ enum Cell {
 
 /// One checked statement: its text and the values it binds.
 #[derive(Clone, Debug)]
-struct Statement {
-    sql: String,
-    values: Vec<Param>,
+pub struct Statement {
+    pub sql: String,
+    pub values: Vec<Param>,
 }
 
-type Row = Vec<(String, Cell)>;
+pub type Row = Vec<(String, Cell)>;
 
 impl Statement {
     fn prepared<'c>(&self, c: &'c Connection) -> Result<rusqlite::Statement<'c>, String> {
@@ -759,6 +977,12 @@ impl DatabaseContext {
             return Err(err(format!("{what}: {problem}")));
         }
         if this.connection.is_empty()
+            && self
+                .shared
+                .databases
+                .borrow()
+                .own(&this.namespace)
+                .is_none()
             && let Some(problem) = sqlite_problem(&sql)
         {
             return Err(err(format!("{what}: {problem}")));
@@ -769,32 +993,73 @@ impl DatabaseContext {
         })
     }
 
-    /// Runs `work` on the handle's database's lane: its value at a tick, or why there's none.
-    fn run<T: Send + 'static>(
+    /// Runs `work` on the handle's database's lane: its answer at a tick, or why there's none.
+    fn run(
         &self,
         this: &handles::Database,
-        work: impl FnOnce(&mut Connection) -> Result<T, String> + Send + 'static,
-    ) -> mpsc::Receiver<Result<T, String>> {
+        work: crate::remote_db::Work,
+    ) -> mpsc::Receiver<Result<crate::remote_db::Answer, String>> {
         let (send, receive) = mpsc::channel();
+        let mut databases = self.shared.databases.borrow_mut();
+        for line in databases.take_logs() {
+            self.shared.platform.log().error(line, None);
+        }
         if !this.connection.is_empty() {
-            let _ = send.send(Err(format!(
-                "the connection \"{}\" is a MySQL or PostgreSQL server's, which the Rust runtime doesn't reach yet",
-                this.connection
-            )));
+            let remote = databases.remote(&this.connection);
+            databases
+                .lane(&this.namespace, &this.connection)
+                .submit(move || {
+                    let _ = send.send(remote.run(None, &work));
+                });
             return receive;
         }
-        let database = {
-            let mut databases = self.shared.databases.borrow_mut();
-            if let Some(why) = databases.unavailable(&this.namespace) {
-                let _ = send.send(Err(why));
-                return receive;
-            }
-            databases.database(&this.namespace)
-        };
+        if let Some(why) = databases.unavailable(&this.namespace) {
+            let _ = send.send(Err(why));
+            return receive;
+        }
+        if let Some(name) = databases.own(&this.namespace) {
+            let remote = databases.remote(&name);
+            let namespace = this.namespace.clone();
+            databases.lane(&namespace, &name).submit(move || {
+                let _ = send.send(remote.run(Some(&namespace), &work));
+            });
+            return receive;
+        }
+        let database = databases.database(&this.namespace);
+        drop(databases);
         database.submit(Box::new(move |c| {
-            let _ = send.send(c.and_then(work));
+            let _ = send.send(c.and_then(|c| sqlite_work(c, &work)));
         }));
         receive
+    }
+}
+
+/// `work` on a package's SQLite file.
+fn sqlite_work(
+    c: &mut Connection,
+    work: &crate::remote_db::Work,
+) -> Result<crate::remote_db::Answer, String> {
+    use crate::remote_db::{Answer, Work};
+    match work {
+        Work::Query(statement) => statement.rows(c).map(Answer::Rows),
+        Work::Execute(statement) => statement.execute(c).map(Answer::Result),
+        Work::Transaction(statements) => {
+            let tx = c.transaction().map_err(said)?;
+            let mut results = Vec::new();
+            for (i, statement) in statements.iter().enumerate() {
+                match statement.execute(&tx) {
+                    Ok(result) => results.push(result),
+                    Err(why) => {
+                        return Err(format!(
+                            "statement {} failed, so nothing was changed: {why}",
+                            i + 1
+                        ));
+                    }
+                }
+            }
+            tx.commit().map_err(said)?;
+            Ok(Answer::Results(results))
+        }
     }
 }
 
@@ -814,11 +1079,13 @@ impl DatabaseApi for DatabaseContext {
         sql: String,
         params: Value,
     ) -> ApiResult<Pending<Vec<BTreeMap<String, Value>>>> {
+        use crate::remote_db::{Answer, Work};
         let statement = self.statement(this, "Database:query", sql, &params)?;
-        let receive = self.run(this, move |c| statement.rows(c));
+        let receive = self.run(this, Work::Query(statement));
         let lua = self.scripts.host().lua().clone();
-        Ok(answer(receive, move |rows: Vec<Row>| {
-            rows.into_iter().map(|row| row_table(&lua, row)).collect()
+        Ok(answer(receive, move |answer| match answer {
+            Answer::Rows(rows) => rows.into_iter().map(|row| row_table(&lua, row)).collect(),
+            _ => Vec::new(),
         }))
     }
 
@@ -828,9 +1095,16 @@ impl DatabaseApi for DatabaseContext {
         sql: String,
         params: Value,
     ) -> ApiResult<Pending<shapes::DatabaseResult>> {
+        use crate::remote_db::{Answer, Work};
         let statement = self.statement(this, "Database:execute", sql, &params)?;
-        let receive = self.run(this, move |c| statement.execute(c));
-        Ok(answer(receive, |result| result))
+        let receive = self.run(this, Work::Execute(statement));
+        Ok(answer(receive, |answer| match answer {
+            Answer::Result(result) => result,
+            _ => shapes::DatabaseResult {
+                changes: 0,
+                last_insert_id: None,
+            },
+        }))
     }
 
     fn transaction(
@@ -838,6 +1112,7 @@ impl DatabaseApi for DatabaseContext {
         this: &handles::Database,
         statements: Vec<shapes::DatabaseStatement>,
     ) -> ApiResult<Pending<Vec<shapes::DatabaseResult>>> {
+        use crate::remote_db::{Answer, Work};
         let checked = statements
             .into_iter()
             .enumerate()
@@ -850,24 +1125,11 @@ impl DatabaseApi for DatabaseContext {
                 )
             })
             .collect::<ApiResult<Vec<Statement>>>()?;
-        let receive = self.run(this, move |c| {
-            let tx = c.transaction().map_err(said)?;
-            let mut results = Vec::new();
-            for (i, statement) in checked.iter().enumerate() {
-                match statement.execute(&tx) {
-                    Ok(result) => results.push(result),
-                    Err(why) => {
-                        return Err(format!(
-                            "statement {} failed, so nothing was changed: {why}",
-                            i + 1
-                        ));
-                    }
-                }
-            }
-            tx.commit().map_err(said)?;
-            Ok(results)
-        });
-        Ok(answer(receive, |results| results))
+        let receive = self.run(this, Work::Transaction(checked));
+        Ok(answer(receive, |answer| match answer {
+            Answer::Results(results) => results,
+            _ => Vec::new(),
+        }))
     }
 }
 
@@ -887,6 +1149,44 @@ impl Service for DatabasesService {
     }
 
     fn start(&self, _room: &Room, project: &Define) {
+        {
+            let databases = self.shared.databases.borrow();
+            let log = self.shared.platform.log();
+            for (name, why) in &databases.config.invalid {
+                log.error(
+                    format!("config.yml's databases.{name} can't be used: {why}"),
+                    None,
+                );
+            }
+            if !databases.config.connections.is_empty() {
+                let each: Vec<String> = databases
+                    .config
+                    .connections
+                    .iter()
+                    .map(|(name, c)| {
+                        let packages: Vec<&str> = c.packages.iter().map(String::as_str).collect();
+                        let own: Vec<&str> = c.own_databases.iter().map(String::as_str).collect();
+                        format!(
+                            "{name}: {} at {}:{}, for {}{}",
+                            c.kind,
+                            c.host,
+                            c.port,
+                            if packages.is_empty() {
+                                "no package yet".to_owned()
+                            } else {
+                                packages.join(", ")
+                            },
+                            if own.is_empty() {
+                                String::new()
+                            } else {
+                                format!("; the own databases of {}", own.join(", "))
+                            }
+                        )
+                    })
+                    .collect();
+                log.info(format!("Database connections: {}", each.join("; ")));
+            }
+        }
         self.shared.databases.borrow_mut().failures.clear();
         for (namespace, migrations) in migrations_of(project) {
             apply(&self.shared, &namespace, &migrations);

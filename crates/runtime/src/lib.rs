@@ -69,6 +69,7 @@ pub mod project_files;
 pub mod project_items;
 pub mod recipes;
 pub mod reload;
+pub mod remote_db;
 pub mod schedule;
 pub mod screen;
 pub mod scripts;

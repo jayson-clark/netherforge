@@ -21,6 +21,8 @@ pub struct DataTable {
 
 pub struct Shared {
     pub platform: Rc<dyn Platform>,
+    /// The packages the server provides that the project loaded, as `/nf requires` lists them: the adapter's.
+    pub provided_packages: RefCell<Option<crate::session::WrittenPackFiles>>,
     pub centities: RefCell<Centities>,
     /// The project's `fonts/default.json`, which anchored text is measured with.
     pub font: RefCell<Option<DefaultFontFile>>,
@@ -163,6 +165,7 @@ impl Shared {
             screens: RefCell::default(),
             huds: RefCell::default(),
             packs: RefCell::default(),
+            provided_packages: RefCell::default(),
             files: RefCell::default(),
             block_data: RefCell::default(),
             mining: RefCell::default(),
