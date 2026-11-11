@@ -27,13 +27,19 @@ function steps.copy()
   end)
 end
 
-function steps.void()
+-- In a task, a wait after each part: making a world, loading its chunk and placing structures in one call ran past a
+-- call's time limit on a loaded machine (each wait gives the task a whole call again).
+local function void_parts()
   local void = nf.worlds.create("it_void", { generator = "void", structures = false })
+  nf.wait(1)
   void:load_chunk(vec3(10, 70, 10))
+  nf.wait(1)
   local empty = void:block(vec3(0, -60, 0)):kind()
   local placed = void:place_structure("it_house", vec3(10, 70, 10))
+  nf.wait(1)
   local turned =
     void:place_structure("it_house", vec3(30, 70, 30), { rotation = 90, mirror = "left_right" })
+  nf.wait(1)
   local border = void:border()
   border:set_center(vec3(5, 64, 5))
   border:set_size(30)
@@ -60,6 +66,10 @@ function steps.void()
     border:contains(vec3(21, 64, 5))
   )
   log("shrinking", border:set_size(10, { ticks = 200 }))
+end
+
+function steps.void()
+  nf.task(void_parts)
 end
 
 function steps.unload()
