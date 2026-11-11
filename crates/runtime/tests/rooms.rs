@@ -219,3 +219,57 @@ end)
         ]
     );
 }
+
+#[test]
+fn a_command_runs_in_its_senders_room_and_the_server_has_it_once() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"
+local runs = 0
+nf.commands.register("score", function(event)
+  runs += 1
+  print("score", runs)
+end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let room = server.session_mut().open_room().expect("a room");
+    assert_eq!(platform.commands.borrow().len(), 1);
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    server.game().player_join(&mut alex_join());
+    command(&platform, Some(alex()), "score");
+    server.session().move_player(alex().uuid, room);
+    command(&platform, Some(alex()), "score");
+    command(&platform, Some(alex()), "score");
+    // The console's goes to the main room.
+    command(&platform, None, "score");
+    server.tick();
+    let lines = platform.take();
+    let scores: Vec<&String> = lines.iter().filter(|l| l.contains("] score")).collect();
+    assert_eq!(scores.len(), 4, "{lines:?}");
+    assert!(
+        scores[0].starts_with("info [module t] score\t1"),
+        "{lines:?}"
+    );
+    assert!(
+        scores[1].starts_with("info [module t] score\t2"),
+        "{lines:?}"
+    );
+    assert!(
+        scores[2].starts_with("info [room 1 module t] score\t1"),
+        "{lines:?}"
+    );
+    assert!(
+        scores[3].starts_with("info [room 1 module t] score\t2"),
+        "{lines:?}"
+    );
+    // The server keeps /score until the last room that has it goes.
+    server.session_mut().close_room(room);
+    assert_eq!(platform.commands.borrow().len(), 1);
+    server.session_mut().stop();
+    assert_eq!(platform.commands.borrow().len(), 0);
+}

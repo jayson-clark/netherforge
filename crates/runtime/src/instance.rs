@@ -12,7 +12,10 @@ use std::rc::Rc;
 
 use std::collections::HashMap;
 
-use netherforge_platform::{Platform, Uuid};
+use netherforge_platform::{
+    CommandHandler, CommandInput, CommandSender, CommandSpec, Completion, Platform,
+    SuggestionRequest, Uuid,
+};
 
 /// A room of the server: `MAIN` is the one every session has, which holds every world and player no other room
 /// does; each room opened later has the next number.
@@ -124,6 +127,48 @@ pub struct Instance {
     pub routes: RefCell<Routes>,
     /// The last boss bar number given, in any room.
     pub next_bar: std::cell::Cell<i32>,
+    /// Each command the rooms declared, by name: every room's handler, behind the one the server has.
+    commands: RefCell<HashMap<String, std::collections::BTreeMap<RoomId, Rc<dyn CommandHandler>>>>,
+}
+
+/// What the server runs for a command the rooms declared: the sender's room's handler (a player's room's; the main
+/// room's for the console, or the first room's that has one).
+struct RoomCommand {
+    name: String,
+    instance: std::rc::Weak<Instance>,
+}
+
+impl RoomCommand {
+    fn handler(&self, sender: &dyn CommandSender) -> Option<Rc<dyn CommandHandler>> {
+        let instance = self.instance.upgrade()?;
+        let room = sender
+            .player()
+            .map_or(RoomId::MAIN, |p| instance.routes.borrow().player(p.uuid));
+        let commands = instance.commands.borrow();
+        let by_room = commands.get(&self.name)?;
+        by_room
+            .get(&room)
+            .or_else(|| by_room.values().next())
+            .cloned()
+    }
+}
+
+impl CommandHandler for RoomCommand {
+    fn run(&self, sender: Rc<dyn CommandSender>, label: String, input: CommandInput) {
+        if let Some(handler) = self.handler(&*sender) {
+            handler.run(sender, label, input);
+        }
+    }
+
+    fn suggest(&self, sender: Rc<dyn CommandSender>, request: SuggestionRequest) -> Completion {
+        match self.handler(&*sender) {
+            Some(handler) => handler.suggest(sender, request),
+            None => Completion {
+                start: request.partial.len() as i32,
+                suggestions: Vec::new(),
+            },
+        }
+    }
 }
 
 impl Instance {
@@ -143,6 +188,7 @@ impl Instance {
             lanes: RefCell::default(),
             routes: RefCell::default(),
             next_bar: Default::default(),
+            commands: RefCell::default(),
         })
     }
 
@@ -153,6 +199,60 @@ impl Instance {
             .entry(name)
             .or_insert_with(|| crate::http::Workers::lane(&format!("NetherForge {name}")))
             .clone()
+    }
+
+    /// Declares `/name` for `room`: the server is given it the first time any room declares it. False when the server
+    /// already has another `/name`, or `room` declared it already.
+    pub fn declare_command(
+        self: &Rc<Self>,
+        room: RoomId,
+        spec: CommandSpec,
+        handler: Rc<dyn CommandHandler>,
+    ) -> bool {
+        let name = spec.name.clone();
+        let known = self.commands.borrow().contains_key(&name);
+        if known {
+            let mut commands = self.commands.borrow_mut();
+            let by_room = commands.get_mut(&name).expect("known");
+            if by_room.contains_key(&room) {
+                return false;
+            }
+            by_room.insert(room, handler);
+            return true;
+        }
+        let dispatch = Rc::new(RoomCommand {
+            name: name.clone(),
+            instance: Rc::downgrade(self),
+        });
+        if !self.platform.commands().register(spec, dispatch) {
+            return false;
+        }
+        self.commands
+            .borrow_mut()
+            .entry(name)
+            .or_default()
+            .insert(room, handler);
+        true
+    }
+
+    /// `room` no longer has `/name`: the server's goes once no room does.
+    pub fn drop_command(&self, room: RoomId, name: &str) {
+        let gone = {
+            let mut commands = self.commands.borrow_mut();
+            let Some(by_room) = commands.get_mut(name) else {
+                return;
+            };
+            by_room.remove(&room);
+            if by_room.is_empty() {
+                commands.remove(name);
+                true
+            } else {
+                false
+            }
+        };
+        if gone {
+            self.platform.commands().unregister(name.to_owned());
+        }
     }
 
     /// Says that `count` things kept running on resource `kind:id`'s new version (live instances, windows kept,
