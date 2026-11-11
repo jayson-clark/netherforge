@@ -1964,7 +1964,7 @@ impl<'a> Session<'a> {
             }
         };
         for report in scripts.take_reports() {
-            let label = label(room, report.scope);
+            let label = label(run, room, report.scope);
             let (message, file, line) = placed(&report.failure);
             let traceback = match &report.failure {
                 netherforge_luau::Failure::Error { traceback, .. } => traceback.clone(),
@@ -2095,7 +2095,7 @@ impl<'a> Session<'a> {
                     line: Some(l.line as i32),
                 });
             let at = line.location.map(|l| format!(" ({l})")).unwrap_or_default();
-            let text = format!("[{}] {}{at}", label(room, line.scope), line.line);
+            let text = format!("[{}] {}{at}", label(run, room, line.scope), line.line);
             match run.shared.instance.console.borrow().clone() {
                 Some(console) => console.script_line(text, line.line, source),
                 None => log.info(text),
@@ -2519,10 +2519,18 @@ fn buffs(project: &Define) -> BTreeMap<String, netherforge_format::kind::buff::B
 }
 
 /// Whose a scope is, for the log: `module greeter`, a script's file.
-fn label(room: &Room, scope: netherforge_luau::ScopeId) -> String {
-    room.host()
+/// What the log calls a scope of `run`'s room: its name (`module door`), after the room's own when it isn't the main
+/// room (`room 2 module door`).
+fn label(run: &RoomRun, room: &Room, scope: netherforge_luau::ScopeId) -> String {
+    let name = room
+        .host()
         .scope_name(scope)
-        .unwrap_or_else(|| "script".into())
+        .unwrap_or_else(|| "script".into());
+    if run.id == crate::instance::RoomId::MAIN {
+        name
+    } else {
+        format!("{} {name}", run.id)
+    }
 }
 
 fn load<'a>(source: &dyn ProjectSource, packages: &'a dyn PackageSources) -> Loaded<'a> {

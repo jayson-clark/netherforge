@@ -118,6 +118,24 @@ pub struct Shared {
 }
 
 impl Shared {
+    /// Whether `player` is in this room (an online player not in another room is the main room's).
+    pub fn has_player(&self, player: netherforge_platform::Uuid) -> bool {
+        self.instance.routes.borrow().player(player) == self.room
+    }
+
+    /// The online players in this room: what "everyone" means to its scripts and services.
+    pub fn online_players(&self) -> Vec<netherforge_platform::PlayerRef> {
+        let mut online = self.platform.players().online();
+        let routes = self.instance.routes.borrow();
+        online.retain(|p| routes.player(p.uuid) == self.room);
+        online
+    }
+
+    /// Whether `world` is this room's (a world not given to another room is the main room's).
+    pub fn owns_world(&self, world: &str) -> bool {
+        self.instance.routes.borrow().world(world) == self.room
+    }
+
     /// The block at (x, y, z) in `world` was set or broken (by a script, a walk, or the server's events): bodies near
     /// it and what movers keep of it see it as it is now.
     pub fn block_changed(&self, world: &str, x: i32, y: i32, z: i32) {

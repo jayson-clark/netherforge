@@ -124,9 +124,7 @@ impl NfPlayersApi for UtilitiesContext {
     fn online(&self, _: &Caller) -> ApiResult<Vec<handles::Player>> {
         Ok(self
             .shared
-            .platform
-            .players()
-            .online()
+            .online_players()
             .iter()
             .map(player_handle)
             .collect())
