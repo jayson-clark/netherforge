@@ -69,6 +69,9 @@ pub struct Fake {
     pub game: NoFacts,
     /// Whether every chunk's entities are loaded.
     pub unloaded: std::cell::Cell<bool>,
+    /// The lowest solid y: the ground is every block from here to y 63 (and x 10 a wall). Unbounded by default; a
+    /// flat world's few layers for the bench, whose bodies would otherwise collide with whole solid sections.
+    pub floor: std::cell::Cell<i32>,
     /// The one player online, and where they are.
     pub player: RefCell<Option<Location>>,
     pub calls: RefCell<Vec<String>>,
@@ -109,6 +112,7 @@ impl Default for Fake {
             ])),
             game: NoFacts,
             unloaded: std::cell::Cell::new(false),
+            floor: std::cell::Cell::new(i32::MIN),
             player: RefCell::new(None),
             calls: RefCell::default(),
             next: RefCell::default(),
@@ -128,6 +132,11 @@ impl Default for Fake {
 }
 
 impl Fake {
+    /// Whether the block at (x, y) is solid: the ground below y 64 down to `floor`, and the wall at x 10.
+    pub fn solid(&self, x: i32, y: i32) -> bool {
+        (y < 64 && y >= self.floor.get()) || x == 10
+    }
+
     pub fn take(&self) -> Vec<String> {
         std::mem::take(&mut self.calls.borrow_mut())
     }
@@ -389,7 +398,7 @@ impl netherforge_platform::FakeBlockOps for Fake {
         for y in y0..=y1 {
             for _ in z0..=z1 {
                 for x in x0..=x1 {
-                    cells.push(i32::from(y < 64 || x == 10));
+                    cells.push(i32::from(self.solid(x, y)));
                 }
             }
         }
@@ -408,7 +417,7 @@ impl netherforge_platform::FakeBlockOps for Fake {
         y: i32,
         _: i32,
     ) -> Option<netherforge_platform::BlockSnapshot> {
-        let solid = y < 64 || x == 10;
+        let solid = self.solid(x, y);
         Some(netherforge_platform::BlockSnapshot {
             state: if solid {
                 "minecraft:stone"
@@ -589,7 +598,7 @@ impl FakeWorldOps for Fake {
         max_distance: f64,
         _: bool,
     ) -> Option<netherforge_platform::BlockHit> {
-        let solid = |x: i32, y: i32, _: i32| y < 64 || x == 10;
+        let solid = |x: i32, y: i32, _: i32| self.solid(x, y);
         let cell = |p: netherforge_format::math::Vec3| {
             (p.0.floor() as i32, p.1.floor() as i32, p.2.floor() as i32)
         };
@@ -632,7 +641,7 @@ impl FakeWorldOps for Fake {
         for x in min_x.floor() as i32..=max_x.floor() as i32 {
             for y in min_y.floor() as i32..=max_y.floor() as i32 {
                 for z in min_z.floor() as i32..=max_z.floor() as i32 {
-                    if (y < 64 || x == 10) && !self.broken.borrow().contains(&(x, y, z)) {
+                    if self.solid(x, y) && !self.broken.borrow().contains(&(x, y, z)) {
                         let (x, y, z) = (f64::from(x), f64::from(y), f64::from(z));
                         boxes.push(netherforge_format::math::BoundingBox {
                             min: netherforge_format::math::Vec3(x, y, z),
