@@ -1357,3 +1357,76 @@ fn the_owners_policy_that_stops_projects_refuses_one_that_requires_what_it_denie
         Some("runtime.policy")
     );
 }
+
+/// What each room's scripts printed: `main …` or `room 1 …`.
+fn room_lines(platform: &Fake) -> Vec<String> {
+    platform
+        .take()
+        .into_iter()
+        .filter_map(|line| {
+            let (room, rest) = if let Some(rest) = line.strip_prefix("info [module t] ") {
+                ("main", rest)
+            } else {
+                let rest = line.strip_prefix("info [room ")?;
+                let (n, rest) = rest.split_once(" module t] ")?;
+                (if n == "1" { "room 1" } else { "room ?" }, rest)
+            };
+            let text = rest.rsplit_once(" (modules/").map_or(rest, |(t, _)| t);
+            Some(format!("{room} {}", text.replace('\t', " ")))
+        })
+        .collect()
+}
+
+#[test]
+fn every_room_hears_the_network_and_a_request_is_answered_once() {
+    let files = project(
+        r#"
+        local chat = nf.network.channel("chat")
+        chat:on("message", function(e) print("heard", e.value) end)
+        chat:on("request", function(e) print("answering"); e.reply = "yes" end)
+        nf.on("test:go", function()
+            nf.task(function()
+                print("published", chat:publish("hi"))
+                print("answer", chat:request("dev", 1))
+            end)
+        end)
+    "#,
+        NETWORK,
+    );
+    let platform = Platform::default();
+    let mut session = start(&files, &platform, dev(), None);
+    let room = session.open_room().expect("a room");
+    for _ in 0..3 {
+        session.tick();
+    }
+    room_lines(&platform);
+    // Room 1 publishes and asks: both rooms hear it, and only the main room (the first listening) answers.
+    let run = session.run(room).unwrap();
+    run.room()
+        .unwrap()
+        .scripts()
+        .emit_custom(
+            netherforge_runtime::scripts::Target::Nf,
+            "test:go".into(),
+            mlua::Value::Nil,
+        )
+        .unwrap();
+    let mut seen = Vec::new();
+    let started = Instant::now();
+    while started.elapsed() < Duration::from_secs(10) && seen.len() < 5 {
+        session.tick();
+        seen.extend(room_lines(&platform));
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    seen.sort();
+    assert_eq!(
+        seen,
+        [
+            "main answering",
+            "main heard hi",
+            "room 1 answer yes nil",
+            "room 1 heard hi",
+            "room 1 published true",
+        ]
+    );
+}

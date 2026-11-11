@@ -710,6 +710,7 @@ impl<'a> Session<'a> {
         let mut run = run;
         run.room = Some(room);
         self.rooms.push(run);
+        self.instance().open.borrow_mut().insert(id);
         let run = self.rooms.last().expect("just pushed");
         self.released_in(run);
         self.report_in(run);
@@ -732,7 +733,11 @@ impl<'a> Session<'a> {
         };
         self.stop_room(at);
         self.rooms.remove(at);
-        self.instance().routes.borrow_mut().forget(id);
+        let instance = self.instance();
+        instance.routes.borrow_mut().forget(id);
+        instance.open.borrow_mut().remove(&id);
+        instance.network_inbound.borrow_mut().remove(&id);
+        instance.network_listening.borrow_mut().remove(&id);
         self.update_watched();
     }
 
@@ -782,27 +787,27 @@ impl<'a> Session<'a> {
             return;
         };
         use netherforge_platform::{GameEvents, game_event};
-        // What the rooms' handlers make of the messages is nobody's: the server says nothing of a move.
-        crate::events::GameEventDispatch(crate::events::InRoom {
-            session: self,
-            at: from,
-        })
-        .player_quit(&mut game_event::PlayerQuit {
-            player: player.clone(),
-            message: None,
-        });
-        self.instance()
-            .routes
-            .borrow_mut()
-            .put_player(player.uuid, to);
-        crate::events::GameEventDispatch(crate::events::InRoom {
-            session: self,
-            at: to,
-        })
-        .player_join(&mut game_event::PlayerJoin {
-            player,
-            first_join: false,
-            message: None,
+        let uuid = player.uuid;
+        self.instance().moving(uuid, || {
+            // What the rooms' handlers make of the messages is nobody's: the server says nothing of a move.
+            crate::events::GameEventDispatch(crate::events::InRoom {
+                session: self,
+                at: from,
+            })
+            .player_quit(&mut game_event::PlayerQuit {
+                player: player.clone(),
+                message: None,
+            });
+            self.instance().routes.borrow_mut().put_player(uuid, to);
+            crate::events::GameEventDispatch(crate::events::InRoom {
+                session: self,
+                at: to,
+            })
+            .player_join(&mut game_event::PlayerJoin {
+                player,
+                first_join: false,
+                message: None,
+            });
         });
     }
 
@@ -959,12 +964,22 @@ impl<'a> Session<'a> {
     /// A player joined room `room` (the server, or from another room): its services hear of it before its scripts
     /// do (what's hidden from them is hidden again).
     pub fn player_joined(&self, room: crate::instance::RoomId, player: &PlayerRef) {
-        self.each_in(room, |s| s.player_joined(player));
+        let moving = self.instance().is_moving(player.uuid);
+        self.each_in(room, |s| {
+            if !(moving && s.instance_wide()) {
+                s.player_joined(player)
+            }
+        });
     }
 
     /// A player left room `room`: its services forget them, after its scripts heard of it.
     pub fn player_quit(&self, room: crate::instance::RoomId, player: &PlayerRef) {
-        self.each_in(room, |s| s.player_quit(player));
+        let moving = self.instance().is_moving(player.uuid);
+        self.each_in(room, |s| {
+            if !(moving && s.instance_wide()) {
+                s.player_quit(player)
+            }
+        });
     }
 
     /// An entity has gone for good (died, removed): what every room kept for it goes, and its handlers.

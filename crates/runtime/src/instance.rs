@@ -127,6 +127,15 @@ pub struct Instance {
     pub routes: RefCell<Routes>,
     /// The last boss bar number given, in any room.
     pub next_bar: std::cell::Cell<i32>,
+    /// The rooms open now, the main room among them.
+    pub open: RefCell<std::collections::BTreeSet<RoomId>>,
+    /// The players being moved between rooms right now: what the server holds for everyone (the pack, their
+    /// permissions, their presence on the network) doesn't hear them leave or arrive.
+    moving: RefCell<std::collections::HashSet<Uuid>>,
+    /// What came in from the network's hub for each room beside the main one, which reads the link for all of them.
+    pub network_inbound: RefCell<HashMap<RoomId, Vec<crate::network::Inbound>>>,
+    /// What each room listens to on the network: the hub is told every room's at once.
+    pub network_listening: RefCell<std::collections::BTreeMap<RoomId, (Vec<String>, Vec<String>)>>,
     /// Each recipe the server has from the rooms, by id: how many rooms gave it, and the version it has.
     recipes: RefCell<HashMap<String, (u32, netherforge_format::kind::recipe::RecipeFile)>>,
     /// Each command the rooms declared, by name: every room's handler, behind the one the server has.
@@ -192,6 +201,10 @@ impl Instance {
             next_bar: Default::default(),
             commands: RefCell::default(),
             recipes: RefCell::default(),
+            open: RefCell::new([RoomId::MAIN].into()),
+            moving: RefCell::default(),
+            network_inbound: RefCell::default(),
+            network_listening: RefCell::default(),
         })
     }
 
@@ -202,6 +215,46 @@ impl Instance {
             .entry(name)
             .or_insert_with(|| crate::http::Workers::lane(&format!("NetherForge {name}")))
             .clone()
+    }
+
+    /// Whether `player` is being moved between rooms now.
+    pub fn is_moving(&self, player: Uuid) -> bool {
+        self.moving.borrow().contains(&player)
+    }
+
+    /// `f`, with `player` being moved between rooms meanwhile.
+    pub fn moving<R>(&self, player: Uuid, f: impl FnOnce() -> R) -> R {
+        self.moving.borrow_mut().insert(player);
+        let out = f();
+        self.moving.borrow_mut().remove(&player);
+        out
+    }
+
+    /// Every room's network listening at once: the channels and maps any room listens to.
+    pub fn network_union(&self) -> (Vec<String>, Vec<String>) {
+        let listening = self.network_listening.borrow();
+        let mut channels: Vec<String> = listening
+            .values()
+            .flat_map(|(c, _)| c.iter().cloned())
+            .collect();
+        let mut maps: Vec<String> = listening
+            .values()
+            .flat_map(|(_, m)| m.iter().cloned())
+            .collect();
+        channels.sort();
+        channels.dedup();
+        maps.sort();
+        maps.dedup();
+        (channels, maps)
+    }
+
+    /// The room that answers requests on `channel`: the first that listens to it.
+    pub fn network_answerer(&self, channel: &str) -> Option<RoomId> {
+        self.network_listening
+            .borrow()
+            .iter()
+            .find(|(_, (channels, _))| channels.iter().any(|c| c == channel))
+            .map(|(room, _)| *room)
     }
 
     /// A room gives the server recipe `id` (it hadn't): the server has it while any room does, as the room that gave

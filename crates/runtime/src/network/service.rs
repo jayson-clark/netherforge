@@ -807,21 +807,47 @@ impl NetworkContext {
     // ---- what came in ------------------------------------------------------------
 
     /// One tick: what came in, what's listened to, the server's life, timeouts and arrivals.
+    ///
+    /// The main room reads the link for every room: what came in goes to each room open beside it too, for its own
+    /// scripts (each hears what it listens to, answers what it asked). The server's life on the network (its
+    /// readiness, a shutdown, arrivals) is the main room's to keep.
     pub fn tick(&self) {
         let Some(link) = self.link() else { return };
         let now = self.now();
-        link.tick(now);
-        let max = self.shared.network.borrow().config.messages_per_tick;
-        let log = self.platform().log();
-        let items = link.drain(max, now, &|m| log.info(m), &|m| log.warn(m));
+        let instance = &self.shared.instance;
+        let main = self.shared.room == crate::instance::RoomId::MAIN;
+        let items = if main {
+            link.tick(now);
+            let max = self.shared.network.borrow().config.messages_per_tick;
+            let log = self.platform().log();
+            let items = link.drain(max, now, &|m| log.info(m), &|m| log.warn(m));
+            let open = instance.open.borrow().clone();
+            let mut inbound = instance.network_inbound.borrow_mut();
+            for room in open.into_iter().filter(|r| *r != self.shared.room) {
+                inbound
+                    .entry(room)
+                    .or_default()
+                    .extend(items.iter().cloned());
+            }
+            items
+        } else {
+            instance
+                .network_inbound
+                .borrow_mut()
+                .remove(&self.shared.room)
+                .unwrap_or_default()
+        };
         for item in items {
             self.received(&link, item);
         }
         if link.connected() {
             self.listen(&link);
         }
-        self.life(&link, now);
         self.time_out(now);
+        if !main {
+            return;
+        }
+        self.life(&link, now);
         self.arrive(&link, now);
         if let Some(hub) = link.local() {
             for (id, message) in hub.take_kicks() {
@@ -935,7 +961,12 @@ impl NetworkContext {
                 channel,
                 from,
                 value,
-            } => self.answer(link, lua, id, channel, from, value),
+            } => {
+                // One room answers a request: the first that listens to its channel.
+                if self.shared.instance.network_answerer(&channel) == Some(self.shared.room) {
+                    self.answer(link, lua, id, channel, from, value)
+                }
+            }
             HubFrame::Reply { id, value, error } => {
                 let waiting = self.shared.network.borrow_mut().requests.remove(&id);
                 if let Some(waiting) = waiting {
@@ -1358,6 +1389,20 @@ impl NetworkContext {
             })
             .collect();
         let now = self.now();
+        // The hub hears every room's at once, from the main room.
+        self.shared
+            .instance
+            .network_listening
+            .borrow_mut()
+            .insert(self.shared.room, (channels, maps));
+        if self.shared.room != crate::instance::RoomId::MAIN {
+            let mut network = self.shared.network.borrow_mut();
+            for (key, message) in warnings {
+                network.warn_once(self.platform(), now, &key, message);
+            }
+            return;
+        }
+        let (channels, maps) = self.shared.instance.network_union();
         {
             let mut network = self.shared.network.borrow_mut();
             for (key, message) in warnings {
@@ -1575,9 +1620,13 @@ impl Service for NetworkService {
             scripts: room.scripts().clone(),
         };
         let link = self.shared.network.borrow().link();
+        let main = self.shared.room == crate::instance::RoomId::MAIN;
         if let Some(link) = link {
             let log = self.shared.platform.log();
-            link.start(&|m| log.info(m));
+            // The server's link starts once, with the main room; a room opened later finds it running.
+            if main {
+                link.start(&|m| log.info(m));
+            }
             if link.mode != Mode::Off {
                 // The network's bans and mutes: this server's copies, to enforce and to answer from.
                 let mut network = self.shared.network.borrow_mut();
@@ -1591,7 +1640,7 @@ impl Service for NetworkService {
                 hub.accept_joins();
             }
             // Everyone already here (a reload) is this server's in a local network.
-            for player in self.shared.online_players() {
+            for player in self.shared.online_players().into_iter().filter(|_| main) {
                 self.shared
                     .network
                     .borrow_mut()
@@ -1611,6 +1660,10 @@ impl Service for NetworkService {
     }
 
     fn player_joined(&self, player: &PlayerRef) {
+        // A move between rooms isn't an arrival on the network.
+        if self.shared.instance.is_moving(player.uuid) {
+            return;
+        }
         let now = self.context.borrow().as_ref().map_or(0, |c| c.now());
         let link = {
             let mut network = self.shared.network.borrow_mut();
@@ -1623,6 +1676,9 @@ impl Service for NetworkService {
     }
 
     fn player_quit(&self, player: &PlayerRef) {
+        if self.shared.instance.is_moving(player.uuid) {
+            return;
+        }
         let link = {
             let mut network = self.shared.network.borrow_mut();
             network.joined_at.remove(&player.uuid);
@@ -1656,9 +1712,16 @@ impl Service for NetworkService {
             network.joined_at.clear();
             network.link()
         };
-        // The next session says what it listens to; until then, nothing.
+        self.shared
+            .instance
+            .network_listening
+            .borrow_mut()
+            .remove(&self.shared.room);
+        // The next session says what it listens to; until then, nothing. A room closing beside the main one leaves
+        // the rest's: the main room tells the hub what's left at its next tick.
         if let Some(link) = link
             && link.connected()
+            && self.shared.room == crate::instance::RoomId::MAIN
         {
             link.send(ServerFrame::Listen {
                 channels: Vec::new(),
