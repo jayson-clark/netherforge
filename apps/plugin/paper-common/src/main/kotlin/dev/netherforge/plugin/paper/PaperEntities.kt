@@ -56,7 +56,7 @@ import org.bukkit.entity.TextDisplay as BukkitTextDisplay
 open class PaperEntities(
     protected val plugin: Plugin,
     /** [PaperVersion.move]: moves one of ours within its world without a teleport, when it can. */
-    private val move: (Entity, org.bukkit.Location) -> Boolean,
+    private val move: (Entity, org.bukkit.Location) -> Boolean
 ) : EntityOps {
     private val instanceKey = NamespacedKey(plugin, "instance")
     private val nodeKey = NamespacedKey(plugin, "node")

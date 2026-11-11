@@ -180,11 +180,11 @@ nothing.
 
 Our own A*, not the game's pathfinder (centities aren't mobs). Where things are:
 
-| Path (`crates/runtime/src/centity/`) | Owns                                                                                                                                                     |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pathing.rs`                         | `Space` (a block's collision boxes, none = unloaded), `Walker`, `clear`/`floor_at`; the shared A*, `ground` (walk), `air` (fly), smoothing, `NODE_LIMIT` |
+| Path (`crates/runtime/src/centity/`) | Owns                                                                                                                                                                                                                                                     |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pathing.rs`                         | `Space` (a block's collision boxes, none = unloaded), `Walker`, `clear`/`floor_at`; the shared A*, `ground` (walk), `air` (fly), smoothing, `NODE_LIMIT`                                                                                                 |
 | `world_shapes.rs`                    | the blocks of a region from `WorldOps.collision_boxes` (one call, filed by block), and `BlockCache`: worlds' blocks kept across ticks by 8³ brick for movers, walks and searches (read again after 20 ticks, or at once through `Shared::block_changed`) |
-| `paths.rs`                           | `Walk` (on `Instance.walk`), `move_to`'s start, the per-tick step, re-paths, doors, `path_end`                                                           |
+| `paths.rs`                           | `Walk` (on `Instance.walk`), `move_to`'s start, the per-tick step, re-paths, doors, `path_end`                                                                                                                                                           |
 
 - **Platform-free search**, tested alone (`pathing.rs`' own tests) against a
   map of blocks, and on spawned centities in `crates/runtime/tests/centities.rs`. It only asks
