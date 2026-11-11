@@ -29,13 +29,14 @@ end
 -- The world loaded around its spawn so the ruin generates.
 function steps.generate()
   local world = nf.worlds.get("it_gen") or nf.worlds.load("it_gen")
-  -- A row of chunks a tick: generating them all in one call runs past a call's time limit on a loaded machine.
+  -- A chunk a tick: generating new chunks is slow on a loaded machine, and even a row of nine in one call ran past a
+  -- call's time limit there (load averages of 50 and more).
   nf.task(function()
     for cx = -4, 4 do
       for cz = -4, 4 do
         world:load_chunk(vec3(cx * 16, 64, cz * 16))
+        nf.wait(1)
       end
-      nf.wait(1)
     end
     log("generated", world:name())
   end)
