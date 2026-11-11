@@ -17,7 +17,7 @@ netherforge-platform = { path = "../platform" }
 netherforge-runtime = { path = "../runtime" }
 netherforge-luau = { path = "../luau" }
 foldhash = "0.2"
-mimalloc = { version = "0.1", default-features = false }
+mimalloc = { version = "0.1", default-features = false, features = ["local_dynamic_tls"] }
 serde.workspace = true
 serde_json.workspace = true
 

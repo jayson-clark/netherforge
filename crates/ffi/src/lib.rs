@@ -7,6 +7,8 @@
 /// mimalloc, not the system's: the runtime and Luau (whose allocator is Rust's) allocate many small objects a
 /// tick, and glibc's malloc made the Linux library ~20% slower than it ran elsewhere (Kosmoi's entities bench in a
 /// Linux container: 2.1-2.7 ms of CPU a tick, 1.7-2.2 with mimalloc). Only Rust's allocations: the JVM keeps its own.
+/// `local_dynamic_tls`: the library is `dlopen`ed into the JVM, and mimalloc's default initial-exec TLS can't be
+/// ("cannot allocate memory in static TLS block", so the plugin couldn't load at all on Linux).
 #[global_allocator]
 static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
