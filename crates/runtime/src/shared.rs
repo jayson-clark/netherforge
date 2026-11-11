@@ -131,6 +131,17 @@ impl Shared {
         online
     }
 
+    /// This room's default world (`nf.worlds.default()`): the server's for the main room, the first world it was given
+    /// for any other (the server's while it has none).
+    pub fn default_world(&self) -> String {
+        if self.room != crate::instance::RoomId::MAIN
+            && let Some(first) = self.instance.routes.borrow().worlds_of(self.room).into_iter().next()
+        {
+            return first;
+        }
+        self.platform.worlds().default_world()
+    }
+
     /// Whether `world` is this room's (a world not given to another room is the main room's).
     pub fn owns_world(&self, world: &str) -> bool {
         self.instance.routes.borrow().world(world) == self.room

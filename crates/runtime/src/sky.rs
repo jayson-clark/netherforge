@@ -350,7 +350,7 @@ impl Service for SkiesService {
         if skies.worlds.is_empty() && skies.players.is_empty() && skies.viewers.is_empty() {
             return;
         }
-        for player in platform.players().online() {
+        for player in self.shared.online_players() {
             skies.view(platform, player.uuid);
         }
     }

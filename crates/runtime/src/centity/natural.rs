@@ -372,7 +372,7 @@ impl CentityContext {
         if all.is_empty() {
             return;
         }
-        let online = platform.players().online();
+        let online = self.shared.online_players();
         if online.is_empty() {
             return;
         }

@@ -472,7 +472,7 @@ impl ParticlesContext {
             particles.rotation = particles.rotation.wrapping_add(1);
             start
         };
-        let online = self.platform().players().online();
+        let online = self.shared.online_players();
         let mut sent = 0;
         let mut skipped: Vec<String> = Vec::new();
         for k in 0..numbers.len() {

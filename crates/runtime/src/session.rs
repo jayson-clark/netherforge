@@ -2313,7 +2313,10 @@ fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {
         Box::new(crate::sky::SkiesService {
             shared: shared.clone(),
         }),
-        Box::new(crate::daylight::DaylightService::default()),
+        Box::new(crate::daylight::DaylightService {
+            shared: shared.clone(),
+            night: Default::default(),
+        }),
         Box::new(crate::daylight::SpawnRatesService::default()),
         // Stops after every script that may hold a connection open, so theirs end `unloaded` as they go.
         Box::new(crate::http::api::HttpService {

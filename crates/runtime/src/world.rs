@@ -1948,11 +1948,17 @@ fn filter_of(options: Option<&shapes::QueryOptions>) -> ApiResult<QueryFilter> {
 }
 
 impl NfWorldsApi for GameContext {
+    /// The room's worlds, its default first.
     fn all(&self, _: &Caller) -> ApiResult<Vec<handles::World>> {
         let worlds = self.platform().worlds();
-        let default = worlds.default_world();
+        let default = self.shared.default_world();
         let mut names = vec![default.clone()];
-        names.extend(worlds.names().into_iter().filter(|n| *n != default));
+        names.extend(
+            worlds
+                .names()
+                .into_iter()
+                .filter(|n| *n != default && self.shared.owns_world(n)),
+        );
         Ok(names
             .into_iter()
             .map(|name| handles::World { name })
@@ -1997,7 +2003,7 @@ impl NfWorldsApi for GameContext {
 
     fn default(&self, _: &Caller) -> ApiResult<handles::World> {
         Ok(handles::World {
-            name: self.platform().worlds().default_world(),
+            name: self.shared.default_world(),
         })
     }
 }

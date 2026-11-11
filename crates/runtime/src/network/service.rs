@@ -1591,7 +1591,7 @@ impl Service for NetworkService {
                 hub.accept_joins();
             }
             // Everyone already here (a reload) is this server's in a local network.
-            for player in self.shared.platform.players().online() {
+            for player in self.shared.online_players() {
                 self.shared
                     .network
                     .borrow_mut()
