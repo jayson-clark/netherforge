@@ -606,6 +606,7 @@ fn presence_sending_players_and_arrivals() {
         group: None,
         balance: None,
         wait_millis: None,
+        room: None,
     });
     assert_eq!(hub.take_joins(), [(uuid_text(9), "Sam".to_owned())]);
     platform.online.borrow_mut().push(sam.clone());
@@ -1429,4 +1430,65 @@ fn every_room_hears_the_network_and_a_request_is_answered_once() {
             "room 1 published true",
         ]
     );
+}
+
+#[test]
+fn a_player_sent_for_a_room_arrives_in_it_and_it_opens_for_them() {
+    let files = project(
+        r#"
+        local here = nf.rooms.current()
+        nf.on("player_arrive", function(e) print("arrived", here:key(), e.from) end)
+    "#,
+        NETWORK,
+    );
+    let platform = Platform::default();
+    let mut session = start(&files, &platform, dev(), None);
+    let hub = hub(&session);
+    let survival = hub.peer("survival", None, None, Lifecycle::Ready);
+    // Ready once it has ticked.
+    for _ in 0..3 {
+        session.tick();
+    }
+    hub.accept_joins();
+    hub.place(&uuid_text(9), "Sam", "survival");
+    survival.send(ServerFrame::Send {
+        id: 1,
+        players: vec![uuid_text(9)],
+        server: Some("dev".into()),
+        data: None,
+        group: None,
+        balance: None,
+        wait_millis: None,
+        room: Some("match-1".into()),
+    });
+    // The main room reads the link; at the tick's end the room opens, and Sam is its as they arrive.
+    let started = Instant::now();
+    let mut room = netherforge_runtime::instance::RoomId::MAIN;
+    while started.elapsed() < Duration::from_secs(10)
+        && room == netherforge_runtime::instance::RoomId::MAIN
+    {
+        session.tick();
+        session.apply_room_requests();
+        room = session.route(netherforge_runtime::events::Route::Player(uuid(9)));
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert_ne!(room, netherforge_runtime::instance::RoomId::MAIN);
+    assert_eq!(
+        session.instance().room_key(room).as_deref(),
+        Some("match-1")
+    );
+    let sam = PlayerRef {
+        uuid: uuid(9),
+        name: "Sam".into(),
+    };
+    platform.online.borrow_mut().push(sam.clone());
+    session.player_joined(room, &sam);
+    let mut seen = Vec::new();
+    let started = Instant::now();
+    while started.elapsed() < Duration::from_secs(10) && seen.is_empty() {
+        session.tick();
+        seen.extend(room_lines(&platform));
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert_eq!(seen, ["room 1 arrived match-1 survival"]);
 }

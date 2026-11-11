@@ -263,6 +263,14 @@ sealed interface HubFrame {
     @SerialName("arriving")
     data class Arriving(val player: String, val from: String, val data: JsonElement? = null) : HubFrame
 
+    /**
+     * [player], on their way here (logging in, or sent), belongs in the room [room] names: the server puts them in it as
+     * they arrive, opening it when no room has that key yet. Before the player gets here, and before any [Arriving].
+     */
+    @Serializable
+    @SerialName("room")
+    data class Room(val player: String, val room: String) : HubFrame
+
     /** The [Arriving] for [player] won't happen after all: the proxy couldn't move them. */
     @Serializable
     @SerialName("arrival_cancelled")
@@ -482,7 +490,9 @@ sealed interface ServerFrame {
         val group: String? = null,
         val balance: Balance? = null,
         /** How long it may wait for an instance with room (or a server that's starting) before it fails. */
-        val waitMillis: Long? = null
+        val waitMillis: Long? = null,
+        /** The room on the server they go into (a match's key, an owner's): the server's own choice when null. */
+        val room: String? = null
     ) : ServerFrame
 
     @Serializable

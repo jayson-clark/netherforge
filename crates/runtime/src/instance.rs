@@ -247,6 +247,43 @@ impl Instance {
         self.rooms.borrow().get(&room).and_then(|r| r.key.clone())
     }
 
+    /// `player`, on their way here, belongs in the room keyed `key`: the room open with that key, or one opened for it
+    /// at the end of the tick. Already here, they're moved there then.
+    pub fn place_in_room(&self, player: Uuid, key: &str) {
+        let found = self
+            .rooms
+            .borrow()
+            .iter()
+            .find(|(_, r)| {
+                r.key.as_deref() == Some(key) && r.state != crate::rooms::RoomState::Closing
+            })
+            .map(|(id, _)| *id);
+        let id = found.unwrap_or_else(|| {
+            let id = self.next_room_id();
+            self.rooms.borrow_mut().insert(
+                id,
+                crate::rooms::RoomInfo {
+                    key: Some(key.to_owned()),
+                    state: crate::rooms::RoomState::Opening,
+                },
+            );
+            self.room_requests
+                .borrow_mut()
+                .push(crate::rooms::RoomRequest::Open {
+                    id,
+                    key: Some(key.to_owned()),
+                });
+            id
+        });
+        if self.platform.players().get(player).is_some() {
+            self.room_requests
+                .borrow_mut()
+                .push(crate::rooms::RoomRequest::Send { player, to: id });
+        } else {
+            self.routes.borrow_mut().put_player(player, id);
+        }
+    }
+
     /// Whether `player` is being moved between rooms now.
     pub fn is_moving(&self, player: Uuid) -> bool {
         self.moving.borrow().contains(&player)

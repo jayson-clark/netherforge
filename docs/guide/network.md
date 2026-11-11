@@ -645,7 +645,7 @@ allow; `/nfhub admins revoke <id>` ends it and its streams.
 | `servers:read`     | `GET /v1/servers` (each with its group, state, players and room), and server changes streamed.                                                                |
 | `servers:write`    | `POST /v1/servers`, `DELETE /v1/servers/<name>`, `POST /v1/servers/<name>/drain`.                                                                             |
 | `presence:read`    | `GET /v1/players`, and joins, moves and leaves streamed.                                                                                                      |
-| `players:send`     | `POST /v1/players/<id or name>/send` `{ "server" \| "group", "balance", "data", "wait" }`.                                                                    |
+| `players:send`     | `POST /v1/players/<id or name>/send` `{ "server" \| "group", "balance", "data", "wait", "room" }`.                                                            |
 | `players:message`  | `POST /v1/players/<id or name>/message` `{ "kind": "chat" \| "title" \| "actionbar", "text", "subtitle" }`, shown by the proxy wherever they are (see below). |
 | `players:kick`     | `POST /v1/players/<id or name>/kick` `{ "message" }`.                                                                                                         |
 | `channels:publish` | `POST /v1/channels/publish` `{ "channel": "lobby:news", "value", "server", "group" }`.                                                                        |
@@ -697,7 +697,10 @@ players logging in) decides where those players go. For each send, the hub
 sends `place` with the players and an `id`, and the service answers
 `POST /v1/placements/<id>` with one of:
 
-- `{ "server": "arena-3" }`: they go there.
+- `{ "server": "arena-3" }`: they go there. Add `"room": "match-7"` to put
+  them in that room of the server (one that runs several rooms of its project,
+  see `nf.rooms`): the server opens a room with that key for the first player
+  sent for it.
 - `{ "hold": "Finding you a match…" }`: they wait where they are, seeing the
   status on their action bar (or the send's `on_wait` hears it), until the
   service answers again or the send's `wait` runs out. A player logging in

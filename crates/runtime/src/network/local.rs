@@ -123,6 +123,7 @@ struct Send {
     group: Option<String>,
     balance: Option<Balance>,
     wait_millis: Option<i64>,
+    room: Option<String>,
 }
 
 /// Players to move once the frame is handled, and whom to tell.
@@ -983,6 +984,7 @@ impl Hub {
                 group,
                 balance,
                 wait_millis,
+                room,
             } => self.send_player(
                 from,
                 Send {
@@ -993,6 +995,7 @@ impl Hub {
                     group,
                     balance,
                     wait_millis,
+                    room,
                 },
             ),
         }
@@ -1343,6 +1346,15 @@ impl Hub {
         let target = self.sessions.contains_key(&server).then(|| server.clone());
         if let Some(target) = &target {
             for player in &moving {
+                if let Some(room) = &frame.room {
+                    self.deliver(
+                        target,
+                        HubFrame::Room {
+                            player: player.id.clone(),
+                            room: room.clone(),
+                        },
+                    );
+                }
                 self.deliver(
                     target,
                     HubFrame::Arriving {
@@ -1449,6 +1461,7 @@ impl Hub {
                 group: Some(FALLBACK.into()),
                 balance: None,
                 wait_millis: None,
+                room: None,
             };
             if let Placement::Go {
                 server,

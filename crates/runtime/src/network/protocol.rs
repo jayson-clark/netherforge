@@ -494,6 +494,12 @@ pub enum HubFrame {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         data: Option<Value>,
     },
+    /// `player`, on their way here (logging in, or sent), belongs in the room `room` names: they're put in it as they
+    /// arrive, a room opened for it when none has that key yet. Before the player gets here, and before any `Arriving`.
+    Room {
+        player: String,
+        room: String,
+    },
     ArrivalCancelled {
         player: String,
     },
@@ -637,6 +643,9 @@ pub enum ServerFrame {
         balance: Option<Balance>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         wait_millis: Option<i64>,
+        /// The room on the server they go into (a match's key, an owner's): the server's own choice when none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        room: Option<String>,
     },
     Ping,
 }

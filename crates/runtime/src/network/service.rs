@@ -648,6 +648,7 @@ impl NetworkContext {
             group,
             balance,
             wait_millis: wait.map(|w| (w * 1000.0) as i64),
+            room: None,
         };
         let link = network.link();
         drop(network);
@@ -844,11 +845,11 @@ impl NetworkContext {
             self.listen(&link);
         }
         self.time_out(now);
+        self.arrive(&link, now);
         if !main {
             return;
         }
         self.life(&link, now);
-        self.arrive(&link, now);
         if let Some(hub) = link.local() {
             for (id, message) in hub.take_kicks() {
                 if let Some(uuid) = parse_uuid(&id) {
@@ -1095,6 +1096,13 @@ impl NetworkContext {
                             },
                         ),
                     );
+                }
+            }
+            HubFrame::Room { player, room } => {
+                if self.shared.room == crate::instance::RoomId::MAIN
+                    && let Some(player) = parse_uuid(&player)
+                {
+                    self.shared.instance.place_in_room(player, &room);
                 }
             }
             HubFrame::Problem { message } => {
@@ -1534,7 +1542,10 @@ impl NetworkContext {
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
         for (id, arrival) in arrivals {
-            let player = parse_uuid(&id).filter(|u| self.platform().players().get(*u).is_some());
+            // Each room hears its own players arrive.
+            let player = parse_uuid(&id).filter(|u| {
+                self.shared.has_player(*u) && self.platform().players().get(*u).is_some()
+            });
             let Some(player) = player else {
                 if now.saturating_sub(arrival.tick) > ARRIVAL_TICKS {
                     link.state.borrow_mut().arrivals.remove(&id);

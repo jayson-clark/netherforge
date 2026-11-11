@@ -727,6 +727,23 @@ impl<'a> Session<'a> {
         run.room = Some(room);
         self.rooms.push(run);
         self.instance().open.borrow_mut().insert(id);
+        // Players who arrived for it before it opened join it now.
+        let waiting = self.instance().routes.borrow().players_of(id);
+        for player in waiting {
+            if let Some(player) = self.platform.players().get(player) {
+                use netherforge_platform::{GameEvents, game_event};
+                self.relist(player.uuid);
+                crate::events::GameEventDispatch(crate::events::InRoom {
+                    session: self,
+                    at: id,
+                })
+                .player_join(&mut game_event::PlayerJoin {
+                    player,
+                    first_join: false,
+                    message: None,
+                });
+            }
+        }
         // Opening, it's open now (a room started as it opened stays started).
         if let Some(info) = self.instance().rooms.borrow_mut().get_mut(&id)
             && info.state == crate::rooms::RoomState::Opening
