@@ -31,7 +31,7 @@ use rapier3d_f64::math::{Pose, Rotation, Vector as RVec};
 use rapier3d_f64::prelude::{
     ActiveEvents, ChannelEventCollector, CoefficientCombineRule, ColliderBuilder, ColliderHandle,
     CollisionEvent, Group, InteractionGroups, InteractionTestMode, PhysicsWorld, RigidBodyBuilder,
-    RigidBodyHandle, RigidBodyType,
+    RigidBodyHandle, RigidBodyType, SharedShape,
 };
 
 use super::Instance;
@@ -586,35 +586,67 @@ impl Physics {
             {
                 continue;
             }
-            if let Some((_, colliders)) = world.scenery.remove(&id) {
-                for c in colliders {
-                    world.remove_collider(c);
-                }
-            }
             let Some(instance) = centities.get(id) else {
                 continue;
             };
             let a = instance.anchor();
             let at = Vec3(a.x, a.y, a.z);
-            let mut colliders = Vec::new();
-            for (b, node) in obstacles.boxes.iter().zip(&obstacles.nodes) {
-                if instance.definition.nodes[*node].physics.is_some()
-                    || under_a_body(instance, *node)
-                {
-                    continue;
+            // Each box no body carries, as a cuboid's half extents and centre.
+            let placed: Vec<(Vec3, Vec3)> = obstacles
+                .boxes
+                .iter()
+                .zip(&obstacles.nodes)
+                .filter(|(_, node)| {
+                    instance.definition.nodes[**node].physics.is_none()
+                        && !under_a_body(instance, **node)
+                })
+                .map(|(b, _)| {
+                    let half = (b.max - b.min) * 0.5;
+                    (
+                        Vec3(half.0.max(1e-3), half.1.max(1e-3), half.2.max(1e-3)),
+                        (b.min + b.max) * 0.5 + at,
+                    )
+                })
+                .collect();
+            // As many boxes as before (it moved, or turned): its colliders are moved and reshaped where they are,
+            // which the broad phase refits, rather than taken out and put back every tick a centity walks.
+            if let Some((was, colliders)) = world.scenery.get_mut(&id)
+                && colliders.len() == placed.len()
+            {
+                for (handle, (half, centre)) in colliders.iter().zip(&placed) {
+                    if let Some(collider) = world.rapier.colliders.get_mut(*handle) {
+                        let same_shape = collider
+                            .shape()
+                            .as_cuboid()
+                            .is_some_and(|c| fv(c.half_extents) == *half);
+                        if !same_shape {
+                            collider.set_shape(SharedShape::cuboid(half.0, half.1, half.2));
+                        }
+                        if fv(collider.translation()) != *centre {
+                            collider.set_translation(rv(*centre));
+                        }
+                    }
                 }
-                let half = (b.max - b.min) * 0.5;
-                let collider =
-                    ColliderBuilder::cuboid(half.0.max(1e-3), half.1.max(1e-3), half.2.max(1e-3))
-                        .translation(rv((b.min + b.max) * 0.5 + at))
-                        .friction(1.0)
-                        .restitution(0.0)
-                        .collision_groups(InteractionGroups::new(
-                            HITBOXES,
-                            BODIES,
-                            InteractionTestMode::And,
-                        ))
-                        .build();
+                *was = obstacles;
+                continue;
+            }
+            if let Some((_, colliders)) = world.scenery.remove(&id) {
+                for c in colliders {
+                    world.remove_collider(c);
+                }
+            }
+            let mut colliders = Vec::new();
+            for (half, centre) in placed {
+                let collider = ColliderBuilder::cuboid(half.0, half.1, half.2)
+                    .translation(rv(centre))
+                    .friction(1.0)
+                    .restitution(0.0)
+                    .collision_groups(InteractionGroups::new(
+                        HITBOXES,
+                        BODIES,
+                        InteractionTestMode::And,
+                    ))
+                    .build();
                 colliders.push(world.rapier.colliders.insert(collider));
             }
             world.scenery.insert(id, (obstacles, colliders));
