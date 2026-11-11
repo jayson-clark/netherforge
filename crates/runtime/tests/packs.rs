@@ -458,7 +458,9 @@ end)
     assert_eq!(fetch("POST", &url).0, "HTTP/1.1 405 Method Not Allowed");
 
     // Joining again with this build sends nothing; a changed pack is sent, replacing only the project's.
-    events.session().player_joined(&alex());
+    events
+        .session()
+        .player_joined(netherforge_runtime::instance::RoomId::MAIN, &alex());
     assert!(!platform.take().iter().any(|l| l.starts_with("offer")));
     files.write(
         "resource_packs/ui/pack.json",

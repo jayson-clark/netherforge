@@ -170,6 +170,10 @@ impl Service for SpawnRatesService {
     fn name(&self) -> &'static str {
         "spawn rates"
     }
+    /// Once per server, in the main room.
+    fn instance_wide(&self) -> bool {
+        true
+    }
 
     fn start(&self, _room: &Room, project: &Define) {
         let worlds: BTreeMap<String, WorldConfig> = project

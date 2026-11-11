@@ -162,6 +162,11 @@ pub struct Template {
 }
 
 impl Menus {
+    /// Whether window `uuid` is one of these menus'.
+    pub fn has_window(&self, uuid: Uuid) -> bool {
+        self.by_uuid(uuid).is_some()
+    }
+
     fn by_uuid(&self, uuid: Uuid) -> Option<&Window> {
         self.windows.values().find(|w| w.uuid == uuid)
     }

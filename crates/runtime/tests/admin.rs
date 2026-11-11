@@ -177,7 +177,9 @@ fn data_shows_what_the_store_keeps_as_it_is_now() {
         .session()
         .spawn("c", place(1.0, 64.0, 2.0), 0.0)
         .expect("spawned");
-    events.session().player_joined(&alex());
+    events
+        .session()
+        .player_joined(netherforge_runtime::instance::RoomId::MAIN, &alex());
     {
         let session = events.session();
         let room = session.room().unwrap();

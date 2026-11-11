@@ -1167,6 +1167,10 @@ impl Service for DatabasesService {
     fn name(&self) -> &'static str {
         "package databases"
     }
+    /// Once per server, in the main room.
+    fn instance_wide(&self) -> bool {
+        true
+    }
 
     fn reloads(&self) -> &'static [&'static str] {
         &["migration"]

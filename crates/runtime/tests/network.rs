@@ -559,7 +559,7 @@ fn presence_sending_players_and_arrivals() {
     let hub = hub(&session);
     let survival = hub.peer("survival", None, None, Lifecycle::Ready);
     platform.online.borrow_mut().push(alex.clone());
-    session.player_joined(&alex);
+    session.player_joined(netherforge_runtime::instance::RoomId::MAIN, &alex);
     let seen = printed(&session, &platform, 10);
     assert_eq!(
         seen,
@@ -589,7 +589,7 @@ fn presence_sending_players_and_arrivals() {
             Some(serde_json::json!({ "kit": "starter" }))
         )]
     );
-    session.player_quit(&alex);
+    session.player_quit(netherforge_runtime::instance::RoomId::MAIN, &alex);
     // Another player sent here by survival arrives the tick after they join (the test joins them, as the proxy's
     // move would).
     let sam = PlayerRef {
@@ -609,7 +609,7 @@ fn presence_sending_players_and_arrivals() {
     });
     assert_eq!(hub.take_joins(), [(uuid_text(9), "Sam".to_owned())]);
     platform.online.borrow_mut().push(sam.clone());
-    session.player_joined(&sam);
+    session.player_joined(netherforge_runtime::instance::RoomId::MAIN, &sam);
     assert_eq!(
         printed(&session, &platform, 3),
         [
@@ -1200,7 +1200,7 @@ fn bans_mutes_and_reports_go_through_the_hub() {
     };
     let session = start(&files, &platform, dev(), None);
     platform.online.borrow_mut().push(alex.clone());
-    session.player_joined(&alex);
+    session.player_joined(netherforge_runtime::instance::RoomId::MAIN, &alex);
     assert_eq!(
         printed(&session, &platform, 9),
         [

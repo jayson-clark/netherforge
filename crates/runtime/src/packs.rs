@@ -1033,6 +1033,10 @@ impl Service for PacksService {
     fn name(&self) -> &'static str {
         "resource pack"
     }
+    /// Once per server, in the main room.
+    fn instance_wide(&self) -> bool {
+        true
+    }
 
     fn reloads(&self) -> &'static [&'static str] {
         &["resource_pack"]

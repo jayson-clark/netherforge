@@ -107,6 +107,10 @@ impl Service for PermissionsService {
     fn name(&self) -> &'static str {
         "permissions"
     }
+    /// Once per server, in the main room.
+    fn instance_wide(&self) -> bool {
+        true
+    }
 
     /// The project runs: everyone online gets what's allowed now, before any script (so `has_permission`
     /// already answers).

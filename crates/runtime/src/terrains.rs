@@ -753,6 +753,10 @@ impl Service for TerrainsService {
     fn name(&self) -> &'static str {
         "terrains"
     }
+    /// Once per server, in the main room.
+    fn instance_wide(&self) -> bool {
+        true
+    }
 
     fn reloads(&self) -> &'static [&'static str] {
         &["terrain"]

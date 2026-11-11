@@ -12,13 +12,13 @@ use netherforge_api::handles::{self, Handle};
 use netherforge_api::{codecs, shapes, values};
 use netherforge_platform::{game_event, GameEvents, WatchedEvent};
 
-use crate::events::EventSession;
+use crate::events::{EventSession, Route};
 
-/// Where the dispatch finds the session running now, opened once per event: none while no
+/// Where the dispatch finds the room an event goes to, opened once per event: none while no
 /// project runs (or it can't be reached now), and every event then goes through unchanged.
 pub trait EventSource {
     type Open<'b>: EventSession + Around where Self: 'b;
-    fn open(&self) -> Option<Self::Open<'_>>;
+    fn open(&self, route: Route<'_>) -> Option<Self::Open<'_>>;
 }
 
 /// What the runtime does around an event besides raising it to scripts (the Kotlin runtime's
@@ -327,372 +327,372 @@ pub struct GameEventDispatch<S: EventSource>(pub S);
 
 impl<S: EventSource> GameEvents for GameEventDispatch<S> {
     fn player_join(&self, event: &mut game_event::PlayerJoin) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_join(event, &|event| player_join(&s, event))
     }
 
     fn player_quit(&self, event: &mut game_event::PlayerQuit) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_quit(event, &|event| player_quit(&s, event))
     }
 
     fn player_chat(&self, event: &mut game_event::PlayerChat) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_chat(event, &|event| player_chat(&s, event))
     }
 
     fn player_move(&self, event: &mut game_event::PlayerMove) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_move(event, &|event| player_move(&s, event))
     }
 
     fn player_teleport(&self, event: &mut game_event::PlayerTeleport) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_teleport(event, &|event| player_teleport(&s, event))
     }
 
     fn player_change_world(&self, event: &mut game_event::PlayerChangeWorld) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_change_world(event, &|event| player_change_world(&s, event))
     }
 
     fn player_respawn(&self, event: &mut game_event::PlayerRespawn) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_respawn(event, &|event| player_respawn(&s, event))
     }
 
     fn player_swap_hands(&self, event: &mut game_event::PlayerSwapHands) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_swap_hands(event, &|event| player_swap_hands(&s, event))
     }
 
     fn player_sneak(&self, event: &mut game_event::PlayerSneak) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_sneak(event, &|event| player_sneak(&s, event))
     }
 
     fn player_command(&self, event: &mut game_event::PlayerCommand) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_command(event, &|event| player_command(&s, event))
     }
 
     fn block_place(&self, event: &mut game_event::BlockPlace) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.block.world)) else { return false; };
         s.block_place(event, &|event| block_place(&s, event))
     }
 
     fn entity_spawn(&self, event: &mut game_event::EntitySpawn) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.world)) else { return false; };
         s.entity_spawn(event, &|event| entity_spawn(&s, event))
     }
 
     fn player_input(&self, event: &mut game_event::PlayerInput) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_input(event, &|event| player_input(&s, event))
     }
 
     fn player_change_slot(&self, event: &mut game_event::PlayerChangeSlot) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_change_slot(event, &|event| player_change_slot(&s, event))
     }
 
     fn player_swing(&self, event: &mut game_event::PlayerSwing) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_swing(event, &|event| player_swing(&s, event))
     }
 
     fn player_sprint(&self, event: &mut game_event::PlayerSprint) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_sprint(event, &|event| player_sprint(&s, event))
     }
 
     fn player_fly(&self, event: &mut game_event::PlayerFly) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_fly(event, &|event| player_fly(&s, event))
     }
 
     fn player_jump(&self, event: &mut game_event::PlayerJump) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_jump(event, &|event| player_jump(&s, event))
     }
 
     fn player_change_game_mode(&self, event: &mut game_event::PlayerChangeGameMode) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_change_game_mode(event, &|event| player_change_game_mode(&s, event))
     }
 
     fn player_change_food(&self, event: &mut game_event::PlayerChangeFood) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_change_food(event, &|event| player_change_food(&s, event))
     }
 
     fn player_gain_experience(&self, event: &mut game_event::PlayerGainExperience) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_gain_experience(event, &|event| player_gain_experience(&s, event))
     }
 
     fn player_change_level(&self, event: &mut game_event::PlayerChangeLevel) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_change_level(event, &|event| player_change_level(&s, event))
     }
 
     fn player_kick(&self, event: &mut game_event::PlayerKick) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_kick(event, &|event| player_kick(&s, event))
     }
 
     fn player_complete_advancement(&self, event: &mut game_event::PlayerAdvancement) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_complete_advancement(event, &|event| player_complete_advancement(&s, event))
     }
 
     fn player_stop_using_item(&self, event: &mut game_event::PlayerStopUsingItem) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_stop_using_item(event, &|event| player_stop_using_item(&s, event))
     }
 
     fn player_break_item(&self, event: &mut game_event::PlayerItem) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_break_item(event, &|event| player_break_item(&s, event))
     }
 
     fn entity_heal(&self, event: &mut game_event::EntityHeal) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Entity(event.entity)) else { return false; };
         s.entity_heal(event, &|event| entity_heal(&s, event))
     }
 
     fn projectile_launch(&self, event: &mut game_event::ProjectileLaunch) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(event.shooter.as_ref().map_or(Route::Main, |x0| Route::Entity(*x0))) else { return false; };
         s.projectile_launch(event, &|event| projectile_launch(&s, event))
     }
 
     fn projectile_hit(&self, event: &mut game_event::ProjectileHit) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Entity(event.projectile)) else { return false; };
         s.projectile_hit(event, &|event| projectile_hit(&s, event))
     }
 
     fn entity_shoot_bow(&self, event: &mut game_event::EntityShootBow) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Entity(event.entity)) else { return false; };
         s.entity_shoot_bow(event, &|event| entity_shoot_bow(&s, event))
     }
 
     fn entity_target(&self, event: &mut game_event::EntityTarget) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Entity(event.entity)) else { return false; };
         s.entity_target(event, &|event| entity_target(&s, event))
     }
 
     fn entity_explode(&self, event: &mut game_event::Explode) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(event.entity.as_ref().map_or(Route::Main, |x0| Route::Entity(*x0))) else { return false; };
         s.entity_explode(event, &|event| entity_explode(&s, event))
     }
 
     fn block_explode(&self, event: &mut game_event::Explode) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(event.block.as_ref().map_or(Route::Main, |x0| Route::World(&x0.world))) else { return false; };
         s.block_explode(event, &|event| block_explode(&s, event))
     }
 
     fn entity_combust(&self, event: &mut game_event::EntityCombust) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Entity(event.entity)) else { return false; };
         s.entity_combust(event, &|event| entity_combust(&s, event))
     }
 
     fn entity_change_effect(&self, event: &mut game_event::EntityChangeEffect) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Entity(event.entity)) else { return false; };
         s.entity_change_effect(event, &|event| entity_change_effect(&s, event))
     }
 
     fn block_ignite(&self, event: &mut game_event::BlockIgnite) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.block.world)) else { return false; };
         s.block_ignite(event, &|event| block_ignite(&s, event))
     }
 
     fn block_burn(&self, event: &mut game_event::BlockBurn) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.block.world)) else { return false; };
         s.block_burn(event, &|event| block_burn(&s, event))
     }
 
     fn block_spread(&self, event: &mut game_event::BlockChange) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.block.world)) else { return false; };
         s.block_spread(event, &|event| block_spread(&s, event))
     }
 
     fn block_flow(&self, event: &mut game_event::BlockFlow) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.block.world)) else { return false; };
         s.block_flow(event, &|event| block_flow(&s, event))
     }
 
     fn block_grow(&self, event: &mut game_event::BlockChange) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.block.world)) else { return false; };
         s.block_grow(event, &|event| block_grow(&s, event))
     }
 
     fn block_fade(&self, event: &mut game_event::BlockChange) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.block.world)) else { return false; };
         s.block_fade(event, &|event| block_fade(&s, event))
     }
 
     fn block_form(&self, event: &mut game_event::BlockChange) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.block.world)) else { return false; };
         s.block_form(event, &|event| block_form(&s, event))
     }
 
     fn leaves_decay(&self, event: &mut game_event::Block) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.block.world)) else { return false; };
         s.leaves_decay(event, &|event| leaves_decay(&s, event))
     }
 
     fn piston_extend(&self, event: &mut game_event::Piston) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.block.world)) else { return false; };
         s.piston_extend(event, &|event| piston_extend(&s, event))
     }
 
     fn piston_retract(&self, event: &mut game_event::Piston) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.block.world)) else { return false; };
         s.piston_retract(event, &|event| piston_retract(&s, event))
     }
 
     fn block_redstone(&self, event: &mut game_event::BlockRedstone) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::World(&event.block.world)) else { return ; };
         s.block_redstone(event, &|event| block_redstone(&s, event))
     }
 
     fn sign_change(&self, event: &mut game_event::SignChange) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.block.world)) else { return false; };
         s.sign_change(event, &|event| sign_change(&s, event))
     }
 
     fn block_start_break(&self, event: &mut game_event::BlockStartBreak) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.block.world)) else { return false; };
         s.block_start_break(event, &|event| block_start_break(&s, event))
     }
 
     fn block_drop_item(&self, event: &mut game_event::BlockDropItem) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.block.world)) else { return false; };
         s.block_drop_item(event, &|event| block_drop_item(&s, event))
     }
 
     fn weather_change(&self, event: &mut game_event::WeatherChange) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.world)) else { return false; };
         s.weather_change(event, &|event| weather_change(&s, event))
     }
 
     fn thunder_change(&self, event: &mut game_event::ThunderChange) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.world)) else { return false; };
         s.thunder_change(event, &|event| thunder_change(&s, event))
     }
 
     fn lightning_strike(&self, event: &mut game_event::LightningStrike) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.world)) else { return false; };
         s.lightning_strike(event, &|event| lightning_strike(&s, event))
     }
 
     fn chunk_load(&self, event: &mut game_event::ChunkLoad) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::World(&event.world)) else { return ; };
         s.chunk_load(event, &|event| chunk_load(&s, event))
     }
 
     fn chunk_generated(&self, event: &mut game_event::Chunk) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::World(&event.world)) else { return ; };
         s.chunk_generated(event, &|event| chunk_generated(&s, event))
     }
 
     fn chunk_unload(&self, event: &mut game_event::Chunk) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::World(&event.world)) else { return ; };
         s.chunk_unload(event, &|event| chunk_unload(&s, event))
     }
 
     fn world_load(&self, event: &mut game_event::World) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Main) else { return ; };
         s.world_load(event, &|event| world_load(&s, event))
     }
 
     fn world_unload(&self, event: &mut game_event::World) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Main) else { return ; };
         s.world_unload(event, &|event| world_unload(&s, event))
     }
 
     fn entity_mount(&self, event: &mut game_event::Mount) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Entity(event.entity)) else { return false; };
         s.entity_mount(event, &|event| entity_mount(&s, event))
     }
 
     fn entity_dismount(&self, event: &mut game_event::Mount) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Entity(event.entity)) else { return false; };
         s.entity_dismount(event, &|event| entity_dismount(&s, event))
     }
 
     fn vehicle_move(&self, event: &mut game_event::VehicleMove) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Main) else { return ; };
         s.vehicle_move(event, &|event| vehicle_move(&s, event))
     }
 
     fn vehicle_damage(&self, event: &mut game_event::VehicleDamage) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Main) else { return false; };
         s.vehicle_damage(event, &|event| vehicle_damage(&s, event))
     }
 
     fn vehicle_destroy(&self, event: &mut game_event::VehicleDestroy) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Main) else { return false; };
         s.vehicle_destroy(event, &|event| vehicle_destroy(&s, event))
     }
 
     fn player_open_inventory(&self, event: &mut game_event::PlayerInventory) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_open_inventory(event, &|event| player_open_inventory(&s, event))
     }
 
     fn player_close_inventory(&self, event: &mut game_event::PlayerInventory) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_close_inventory(event, &|event| player_close_inventory(&s, event))
     }
 
     fn player_click_inventory(&self, event: &mut game_event::PlayerClickInventory) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_click_inventory(event, &|event| player_click_inventory(&s, event))
     }
 
     fn player_drag_inventory(&self, event: &mut game_event::PlayerDragInventory) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_drag_inventory(event, &|event| player_drag_inventory(&s, event))
     }
 
     fn player_craft(&self, event: &mut game_event::PlayerCraft) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_craft(event, &|event| player_craft(&s, event))
     }
 
     fn player_prepare_craft(&self, event: &mut game_event::PlayerPrepareCraft) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_prepare_craft(event, &|event| player_prepare_craft(&s, event))
     }
 
     fn player_prepare_anvil(&self, event: &mut game_event::PlayerPrepareAnvil) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_prepare_anvil(event, &|event| player_prepare_anvil(&s, event))
     }
 
     fn player_prepare_smithing(&self, event: &mut game_event::PlayerPrepareSmithing) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_prepare_smithing(event, &|event| player_prepare_smithing(&s, event))
     }
 
     fn player_prepare_grindstone(&self, event: &mut game_event::PlayerPrepareGrindstone) {
-        let Some(s) = self.0.open() else { return ; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return ; };
         s.player_prepare_grindstone(event, &|event| player_prepare_grindstone(&s, event))
     }
 
     fn player_enchant_item(&self, event: &mut game_event::PlayerEnchantItem) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Player(event.player.uuid)) else { return false; };
         s.player_enchant_item(event, &|event| player_enchant_item(&s, event))
     }
 
     fn furnace_smelt(&self, event: &mut game_event::FurnaceSmelt) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::World(&event.block.world)) else { return false; };
         s.furnace_smelt(event, &|event| furnace_smelt(&s, event))
     }
 
     fn server_list_ping(&self, event: &mut game_event::ServerListPing) -> bool {
-        let Some(s) = self.0.open() else { return false; };
+        let Some(s) = self.0.open(Route::Main) else { return false; };
         s.server_list_ping(event, &|event| server_list_ping(&s, event))
     }
 }

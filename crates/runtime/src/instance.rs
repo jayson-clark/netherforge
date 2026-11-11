@@ -10,7 +10,90 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use netherforge_platform::Platform;
+use std::collections::HashMap;
+
+use netherforge_platform::{Platform, Uuid};
+
+/// A room of the server: `MAIN` is the one every session has, which holds every world and player no other room
+/// does; each room opened later has the next number.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct RoomId(pub u32);
+
+impl RoomId {
+    pub const MAIN: RoomId = RoomId(0);
+}
+
+impl std::fmt::Display for RoomId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if *self == RoomId::MAIN {
+            f.write_str("main")
+        } else {
+            write!(f, "room {}", self.0)
+        }
+    }
+}
+
+/// Which room each world and each player is in: one that isn't named is the main room's.
+#[derive(Default)]
+pub struct Routes {
+    worlds: HashMap<String, RoomId>,
+    players: HashMap<Uuid, RoomId>,
+}
+
+impl Routes {
+    pub fn world(&self, world: &str) -> RoomId {
+        self.worlds.get(world).copied().unwrap_or(RoomId::MAIN)
+    }
+
+    pub fn player(&self, player: Uuid) -> RoomId {
+        self.players.get(&player).copied().unwrap_or(RoomId::MAIN)
+    }
+
+    /// `world` is `room`'s from now on.
+    pub fn give_world(&mut self, world: &str, room: RoomId) {
+        if room == RoomId::MAIN {
+            self.worlds.remove(world);
+        } else {
+            self.worlds.insert(world.to_owned(), room);
+        }
+    }
+
+    /// `player` is in `room` from now on.
+    pub fn put_player(&mut self, player: Uuid, room: RoomId) {
+        if room == RoomId::MAIN {
+            self.players.remove(&player);
+        } else {
+            self.players.insert(player, room);
+        }
+    }
+
+    /// The worlds `room` holds, when it isn't the main room (which holds every world no other does).
+    pub fn worlds_of(&self, room: RoomId) -> Vec<String> {
+        let mut worlds: Vec<String> = self
+            .worlds
+            .iter()
+            .filter(|(_, r)| **r == room)
+            .map(|(w, _)| w.clone())
+            .collect();
+        worlds.sort();
+        worlds
+    }
+
+    /// The players `room` holds, when it isn't the main room.
+    pub fn players_of(&self, room: RoomId) -> Vec<Uuid> {
+        self.players
+            .iter()
+            .filter(|(_, r)| **r == room)
+            .map(|(p, _)| *p)
+            .collect()
+    }
+
+    /// `room` closed: its worlds and players are nobody's, which is the main room's.
+    pub fn forget(&mut self, room: RoomId) {
+        self.worlds.retain(|_, r| *r != room);
+        self.players.retain(|_, r| *r != room);
+    }
+}
 
 pub struct Instance {
     pub platform: Rc<dyn Platform>,
@@ -37,6 +120,8 @@ pub struct Instance {
     pub console: RefCell<Option<Rc<dyn crate::bridge::Console>>>,
     /// Lanes work goes to off the main thread, by name, made as they're first wanted (a biome search's).
     lanes: RefCell<std::collections::HashMap<&'static str, crate::http::Workers>>,
+    /// Which room each world and player is in.
+    pub routes: RefCell<Routes>,
 }
 
 impl Instance {
@@ -54,6 +139,7 @@ impl Instance {
             reloading: RefCell::default(),
             console: RefCell::default(),
             lanes: RefCell::default(),
+            routes: RefCell::default(),
         })
     }
 

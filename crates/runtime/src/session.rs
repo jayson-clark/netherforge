@@ -46,6 +46,11 @@ pub struct Define<'s> {
 pub trait Service {
     /// Its name, for the log.
     fn name(&self) -> &'static str;
+    /// Whether it exists once per server, in the main room only (the pack, the databases, the server's worlds'
+    /// generators...), rather than in every room.
+    fn instance_wide(&self) -> bool {
+        false
+    }
     /// The kinds of resource it reloads, by their ids: each kind has one service that does.
     fn reloads(&self) -> &'static [&'static str] {
         &[]
@@ -219,11 +224,11 @@ pub struct Session<'a> {
     packages: &'a dyn PackageSources,
     project: Loaded<'a>,
     refusal: Option<Refusal>,
-    room: Option<Room>,
-    services: Vec<Box<dyn Service>>,
-    /// What its services share with the room's API: its centities, its modules.
-    shared: Rc<Shared>,
-    reported: std::cell::RefCell<Reported>,
+    /// Its rooms: the main room first, always there (its Lua state only while the project runs), which also runs
+    /// the services that must exist once per server; then the rooms opened since, each its own Lua state.
+    rooms: Vec<RoomRun>,
+    /// What the server's config said, for each room opened later.
+    config: Config,
     limits: Limits,
     /// The owner's policy, and why it couldn't be read.
     owner_policy: Option<netherforge_format::policy::Policy>,
@@ -241,20 +246,43 @@ pub struct Session<'a> {
     startup: std::cell::RefCell<crate::reload::StartupCheck>,
     clock: Option<Rc<dyn netherforge_luau::Clock>>,
     written_pack_files: Option<WrittenPackFiles>,
-    /// What each scope's code costs (`/nf scripts`, slow-script warnings), and the warnings already given.
-    costs: std::cell::RefCell<crate::costs::ScriptCosts>,
     performance: Option<crate::config::PerformanceConfig>,
-    warned: std::cell::RefCell<Warned>,
     /// What the adapter was last told of each watched event (`Platform::watch`).
     watching: std::cell::RefCell<HashMap<netherforge_platform::WatchedEvent, bool>>,
     /// The runtime's profiler, which outlives sessions (`ServerEvents` hands it over), and whether this run's Lua
     /// state keeps per-function times for it now.
     profiler: std::cell::RefCell<Option<Rc<crate::profile::Profiler>>>,
-    profiling: std::cell::Cell<bool>,
     /// Server ticks this session has seen, across reloads: what the costs and the profiler count by.
     ticks: std::cell::Cell<u64>,
     /// Told of each new Lua state before any script runs in it (the debugger, which outlives sessions).
     on_host: std::cell::RefCell<Option<OnHost>>,
+}
+
+/// One room of a session: its id, its Lua state while it runs, what its services share with its API, its services,
+/// and what was said of its scripts (their scopes are this Lua state's).
+pub struct RoomRun {
+    pub id: crate::instance::RoomId,
+    room: Option<Room>,
+    shared: Rc<Shared>,
+    services: Vec<Box<dyn Service>>,
+    reported: std::cell::RefCell<Reported>,
+    /// What each scope's code costs (`/nf scripts`, slow-script warnings), and the warnings already given.
+    costs: std::cell::RefCell<crate::costs::ScriptCosts>,
+    warned: std::cell::RefCell<Warned>,
+    /// Whether its Lua state keeps per-function times for the profiler now.
+    profiling: std::cell::Cell<bool>,
+}
+
+impl RoomRun {
+    /// Its Lua state and scripts, while it runs.
+    pub fn room(&self) -> Option<&Room> {
+        self.room.as_ref()
+    }
+
+    /// What its services share with its API.
+    pub fn shared(&self) -> &Rc<Shared> {
+        &self.shared
+    }
 }
 
 /// What the costs have warned about: each slow script's last warning and how many like it were held back since,
@@ -358,101 +386,43 @@ impl<'a> Session<'a> {
         config: Config,
     ) -> Session<'a> {
         let project = load(source, packages);
-        let shared = Shared::new(crate::instance::Instance::new(platform.clone(), store));
-        shared.schedules.borrow_mut().now = config.wall_clock;
-        shared.schedules.borrow_mut().rate = config.wall_clock_rate;
-        shared.instance.packs.borrow_mut().config = config.pack.clone();
-        shared.instance.packs.borrow_mut().prebuilt = config.prebuilt_pack.clone();
-        *shared.instance.provided_packages.borrow_mut() = config.provided_packages.clone();
-        {
-            let mut http = shared.http.borrow_mut();
-            http.config = config.http.clone();
-            http.hooks = config.net.clone();
-            // A test run looks no name up: `localhost` is this machine, any other name leads nowhere.
-            if config.testing.is_some() && http.hooks.resolve.is_none() {
-                http.hooks.resolve = Some(std::sync::Arc::new(|host: &str| {
-                    let host = host.to_lowercase();
-                    Ok(if host == "localhost" || host.ends_with(".localhost") {
-                        vec![
-                            std::net::Ipv4Addr::LOCALHOST.into(),
-                            std::net::Ipv6Addr::LOCALHOST.into(),
-                        ]
-                    } else {
-                        Vec::new()
-                    })
-                }));
-            }
-        }
-        shared.web.borrow_mut().config = config.web.clone();
-        // A test run's bots are on, as the dev server's are: a test of a project that joins bots is the point.
-        shared.bots.borrow_mut().config = crate::bots::BotsConfig {
-            enabled: config.bots.enabled || config.testing.is_some(),
-            ..config.bots
-        };
-        shared.settings.borrow_mut().directory = config.settings_dir.clone();
         // A script test's server is a network of its own, `test`, whose other servers the test plays.
         let mut network_config = config.network.clone();
         if config.testing.is_some() && network_config.alone.is_none() && !network_config.enabled {
             network_config.alone = Some(crate::network::link::TEST_NETWORK.into());
         }
-        let config = Config {
+        let mut config = Config {
             network: network_config,
             ..config
         };
-        {
-            let mut network = shared.network.borrow_mut();
-            network.config = config.network.clone();
-            network.link = Some(match &config.network_link {
-                Some(link) => link.0.clone(),
-                None => crate::network::NetworkLink::new(config.network.clone()),
-            });
+        // One link to the network for the whole server, whichever room's scripts use it.
+        if config.network_link.is_none() {
+            config.network_link = Some(crate::network::Link(crate::network::NetworkLink::new(
+                config.network.clone(),
+            )));
         }
+        let instance = crate::instance::Instance::new(platform.clone(), store);
+        instance.packs.borrow_mut().config = config.pack.clone();
+        instance.packs.borrow_mut().prebuilt = config.prebuilt_pack.clone();
+        *instance.provided_packages.borrow_mut() = config.provided_packages.clone();
         {
-            let mut wasm = shared.wasm.borrow_mut();
-            wasm.config = config.wasm.clone();
-            wasm.sources = crate::wasm::Sources {
-                bytes: config.bytes.clone(),
-                paths: config.paths.clone(),
-            };
-        }
-        {
-            let mut screens = shared.screens.borrow_mut();
-            screens.config = config.screens;
-            screens.read = config.bytes.clone();
-            screens.paths = config.paths.clone();
-        }
-        {
-            let mut databases = shared.instance.databases.borrow_mut();
+            let mut databases = instance.databases.borrow_mut();
             databases.dir = config.databases_dir.clone();
             databases.config = config.databases.clone();
         }
-        {
-            let mut managed = shared.managed_worlds.borrow_mut();
-            managed.config = config.worlds.clone();
-            managed.paths = config.paths.clone();
-        }
-        {
-            let mut structures = shared.structures.borrow_mut();
-            structures.config = config.structures;
-            structures.paths = config.paths.clone();
-            structures.saved = config
-                .data_dir
-                .as_ref()
-                .map(|d| d.join(".nf").join("structures"));
-        }
         if let Some(root) = &config.data_dir {
-            *shared.instance.files.borrow_mut() =
+            *instance.files.borrow_mut() =
                 Some(crate::files::ScriptFiles::new(root.clone(), config.files));
         }
-        if let Some(zone) = &config.time_zone {
-            match crate::schedule::Zone::parse(zone) {
-                Some(zone) => shared.schedules.borrow_mut().zone = zone,
-                None => platform.log().warn(format!(
-                    "config.yml's schedules.time-zone \"{zone}\" isn't a time zone (try \"Europe/London\", \"UTC\" or \"+02:00\"): schedules use the server's own"
-                )),
-            }
+        if let Some(zone) = &config.time_zone
+            && crate::schedule::Zone::parse(zone).is_none()
+        {
+            platform.log().warn(format!(
+                "config.yml's schedules.time-zone \"{zone}\" isn't a time zone (try \"Europe/London\", \"UTC\" or \"+02:00\"): schedules use the server's own"
+            ));
         }
-        shared.tests.borrow_mut().harness = config.testing.clone();
+        let shared = Shared::new(instance, crate::instance::RoomId::MAIN);
+        configure_room(&shared, &config);
         Session {
             limits: {
                 let mut limits = config.limits.clone().unwrap_or_default();
@@ -478,18 +448,22 @@ impl<'a> Session<'a> {
             source,
             packages,
             project,
-            room: None,
-            services: services(&shared),
-            shared,
-            reported: Default::default(),
-            costs: std::cell::RefCell::new(crate::costs::ScriptCosts::new(config.performance)),
+            rooms: vec![RoomRun {
+                id: crate::instance::RoomId::MAIN,
+                room: None,
+                services: services(&shared),
+                shared,
+                reported: Default::default(),
+                costs: std::cell::RefCell::new(crate::costs::ScriptCosts::new(config.performance)),
+                warned: Default::default(),
+                profiling: Default::default(),
+            }],
             performance: config.performance,
             clock: config.clock.clone(),
             written_pack_files: config.written_pack_files.clone(),
-            warned: Default::default(),
+            config: config.clone(),
             watching: Default::default(),
             profiler: Default::default(),
-            profiling: Default::default(),
             ticks: Default::default(),
             on_host: Default::default(),
         }
@@ -498,13 +472,13 @@ impl<'a> Session<'a> {
     /// Runs a [`configured`](Self::configured) session for the first time.
     pub fn begin(&mut self) {
         self.refuse();
-        self.run();
+        self.run_project();
     }
 
     /// The policy this run is under, from the owner's and what the network's hub sent; whether it waits for the hub;
     /// and, with those, why the project can't run.
     fn refuse(&mut self) {
-        let link = self.shared.network.borrow().link.clone();
+        let link = self.rooms[0].shared.network.borrow().link.clone();
         let (remote, connected, hub_policy) = link.as_ref().map_or((false, false, None), |l| {
             (
                 l.mode == crate::network::Mode::Remote,
@@ -558,7 +532,7 @@ impl<'a> Session<'a> {
     /// Whether the session should start again: the network's policy for this server came or changed, or the hub a
     /// project waits for is here. The runtime asks now and then while the link is connected.
     pub fn hub_changed(&self) -> Option<&'static str> {
-        let link = self.shared.network.borrow().link.clone()?;
+        let link = self.rooms[0].shared.network.borrow().link.clone()?;
         if !link.connected() {
             return None;
         }
@@ -594,7 +568,7 @@ impl<'a> Session<'a> {
         limits
     }
 
-    fn run(&mut self) {
+    fn run_project(&mut self) {
         let log = self.platform.log();
         for problem in self
             .project
@@ -615,26 +589,11 @@ impl<'a> Session<'a> {
             log.error(format!("Not running {name}: {}", refusal.message), None);
             return;
         }
-        // The policy's rates where they're lower than the owner's.
-        let lower =
-            |own: usize, theirs: Option<i32>| theirs.map_or(own, |t| own.min(t.max(0) as usize));
-        let limits = self
-            .policy
-            .as_ref()
-            .map(|p| p.limits.clone())
-            .unwrap_or_default();
-        self.shared.network.borrow_mut().config.messages_per_minute =
-            lower(self.rates.0, limits.network_messages_per_minute);
-        self.shared.http.borrow_mut().config.requests_per_minute =
-            lower(self.rates.1, limits.http_requests_per_minute);
-        let mut grants = grants(&self.project);
-        grants.policy = self.policy.clone();
-        let limits = self.limits_under_policy();
-        let host = match &self.clock {
-            Some(clock) => Host::with_clock(limits, clock.clone()),
-            None => Host::new(limits),
-        };
-        let room = match host.and_then(|host| Room::with(host, grants, Some(self.shared.clone()))) {
+        // Files from before each package had a folder are the project's.
+        if let Some(files) = self.rooms[0].shared.instance.files.borrow_mut().as_mut() {
+            files.adopt(self.project.namespace());
+        }
+        let room = match self.start_room(&self.rooms[0]) {
             Ok(room) => room,
             Err(e) => {
                 log.error(
@@ -644,32 +603,7 @@ impl<'a> Session<'a> {
                 return;
             }
         };
-        *self.shared.names.borrow_mut() = self.project.names();
-        // Files from before each package had a folder are the project's.
-        if let Some(files) = self.shared.instance.files.borrow_mut().as_mut() {
-            files.adopt(self.project.namespace());
-        }
-        let define = Define {
-            project: &self.project,
-            source: self.source,
-            platform: &*self.platform,
-        };
-        // The debugger knows what to stop at before any body runs, so breakpoints in a body hold on a full reload.
-        let on_host = self.on_host.borrow().clone();
-        if let Some(on_host) = on_host {
-            on_host(room.host(), &self.shared);
-        }
-        // The profiler's bookkeeping is on before any body runs, so bodies are timed too.
-        self.profiling.set(false);
-        let profiling = self.profiler().is_some_and(|p| p.active());
-        self.sync_profiling(room.host(), profiling);
-        for service in &self.services {
-            service.start(&room, &define);
-        }
-        for service in &self.services {
-            service.after_start(&room);
-        }
-        self.room = Some(room);
+        self.rooms[0].room = Some(room);
         self.released();
         self.report();
         self.update_watched();
@@ -695,6 +629,183 @@ impl<'a> Session<'a> {
         ));
     }
 
+    /// Starts room `run`'s Lua state and its services, as the project reads now.
+    fn start_room(&self, run: &RoomRun) -> mlua::Result<Room> {
+        // The policy's rates where they're lower than the owner's.
+        let lower =
+            |own: usize, theirs: Option<i32>| theirs.map_or(own, |t| own.min(t.max(0) as usize));
+        let policy_limits = self
+            .policy
+            .as_ref()
+            .map(|p| p.limits.clone())
+            .unwrap_or_default();
+        run.shared.network.borrow_mut().config.messages_per_minute =
+            lower(self.rates.0, policy_limits.network_messages_per_minute);
+        run.shared.http.borrow_mut().config.requests_per_minute =
+            lower(self.rates.1, policy_limits.http_requests_per_minute);
+        let mut grants = grants(&self.project);
+        grants.policy = self.policy.clone();
+        let limits = self.limits_under_policy();
+        let host = match &self.clock {
+            Some(clock) => Host::with_clock(limits, clock.clone())?,
+            None => Host::new(limits)?,
+        };
+        let room = Room::with(host, grants, Some(run.shared.clone()))?;
+        *run.shared.names.borrow_mut() = self.project.names();
+        let define = Define {
+            project: &self.project,
+            source: self.source,
+            platform: &*self.platform,
+        };
+        // The debugger knows what to stop at before any body runs, so breakpoints in a body hold on a full reload.
+        let on_host = self.on_host.borrow().clone();
+        if let Some(on_host) = on_host {
+            on_host(room.host(), &run.shared);
+        }
+        // The profiler's bookkeeping is on before any body runs, so bodies are timed too.
+        run.profiling.set(false);
+        let profiling = self.profiler().is_some_and(|p| p.active());
+        Self::sync_profiling(run, room.host(), profiling);
+        for service in &run.services {
+            service.start(&room, &define);
+        }
+        for service in &run.services {
+            service.after_start(&room);
+        }
+        Ok(room)
+    }
+
+    /// Opens a room beside the main one, with a Lua state of its own and the project started in it: its id, or
+    /// none while the project doesn't run (or the room's Lua state didn't start, which the log says). It holds no
+    /// world and no player until it's given them ([`give_world`](Self::give_world),
+    /// [`move_player`](Self::move_player)).
+    pub fn open_room(&mut self) -> Option<crate::instance::RoomId> {
+        self.rooms[0].room.as_ref()?;
+        let id = crate::instance::RoomId(self.rooms.iter().map(|r| r.id.0).max().unwrap_or(0) + 1);
+        let shared = Shared::new(self.instance().clone(), id);
+        configure_room(&shared, &self.config);
+        let run = RoomRun {
+            id,
+            room: None,
+            services: services(&shared)
+                .into_iter()
+                .filter(|s| !s.instance_wide())
+                .collect(),
+            shared,
+            reported: Default::default(),
+            costs: std::cell::RefCell::new(crate::costs::ScriptCosts::new(self.performance)),
+            warned: Default::default(),
+            profiling: Default::default(),
+        };
+        let room = match self.start_room(&run) {
+            Ok(room) => room,
+            Err(e) => {
+                self.platform.log().error(
+                    format!("{id} didn't open: its Lua state didn't start: {e}"),
+                    None,
+                );
+                return None;
+            }
+        };
+        let mut run = run;
+        run.room = Some(room);
+        self.rooms.push(run);
+        let run = self.rooms.last().expect("just pushed");
+        self.released_in(run);
+        self.report_in(run);
+        self.update_watched();
+        Some(id)
+    }
+
+    /// Closes room `id` (never the main room): its players go back to the main room as if they'd come from the
+    /// server, its services stop in reverse order and its Lua state closes. Its worlds are the main room's again.
+    pub fn close_room(&mut self, id: crate::instance::RoomId) {
+        if id == crate::instance::RoomId::MAIN {
+            return;
+        }
+        let players = self.instance().routes.borrow().players_of(id);
+        for player in players {
+            self.move_player(player, crate::instance::RoomId::MAIN);
+        }
+        let Some(at) = self.rooms.iter().position(|r| r.id == id) else {
+            return;
+        };
+        self.stop_room(at);
+        self.rooms.remove(at);
+        self.instance().routes.borrow_mut().forget(id);
+        self.update_watched();
+    }
+
+    /// Stops the room at `at` in `rooms`: its services in reverse order, what it said as they stopped, and its Lua
+    /// state.
+    fn stop_room(&mut self, at: usize) {
+        let run = &self.rooms[at];
+        let Some(room) = &run.room else {
+            return;
+        };
+        for service in run.services.iter().rev() {
+            service.stop(room, &*self.platform);
+        }
+        // What the scripts said as they were stopped (an `end` handler of a cutscene that unloaded) is still told.
+        self.report_in(run);
+        // What the services staged as they stopped is written before anything else opens the store.
+        run.shared.instance.store.flush();
+        run.shared.tests.borrow_mut().clear();
+        // A full reload: what this Lua state measured goes to the profiler before it closes.
+        if let Some(p) = self.profiler() {
+            self.drain_profile(run, room, &p);
+        }
+        run.profiling.set(false);
+        run.costs.borrow_mut().clear();
+        run.warned.borrow_mut().problems.clear();
+        self.rooms[at].room = None;
+    }
+
+    /// Gives world `world` to room `room`: its blocks, entities and events are the room's from now on.
+    pub fn give_world(&self, world: &str, room: crate::instance::RoomId) {
+        if self.run(room).is_some() {
+            self.instance().routes.borrow_mut().give_world(world, room);
+        }
+    }
+
+    /// Moves `player` to room `to`: their room's scripts hear them quit (and its services forget them after), then
+    /// `to`'s services hear them join, before its scripts do. As far as each room can tell, they left the server and
+    /// joined it.
+    pub fn move_player(&self, player: Uuid, to: crate::instance::RoomId) {
+        let from = self.instance().routes.borrow().player(player);
+        if from == to || self.run(to).is_none() {
+            return;
+        }
+        let Some(player) = self.platform.players().get(player) else {
+            // Someone not online yet goes to `to` as they arrive.
+            self.instance().routes.borrow_mut().put_player(player, to);
+            return;
+        };
+        use netherforge_platform::{GameEvents, game_event};
+        // What the rooms' handlers make of the messages is nobody's: the server says nothing of a move.
+        crate::events::GameEventDispatch(crate::events::InRoom {
+            session: self,
+            at: from,
+        })
+        .player_quit(&mut game_event::PlayerQuit {
+            player: player.clone(),
+            message: None,
+        });
+        self.instance()
+            .routes
+            .borrow_mut()
+            .put_player(player.uuid, to);
+        crate::events::GameEventDispatch(crate::events::InRoom {
+            session: self,
+            at: to,
+        })
+        .player_join(&mut game_event::PlayerJoin {
+            player,
+            first_join: false,
+            message: None,
+        });
+    }
+
     /// The project as it read last.
     pub fn project(&self) -> &Loaded<'a> {
         &self.project
@@ -705,35 +816,98 @@ impl<'a> Session<'a> {
         self.refusal.as_ref()
     }
 
-    /// Its centities' instances.
+    /// Its centities' instances, in the main room.
     pub fn centities(&self) -> std::cell::RefMut<'_, crate::centity::Centities> {
-        self.shared.centities.borrow_mut()
+        self.rooms[0].shared.centities.borrow_mut()
+    }
+
+    /// What every room shares.
+    pub fn instance(&self) -> &Rc<crate::instance::Instance> {
+        &self.rooms[0].shared.instance
+    }
+
+    /// Its rooms: the main room first.
+    pub fn rooms(&self) -> &[RoomRun] {
+        &self.rooms
+    }
+
+    /// Room `id`, while it's open.
+    pub fn run(&self, id: crate::instance::RoomId) -> Option<&RoomRun> {
+        self.rooms.iter().find(|r| r.id == id)
+    }
+
+    /// The room `route` reaches: always the main room while it's the only one.
+    pub fn route(&self, route: crate::events::Route<'_>) -> crate::instance::RoomId {
+        use crate::events::Route;
+        use crate::instance::RoomId;
+        if self.rooms.len() == 1 {
+            return RoomId::MAIN;
+        }
+        let entity_world = |id: &Uuid| {
+            self.platform
+                .world_entities()
+                .info(*id)
+                .map(|info| info.location.world)
+        };
+        let routes = self.instance().routes.borrow();
+        match route {
+            Route::Main => RoomId::MAIN,
+            Route::Player(player) => routes.player(player),
+            Route::World(world) => routes.world(world),
+            Route::Entity(entity) => match self.platform.players().get(entity) {
+                Some(_) => routes.player(entity),
+                None => entity_world(&entity).map_or(RoomId::MAIN, |w| routes.world(&w)),
+            },
+            Route::Inventory(inventory) => {
+                use netherforge_platform::InventoryRef;
+                match inventory {
+                    InventoryRef::Player(p) => routes.player(p.player),
+                    InventoryRef::EnderChest(p) => routes.player(p.player),
+                    InventoryRef::Storage(s) => routes.player(s.player),
+                    InventoryRef::Entity(e) => {
+                        entity_world(&e.entity).map_or(RoomId::MAIN, |w| routes.world(&w))
+                    }
+                    InventoryRef::Block(b) => routes.world(&b.world),
+                }
+            }
+            Route::Window(window) => self
+                .rooms
+                .iter()
+                .find(|r| r.shared.menus.borrow().has_window(window))
+                .map_or(RoomId::MAIN, |r| r.id),
+        }
+    }
+
+    /// The room `route` reaches, while it runs.
+    pub fn run_for(&self, route: crate::events::Route<'_>) -> Option<&RoomRun> {
+        self.run(self.route(route)).filter(|r| r.room.is_some())
     }
 
     /// The runtime's half of the bots (what the bridge's bots extension asks: where a click on a centity's node aims,
-    /// which node a bot looks at), while the session runs.
+    /// which node a bot looks at), in the main room while the session runs.
     pub fn bots(&self) -> Option<crate::bots::BotsContext> {
-        let room = self.room.as_ref()?;
+        let room = self.rooms[0].room.as_ref()?;
         Some(crate::bots::BotsContext {
-            shared: self.shared.clone(),
+            shared: self.rooms[0].shared.clone(),
             scripts: room.scripts().clone(),
         })
     }
 
-    /// Spawns an instance of `centity` at `at`, facing `yaw`, as `nf.centities.spawn` will: its id, or none
-    /// when there's no such centity or world.
+    /// Spawns an instance of `centity` at `at`, facing `yaw`, as `nf.centities.spawn` will, in the room of `at`'s
+    /// world: its id, or none when there's no such centity or world.
     pub fn spawn(
         &self,
         centity: &str,
         at: netherforge_platform::Location,
         yaw: f64,
     ) -> Option<netherforge_platform::Uuid> {
-        let room = self.room.as_ref()?;
-        CentityContext::new(self.shared.clone(), room.scripts().clone()).spawn(centity, at, yaw)
+        let run = self.run_for(crate::events::Route::World(&at.world))?;
+        let room = run.room.as_ref()?;
+        CentityContext::new(run.shared.clone(), room.scripts().clone()).spawn(centity, at, yaw)
     }
 
     /// A player clicked `entity` (`PlatformEvents::entity_clicked`): true when it's one of ours, which the
-    /// adapter cancels whatever scripts did with it.
+    /// adapter cancels whatever scripts did with it. It's the player's room's to answer.
     pub fn entity_clicked(
         &self,
         entity: netherforge_platform::Uuid,
@@ -741,47 +915,70 @@ impl<'a> Session<'a> {
         button: netherforge_platform::ClickButton,
         sight: Option<netherforge_platform::Ray>,
     ) -> bool {
-        let Some(room) = self.room.as_ref() else {
+        let Some(run) = self.run_for(crate::events::Route::Player(player.uuid)) else {
             return false;
         };
-        let ours = CentityContext::new(self.shared.clone(), room.scripts().clone()).click(
+        let room = run.room.as_ref().expect("run_for answers running rooms");
+        let ours = CentityContext::new(run.shared.clone(), room.scripts().clone()).click(
             entity,
             player,
             button,
             sight.clone(),
         ) || crate::screen::ScreensContext {
-            shared: self.shared.clone(),
+            shared: run.shared.clone(),
             scripts: room.scripts().clone(),
         }
         .click(entity, player, button, sight);
-        self.released();
+        self.released_in(run);
         ours
+    }
+
+    /// The room a batch of a chunk's entities is in: their world's (one chunk's are all in one world).
+    fn room_of_entities<'e>(
+        &self,
+        mut entities: impl Iterator<Item = &'e Uuid>,
+    ) -> crate::instance::RoomId {
+        match entities.next() {
+            Some(first) if self.rooms.len() > 1 => self.route(crate::events::Route::Entity(*first)),
+            _ => crate::instance::RoomId::MAIN,
+        }
     }
 
     /// Entities came into memory with their chunk (`PlatformEvents::entities_loaded`).
     pub fn entities_loaded(&self, tagged: &HashMap<Uuid, EntityTag>, untagged: &[Uuid]) {
-        self.each(|s| s.entities_loaded(tagged, untagged));
+        let room = self.room_of_entities(tagged.keys().chain(untagged));
+        self.each_in(room, |s| s.entities_loaded(tagged, untagged));
     }
 
     /// Entities are about to unload with their chunk (`PlatformEvents::entities_unloading`).
     pub fn entities_unloading(&self, entities: &HashSet<Uuid>) {
-        self.each(|s| s.entities_unloading(entities));
+        let room = self.room_of_entities(entities.iter());
+        self.each_in(room, |s| s.entities_unloading(entities));
     }
 
-    /// A player joined: every service hears of it before scripts do (what's hidden from them is hidden again).
-    pub fn player_joined(&self, player: &PlayerRef) {
-        self.each(|s| s.player_joined(player));
+    /// A player joined room `room` (the server, or from another room): its services hear of it before its scripts
+    /// do (what's hidden from them is hidden again).
+    pub fn player_joined(&self, room: crate::instance::RoomId, player: &PlayerRef) {
+        self.each_in(room, |s| s.player_joined(player));
     }
 
-    /// A player left: every service forgets them, after scripts heard of it.
-    pub fn player_quit(&self, player: &PlayerRef) {
-        self.each(|s| s.player_quit(player));
+    /// A player left room `room`: its services forget them, after its scripts heard of it.
+    pub fn player_quit(&self, room: crate::instance::RoomId, player: &PlayerRef) {
+        self.each_in(room, |s| s.player_quit(player));
     }
 
-    /// An entity has gone for good (died, removed): what's kept for it goes, and its handlers.
+    /// An entity has gone for good (died, removed): what every room kept for it goes, and its handlers.
     pub fn entity_gone(&self, entity: Uuid) {
-        self.each(|s| s.entity_gone(entity));
-        let Some(room) = &self.room else { return };
+        for run in &self.rooms {
+            self.entity_gone_in(run, entity);
+        }
+    }
+
+    fn entity_gone_in(&self, run: &RoomRun, entity: Uuid) {
+        let Some(room) = &run.room else { return };
+        for service in &run.services {
+            service.entity_gone(entity);
+        }
         let handle = netherforge_api::handles::Handle::Entity(netherforge_api::handles::Entity {
             id: crate::events::uuid_text(&entity),
         });
@@ -791,59 +988,79 @@ impl<'a> Session<'a> {
         }
     }
 
-    /// The world is saving (`PlatformEvents::world_saving`): what its services keep of it is written as of now.
+    /// The world is saving (`PlatformEvents::world_saving`): what its room's services keep of it is written as of now.
     pub fn world_saving(&self, world: &str) {
-        self.each(|s| s.world_saving(world));
-        self.shared.instance.store.commit();
+        let room = self.route(crate::events::Route::World(world));
+        self.each_in(room, |s| s.world_saving(world));
+        self.instance().store.commit();
     }
 
-    /// A chunk is unloading, its scripts told: what its services keep of it is written now.
+    /// A chunk is unloading, its scripts told: what its room's services keep of it is written now.
     pub fn chunk_unloading(&self, world: &str, chunk_x: i32, chunk_z: i32) {
-        self.each(|s| s.chunk_unloading(world, chunk_x, chunk_z));
-        self.shared.instance.store.commit();
+        let room = self.route(crate::events::Route::World(world));
+        self.each_in(room, |s| s.chunk_unloading(world, chunk_x, chunk_z));
+        self.instance().store.commit();
     }
 
-    /// A chunk came into memory: its services hear of it before its scripts do (its blocks are the project's,
-    /// tracked, before a script asks).
+    /// A chunk came into memory: its room's services hear of it before its scripts do (its blocks are the
+    /// project's, tracked, before a script asks).
     pub fn chunk_loaded(&self, world: &str, chunk_x: i32, chunk_z: i32, generated: bool) {
-        self.each(|s| s.chunk_loaded(world, chunk_x, chunk_z, generated));
-        self.released();
+        let room = self.route(crate::events::Route::World(world));
+        self.each_in(room, |s| s.chunk_loaded(world, chunk_x, chunk_z, generated));
+        if let Some(run) = self.run(room) {
+            self.released_in(run);
+        }
     }
 
     /// A world was loaded: its configured spawn rates go in place before scripts hear of it.
     pub fn world_loaded(&self, world: &str) {
         let platform = self.platform.clone();
-        self.each(|s| s.world_loaded(&*platform, world));
+        let room = self.route(crate::events::Route::World(world));
+        self.each_in(room, |s| s.world_loaded(&*platform, world));
     }
 
-    /// Other plugins changed (`PlatformEvents::plugins_changed`).
+    /// Other plugins changed (`PlatformEvents::plugins_changed`): every room hears.
     pub fn plugins_changed(&self) {
         self.each(|s| s.plugins_changed());
     }
 
-    /// A block was placed or broken.
+    /// A block was placed or broken: its world's room hears.
     pub fn block_changed(&self, block: &BlockRef) {
-        self.each(|s| s.block_changed(block));
+        let room = self.route(crate::events::Route::World(&block.world));
+        self.each_in(room, |s| s.block_changed(block));
     }
 
-    /// Every service's hook, in registration order, while it runs.
+    /// Every running room's services' hook, in registration order.
     fn each(&self, hook: impl Fn(&dyn Service)) {
-        if self.room.is_none() {
-            return;
+        for run in &self.rooms {
+            if run.room.is_some() {
+                for service in &run.services {
+                    hook(&**service);
+                }
+            }
         }
-        for service in &self.services {
+    }
+
+    /// Room `room`'s services' hook, in registration order, while it runs.
+    fn each_in(&self, room: crate::instance::RoomId, hook: impl Fn(&dyn Service)) {
+        let Some(run) = self.run(room).filter(|r| r.room.is_some()) else {
+            return;
+        };
+        for service in &run.services {
             hook(&**service);
         }
     }
 
     /// The wall clock schedules read, in Unix milliseconds: a test's, or the system's when none.
     pub fn set_wall_clock(&self, millis: Option<i64>) {
-        self.shared.schedules.borrow_mut().now = millis;
+        for run in &self.rooms {
+            run.shared.schedules.borrow_mut().now = millis;
+        }
     }
 
-    /// What its services share with the room's API.
+    /// What the main room's services share with its API.
     pub fn shared(&self) -> &Rc<Shared> {
-        &self.shared
+        &self.rooms[0].shared
     }
 
     /// Where its project's files are read from.
@@ -861,41 +1078,42 @@ impl<'a> Session<'a> {
         self.platform.clone()
     }
 
-    /// What goes with the scopes that stopped since the last time (temporary centities).
+    /// What goes with the scopes that stopped since the last time (temporary centities), in every room.
     pub(crate) fn released(&self) {
-        if let Some(room) = &self.room {
+        for run in &self.rooms {
+            self.released_in(run);
+        }
+    }
+
+    /// What goes with the scopes of `run`'s room that stopped since the last time.
+    pub(crate) fn released_in(&self, run: &RoomRun) {
+        if let Some(room) = &run.room {
             let released = room.scripts().take_released();
             if !released.is_empty() {
-                CentityContext::new(self.shared.clone(), room.scripts().clone())
+                CentityContext::new(run.shared.clone(), room.scripts().clone())
                     .scopes_released(&released);
-                for service in &self.services {
+                for service in &run.services {
                     service.scope_released(&released);
                 }
             }
         }
-        let gone = std::mem::take(&mut *self.shared.gone.borrow_mut());
+        let gone = std::mem::take(&mut *run.shared.gone.borrow_mut());
         for entity in gone {
             self.entity_gone(entity);
         }
     }
 
-    /// Its room, while it runs.
+    /// The main room, while it runs.
     pub fn room(&self) -> Option<&Room> {
-        self.room.as_ref()
+        self.rooms[0].room.as_ref()
     }
 
     /// What's wrong with the project as it reads: format's findings, the session's own refusal, and what its
     /// running scripts caused (a body that failed, a handler that errors), until the scope closes.
     pub fn problems(&self) -> Vec<Problem> {
         let refused = self.refusal.as_ref().and_then(|r| r.problem.clone());
-        let mut reported = self.reported.borrow_mut();
-        if let Some(room) = &self.room {
-            let host = room.host();
-            reported
-                .problems
-                .retain(|scope, _| host.scope_name(*scope).is_some());
-        }
-        self.project
+        let mut found: Vec<Problem> = self
+            .project
             .problems
             .iter()
             .cloned()
@@ -907,59 +1125,96 @@ impl<'a> Session<'a> {
                     .filter(|p| !p.stops())
                     .flat_map(|p| p.check(&self.project)),
             )
-            .chain(reported.problems.values().flatten().cloned())
-            .chain({
-                let mut warned = self.warned.borrow_mut();
-                if let Some(room) = &self.room {
-                    let live = room.scripts().live_scopes();
-                    warned.problems.retain(|scope, _| live.contains(scope));
+            .collect();
+        for run in &self.rooms {
+            let mut reported = run.reported.borrow_mut();
+            let mut warned = run.warned.borrow_mut();
+            if let Some(room) = &run.room {
+                let host = room.host();
+                reported
+                    .problems
+                    .retain(|scope, _| host.scope_name(*scope).is_some());
+                let live = room.scripts().live_scopes();
+                warned.problems.retain(|scope, _| live.contains(scope));
+            }
+            for problem in reported
+                .problems
+                .values()
+                .flatten()
+                .chain(warned.problems.values())
+                .cloned()
+                .chain(run.services.iter().flat_map(|s| s.problems()))
+            {
+                // Every room runs the same project: a problem they all have is said once.
+                if !found.contains(&problem) {
+                    found.push(problem);
                 }
-                warned.problems.values().cloned().collect::<Vec<_>>()
-            })
-            .chain(self.services.iter().flat_map(|s| s.problems()))
-            .chain(self.startup.borrow().problems())
-            .collect()
+            }
+        }
+        found.extend(self.startup.borrow().problems());
+        found
     }
 
-    /// One server tick: the scripts' own (timers, async values, `tick` handlers), each service in order, then what
-    /// the scripts reported, then the accounts: what each scope cost, and the profiler's share (each step timed
-    /// while it measures).
+    /// One server tick: each room's in turn (the main room first), then what the session watches for. A room's tick
+    /// is the scripts' own (timers, async values, `tick` handlers), each service in order, then what the scripts
+    /// reported, then the accounts: what each scope cost, and the profiler's share (each step timed while it measures).
     pub fn tick(&self) {
         let tick = self.ticks.get() + 1;
         self.ticks.set(tick);
-        let Some(room) = &self.room else { return };
-        let host = room.host();
         let profiler = self.profiler.borrow().clone();
         let profiler = profiler.filter(|p| p.active());
-        self.sync_profiling(host, profiler.is_some());
-        let start = host.now();
-        // Kotlin's eight phases, in its order, as the profiler shows them.
+        // Kotlin's eight phases, in its order, as the profiler shows them: every room's added up.
         let mut phases: indexmap::IndexMap<String, i64> =
             TICK_PHASES.iter().map(|p| ((*p).to_owned(), 0)).collect();
+        let mut total = 0;
+        let mut ran = false;
+        for run in &self.rooms {
+            let Some(room) = &run.room else { continue };
+            ran = true;
+            total += self.tick_room(run, room, tick, profiler.as_deref(), &mut phases);
+        }
+        if !ran {
+            return;
+        }
+        self.update_watched();
+        if let Some(p) = &profiler {
+            p.tick(tick, total, phases);
+        }
+    }
+
+    /// Room `run`'s part of tick `tick`: how long it took, in the host's nanoseconds.
+    fn tick_room(
+        &self,
+        run: &RoomRun,
+        room: &Room,
+        tick: u64,
+        profiler: Option<&crate::profile::Profiler>,
+        phases: &mut indexmap::IndexMap<String, i64>,
+    ) -> u64 {
+        let host = room.host();
+        Self::sync_profiling(run, host, profiler.is_some());
+        let start = host.now();
         room.scripts().tick_timed(&mut |phase, nanos| {
             *phases.entry(phase.to_owned()).or_default() += nanos as i64;
         });
         let mut at = host.now();
-        for service in &self.services {
+        for service in &run.services {
             service.tick(room, &*self.platform);
             let now = host.now();
             *phases.entry(service.phase().to_owned()).or_default() += (now - at) as i64;
-            if let Some(p) = &profiler {
+            if let Some(p) = profiler {
                 p.part(&format!("services/{}", service.name()), now - at);
             }
             at = now;
         }
-        self.released();
-        self.report();
-        self.update_watched();
-        self.shared.classed.borrow_mut().clear();
+        self.released_in(run);
+        self.report_in(run);
+        run.shared.classed.borrow_mut().clear();
         let now = host.now();
-        self.accounts(room, tick, profiler.as_deref());
+        self.accounts(run, room, tick, profiler);
         let end = host.now();
-        phases.insert("accounts".to_owned(), (end - now) as i64);
-        if let Some(p) = &profiler {
-            p.tick(tick, end - start, phases);
-        }
+        *phases.entry("accounts".to_owned()).or_default() += (end - now) as i64;
+        end - start
     }
 
     /// Server ticks this session has seen.
@@ -969,8 +1224,8 @@ impl<'a> Session<'a> {
 
     /// What hears of each new Lua state before any script runs in it (and of this one now, if it runs).
     pub fn set_on_host(&self, on_host: Option<OnHost>) {
-        if let (Some(f), Some(room)) = (&on_host, &self.room) {
-            f(room.host(), &self.shared);
+        if let (Some(f), Some(room)) = (&on_host, &self.rooms[0].room) {
+            f(room.host(), &self.rooms[0].shared);
         }
         *self.on_host.borrow_mut() = on_host;
     }
@@ -985,26 +1240,32 @@ impl<'a> Session<'a> {
         self.profiler.borrow().clone()
     }
 
-    fn sync_profiling(&self, host: &netherforge_luau::Host, wanted: bool) {
-        if self.profiling.get() != wanted {
+    fn sync_profiling(run: &RoomRun, host: &netherforge_luau::Host, wanted: bool) {
+        if run.profiling.get() != wanted {
             host.set_profiling(wanted);
-            self.profiling.set(wanted);
+            run.profiling.set(wanted);
         }
     }
 
     /// The end of a tick: what each scope cost (warnings for the slow and the deferred), and the profiler's share.
-    fn accounts(&self, room: &Room, tick: u64, profiler: Option<&crate::profile::Profiler>) {
+    fn accounts(
+        &self,
+        run: &RoomRun,
+        room: &Room,
+        tick: u64,
+        profiler: Option<&crate::profile::Profiler>,
+    ) {
         let host = room.host();
         let live = room.scripts().live_scopes();
-        let recorded = self.costs.borrow_mut().record(host, &live, tick);
+        let recorded = run.costs.borrow_mut().record(host, &live, tick);
         for scope in recorded.deferred {
-            self.warn_deferred(room, scope, tick);
+            self.warn_deferred(run, room, scope, tick);
         }
         for slow in recorded.slow {
-            self.warn_slow(room, slow, tick);
+            self.warn_slow(run, room, slow, tick);
         }
         if let Some(p) = profiler {
-            let scopes = self
+            let scopes = run
                 .costs
                 .borrow()
                 .last_tick()
@@ -1020,14 +1281,14 @@ impl<'a> Session<'a> {
                 .collect();
             p.scopes(scopes);
             if p.due(tick) {
-                self.drain_profile(room, p);
+                self.drain_profile(run, room, p);
             }
         }
     }
 
     /// Hands the profiler what every function cost since the last time.
-    fn drain_profile(&self, room: &Room, profiler: &crate::profile::Profiler) {
-        if !self.profiling.get() {
+    fn drain_profile(&self, run: &RoomRun, room: &Room, profiler: &crate::profile::Profiler) {
+        if !run.profiling.get() {
             return;
         }
         let host = room.host();
@@ -1060,19 +1321,22 @@ impl<'a> Session<'a> {
 
     /// Hands the profiler what's pending now (before `/nf profile` starts recording, so it's not part of it).
     pub fn drain_pending_profile(&self) {
-        if let (Some(room), Some(p)) = (&self.room, self.profiler()) {
-            self.drain_profile(room, &p);
+        let Some(p) = self.profiler() else { return };
+        for run in &self.rooms {
+            if let Some(room) = &run.room {
+                self.drain_profile(run, room, &p);
+            }
         }
     }
 
     /// A scope over its time: said in the log and the editor's console (at most once per `QUIET_TICKS` for one
     /// script's place, how many like it held back said with the next), and a `script.slow` problem while it runs.
-    fn warn_slow(&self, room: &Room, slow: crate::costs::Slow, tick: u64) {
+    fn warn_slow(&self, run: &RoomRun, room: &Room, slow: crate::costs::Slow, tick: u64) {
         let Some(title) = room.host().scope_name(slow.scope) else {
             return;
         };
         let label = crate::costs::script_label(&title);
-        let owner_file = self
+        let owner_file = run
             .shared
             .modules
             .borrow()
@@ -1096,7 +1360,7 @@ impl<'a> Session<'a> {
         });
         let limit = plain(self.performance.map_or(0.0, |p| p.warn_millis));
         let key = format!("{label}|{file:?}|{line:?}");
-        let mut warned = self.warned.borrow_mut();
+        let mut warned = run.warned.borrow_mut();
         let (last, held) = warned.slow.get(&key).copied().unwrap_or((0, 0));
         if last == 0 || tick - last >= crate::costs::QUIET_TICKS {
             warned.slow.insert(key, (tick, 0));
@@ -1109,7 +1373,7 @@ impl<'a> Session<'a> {
                 "{label} is slow: {:.1} ms a tick on average over the last {} ticks, over the {limit} ms limit; see /nf scripts",
                 slow.average_millis, slow.ticks
             );
-            match self.shared.instance.console.borrow().clone() {
+            match run.shared.instance.console.borrow().clone() {
                 Some(console) => console.script_error(
                     format!("{message}{place}{more}"),
                     format!("{message}{more}"),
@@ -1133,8 +1397,14 @@ impl<'a> Session<'a> {
 
     /// A scope's timers or `tick` handlers waited for the next tick, its code over `performance.max-ms-per-tick`:
     /// said at most once per `QUIET_TICKS` per scope.
-    fn warn_deferred(&self, room: &Room, scope: netherforge_luau::ScopeId, tick: u64) {
-        let mut warned = self.warned.borrow_mut();
+    fn warn_deferred(
+        &self,
+        run: &RoomRun,
+        room: &Room,
+        scope: netherforge_luau::ScopeId,
+        tick: u64,
+    ) {
+        let mut warned = run.warned.borrow_mut();
         if warned
             .deferred
             .get(&scope)
@@ -1156,12 +1426,12 @@ impl<'a> Session<'a> {
     /// Every live scope's costs (`/nf scripts`), the most expensive first: its window's numbers, what it holds
     /// here, every service's counts of what it owns, and the bytes its script's memory key holds.
     pub fn costs(&self) -> Vec<crate::costs::Entry> {
-        let Some(room) = &self.room else {
+        let Some(room) = &self.rooms[0].room else {
             return Vec::new();
         };
         let host = room.host();
         let scripts = room.scripts();
-        let costs = self.costs.borrow();
+        let costs = self.rooms[0].costs.borrow();
         let entries = scripts
             .live_scopes()
             .into_iter()
@@ -1172,7 +1442,7 @@ impl<'a> Session<'a> {
                     "waits",
                     netherforge_api::pending::waiting(host.lua(), scope),
                 )];
-                for service in &self.services {
+                for service in &self.rooms[0].services {
                     counts.extend(service.costs(scope));
                 }
                 crate::costs::Entry {
@@ -1199,7 +1469,7 @@ impl<'a> Session<'a> {
 
     /// Whether it runs: it isn't refused, and its Lua state started.
     pub fn running(&self) -> bool {
-        self.room.is_some()
+        self.rooms[0].room.is_some()
     }
 
     /// Reads the project again after `changed` (project or package paths) changed, and reloads the resource that
@@ -1225,7 +1495,7 @@ impl<'a> Session<'a> {
             .filter(|d| *d == "vanilla" || *d == "default_font")
             .collect();
         if wanted.is_empty() && !whole {
-            if !followed.is_empty() && self.room.is_some() {
+            if !followed.is_empty() && self.rooms[0].room.is_some() {
                 self.project = load(self.source, self.packages);
                 self.reload_kinds(Vec::new(), &followed);
             }
@@ -1234,11 +1504,11 @@ impl<'a> Session<'a> {
                 restart: false,
             };
         }
-        if whole || self.room.is_none() {
+        if whole || self.rooms[0].room.is_none() {
             return self.reload_all();
         }
         self.project = load(self.source, self.packages);
-        *self.shared.names.borrow_mut() = self.project.names();
+        *self.rooms[0].shared.names.borrow_mut() = self.project.names();
         self.collect();
         let order = self.reload_kinds(wanted, &followed);
         let failed = self.collected();
@@ -1246,8 +1516,8 @@ impl<'a> Session<'a> {
             .iter()
             .any(|(kind, _)| crate::reload::STARTUP_KINDS.contains(kind))
             && self.check_startup()
-            || self.services.iter().any(|s| s.needs_restart());
-        let notes = std::mem::take(&mut *self.shared.instance.reloading.borrow_mut());
+            || self.rooms[0].services.iter().any(|s| s.needs_restart());
+        let notes = std::mem::take(&mut *self.rooms[0].shared.instance.reloading.borrow_mut());
         let resources = crate::reload::outcomes(
             &order,
             self.project.namespace(),
@@ -1267,11 +1537,11 @@ impl<'a> Session<'a> {
         self.stop();
         self.project = load(self.source, self.packages);
         self.refuse();
-        self.run();
+        self.run_project();
         let failed: Vec<Problem> = self.collected().into_iter().map(|f| f.problem).collect();
         let restart = (self.has_startup_resources() && self.check_startup())
-            || self.services.iter().any(|s| s.needs_restart());
-        std::mem::take(&mut *self.shared.instance.reloading.borrow_mut());
+            || self.rooms[0].services.iter().any(|s| s.needs_restart());
+        std::mem::take(&mut *self.rooms[0].shared.instance.reloading.borrow_mut());
         let mut problems = self.problems();
         for problem in &failed {
             if !problems.contains(problem) {
@@ -1283,8 +1553,8 @@ impl<'a> Session<'a> {
                 pkg: self.project.namespace().to_owned(),
                 kind: None,
                 id: None,
-                ok: self.room.is_some() && failed.is_empty(),
-                reattached: self.shared.centities.borrow().all().count() as i32,
+                ok: self.rooms[0].room.is_some() && failed.is_empty(),
+                reattached: self.rooms[0].shared.centities.borrow().all().count() as i32,
                 problems,
                 pack: None,
             }],
@@ -1308,12 +1578,13 @@ impl<'a> Session<'a> {
 
     /// Starts keeping the scripts' failures for a reload's answer.
     fn collect(&self) {
-        self.reported.borrow_mut().collecting = Some(Vec::new());
+        self.rooms[0].reported.borrow_mut().collecting = Some(Vec::new());
     }
 
     /// The failures kept since `collect`, and stops keeping them.
     fn collected(&self) -> Vec<crate::reload::Failed> {
-        self.reported
+        self.rooms[0]
+            .reported
             .borrow_mut()
             .collecting
             .take()
@@ -1327,7 +1598,7 @@ impl<'a> Session<'a> {
         wanted: Vec<crate::reload::Key>,
         followed: &[&'static str],
     ) -> Vec<crate::reload::Key> {
-        let Some(room) = self.room.as_ref() else {
+        let Some(room) = self.rooms[0].room.as_ref() else {
             return Vec::new();
         };
         let mut order = wanted;
@@ -1350,7 +1621,7 @@ impl<'a> Session<'a> {
             };
             asked.insert(kind);
             let ids = ids_of(&order, kind);
-            for service in &self.services {
+            for service in &self.rooms[0].services {
                 for (also, id) in service.restarts(kind, &ids) {
                     let key = (also, id);
                     if kind_order(also) >= kind_order(kind) && !order.contains(&key) {
@@ -1375,23 +1646,31 @@ impl<'a> Session<'a> {
             platform: &*self.platform,
         };
         // Whatever reloads next runs the Lua as it reads now.
-        if let Some(modules) = self.shared.modules.borrow().clone() {
+        if let Some(modules) = self.rooms[0].shared.modules.borrow().clone() {
             modules.update(lua_of(&define));
         }
         for (kind, ids) in &by_kind {
-            if let Some(service) = self.services.iter().find(|s| s.reloads().contains(kind)) {
+            if let Some(service) = self.rooms[0]
+                .services
+                .iter()
+                .find(|s| s.reloads().contains(kind))
+            {
                 service.unload(room, kind, ids);
             }
         }
         self.released();
         for (kind, ids) in &by_kind {
-            if let Some(service) = self.services.iter().find(|s| s.reloads().contains(kind)) {
+            if let Some(service) = self.rooms[0]
+                .services
+                .iter()
+                .find(|s| s.reloads().contains(kind))
+            {
                 service.reload(room, kind, ids, &define);
             }
         }
         let mut kinds: BTreeSet<&str> = by_kind.iter().map(|(k, _)| *k).collect();
         kinds.extend(followed.iter().copied());
-        for service in &self.services {
+        for service in &self.rooms[0].services {
             service.reloaded(room, &kinds, &define);
         }
         self.released();
@@ -1409,7 +1688,7 @@ impl<'a> Session<'a> {
         name: &str,
         value: Option<&serde_json::Value>,
     ) -> Result<bool, String> {
-        let changes = self
+        let changes = self.rooms[0]
             .shared
             .settings
             .borrow_mut()
@@ -1426,7 +1705,7 @@ impl<'a> Session<'a> {
         name: &str,
         text: &str,
     ) -> Result<bool, String> {
-        let changes = self
+        let changes = self.rooms[0]
             .shared
             .settings
             .borrow_mut()
@@ -1443,7 +1722,7 @@ impl<'a> Session<'a> {
         namespace: &str,
         values: Vec<(String, Option<serde_json::Value>)>,
     ) -> Result<Vec<String>, String> {
-        let changes = self
+        let changes = self.rooms[0]
             .shared
             .settings
             .borrow_mut()
@@ -1456,23 +1735,26 @@ impl<'a> Session<'a> {
     /// Saves every saved table that changed and every centity's place, staged and committed, so what the store
     /// shows is now (`/nf data`, as the world saving would).
     pub fn save_data(&self) {
-        let Some(room) = &self.room else { return };
+        let Some(room) = &self.rooms[0].room else {
+            return;
+        };
         let host = room.host();
-        for owner in crate::data::ScriptData::owners(&self.shared) {
-            crate::data::ScriptData::save(&self.shared, host, &owner);
+        for owner in crate::data::ScriptData::owners(&self.rooms[0].shared) {
+            crate::data::ScriptData::save(&self.rooms[0].shared, host, &owner);
         }
-        self.shared
+        self.rooms[0]
+            .shared
             .centities
             .borrow_mut()
-            .save_placements(&self.shared.instance.store);
-        self.shared.instance.store.commit();
+            .save_placements(&self.rooms[0].shared.instance.store);
+        self.rooms[0].shared.instance.store.commit();
     }
 
     /// Saves `owner`'s saved table now, if it has one.
     pub fn save_data_of(&self, owner: &crate::data::Owner) {
-        if let Some(room) = &self.room {
-            crate::data::ScriptData::save(&self.shared, room.host(), owner);
-            self.shared.instance.store.commit();
+        if let Some(room) = &self.rooms[0].room {
+            crate::data::ScriptData::save(&self.rooms[0].shared, room.host(), owner);
+            self.rooms[0].shared.instance.store.commit();
         }
     }
 
@@ -1480,7 +1762,11 @@ impl<'a> Session<'a> {
     /// many settings changed.
     pub fn reload_settings(&mut self) -> usize {
         let log = self.platform.log();
-        let all = self.shared.settings.borrow_mut().reload(&|m| log.warn(m));
+        let all = self.rooms[0]
+            .shared
+            .settings
+            .borrow_mut()
+            .reload(&|m| log.warn(m));
         let mut count = 0;
         for (namespace, changes) in all {
             count += changes.len();
@@ -1496,7 +1782,7 @@ impl<'a> Session<'a> {
         if changes.is_empty() {
             return;
         }
-        let Some(room) = self.room.as_ref() else {
+        let Some(room) = self.rooms[0].room.as_ref() else {
             return;
         };
         let scripts = room.scripts().clone();
@@ -1509,7 +1795,7 @@ impl<'a> Session<'a> {
         let lua = scripts.host().lua().clone();
         let log = self.platform.log();
         for change in &changes {
-            let Ok(definition) = self
+            let Ok(definition) = self.rooms[0]
                 .shared
                 .settings
                 .borrow()
@@ -1541,7 +1827,7 @@ impl<'a> Session<'a> {
             }
         }
         let names: HashSet<String> = changes.iter().map(|c| c.setting.clone()).collect();
-        let stale: Vec<netherforge_luau::ScopeId> = self
+        let stale: Vec<netherforge_luau::ScopeId> = self.rooms[0]
             .shared
             .settings
             .borrow()
@@ -1549,7 +1835,7 @@ impl<'a> Session<'a> {
             .into_iter()
             .filter(|scope| of_package(*scope) && !listening.contains(scope))
             .collect();
-        let Some(modules) = self.shared.modules.borrow().clone() else {
+        let Some(modules) = self.rooms[0].shared.modules.borrow().clone() else {
             return;
         };
         let mut wanted: Vec<crate::reload::Key> = Vec::new();
@@ -1572,7 +1858,7 @@ impl<'a> Session<'a> {
 
     /// The project's packs read again from disk and rebuilt (`nf.packs.rebuild`), when a script asked for it.
     pub fn rebuild_packs(&mut self) {
-        if !std::mem::take(&mut self.shared.instance.packs.borrow_mut().wanted) {
+        if !std::mem::take(&mut self.rooms[0].shared.instance.packs.borrow_mut().wanted) {
             return;
         }
         if self.refusal.is_some() {
@@ -1599,43 +1885,33 @@ impl<'a> Session<'a> {
         }
     }
 
-    /// Stops every service, in reverse order, and closes the room.
+    /// Stops every room: those opened beside the main room first (closed for good), then the main room's services, in
+    /// reverse order, and its Lua state.
     pub fn stop(&mut self) {
-        let Some(room) = &self.room else { return };
-        for service in self.services.iter().rev() {
-            service.stop(room, &*self.platform);
+        while self.rooms.len() > 1 {
+            let id = self.rooms[self.rooms.len() - 1].id;
+            self.close_room(id);
         }
-        // What the scripts said as they were stopped (an `end` handler of a cutscene that unloaded) is still told.
-        self.report();
-        // What the services staged as they stopped is written before anything else opens the store.
-        self.shared.instance.store.flush();
-        self.shared.tests.borrow_mut().clear();
-        // A full reload: what this Lua state measured goes to the profiler before it closes.
-        if let (Some(room), Some(p)) = (&self.room, self.profiler()) {
-            self.drain_profile(room, &p);
+        if self.rooms[0].room.is_none() {
+            return;
         }
-        self.profiling.set(false);
-        self.costs.borrow_mut().clear();
-        self.warned.borrow_mut().problems.clear();
-        self.room = None;
+        self.stop_room(0);
         self.update_watched();
-        self.services = services(&self.shared);
+        self.rooms[0].services = services(&self.rooms[0].shared);
     }
 
     /// Tells the adapter which of the events it watches only on request are wanted now (Kotlin's `ProjectSession.watch`):
     /// those a script listens to, on any target, and those a service needs while the session runs. Never twice in a row
     /// the same; everything goes once the session stops.
     fn update_watched(&self) {
-        let (listened, needed): (std::collections::HashSet<String>, Vec<_>) = match &self.room {
-            Some(room) => (
-                room.scripts().events_listened(),
-                self.services
-                    .iter()
-                    .flat_map(|s| s.needs_watched())
-                    .collect(),
-            ),
-            None => Default::default(),
-        };
+        let mut listened = std::collections::HashSet::new();
+        let mut needed = Vec::new();
+        for run in &self.rooms {
+            if let Some(room) = &run.room {
+                listened.extend(room.scripts().events_listened());
+                needed.extend(run.services.iter().flat_map(|s| s.needs_watched()));
+            }
+        }
         let mut watching = self.watching.borrow_mut();
         for (event, stages) in crate::events::WATCHED {
             let now =
@@ -1654,19 +1930,28 @@ impl<'a> Session<'a> {
     /// back); one cancelled for failing `MAX_ERRORS` times in a row, which is always said. Each is a
     /// `script.error` problem too, until its scope closes. Then the lines scripts logged.
     pub(crate) fn report(&self) {
-        let Some(room) = &self.room else { return };
+        for run in &self.rooms {
+            self.report_in(run);
+        }
+    }
+
+    /// `report`, for one room.
+    fn report_in(&self, run: &RoomRun) {
+        let Some(room) = &run.room else {
+            return;
+        };
         let log = self.platform.log();
         let scripts = room.scripts();
         let tick = scripts.tick_count();
-        let mut reported = self.reported.borrow_mut();
+        let mut reported = run.reported.borrow_mut();
         // A test run keeps what the editor's console would get: a script's error fails the test that set it off.
-        let testing = self.shared.tests.borrow().harness.is_some();
+        let testing = run.shared.tests.borrow().harness.is_some();
         let record = |message: String,
                       file: &Option<String>,
                       line: Option<u32>,
                       traceback: Option<String>| {
             if testing {
-                self.shared
+                run.shared
                     .tests
                     .borrow_mut()
                     .errors
@@ -1696,7 +1981,7 @@ impl<'a> Session<'a> {
                     file: f.clone(),
                     line: line.map(|l| l as i32),
                 });
-            let console = self.shared.instance.console.borrow().clone();
+            let console = run.shared.instance.console.borrow().clone();
             // The server's console gets the line; the editor's, the error located with its traceback.
             let warn = |text: String, entry: String, traceback: Option<String>| match &console {
                 Some(console) => console.script_error(text, entry, source.clone(), traceback),
@@ -1775,7 +2060,7 @@ impl<'a> Session<'a> {
             );
             let problem = Problem { line, ..problem };
             if reported.collecting.is_some() {
-                let owner = self
+                let owner = run
                     .shared
                     .modules
                     .borrow()
@@ -1796,7 +2081,7 @@ impl<'a> Session<'a> {
         }
         for line in scripts.take_logs() {
             if testing && let Some(at) = &line.location {
-                self.shared
+                run.shared
                     .tests
                     .borrow_mut()
                     .logs
@@ -1811,7 +2096,7 @@ impl<'a> Session<'a> {
                 });
             let at = line.location.map(|l| format!(" ({l})")).unwrap_or_default();
             let text = format!("[{}] {}{at}", label(room, line.scope), line.line);
-            match self.shared.instance.console.borrow().clone() {
+            match run.shared.instance.console.borrow().clone() {
                 Some(console) => console.script_line(text, line.line, source),
                 None => log.info(text),
             }
@@ -1838,6 +2123,79 @@ fn kind_order(kind: &str) -> usize {
 const TICK_PHASES: [&str; 8] = [
     "timers", "async", "events", "world", "effects", "upkeep", "accounts", "save",
 ];
+
+/// What the server's config says each room runs with: written into a room's `Shared` as it's made.
+fn configure_room(shared: &Shared, config: &Config) {
+    shared.schedules.borrow_mut().now = config.wall_clock;
+    shared.schedules.borrow_mut().rate = config.wall_clock_rate;
+    {
+        let mut http = shared.http.borrow_mut();
+        http.config = config.http.clone();
+        http.hooks = config.net.clone();
+        // A test run looks no name up: `localhost` is this machine, any other name leads nowhere.
+        if config.testing.is_some() && http.hooks.resolve.is_none() {
+            http.hooks.resolve = Some(std::sync::Arc::new(|host: &str| {
+                let host = host.to_lowercase();
+                Ok(if host == "localhost" || host.ends_with(".localhost") {
+                    vec![
+                        std::net::Ipv4Addr::LOCALHOST.into(),
+                        std::net::Ipv6Addr::LOCALHOST.into(),
+                    ]
+                } else {
+                    Vec::new()
+                })
+            }));
+        }
+    }
+    shared.web.borrow_mut().config = config.web.clone();
+    // A test run's bots are on, as the dev server's are: a test of a project that joins bots is the point.
+    shared.bots.borrow_mut().config = crate::bots::BotsConfig {
+        enabled: config.bots.enabled || config.testing.is_some(),
+        ..config.bots
+    };
+    shared.settings.borrow_mut().directory = config.settings_dir.clone();
+    {
+        let mut network = shared.network.borrow_mut();
+        network.config = config.network.clone();
+        network.link = config.network_link.as_ref().map(|link| link.0.clone());
+    }
+    {
+        let mut wasm = shared.wasm.borrow_mut();
+        wasm.config = config.wasm.clone();
+        wasm.sources = crate::wasm::Sources {
+            bytes: config.bytes.clone(),
+            paths: config.paths.clone(),
+        };
+    }
+    {
+        let mut screens = shared.screens.borrow_mut();
+        screens.config = config.screens;
+        screens.read = config.bytes.clone();
+        screens.paths = config.paths.clone();
+    }
+    {
+        let mut managed = shared.managed_worlds.borrow_mut();
+        managed.config = config.worlds.clone();
+        managed.paths = config.paths.clone();
+    }
+    {
+        let mut structures = shared.structures.borrow_mut();
+        structures.config = config.structures;
+        structures.paths = config.paths.clone();
+        structures.saved = config
+            .data_dir
+            .as_ref()
+            .map(|d| d.join(".nf").join("structures"));
+    }
+    if let Some(zone) = config
+        .time_zone
+        .as_deref()
+        .and_then(crate::schedule::Zone::parse)
+    {
+        shared.schedules.borrow_mut().zone = zone;
+    }
+    shared.tests.borrow_mut().harness = config.testing.clone();
+}
 
 /// The services a session runs, in the one order they start, tick and stop in.
 fn services(shared: &Rc<Shared>) -> Vec<Box<dyn Service>> {

@@ -22,6 +22,8 @@ pub struct DataTable {
 pub struct Shared {
     /// What every room of the server shares: the store, the pack, the databases...
     pub instance: Rc<crate::instance::Instance>,
+    /// Which of the server's rooms this is.
+    pub room: crate::instance::RoomId,
     pub platform: Rc<dyn Platform>,
     pub centities: RefCell<Centities>,
     /// The project's `fonts/default.json`, which anchored text is measured with.
@@ -123,10 +125,14 @@ impl Shared {
         self.block_shapes.changed(world, x, y, z);
     }
 
-    pub fn new(instance: Rc<crate::instance::Instance>) -> Rc<Shared> {
+    pub fn new(
+        instance: Rc<crate::instance::Instance>,
+        room: crate::instance::RoomId,
+    ) -> Rc<Shared> {
         let platform = instance.platform.clone();
         Rc::new(Shared {
             instance,
+            room,
             mobs: crate::mob::Mobs::new(platform.clone()),
             structures: RefCell::default(),
             managed_worlds: RefCell::default(),

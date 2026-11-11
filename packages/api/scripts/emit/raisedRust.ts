@@ -255,13 +255,46 @@ function stages(it: RaisedEvent): { first?: [string, string]; nf: [string, strin
 const payloadType = (it: RaisedEvent) => `game_event::${it.payload.name}`
 const returns = (it: RaisedEvent) => (it.event.cancellable ? ' -> bool' : '')
 
-/** `GameEvents`' method: the session opened once, then its `Around` hook given the raise. */
+/**
+ * The room an event goes to: the room of what it's first heard on (its player, its entity, its block's or its
+ * own world, its inventory's holder), the main room for an event heard only on `nf`.
+ */
+function route(it: RaisedEvent): string {
+  if (!it.first) return 'Route::Main'
+  const field = it.first.field
+  const optional = field.codec.kind === 'optional'
+  const inner = optional && field.codec.kind === 'optional' ? field.codec.inner : field.codec
+  const held = inner.kind === 'handle' ? inner.cls.name : inner.kind === 'runtime' ? inner.name : ''
+  // `x` names the field's value; `byRef` when it's a reference already (an optional's `x0`).
+  const of = (x: string, byRef: boolean): string => {
+    switch (it.first!.cls) {
+      case 'Player':
+        return `Route::Player(${x}.uuid)`
+      case 'Entity':
+      case 'Living':
+      case 'Mob':
+        return `Route::Entity(${byRef ? `*${x}` : x})`
+      case 'Block':
+        return `Route::World(&${x}.world)`
+      case 'World':
+        return held === 'World' ? `Route::World(${byRef ? x : `&${x}`})` : `Route::World(&${x}.world)`
+      case 'Inventory':
+        return `Route::Inventory(${byRef ? x : `&${x}`})`
+      default:
+        throw new Error(`no route for an event first heard on a ${it.first!.cls}`)
+    }
+  }
+  const value = `event.${ident(field.name)}`
+  return optional ? `${value}.as_ref().map_or(Route::Main, |x0| ${of('x0', true)})` : of(value, false)
+}
+
+/** `GameEvents`' method: the room it goes to opened once, then its `Around` hook given the raise. */
 function dispatchMethod(it: RaisedEvent): string[] {
   const unchanged = it.event.cancellable ? 'false' : ''
   const name = snake(it.method)
   return [
     `${sinkSignature(it)} {`,
-    `    let Some(s) = self.0.open() else { return ${unchanged}; };`,
+    `    let Some(s) = self.0.open(${route(it)}) else { return ${unchanged}; };`,
     `    s.${name}(event, &|event| ${name}(&s, event))`,
     '}',
   ]
@@ -354,13 +387,13 @@ export function dispatchRust(events: RaisedEvent[]): string {
     'use netherforge_api::{codecs, shapes, values};',
     'use netherforge_platform::{game_event, GameEvents, WatchedEvent};',
     '',
-    'use crate::events::EventSession;',
+    'use crate::events::{EventSession, Route};',
     '',
-    '/// Where the dispatch finds the session running now, opened once per event: none while no',
+    '/// Where the dispatch finds the room an event goes to, opened once per event: none while no',
     "/// project runs (or it can't be reached now), and every event then goes through unchanged.",
     'pub trait EventSource {',
     "    type Open<'b>: EventSession + Around where Self: 'b;",
-    "    fn open(&self) -> Option<Self::Open<'_>>;",
+    "    fn open(&self, route: Route<'_>) -> Option<Self::Open<'_>>;",
     '}',
     '',
     "/// What the runtime does around an event besides raising it to scripts (the Kotlin runtime's",
