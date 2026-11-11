@@ -127,6 +127,8 @@ pub struct Instance {
     pub routes: RefCell<Routes>,
     /// The last boss bar number given, in any room.
     pub next_bar: std::cell::Cell<i32>,
+    /// Each recipe the server has from the rooms, by id: how many rooms gave it, and the version it has.
+    recipes: RefCell<HashMap<String, (u32, netherforge_format::kind::recipe::RecipeFile)>>,
     /// Each command the rooms declared, by name: every room's handler, behind the one the server has.
     commands: RefCell<HashMap<String, std::collections::BTreeMap<RoomId, Rc<dyn CommandHandler>>>>,
 }
@@ -189,6 +191,7 @@ impl Instance {
             routes: RefCell::default(),
             next_bar: Default::default(),
             commands: RefCell::default(),
+            recipes: RefCell::default(),
         })
     }
 
@@ -199,6 +202,60 @@ impl Instance {
             .entry(name)
             .or_insert_with(|| crate::http::Workers::lane(&format!("NetherForge {name}")))
             .clone()
+    }
+
+    /// A room gives the server recipe `id` (it hadn't): the server has it while any room does, as the room that gave
+    /// it last has it (a reload's new version replaces the old for every room). False when the server couldn't make it.
+    pub fn give_recipe(
+        &self,
+        id: &str,
+        file: &netherforge_format::kind::recipe::RecipeFile,
+    ) -> bool {
+        let mut recipes = self.recipes.borrow_mut();
+        let ops = self.platform.recipes();
+        match recipes.get_mut(id) {
+            Some((holders, held)) if held == file => {
+                *holders += 1;
+                true
+            }
+            Some((holders, held)) => {
+                ops.remove(id.to_owned());
+                let added = ops.add(netherforge_platform::RecipeSpec {
+                    id: id.to_owned(),
+                    file: file.clone(),
+                });
+                if added {
+                    *holders += 1;
+                    *held = file.clone();
+                } else if *holders == 0 {
+                    recipes.remove(id);
+                }
+                added
+            }
+            None => {
+                let added = ops.add(netherforge_platform::RecipeSpec {
+                    id: id.to_owned(),
+                    file: file.clone(),
+                });
+                if added {
+                    recipes.insert(id.to_owned(), (1, file.clone()));
+                }
+                added
+            }
+        }
+    }
+
+    /// A room takes back recipe `id` it gave: the server's goes once no room has it.
+    pub fn take_recipe(&self, id: &str) {
+        let mut recipes = self.recipes.borrow_mut();
+        let Some((holders, _)) = recipes.get_mut(id) else {
+            return;
+        };
+        *holders = holders.saturating_sub(1);
+        if *holders == 0 {
+            recipes.remove(id);
+            self.platform.recipes().remove(id.to_owned());
+        }
     }
 
     /// Declares `/name` for `room`: the server is given it the first time any room declares it. False when the server
