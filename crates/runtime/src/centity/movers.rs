@@ -256,12 +256,12 @@ fn solids_around(
     for x in x0..=x1 {
         for z in z0..=z1 {
             for y in y0..=y1 {
-                match shapes.boxes(x, y, z) {
-                    None => solids.push(BoundingBox {
+                // A block in a chunk that isn't loaded is a full cube.
+                if !shapes.each_box(x, y, z, &mut |b| solids.push(*b)) {
+                    solids.push(BoundingBox {
                         min: Vec3(f64::from(x), f64::from(y), f64::from(z)),
                         max: Vec3(f64::from(x + 1), f64::from(y + 1), f64::from(z + 1)),
-                    }),
-                    Some(boxes) => solids.extend(boxes),
+                    });
                 }
             }
         }

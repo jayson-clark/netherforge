@@ -34,6 +34,17 @@ pub trait BlockShapes {
     /// The collision boxes of the block at (x, y, z), in world coordinates: empty for air, none when its
     /// chunk isn't loaded (a walker treats it as a wall).
     fn boxes(&self, x: i32, y: i32, z: i32) -> Option<Vec<BoundingBox>>;
+
+    /// Each of the block's boxes, handed to `f` where they are (no copy): false when its chunk isn't loaded.
+    fn each_box(&self, x: i32, y: i32, z: i32, f: &mut dyn FnMut(&BoundingBox)) -> bool {
+        match self.boxes(x, y, z) {
+            Some(boxes) => {
+                boxes.iter().for_each(f);
+                true
+            }
+            None => false,
+        }
+    }
 }
 
 /// One region's blocks as read: each cell's boxes, or none in a chunk that isn't loaded.
@@ -313,5 +324,24 @@ impl BlockShapes for CachedShapes<'_> {
     fn boxes(&self, x: i32, y: i32, z: i32) -> Option<Vec<BoundingBox>> {
         let region = self.brick(brick_of(x, y, z));
         region.cell(x, y, z).and_then(|cell| cell.clone())
+    }
+
+    fn each_box(&self, x: i32, y: i32, z: i32, f: &mut dyn FnMut(&BoundingBox)) -> bool {
+        let key = brick_of(x, y, z);
+        // The brick asked last, read where it is: a mover's questions are mostly about the same one.
+        let last = self.last.borrow();
+        let kept = last
+            .as_ref()
+            .filter(|(k, _)| *k == key)
+            .map(|(_, r)| r.clone());
+        drop(last);
+        let region = kept.unwrap_or_else(|| self.brick(key));
+        match region.cell(x, y, z) {
+            Some(Some(boxes)) => {
+                boxes.iter().for_each(f);
+                true
+            }
+            _ => false,
+        }
     }
 }
