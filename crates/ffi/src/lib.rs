@@ -4,6 +4,12 @@
 //! dispatchers for the runtime's (`dispatch_platform_events`...). The rest is what they stand on:
 //! the wire, the objects each side hands the other, and the entry points the JVM calls.
 
+/// mimalloc, not the system's: the runtime and Luau (whose allocator is Rust's) allocate many small objects a
+/// tick, and glibc's malloc made the Linux library ~20% slower than it ran elsewhere (Kosmoi's entities bench in a
+/// Linux container: 2.1-2.7 ms of CPU a tick, 1.7-2.2 with mimalloc). Only Rust's allocations: the JVM keeps its own.
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 pub mod compose;
 pub use netherforge_runtime::disk;
 pub mod entry;
