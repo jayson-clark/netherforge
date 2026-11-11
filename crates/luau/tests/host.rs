@@ -382,7 +382,9 @@ fn a_script_called_back_from_a_rust_function_is_limited_again() {
             ]))
         })
         .unwrap();
-    let caller = host.load(scope, "c.lua", "local f = ... return (f())").unwrap();
+    let caller = host
+        .load(scope, "c.lua", "local f = ... return (f())")
+        .unwrap();
     let stopped: bool = host.invoke(scope, BUDGET, &caller, nested).unwrap();
     assert!(stopped, "the script inside ran out of memory");
 }
