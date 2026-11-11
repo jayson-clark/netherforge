@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::ffi::c_int;
 use std::rc::{Rc, Weak};
@@ -145,9 +145,52 @@ impl Guard {
     }
 }
 
+/// Whether the state's memory limit is on. It's on while script code runs (a call in, `Host::invoke`) and off while
+/// the host's Rust does (between calls, in a function a script called, `detached`): with a limit set, mlua runs every
+/// table write, string and table Rust makes through a `pcall` and a new C closure in case the allocation fails, which
+/// made delivering an event's table cost more than the handlers it ran. What Rust allocates still counts, so a state
+/// over its limit fails a script's next allocation; with it off, only a real out-of-memory fails (mlua's own case).
+struct MemoryLimit {
+    bytes: usize,
+    on: Cell<bool>,
+}
+
+impl MemoryLimit {
+    /// The limit `on` (or off) until the guard returned is dropped, which puts back what it was.
+    fn set<'a>(&'a self, lua: &'a Lua, on: bool) -> Limited<'a> {
+        let was = self.on.replace(on);
+        if was != on {
+            let _ = lua.set_memory_limit(if on { self.bytes } else { 0 });
+        }
+        Limited {
+            limit: self,
+            lua,
+            was,
+        }
+    }
+}
+
+/// What `MemoryLimit::set` puts back when it's dropped (an error or a panic in between included).
+struct Limited<'a> {
+    limit: &'a MemoryLimit,
+    lua: &'a Lua,
+    was: bool,
+}
+
+impl Drop for Limited<'_> {
+    fn drop(&mut self) {
+        if self.limit.on.replace(self.was) != self.was {
+            let _ = self
+                .lua
+                .set_memory_limit(if self.was { self.limit.bytes } else { 0 });
+        }
+    }
+}
+
 struct Inner {
     lua: Lua,
     guard: Rc<RefCell<Guard>>,
+    memory: Rc<MemoryLimit>,
     /// Wraps a Rust function scripts call (`Host::script_function`).
     shim: Function,
     /// What a wrapped function returns first when it failed, then its message.
@@ -187,10 +230,12 @@ impl Host {
 
     pub fn with_clock(limits: Limits, clock: Rc<dyn Clock>) -> mlua::Result<Host> {
         let lua = Lua::new();
-        // The memory limit is on only while a script runs (`invoke`, `limit_memory`): with one set, mlua runs
-        // every table write, string and table the host makes through a `pcall` and a new C closure, in case the
-        // allocation fails, which made delivering an event's table cost more than the handlers it ran.
+        // Off until a script runs (`MemoryLimit`).
         lua.set_memory_limit(0)?;
+        let memory = Rc::new(MemoryLimit {
+            bytes: limits.memory_bytes,
+            on: Cell::new(false),
+        });
         let guard = Rc::new(RefCell::new(Guard {
             limits,
             clock,
@@ -279,6 +324,7 @@ impl Host {
             catching,
             error_handler,
             lua,
+            memory,
             guard,
             shim,
             failed,
@@ -331,10 +377,14 @@ impl Host {
         F: Fn(&Lua, MultiValue) -> mlua::Result<MultiValue> + 'static,
     {
         let failed = self.0.failed.clone();
-        let raw = self
-            .0
-            .lua
-            .create_function(move |lua, args: MultiValue| match f(lua, args) {
+        let memory = self.0.memory.clone();
+        let raw = self.0.lua.create_function(move |lua, args: MultiValue| {
+            // The function's own work (an answer's tables) is the host's, on mlua's fast path; a script it
+            // calls back into is limited again.
+            let unlimited = memory.set(lua, false);
+            let result = f(lua, args);
+            drop(unlimited);
+            match result {
                 Ok(values) => Ok(values),
                 Err(e) => {
                     let message = lua.create_string(message_of(&e))?;
@@ -343,7 +393,8 @@ impl Host {
                         Value::String(message),
                     ]))
                 }
-            })?;
+            }
+        })?;
         let (waiting, stuck) = match waiting {
             Some((value, called)) => (
                 value,
@@ -449,9 +500,8 @@ impl Host {
             .get(&scope)
             .map(|s| s.category)
             .ok_or_else(|| unknown_scope(scope))?;
-        let (parent_category, outermost) = {
+        let parent_category = {
             let mut guard = self.0.guard.borrow_mut();
-            let outermost = guard.frames.is_empty();
             let budget = guard
                 .limits
                 .max_budget
@@ -477,11 +527,9 @@ impl Host {
                 kind,
                 serial,
             });
-            (parent_category, outermost)
+            parent_category
         };
-        if outermost {
-            self.limit_memory(true);
-        }
+        let limited = self.0.memory.set(&self.0.lua, true);
         set_memory_category(&self.0.lua, category);
         let result = if self.0.debug.errors_on() {
             // Breaking on errors: through `xpcall`, whose handler stops where the error happened.
@@ -494,9 +542,7 @@ impl Host {
             f.call::<R>(args)
         };
         set_memory_category(&self.0.lua, parent_category);
-        if outermost {
-            self.limit_memory(false);
-        }
+        drop(limited);
 
         let frame = {
             let mut guard = self.0.guard.borrow_mut();
@@ -532,16 +578,11 @@ impl Host {
     pub fn detached<R>(&self, f: impl FnOnce() -> R) -> R {
         let saved = std::mem::take(&mut self.0.guard.borrow_mut().frames);
         let category = saved.last().map_or(HOST_CATEGORY, |f| f.category);
-        let inside_a_call = !saved.is_empty();
-        if inside_a_call {
-            self.limit_memory(false);
-        }
+        let unlimited = self.0.memory.set(&self.0.lua, false);
         set_memory_category(&self.0.lua, HOST_CATEGORY);
         let result = f();
         set_memory_category(&self.0.lua, category);
-        if inside_a_call {
-            self.limit_memory(true);
-        }
+        drop(unlimited);
         let mut guard = self.0.guard.borrow_mut();
         let inside = std::mem::replace(&mut guard.frames, saved);
         debug_assert!(inside.is_empty(), "every call inside has returned");
@@ -735,19 +776,6 @@ impl Host {
         // Taken out first: saying where a function starts reads Luau, which mustn't happen under the guard's borrow.
         let functions = self.0.guard.borrow_mut().timing.take_functions();
         crate::timing::resolve(functions)
-    }
-
-    /// The state's memory limit on (a script is running: an allocation past it fails, inside the call's `pcall`)
-    /// or off (the host is working between calls, on mlua's fast path, where only a real out-of-memory fails).
-    /// What the host allocates between calls still counts: a state over its limit fails a script's next
-    /// allocation.
-    fn limit_memory(&self, on: bool) {
-        let limit = if on {
-            self.0.guard.borrow().limits.memory_bytes
-        } else {
-            0
-        };
-        let _ = self.0.lua.set_memory_limit(limit);
     }
 
     fn blame(&self) {
