@@ -31,8 +31,18 @@ quarantined the same day (see CI).
      entities, players, worlds, commands and bots; others have their own small
      `Fake`), reading what the scripts printed from the fake's log. A server
      test of MySQL or PostgreSQL runs when `NETHERFORGE_TEST_POSTGRES` /
-     `NETHERFORGE_TEST_MYSQL` names one (`host:port:user:database`). See the
+     `NETHERFORGE_TEST_MYSQL` names one (`host:port:user:database`;
+     `NETHERFORGE_TEST_<KIND>_SSL` = `prefer`/`require` for TLS, see plugin-persistence). See the
      plugin-runtime skill, a section per area.
+   - **The tick's benchmark** (`crates/runtime/tests/bench.rs`, ignored):
+     `cargo test --release -p netherforge-runtime --test bench -- --ignored --nocapture`.
+     `the_entities_baseline_tick` is Kosmoi's entities baseline (200 walking centities, 100 crates)
+     on the fake, timed by the thread's CPU (a busy machine inflates the wall's far more) with the
+     scripts' and the state's Luau memory; `an_empty_projects_tick` the runtime's own cost with
+     nothing to do. The fake's calls are cheap Rust, so what crossing to the JVM costs isn't in it:
+     measure that on a server (Kosmoi's `tools/bots/baseline/run`). Compare builds by alternating
+     runs and taking the best of several, not one run each. Profile it with macOS's `sample` or
+     `perf`.
    - **Through FFM** (`:plugin:ffi:test`): the Rust runtime on the testkit's
      Kotlin `FakePlatform` (`ShowcaseTest`: the whole showcase, the quick loop
      for the boundary; `NativeRuntimeTest`).
@@ -680,6 +690,15 @@ job declares least-privilege `permissions:`. To bump one, resolve the new
 tag's commit (`gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`) and
 change the SHA and the comment together. Check workflow edits with `actionlint`
 (it isn't part of `pnpm lint`).
+
+## Integration fixtures on a busy machine
+
+A scenario's script step runs under the plugin's 1 s call limit, and a loaded machine (load averages of 40 and
+more) makes the server's own work slow: generating new chunks, making a world, placing structures. A step that does
+several of those does them in a task with `nf.wait(1)` between (each wait gives a whole call again), and **holds**
+the chunks it reads later (`world:hold_chunk`): one only loaded unloads at the tick's end when nobody is near, and
+reads ticks later answer nil (`structures` and `worlds` fixtures). A failure that's "ran past its time limit" or a
+60 s wait for a log line is that first; check the server log before blaming the change.
 
 ## Dependency locks
 

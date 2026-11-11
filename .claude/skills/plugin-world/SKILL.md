@@ -384,6 +384,15 @@ a world load before scripts hear `world_load`). A negative value to the
 Platform call means "the server's own setting" (`bukkit.yml`); the file
 only holds 0 or more.
 
+**Held chunks** (`world:hold_chunk`/`release_chunk`, `ChunkHolds` in `world.rs`, `Shared::chunk_holds`): a chunk
+kept loaded, its entities ticking, with nobody near, on the platform's counted `WorldOps.hold_chunk` (a plugin chunk
+ticket in Paper, as cutscenes use). Each hold has a `Holder`: a script (its scope, every hold given back when it's
+released) or a world made with `keep_spawn_loaded` (the 3 by 3 chunks around its spawn: Paper 26.x's own setting does
+nothing since Minecraft dropped spawn chunks). A world's spawn is held when it's made, loaded again (the store's
+`worlds.keep_spawn_loaded`, migration 2) or still loaded at a session's start, and every hold in it is given back
+before it's unloaded, so the adapter's counts stay right when a world of the name comes back. A session's stop gives
+back all of them.
+
 `crates/runtime/src/managed_worlds.rs` decides which worlds a project may unload: those
 its scripts created (kept in the store's `worlds` under the project's
 namespace, so a restart keeps the claim) or `netherforge.json`'s `managedWorlds` names, never the main

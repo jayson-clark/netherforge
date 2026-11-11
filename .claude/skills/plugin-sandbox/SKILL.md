@@ -40,7 +40,13 @@ The host is `crates/luau` (`Host`, `Limits`, `Guard`), on mlua's Luau.
     the call stopped whatever it returned.
 - **Memory is the allocator's.** `Limits::memory_bytes` is mlua's allocator limit for the
   state, so an allocation past it fails (`Failure::Memory`), exactly. No census and no
-  periodic `collectgarbage("count")`.
+  periodic `collectgarbage("count")`. **The limit is on only while script code runs**
+  (`MemoryLimit` in `host.rs`, set and put back by a guard): `invoke` turns it on, a Rust function
+  a script called (`Host::wrapped`) and `detached` turn it off, and a script called back from one
+  of those is limited again. With any limit set, mlua runs every table write, string and table
+  the host makes through a `pcall` and a new C closure, which made delivering an event's table
+  cost more than its handlers. What Rust allocates between calls still counts: a state over its
+  limit fails a script's next allocation (`tests/host.rs` has both cases).
 - **Memory per scope is Luau's memory categories.** `invoke` sets the running thread's
   category (`lua_setmemcat`) to the scope's, and Luau charges every object to the category it
   was allocated under and credits its free back to that category. So `scope_memory` is exact

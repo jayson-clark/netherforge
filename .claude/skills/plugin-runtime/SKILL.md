@@ -243,7 +243,9 @@ with the bindings.
   be changed". There's nothing left for the old `rawset` refusal to guard.
 - **One userdata per thing**: a weak-valued registry table by root and key (`push_key`). So
   `a == b` and `rawequal(a, b)` hold for two handles to the same thing, and a handle no
-  script holds is collected. `__eq` compares root and key besides.
+  script holds is collected. `__eq` compares root and key besides. A centity's own handle is
+  also kept by the runtime (`CentityHandles`, in the state's app data, let go of when it's removed),
+  since every one of its events needs it as their target.
 - `typeof(handle)` is `"handle"`, and mlua hides the metatable (`getmetatable` gives `false`).
 - A method called with `.` fails with "call BossBar methods with ':'".
 
@@ -284,13 +286,20 @@ Kotlin `Scripts`, in Rust, implementing `nf.on`/`once`/`emit`, `nf.after`/`every
   guarded call. One that fails is reported (`take_reports`) and the rest still run; after
   `MAX_ERRORS` (20) failures in a row it's cancelled (`gave_up`). A `tick` handler's `every`
   is phased by its target, or its id on `nf`. `listening(target, event)` tells the server
-  whether to bother.
+  whether to bother; `due(target, event)` whether a handler would run this tick (a `tick` handler with `every`
+  that isn't due doesn't count), and what the server raises with nobody due isn't made at all. They're filed in
+  `Listeners` (target, then event name), looked up by the name's `&str` without making a key.
 - **Events** are the prelude's design: an empty table whose `__index` is its view (`name`,
   `current`, `cancelled`, `stopped`, the methods), whose `__index` is the payload's fields, so
   a read runs nothing; `__newindex` allows only the event's writable fields (any field of a
   custom event). The view keeps the event's own state under a private key. `raise` returns
   `Delivered` (cancelled, and the fields as handlers left them). A custom event's payload is
-  the caller's very table, so the caller reads what handlers set.
+  the caller's very table, so the caller reads what handlers set. An event is made by one Luau
+  function (`EVENT_MAKER`), outside the raising call's frame so it's none of the script's steps; a
+  target's **`tick` event is made once and refreshed** each tick (its payload swapped in,
+  `stopped`/`cancelled` reset: it can't be cancelled and has nothing writable), and every centity's
+  `tick` in one tick shares one payload table. A script that keeps a `tick` event past its handler
+  sees the next tick's; the docs say so.
 - **Timers** run at the start of a tick, in order of when they're due. A repeating one that
   fails 20 times in a row is cancelled.
 - **Tasks** are Luau threads, started at once, resumed through `coroutine.resume` inside the
