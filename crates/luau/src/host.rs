@@ -685,6 +685,11 @@ impl Host {
         Some(category_bytes(&self.0.lua, category))
     }
 
+    /// The memory category `scope` is charged to: the scopes of one script share it, and so their `scope_memory`.
+    pub fn scope_category(&self, scope: ScopeId) -> Option<u8> {
+        Some(self.0.scopes.borrow().get(&scope)?.category)
+    }
+
     /// The scope blamed for the last allocation failure, once: the one
     /// holding the most, if that's at least a quarter of the limit. The
     /// runtime stops it at the end of the tick.

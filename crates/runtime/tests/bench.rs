@@ -108,14 +108,37 @@ fn the_entities_baseline_tick() {
         .and_then(|t| t.parse().ok())
         .unwrap_or(600);
     let (wall, cpu) = (std::time::Instant::now(), thread_cpu());
-    for _ in 0..ticks {
+    // Scripts' Luau memory (what `netherforge_script_bytes` reports) and the whole state's, every 20 ticks.
+    let (mut scripts, mut state) = (Vec::new(), Vec::new());
+    for t in 0..ticks {
         session.tick();
         platform.take();
+        if t % 20 == 0 {
+            let mut counted = std::collections::HashSet::new();
+            let costs = session.costs();
+            let once = costs
+                .iter()
+                .filter(|e| e.category.is_none_or(|c| counted.insert(c)));
+            scripts.push(once.map(|e| e.bytes).sum::<usize>());
+            if let Some(room) = session.room() {
+                state.push(room.scripts().host().memory());
+            }
+        }
     }
     let cpu = (thread_cpu() - cpu) / ticks;
     let wall = wall.elapsed() / ticks;
     // The thread's own CPU time, which a busy machine (other builds, other tests) inflates far less than the wall's.
     eprintln!("entities baseline: {cpu:?} of CPU a tick ({wall:?} by the wall) over {ticks} ticks");
+    let mb = |v: &[usize]| {
+        let avg = v.iter().sum::<usize>() as f64 / v.len().max(1) as f64 / 1048576.0;
+        let max = *v.iter().max().unwrap_or(&0) as f64 / 1048576.0;
+        format!("{avg:.1} MB average, {max:.1} MB at most")
+    };
+    eprintln!(
+        "  scripts' Luau memory {}; the state's {}",
+        mb(&scripts),
+        mb(&state)
+    );
 }
 
 /// This thread's CPU time so far.

@@ -111,6 +111,47 @@ fn printed(calls: &[String]) -> Vec<String> {
 }
 
 #[test]
+fn a_centitys_instances_share_one_memory_category_so_their_memory_is_counted_once() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &scripted_lamp()),
+        (
+            "centities/lamp/script.lua",
+            "held = string.rep('x', 100000)",
+        ),
+        (
+            "modules/game/init.lua",
+            r#"for i = 1, 3 do nf.centities.spawn("lamp", vector.create(i * 2, 64, 0)) end"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    assert!(session.refusal().is_none(), "{:?}", session.problems());
+    let costs = session.costs();
+    let lamps: Vec<_> = costs.iter().filter(|e| e.title.contains("lamp")).collect();
+    assert_eq!(
+        lamps.len(),
+        3,
+        "{:?}",
+        costs.iter().map(|e| &e.title).collect::<Vec<_>>()
+    );
+    // One category, each instance reporting all of it: the three strings are in it.
+    assert!(
+        lamps
+            .iter()
+            .all(|e| e.category == lamps[0].category && e.category.is_some())
+    );
+    assert!(lamps[0].bytes >= 300_000, "{}", lamps[0].bytes);
+    let mut counted = std::collections::HashSet::new();
+    let once: usize = lamps
+        .iter()
+        .filter(|e| e.category.is_none_or(|c| counted.insert(c)))
+        .map(|e| e.bytes)
+        .sum();
+    assert_eq!(once, lamps[0].bytes);
+}
+
+#[test]
 fn an_instances_tick_handlers_run_at_their_rate_and_a_handle_stays_the_same() {
     let platform = std::rc::Rc::new(Fake::default());
     let files = Files::new(&[

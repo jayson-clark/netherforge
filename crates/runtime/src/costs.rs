@@ -44,7 +44,10 @@ pub struct Entry {
     pub subscriptions: usize,
     pub tasks: usize,
     pub counts: Vec<(&'static str, usize)>,
+    /// What its memory key holds: shared by every scope of one script (each instance of a centity's).
     pub bytes: usize,
+    /// The Luau memory category `bytes` is of, so a sum over scopes counts each once.
+    pub category: Option<u8>,
 }
 
 struct Window {

@@ -1185,6 +1185,7 @@ impl<'a> Session<'a> {
                     tasks,
                     counts,
                     bytes: host.scope_memory(scope).unwrap_or(0),
+                    category: host.scope_category(scope),
                 }
             })
             .collect();
