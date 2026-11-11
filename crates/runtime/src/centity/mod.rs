@@ -78,6 +78,10 @@ impl Centities {
     /// Takes `definitions`, the project's compiled centities by the name the server knows them by.
     pub fn define(&mut self, definitions: BTreeMap<String, Rc<CompiledCentity>>) {
         self.definitions = definitions;
+        // The project was loaded: what's drawn is drawn again, with its font.
+        for instance in self.instances.values_mut() {
+            instance.drawn.clear();
+        }
     }
 
     pub fn definition(&self, id: &str) -> Option<&Rc<CompiledCentity>> {
@@ -256,7 +260,29 @@ impl Centities {
             || platform.worlds().entities_loaded(instance.anchor().clone())
     }
 
-    fn drawn(&mut self, drawing: &Drawing, display: &DisplayDef) -> drawing::Drawn {
+    /// Node `index` of instance `id` drawn as `display`: as it was last time, when that was drawn from the same.
+    fn drawn(
+        &mut self,
+        drawing: &Drawing,
+        id: Uuid,
+        index: usize,
+        display: &DisplayDef,
+    ) -> drawing::Drawn {
+        if let Some((from, drawn)) = self.instances.get(&id).and_then(|i| i.drawn.get(&index))
+            && from == display
+        {
+            return drawn.clone();
+        }
+        let drawn = self.draw(drawing, display);
+        if let Some(instance) = self.instances.get_mut(&id) {
+            instance
+                .drawn
+                .insert(index, (display.clone(), drawn.clone()));
+        }
+        drawn
+    }
+
+    fn draw(&mut self, drawing: &Drawing, display: &DisplayDef) -> drawing::Drawn {
         let mut warnings = Vec::new();
         let drawn = drawing::drawn(display, drawing.text_size, &mut |w| warnings.push(w));
         for warning in warnings {
@@ -309,7 +335,7 @@ impl Centities {
             };
             let display = self.instances[&id].display(index).cloned();
             let content_changed = self.instances[&id].content_changed(index);
-            let drawn = display.as_ref().map(|d| self.drawn(drawing, d));
+            let drawn = display.as_ref().map(|d| self.drawn(drawing, id, index, d));
             let instance = self.instances.get_mut(&id).expect("listed");
             if content_changed
                 && let Some(drawn) = &drawn
@@ -508,7 +534,7 @@ impl Centities {
             let Some(display) = self.instances[&id].display(index).cloned() else {
                 continue;
             };
-            let drawn = self.drawn(drawing, &display);
+            let drawn = self.drawn(drawing, id, index, &display);
             let existing = self.instances[&id].displays.get(&name).copied();
             if let Some(existing) = existing
                 && !entities.update_display(existing, drawn.shown.clone())

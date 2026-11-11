@@ -242,6 +242,10 @@ pub struct Instance {
     pub pushed_looks: netherforge_platform::UuidMap<DisplayLook>,
     /// Where each billboarded display was last put: one stands on its own at its node.
     pub pushed_spots: netherforge_platform::UuidMap<Location>,
+    /// Each node's display as last drawn, by node index: the definition it was drawn from and what came of it.
+    /// Drawing measures text glyph by glyph, which on a hub's launcher was a third of the tick when it ran on
+    /// every sync. `Centities::define` forgets them (a project's load: its font may have changed).
+    pub drawn: HashMap<usize, (DisplayDef, super::drawing::Drawn)>,
 }
 
 impl Instance {
@@ -309,6 +313,7 @@ impl Instance {
             pushed_poses: Default::default(),
             pushed_looks: Default::default(),
             pushed_spots: Default::default(),
+            drawn: HashMap::new(),
         };
         instance.redefine(definition);
         instance
