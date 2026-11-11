@@ -1133,7 +1133,7 @@ impl Scripts {
     fn run_handlers(&self, ids: &[u64], ev: &Table, view: &Table) {
         let tick = self.tick_count();
         for &id in ids {
-            let (scope, handler, once, what, event) = {
+            let (scope, handler, once, class, event) = {
                 let state = self.0.state.borrow();
                 let Some(sub) = state.subs.get(&id) else {
                     continue;
@@ -1146,16 +1146,11 @@ impl Scripts {
                 if sub.event == "tick" && self.host().over_tick(sub.scope) {
                     continue;
                 }
-                let on = if sub.class == "nf" {
-                    String::new()
-                } else {
-                    format!(" on a {}", sub.class)
-                };
                 (
                     sub.scope,
                     sub.handler.clone(),
                     sub.once,
-                    format!("{} handler{on}", sub.event),
+                    sub.class,
                     sub.event.clone(),
                 )
             };
@@ -1184,7 +1179,13 @@ impl Scripts {
                     if gave_up {
                         self.unsubscribe(id);
                     }
-                    self.report(scope, what, failure, gave_up);
+                    // Said only when it failed: made for every handler run, it showed in the tick.
+                    let on = if class == "nf" {
+                        String::new()
+                    } else {
+                        format!(" on a {class}")
+                    };
+                    self.report(scope, format!("{event} handler{on}"), failure, gave_up);
                 }
             }
             if view.raw_get::<bool>("stopped").unwrap_or(false) {
