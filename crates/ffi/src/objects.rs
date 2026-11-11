@@ -11,7 +11,8 @@
 
 use std::any::Any;
 use std::cell::{OnceCell, RefCell};
-use std::collections::HashMap;
+/// foldhash, not SipHash: looked up on every call the JVM and Rust make each other, keyed by nothing an attacker picks.
+type HashMap<K, V> = std::collections::HashMap<K, V, foldhash::fast::RandomState>;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -98,10 +99,22 @@ impl JavaRef {
         args: impl FnOnce(&mut Writer),
         read: impl FnOnce(&mut Reader) -> R,
     ) -> Result<R, PlatformError> {
-        let mut w = Writer::new();
+        // This thread's arguments buffer, taken for the call (a call the JVM makes back into Rust meanwhile, which
+        // calls the JVM again, finds none and makes its own) and put back after: no allocation per call. The JVM
+        // reads the arguments whole before it does anything.
+        let mut w = Writer {
+            bytes: ARGUMENTS.with(|a| std::mem::take(&mut *a.borrow_mut())),
+        };
+        if w.bytes.capacity() == 0 {
+            w = Writer::new();
+        }
         args(&mut w);
         let mut len = 0usize;
         let at = (upcalls().call)(self.id, method, w.bytes.as_ptr(), w.bytes.len(), &mut len);
+        w.bytes.clear();
+        if w.bytes.capacity() <= KEPT_ARGUMENTS {
+            ARGUMENTS.with(|a| *a.borrow_mut() = w.bytes);
+        }
         // SAFETY: the JVM answers with `len` bytes at `at`, valid until this thread calls it again.
         let bytes = unsafe { std::slice::from_raw_parts(at, len) };
         let mut r = Reader::new(bytes);
@@ -118,6 +131,14 @@ impl JavaRef {
         }
     }
 }
+
+thread_local! {
+    /// The arguments buffer `JavaRef`'s calls write into, kept between calls (`answer`).
+    static ARGUMENTS: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A buffer grown past this (a big call's arguments) isn't kept.
+const KEPT_ARGUMENTS: usize = 64 * 1024;
 
 impl Drop for JavaRef {
     fn drop(&mut self) {
@@ -196,10 +217,10 @@ struct Exported {
 }
 
 thread_local! {
-    static EXPORTED: RefCell<HashMap<u64, Exported>> = RefCell::new(HashMap::new());
+    static EXPORTED: RefCell<HashMap<u64, Exported>> = RefCell::new(HashMap::default());
     /// The objects made from an `Rc`, by its address: handed out again, one is the same id (and counted), so the JVM
     /// sees the same object (a goal it's asked to remove is the one it was given).
-    static KEYED: RefCell<HashMap<usize, u64>> = RefCell::new(HashMap::new());
+    static KEYED: RefCell<HashMap<usize, u64>> = RefCell::new(HashMap::default());
 }
 
 /// Every object's id, the main thread's and the thread-safe ones' (`crate::terrain`) alike.

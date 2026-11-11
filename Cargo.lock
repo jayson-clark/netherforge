@@ -1635,6 +1635,7 @@ dependencies = [
 name = "netherforge-ffi"
 version = "0.0.0"
 dependencies = [
+ "foldhash 0.2.0",
  "netherforge-format",
  "netherforge-luau",
  "netherforge-platform",
@@ -1690,6 +1691,7 @@ dependencies = [
  "croner",
  "encoding_rs",
  "flate2",
+ "foldhash 0.2.0",
  "fontdue",
  "getrandom 0.4.3",
  "hmac 0.12.1",

@@ -16,6 +16,7 @@ netherforge-format = { path = "../format" }
 netherforge-platform = { path = "../platform" }
 netherforge-runtime = { path = "../runtime" }
 netherforge-luau = { path = "../luau" }
+foldhash = "0.2"
 serde.workspace = true
 serde_json.workspace = true
 
