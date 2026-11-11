@@ -1119,14 +1119,35 @@ impl CentityContext {
         }
     }
 
-    /// `tick` on instance `id`, to whoever listens.
+    /// `tick` on instance `id`, to whoever listens. Every instance's `tick` this tick shares one payload: it has
+    /// no writable field, and no script reaches an event's payload table, so nothing can tell them apart; making
+    /// one for each of hundreds of centities every tick showed in the tick.
     fn raise_tick(&self, id: Uuid, now: u64) {
-        self.raise_on(
-            id,
-            "tick",
-            codecs::TickEvent,
-            shapes::TickEvent { tick: now as i64 },
-        );
+        let Some(target) = self.centity_target(id) else {
+            return;
+        };
+        if !self.scripts.due(&target, "tick") {
+            return;
+        }
+        let host = self.scripts.host();
+        let lua = host.lua();
+        let kept = lua
+            .app_data_ref::<TickPayload>()
+            .filter(|p| p.0 == now)
+            .map(|p| p.1.clone());
+        let fields = match kept {
+            Some(fields) => fields,
+            None => {
+                let Ok(Value::Table(fields)) =
+                    codecs::TickEvent.push(lua, shapes::TickEvent { tick: now as i64 })
+                else {
+                    return;
+                };
+                lua.set_app_data(TickPayload(now, fields.clone()));
+                fields
+            }
+        };
+        self.scripts.raise(&target, "tick", fields);
     }
 
     /// Moves instance `id`'s body a tick (unless something else moves it), and says how it landed and what it
@@ -4102,3 +4123,6 @@ impl NodeApi for CentityContext {
 /// Each instance's handle in one Luau state, kept in that state's app data, so a reload's new state makes its own.
 #[derive(Default)]
 struct CentityHandles(netherforge_platform::UuidMap<mlua::AnyUserData>);
+
+/// This tick's `tick` payload, which every instance's `tick` shares (`raise_tick`).
+struct TickPayload(u64, mlua::Table);
