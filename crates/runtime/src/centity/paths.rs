@@ -15,7 +15,7 @@ use netherforge_platform::{Location, Platform, Uuid};
 use super::Instance;
 use super::api::CentityContext;
 use super::pathing::{self, PathResult, SearchLimits, Space, Walker};
-use super::world_shapes::{BlockShapes, BrickShapes, RegionShapes};
+use super::world_shapes::BlockShapes;
 use crate::events::uuid_text;
 
 /// How close it has to come to count as reached: `PATH_REACH` in `spec/constants.ts`.
@@ -148,11 +148,14 @@ const DOOR_HEIGHT: i32 = 2;
 /// The game's wooden doors and fence gates for walks that go through them (`open_doors`).
 struct Doors<'p> {
     platform: &'p dyn Platform,
+    /// Told of every door it opens or shuts (`Shared::block_changed`): bodies and kept blocks see it.
+    shared: &'p crate::shared::Shared,
     kinds: HashSet<String>,
 }
 
 impl<'p> Doors<'p> {
-    fn new(platform: &'p dyn Platform) -> Self {
+    fn new(shared: &'p crate::shared::Shared) -> Self {
+        let platform: &dyn Platform = &*shared.platform;
         let game: &dyn GameData = platform.game();
         let kinds = DOOR_TAGS
             .iter()
@@ -160,7 +163,11 @@ impl<'p> Doors<'p> {
             .flatten()
             .cloned()
             .collect();
-        Doors { platform, kinds }
+        Doors {
+            platform,
+            shared,
+            kinds,
+        }
     }
 
     /// The state at a block when it's one of the doors a walk can open.
@@ -222,6 +229,7 @@ impl<'p> Doors<'p> {
             state.replace("open=false", "open=true"),
             false,
         ) {
+            self.shared.block_changed(world, cell.x, cell.y, cell.z);
             opened.push(cell);
         }
     }
@@ -236,15 +244,16 @@ impl<'p> Doors<'p> {
             }
             if let Some(state) = self.door_at(world, door.x, door.y, door.z)
                 && state.contains("open=true")
-            {
-                self.platform.blocks().set(
+                && self.platform.blocks().set(
                     world.to_owned(),
                     door.x,
                     door.y,
                     door.z,
                     state.replace("open=true", "open=false"),
                     false,
-                );
+                )
+            {
+                self.shared.block_changed(world, door.x, door.y, door.z);
             }
         }
         *opened = kept;
@@ -338,8 +347,11 @@ impl CentityContext {
         budgeted: bool,
     ) -> PathResult {
         let platform = &*self.shared.platform;
-        let bricks = BrickShapes::new(platform.worlds(), world);
-        let doors = Doors::new(platform);
+        let bricks =
+            self.shared
+                .block_shapes
+                .shapes(platform.worlds(), world, self.scripts.tick_count());
+        let doors = Doors::new(&self.shared);
         let through = Through {
             doors: &doors,
             world,
@@ -498,7 +510,7 @@ impl CentityContext {
             None => return,
         };
         if settings.open_doors {
-            let doors = Doors::new(platform);
+            let doors = Doors::new(&self.shared);
             if let Some(i) = self.shared.centities.borrow_mut().get_mut(id) {
                 doors.pass(&world, &walk, &mut i.opened_doors);
             }
@@ -543,29 +555,11 @@ impl CentityContext {
             (walk.falling + GRAVITY * SECONDS).min(MAX_FALL) * SECONDS
         };
         let feet = {
-            let half = walk.walker.width / 2.0;
-            let (mut lo, mut hi) = (
-                Vec3(f64::MAX, f64::MAX, f64::MAX),
-                Vec3(-f64::MAX, -f64::MAX, -f64::MAX),
-            );
-            for p in &passed {
-                lo = Vec3(lo.0.min(p.0), lo.1.min(p.1), lo.2.min(p.2));
-                hi = Vec3(hi.0.max(p.0), hi.1.max(p.1), hi.2.max(p.2));
-            }
-            let climb = if settings.fly {
-                0.0
-            } else {
-                settings.step_height
-            };
-            let shapes = RegionShapes::around(
+            // The world's kept blocks: what the step passes through is read as it's asked for.
+            let shapes = self.shared.block_shapes.shapes(
                 platform.worlds(),
                 &world,
-                Vec3(lo.0 - half, lo.1 - fall - 1.0, lo.2 - half),
-                Vec3(
-                    hi.0 + half,
-                    hi.1 + climb + walk.walker.height + 1.0,
-                    hi.2 + half,
-                ),
+                self.scripts.tick_count(),
             );
             let space = Space::new(&shapes, walk.walker);
             if settings.fly {
@@ -717,12 +711,11 @@ impl CentityContext {
         }
         let feet = feet_of(platform.game(), instance);
         let world = instance.anchor().world.clone();
-        Doors::new(platform).shut(&world, &mut instance.opened_doors, &|d| !d.holds(feet));
+        Doors::new(&self.shared).shut(&world, &mut instance.opened_doors, &|d| !d.holds(feet));
     }
 
     /// Shuts every door its walks opened, wherever it is: it has been teleported away, or removed.
     pub(crate) fn shut_all(&self, id: Uuid) {
-        let platform = &*self.shared.platform;
         let mut centities = self.shared.centities.borrow_mut();
         let Some(instance) = centities.get_mut(id) else {
             return;
@@ -731,7 +724,7 @@ impl CentityContext {
             return;
         }
         let world = instance.anchor().world.clone();
-        Doors::new(platform).shut(&world, &mut instance.opened_doors, &|_| true);
+        Doors::new(&self.shared).shut(&world, &mut instance.opened_doors, &|_| true);
     }
 
     /// Its walk ended: `path_end`, once its doors are shut, so a handler can send it off again.

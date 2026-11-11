@@ -879,10 +879,7 @@ impl WorldApi for GameContext {
                 .blocks()
                 .set(world.to_owned(), x, y, z, canonical.clone(), update);
         if set {
-            self.shared
-                .physics
-                .borrow_mut()
-                .block_changed(world, x, y, z);
+            self.shared.block_changed(world, x, y, z);
             self.blocks().replaced(world, x, y, z, &canonical);
         }
         Ok(set)
@@ -923,10 +920,7 @@ impl WorldApi for GameContext {
                 for y in a.1.min(b.1).max(bottom)..=a.1.max(b.1).min(top - 1) {
                     if blocks.set(world.to_owned(), x, y, z, canonical.clone(), update) {
                         changed += 1;
-                        self.shared
-                            .physics
-                            .borrow_mut()
-                            .block_changed(world, x, y, z);
+                        self.shared.block_changed(world, x, y, z);
                         self.blocks().replaced(world, x, y, z, &canonical);
                     }
                 }

@@ -102,6 +102,8 @@ pub struct Shared {
     pub tests: RefCell<crate::testing::Tests>,
     /// Nodes' rigid bodies.
     pub physics: RefCell<crate::centity::physics::Physics>,
+    /// Worlds' blocks kept for movers, walks and path searches.
+    pub block_shapes: crate::centity::world_shapes::BlockCache,
     /// Players' and centities' stats and buffs.
     pub stats: RefCell<crate::stats::StatSheets>,
     /// The project's modules, while the session runs: what a resource's script requires through.
@@ -133,6 +135,13 @@ pub struct Shared {
 }
 
 impl Shared {
+    /// The block at (x, y, z) in `world` was set or broken (by a script, a walk, or the server's events): bodies near
+    /// it and what movers keep of it see it as it is now.
+    pub fn block_changed(&self, world: &str, x: i32, y: i32, z: i32) {
+        self.physics.borrow_mut().block_changed(world, x, y, z);
+        self.block_shapes.changed(world, x, y, z);
+    }
+
     /// Says that `count` things kept running on resource `kind:id`'s new version (live instances, windows kept,
     /// players sent the rebuilt pack): its `reattached` in the reload's answer.
     pub fn reattached(&self, kind: &'static str, id: &str, count: usize) {
@@ -196,6 +205,7 @@ impl Shared {
             interop: RefCell::default(),
             bots: RefCell::default(),
             physics: RefCell::default(),
+            block_shapes: Default::default(),
             stats: RefCell::default(),
             modules: RefCell::default(),
             classed: RefCell::default(),

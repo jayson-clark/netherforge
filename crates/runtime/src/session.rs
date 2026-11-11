@@ -2145,8 +2145,6 @@ impl Service for CentitiesService {
     /// Bodies near it run into the blocks as they are now.
     fn block_changed(&self, block: &BlockRef) {
         self.shared
-            .physics
-            .borrow_mut()
             .block_changed(&block.world, block.x, block.y, block.z);
     }
 }

@@ -59,7 +59,7 @@ A centity's `body` moves the whole centity, where a node's `physics` moves one n
 move found; reset by `redefine`) and `centity/movers.rs`, stepped in the pipeline after a walk and
 before physics (skipped while `move_to` walks it). One step: drag, then gravity (less in a liquid,
 read from the block at its middle), then the walk's approach (so a walk lands on exactly the speed it
-asks for); then the move, Minecraft's way: one `RegionShapes` read of the blocks around the swept box
+asks for); then the move, Minecraft's way: the blocks around the swept box from `Shared::block_shapes`
 (unloaded chunks are full cubes), clipped up or down first, then the longer sideways axis first; a
 blocked sideways move on the ground is tried again from `stepHeight` higher and kept if it got
 further. A body that starts overlapping a block rises out. `jumpSpeed` halves its way to the launch
@@ -183,7 +183,7 @@ Our own A*, not the game's pathfinder (centities aren't mobs). Where things are:
 | Path (`crates/runtime/src/centity/`) | Owns                                                                                                                                                     |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pathing.rs`                         | `Space` (a block's collision boxes, none = unloaded), `Walker`, `clear`/`floor_at`; the shared A*, `ground` (walk), `air` (fly), smoothing, `NODE_LIMIT` |
-| `world_shapes.rs`                    | the blocks of one region from `WorldOps.collision_boxes`: one call, filed by block                                                                       |
+| `world_shapes.rs`                    | the blocks of a region from `WorldOps.collision_boxes` (one call, filed by block), and `BlockCache`: worlds' blocks kept across ticks by 8³ brick for movers, walks and searches (read again after 20 ticks, or at once through `Shared::block_changed`) |
 | `paths.rs`                           | `Walk` (on `Instance.walk`), `move_to`'s start, the per-tick step, re-paths, doors, `path_end`                                                           |
 
 - **Platform-free search**, tested alone (`pathing.rs`' own tests) against a
@@ -224,7 +224,7 @@ Our own A*, not the game's pathfinder (centities aren't mobs). Where things are:
 - **The step** (`CentityPaths.step`, in the pipeline after animate and before
   physics, so bodies settle where the centity was walked to and scripts see
   the result): moves `speed / 20` along the path, checking each stretch it
-  passes in one `RegionShapes` read (a step up when something is in the way
+  passes in the kept blocks (a step up when something is in the way
   and it fits, else blocked); walking, then held up where it stops or falls
   under gravity (32 b/s², at most 78.4). Blocked or 40 ticks still: a new
   path (at most 3 in a row without reaching a point, then `path_end` false).
@@ -505,3 +505,10 @@ but to keep a natural one a click reached.
   `click` handlers, each ancestor's, the centity's, then `nf.on("centity_click")`,
   until a handler calls `event:stop()`.
 - A click on any tagged entity is cancelled even when no script wants it.
+
+**Blocks are kept between ticks for movers, walks and path searches** (`BlockCache`, `Shared::block_shapes`): asking
+the server every tick for every walker's blocks was the most of what crossed to the JVM. A brick (8³, never across a
+chunk) is read again after `BRICK_TICKS` (20; a piston or fluid nothing reports is seen within a second) and at
+once when a block in it changes: **anything that sets or breaks a block goes through `Shared::block_changed`**
+(scripts' `set`/`fill`/`break`, the server's place and break events, a walk's doors), which tells physics too. A new
+way of changing blocks that skips it leaves movers walking through what isn't there for up to a second.

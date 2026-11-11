@@ -794,6 +794,63 @@ end)
 }
 
 #[test]
+fn a_walker_sees_a_broken_wall_at_once_though_blocks_are_kept_between_ticks() {
+    use netherforge_platform::{BlockRef, PlatformEvents};
+    use netherforge_runtime::server::ServerEvents;
+    let platform = std::rc::Rc::new(Fake::default());
+    let centity = lamp(1.0);
+    let end = centity.rfind('}').expect("an object");
+    let centity = format!(
+        r#"{}, "body": {{ "width": 0.6, "height": 1.8 }} }}"#,
+        centity[..end].trim_end()
+    );
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/walker/centity.json", &centity),
+        (
+            "modules/game/init.lua",
+            r#"
+local w = nf.centities.spawn("walker", vector.create(8.5, 64, 0.5))
+w:set_walk_velocity(vector.create(4, 0, 0))
+nf.every(1, function() print(string.format("%.1f", w:position().x)) end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    platform.take();
+    let mut xs = Vec::new();
+    for _ in 0..30 {
+        server.tick();
+        xs.extend(printed(&platform.take()));
+    }
+    // Against the wall at x 10.
+    assert_eq!(xs.last().map(String::as_str), Some("9.7"), "{xs:?}");
+    // The wall in its way goes, as a player breaking it says: it walks on at once, not a second later when the
+    // blocks it keeps would have been read again.
+    for y in 64..=66 {
+        for z in -1..=1 {
+            let block = BlockRef {
+                world: "world".into(),
+                x: 10,
+                y,
+                z,
+                id: "minecraft:stone".into(),
+                state: "minecraft:stone".into(),
+            };
+            server.block_break(alex(), block, Box::new(Vec::new), 0);
+            platform.broken.borrow_mut().insert((10, y, z));
+        }
+    }
+    let mut xs = Vec::new();
+    for _ in 0..5 {
+        server.tick();
+        xs.extend(printed(&platform.take()));
+    }
+    let last: f64 = xs.last().expect("ticked").parse().unwrap();
+    assert!(last > 9.8, "{xs:?}");
+}
+
+#[test]
 fn centities_hear_what_their_hitboxes_start_touching() {
     let platform = std::rc::Rc::new(Fake::default());
     let block = r#"{ "nodes": { "cube": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} } } }"#;

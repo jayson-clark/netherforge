@@ -8,7 +8,7 @@ use netherforge_format::math::{BoundingBox, Vec3};
 use netherforge_platform::Platform;
 
 use super::Instance;
-use super::world_shapes::{BlockShapes, RegionShapes};
+use super::world_shapes::BlockShapes;
 
 /// A tick, in seconds.
 pub const SECONDS: f64 = 1.0 / 20.0;
@@ -270,19 +270,28 @@ fn solids_around(
 }
 
 /// Moves `instance`'s body one tick; none when it has none.
-pub fn step(platform: &dyn Platform, instance: &mut Instance) -> Option<Moved> {
+/// `blocks` keeps the world's blocks across ticks (read through the platform when they're not), at tick `tick`.
+pub fn step(
+    platform: &dyn Platform,
+    instance: &mut Instance,
+    blocks: &super::world_shapes::BlockCache,
+    tick: u64,
+) -> Option<Moved> {
     let anchor = instance.anchor().clone();
     let mover = instance.mover.as_mut()?;
     let s = mover.settings.clone();
     let world = anchor.world.clone();
     let half = s.width / 2.0;
-    let middle = platform.blocks().get(
-        world.clone(),
-        anchor.x.floor() as i32,
-        (anchor.y + s.height / 2.0).floor() as i32,
-        anchor.z.floor() as i32,
+    mover.in_liquid = blocks.liquid(
+        platform.blocks(),
+        &world,
+        (
+            anchor.x.floor() as i32,
+            (anchor.y + s.height / 2.0).floor() as i32,
+            anchor.z.floor() as i32,
+        ),
+        tick,
     );
-    mover.in_liquid = middle.is_some_and(|b| b.liquid);
 
     let mut v = mover.velocity;
     // Drag first, then gravity, then the walk: so a walk reaches exactly the speed it asks for.
@@ -331,20 +340,7 @@ pub fn step(platform: &dyn Platform, instance: &mut Instance) -> Option<Moved> {
         mover.on_ground = false;
     } else {
         let reach = s.step_height + 1.0;
-        let shapes = RegionShapes::around(
-            platform.worlds(),
-            &world,
-            Vec3(
-                b.min.0.min(b.min.0 + want.0) - 1.0,
-                b.min.1.min(b.min.1 + want.1) - 1.0,
-                b.min.2.min(b.min.2 + want.2) - 1.0,
-            ),
-            Vec3(
-                b.max.0.max(b.max.0 + want.0) + 1.0,
-                b.max.1.max(b.max.1 + want.1) + reach,
-                b.max.2.max(b.max.2 + want.2) + 1.0,
-            ),
-        );
+        let shapes = blocks.shapes(platform.worlds(), &world, tick);
         let solids = solids_around(&shapes, &b, want, reach);
         if solids.iter().any(|x| overlaps(x, &shrink(&b))) {
             // Inside blocks (spawned there, or the world changed round it): it rises out rather than freezes.

@@ -96,10 +96,7 @@ impl GameContext {
                 .blocks()
                 .set(this.world.clone(), x, y, z, state.clone(), update);
         if set {
-            self.shared
-                .physics
-                .borrow_mut()
-                .block_changed(&this.world, x, y, z);
+            self.shared.block_changed(&this.world, x, y, z);
             self.blocks().replaced(&this.world, x, y, z, &state);
         }
         set
@@ -231,10 +228,7 @@ impl BlockApi for GameContext {
                 .blocks()
                 .break_naturally(this.world.clone(), x, y, z, tool);
         if broken {
-            self.shared
-                .physics
-                .borrow_mut()
-                .block_changed(&this.world, x, y, z);
+            self.shared.block_changed(&this.world, x, y, z);
         }
         Ok(broken)
     }

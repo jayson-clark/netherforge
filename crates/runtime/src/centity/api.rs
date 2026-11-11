@@ -980,6 +980,10 @@ impl CentityContext {
         }
         self.touches();
         self.natural_tick();
+        // Kept blocks nothing has asked for in a while go.
+        if now.is_multiple_of(100) {
+            self.shared.block_shapes.sweep(now);
+        }
     }
 
     /// One step of every rigid body, then `collide`, `wake` and `sleep` on their nodes.
@@ -1162,7 +1166,12 @@ impl CentityContext {
             if instance.mover.is_none() || instance.walk.is_some() || instance.flight.is_some() {
                 return;
             }
-            super::movers::step(&*self.shared.platform, instance)
+            super::movers::step(
+                &*self.shared.platform,
+                instance,
+                &self.shared.block_shapes,
+                self.scripts.tick_count(),
+            )
         };
         let Some(moved) = moved else {
             return;
