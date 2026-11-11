@@ -91,6 +91,8 @@ impl ScriptData {
             }
             match table.carried.take() {
                 Some(text) => Some(text),
+                // A room's own named tables start empty: the store's are the main room's.
+                None if !saved_by(shared, &owner) => None,
                 None => {
                     let read = shared.instance.store.data(&owner);
                     table.saved.clone_from(&read);
@@ -159,7 +161,7 @@ impl ScriptData {
             return Some(text);
         }
         table.too_big = false;
-        if table.saved.as_deref() != Some(text.as_str()) {
+        if table.saved.as_deref() != Some(text.as_str()) && saved_by(shared, owner) {
             table.saved = Some(text.clone());
             shared.instance.store.put_data(owner, text.clone());
         }
@@ -175,6 +177,13 @@ impl ScriptData {
     pub fn forget(shared: &Shared, owner: &Owner) {
         shared.data.borrow_mut().tables.remove(owner);
     }
+}
+
+/// Whether `owner`'s table is kept in the store from `shared`'s room: a player's and a centity's always (they're the
+/// thing's, wherever it is), `nf.data(name)` only from the main room. A room opened beside it has its own named
+/// tables, which last as long as it does.
+fn saved_by(shared: &Shared, owner: &Owner) -> bool {
+    !matches!(owner, Owner::Named { .. }) || shared.room == crate::instance::RoomId::MAIN
 }
 
 /// Saved tables as a session's service: autosave, a player's on quit, every one at the end.
@@ -220,10 +229,13 @@ impl Service for DataService {
         }
     }
 
-    /// They left: their table is saved now, after their `player_quit` handlers.
+    /// They left: their table is saved now, after their `player_quit` handlers, and let go of, so the room they
+    /// join next (this one again, or another) reads it as it was saved, whatever another room did with it meanwhile.
     fn player_quit(&self, player: &PlayerRef) {
         if let Some(host) = self.host.borrow().clone() {
-            ScriptData::save(&self.shared, &host, &Owner::Player(player.uuid));
+            let owner = Owner::Player(player.uuid);
+            ScriptData::save(&self.shared, &host, &owner);
+            ScriptData::forget(&self.shared, &owner);
         }
     }
 

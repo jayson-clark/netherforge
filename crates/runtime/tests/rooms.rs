@@ -183,3 +183,35 @@ fn a_closed_room_sends_its_players_back_and_its_lua_state_goes() {
     server.tick();
     assert_eq!(printed(&platform.take()), ["placed in world"]);
 }
+
+#[test]
+fn a_players_data_goes_with_them_and_a_rooms_named_data_is_its_own() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"
+local mine = nf.data("scores")
+mine.opened = (mine.opened or 0) + 1
+nf.on("player_join", function(e)
+  local data = e.player:data()
+  data.visits = (data.visits or 0) + 1
+  print("visits", data.visits, "opened", mine.opened)
+end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let room = server.session_mut().open_room().expect("a room");
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    server.game().player_join(&mut alex_join());
+    server.session().move_player(alex().uuid, room);
+    server.session().move_player(alex().uuid, RoomId::MAIN);
+    server.tick();
+    // The main room's named table and room 1's are two tables; Alex's is one, read again in each room.
+    assert_eq!(
+        printed(&platform.take()),
+        ["visits\t1\topened\t1", "visits\t3\topened\t1", "visits\t2\topened\t1"]
+    );
+}
