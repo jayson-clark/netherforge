@@ -182,13 +182,34 @@ impl State {
 
 struct Fns {
     resume: Function,
-    /// The private key an event's view keeps its state under.
-    private: Table,
-    cancel: Function,
-    stop: Function,
-    uncancel: Function,
-    newindex: Function,
+    /// Makes an event and its view (`EVENT_MAKER`, which holds the private key the view keeps its state under, and
+    /// the event's methods and `__newindex`).
+    make_event: Function,
+    /// Each event type's writable fields as a set, made once: the spec's lists are static, and nothing changes one.
+    writable_sets: RefCell<HashMap<usize, Table>>,
 }
+
+/// An event and its view, made in Luau in one call: the tables and their keys from Rust cost a call into Luau each,
+/// which on a tick of 200 centities was more than their handlers took. The view holds the event's own fields, its
+/// state under the private key, and reads on through to the payload's fields; the event reads the view and writes
+/// through `__newindex`.
+const EVENT_MAKER: &str = r#"
+local private, cancel, uncancel, stop, newindex = ...
+return function(name, current, fields, cancellable, writable, payload)
+    local view = setmetatable({
+        name = name,
+        current = current,
+        cancelled = false,
+        stopped = false,
+        cancel = cancel,
+        uncancel = uncancel,
+        stop = stop,
+        [private] = { cancellable = cancellable, writable = writable, payload = payload, fields = fields },
+    }, { __index = fields })
+    local ev = setmetatable({}, { __index = view, __newindex = newindex, __metatable = false, __type = "Event" })
+    return ev, view
+end
+"#;
 
 /// Whether the thing a handle names is still there (a centity, a window): a service's answer for the classes
 /// it keeps, none for one it doesn't.
@@ -232,13 +253,18 @@ impl Scripts {
         let lua = host.lua();
         let coroutine: Table = lua.globals().get("coroutine")?;
         let private = lua.create_table()?;
+        let cancel = event_method(&host, &private, Some(true))?;
+        let uncancel = event_method(&host, &private, Some(false))?;
+        let stop = event_method(&host, &private, None)?;
+        let newindex = event_newindex(&host, &private)?;
+        let make_event: Function = lua
+            .load(EVENT_MAKER)
+            .set_name("=nf/event")
+            .call((private, cancel, uncancel, stop, newindex))?;
         let fns = Fns {
             resume: coroutine.get("resume")?,
-            cancel: event_method(&host, &private, Some(true))?,
-            uncancel: event_method(&host, &private, Some(false))?,
-            stop: event_method(&host, &private, None)?,
-            newindex: event_newindex(&host, &private)?,
-            private,
+            make_event,
+            writable_sets: RefCell::default(),
         };
         Ok(Scripts(Rc::new(Inner {
             liveness: RefCell::new(Vec::new()),
@@ -1030,12 +1056,15 @@ impl Scripts {
         if precancelled {
             let _ = view.raw_set("cancelled", true);
         }
-        for (target, event, ids) in &listened {
-            let _ = view.raw_set("name", event.as_str());
-            let _ = match target {
-                Target::Handle(u) => view.raw_set("current", u.clone()),
-                Target::Nf => view.raw_set("current", Value::Nil),
-            };
+        for (stage, (target, event, ids)) in listened.iter().enumerate() {
+            // The first stage's are the event's from its making.
+            if stage > 0 {
+                let _ = view.raw_set("name", event.as_str());
+                let _ = match target {
+                    Target::Handle(u) => view.raw_set("current", u.clone()),
+                    Target::Nf => view.raw_set("current", Value::Nil),
+                };
+            }
             self.run_handlers(ids, &ev, &view);
             if view.raw_get::<bool>("stopped").unwrap_or(false) {
                 break;
@@ -1129,44 +1158,40 @@ impl Scripts {
         let host = self.host();
         let lua = host.lua();
         let fns = &self.0.fns;
-        let view = lua.create_table()?;
-        view.raw_set("name", name)?;
-        if let Target::Handle(u) = target {
-            view.raw_set("current", u.clone())?;
-        }
-        view.raw_set("cancelled", false)?;
-        view.raw_set("stopped", false)?;
-        view.raw_set("cancel", fns.cancel.clone())?;
-        view.raw_set("uncancel", fns.uncancel.clone())?;
-        view.raw_set("stop", fns.stop.clone())?;
-        let state = lua.create_table()?;
-        state.raw_set("cancellable", cancellable)?;
-        match writable {
-            None => state.raw_set("writable", true)?,
+        let writable = match writable {
+            None => Value::Boolean(true),
             Some(names) => {
-                let set = lua.create_table()?;
-                for n in names {
-                    set.raw_set(*n, true)?;
-                }
-                state.raw_set("writable", set)?;
+                let mut sets = fns.writable_sets.borrow_mut();
+                let key = names.as_ptr() as usize;
+                let set = match sets.get(&key) {
+                    Some(set) => set.clone(),
+                    None => {
+                        let set = lua.create_table_with_capacity(0, names.len())?;
+                        for n in names {
+                            set.raw_set(*n, true)?;
+                        }
+                        sets.insert(key, set.clone());
+                        set
+                    }
+                };
+                Value::Table(set)
             }
-        }
-        if let Some(payload) = payload {
-            state.raw_set("payload", payload)?;
-        }
-        state.raw_set("fields", fields.clone())?;
-        view.raw_set(fns.private.clone(), state)?;
-        let view_meta = lua.create_table()?;
-        view_meta.raw_set("__index", fields.clone())?;
-        view.set_metatable(Some(view_meta))?;
-        let ev = lua.create_table()?;
-        let meta = lua.create_table()?;
-        meta.raw_set("__index", view.clone())?;
-        meta.raw_set("__newindex", fns.newindex.clone())?;
-        meta.raw_set("__metatable", false)?;
-        meta.raw_set("__type", "Event")?;
-        ev.set_metatable(Some(meta))?;
-        Ok((ev, view))
+        };
+        let current = match target {
+            Target::Handle(u) => Value::UserData(u.clone()),
+            Target::Nf => Value::Nil,
+        };
+        // Outside any call's frame: making it is the host's work, not steps of the script that raised it.
+        host.detached(|| {
+            fns.make_event.call((
+                name,
+                current,
+                fields.clone(),
+                cancellable,
+                writable,
+                payload,
+            ))
+        })
     }
 
     /// Raises custom `event` on `target` (`:emit`): whether anything heard it.
