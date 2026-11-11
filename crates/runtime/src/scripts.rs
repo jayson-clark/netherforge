@@ -66,6 +66,56 @@ fn is_due(sub: &Sub, tick: u64) -> bool {
         .is_none_or(|(rate, phase)| (tick + phase).is_multiple_of(rate))
 }
 
+type Fast = foldhash::fast::RandomState;
+
+/// Subscriptions by target and event. Looked up by the event's `&str` without making a key: a map keyed by
+/// `(target, String)` had every raise allocate the event's name and SipHash it, on every centity's every tick.
+#[derive(Default)]
+struct Listeners(HashMap<TargetKey, HashMap<String, Vec<u64>, Fast>, Fast>);
+
+impl Listeners {
+    fn add(&mut self, key: TargetKey, event: String, id: u64) {
+        self.0
+            .entry(key)
+            .or_default()
+            .entry(event)
+            .or_default()
+            .push(id);
+    }
+
+    fn remove(&mut self, key: TargetKey, event: &str, id: u64) {
+        let Some(events) = self.0.get_mut(&key) else {
+            return;
+        };
+        if let Some(ids) = events.get_mut(event) {
+            ids.retain(|it| *it != id);
+            if ids.is_empty() {
+                events.remove(event);
+            }
+        }
+        if events.is_empty() {
+            self.0.remove(&key);
+        }
+    }
+
+    fn get(&self, key: TargetKey, event: &str) -> Option<&Vec<u64>> {
+        self.0.get(&key)?.get(event)
+    }
+
+    /// Every subscription on one target, whatever its event.
+    fn on(&self, key: TargetKey) -> impl Iterator<Item = u64> + '_ {
+        self.0
+            .get(&key)
+            .into_iter()
+            .flat_map(|events| events.values().flatten().copied())
+    }
+
+    /// Every event something listens for, on some target.
+    fn events(&self) -> impl Iterator<Item = &String> {
+        self.0.values().flat_map(|events| events.keys())
+    }
+}
+
 fn key_of(target: &Target) -> TargetKey {
     match target {
         Target::Nf => None,
@@ -167,7 +217,7 @@ struct State {
     next_id: u64,
     scopes: HashMap<ScopeId, ScopeInfo>,
     subs: HashMap<u64, Sub>,
-    listeners: HashMap<(TargetKey, String), Vec<u64>>,
+    listeners: Listeners,
     timers: HashMap<u64, Timer>,
     due: BTreeMap<(u64, u64), ()>,
     tasks: HashMap<u64, Task>,
@@ -453,12 +503,7 @@ impl Scripts {
         let key = key_of(target);
         let ids: Vec<u64> = {
             let state = self.0.state.borrow();
-            state
-                .listeners
-                .iter()
-                .filter(|((k, _), _)| *k == key)
-                .flat_map(|(_, ids)| ids.clone())
-                .collect()
+            state.listeners.on(key).collect()
         };
         for id in &ids {
             self.unsubscribe(*id);
@@ -859,7 +904,7 @@ impl Scripts {
                 errors: 0,
             },
         );
-        state.listeners.entry((key, event)).or_default().push(id);
+        state.listeners.add(key, event, id);
         if let Some(info) = state.scopes.get_mut(&scope) {
             info.subs.insert(id);
         }
@@ -871,12 +916,7 @@ impl Scripts {
         let Some(sub) = state.subs.remove(&id) else {
             return false;
         };
-        if let Some(list) = state.listeners.get_mut(&(sub.key, sub.event.clone())) {
-            list.retain(|it| *it != id);
-            if list.is_empty() {
-                state.listeners.remove(&(sub.key, sub.event));
-            }
-        }
+        state.listeners.remove(sub.key, &sub.event, id);
         if let Some(info) = state.scopes.get_mut(&sub.scope) {
             info.subs.remove(&id);
         }
@@ -890,14 +930,15 @@ impl Scripts {
             .state
             .borrow()
             .listeners
-            .contains_key(&(key_of(target), event.to_owned()))
+            .get(key_of(target), event)
+            .is_some()
     }
 
     /// Whether a handler for `event` on `target` would run now: one listens, and a `tick` handler with `every` is
     /// due this tick. What the server raises with nobody due isn't made at all.
     pub fn due(&self, target: &Target, event: &str) -> bool {
         let state = self.0.state.borrow();
-        let Some(ids) = state.listeners.get(&(key_of(target), event.to_owned())) else {
+        let Some(ids) = state.listeners.get(key_of(target), event) else {
             return false;
         };
         ids.iter().any(|id| {
@@ -910,23 +951,12 @@ impl Scripts {
 
     /// Every event something listens for, on any target.
     pub fn events_listened(&self) -> std::collections::HashSet<String> {
-        self.0
-            .state
-            .borrow()
-            .listeners
-            .keys()
-            .map(|(_, e)| e.clone())
-            .collect()
+        self.0.state.borrow().listeners.events().cloned().collect()
     }
 
     /// Whether anything listens for `event` on any target (a world's `dusk` on any world).
     pub fn listening_anywhere(&self, event: &str) -> bool {
-        self.0
-            .state
-            .borrow()
-            .listeners
-            .keys()
-            .any(|(_, e)| e == event)
+        self.0.state.borrow().listeners.events().any(|e| e == event)
     }
 
     /// Raises built-in `event` on `target` with `payload` (its fields), and
@@ -994,7 +1024,7 @@ impl Scripts {
         let state = self.0.state.borrow();
         state
             .listeners
-            .get(&(key_of(target), event.to_owned()))
+            .get(key_of(target), event)
             .into_iter()
             .flatten()
             .filter_map(|id| state.subs.get(id).map(|s| s.scope))
@@ -1035,7 +1065,7 @@ impl Scripts {
                 .filter_map(|(target, event)| {
                     let mut ids = state
                         .listeners
-                        .get(&(key_of(target), event.clone()))
+                        .get(key_of(target), event)
                         .cloned()
                         .unwrap_or_default();
                     if let Some(only) = only {

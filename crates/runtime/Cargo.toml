@@ -10,6 +10,7 @@ rust-version.workspace = true
 [dependencies]
 getrandom.workspace = true
 indexmap.workspace = true
+foldhash = "0.2"
 mlua.workspace = true
 netherforge-luau = { path = "../luau" }
 netherforge-api = { path = "../api" }
