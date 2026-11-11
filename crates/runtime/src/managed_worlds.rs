@@ -200,7 +200,20 @@ impl ManagedContext {
         hold_spawn(&self.shared, name);
     }
 
+    /// A world this room's scripts made or loaded is this room's (a room beside the main one): its events, blocks and
+    /// players there are the room's.
+    fn adopt(&self, name: &str) {
+        if self.shared.room != crate::instance::RoomId::MAIN {
+            self.shared
+                .instance
+                .routes
+                .borrow_mut()
+                .give_world(name, self.shared.room);
+        }
+    }
+
     fn own(&self, name: &str, owned: OwnedWorld) {
+        self.adopt(name);
         let mut managed = self.shared.managed_worlds.borrow_mut();
         self.shared
             .instance
@@ -383,6 +396,9 @@ impl ManagedContext {
         let keep_spawn_loaded = owned.as_ref().is_some_and(|o| o.keep_spawn_loaded);
         let terrain = owned.and_then(|o| o.terrain);
         let loaded = self.timed(name, || ops.load(name.to_owned(), environment, terrain));
+        if loaded {
+            self.adopt(name);
+        }
         if loaded && keep_spawn_loaded {
             self.hold_spawn(name);
         }
@@ -678,7 +694,9 @@ impl Service for ManagedWorldsService {
         let keep: Vec<String> = created
             .iter()
             .filter(|(name, w)| {
-                w.keep_spawn_loaded && self.shared.platform.worlds().exists((*name).clone())
+                w.keep_spawn_loaded
+                    && self.shared.owns_world(name)
+                    && self.shared.platform.worlds().exists((*name).clone())
             })
             .map(|(name, _)| name.clone())
             .collect();
