@@ -180,6 +180,88 @@ impl ServerMetrics {
         self.worst_nanos.set(0);
     }
 
+    /// What the endpoint says of `session`'s rooms, alone.
+    pub fn rooms_text(session: &Session, platform: &dyn Platform) -> String {
+        let mut out = Prometheus::default();
+        Self::rooms(&mut out, session, platform);
+        out.text()
+    }
+
+    /// Each room's share: its tick, players, entities and chunks in its worlds, its Lua state's memory; and how many
+    /// rooms are where in their lives. A room is labelled by its number and its key.
+    fn rooms(out: &mut Prometheus, session: &Session, platform: &dyn Platform) {
+        let instance = session.instance();
+        let worlds = platform.worlds();
+        let world_names = worlds.names();
+        let online = platform.players().online();
+        let routes = instance.routes.borrow();
+        let infos = instance.rooms.borrow();
+        for run in session.rooms() {
+            let id = run.id.0.to_string();
+            let key = infos
+                .get(&run.id)
+                .and_then(|i| i.key.clone())
+                .unwrap_or_default();
+            let labels = [("room", id.as_str()), ("key", key.as_str())];
+            out.sample(
+                "netherforge_room_tick_milliseconds",
+                "A room's share of a tick (its scripts and services), averaged since the last gather",
+                Value::Measure(run.take_tick_millis()),
+                &labels,
+                false,
+            );
+            let players = online
+                .iter()
+                .filter(|p| routes.player(p.uuid) == run.id)
+                .count();
+            out.sample(
+                "netherforge_room_players",
+                "Players in a room",
+                Value::Count(players as i64),
+                &labels,
+                false,
+            );
+            let (mut entities, mut chunks) = (0i64, 0i64);
+            for world in world_names.iter().filter(|w| routes.world(w) == run.id) {
+                entities += i64::from(worlds.entity_count(world.clone()));
+                chunks += i64::from(worlds.chunk_count(world.clone()));
+            }
+            out.sample(
+                "netherforge_room_entities",
+                "Entities in a room's worlds",
+                Value::Count(entities),
+                &labels,
+                false,
+            );
+            out.sample(
+                "netherforge_room_chunks",
+                "Loaded chunks in a room's worlds",
+                Value::Count(chunks),
+                &labels,
+                false,
+            );
+            if let Some(room) = run.room() {
+                out.sample(
+                    "netherforge_room_script_bytes",
+                    "What a room's Lua state holds in memory",
+                    Value::Count(room.host().memory() as i64),
+                    &labels,
+                    false,
+                );
+            }
+        }
+        for state in ["opening", "open", "started", "finished", "closing"] {
+            let count = infos.values().filter(|i| i.state.name() == state).count();
+            out.sample(
+                "netherforge_rooms",
+                "Rooms in each state of their lives",
+                Value::Count(count as i64),
+                &[("state", state)],
+                false,
+            );
+        }
+    }
+
     fn gather(&self, session: Option<&Session>, platform: &dyn Platform) -> String {
         let mut out = Prometheus::default();
         let performance = platform.performance();
@@ -240,6 +322,7 @@ impl ServerMetrics {
             );
         }
         if let Some(session) = session {
+            Self::rooms(&mut out, session, platform);
             let shared = session.shared();
             out.sample(
                 "netherforge_centities",

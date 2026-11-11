@@ -271,9 +271,21 @@ pub struct RoomRun {
     warned: std::cell::RefCell<Warned>,
     /// Whether its Lua state keeps per-function times for the profiler now.
     profiling: std::cell::Cell<bool>,
+    /// What its ticks took since the metrics last asked: nanoseconds in all, and how many ticks.
+    ticked: std::cell::Cell<(u64, u64)>,
 }
 
 impl RoomRun {
+    /// What its ticks took on average since the last time this was asked, in milliseconds (0 with no tick).
+    pub fn take_tick_millis(&self) -> f64 {
+        let (nanos, ticks) = self.ticked.replace((0, 0));
+        if ticks == 0 {
+            0.0
+        } else {
+            nanos as f64 / ticks as f64 / 1e6
+        }
+    }
+
     /// Its Lua state and scripts, while it runs.
     pub fn room(&self) -> Option<&Room> {
         self.room.as_ref()
@@ -457,6 +469,7 @@ impl<'a> Session<'a> {
                 costs: std::cell::RefCell::new(crate::costs::ScriptCosts::new(config.performance)),
                 warned: Default::default(),
                 profiling: Default::default(),
+                ticked: Default::default(),
             }],
             performance: config.performance,
             clock: config.clock.clone(),
@@ -712,6 +725,7 @@ impl<'a> Session<'a> {
             costs: std::cell::RefCell::new(crate::costs::ScriptCosts::new(self.performance)),
             warned: Default::default(),
             profiling: Default::default(),
+            ticked: Default::default(),
         };
         let room = match self.start_room(&run) {
             Ok(room) => room,
@@ -1290,7 +1304,10 @@ impl<'a> Session<'a> {
         for run in &self.rooms {
             let Some(room) = &run.room else { continue };
             ran = true;
-            total += self.tick_room(run, room, tick, profiler.as_deref(), &mut phases);
+            let took = self.tick_room(run, room, tick, profiler.as_deref(), &mut phases);
+            let (nanos, ticks) = run.ticked.get();
+            run.ticked.set((nanos + took, ticks + 1));
+            total += took;
         }
         if !ran {
             return;

@@ -388,3 +388,41 @@ end)
         RoomId::MAIN
     );
 }
+
+#[test]
+fn each_rooms_share_is_a_metric() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[("netherforge.json", MANIFEST), ("modules/t/init.lua", "")]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    server.game().player_join(&mut alex_join());
+    let room = server
+        .session_mut()
+        .open_room(Some("match-1".into()))
+        .expect("a room");
+    server.session().move_player(alex().uuid, room);
+    server.session().give_world("world", room);
+    server.tick();
+    let text =
+        netherforge_runtime::metrics::ServerMetrics::rooms_text(&server.session(), &*platform);
+    assert!(
+        text.contains("netherforge_room_players{room=\"0\",key=\"\"} 0"),
+        "{text}"
+    );
+    assert!(
+        text.contains("netherforge_room_players{room=\"1\",key=\"match-1\"} 1"),
+        "{text}"
+    );
+    assert!(
+        text.contains("netherforge_room_chunks{room=\"1\",key=\"match-1\"}"),
+        "{text}"
+    );
+    assert!(
+        text.contains("netherforge_room_tick_milliseconds{room=\"1\",key=\"match-1\"}"),
+        "{text}"
+    );
+    assert!(
+        text.contains("netherforge_rooms{state=\"open\"} 2"),
+        "{text}"
+    );
+}

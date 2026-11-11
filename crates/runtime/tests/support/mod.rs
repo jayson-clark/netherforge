@@ -535,6 +535,13 @@ impl netherforge_platform::FakePlayerOps for Fake {
 }
 
 impl FakeWorldOps for Fake {
+    /// A world of nine chunks with nobody in it but the player.
+    fn chunk_count(&self, _: String) -> i32 {
+        9
+    }
+    fn entity_count(&self, _: String) -> i32 {
+        i32::from(self.player.borrow().is_some())
+    }
     fn names(&self) -> Vec<String> {
         let mut names = vec!["world".to_owned()];
         names.extend(self.extra_worlds.borrow().iter().cloned());
