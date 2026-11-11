@@ -245,7 +245,7 @@ pub struct Instance {
     /// Each node's display as last drawn, by node index: the definition it was drawn from and what came of it.
     /// Drawing measures text glyph by glyph, which on a hub's launcher was a third of the tick when it ran on
     /// every sync. `Centities::define` forgets them (a project's load: its font may have changed).
-    pub drawn: HashMap<usize, (DisplayDef, super::drawing::Drawn)>,
+    pub drawn: HashMap<usize, (DisplayDef, Rc<super::drawing::Drawn>)>,
 }
 
 impl Instance {

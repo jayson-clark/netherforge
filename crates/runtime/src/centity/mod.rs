@@ -270,13 +270,13 @@ impl Centities {
         id: Uuid,
         index: usize,
         display: &DisplayDef,
-    ) -> drawing::Drawn {
+    ) -> Rc<drawing::Drawn> {
         if let Some((from, drawn)) = self.instances.get(&id).and_then(|i| i.drawn.get(&index))
             && from == display
         {
             return drawn.clone();
         }
-        let drawn = self.draw(drawing, display);
+        let drawn = Rc::new(self.draw(drawing, display));
         if let Some(instance) = self.instances.get_mut(&id) {
             instance
                 .drawn
@@ -341,9 +341,23 @@ impl Centities {
             let Some(entity) = self.instances[&id].displays.get(&name).copied() else {
                 continue;
             };
-            let display = self.instances[&id].display(index).cloned();
             let content_changed = self.instances[&id].content_changed(index);
-            let drawn = display.as_ref().map(|d| self.drawn(drawing, id, index, d));
+            // Unchanged since the last sync: as it was drawn then, without copying or comparing its definition.
+            let kept = (!content_changed)
+                .then(|| {
+                    self.instances[&id]
+                        .drawn
+                        .get(&index)
+                        .map(|(_, d)| d.clone())
+                })
+                .flatten();
+            let drawn = match kept {
+                Some(kept) => Some(kept),
+                None => {
+                    let display = self.instances[&id].display(index).cloned();
+                    display.map(|d| self.drawn(drawing, id, index, &d))
+                }
+            };
             let instance = self.instances.get_mut(&id).expect("listed");
             if content_changed
                 && let Some(drawn) = &drawn
@@ -401,7 +415,7 @@ impl Centities {
                     shown,
                     cull,
                 },
-                drawn.as_ref(),
+                drawn.as_deref(),
                 &mut ahead,
             );
         }
