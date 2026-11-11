@@ -2438,7 +2438,9 @@ impl Service for CentitiesService {
         let mut centities = self.shared.centities.borrow_mut();
         centities.set_home(project.project.namespace());
         *self.restored.borrow_mut() =
-            centities.restore(project.platform, &self.shared.instance.store);
+            centities.restore(project.platform, &self.shared.instance.store, &|world| {
+                self.shared.owns_world(world)
+            });
     }
 
     fn after_start(&self, room: &Room) {

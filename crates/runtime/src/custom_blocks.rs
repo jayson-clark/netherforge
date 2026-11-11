@@ -1990,7 +1990,10 @@ impl BlocksContext {
             };
             (drops, falls)
         };
-        if self.shared.blocks.borrow().watched == (drops.clone(), falls.clone()) {
+        // What the server tells about is for every room: the main room's say, as every room runs the same project.
+        if self.shared.room != crate::instance::RoomId::MAIN
+            || self.shared.blocks.borrow().watched == (drops.clone(), falls.clone())
+        {
             return;
         }
         self.shared.blocks.borrow_mut().watched = (drops.clone(), falls.clone());

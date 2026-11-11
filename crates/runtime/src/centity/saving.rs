@@ -104,11 +104,19 @@ impl Centities {
         self.save_placements_of(store, &|_| true);
     }
 
-    /// Every record the store has, as instances again (inert where their centity is gone). Their scripts
-    /// aren't started: the session does that.
-    pub fn restore(&mut self, platform: &dyn Platform, store: &Store) -> Vec<Uuid> {
+    /// Every record the store has in the worlds `owns` says are this room's, as instances again (inert where their
+    /// centity is gone). Their scripts aren't started: the session does that.
+    pub fn restore(
+        &mut self,
+        platform: &dyn Platform,
+        store: &Store,
+        owns: &dyn Fn(&str) -> bool,
+    ) -> Vec<Uuid> {
         let mut restored = Vec::new();
         for record in store.instances() {
+            if !owns(&record.anchor.world) {
+                continue;
+            }
             self.stored
                 .insert(record.id, (record.anchor.clone(), record.yaw));
             if let Some(id) = self.restore_one(platform, record) {
