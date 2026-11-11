@@ -1637,6 +1637,12 @@ an object registry and a loader written by hand on each side.
   raising an event) can't overwrite what's still needed. Nothing unwinds across: a panic is a failed
   answer the JVM throws as `NativeException`, and a Kotlin exception is one Rust panics with ("the
   server's TeamOps::create failed: ..."), or an `Err` for a method answering `Result`.
+- **The library is `dlopen`ed, so anything in it must allow that.** Its allocator is mimalloc
+  (`crates/ffi/src/lib.rs`, ~20% faster than glibc's malloc on Linux) with `local_dynamic_tls`: mimalloc's default
+  initial-exec TLS made glibc refuse the library ("cannot allocate memory in static TLS block") and the plugin
+  didn't start on Linux. Local integration runs on macOS load the dylib and can't catch it: after touching the
+  library's dependencies or link settings, `dlopen` the Linux build in a container (`python3 -c "import ctypes;
+  ctypes.CDLL('libnetherforge_ffi.so')"`) or run a server on it.
 - **Which side implements an interface follows from the spec** (`ffi.ts`'s `sides`): `Platform` is the
   JVM's and `PlatformEvents` Rust's; what a side's method returns is that side's, what it takes is the
   other's. It comes out as Rust implementing `PlatformEvents`, `CommandHandler`, `PlaceholderResolver`,
