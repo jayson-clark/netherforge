@@ -18,6 +18,12 @@
 //! reads differently next tick was moved by a script or a clip, and its body is put there. Afterwards a node
 //! hears `collide` for what its body started touching, and `wake` and `sleep` when it changed between moving
 //! and settled. Velocities are blocks a second; spin is degrees a second to scripts, radians here.
+//!
+//! Rapier runs in f32 with SIMD (the roadmap's "f32 with SIMD and a room origin, or f64", settled by Kosmoi's
+//! entities baseline): each world's positions are relative to its `origin`, its first body's section, so they
+//! stay small. A world goes when nothing in it is simulated, and its next body picks the origin again. f32 there
+//! holds about 1e-5 of a block a few hundred blocks out and a millimetre 10,000 out; velocities, extents and a
+//! collider's offset from its own body are never far from zero.
 
 /// foldhash, not SipHash: these maps are read every tick (bodies, sections, chunks), keyed by nothing an attacker picks.
 type HashMap<K, V> = std::collections::HashMap<K, V, foldhash::fast::RandomState>;
@@ -29,8 +35,8 @@ use netherforge_format::kind::centity::PhysicsShape;
 use netherforge_format::kind::centity::compiled::ResolvedPhysics;
 use netherforge_format::math::{BoundingBox, Matrix4, Vec3};
 use netherforge_platform::{Platform, Uuid};
-use rapier3d_f64::math::{Pose, Rotation, Vector as RVec};
-use rapier3d_f64::prelude::{
+use rapier3d::math::{Pose, Rotation, Vector as RVec};
+use rapier3d::prelude::{
     ActiveEvents, ChannelEventCollector, CoefficientCombineRule, ColliderBuilder, ColliderHandle,
     CollisionEvent, Group, InteractionGroups, InteractionTestMode, PhysicsWorld, RigidBodyBuilder,
     RigidBodyHandle, RigidBodyType, SharedShape,
@@ -145,24 +151,34 @@ pub fn mass_of(physics: &ResolvedPhysics, boxes: &[BoundingBox], scale: Vec3) ->
 }
 
 fn rv(v: Vec3) -> RVec {
-    RVec::new(v.0, v.1, v.2)
+    RVec::new(v.0 as f32, v.1 as f32, v.2 as f32)
 }
 
 fn fv(v: RVec) -> Vec3 {
-    Vec3(v.x, v.y, v.z)
+    Vec3(f64::from(v.x), f64::from(v.y), f64::from(v.z))
 }
 
 fn rq(q: Quat) -> Rotation {
-    Rotation::from_xyzw(q.x, q.y, q.z, q.w)
+    Rotation::from_xyzw(q.x as f32, q.y as f32, q.z as f32, q.w as f32)
 }
 
 fn fq(q: &Rotation) -> Quat {
     Quat {
-        x: q.x,
-        y: q.y,
-        z: q.z,
-        w: q.w,
+        x: f64::from(q.x),
+        y: f64::from(q.y),
+        z: f64::from(q.z),
+        w: f64::from(q.w),
     }
+}
+
+/// A point in the world as Rapier holds it: from `origin`.
+fn rp(origin: Vec3, p: Vec3) -> RVec {
+    rv(p - origin)
+}
+
+/// A point Rapier holds, back in the world.
+fn fp(origin: Vec3, p: RVec) -> Vec3 {
+    fv(p) + origin
 }
 
 /// The fraction of speed shed a second as Rapier's damping coefficient.
@@ -198,6 +214,8 @@ struct Section {
 /// One Rapier world, and what's in it.
 struct World {
     rapier: PhysicsWorld,
+    /// Where Rapier's zero is in the world (`rp`, `fp`).
+    origin: Vec3,
     events: std::sync::mpsc::Receiver<CollisionEvent>,
     collector: ChannelEventCollector,
     sections: HashMap<(i32, i32, i32), Section>,
@@ -206,16 +224,17 @@ struct World {
 }
 
 impl World {
-    fn new() -> World {
+    fn new(origin: Vec3) -> World {
         let (collisions, events) = std::sync::mpsc::channel();
         let (forces, _) = std::sync::mpsc::channel();
         let (tears, _) = std::sync::mpsc::channel();
         let mut rapier = PhysicsWorld::new();
         // Each body's own gravity is its gravity scale.
         rapier.gravity = RVec::new(0.0, -1.0, 0.0);
-        rapier.integration_parameters.dt = SECONDS;
+        rapier.integration_parameters.dt = SECONDS as f32;
         World {
             rapier,
+            origin,
             events,
             collector: ChannelEventCollector::new(collisions, forces, tears),
             sections: HashMap::default(),
@@ -353,7 +372,7 @@ impl Physics {
                 body.colliders().iter().any(|c| {
                     w.rapier.colliders.get(*c).is_some_and(|collider| {
                         let aabb = collider.compute_aabb();
-                        let (a, b) = (fv(aabb.mins), fv(aabb.maxs));
+                        let (a, b) = (fp(w.origin, aabb.mins), fp(w.origin, aabb.maxs));
                         a.0 <= hi.0
                             && b.0 >= lo.0
                             && a.1 <= hi.1
@@ -468,7 +487,15 @@ impl Physics {
             let key = (id, node.clone());
             live.insert(key.clone());
             let pose = pose_of(instance, &world, index);
-            self.worlds.entry(name.clone()).or_insert_with(World::new);
+            // A new world's origin is its first body's section.
+            let section = |v: f64| (v / f64::from(SECTION)).floor() * f64::from(SECTION);
+            self.worlds.entry(name.clone()).or_insert_with(|| {
+                World::new(Vec3(
+                    section(pose.0.0),
+                    section(pose.0.1),
+                    section(pose.0.2),
+                ))
+            });
             // A remade state (a reload) or a body in another world now is made again.
             let stale = match (self.bodies.get(&key), state.handle) {
                 (Some(e), Some(h)) => {
@@ -519,8 +546,9 @@ impl Physics {
             }
             let entry = self.bodies.get_mut(&key).expect("there");
             entry.before = state.velocity;
-            let w = &mut self.worlds.get_mut(&name).expect("made").rapier;
-            let Some(body) = w.bodies.get_mut(entry.handle) else {
+            let world = self.worlds.get_mut(&name).expect("made");
+            let origin = world.origin;
+            let Some(body) = world.rapier.bodies.get_mut(entry.handle) else {
                 continue;
             };
             // A script or a clip moved the node since physics last put it there: the body goes there too.
@@ -529,7 +557,7 @@ impl Physics {
                 .as_ref()
                 .is_none_or(|was| !same_pose(was, &pose))
             {
-                body.set_position(Pose::from_parts(rv(pose.0), rq(pose.1)), true);
+                body.set_position(Pose::from_parts(rp(origin, pose.0), rq(pose.1)), true);
                 if let Some(Some(s)) = instance.bodies.get_mut(index) {
                     s.written = Some(pose);
                 }
@@ -545,7 +573,14 @@ impl Physics {
                 if body.body_type() != kind {
                     body.set_body_type(kind, true);
                 }
-                body.set_gravity_scale(if state.gravity { physics.gravity } else { 0.0 }, true);
+                body.set_gravity_scale(
+                    if state.gravity {
+                        physics.gravity as f32
+                    } else {
+                        0.0
+                    },
+                    true,
+                );
                 body.set_linvel(rv(state.velocity), true);
                 body.set_angvel(rv(state.angular_velocity), true);
                 if !state.asleep {
@@ -595,7 +630,7 @@ impl Physics {
                 continue;
             };
             let a = instance.anchor();
-            let at = Vec3(a.x, a.y, a.z);
+            let at = Vec3(a.x, a.y, a.z) - world.origin;
             // Each box no body carries, as a cuboid's half extents and centre.
             let placed: Vec<(Vec3, Vec3)> = obstacles
                 .boxes
@@ -620,15 +655,17 @@ impl Physics {
             {
                 for (handle, (half, centre)) in colliders.iter().zip(&placed) {
                     if let Some(collider) = world.rapier.colliders.get_mut(*handle) {
+                        // In Rapier's f32: compared in f64, what it holds never equals what was asked.
+                        let (half, centre) = (rv(*half), rv(*centre));
                         let same_shape = collider
                             .shape()
                             .as_cuboid()
-                            .is_some_and(|c| fv(c.half_extents) == *half);
+                            .is_some_and(|c| c.half_extents == half);
                         if !same_shape {
-                            collider.set_shape(SharedShape::cuboid(half.0, half.1, half.2));
+                            collider.set_shape(SharedShape::cuboid(half.x, half.y, half.z));
                         }
-                        if fv(collider.translation()) != *centre {
-                            collider.set_translation(rv(*centre));
+                        if collider.translation() != centre {
+                            collider.set_translation(centre);
                         }
                     }
                 }
@@ -642,7 +679,7 @@ impl Physics {
             }
             let mut colliders = Vec::new();
             for (half, centre) in placed {
-                let collider = ColliderBuilder::cuboid(half.0, half.1, half.2)
+                let collider = ColliderBuilder::cuboid(half.0 as f32, half.1 as f32, half.2 as f32)
                     .translation(rv(centre))
                     .friction(1.0)
                     .restitution(0.0)
@@ -676,8 +713,8 @@ impl Physics {
                 }
                 let aabb = collider.compute_aabb();
                 let (lo, hi) = (
-                    fv(aabb.mins) - Vec3(reach, reach, reach),
-                    fv(aabb.maxs) + Vec3(reach, reach, reach),
+                    fp(world.origin, aabb.mins) - Vec3(reach, reach, reach),
+                    fp(world.origin, aabb.maxs) + Vec3(reach, reach, reach),
                 );
                 let s = |v: f64| (v.floor() as i32).div_euclid(SECTION);
                 for x in s(lo.0)..=s(hi.0) {
@@ -713,7 +750,7 @@ impl Physics {
                     world.remove_collider(c);
                 }
             }
-            let colliders = section_colliders(&mut world.rapier, &boxes);
+            let colliders = section_colliders(&mut world.rapier, world.origin, &boxes);
             world.sections.insert(
                 *key,
                 Section {
@@ -762,7 +799,10 @@ impl Physics {
         ) else {
             return Vec::new();
         };
-        let position = fv(c1.position().transform_point(contact.local_p1));
+        let position = fp(
+            world.origin,
+            c1.position().transform_point(contact.local_p1),
+        );
         // The normal points from the first collider into the second.
         let normal = fv(manifold.data.normal);
         let first_is_a = pair.collider1 == a;
@@ -821,7 +861,7 @@ impl Physics {
                 body.set_angvel(rv(spin), false);
             }
             let asleep = body.is_sleeping();
-            let origin = fv(body.translation());
+            let origin = fp(world.origin, body.translation());
             let facing = fq(body.rotation());
             let dynamic = body.body_type() != RigidBodyType::Fixed;
             if let Some(Some(s)) = instance.bodies.get_mut(index) {
@@ -876,21 +916,36 @@ impl Physics {
         settled
     }
 
-    /// The Rapier body of instance `id`'s node `node`, when it has one: its mass, and pushing it.
-    pub fn with_body<R>(
-        &mut self,
-        id: Uuid,
-        node: &str,
-        f: impl FnOnce(&mut rapier3d_f64::prelude::RigidBody) -> R,
-    ) -> Option<R> {
+    /// The mass of instance `id`'s node `node`'s body, when it has one.
+    pub fn mass(&self, id: Uuid, node: &str) -> Option<f64> {
         let entry = self.bodies.get(&(id, node.to_owned()))?;
         let body = self
             .worlds
-            .get_mut(&entry.world)?
+            .get(&entry.world)?
             .rapier
             .bodies
-            .get_mut(entry.handle)?;
-        Some(f(body))
+            .get(entry.handle)?;
+        Some(f64::from(body.mass()))
+    }
+
+    /// Pushes instance `id`'s node `node`'s body by `impulse` (at `point` in the world, or its centre of mass), and
+    /// says its velocity and spin after; none when it has no body.
+    pub fn push(
+        &mut self,
+        id: Uuid,
+        node: &str,
+        impulse: Vec3,
+        point: Option<Vec3>,
+    ) -> Option<(Vec3, Vec3)> {
+        let entry = self.bodies.get(&(id, node.to_owned()))?;
+        let world = self.worlds.get_mut(&entry.world)?;
+        let origin = world.origin;
+        let body = world.rapier.bodies.get_mut(entry.handle)?;
+        match point {
+            Some(p) => body.apply_impulse_at_point(rv(impulse), rp(origin, p), true),
+            None => body.apply_impulse(rv(impulse), true),
+        }
+        Some((fv(body.linvel()), fv(body.angvel())))
     }
 }
 
@@ -935,12 +990,16 @@ fn make_body(
         RigidBodyType::Dynamic
     };
     let mut builder = RigidBodyBuilder::new(kind)
-        .pose(Pose::from_parts(rv(origin), rq(facing)))
+        .pose(Pose::from_parts(rp(world.origin, origin), rq(facing)))
         .linvel(rv(state.velocity))
         .angvel(rv(state.angular_velocity))
-        .gravity_scale(if state.gravity { physics.gravity } else { 0.0 })
-        .linear_damping(damping(physics.drag))
-        .angular_damping(damping(physics.angular_drag))
+        .gravity_scale(if state.gravity {
+            physics.gravity as f32
+        } else {
+            0.0
+        })
+        .linear_damping(damping(physics.drag) as f32)
+        .angular_damping(damping(physics.angular_drag) as f32)
         .can_sleep(physics.sleeps)
         .ccd_enabled(true);
     if !physics.rotates {
@@ -965,21 +1024,21 @@ fn make_body(
         let center = ((b.min + b.max) * 0.5).times(scale);
         let shape = if sphere {
             // A sphere fits inside whatever the collider would have been.
-            ColliderBuilder::ball(half.0.min(half.1).min(half.2).max(1e-3))
+            ColliderBuilder::ball(half.0.min(half.1).min(half.2).max(1e-3) as f32)
         } else {
             ColliderBuilder::cuboid(
-                half.0.abs().max(1e-3),
-                half.1.abs().max(1e-3),
-                half.2.abs().max(1e-3),
+                half.0.abs().max(1e-3) as f32,
+                half.1.abs().max(1e-3) as f32,
+                half.2.abs().max(1e-3) as f32,
             )
         };
         let share = if sphere { 1.0 } else { volume(b) / total };
         let collider = shape
             .translation(rv(center))
-            .mass((mass * share).max(MIN_MASS))
-            .friction(physics.friction)
+            .mass((mass * share).max(MIN_MASS) as f32)
+            .friction(physics.friction as f32)
             .friction_combine_rule(CoefficientCombineRule::Min)
-            .restitution(physics.bounciness)
+            .restitution(physics.bounciness as f32)
             .restitution_combine_rule(CoefficientCombineRule::Max)
             .collision_groups(groups)
             .active_events(ActiveEvents::COLLISION_EVENTS)
@@ -1042,18 +1101,25 @@ fn section_boxes(platform: &dyn Platform, name: &str, key: (i32, i32, i32)) -> V
 }
 
 /// Fixed colliders for a section's boxes.
-fn section_colliders(w: &mut PhysicsWorld, boxes: &[BoundingBox]) -> Vec<ColliderHandle> {
+fn section_colliders(
+    w: &mut PhysicsWorld,
+    origin: Vec3,
+    boxes: &[BoundingBox],
+) -> Vec<ColliderHandle> {
     let groups = InteractionGroups::new(BLOCKS, BODIES, InteractionTestMode::And);
     let mut out = Vec::new();
     for b in boxes {
         let half = (b.max - b.min) * 0.5;
-        let collider =
-            ColliderBuilder::cuboid(half.0.max(1e-4), half.1.max(1e-4), half.2.max(1e-4))
-                .translation(rv((b.min + b.max) * 0.5))
-                .friction(1.0)
-                .restitution(0.0)
-                .collision_groups(groups)
-                .build();
+        let collider = ColliderBuilder::cuboid(
+            half.0.max(1e-4) as f32,
+            half.1.max(1e-4) as f32,
+            half.2.max(1e-4) as f32,
+        )
+        .translation(rp(origin, (b.min + b.max) * 0.5))
+        .friction(1.0)
+        .restitution(0.0)
+        .collision_groups(groups)
+        .build();
         out.push(w.colliders.insert(collider));
     }
     out

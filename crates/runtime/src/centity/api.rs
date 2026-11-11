@@ -3068,16 +3068,7 @@ impl CentityContext {
             .shared
             .physics
             .borrow_mut()
-            .with_body(id, &this.name, |body| {
-                use rapier3d_f64::math::Vector;
-                let i = Vector::new(impulse.0, impulse.1, impulse.2);
-                match point {
-                    Some(p) => body.apply_impulse_at_point(i, Vector::new(p.0, p.1, p.2), true),
-                    None => body.apply_impulse(i, true),
-                }
-                let (v, w) = (body.linvel(), body.angvel());
-                (Vec3(v.x, v.y, v.z), Vec3(w.x, w.y, w.z))
-            });
+            .push(id, &this.name, impulse, point);
         let mass = self.mass(this).unwrap_or(1.0).max(1e-3);
         self.change_body(this, |b| match pushed {
             Some((v, w)) => {
@@ -3993,12 +3984,7 @@ impl NodeApi for CentityContext {
         let Some((id, name)) = self.with_node(this, |i, _| (i.id, this.name.clone())) else {
             return Ok(0.0);
         };
-        if let Some(mass) = self
-            .shared
-            .physics
-            .borrow_mut()
-            .with_body(id, &name, |b| b.mass())
-        {
+        if let Some(mass) = self.shared.physics.borrow().mass(id, &name) {
             return Ok(mass);
         }
         let game = self.shared.platform.game();

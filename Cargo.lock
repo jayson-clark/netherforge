@@ -1710,7 +1710,7 @@ dependencies = [
  "netherforge-terrain",
  "postgres",
  "postgres_rustls",
- "rapier3d-f64",
+ "rapier3d",
  "regex",
  "ring",
  "rusqlite",
@@ -1874,10 +1874,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "parry3d-f64"
+name = "parry3d"
 version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffb9e04261f1783d8f66f36767b2b73132a63c9b30b12a5ed47e1faa240f7591"
+checksum = "7b626edc0b497dba4bdf6e1e0797895294ed9f61dac2bd28cb5d34d37ad2ca7e"
 dependencies = [
  "approx",
  "arrayvec",
@@ -1897,6 +1897,7 @@ dependencies = [
  "slab",
  "smallvec",
  "spade",
+ "static_assertions",
  "thiserror",
 ]
 
@@ -2150,10 +2151,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
 
 [[package]]
-name = "rapier3d-f64"
+name = "rapier3d"
 version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4588855e9c5451702147b5c6ddff4d93887f1e59c9504b6ac3571818f6ec3d2"
+checksum = "033e2edc815d61ab97bd74ed5d1cbea5ebe575218774a7cfedbd3551f0033317"
 dependencies = [
  "approx",
  "arrayvec",
@@ -2162,12 +2163,13 @@ dependencies = [
  "log",
  "nalgebra",
  "num-traits",
- "parry3d-f64",
+ "parry3d",
  "profiling",
  "serde",
  "simba",
  "static_assertions",
  "thiserror",
+ "wide",
 ]
 
 [[package]]

@@ -84,11 +84,16 @@ removes it unless `remove_on_end` is false. Tests: `crates/runtime/tests/centiti
 The runtime's physics is Rapier, not the solver this skill once described (Kotlin's `physics/`, a port of the
 reference's sequential impulses, is gone with the Kotlin runtime). From the plugin-runtime skill's "Centities":
 
-**Physics on Rapier** (`physics.rs`, rapier3d-f64): one Rapier world per Minecraft world of a room. Every body
-is simulated together (a crate knocks over another centity's crate: the roadmap's deliberate change). World
-blocks are fixed colliders built per chunk section around awake bodies, read again after `SECTION_TICKS` (40)
-and dropped when idle; full cubes buried among full cubes are skipped. Hitboxes no body carries are fixed
-colliders, rebuilt when an instance's obstacles change. A body's collider is its hitbox boxes (or
+**Physics on Rapier** (`physics.rs`, rapier3d, f32): one Rapier world per Minecraft world of a room. Every body
+is simulated together (a crate knocks over another centity's crate: the roadmap's deliberate change). **Positions
+cross as offsets from the world's `origin`** (its first body's section; `rp`/`fp` for points, `rv`/`fv` for
+velocities, extents and a collider's offset from its own body): a world is dropped when nothing in it is simulated,
+so the origin follows the bodies. f32 was chosen over f64 by benchmark (Kosmoi's entities baseline: the whole tick
+~5% faster). Compare what Rapier holds in f32 (`rv(x) == held`), never in f64, or every collider "changes" every
+tick. World blocks are fixed colliders built per chunk section around awake bodies; a section is read again after
+`SECTION_TICKS` (40) and its colliders remade only if its boxes changed (a `block_changed` drops it at once), and
+it's dropped when idle; full cubes buried among full cubes are skipped. Hitboxes no body carries are fixed
+colliders, moved and reshaped in place when an instance's obstacles change (rebuilt only when their count does). A body's collider is its hitbox boxes (or
 `physics.collider`, unit cube by default; one box for `shape: box`, a ball for `sphere`) scaled by the node; mass
 is `physics.mass` or the volume. Gravity is the body's gravity scale against a world gravity of 1. Physics
 writes the node's pose through the setters and remembers it; a node moved by anything else teleports its body.
