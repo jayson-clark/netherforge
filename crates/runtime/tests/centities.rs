@@ -3855,7 +3855,22 @@ print(nf.images.fill(2048, 2048, "#0000ff"):pixel(0, 0))
 "##,
         ),
     ]);
-    let _session = Session::start(platform.clone(), &files, &NoPackages);
+    // Twenty-nine 2048 by 2048 fills are a lot for one call in a debug build on a busy machine: what's checked is how
+    // pixels are counted, not time, so the call may take 10 s rather than the default second.
+    let config = netherforge_runtime::session::Config {
+        limits: Some(netherforge_luau::Limits {
+            deadline: std::time::Duration::from_secs(10),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let _session = Session::start_configured(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        std::rc::Rc::new(netherforge_runtime::store::Store::in_memory()),
+        config,
+    );
     let start = platform.take();
     assert_eq!(
         printed(&start),
