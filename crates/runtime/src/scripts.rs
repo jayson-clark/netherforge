@@ -238,6 +238,12 @@ impl State {
 
 struct Fns {
     resume: Function,
+    /// The private key an event's view keeps its state under (a kept `tick` event's is refreshed through it).
+    private: Table,
+    /// Each target's `tick` event, made once and refreshed for each tick (`deliver_path`): a `tick` can't be
+    /// cancelled and has no writable field, and making 300 of them a tick (a scripted centity's each) was most of
+    /// what delivering them cost. A script that keeps one past its handler sees the next tick's.
+    tick_events: RefCell<HashMap<TargetKey, (Table, Table)>>,
     /// Makes an event and its view (`EVENT_MAKER`, which holds the private key the view keeps its state under, and
     /// the event's methods and `__newindex`).
     make_event: Function,
@@ -313,12 +319,17 @@ impl Scripts {
         let uncancel = event_method(&host, &private, Some(false))?;
         let stop = event_method(&host, &private, None)?;
         let newindex = event_newindex(&host, &private)?;
-        let make_event: Function = lua
-            .load(EVENT_MAKER)
-            .set_name("=nf/event")
-            .call((private, cancel, uncancel, stop, newindex))?;
+        let make_event: Function = lua.load(EVENT_MAKER).set_name("=nf/event").call((
+            private.clone(),
+            cancel,
+            uncancel,
+            stop,
+            newindex,
+        ))?;
         let fns = Fns {
             resume: coroutine.get("resume")?,
+            private,
+            tick_events: RefCell::default(),
             make_event,
             writable_sets: RefCell::default(),
         };
@@ -501,6 +512,7 @@ impl Scripts {
     /// The thing a handle stands for is gone: every subscription on it goes.
     pub fn drop_target(&self, target: &Target) {
         let key = key_of(target);
+        self.0.fns.tick_events.borrow_mut().remove(&key);
         let ids: Vec<u64> = {
             let state = self.0.state.borrow();
             state.listeners.on(key).collect()
@@ -1090,14 +1102,26 @@ impl Scripts {
             Some(spec.map_or(&[], |s| s.writable))
         };
         let payload = spec.and_then(|s| s.payload);
-        let (ev, view) = match self.new_event(
-            first_target,
-            first_event,
-            &fields,
-            cancellable,
-            writable,
-            payload,
-        ) {
+        // A target's `tick`, delivered alone: its event kept from the last tick, refreshed.
+        let kept_tick = (first_event == "tick"
+            && listened.len() == 1
+            && !cancellable
+            && writable == Some(&[])
+            && !precancelled)
+            .then(|| self.kept_tick(first_target, &fields))
+            .flatten();
+        let made = match kept_tick {
+            Some(kept) => Ok(kept),
+            None => self.new_event(
+                first_target,
+                first_event,
+                &fields,
+                cancellable,
+                writable,
+                payload,
+            ),
+        };
+        let (ev, view) = match made {
             Ok(it) => it,
             Err(_) => {
                 return Delivered {
@@ -1198,6 +1222,39 @@ impl Scripts {
     /// `name`, `current`, `cancelled`, `stopped`, the methods), whose `__index`
     /// is its fields, a chain the VM follows itself, so a read runs nothing.
     /// Every write finds the event empty, so `__newindex` checks each.
+    /// `target`'s kept `tick` event, refreshed to carry `fields` (made and kept the first time).
+    fn kept_tick(&self, target: &Target, fields: &Table) -> Option<(Table, Table)> {
+        let key = key_of(target);
+        let kept = self.0.fns.tick_events.borrow().get(&key).cloned();
+        if let Some((ev, view)) = kept {
+            // Its target still (a handle's address could be another's once it's gone): refreshed in place.
+            let same = match target {
+                Target::Nf => true,
+                Target::Handle(u) => view
+                    .raw_get::<Value>("current")
+                    .is_ok_and(|c| c.to_pointer() == u.to_pointer()),
+            };
+            if same {
+                let state: Table = view.raw_get(self.0.fns.private.clone()).ok()?;
+                let meta = view.metatable()?;
+                state.raw_set("fields", fields.clone()).ok()?;
+                meta.raw_set("__index", fields.clone()).ok()?;
+                view.raw_set("stopped", false).ok()?;
+                view.raw_set("cancelled", false).ok()?;
+                return Some((ev, view));
+            }
+        }
+        let made = self
+            .new_event(target, "tick", fields, false, Some(&[]), None)
+            .ok()?;
+        self.0
+            .fns
+            .tick_events
+            .borrow_mut()
+            .insert(key, made.clone());
+        Some(made)
+    }
+
     fn new_event(
         &self,
         target: &Target,

@@ -107,6 +107,27 @@ nf.on('tick', function() every_other += 1 end, { every = 2 })",
 }
 
 #[test]
+fn a_tick_event_carries_its_own_tick_and_one_stopped_doesnt_stop_the_next() {
+    let t = Test::new();
+    let s = t.module(
+        "s",
+        "heard, wrong, n = 0, 0, 0
+nf.on('tick', function(e)
+  n += 1
+  if n % 2 == 1 then e:stop() end
+end)
+nf.on('tick', function(e)
+  heard += 1
+  if n % 2 == 1 or e.name ~= 'tick' or e.stopped then wrong += 1 end
+end)",
+    );
+    t.ticks(10);
+    // The event is the target's own each tick, made again in all but name: not stopped because it was last tick.
+    assert_eq!(t.get::<f64>(s, "heard"), 5.0);
+    assert_eq!(t.get::<f64>(s, "wrong"), 0.0);
+}
+
+#[test]
 fn a_failing_handler_is_reported_and_the_rest_still_run() {
     let t = Test::new();
     let s = t.module(

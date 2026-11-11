@@ -455,7 +455,7 @@ const inWorld = (name: string, field: string): Raised => ({
 export const nfEvents: EventSpec[] = [
   {
     name: 'tick',
-    doc: 'Every server tick, twenty times a second. Keep handlers cheap, or listen less often with `{ every = n }`.',
+    doc: 'Every server tick, twenty times a second. Keep handlers cheap, or listen less often with `{ every = n }`. The event is the same table every tick, refreshed: read what you need of it in the handler rather than keeping it.',
     payload: 'TickEvent',
     options: ['every'],
     example: 'nf.on("tick", function(event)\n  log("tick", event.tick)\nend, { every = 20 })',
