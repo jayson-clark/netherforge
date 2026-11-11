@@ -113,6 +113,14 @@ interface PaperVersion {
     fun clientEntities(): ClientEntityPackets
 
     /**
+     * Moves [entity] to [to] in its own world as its own movement would (its position and facing set; the server's
+     * trackers send it on), not as a teleport: what rides it follows on its next tick, no teleport event fires, and
+     * nothing is sent at once. A centity's anchor moves every tick it walks, and a teleport's passengers, event and
+     * packets were the most of the adapter's time. False when it can't (another world): the caller teleports.
+     */
+    fun move(entity: org.bukkit.entity.Entity, to: org.bukkit.Location): Boolean = false
+
+    /**
      * Every goal's priority on [mob], keyed by the very [Goal] objects Paper's
      * `MobGoals` hands out for it. Paper's goal API has no priorities; they
      * live on the server's own goal selectors.

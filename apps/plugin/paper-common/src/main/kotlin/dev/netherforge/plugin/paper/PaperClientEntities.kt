@@ -47,7 +47,8 @@ import org.bukkit.Location as BukkitLocation
  * is within reach of.
  */
 class PaperClientEntities(plugin: Plugin, private val wire: ClientEntityPackets) :
-    PaperEntities(plugin),
+    // Its own `teleport` moves what only clients have: nothing for the server to move.
+    PaperEntities(plugin, { _, _ -> false }),
     ClientEntityOps,
     ClientEntityLookup,
     Listener {

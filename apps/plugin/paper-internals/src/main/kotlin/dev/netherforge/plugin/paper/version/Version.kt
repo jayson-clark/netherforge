@@ -66,6 +66,17 @@ import net.minecraft.resources.ResourceKey as MojangKey
 /** This adapter's [PaperVersion], listed in `META-INF/services`. */
 
 class Version : PaperVersion {
+    override fun move(entity: org.bukkit.entity.Entity, to: org.bukkit.Location): Boolean {
+        val handle = (entity as org.bukkit.craftbukkit.entity.CraftEntity).handle
+        val world = to.world as? org.bukkit.craftbukkit.CraftWorld ?: return false
+        if (handle.level() !== world.handle) return false
+        handle.setYRot(to.yaw)
+        handle.setXRot(to.pitch)
+        // What its own movement does: the entity's section follows it, and its tracker sends where it is.
+        handle.setPos(to.x, to.y, to.z)
+        return true
+    }
+
     override fun mapColors(): List<Int> = (0 until MAP_COLORS).map { packed ->
         val base = packed shr 2
         val color = MapColor.byId(base)
