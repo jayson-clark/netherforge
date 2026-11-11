@@ -60,6 +60,12 @@ pub enum Target {
 /// The key a target's listeners are filed under.
 type TargetKey = Option<usize>;
 
+/// Whether `sub` runs on `tick`: always, unless it's a `tick` handler with `every` that isn't due.
+fn is_due(sub: &Sub, tick: u64) -> bool {
+    sub.every
+        .is_none_or(|(rate, phase)| (tick + phase).is_multiple_of(rate))
+}
+
 fn key_of(target: &Target) -> TargetKey {
     match target {
         Target::Nf => None,
@@ -887,6 +893,21 @@ impl Scripts {
             .contains_key(&(key_of(target), event.to_owned()))
     }
 
+    /// Whether a handler for `event` on `target` would run now: one listens, and a `tick` handler with `every` is
+    /// due this tick. What the server raises with nobody due isn't made at all.
+    pub fn due(&self, target: &Target, event: &str) -> bool {
+        let state = self.0.state.borrow();
+        let Some(ids) = state.listeners.get(&(key_of(target), event.to_owned())) else {
+            return false;
+        };
+        ids.iter().any(|id| {
+            state
+                .subs
+                .get(id)
+                .is_some_and(|sub| is_due(sub, state.tick))
+        })
+    }
+
     /// Every event something listens for, on any target.
     pub fn events_listened(&self) -> std::collections::HashSet<String> {
         self.0
@@ -1020,6 +1041,8 @@ impl Scripts {
                     if let Some(only) = only {
                         ids.retain(|id| state.subs.get(id).is_some_and(|s| only(s.scope)));
                     }
+                    // Handlers not due this tick (`every`) aren't run, so nothing is made for them.
+                    ids.retain(|id| state.subs.get(id).is_some_and(|s| is_due(s, state.tick)));
                     (!ids.is_empty()).then(|| (target.clone(), event.clone(), ids))
                 })
                 .collect()
@@ -1085,9 +1108,7 @@ impl Scripts {
                 let Some(sub) = state.subs.get(&id) else {
                     continue;
                 };
-                if let Some((rate, phase)) = sub.every
-                    && !(tick + phase).is_multiple_of(rate)
-                {
+                if !is_due(sub, tick) {
                     continue;
                 }
                 // A scope that already ran its tick's worth has its `tick` handlers wait for the next (no other

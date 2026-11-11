@@ -121,8 +121,39 @@ impl CentityContext {
             .map(Target::Handle)
     }
 
+    /// Instance `id`'s handle as an event target: the one this state made for it before, kept (`CentityHandles`)
+    /// rather than looked up by its key's text each time, which every centity's every `tick` did.
     pub(crate) fn centity_target(&self, id: Uuid) -> Option<Target> {
-        self.handle_target(Handle::Centity(handles::Centity { id: uuid_text(&id) }))
+        let host = self.scripts.host();
+        let lua = host.lua();
+        if let Some(kept) = lua
+            .app_data_ref::<CentityHandles>()
+            .and_then(|kept| kept.0.get(&id).cloned())
+        {
+            return Some(Target::Handle(kept));
+        }
+        let target =
+            self.handle_target(Handle::Centity(handles::Centity { id: uuid_text(&id) }))?;
+        if let Target::Handle(u) = &target {
+            match lua.app_data_mut::<CentityHandles>() {
+                Some(mut kept) => {
+                    kept.0.insert(id, u.clone());
+                }
+                None => {
+                    let mut kept = CentityHandles::default();
+                    kept.0.insert(id, u.clone());
+                    lua.set_app_data(kept);
+                }
+            }
+        }
+        Some(target)
+    }
+
+    /// Instance `id` is gone: its handle isn't kept for it any more (Lua lets go of it once nothing holds it).
+    fn forget_handle(&self, id: Uuid) {
+        if let Some(mut kept) = self.scripts.host().lua().app_data_mut::<CentityHandles>() {
+            kept.0.remove(&id);
+        }
     }
 
     /// Raises built-in `event` on instance `id`, its payload `{ centity = <it> }`.
@@ -232,7 +263,8 @@ impl CentityContext {
         codec: C,
         payload: C::T,
     ) -> Option<crate::Delivered> {
-        if !self.scripts.listening(&target, event) {
+        // Not just listened to: a handler due now (`tick`'s `every`), or the payload isn't made at all.
+        if !self.scripts.due(&target, event) {
             return None;
         }
         let lua = self.scripts.host().lua().clone();
@@ -795,6 +827,7 @@ impl CentityContext {
         if let Some(target) = self.centity_target(id) {
             self.scripts.drop_target(&target);
         }
+        self.forget_handle(id);
         for name in nodes {
             self.drop_node(id, name);
         }
@@ -4065,3 +4098,7 @@ impl NodeApi for CentityContext {
 
     // ---- not ported yet ----
 }
+
+/// Each instance's handle in one Luau state, kept in that state's app data, so a reload's new state makes its own.
+#[derive(Default)]
+struct CentityHandles(netherforge_platform::UuidMap<mlua::AnyUserData>);

@@ -111,6 +111,49 @@ fn printed(calls: &[String]) -> Vec<String> {
 }
 
 #[test]
+fn an_instances_tick_handlers_run_at_their_rate_and_a_handle_stays_the_same() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &scripted_lamp()),
+        (
+            "centities/lamp/script.lua",
+            r#"
+local every_tick, every_fifth, same = 0, 0, true
+this:on("tick", function(e) every_tick += 1; same = same and e.current == this end)
+this:on("tick", function() every_fifth += 1 end, { every = 5 })
+this:on("remove", function() print(every_tick, every_fifth, same) end)
+"#,
+        ),
+        (
+            "modules/game/init.lua",
+            r#"
+local a = nf.centities.spawn("lamp", vector.create(1, 64, 2))
+local b = nf.centities.spawn("lamp", vector.create(4, 64, 2))
+nf.after(20, function() a:remove(); b:remove() end)
+"#,
+        ),
+    ]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    assert!(session.refusal().is_none(), "{:?}", session.problems());
+    platform.take();
+    let mut lines = Vec::new();
+    for _ in 0..25 {
+        session.tick();
+        lines.extend(printed(&platform.take()));
+    }
+    // Each ran its every-tick handler each tick and its every-fifth one a fifth as often, on its own handle.
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    for line in &lines {
+        let parts: Vec<&str> = line.split('\t').collect();
+        let (ticks, fifths): (u32, u32) = (parts[0].parse().unwrap(), parts[1].parse().unwrap());
+        assert!((19..=21).contains(&ticks), "{lines:?}");
+        assert!((ticks / 5..=ticks / 5 + 1).contains(&fifths), "{lines:?}");
+        assert_eq!(parts[2], "true", "{lines:?}");
+    }
+}
+
+#[test]
 fn scripts_spawn_instances_and_an_instance_runs_its_own_script() {
     let platform = std::rc::Rc::new(Fake::default());
     let files = Files::new(&[
