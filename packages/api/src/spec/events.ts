@@ -253,6 +253,11 @@ export const shapes: LuaClass[] = [
       type: 'Text',
       doc: 'How the line is shown, as MiniMessage, where `<player>` is the player\'s display name and `<message>` what they said (both shown as they are, never read as tags). Starts as Minecraft\'s own look, `"\\\\<<player>> <message>"`. Writable: assign another, like `"<gray><player>: <white><message>"`.',
     },
+    {
+      name: 'recipients',
+      type: 'Player[]',
+      doc: "Who sees the line: every player in the speaker's room to begin with (everyone online, on a server that runs one room). Writable: assign a list to show it to only those players. The server's console always sees it.",
+    },
   ]),
   payload(
     'PlayerInteractEvent',
@@ -493,7 +498,7 @@ export const nfEvents: EventSpec[] = [
     doc: 'A player is saying something in chat. `event:cancel()` stops anyone seeing it; assign `event.message` to change what they said, or `event.format` to change how the line looks. Handlers run on the main thread while the chat waits for them, so keep them quick.',
     payload: 'PlayerChatEvent',
     cancellable: true,
-    writable: ['message', 'format'],
+    writable: ['message', 'format', 'recipients'],
     example:
       'nf.on("player_chat", function(event)\n  event.format = "<gray><player> <dark_gray>»</dark_gray> <white><message>"\nend)',
     raised: byPlayer('player_chat', { watched: true }),

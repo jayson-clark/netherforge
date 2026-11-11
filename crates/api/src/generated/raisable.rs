@@ -66,7 +66,7 @@ pub const RAISABLE: &[Raisable] = &[
     },
     Raisable {
         event: "player_chat",
-        fields: &["format", "message", "player"],
+        fields: &["format", "message", "player", "recipients"],
         payload: Some(|lua, value| { let read = codecs::PlayerChatEvent.read(lua, value, "payload")?; codecs::PlayerChatEvent.push(lua, read).map_err(|e| ApiError(e.to_string())) }),
         first: Some(First { class: "Player", event: "chat", field: "player", via: Via::Handle }),
     },

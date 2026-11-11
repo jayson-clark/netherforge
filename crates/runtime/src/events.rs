@@ -78,6 +78,9 @@ pub trait EventSession {
     ) -> Option<ItemData>;
     /// As `item_back`, for a list of items.
     fn items_back(&self, after: Vec<values::Item>, before: &[ItemData]) -> Vec<ItemData>;
+    /// The players a handler left in a list of players: those `before` had as they were, any other online player as
+    /// the server has them (one that isn't online is left out).
+    fn players_back(&self, after: Vec<handles::Player>, before: &[PlayerRef]) -> Vec<PlayerRef>;
 }
 
 /// A UUID as text, as handles key on it: `8-4-4-4-12` hex digits, lower case.
@@ -441,6 +444,19 @@ impl EventSession for Running<'_, '_> {
             })
             .collect()
     }
+
+    fn players_back(&self, after: Vec<handles::Player>, before: &[PlayerRef]) -> Vec<PlayerRef> {
+        after
+            .into_iter()
+            .filter_map(|p| {
+                let id = parse_uuid(&p.id)?;
+                match before.iter().find(|b| b.uuid == id) {
+                    Some(was) => Some(was.clone()),
+                    None => self.platform().players().get(id),
+                }
+            })
+            .collect()
+    }
 }
 
 impl Running<'_, '_> {
@@ -468,6 +484,10 @@ impl Around for Running<'_, '_> {
         event: &mut netherforge_platform::game_event::PlayerJoin,
         raise: &dyn Fn(&mut netherforge_platform::game_event::PlayerJoin),
     ) {
+        // Arriving on a server with rooms beside the main one, they see only their room in the player list.
+        if self.session.rooms().len() > 1 && !self.shared().instance.is_moving(event.player.uuid) {
+            self.session.relist(event.player.uuid);
+        }
         self.session.player_joined(self.at, &event.player);
         raise(event)
     }
@@ -499,12 +519,18 @@ impl Around for Running<'_, '_> {
     ) -> bool {
         let muted = self.shared().network.borrow().muted(event.player.uuid);
         if let Some(why) = muted {
-            self.session
-                .shared()
+            self.shared()
                 .platform
                 .players()
                 .message(event.player.uuid, why);
             return true;
+        }
+        // What's said in a room is heard in it: the rest of the server's players don't see the line.
+        if self.session.rooms().len() > 1 {
+            let routes = self.shared().instance.routes.borrow();
+            event
+                .recipients
+                .retain(|p| routes.player(p.uuid) == self.at);
         }
         raise(event)
     }

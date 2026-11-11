@@ -794,11 +794,16 @@ class PaperGameEvents(private val plugin: JavaPlugin, private val platform: Pape
     fun onChat(event: AsyncChatEvent) {
         val player = ref(event.player)
         val message = plain.serialize(event.message())
-        val chat = GameEvent.PlayerChat(player, message, DEFAULT_CHAT_FORMAT)
+        val everyone = event.viewers().filterIsInstance<Player>().map(::ref)
+        val chat = GameEvent.PlayerChat(player, message, DEFAULT_CHAT_FORMAT, everyone)
         val cancelled = onMainThread("Chat from ${player.name} went out", CHAT_WAIT_SECONDS) { game.playerChat(chat) } ?: return
         if (cancelled) {
             event.isCancelled = true
             return
+        }
+        if (chat.recipients != everyone) {
+            val kept = chat.recipients.map { it.uuid }.toSet()
+            event.viewers().removeIf { it is Player && it.uniqueId !in kept }
         }
         if (chat.message != message) event.message(Component.text(chat.message))
         if (chat.format != DEFAULT_CHAT_FORMAT) {

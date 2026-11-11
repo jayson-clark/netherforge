@@ -730,10 +730,12 @@ fn player_chat<S: EventSession>(s: &S, event: &mut game_event::PlayerChat) -> bo
         player: first.clone(),
         message: (&event.message).clone(),
         format: s.text((&event.format)),
+        recipients: (&event.recipients).iter().map(|x0| s.player(x0)).collect(),
     };
     let Some(out) = s.emit(&stages, codecs::PlayerChatEvent, payload) else { return false; };
     if let Some(v) = s.read(&out, "message", Str) { event.message = v; }
     if let Some(v) = s.read(&out, "format", TextCodec) { event.format = v.0; }
+    if let Some(v) = s.read(&out, "recipients", List(HandleOf::<handles::Player>::default())) { event.recipients = s.players_back(v, &event.recipients); }
     out.cancelled
 }
 

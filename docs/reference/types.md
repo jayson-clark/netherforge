@@ -995,6 +995,7 @@ Has the fields and methods of [Event](#event) too.
 | `player` | [`Player`](player.md) | Who it was. |
 | `message` | `string` | What they said, as plain text: never MiniMessage, so it can be shown as it is. Writable: assign other text to change what everyone sees. |
 | `format` | [`Text`](index.md#types) | How the line is shown, as MiniMessage, where `<player>` is the player's display name and `<message>` what they said (both shown as they are, never read as tags). Starts as Minecraft's own look, `"\\<<player>> <message>"`. Writable: assign another, like `"<gray><player>: <white><message>"`. |
+| `recipients` | [`Player`](player.md)`[]` | Who sees the line: every player in the speaker's room to begin with (everyone online, on a server that runs one room). Writable: assign a list to show it to only those players. The server's console always sees it. |
 
 ### PlayerInteractEvent {#playerinteractevent}
 

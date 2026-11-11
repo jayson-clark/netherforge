@@ -341,19 +341,21 @@ impl Codec for PlayerChatEvent {
     fn expected(&self) -> String { "PlayerChatEvent".into() }
     fn accepts(&self, value: &Value) -> bool { matches!(value, Value::Table(t) if t.metatable().is_none()) }
     fn read(&self, lua: &Lua, value: Value, at: &str) -> crate::ApiResult<shapes::PlayerChatEvent> {
-        let t = shape_table(&value, at, "PlayerChatEvent", &["player", "message", "format"])?;
+        let t = shape_table(&value, at, "PlayerChatEvent", &["player", "message", "format", "recipients"])?;
         let _ = (&lua, &t);
         Ok(shapes::PlayerChatEvent {
             player: field(lua, t, at, "player", HandleOf::<handles::Player>::default())?,
             message: field(lua, t, at, "message", Str)?,
             format: field(lua, t, at, "format", TextCodec)?,
+            recipients: field(lua, t, at, "recipients", List(HandleOf::<handles::Player>::default()))?,
         })
     }
     fn push(&self, lua: &Lua, value: shapes::PlayerChatEvent) -> mlua::Result<Value> {
-        let t: Table = lua.create_table_with_capacity(0, 3)?;
+        let t: Table = lua.create_table_with_capacity(0, 4)?;
         set_field(lua, &t, "player", HandleOf::<handles::Player>::default(), value.player)?;
         set_field(lua, &t, "message", Str, value.message)?;
         set_field(lua, &t, "format", TextCodec, value.format)?;
+        set_field(lua, &t, "recipients", List(HandleOf::<handles::Player>::default()), value.recipients)?;
         Ok(Value::Table(t))
     }
 }
@@ -7361,6 +7363,7 @@ pub fn check_field(lua: &Lua, shape: &str, name: &str, value: Value, at: &str) -
         ("PlayerQuitEvent", "message") => Some(Opt(TextCodec).read(lua, value, at).map(|_| ())),
         ("PlayerChatEvent", "message") => Some(Str.read(lua, value, at).map(|_| ())),
         ("PlayerChatEvent", "format") => Some(TextCodec.read(lua, value, at).map(|_| ())),
+        ("PlayerChatEvent", "recipients") => Some(List(HandleOf::<handles::Player>::default()).read(lua, value, at).map(|_| ())),
         ("PlayerTeleportEvent", "to") => Some(LocationCodec.read(lua, value, at).map(|_| ())),
         ("PlayerDeathEvent", "message") => Some(Opt(TextCodec).read(lua, value, at).map(|_| ())),
         ("PlayerDeathEvent", "keep_inventory") => Some(Bool.read(lua, value, at).map(|_| ())),

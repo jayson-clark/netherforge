@@ -29,10 +29,11 @@ pub fn game_events_dispatch(events: Rc<dyn PlatformEvents>) -> Dispatch {
                 event.message.put(w);
             }
             2 => {
-                let mut event = game_event::PlayerChat { player: <PlayerRef as Take>::take(r), message: <String as Take>::take(r), format: <String as Take>::take(r) };
+                let mut event = game_event::PlayerChat { player: <PlayerRef as Take>::take(r), message: <String as Take>::take(r), format: <String as Take>::take(r), recipients: <Vec<PlayerRef> as Take>::take(r) };
                 game.player_chat(&mut event).put(w);
                 event.message.put(w);
                 event.format.put(w);
+                event.recipients.put(w);
             }
             3 => {
                 let mut event = game_event::PlayerMove { player: <PlayerRef as Take>::take(r), from: <Location as Take>::take(r), to: <Location as Take>::take(r) };

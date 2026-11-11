@@ -28,8 +28,8 @@ interface GameEvents {
      * A player is saying something in chat. `event:cancel()` stops anyone seeing it; assign
      * `event.message` to change what they said, or `event.format` to change how the line looks. Handlers
      * run on the main thread while the chat waits for them, so keep them quick. True when it ended
-     * cancelled. What handlers made of `message`, `format` is written back into [event]. Only while
-     * [WatchedEvent.PLAYER_CHAT] is watched.
+     * cancelled. What handlers made of `message`, `format`, `recipients` is written back into [event].
+     * Only while [WatchedEvent.PLAYER_CHAT] is watched.
      */
     fun playerChat(event: GameEvent.PlayerChat): Boolean
 
@@ -563,7 +563,13 @@ sealed interface GameEvent {
          * what they said (both shown as they are, never read as tags). Starts as Minecraft's own look,
          * `"\\<<player>> <message>"`. Writable: assign another, like `"<gray><player>: <white><message>"`.
          */
-        var format: String
+        var format: String,
+        /**
+         * Who sees the line: every player in the speaker's room to begin with (everyone online, on a server
+         * that runs one room). Writable: assign a list to show it to only those players. The server's console
+         * always sees it.
+         */
+        var recipients: List<PlayerRef>
     ) : GameEvent
 
     /** A player walked, swam, flew or fell into another block. */

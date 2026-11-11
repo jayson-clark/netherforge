@@ -20,7 +20,7 @@ pub trait GameEvents {
     /// A player left. Assign `event.message` to change what everyone is told, or `nil` to say nothing. What handlers made of `message` is written back into `event`.
     fn player_quit(&self, event: &mut game_event::PlayerQuit);
 
-    /// A player is saying something in chat. `event:cancel()` stops anyone seeing it; assign `event.message` to change what they said, or `event.format` to change how the line looks. Handlers run on the main thread while the chat waits for them, so keep them quick. True when it ended cancelled. What handlers made of `message`, `format` is written back into `event`. Only while `WatchedEvent::PlayerChat` is watched.
+    /// A player is saying something in chat. `event:cancel()` stops anyone seeing it; assign `event.message` to change what they said, or `event.format` to change how the line looks. Handlers run on the main thread while the chat waits for them, so keep them quick. True when it ended cancelled. What handlers made of `message`, `format`, `recipients` is written back into `event`. Only while `WatchedEvent::PlayerChat` is watched.
     fn player_chat(&self, event: &mut game_event::PlayerChat) -> bool;
 
     /// A player moved into another block: walking, swimming, flying, falling, riding. Only moves that change block are heard, not every step or turn of the head, and teleports are `player_teleport` instead. `event:cancel()` puts them back where they were. The server only watches moves while something listens, so it costs nothing otherwise. True when it ended cancelled. Only while `WatchedEvent::PlayerMove` is watched.
@@ -268,6 +268,8 @@ pub mod game_event {
         pub message: String,
         /// How the line is shown, as MiniMessage, where `<player>` is the player's display name and `<message>` what they said (both shown as they are, never read as tags). Starts as Minecraft's own look, `"\\<<player>> <message>"`. Writable: assign another, like `"<gray><player>: <white><message>"`.
         pub format: String,
+        /// Who sees the line: every player in the speaker's room to begin with (everyone online, on a server that runs one room). Writable: assign a list to show it to only those players. The server's console always sees it.
+        pub recipients: Vec<PlayerRef>,
     }
 
     /// A player walked, swam, flew or fell into another block.

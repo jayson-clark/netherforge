@@ -273,3 +273,49 @@ end)
     server.session_mut().stop();
     assert_eq!(platform.commands.borrow().len(), 0);
 }
+
+#[test]
+fn a_rooms_players_see_only_each_other_in_the_list_and_in_chat() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[("netherforge.json", MANIFEST), ("modules/t/init.lua", "")]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let room = server.session_mut().open_room().expect("a room");
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    let sam = FakeBot {
+        name: "Sam".into(),
+        id: Uuid(88),
+        at: place(0.0, 64.0, 0.0),
+    };
+    platform.bots.online.borrow_mut().push(FakeBot {
+        name: "Sam".into(),
+        id: Uuid(88),
+        at: place(0.0, 64.0, 0.0),
+    });
+    server.game().player_join(&mut alex_join());
+    platform.take();
+    // Sam goes to room 1: Alex and Sam leave each other's lists.
+    server.session().move_player(sam.id, room);
+    let listed: Vec<String> = platform
+        .take()
+        .into_iter()
+        .filter(|l| l.starts_with("listed"))
+        .collect();
+    assert_eq!(listed, ["listed 77 for 88 false", "listed 88 for 77 false"]);
+    // What Alex says, only the main room's players see.
+    let mut chat = game_event::PlayerChat {
+        player: alex(),
+        message: "hi".into(),
+        format: "<player>: <message>".into(),
+        recipients: vec![alex(), sam.player()],
+    };
+    assert!(!server.game().player_chat(&mut chat));
+    assert_eq!(chat.recipients, [alex()]);
+    // Back together.
+    server.session().move_player(sam.id, RoomId::MAIN);
+    let listed: Vec<String> = platform
+        .take()
+        .into_iter()
+        .filter(|l| l.starts_with("listed"))
+        .collect();
+    assert_eq!(listed, ["listed 77 for 88 true", "listed 88 for 77 true"]);
+}

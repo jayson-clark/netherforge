@@ -1269,7 +1269,7 @@ What `player:on(event, handler)` listens for. See [Events](events.md) for how ev
 
 | Event | Payload | |
 | --- | --- | --- |
-| `chat` | [PlayerChatEvent](types.md#playerchatevent) | A player is saying something in chat. `event:cancel()` stops anyone seeing it; assign `event.message` to change what they said, or `event.format` to change how the line looks. Handlers run on the main thread while the chat waits for them, so keep them quick. Only this player's: heard before `nf.on("player_chat")`, with the same event, so `event:stop()` keeps it from there. **Cancellable.** Bubbles. Writable: `message`, `format`. |
+| `chat` | [PlayerChatEvent](types.md#playerchatevent) | A player is saying something in chat. `event:cancel()` stops anyone seeing it; assign `event.message` to change what they said, or `event.format` to change how the line looks. Handlers run on the main thread while the chat waits for them, so keep them quick. Only this player's: heard before `nf.on("player_chat")`, with the same event, so `event:stop()` keeps it from there. **Cancellable.** Bubbles. Writable: `message`, `format`, `recipients`. |
 | `command` | [PlayerCommandEvent](types.md#playercommandevent) | A player typed a command (any command: Minecraft's, a plugin's or a script's), before it runs. `event:cancel()` stops it running. Only this player's: heard before `nf.on("player_command")`, with the same event, so `event:stop()` keeps it from there. **Cancellable.** Bubbles. |
 
 ### Moving

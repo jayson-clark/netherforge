@@ -32,10 +32,12 @@ internal class RustGameEvents(private val id: Long) : GameEvents {
         putPlayerRef(w, event.player)
         w.string(event.message)
         w.string(event.format)
+        w.list(event.recipients) { x0 -> putPlayerRef(w, x0) }
     }) { r ->
         val cancelled = r.bool()
         event.message = r.string()
         event.format = r.string()
+        event.recipients = r.list { takePlayerRef(r) }
         cancelled
     }
 

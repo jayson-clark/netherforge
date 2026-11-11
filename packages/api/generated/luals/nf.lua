@@ -6726,6 +6726,7 @@ function Event:uncancel() end
 ---@field player Player Who it was.
 ---@field message string What they said, as plain text: never MiniMessage, so it can be shown as it is. Writable: assign other text to change what everyone sees.
 ---@field format Text How the line is shown, as MiniMessage, where `<player>` is the player's display name and `<message>` what they said (both shown as they are, never read as tags). Starts as Minecraft's own look, `"\\<<player>> <message>"`. Writable: assign another, like `"<gray><player>: <white><message>"`.
+---@field recipients Player[] Who sees the line: every player in the speaker's room to begin with (everyone online, on a server that runs one room). Writable: assign a list to show it to only those players. The server's console always sees it.
 
 --- A player clicked a block or the air with one hand. The game asks for each hand in turn, so one right click can arrive twice: once for the main hand and, unless that did something, once for the off hand.
 ---@class PlayerInteractEvent: Event

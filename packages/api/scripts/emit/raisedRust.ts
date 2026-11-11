@@ -147,6 +147,8 @@ function fromLua(
     case 'list':
       if (codec.item.kind === 'runtime' && codec.item.name === 'Item')
         return `s.items_back(${lua}, ${was})`
+      if (codec.item.kind === 'handle' && codec.item.cls.name === 'Player')
+        return `s.players_back(${lua}, ${was})`
       break
   }
   throw new Error(`no way back to the platform for a writable ${codec.kind}`)

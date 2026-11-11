@@ -555,7 +555,7 @@ end)
             "false\ttests/m_test.lua:6: nf.test.case is for a test file's own code, which is where its tests are declared",
             "false\ttests/m_test.lua:7: bad argument 'ticks' (at least 1 expected, got 0)",
             "false\ttests/m_test.lua:8: bad argument 'name' (3 to 16 letters, digits and _ expected, got \"no\")",
-            "false\ttests/m_test.lua:10: event \"player_chat\" needs a payload: a table of format, message, player",
+            "false\ttests/m_test.lua:10: event \"player_chat\" needs a payload: a table of format, message, player, recipients",
             "false\ttests/m_test.lua:11: bad argument 'payload.world' (World expected, got string)",
             "false\ttests/m_test.lua:12: bad argument 'payload.player' (Player expected, got number)",
             "false\ttests/m_test.lua:13: bad argument 'options' (table expected, got number)",

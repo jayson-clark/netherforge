@@ -799,6 +799,7 @@ impl<'a> Session<'a> {
                 message: None,
             });
             self.instance().routes.borrow_mut().put_player(uuid, to);
+            self.relist(uuid);
             crate::events::GameEventDispatch(crate::events::InRoom {
                 session: self,
                 at: to,
@@ -809,6 +810,23 @@ impl<'a> Session<'a> {
                 message: None,
             });
         });
+    }
+
+    /// Who `player` sees in the player list and who sees them, as their room says: the players in their room, and
+    /// nobody in another. A room's teams hide more as their player joins.
+    pub fn relist(&self, player: Uuid) {
+        let platform = &*self.platform;
+        let routes = self.instance().routes.borrow();
+        let room = routes.player(player);
+        let list = platform.player_list();
+        for other in platform.players().online() {
+            if other.uuid == player {
+                continue;
+            }
+            let together = routes.player(other.uuid) == room;
+            list.set_listed(player, other.uuid, together);
+            list.set_listed(other.uuid, player, together);
+        }
     }
 
     /// The project as it read last.
@@ -1926,6 +1944,10 @@ impl<'a> Session<'a> {
                 listened.extend(room.scripts().events_listened());
                 needed.extend(run.services.iter().flat_map(|s| s.needs_watched()));
             }
+        }
+        // With rooms beside the main one, every line of chat is kept to its room, listened to or not.
+        if self.rooms.len() > 1 {
+            needed.push(netherforge_platform::WatchedEvent::PlayerChat);
         }
         let mut watching = self.watching.borrow_mut();
         for (event, stages) in crate::events::WATCHED {
