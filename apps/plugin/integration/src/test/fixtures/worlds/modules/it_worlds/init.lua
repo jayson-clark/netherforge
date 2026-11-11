@@ -32,7 +32,11 @@ end
 local function void_parts()
   local void = nf.worlds.create("it_void", { generator = "void", structures = false })
   nf.wait(1)
-  void:load_chunk(vec3(10, 70, 10))
+  -- Held, not just loaded: a chunk nobody's near unloads at the tick's end, and the reads below are ticks later.
+  -- Unloading the world lets go of them.
+  void:hold_chunk(vec3(10, 70, 10))
+  nf.wait(1)
+  void:hold_chunk(vec3(30, 70, 30))
   nf.wait(1)
   local empty = void:block(vec3(0, -60, 0)):kind()
   local placed = void:place_structure("it_house", vec3(10, 70, 10))
