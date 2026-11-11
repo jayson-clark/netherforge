@@ -67,6 +67,9 @@ pub struct Centities {
     unmeasured: HashSet<String>,
 }
 
+/// How often an instance's entities are checked for having been removed by something else (`drop_gone`): a second.
+const GONE_TICKS: u64 = 20;
+
 /// A whole centity's drawing context: measuring text, and saying what can't be drawn.
 pub struct Drawing<'a> {
     pub text_size: &'a dyn Fn(&str) -> Option<(i32, i32)>,
@@ -302,7 +305,12 @@ impl Centities {
         if instance.removed || !Self::loaded(platform, instance) {
             return;
         }
-        self.drop_gone(platform, id);
+        // Something else removing our entities is rare, and asking the server about each of an instance's entities
+        // is a call to it apiece: each instance is checked once every `GONE_TICKS`, its turn spread by its id.
+        let due = (instance.age + (id.0 as u64 % GONE_TICKS)).is_multiple_of(GONE_TICKS);
+        if due {
+            self.drop_gone(platform, id);
+        }
         if self.instances[&id].needs_reconcile {
             self.reconcile(platform, drawing, id);
         }
@@ -714,7 +722,7 @@ impl Centities {
     }
 
     /// Forgets entities that can't be reached although their chunk's entities are loaded: something else
-    /// removed them. `reconcile` spawns them again.
+    /// removed them. `reconcile` spawns them again. Asked once every `GONE_TICKS` of an instance's.
     fn drop_gone(&mut self, platform: &dyn Platform, id: Uuid) {
         let instance = &self.instances[&id];
         // A private one's client entities go only when we remove them.
