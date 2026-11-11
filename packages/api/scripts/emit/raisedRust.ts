@@ -279,7 +279,9 @@ function route(it: RaisedEvent): string {
       case 'Block':
         return `Route::World(&${x}.world)`
       case 'World':
-        return held === 'World' ? `Route::World(${byRef ? x : `&${x}`})` : `Route::World(&${x}.world)`
+        return held === 'World'
+          ? `Route::World(${byRef ? x : `&${x}`})`
+          : `Route::World(&${x}.world)`
       case 'Inventory':
         return `Route::Inventory(${byRef ? x : `&${x}`})`
       default:
@@ -287,7 +289,9 @@ function route(it: RaisedEvent): string {
     }
   }
   const value = `event.${ident(field.name)}`
-  return optional ? `${value}.as_ref().map_or(Route::Main, |x0| ${of('x0', true)})` : of(value, false)
+  return optional
+    ? `${value}.as_ref().map_or(Route::Main, |x0| ${of('x0', true)})`
+    : of(value, false)
 }
 
 /** `GameEvents`' method: the room it goes to opened once, then its `Around` hook given the raise. */

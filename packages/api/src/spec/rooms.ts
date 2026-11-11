@@ -78,7 +78,7 @@ export const roomClass: LuaClass = {
     },
     {
       name: 'start',
-      doc: "Begins its match: its scripts hear `room_start` (at the end of this tick for a room still opening, once it has). `false` once it has started already, finished or closed.",
+      doc: 'Begins its match: its scripts hear `room_start` (at the end of this tick for a room still opening, once it has). `false` once it has started already, finished or closed.',
       params: [],
       returns: [{ type: 'boolean' }],
     },
@@ -99,7 +99,8 @@ export const roomClass: LuaClass = {
       doc: `Moves a player into it: their room's scripts hear them quit and this room's hear them join, as if they'd left the server and come back. Their \`player:data()\` goes with them; their \`player:session()\` table is the room's, so it starts empty here. ${LATER} \`false\` when the player isn't online or the room is closing or closed.`,
       params: [{ name: 'player', type: 'Player', doc: '' }],
       returns: [{ type: 'boolean' }],
-      example: 'local room = nf.rooms.open({ key = "match-7" })\nfor _, player in ipairs(queue) do\n  room:send(player)\nend',
+      example:
+        'local room = nf.rooms.open({ key = "match-7" })\nfor _, player in ipairs(nf.players.online()) do\n  room:send(player)\nend',
     },
     {
       name: 'give_world',
@@ -147,7 +148,7 @@ export const nfRooms: LuaClass = {
       params: [{ name: 'options', type: 'RoomOptions', doc: '', optional: true }],
       returns: [{ type: 'Room' }],
       example:
-        'local room = nf.rooms.open({ key = "match-" .. n })\nroom:send(player)',
+        'nf.on("player_join", function(event)\n  local room = nf.rooms.open({ key = "match-" .. event.player:name() })\n  room:send(event.player)\nend)',
     },
   ],
 }

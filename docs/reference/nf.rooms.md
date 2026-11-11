@@ -47,6 +47,8 @@ Opens a room: the project starts in it, in a Lua state of its own. It happens at
 **Returns** [`Room`](room.md)
 
 ```lua
-local room = nf.rooms.open({ key = "match-" .. n })
-room:send(player)
+nf.on("player_join", function(event)
+  local room = nf.rooms.open({ key = "match-" .. event.player:name() })
+  room:send(event.player)
+end)
 ```

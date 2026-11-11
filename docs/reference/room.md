@@ -79,7 +79,7 @@ Moves a player into it: their room's scripts hear them quit and this room's hear
 
 ```lua
 local room = nf.rooms.open({ key = "match-7" })
-for _, player in ipairs(queue) do
+for _, player in ipairs(nf.players.online()) do
   room:send(player)
 end
 ```

@@ -141,12 +141,18 @@ pub struct Instance {
     /// What came in from the network's hub for each room beside the main one, which reads the link for all of them.
     pub network_inbound: RefCell<HashMap<RoomId, Vec<crate::network::Inbound>>>,
     /// What each room listens to on the network: the hub is told every room's at once.
-    pub network_listening: RefCell<std::collections::BTreeMap<RoomId, (Vec<String>, Vec<String>)>>,
+    pub network_listening: RefCell<std::collections::BTreeMap<RoomId, Listening>>,
     /// Each recipe the server has from the rooms, by id: how many rooms gave it, and the version it has.
     recipes: RefCell<HashMap<String, (u32, netherforge_format::kind::recipe::RecipeFile)>>,
     /// Each command the rooms declared, by name: every room's handler, behind the one the server has.
-    commands: RefCell<HashMap<String, std::collections::BTreeMap<RoomId, Rc<dyn CommandHandler>>>>,
+    commands: RefCell<HashMap<String, RoomHandlers>>,
 }
+
+/// What a room listens to on the network: its channels and its maps.
+pub type Listening = (Vec<String>, Vec<String>);
+
+/// A command's handler in each room that declared it.
+type RoomHandlers = std::collections::BTreeMap<RoomId, Rc<dyn CommandHandler>>;
 
 /// What the server runs for a command the rooms declared: the sender's room's handler (a player's room's; the main
 /// room's for the console, or the first room's that has one).

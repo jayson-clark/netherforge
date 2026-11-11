@@ -3007,7 +3007,7 @@
               "type": "Room"
             }
           ],
-          "example": "local room = nf.rooms.open({ key = \"match-\" .. n })\nroom:send(player)"
+          "example": "nf.on(\"player_join\", function(event)\n  local room = nf.rooms.open({ key = \"match-\" .. event.player:name() })\n  room:send(event.player)\nend)"
         }
       ]
     },
@@ -16031,7 +16031,7 @@
               "type": "boolean"
             }
           ],
-          "example": "local room = nf.rooms.open({ key = \"match-7\" })\nfor _, player in ipairs(queue) do\n  room:send(player)\nend"
+          "example": "local room = nf.rooms.open({ key = \"match-7\" })\nfor _, player in ipairs(nf.players.online()) do\n  room:send(player)\nend"
         },
         {
           "name": "give_world",

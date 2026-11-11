@@ -1461,7 +1461,12 @@ class Hub(
                         answer.room?.let { room -> entry.party.forEach { byName[server]?.send(HubFrame.Room(it.id, room)) } }
                         entry.login.complete(LoginPlace(server))
                     } else {
-                        sendPlayer(entry.origin!!, entry.frame.copy(server = server, group = null, room = answer.room), entry.from!!, asked = true)
+                        sendPlayer(
+                            entry.origin!!,
+                            entry.frame.copy(server = server, group = null, room = answer.room),
+                            entry.from!!,
+                            asked = true
+                        )
                     }
                     null
                 }
