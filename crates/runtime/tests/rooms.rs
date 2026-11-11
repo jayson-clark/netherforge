@@ -212,6 +212,10 @@ end)
     // The main room's named table and room 1's are two tables; Alex's is one, read again in each room.
     assert_eq!(
         printed(&platform.take()),
-        ["visits\t1\topened\t1", "visits\t3\topened\t1", "visits\t2\topened\t1"]
+        [
+            "visits\t1\topened\t1",
+            "visits\t3\topened\t1",
+            "visits\t2\topened\t1"
+        ]
     );
 }

@@ -16,7 +16,7 @@ use netherforge_platform::{Platform, Uuid};
 
 /// A room of the server: `MAIN` is the one every session has, which holds every world and player no other room
 /// does; each room opened later has the next number.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RoomId(pub u32);
 
 impl RoomId {
@@ -122,6 +122,8 @@ pub struct Instance {
     lanes: RefCell<std::collections::HashMap<&'static str, crate::http::Workers>>,
     /// Which room each world and player is in.
     pub routes: RefCell<Routes>,
+    /// The last boss bar number given, in any room.
+    pub next_bar: std::cell::Cell<i32>,
 }
 
 impl Instance {
@@ -140,6 +142,7 @@ impl Instance {
             console: RefCell::default(),
             lanes: RefCell::default(),
             routes: RefCell::default(),
+            next_bar: Default::default(),
         })
     }
 

@@ -135,7 +135,13 @@ impl Shared {
     /// for any other (the server's while it has none).
     pub fn default_world(&self) -> String {
         if self.room != crate::instance::RoomId::MAIN
-            && let Some(first) = self.instance.routes.borrow().worlds_of(self.room).into_iter().next()
+            && let Some(first) = self
+                .instance
+                .routes
+                .borrow()
+                .worlds_of(self.room)
+                .into_iter()
+                .next()
         {
             return first;
         }

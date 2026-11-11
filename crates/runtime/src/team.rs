@@ -31,6 +31,15 @@ fn err(message: impl Into<String>) -> ApiError {
 /// What the project's teams are called on the scoreboard, before their own names.
 pub const PREFIX: &str = "nf.";
 
+/// The scoreboard's prefix for room `room`'s teams.
+pub fn team_prefix(room: crate::instance::RoomId) -> String {
+    if room == crate::instance::RoomId::MAIN {
+        PREFIX.to_owned()
+    } else {
+        format!("{PREFIX}{}.", room.0)
+    }
+}
+
 /// What a team's name may be made of: what `/team` commands can type without quotes.
 fn team_name(name: &str) -> bool {
     !name.is_empty()
@@ -47,6 +56,8 @@ struct Team {
 /// The session's teams, lines under name tags, and players out of others' lists.
 #[derive(Default)]
 pub struct Teams {
+    /// The room they're of: the scoreboard's names of its teams carry it.
+    room: crate::instance::RoomId,
     teams: IndexMap<String, Team>,
     below_names: HashMap<Uuid, String>,
     /// By viewer: the players out of their list.
@@ -54,18 +65,24 @@ pub struct Teams {
 }
 
 impl Teams {
+    /// What the scoreboard calls this room's teams before their own names: `nf.` for the main room's, `nf.2.` for
+    /// room 2's, so two rooms' `red` are two teams.
+    fn prefix(&self) -> String {
+        team_prefix(self.room)
+    }
+
     fn remove(&mut self, platform: &dyn Platform, name: &str) -> bool {
         if self.teams.shift_remove(name).is_none() {
             return false;
         }
-        platform.teams().remove(format!("{PREFIX}{name}"));
+        platform.teams().remove(format!("{}{name}", self.prefix()));
         true
     }
 
     /// The project's team `entry` is in, or none (in none, or in someone else's).
     pub fn of(&self, platform: &dyn Platform, entry: &str) -> Option<String> {
         let full = platform.teams().team_of(entry.to_owned())?;
-        let name = full.strip_prefix(PREFIX)?;
+        let name = full.strip_prefix(&self.prefix())?;
         self.teams.contains_key(name).then(|| name.to_owned())
     }
 }
@@ -106,9 +123,10 @@ impl GameContext {
         let platform = self.shared.platform.clone();
         self.with_team(this, |team| {
             change(&mut team.look);
-            platform
-                .teams()
-                .update(format!("{PREFIX}{}", this.name), team.look.clone());
+            platform.teams().update(
+                format!("{}{}", team_prefix(self.shared.room), this.name),
+                team.look.clone(),
+            );
         })
         .is_some()
     }
@@ -229,7 +247,7 @@ impl NfTeamsApi for GameContext {
             )));
         }
         let ops = self.shared.platform.teams();
-        let full = format!("{PREFIX}{name}");
+        let full = format!("{}{name}", teams.prefix());
         // Only ever ours: a name with our prefix that a crash left behind.
         if !ops.create(full.clone(), look.clone()) {
             ops.remove(full.clone());
@@ -283,11 +301,10 @@ impl TeamApi for GameContext {
         let Some(entry) = self.scoreboard_entry(&member, true) else {
             return Ok(false);
         };
-        Ok(self
-            .shared
-            .platform
-            .teams()
-            .add_entry(format!("{PREFIX}{}", this.name), entry))
+        Ok(self.shared.platform.teams().add_entry(
+            format!("{}{}", team_prefix(self.shared.room), this.name),
+            entry,
+        ))
     }
 
     fn remove_member(&self, this: &handles::Team, member: handles::Entity) -> ApiResult<bool> {
@@ -297,11 +314,10 @@ impl TeamApi for GameContext {
         let Some(entry) = self.scoreboard_entry(&member, false) else {
             return Ok(false);
         };
-        Ok(self
-            .shared
-            .platform
-            .teams()
-            .remove_entry(format!("{PREFIX}{}", this.name), entry))
+        Ok(self.shared.platform.teams().remove_entry(
+            format!("{}{}", team_prefix(self.shared.room), this.name),
+            entry,
+        ))
     }
 
     fn has_member(&self, this: &handles::Team, member: handles::Entity) -> ApiResult<bool> {
@@ -315,7 +331,7 @@ impl TeamApi for GameContext {
             .shared
             .platform
             .teams()
-            .entries(format!("{PREFIX}{}", this.name))
+            .entries(format!("{}{}", team_prefix(self.shared.room), this.name))
             .is_some_and(|e| e.contains(&entry)))
     }
 
@@ -326,7 +342,7 @@ impl TeamApi for GameContext {
         let platform = &*self.shared.platform;
         let mut entries = platform
             .teams()
-            .entries(format!("{PREFIX}{}", this.name))
+            .entries(format!("{}{}", team_prefix(self.shared.room), this.name))
             .unwrap_or_default();
         entries.sort();
         let lua = self.scripts.host().lua().clone();
@@ -417,8 +433,13 @@ impl Service for TeamsService {
         "teams"
     }
 
-    /// Before anything runs: teams of ours and lines under name tags a crash left on the scoreboard go.
+    /// Before anything runs: teams of ours and lines under name tags a crash left on the scoreboard go, as the main
+    /// room starts (before any other room opens; a room's own teams carry its number).
     fn start(&self, _room: &Room, project: &Define) {
+        self.shared.teams.borrow_mut().room = self.shared.room;
+        if self.shared.room != crate::instance::RoomId::MAIN {
+            return;
+        }
         let ops = project.platform.teams();
         for name in ops.names() {
             if name.starts_with(PREFIX) {
@@ -480,8 +501,18 @@ impl Service for TeamsService {
         for name in names {
             teams.remove(platform, &name);
         }
-        if !teams.below_names.is_empty() {
-            platform.teams().clear_below_names();
+        if teams.room == crate::instance::RoomId::MAIN {
+            // The main room stops last: every line goes, a crash's leftovers too.
+            if !teams.below_names.is_empty() {
+                platform.teams().clear_below_names();
+            }
+        } else {
+            // Only this room's lines: another room's players keep theirs.
+            for player in teams.below_names.keys() {
+                if let Some(player) = platform.players().get(*player) {
+                    platform.teams().set_below_name(player.name, None);
+                }
+            }
         }
         for (viewer, players) in &teams.unlisted {
             for player in players {
