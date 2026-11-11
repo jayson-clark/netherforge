@@ -186,6 +186,9 @@ struct Entry {
 /// Fixed colliders built from one section of a world's blocks.
 struct Section {
     colliders: Vec<ColliderHandle>,
+    /// The blocks' boxes the colliders were made from: read again every `SECTION_TICKS`, they're remade only
+    /// when these changed.
+    boxes: Vec<BoundingBox>,
     built: u64,
     needed: u64,
 }
@@ -695,16 +698,25 @@ impl Physics {
             if fresh {
                 continue;
             }
+            let boxes = section_boxes(platform, name, *key);
+            if let Some(s) = world.sections.get_mut(key)
+                && s.boxes == boxes
+            {
+                // The same blocks: the colliders stay, so the broad phase isn't rebuilt for nothing.
+                s.built = tick;
+                continue;
+            }
             if let Some(old) = world.sections.remove(key) {
                 for c in old.colliders {
                     world.remove_collider(c);
                 }
             }
-            let colliders = build_section(platform, &mut world.rapier, name, *key);
+            let colliders = section_colliders(&mut world.rapier, &boxes);
             world.sections.insert(
                 *key,
                 Section {
                     colliders,
+                    boxes,
                     built: tick,
                     needed: tick,
                 },
@@ -978,12 +990,8 @@ fn make_body(
 }
 
 /// The fixed colliders of one section's blocks: every box but a full cube buried among full cubes.
-fn build_section(
-    platform: &dyn Platform,
-    w: &mut PhysicsWorld,
-    name: &str,
-    key: (i32, i32, i32),
-) -> Vec<ColliderHandle> {
+/// The boxes of one section's blocks a body can touch: a full cube buried on every side in the section is left out.
+fn section_boxes(platform: &dyn Platform, name: &str, key: (i32, i32, i32)) -> Vec<BoundingBox> {
     let (x0, y0, z0) = (key.0 * SECTION, key.1 * SECTION, key.2 * SECTION);
     let inside = 1e-6;
     let boxes = platform.worlds().collision_boxes(
@@ -1024,12 +1032,18 @@ fn build_section(
             .iter()
             .all(|(dx, dy, dz)| cubes.contains(&(c.0 + dx, c.1 + dy, c.2 + dz)))
     };
+    boxes
+        .iter()
+        .filter(|b| !(full(b) && buried(cell(b))))
+        .copied()
+        .collect()
+}
+
+/// Fixed colliders for a section's boxes.
+fn section_colliders(w: &mut PhysicsWorld, boxes: &[BoundingBox]) -> Vec<ColliderHandle> {
     let groups = InteractionGroups::new(BLOCKS, BODIES, InteractionTestMode::And);
     let mut out = Vec::new();
-    for b in &boxes {
-        if full(b) && buried(cell(b)) {
-            continue;
-        }
+    for b in boxes {
         let half = (b.max - b.min) * 0.5;
         let collider =
             ColliderBuilder::cuboid(half.0.max(1e-4), half.1.max(1e-4), half.2.max(1e-4))
