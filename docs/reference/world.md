@@ -14,7 +14,7 @@ A `data()` table, `Item.data` and `nf.json` can keep one: it is saved as what id
 | [The world itself](#the-world-itself) | [`name`](#name) [`exists`](#exists) [`environment`](#environment) [`is_managed`](#is_managed) [`unload`](#unload) [`location`](#location) [`spawn_location`](#spawn_location) [`set_spawn_location`](#set_spawn_location) [`min_height`](#min_height) [`max_height`](#max_height) |
 | [Time, weather and sky](#time-weather-and-sky) | [`time_of_day`](#time_of_day) [`set_time_of_day`](#set_time_of_day) [`is_day`](#is_day) [`is_night`](#is_night) [`day_count`](#day_count) [`moon_phase`](#moon_phase) [`weather`](#weather) [`set_weather`](#set_weather) [`sky`](#sky) [`set_sky`](#set_sky) [`clear_sky`](#clear_sky) |
 | [Blocks](#blocks-section) | [`block`](#block) [`blocks`](#blocks) [`set_block`](#set_block) [`fill_blocks`](#fill_blocks) [`fill_gradually`](#fill_gradually) [`flood`](#flood) [`highest_block`](#highest_block) |
-| [Chunks and biomes](#chunks-and-biomes) | [`is_chunk_loaded`](#is_chunk_loaded) [`load_chunk`](#load_chunk) [`locate_biome`](#locate_biome) |
+| [Chunks and biomes](#chunks-and-biomes) | [`is_chunk_loaded`](#is_chunk_loaded) [`load_chunk`](#load_chunk) [`hold_chunk`](#hold_chunk) [`release_chunk`](#release_chunk) [`locate_biome`](#locate_biome) |
 | [Entities](#entities-section) | [`players`](#players) [`centities`](#centities) [`entities`](#entities) [`spawn_entity`](#spawn_entity) [`spawn_item`](#spawn_item) |
 | [Particles, sounds and explosions](#particles-sounds-and-explosions) | [`spawn_particle`](#spawn_particle) [`play_sound`](#play_sound) [`explode`](#explode) [`strike_lightning`](#strike_lightning) |
 | [Raycasts and overlaps](#raycasts-and-overlaps) | [`raycast`](#raycast) [`sweep`](#sweep) [`overlap_box`](#overlap_box) [`overlap_sphere`](#overlap_sphere) [`overlap_cone`](#overlap_cone) [`nearest`](#nearest) |
@@ -351,13 +351,33 @@ Whether the chunk a position is in is loaded: whether its blocks can be read and
 
 ### `world:load_chunk(position)` {#load_chunk}
 
-Loads the chunk a position is in, now, generating it if it's new: that can take a while, so do it rarely. The server unloads it again when nobody is near, as it does any chunk.
+Loads the chunk a position is in, now, generating it if it's new: that can take a while, so do it rarely. The server unloads it again when nobody is near, as it does any chunk (`world:hold_chunk` keeps it).
 
 | Parameter | Type | |
 | --- | --- | --- |
 | `position` | [`Vec3`](vec3.md) | Any point in the chunk. |
 
 **Returns** `boolean`: Whether it's loaded: `false` for a world that has gone.
+
+### `world:hold_chunk(position)` {#hold_chunk}
+
+Keeps the chunk a position is in loaded, its entities ticking, with nobody near: loaded now (generated if it's new) if it isn't. Holds are counted: the chunk is held until this script has released it as many times as it held it, and every hold a script has goes when it stops (a module reloaded, a centity removed). For what runs with nobody watching: a farm that keeps working, an arena made ready before players arrive.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `position` | [`Vec3`](vec3.md) | Any point in the chunk. |
+
+**Returns** `boolean`: `false` for a world that has gone, and nothing is held then.
+
+### `world:release_chunk(position)` {#release_chunk}
+
+Lets go of one of this script's holds on the chunk a position is in (`world:hold_chunk`); the server unloads it as any other once nothing holds it.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `position` | [`Vec3`](vec3.md) | Any point in the chunk. |
+
+**Returns** `boolean`: `false` when this script held it no more.
 
 ### `world:locate_biome(id, options?, callback?)` {#locate_biome}
 

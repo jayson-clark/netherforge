@@ -158,3 +158,29 @@ fn thread_cpu() -> std::time::Duration {
     assert_eq!(unsafe { clock_gettime(clock, &mut ts) }, 0);
     std::time::Duration::new(ts.sec as u64, ts.nsec as u32)
 }
+
+/// The runtime's own cost on an instance with nothing to do: a project without scripts, nobody on (Kosmoi's
+/// `emptyworld`). What every service's tick, the metrics and the costs take when there's no work.
+#[test]
+#[ignore = "a benchmark: run it in release, alone"]
+fn an_empty_projects_tick() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[("netherforge.json", MANIFEST)]);
+    let session = Session::start(platform.clone(), &files, &NoPackages);
+    for _ in 0..200 {
+        session.tick();
+        platform.take();
+    }
+    let ticks: u32 = std::env::var("BENCH_TICKS")
+        .ok()
+        .and_then(|t| t.parse().ok())
+        .unwrap_or(20_000);
+    let (wall, cpu) = (std::time::Instant::now(), thread_cpu());
+    for _ in 0..ticks {
+        session.tick();
+        platform.take();
+    }
+    let cpu = (thread_cpu() - cpu) / ticks;
+    let wall = wall.elapsed() / ticks;
+    eprintln!("empty project: {cpu:?} of CPU a tick ({wall:?} by the wall) over {ticks} ticks");
+}

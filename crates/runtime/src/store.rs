@@ -32,7 +32,14 @@ pub const FILE: &str = "netherforge.db";
 /// The store's migrations' scope in the `migrations` table.
 const SCOPE: &str = "netherforge";
 /// Every migration, in order.
-const MIGRATIONS: &[(i64, &str, &str)] = &[(1, "init", include_str!("../migrations/001_init.sql"))];
+const MIGRATIONS: &[(i64, &str, &str)] = &[
+    (1, "init", include_str!("../migrations/001_init.sql")),
+    (
+        2,
+        "keep spawn loaded",
+        include_str!("../migrations/002_keep_spawn_loaded.sql"),
+    ),
+];
 
 /// A spawned centity as the store keeps it, so it comes back after a restart (Kotlin's `InstanceRecord`).
 #[derive(Clone, Debug, PartialEq)]
@@ -856,7 +863,7 @@ impl Store {
     ) -> BTreeMap<String, crate::managed_worlds::OwnedWorld> {
         let connection = self.settled();
         let Ok(mut statement) = connection.prepare(
-            "SELECT world, environment, terrain, dimension_type FROM worlds WHERE namespace = ?1",
+            "SELECT world, environment, terrain, dimension_type, keep_spawn_loaded FROM worlds WHERE namespace = ?1",
         ) else {
             return BTreeMap::new();
         };
@@ -868,6 +875,7 @@ impl Store {
                         environment: r.get(1)?,
                         terrain: r.get(2)?,
                         dimension_type: r.get(3)?,
+                        keep_spawn_loaded: r.get(4)?,
                     },
                 ))
             })
@@ -889,8 +897,8 @@ impl Store {
             format!("worlds {name}"),
             Box::new(move |c| {
                 c.execute(
-                    "INSERT INTO worlds (world, namespace, environment, terrain, dimension_type) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (world) DO UPDATE SET namespace = excluded.namespace, environment = excluded.environment, terrain = excluded.terrain, dimension_type = excluded.dimension_type",
-                    params![name, namespace, owned.environment, owned.terrain, owned.dimension_type],
+                    "INSERT INTO worlds (world, namespace, environment, terrain, dimension_type, keep_spawn_loaded) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (world) DO UPDATE SET namespace = excluded.namespace, environment = excluded.environment, terrain = excluded.terrain, dimension_type = excluded.dimension_type, keep_spawn_loaded = excluded.keep_spawn_loaded",
+                    params![name, namespace, owned.environment, owned.terrain, owned.dimension_type, owned.keep_spawn_loaded],
                 )?;
                 Ok(())
             }),

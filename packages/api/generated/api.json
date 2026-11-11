@@ -13475,7 +13475,7 @@
         },
         {
           "name": "load_chunk",
-          "doc": "Loads the chunk a position is in, now, generating it if it's new: that can take a while, so do it rarely. The server unloads it again when nobody is near, as it does any chunk.",
+          "doc": "Loads the chunk a position is in, now, generating it if it's new: that can take a while, so do it rarely. The server unloads it again when nobody is near, as it does any chunk (`world:hold_chunk` keeps it).",
           "params": [
             {
               "name": "position",
@@ -13487,6 +13487,40 @@
             {
               "type": "boolean",
               "doc": "Whether it's loaded: `false` for a world that has gone."
+            }
+          ]
+        },
+        {
+          "name": "hold_chunk",
+          "doc": "Keeps the chunk a position is in loaded, its entities ticking, with nobody near: loaded now (generated if it's new) if it isn't. Holds are counted: the chunk is held until this script has released it as many times as it held it, and every hold a script has goes when it stops (a module reloaded, a centity removed). For what runs with nobody watching: a farm that keeps working, an arena made ready before players arrive.",
+          "params": [
+            {
+              "name": "position",
+              "type": "Vec3",
+              "doc": "Any point in the chunk."
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean",
+              "doc": "`false` for a world that has gone, and nothing is held then."
+            }
+          ]
+        },
+        {
+          "name": "release_chunk",
+          "doc": "Lets go of one of this script's holds on the chunk a position is in (`world:hold_chunk`); the server unloads it as any other once nothing holds it.",
+          "params": [
+            {
+              "name": "position",
+              "type": "Vec3",
+              "doc": "Any point in the chunk."
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean",
+              "doc": "`false` when this script held it no more."
             }
           ]
         },
@@ -26030,7 +26064,7 @@
         {
           "name": "keep_spawn_loaded",
           "type": "boolean?",
-          "doc": "Whether the chunks around its spawn stay loaded with nobody near. Default `false`."
+          "doc": "Whether the 3 by 3 chunks around its spawn stay loaded, their entities ticking, with nobody near (held as `world:hold_chunk` holds them, for as long as the world is loaded). Default `false`."
         }
       ]
     },

@@ -2179,8 +2179,14 @@ pub trait WorldApi {
     /// Whether the chunk a position is in is loaded: whether its blocks can be read and changed now.
     fn is_chunk_loaded(&self, this: &handles::World, position: values::Vec3) -> ApiResult<bool>;
 
-    /// Loads the chunk a position is in, now, generating it if it's new: that can take a while, so do it rarely. The server unloads it again when nobody is near, as it does any chunk.
+    /// Loads the chunk a position is in, now, generating it if it's new: that can take a while, so do it rarely. The server unloads it again when nobody is near, as it does any chunk (`world:hold_chunk` keeps it).
     fn load_chunk(&self, this: &handles::World, position: values::Vec3) -> ApiResult<bool>;
+
+    /// Keeps the chunk a position is in loaded, its entities ticking, with nobody near: loaded now (generated if it's new) if it isn't. Holds are counted: the chunk is held until this script has released it as many times as it held it, and every hold a script has goes when it stops (a module reloaded, a centity removed). For what runs with nobody watching: a farm that keeps working, an arena made ready before players arrive.
+    fn hold_chunk(&self, this: &handles::World, position: values::Vec3) -> ApiResult<bool>;
+
+    /// Lets go of one of this script's holds on the chunk a position is in (`world:hold_chunk`); the server unloads it as any other once nothing holds it.
+    fn release_chunk(&self, this: &handles::World, position: values::Vec3) -> ApiResult<bool>;
 
     /// Finds the nearest place where the world's generator puts a biome, as `/locate biome` does: it asks the generator, so it finds places in chunks nobody has been to, and never loads or generates a chunk. It looks out from `options.near` in a square spiral, every 32 blocks across and 64 up and down, so the place it gives is in the biome but may be up to 32 blocks past its nearest edge, and a biome narrower than that can be missed. A biome the world's generator never places (a nether biome in the overworld) is found nowhere at once. An id that isn't a biome on this server (a bare id that isn't one of the project's is an error saying how to write the game's), or a `radius` out of range, is an error at once. Finding nothing within the radius, or a world that has gone, fails. It works off the main thread, so its position arrives later: give `callback`, which is called with `position, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `position, err`. Without a callback outside a task, it's an error. When it fails, `position` is `nil` and `err` says why.
     fn locate_biome(&self, this: &handles::World, id: String, options: Option<shapes::BiomeSearchOptions>) -> ApiResult<Pending<values::Vec3>>;

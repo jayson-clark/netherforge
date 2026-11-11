@@ -1915,7 +1915,7 @@ pub struct WorldCreateOptions {
     pub seed: Option<i64>,
     /// Whether villages, temples and the like generate. Default `true`.
     pub structures: Option<bool>,
-    /// Whether the chunks around its spawn stay loaded with nobody near. Default `false`.
+    /// Whether the 3 by 3 chunks around its spawn stay loaded, their entities ticking, with nobody near (held as `world:hold_chunk` holds them, for as long as the world is loaded). Default `false`.
     pub keep_spawn_loaded: Option<bool>,
 }
 

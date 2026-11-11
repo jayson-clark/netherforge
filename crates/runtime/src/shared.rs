@@ -104,6 +104,8 @@ pub struct Shared {
     pub physics: RefCell<crate::centity::physics::Physics>,
     /// Worlds' blocks kept for movers, walks and path searches.
     pub block_shapes: crate::centity::world_shapes::BlockCache,
+    /// The chunks scripts hold loaded (`world:hold_chunk`), counted by the scope holding them, released as each goes.
+    pub chunk_holds: RefCell<crate::world::ChunkHolds>,
     /// Players' and centities' stats and buffs.
     pub stats: RefCell<crate::stats::StatSheets>,
     /// The project's modules, while the session runs: what a resource's script requires through.
@@ -206,6 +208,7 @@ impl Shared {
             bots: RefCell::default(),
             physics: RefCell::default(),
             block_shapes: Default::default(),
+            chunk_holds: RefCell::default(),
             stats: RefCell::default(),
             modules: RefCell::default(),
             classed: RefCell::default(),

@@ -16,6 +16,7 @@
 //! the terrains' service's (`terrains.rs`, once the generators are published to the server). A project terrain
 //! named here is checked against the project's terrains that have no errors.
 
+use crate::world::Holder;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::PathBuf;
@@ -61,6 +62,8 @@ pub struct OwnedWorld {
     pub environment: String,
     pub terrain: Option<String>,
     pub dimension_type: Option<String>,
+    /// Made with `keep_spawn_loaded`: the chunks around its spawn are held whenever it's loaded.
+    pub keep_spawn_loaded: bool,
 }
 
 /// A copy being made: its files on the lane, then its load at a tick.
@@ -113,6 +116,7 @@ impl ManagedWorlds {
             environment: environment.to_owned(),
             terrain,
             dimension_type,
+            keep_spawn_loaded: false,
         };
         shared.store.own_world(&self.namespace, name, &owned);
         self.created.insert(name.to_owned(), owned);
@@ -187,6 +191,10 @@ impl ManagedContext {
                 .info(format!("Loaded world \"{name}\" in {millis} ms"));
         }
         loaded
+    }
+
+    fn hold_spawn(&self, name: &str) {
+        hold_spawn(&self.shared, name);
     }
 
     fn own(&self, name: &str, owned: OwnedWorld) {
@@ -291,6 +299,7 @@ impl ManagedContext {
             .as_deref()
             .map(|d| self.dimension_type(d))
             .transpose()?;
+        let settings_keep = options.keep_spawn_loaded.unwrap_or(false);
         let settings = WorldSettings {
             generator: options.generator.unwrap_or_else(|| NORMAL.into()),
             environment: environment.clone(),
@@ -313,14 +322,19 @@ impl ManagedContext {
         if !ops.create(name.to_owned(), settings) {
             return Ok(None);
         }
+        let keep_spawn_loaded = settings_keep;
         self.own(
             name,
             OwnedWorld {
                 environment,
                 terrain,
                 dimension_type,
+                keep_spawn_loaded,
             },
         );
+        if keep_spawn_loaded {
+            self.hold_spawn(name);
+        }
         Ok(Some(handles::World { name: name.into() }))
     }
 
@@ -362,8 +376,12 @@ impl ManagedContext {
         let environment = owned
             .as_ref()
             .map_or_else(|| NORMAL.to_owned(), |o| o.environment.clone());
+        let keep_spawn_loaded = owned.as_ref().is_some_and(|o| o.keep_spawn_loaded);
         let terrain = owned.and_then(|o| o.terrain);
         let loaded = self.timed(name, || ops.load(name.to_owned(), environment, terrain));
+        if loaded && keep_spawn_loaded {
+            self.hold_spawn(name);
+        }
         Ok(loaded.then_some(world).flatten())
     }
 
@@ -445,6 +463,7 @@ impl ManagedContext {
                 environment: NORMAL.into(),
                 terrain: terrain.clone(),
                 dimension_type: None,
+                keep_spawn_loaded: false,
             },
         );
         let (send, done) = mpsc::channel();
@@ -568,6 +587,11 @@ impl ManagedContext {
             }
         }
         let ops = platform.world_manager();
+        // Its held chunks are let go of first, so a world of this name made again starts with none held.
+        self.shared
+            .chunk_holds
+            .borrow_mut()
+            .release_world(platform, name);
         if !ops.unload(name.to_owned(), save && !delete) {
             return Ok(false);
         }
@@ -628,6 +652,14 @@ impl Service for ManagedWorldsService {
         "managed worlds"
     }
 
+    /// A script that stopped lets go of the chunks it held (`world:hold_chunk`).
+    fn scope_released(&self, scopes: &[netherforge_luau::ScopeId]) {
+        self.shared
+            .chunk_holds
+            .borrow_mut()
+            .release_scopes(&*self.shared.platform, scopes);
+    }
+
     /// A map is read only when a world is copied from it: later copies see the change. A dimension type is the
     /// server's from its start.
     fn reloads(&self) -> &'static [&'static str] {
@@ -638,9 +670,21 @@ impl Service for ManagedWorldsService {
         let namespace = project.project.namespace().to_owned();
         let created = self.shared.store.worlds_of(&namespace);
         let mut managed = self.shared.managed_worlds.borrow_mut();
+        // Worlds still loaded from a run before (a restart) hold their spawns again: stopping let go of them.
+        let keep: Vec<String> = created
+            .iter()
+            .filter(|(name, w)| {
+                w.keep_spawn_loaded && self.shared.platform.worlds().exists((*name).clone())
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
         managed.created = created;
         managed.namespace = namespace;
         define(&mut managed, project);
+        drop(managed);
+        for name in keep {
+            hold_spawn(&self.shared, &name);
+        }
     }
 
     fn reload(&self, _room: &Room, _kind: &str, _ids: &BTreeSet<String>, project: &Define) {
@@ -666,10 +710,33 @@ impl Service for ManagedWorldsService {
     }
 
     /// A copy still going is left to finish: its files stay, unloaded and the project's (`nf.worlds.load` loads it).
-    fn stop(&self, _room: &Room, _platform: &dyn Platform) {
+    /// Every chunk held (by scripts, and worlds' spawns) is let go of.
+    fn stop(&self, _room: &Room, platform: &dyn Platform) {
         let mut managed = self.shared.managed_worlds.borrow_mut();
         managed.copies.clear();
         managed.copying.clear();
+        self.shared.chunk_holds.borrow_mut().release_all(platform);
+    }
+}
+
+/// Holds the 3 by 3 chunks around world `name`'s spawn, for as long as it's loaded (`keep_spawn_loaded`).
+fn hold_spawn(shared: &Shared, name: &str) {
+    let platform = &*shared.platform;
+    let Some(spawn) = platform.worlds().spawn_location(name.to_owned()) else {
+        return;
+    };
+    let (cx, cz) = ((spawn.x.floor() as i32) >> 4, (spawn.z.floor() as i32) >> 4);
+    let mut holds = shared.chunk_holds.borrow_mut();
+    for dx in -1..=1 {
+        for dz in -1..=1 {
+            holds.hold(
+                platform,
+                Holder::World(name.to_owned()),
+                name,
+                cx + dx,
+                cz + dz,
+            );
+        }
     }
 }
 

@@ -1455,6 +1455,10 @@ impl WorldApi for Unported {
     #[allow(unused_variables)]
     fn load_chunk(&self, this: &handles::World, position: values::Vec3) -> ApiResult<bool> { unported("World:load_chunk") }
     #[allow(unused_variables)]
+    fn hold_chunk(&self, this: &handles::World, position: values::Vec3) -> ApiResult<bool> { unported("World:hold_chunk") }
+    #[allow(unused_variables)]
+    fn release_chunk(&self, this: &handles::World, position: values::Vec3) -> ApiResult<bool> { unported("World:release_chunk") }
+    #[allow(unused_variables)]
     fn locate_biome(&self, this: &handles::World, id: String, options: Option<shapes::BiomeSearchOptions>) -> ApiResult<Pending<values::Vec3>> { unported("World:locate_biome") }
     #[allow(unused_variables)]
     fn players(&self, this: &handles::World) -> ApiResult<Vec<handles::Player>> { unported("World:players") }

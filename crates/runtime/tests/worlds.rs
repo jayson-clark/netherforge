@@ -392,6 +392,19 @@ impl FakeWorldOps for Fake {
     fn load_chunk(&self, world: String, _: i32, _: i32) -> bool {
         self.exists(world)
     }
+    fn hold_chunk(&self, world: String, x: i32, z: i32) -> bool {
+        self.managed
+            .lock()
+            .unwrap()
+            .push(format!("hold {world} {x} {z}"));
+        self.exists(world)
+    }
+    fn release_chunk(&self, world: String, x: i32, z: i32) {
+        self.managed
+            .lock()
+            .unwrap()
+            .push(format!("release {world} {x} {z}"));
+    }
     fn biome_search(
         &self,
         world: String,
@@ -835,6 +848,72 @@ print(arena:unload({{ delete = true }}), arena:is_managed())
     let _session =
         Session::start_configured(platform.clone(), &again, &NoPackages, store, config());
     assert_eq!(platform.lines(), ["true true"]);
+}
+
+#[test]
+fn scripts_hold_chunks_loaded_counted_and_a_world_kept_loaded_holds_its_spawns() {
+    let files = Files::new(
+        &[],
+        r#"
+local world = nf.worlds.default()
+print(world:hold_chunk(vec3(20, 64, 20)), world:hold_chunk(vec3(17, 0, 30)))
+print(world:release_chunk(vec3(20, 64, 20)), world:release_chunk(vec3(40, 64, 40)))
+local kept = nf.worlds.create("kept", { keep_spawn_loaded = true })
+print(kept:name())
+print(kept:unload())
+"#,
+    );
+    let platform = Fake::new();
+    let session = start(&files, &platform, Config::default());
+    let lines = printed(&session, &platform, 4);
+    assert_eq!(
+        lines,
+        ["true true", "true false", "kept", "true"],
+        "{lines:?}"
+    );
+    let managed = platform.managed.lock().unwrap().clone();
+    let of = |prefix: &str| -> Vec<String> {
+        managed
+            .iter()
+            .filter(|l| l.starts_with(prefix))
+            .cloned()
+            .collect()
+    };
+    // The script's two holds of chunk (1, 1) and one release; the third release wasn't its own to give.
+    assert_eq!(of("hold world"), ["hold world 1 1", "hold world 1 1"]);
+    assert_eq!(of("release world"), ["release world 1 1"]);
+    // The kept world's spawn (8.5, -3.5: chunk 0, -1) and its eight neighbours, held as it was made and let go of
+    // before it unloaded.
+    let mut held = of("hold kept");
+    held.sort();
+    assert_eq!(held.len(), 9, "{managed:?}");
+    assert!(
+        held.contains(&"hold kept 0 -1".to_owned()) && held.contains(&"hold kept -1 -2".to_owned())
+    );
+    let released = of("release kept");
+    assert_eq!(released.len(), 9, "{managed:?}");
+    let unload = managed
+        .iter()
+        .position(|l| l.starts_with("unload kept"))
+        .expect("unloaded");
+    assert!(
+        managed
+            .iter()
+            .rposition(|l| l.starts_with("release kept"))
+            .unwrap()
+            < unload
+    );
+    // When the script stops, the hold it still has goes too.
+    drop(session);
+    let after = platform.managed.lock().unwrap().clone();
+    assert!(
+        after
+            .iter()
+            .filter(|l| l.as_str() == "release world 1 1")
+            .count()
+            == 2,
+        "{after:?}"
+    );
 }
 
 #[test]

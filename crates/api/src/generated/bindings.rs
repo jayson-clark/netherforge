@@ -5875,6 +5875,26 @@ fn world_load_chunk(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.world().load_chunk(&this, a_position))?]))
 }
 
+fn world_hold_chunk(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::World>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call World methods with ':' (World:hold_chunk)"));
+    };
+    let this = HandleOf::<handles::World>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_position = arg(lua, args, 1, "position", Vec3Codec)?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.world().hold_chunk(&this, a_position))?]))
+}
+
+fn world_release_chunk(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::World>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call World methods with ':' (World:release_chunk)"));
+    };
+    let this = HandleOf::<handles::World>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_position = arg(lua, args, 1, "position", Vec3Codec)?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.world().release_chunk(&this, a_position))?]))
+}
+
 fn world_locate_biome(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::World>::default().accepts(v)).cloned() else {
@@ -10356,6 +10376,8 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "World", name: "highest_block", method: true, waits: false, call: world_highest_block },
     Binding { class: "World", name: "is_chunk_loaded", method: true, waits: false, call: world_is_chunk_loaded },
     Binding { class: "World", name: "load_chunk", method: true, waits: false, call: world_load_chunk },
+    Binding { class: "World", name: "hold_chunk", method: true, waits: false, call: world_hold_chunk },
+    Binding { class: "World", name: "release_chunk", method: true, waits: false, call: world_release_chunk },
     Binding { class: "World", name: "locate_biome", method: true, waits: true, call: world_locate_biome },
     Binding { class: "World", name: "players", method: true, waits: false, call: world_players },
     Binding { class: "World", name: "centities", method: true, waits: false, call: world_centities },

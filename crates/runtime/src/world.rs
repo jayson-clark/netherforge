@@ -203,6 +203,110 @@ fn id_of(state: &str) -> &str {
     state.split('[').next().unwrap_or(state)
 }
 
+/// Who holds a chunk loaded: a script (`world:hold_chunk`), or a world made with `keep_spawn_loaded` (its spawn's).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Holder {
+    Scope(netherforge_luau::ScopeId),
+    World(String),
+}
+
+/// The chunks held loaded, how many times each holder holds each (world, chunk x, z). The platform's holds are
+/// counted too: a holder's are given back one by one when it goes.
+#[derive(Default)]
+pub struct ChunkHolds(HashMap<Holder, HashMap<(String, i32, i32), u32>>);
+
+impl ChunkHolds {
+    /// Holds a chunk for `holder`: false (and nothing held) when the platform couldn't (its world has gone).
+    pub fn hold(
+        &mut self,
+        platform: &dyn Platform,
+        holder: Holder,
+        world: &str,
+        x: i32,
+        z: i32,
+    ) -> bool {
+        if !platform.worlds().hold_chunk(world.to_owned(), x, z) {
+            return false;
+        }
+        *self
+            .0
+            .entry(holder)
+            .or_default()
+            .entry((world.to_owned(), x, z))
+            .or_default() += 1;
+        true
+    }
+
+    /// Lets go of one of `holder`'s holds on a chunk: false when it held it no more.
+    pub fn release(
+        &mut self,
+        platform: &dyn Platform,
+        holder: &Holder,
+        world: &str,
+        x: i32,
+        z: i32,
+    ) -> bool {
+        let Some(mine) = self.0.get_mut(holder) else {
+            return false;
+        };
+        let key = (world.to_owned(), x, z);
+        let Some(times) = mine.get_mut(&key) else {
+            return false;
+        };
+        *times -= 1;
+        if *times == 0 {
+            mine.remove(&key);
+        }
+        if mine.is_empty() {
+            self.0.remove(holder);
+        }
+        platform.worlds().release_chunk(world.to_owned(), x, z);
+        true
+    }
+
+    fn release_holder(&mut self, platform: &dyn Platform, holder: &Holder) {
+        for ((world, x, z), times) in self.0.remove(holder).unwrap_or_default() {
+            for _ in 0..times {
+                platform.worlds().release_chunk(world.clone(), x, z);
+            }
+        }
+    }
+
+    /// Gives back every hold of the scopes in `released`.
+    pub fn release_scopes(
+        &mut self,
+        platform: &dyn Platform,
+        released: &[netherforge_luau::ScopeId],
+    ) {
+        for scope in released {
+            self.release_holder(platform, &Holder::Scope(*scope));
+        }
+    }
+
+    /// Gives back world `name`'s own holds and every hold any script has in it: it's being unloaded.
+    pub fn release_world(&mut self, platform: &dyn Platform, name: &str) {
+        self.release_holder(platform, &Holder::World(name.to_owned()));
+        for mine in self.0.values_mut() {
+            let gone: Vec<_> = mine.keys().filter(|(w, _, _)| w == name).cloned().collect();
+            for key in gone {
+                let times = mine.remove(&key).unwrap_or(0);
+                for _ in 0..times {
+                    platform.worlds().release_chunk(key.0.clone(), key.1, key.2);
+                }
+            }
+        }
+        self.0.retain(|_, mine| !mine.is_empty());
+    }
+
+    /// Gives back every hold.
+    pub fn release_all(&mut self, platform: &dyn Platform) {
+        let holders: Vec<_> = self.0.keys().cloned().collect();
+        for holder in holders {
+            self.release_holder(platform, &holder);
+        }
+    }
+}
+
 /// The classes of the game's own things (`World`, `nf.worlds`, `Block`, entities), for one room.
 #[derive(Clone)]
 pub struct GameContext {
@@ -976,6 +1080,37 @@ impl WorldApi for GameContext {
                 .worlds()
                 .is_chunk_loaded(w.to_owned(), x >> 4, z >> 4)
         }))
+    }
+
+    fn hold_chunk(&self, this: &handles::World, position: values::Vec3) -> ApiResult<bool> {
+        let (x, _, z) = block_at(&values::Vec3 { y: 0.0, ..position })?;
+        let Some(world) = self.live(this) else {
+            return Ok(false);
+        };
+        let Some(scope) = self.scripts.host().calling_scope() else {
+            return Err(ApiError("world:hold_chunk is called from a script".into()));
+        };
+        Ok(self.shared.chunk_holds.borrow_mut().hold(
+            self.platform(),
+            Holder::Scope(scope),
+            world,
+            x >> 4,
+            z >> 4,
+        ))
+    }
+
+    fn release_chunk(&self, this: &handles::World, position: values::Vec3) -> ApiResult<bool> {
+        let (x, _, z) = block_at(&values::Vec3 { y: 0.0, ..position })?;
+        let Some(scope) = self.scripts.host().calling_scope() else {
+            return Ok(false);
+        };
+        Ok(self.shared.chunk_holds.borrow_mut().release(
+            self.platform(),
+            &Holder::Scope(scope),
+            &this.name,
+            x >> 4,
+            z >> 4,
+        ))
     }
 
     fn load_chunk(&self, this: &handles::World, position: values::Vec3) -> ApiResult<bool> {
