@@ -131,6 +131,54 @@ impl Shared {
         online
     }
 
+    /// What this room's worlds are called on the server after their scripts' names: `__<key>` (its key, made a world
+    /// name: lowercase, any other character `_`) for a room opened with one, `__r<number>` for one without, nothing for
+    /// the main room.
+    fn world_suffix(&self) -> Option<String> {
+        if self.room == crate::instance::RoomId::MAIN {
+            return None;
+        }
+        Some(match self.instance.room_key(self.room) {
+            Some(key) => key
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() {
+                        c.to_ascii_lowercase()
+                    } else {
+                        '_'
+                    }
+                })
+                .collect(),
+            None => format!("r{}", self.room.0),
+        })
+    }
+
+    /// The server's name of the world this room's scripts call `name`: in a room beside the main one, its own world of
+    /// that name (`kart__match_7`), so every room's `nf.worlds.get("kart")` is its own; in the main room, `name`.
+    pub fn real_world(&self, name: &str) -> String {
+        match self.world_suffix() {
+            Some(suffix) if !name.ends_with(&format!("__{suffix}")) => format!("{name}__{suffix}"),
+            _ => name.to_owned(),
+        }
+    }
+
+    /// What this room's scripts call the server's world `real` (`kart` for `kart__match_7` in that room).
+    pub fn script_world(&self, real: &str) -> String {
+        match self.world_suffix() {
+            Some(suffix) => real
+                .strip_suffix(&format!("__{suffix}"))
+                .unwrap_or(real)
+                .to_owned(),
+            None => real.to_owned(),
+        }
+    }
+
+    /// Whether this room's worlds are kept when it closes (a room opened with a key: an owner's world, a party's) or
+    /// go with it (a match's).
+    pub fn keeps_worlds(&self) -> bool {
+        self.instance.room_key(self.room).is_some()
+    }
+
     /// This room's default world (`nf.worlds.default()`): the server's for the main room, the first world it was given
     /// for any other (the server's while it has none).
     pub fn default_world(&self) -> String {

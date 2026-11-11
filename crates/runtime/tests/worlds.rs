@@ -77,7 +77,11 @@ impl Fake {
         std::mem::take(&mut *self.lines.borrow_mut())
             .into_iter()
             .filter_map(|line| {
-                if let Some(rest) = line.strip_prefix("info [module t] ") {
+                let room = line
+                    .strip_prefix("info [room ")
+                    .and_then(|r| r.split_once(" module t] "))
+                    .map(|(_, rest)| rest);
+                if let Some(rest) = line.strip_prefix("info [module t] ").or(room) {
                     let text = rest.rsplit_once(" (modules/").map_or(rest, |(t, _)| t);
                     Some(text.replace('\t', " "))
                 } else if line.starts_with("warn") || line.starts_with("error") {
@@ -1191,5 +1195,53 @@ fn a_packages_terrain_script_reads_its_packages_own_files() {
             netherforge_format::kinds::package_path("acme", "terrain/hills.lua").as_str(),
             Some(2)
         )
+    );
+}
+
+#[test]
+fn a_rooms_worlds_are_its_own_by_name_and_go_or_stay_with_it() {
+    let files = Files::new(
+        &[("maps/tracks/level.dat", "")],
+        r#"
+local here = nf.rooms.current()
+if not here:is_main() then
+  local arena = nf.worlds.create("arena", { generator = "void" })
+  print(here:id(), arena:name(), nf.worlds.get("arena") == arena, #here:worlds())
+else
+  nf.after(1, function() print("main sees arena", nf.worlds.get("arena") ~= nil) end)
+end
+"#,
+    );
+    let platform = Fake::new();
+    let mut session = start(&files, &platform, Config::default());
+    platform.lines();
+    let one = session.open_room(None).expect("a room");
+    let two = session.open_room(Some("owner 7".into())).expect("a room");
+    let said = printed(&session, &platform, 3);
+    let mut said: Vec<String> = said
+        .into_iter()
+        .filter(|l| !l.starts_with("info Requires") && !l.starts_with("info Running"))
+        .collect();
+    said.sort();
+    assert_eq!(
+        said,
+        ["1 arena true 1", "2 arena true 1", "main sees arena false",]
+    );
+    let worlds = platform.worlds.borrow().clone();
+    assert!(
+        worlds.contains("arena__r1") && worlds.contains("arena__owner_7"),
+        "{worlds:?}"
+    );
+    // A match's worlds go with it; a keyed room's are saved for next time.
+    session.close_room(one);
+    session.close_room(two);
+    let managed = platform.managed.lock().unwrap().clone();
+    assert!(
+        managed.iter().any(|m| m == "unload arena__r1 false"),
+        "{managed:?}"
+    );
+    assert!(
+        managed.iter().any(|m| m == "unload arena__owner_7 true"),
+        "{managed:?}"
     );
 }

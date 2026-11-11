@@ -32,7 +32,7 @@ end)
 nf.on("player_quit", function(e)
   print("quit", e.player:name(), #nf.players.online())
 end)
-nf.worlds.get("world"):on("block_place", function(e)
+nf.on("block_place", function(e)
   print("placed in world")
 end)
 "#;

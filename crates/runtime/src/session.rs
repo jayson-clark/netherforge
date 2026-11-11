@@ -784,6 +784,24 @@ impl<'a> Session<'a> {
         let Some(at) = self.rooms.iter().position(|r| r.id == id) else {
             return;
         };
+        // Its own worlds go with it: a match's deleted, a keyed room's saved for the next time it opens.
+        if let Some(room) = self.rooms[at].room() {
+            let shared = self.rooms[at].shared.clone();
+            let managed = crate::managed_worlds::ManagedContext {
+                shared: shared.clone(),
+                scripts: room.scripts().clone(),
+            };
+            let keep = shared.keeps_worlds();
+            for world in self.instance().routes.borrow().worlds_of(id) {
+                if managed.is_managed(&world)
+                    && let Err(e) = managed.unload(&world, keep, !keep, None)
+                {
+                    self.platform
+                        .log()
+                        .warn(format!("{id}'s world \"{world}\" wasn't unloaded: {}", e.0));
+                }
+            }
+        }
         self.stop_room(at);
         self.rooms.remove(at);
         let instance = self.instance();

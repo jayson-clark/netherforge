@@ -621,8 +621,9 @@ impl<P: Fn(&BoxState) -> bool> Flood<'_, P> {
 }
 
 impl WorldApi for GameContext {
+    /// As the room's scripts call it: a room's own world without what the server adds to its name.
     fn name(&self, this: &handles::World) -> ApiResult<String> {
-        Ok(this.name.clone())
+        Ok(self.shared.script_world(&this.name))
     }
 
     fn exists(&self, this: &handles::World) -> ApiResult<bool> {
@@ -1965,12 +1966,18 @@ impl NfWorldsApi for GameContext {
             .collect())
     }
 
+    /// The room's world of that name: one it was given by that name, or in a room beside the main one its own (none
+    /// while it has none by that name).
     fn get(&self, _: &Caller, name: String) -> ApiResult<Option<handles::World>> {
-        Ok(self
-            .platform()
-            .worlds()
-            .exists(name.clone())
-            .then_some(handles::World { name }))
+        let name = if self.shared.owns_world(&name) {
+            name
+        } else {
+            self.shared.real_world(&name)
+        };
+        Ok(
+            (self.platform().worlds().exists(name.clone()) && self.shared.owns_world(&name))
+                .then_some(handles::World { name }),
+        )
     }
 
     fn create(
@@ -1979,15 +1986,16 @@ impl NfWorldsApi for GameContext {
         name: String,
         options: Option<shapes::WorldCreateOptions>,
     ) -> ApiResult<Option<handles::World>> {
-        self.managed().create(&name, options)
+        self.managed()
+            .create(&self.shared.real_world(&name), options)
     }
 
     fn load(&self, _: &Caller, name: String) -> ApiResult<Option<handles::World>> {
-        self.managed().load(&name)
+        self.managed().load(&self.shared.real_world(&name))
     }
 
     fn copy(&self, _: &Caller, map: String, name: String) -> ApiResult<Pending<handles::World>> {
-        self.managed().copy(&map, &name)
+        self.managed().copy(&map, &self.shared.real_world(&name))
     }
 
     fn import(
@@ -1997,8 +2005,11 @@ impl NfWorldsApi for GameContext {
         name: String,
         options: Option<shapes::WorldImportOptions>,
     ) -> ApiResult<Pending<handles::World>> {
-        self.managed()
-            .import(&folder, &name, options.and_then(|o| o.terrain))
+        self.managed().import(
+            &folder,
+            &self.shared.real_world(&name),
+            options.and_then(|o| o.terrain),
+        )
     }
 
     fn default(&self, _: &Caller) -> ApiResult<handles::World> {
