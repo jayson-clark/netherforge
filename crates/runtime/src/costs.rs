@@ -148,12 +148,15 @@ impl ScriptCosts {
     pub fn record(&mut self, host: &Host, live: &[ScopeId], tick: u64) -> Recorded {
         let recent = self.recent();
         let costs = host.take_costs(tick.is_multiple_of(recent as u64));
+        // A set: `live` has every scope (each centity's), and looking each window up in the slice was quadratic.
+        let alive: std::collections::HashSet<ScopeId, foldhash::fast::RandomState> =
+            live.iter().copied().collect();
         let deferred = host
             .take_deferred()
             .into_iter()
-            .filter(|s| live.contains(s))
+            .filter(|s| alive.contains(s))
             .collect();
-        self.windows.retain(|s, _| live.contains(s));
+        self.windows.retain(|s, _| alive.contains(s));
         let warn = self.performance.map_or(0.0, |p| p.warn_millis);
         let limit = (warn * NANOS_PER_MILLI * recent as f64) as u64;
         let mut slow = Vec::new();
