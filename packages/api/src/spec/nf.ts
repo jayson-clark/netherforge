@@ -17,6 +17,7 @@ import { nfNetwork } from './network.ts'
 import { nfBots } from './bots.ts'
 import { nfLoot } from './loot.ts'
 import { nfTeams } from './teams.ts'
+import { nfRooms } from './rooms.ts'
 import { nfSchedule } from './schedule.ts'
 import { nfSpawning } from './spawning.ts'
 import { nfEconomy, nfPlaceholders } from './interop.ts'
@@ -457,6 +458,7 @@ const namespaces = [
   nfLoot,
   nfBossbars,
   nfTeams,
+  nfRooms,
   nfSchedule,
   nfEconomy,
   nfPlaceholders,

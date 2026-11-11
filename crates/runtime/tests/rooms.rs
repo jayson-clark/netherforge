@@ -70,7 +70,7 @@ fn each_room_runs_the_project_in_a_lua_state_of_its_own() {
         ("modules/t/init.lua", COUNTER),
     ]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    let room = server.session_mut().open_room().expect("a room");
+    let room = server.session_mut().open_room(None).expect("a room");
     assert_eq!(room, RoomId(1));
     assert_eq!(printed(&platform.take()), ["started\t?", "started\t?"]);
     // Alex arrives in the main room, then moves: each room counts for itself, and sees only its own players.
@@ -100,7 +100,7 @@ fn a_rooms_world_hears_its_events_and_no_other_room_does() {
         ("modules/t/init.lua", COUNTER),
     ]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    let room = server.session_mut().open_room().expect("a room");
+    let room = server.session_mut().open_room(None).expect("a room");
     platform.take();
     server.game().block_place(&mut placed("world"));
     server.tick();
@@ -144,7 +144,7 @@ end)
         ),
     ]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    let room = server.session_mut().open_room().expect("a room");
+    let room = server.session_mut().open_room(None).expect("a room");
     // Only room 1 has a player: its timer fails, the main room's carries on.
     *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
     server.session().move_player(alex().uuid, room);
@@ -164,7 +164,7 @@ fn a_closed_room_sends_its_players_back_and_its_lua_state_goes() {
         ("modules/t/init.lua", COUNTER),
     ]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    let room = server.session_mut().open_room().expect("a room");
+    let room = server.session_mut().open_room(None).expect("a room");
     *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
     server.game().player_join(&mut alex_join());
     server.session().move_player(alex().uuid, room);
@@ -203,7 +203,7 @@ end)
         ),
     ]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    let room = server.session_mut().open_room().expect("a room");
+    let room = server.session_mut().open_room(None).expect("a room");
     *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
     server.game().player_join(&mut alex_join());
     server.session().move_player(alex().uuid, room);
@@ -237,7 +237,7 @@ end)
         ),
     ]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    let room = server.session_mut().open_room().expect("a room");
+    let room = server.session_mut().open_room(None).expect("a room");
     assert_eq!(platform.commands.borrow().len(), 1);
     *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
     server.game().player_join(&mut alex_join());
@@ -279,7 +279,7 @@ fn a_rooms_players_see_only_each_other_in_the_list_and_in_chat() {
     let platform = std::rc::Rc::new(Fake::default());
     let files = Files::new(&[("netherforge.json", MANIFEST), ("modules/t/init.lua", "")]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    let room = server.session_mut().open_room().expect("a room");
+    let room = server.session_mut().open_room(None).expect("a room");
     *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
     let sam = FakeBot {
         name: "Sam".into(),
@@ -318,4 +318,73 @@ fn a_rooms_players_see_only_each_other_in_the_list_and_in_chat() {
         .filter(|l| l.starts_with("listed"))
         .collect();
     assert_eq!(listed, ["listed 77 for 88 true", "listed 88 for 77 true"]);
+}
+
+#[test]
+fn a_lobby_opens_a_room_sends_its_player_and_the_rooms_life_is_heard() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"
+local here = nf.rooms.current()
+local saved = nf.data("saved")
+saved.n = (saved.n or 0) + 1
+print("room", here:id(), here:is_main(), here:key(), saved.n)
+nf.on("room_start", function(e)
+  print("start", e.room:id(), e.room:state())
+  here:finish()
+  here:close()
+end)
+nf.on("room_finish", function(e) print("finish", e.room:id()) end)
+nf.on("room_close", function(e) print("close", e.room:id(), #nf.players.online()) end)
+local opened = false
+nf.on("player_join", function(e)
+  if here:is_main() and not opened then
+    opened = true
+    local match = nf.rooms.open({ key = "match-1" })
+    print("opening", match:id(), match:state(), match:send(e.player))
+    match:start()
+  elseif not here:is_main() then
+    print("arrived", e.player:name(), #here:players())
+  end
+end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    server.game().player_join(&mut alex_join());
+    // The room opens, Alex goes there, its match starts, ends and the room closes: Alex back in the main room.
+    for _ in 0..4 {
+        server.tick();
+    }
+    let lines = platform.take();
+    let said: Vec<String> = lines
+        .iter()
+        .filter_map(|l| l.strip_prefix("info ["))
+        .map(|l| l.rsplit_once(" (").map_or(l, |(t, _)| t).replace('\t', " "))
+        .collect();
+    assert_eq!(
+        said,
+        [
+            "module t] room 0 true nil 1",
+            "module t] opening 1 opening true",
+            "room 1 module t] room 1 false match-1 1",
+            "room 1 module t] arrived Alex 1",
+            "room 1 module t] start 1 started",
+            "room 1 module t] finish 1",
+            "room 1 module t] close 1 1",
+        ],
+        "{lines:?}"
+    );
+    // The match has closed: Alex is back in the main room, which is the only one.
+    assert_eq!(server.session().rooms().len(), 1);
+    assert_eq!(
+        server
+            .session()
+            .route(netherforge_runtime::events::Route::Player(alex().uuid)),
+        RoomId::MAIN
+    );
 }

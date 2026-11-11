@@ -406,6 +406,10 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
     fn tick(&self) {
         let started = std::time::Instant::now();
         self.run_tick();
+        // What scripts asked of the rooms this tick, now that none runs.
+        if let Ok(mut session) = self.game.0.0.try_borrow_mut() {
+            session.apply_room_requests();
+        }
         let metrics = self.metrics.borrow().clone();
         if let Some(metrics) = metrics {
             metrics.record(started.elapsed().as_nanos() as u64);

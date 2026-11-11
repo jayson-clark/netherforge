@@ -29,7 +29,7 @@
   "classes": [
     {
       "name": "nf",
-      "doc": "Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.images`, `nf.files`, `nf.text`, `nf.looks`, `nf.packs`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.",
+      "doc": "Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.rooms`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.images`, `nf.files`, `nf.text`, `nf.looks`, `nf.packs`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.",
       "methods": false,
       "fields": [
         {
@@ -111,6 +111,11 @@
           "name": "teams",
           "type": "nf.teams",
           "doc": "The project's scoreboard teams: prefixes and suffixes on names, name colours and glow colours, friendly fire, name tags and collision."
+        },
+        {
+          "name": "rooms",
+          "type": "nf.rooms",
+          "doc": "The server's rooms. Each runs the project in a Lua state of its own, with its own players and worlds, and `nf` in a room is that room: `nf.players.online()`, broadcasts, events, timers, teams and the rest are its own. What's shared between rooms is the store's tables of players and centities, the databases, the network, and these functions."
         },
         {
           "name": "schedule",
@@ -1517,6 +1522,22 @@
           "doc": "A player a script on another server sent here (`nf.network.send_player`) has joined, with the data it sent along. Heard the tick after their `player_join`, so whatever `player_join` set up is there.",
           "payload": "PlayerArriveEvent",
           "example": "nf.on(\"player_arrive\", function(event)\n  if event.data and event.data.kit == \"archer\" then\n    event.player:give_item({ kind = \"minecraft:bow\" })\n  end\nend)"
+        },
+        {
+          "name": "room_start",
+          "doc": "This room's match began: `room:start()` was called (by this room's scripts, another room's, or the server's owner through the admin API). Before it, the room is open: players can be sent in and the world got ready.",
+          "payload": "RoomEvent",
+          "example": "nf.on(\"room_start\", function(event)\n  for _, player in ipairs(nf.players.online()) do\n    player:send_title(\"<green>Go!\")\n  end\nend)"
+        },
+        {
+          "name": "room_finish",
+          "doc": "This room's match ended: `room:finish()` was called. Its players are still here; the room closes when it's told to (`room:close()`), which is where a game says who won and sends everyone on.",
+          "payload": "RoomEvent"
+        },
+        {
+          "name": "room_close",
+          "doc": "This room is about to close: its scripts' last chance, before its players go back to the main room and its Lua state ends. Its worlds are the main room's afterwards.",
+          "payload": "RoomEvent"
         }
       ],
       "customEvents": true,
@@ -2915,6 +2936,78 @@
               "type": "Team[]"
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "nf.rooms",
+      "doc": "The server's rooms. Each runs the project in a Lua state of its own, with its own players and worlds, and `nf` in a room is that room: `nf.players.online()`, broadcasts, events, timers, teams and the rest are its own. What's shared between rooms is the store's tables of players and centities, the databases, the network, and these functions.",
+      "methods": false,
+      "fields": [],
+      "functions": [
+        {
+          "name": "current",
+          "doc": "The room this script runs in.",
+          "params": [],
+          "returns": [
+            {
+              "type": "Room"
+            }
+          ]
+        },
+        {
+          "name": "main",
+          "doc": "The main room.",
+          "params": [],
+          "returns": [
+            {
+              "type": "Room"
+            }
+          ]
+        },
+        {
+          "name": "all",
+          "doc": "Every room open now (opening ones too), the main room first.",
+          "params": [],
+          "returns": [
+            {
+              "type": "Room[]"
+            }
+          ]
+        },
+        {
+          "name": "get",
+          "doc": "Room `id`, or `nil` when no room open has it.",
+          "params": [
+            {
+              "name": "id",
+              "type": "integer",
+              "doc": ""
+            }
+          ],
+          "returns": [
+            {
+              "type": "Room?"
+            }
+          ]
+        },
+        {
+          "name": "open",
+          "doc": "Opens a room: the project starts in it, in a Lua state of its own. It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script. It holds no world and no player until it's given them (`room:give_world`, `room:send`), or its scripts make or load a world.",
+          "params": [
+            {
+              "name": "options",
+              "type": "RoomOptions",
+              "doc": "",
+              "optional": true
+            }
+          ],
+          "returns": [
+            {
+              "type": "Room"
+            }
+          ],
+          "example": "local room = nf.rooms.open({ key = \"match-\" .. n })\nroom:send(player)"
         }
       ]
     },
@@ -5099,7 +5192,7 @@
           "params": [
             {
               "name": "event",
-              "type": "\"tick\"|\"player_join\"|\"player_resource_pack_status\"|\"player_quit\"|\"player_chat\"|\"player_interact\"|\"player_interact_entity\"|\"player_move\"|\"player_teleport\"|\"player_change_world\"|\"player_death\"|\"player_respawn\"|\"player_drop_item\"|\"player_pickup_item\"|\"player_use_item\"|\"player_consume_item\"|\"player_swap_hands\"|\"player_sneak\"|\"player_command\"|\"block_break\"|\"block_place\"|\"entity_damage\"|\"entity_death\"|\"entity_spawn\"|\"world_dusk\"|\"world_dawn\"|\"player_input\"|\"player_change_slot\"|\"player_swing\"|\"player_sprint\"|\"player_fly\"|\"player_jump\"|\"player_change_game_mode\"|\"player_change_food\"|\"player_gain_experience\"|\"player_change_level\"|\"player_kick\"|\"player_complete_advancement\"|\"player_stop_using_item\"|\"player_break_item\"|\"entity_heal\"|\"projectile_launch\"|\"projectile_hit\"|\"entity_shoot_bow\"|\"entity_target\"|\"entity_explode\"|\"block_explode\"|\"entity_combust\"|\"entity_change_effect\"|\"block_ignite\"|\"block_burn\"|\"block_spread\"|\"block_flow\"|\"block_grow\"|\"block_fade\"|\"block_form\"|\"leaves_decay\"|\"piston_extend\"|\"piston_retract\"|\"block_redstone\"|\"sign_change\"|\"block_start_break\"|\"block_drop_item\"|\"weather_change\"|\"thunder_change\"|\"lightning_strike\"|\"chunk_load\"|\"chunk_generated\"|\"chunk_unload\"|\"world_load\"|\"world_unload\"|\"entity_mount\"|\"entity_dismount\"|\"vehicle_move\"|\"vehicle_damage\"|\"vehicle_destroy\"|\"player_open_inventory\"|\"player_close_inventory\"|\"player_click_inventory\"|\"player_drag_inventory\"|\"player_craft\"|\"player_prepare_craft\"|\"player_prepare_anvil\"|\"player_prepare_smithing\"|\"player_prepare_grindstone\"|\"player_enchant_item\"|\"furnace_smelt\"|\"server_list_ping\"|\"centity_click\"|\"recipe_craft\"|\"item_view\"|\"centity_natural_spawn\"|\"menu_open\"|\"menu_close\"|\"menu_click\"|\"dialog_press\"|\"setting_changed\"|\"network_connect\"|\"network_disconnect\"|\"network_state\"|\"network_server_connect\"|\"network_server_disconnect\"|\"network_player_join\"|\"network_player_switch\"|\"network_player_quit\"|\"player_arrive\"",
+              "type": "\"tick\"|\"player_join\"|\"player_resource_pack_status\"|\"player_quit\"|\"player_chat\"|\"player_interact\"|\"player_interact_entity\"|\"player_move\"|\"player_teleport\"|\"player_change_world\"|\"player_death\"|\"player_respawn\"|\"player_drop_item\"|\"player_pickup_item\"|\"player_use_item\"|\"player_consume_item\"|\"player_swap_hands\"|\"player_sneak\"|\"player_command\"|\"block_break\"|\"block_place\"|\"entity_damage\"|\"entity_death\"|\"entity_spawn\"|\"world_dusk\"|\"world_dawn\"|\"player_input\"|\"player_change_slot\"|\"player_swing\"|\"player_sprint\"|\"player_fly\"|\"player_jump\"|\"player_change_game_mode\"|\"player_change_food\"|\"player_gain_experience\"|\"player_change_level\"|\"player_kick\"|\"player_complete_advancement\"|\"player_stop_using_item\"|\"player_break_item\"|\"entity_heal\"|\"projectile_launch\"|\"projectile_hit\"|\"entity_shoot_bow\"|\"entity_target\"|\"entity_explode\"|\"block_explode\"|\"entity_combust\"|\"entity_change_effect\"|\"block_ignite\"|\"block_burn\"|\"block_spread\"|\"block_flow\"|\"block_grow\"|\"block_fade\"|\"block_form\"|\"leaves_decay\"|\"piston_extend\"|\"piston_retract\"|\"block_redstone\"|\"sign_change\"|\"block_start_break\"|\"block_drop_item\"|\"weather_change\"|\"thunder_change\"|\"lightning_strike\"|\"chunk_load\"|\"chunk_generated\"|\"chunk_unload\"|\"world_load\"|\"world_unload\"|\"entity_mount\"|\"entity_dismount\"|\"vehicle_move\"|\"vehicle_damage\"|\"vehicle_destroy\"|\"player_open_inventory\"|\"player_close_inventory\"|\"player_click_inventory\"|\"player_drag_inventory\"|\"player_craft\"|\"player_prepare_craft\"|\"player_prepare_anvil\"|\"player_prepare_smithing\"|\"player_prepare_grindstone\"|\"player_enchant_item\"|\"furnace_smelt\"|\"server_list_ping\"|\"centity_click\"|\"recipe_craft\"|\"item_view\"|\"centity_natural_spawn\"|\"menu_open\"|\"menu_close\"|\"menu_click\"|\"dialog_press\"|\"setting_changed\"|\"network_connect\"|\"network_disconnect\"|\"network_state\"|\"network_server_connect\"|\"network_server_disconnect\"|\"network_player_join\"|\"network_player_switch\"|\"network_player_quit\"|\"player_arrive\"|\"room_start\"|\"room_finish\"|\"room_close\"",
               "doc": "The event's name, as `nf.on` takes it."
             },
             {
@@ -15814,6 +15907,145 @@
             {
               "type": "boolean",
               "doc": "`false` once it's gone already."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Room",
+      "doc": "A room of the server: one copy of the project with its own Lua state, its own players and its own worlds. The main room is always there (it holds every world and player no other room does, and it's the only one on a server that never opens another); the others are opened by `nf.rooms.open` or the server's owner, and closed once their match is over. A room's scripts reach nothing of another room's except through these methods. Once it has closed its methods answer `nil` or `false`.",
+      "methods": true,
+      "handle": {
+        "key": [
+          {
+            "name": "id",
+            "type": "integer"
+          }
+        ]
+      },
+      "fields": [],
+      "functions": [
+        {
+          "name": "id",
+          "doc": "Its number: `0` for the main room, then `1`, `2`... in the order rooms were opened, never used twice while the server runs.",
+          "params": [],
+          "returns": [
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        {
+          "name": "key",
+          "doc": "What it's for, as it was opened with it (an owner's id, a match's): `nil` for the main room and for a room opened without one. Its `nf.data` tables are kept under it.",
+          "params": [],
+          "returns": [
+            {
+              "type": "string?"
+            }
+          ]
+        },
+        {
+          "name": "is_main",
+          "doc": "Whether it's the main room.",
+          "params": [],
+          "returns": [
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        {
+          "name": "state",
+          "doc": "`\"opening\"` until the end of the tick it was opened in, then `\"open\"`, `\"started\"` once its match began, `\"finished\"` once it ended, and `\"closed\"` once it has gone. The main room is `\"open\"` until it starts.",
+          "params": [],
+          "returns": [
+            {
+              "type": "\"opening\"|\"open\"|\"started\"|\"finished\"|\"closed\""
+            }
+          ]
+        },
+        {
+          "name": "players",
+          "doc": "The players in it now. Empty once it has closed.",
+          "params": [],
+          "returns": [
+            {
+              "type": "Player[]"
+            }
+          ]
+        },
+        {
+          "name": "worlds",
+          "doc": "The worlds it holds: those it was given or its scripts made or loaded. The main room's are every world no other room holds.",
+          "params": [],
+          "returns": [
+            {
+              "type": "World[]"
+            }
+          ]
+        },
+        {
+          "name": "start",
+          "doc": "Begins its match: its scripts hear `room_start` (at the end of this tick for a room still opening, once it has). `false` once it has started already, finished or closed.",
+          "params": [],
+          "returns": [
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        {
+          "name": "finish",
+          "doc": "Ends its match: its scripts hear `room_finish`. `false` unless it's open or started.",
+          "params": [],
+          "returns": [
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        {
+          "name": "close",
+          "doc": "Closes it: its scripts hear `room_close`, its players go back to the main room (as if they'd joined the server), its Lua state ends and its worlds are the main room's. It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script. `false` for the main room, and once it's closing or closed.",
+          "params": [],
+          "returns": [
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        {
+          "name": "send",
+          "doc": "Moves a player into it: their room's scripts hear them quit and this room's hear them join, as if they'd left the server and come back. Their `player:data()` goes with them; their `player:session()` table is the room's, so it starts empty here. It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script. `false` when the player isn't online or the room is closing or closed.",
+          "params": [
+            {
+              "name": "player",
+              "type": "Player",
+              "doc": ""
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean"
+            }
+          ],
+          "example": "local room = nf.rooms.open({ key = \"match-7\" })\nfor _, player in ipairs(queue) do\n  room:send(player)\nend"
+        },
+        {
+          "name": "give_world",
+          "doc": "Gives it a world: the world's blocks, entities and events are this room's from now on. `false` when the world isn't loaded or the room is closed.",
+          "params": [
+            {
+              "name": "world",
+              "type": "World",
+              "doc": ""
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean"
             }
           ]
         }
@@ -28232,6 +28464,33 @@
         }
       ],
       "extends": "Event"
+    },
+    {
+      "name": "RoomEvent",
+      "doc": "Something happened to this room.",
+      "methods": false,
+      "functions": [],
+      "fields": [
+        {
+          "name": "room",
+          "type": "Room",
+          "doc": "The room: this one."
+        }
+      ],
+      "extends": "Event"
+    },
+    {
+      "name": "RoomOptions",
+      "doc": "How `nf.rooms.open` opens a room.",
+      "methods": false,
+      "functions": [],
+      "fields": [
+        {
+          "name": "key",
+          "type": "string?",
+          "doc": "What it's for (an owner's id, a match's): its `nf.data` tables are kept under it, so a room opened again with the same key finds them. Without one they last as long as the room."
+        }
+      ]
     },
     {
       "name": "ParticlePlayOptions",

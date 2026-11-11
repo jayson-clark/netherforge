@@ -1,6 +1,7 @@
 import type { EventSpec, Field, Fn, LuaClass, Raised } from '../types.ts'
 import { gameNkEvents } from './gameEvents.ts'
 import { networkEvents } from './networkEvents.ts'
+import { roomEvents } from './rooms.ts'
 
 const shape = (
   name: string,
@@ -707,6 +708,7 @@ export const nfEvents: EventSpec[] = [
       'local greeting = nf.config("greeting")\nnf.on("setting_changed", function(event)\n  if event.setting == "greeting" then\n    greeting = event.value\n  end\nend)',
   },
   ...networkEvents,
+  ...roomEvents,
 ]
 
 /**

@@ -154,6 +154,13 @@ The other servers behind the same proxy: messages, requests, shared maps, who is
 - [NetworkMap](networkmap.md): A map the whole network shares, from `nf.network.map`: string keys, any values
 - [NetworkHold](networkhold.md): A hold on this server being ready, from `nf.network.hold_ready`: while any is held, the server stays `starting`
 
+## Rooms
+
+Several rooms of the project on one server, each its own Lua state, players and worlds: matches, parties, owners' worlds.
+
+- [nf.rooms](nf.rooms.md): The server's rooms
+- [Room](room.md): A room of the server: one copy of the project with its own Lua state, its own players and its own worlds
+
 ## Testing
 
 What `*_test.lua` files run on.

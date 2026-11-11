@@ -2892,6 +2892,20 @@ pub struct PlayerArriveEvent {
     pub data: Value,
 }
 
+/// Something happened to this room.
+#[derive(Clone, Debug)]
+pub struct RoomEvent {
+    /// The room: this one.
+    pub room: handles::Room,
+}
+
+/// How `nf.rooms.open` opens a room.
+#[derive(Clone, Debug)]
+pub struct RoomOptions {
+    /// What it's for (an owner's id, a match's): its `nf.data` tables are kept under it, so a room opened again with the same key finds them. Without one they last as long as the room.
+    pub key: Option<String>,
+}
+
 /// How `nf.particles.play` plays an effect. Every key is optional; a key that isn't one of these is an error.
 #[derive(Clone, Debug)]
 pub struct ParticlePlayOptions {

@@ -679,9 +679,25 @@ impl<'a> Session<'a> {
     /// none while the project doesn't run (or the room's Lua state didn't start, which the log says). It holds no
     /// world and no player until it's given them ([`give_world`](Self::give_world),
     /// [`move_player`](Self::move_player)).
-    pub fn open_room(&mut self) -> Option<crate::instance::RoomId> {
+    pub fn open_room(&mut self, key: Option<String>) -> Option<crate::instance::RoomId> {
+        let id = self.instance().next_room_id();
+        self.instance().rooms.borrow_mut().insert(
+            id,
+            crate::rooms::RoomInfo {
+                key: key.clone(),
+                state: crate::rooms::RoomState::Opening,
+            },
+        );
+        let opened = self.open_room_as(id);
+        if opened.is_none() {
+            self.instance().rooms.borrow_mut().remove(&id);
+        }
+        opened
+    }
+
+    /// Opens room `id`, which the instance already knows (opening, with its key).
+    fn open_room_as(&mut self, id: crate::instance::RoomId) -> Option<crate::instance::RoomId> {
         self.rooms[0].room.as_ref()?;
-        let id = crate::instance::RoomId(self.rooms.iter().map(|r| r.id.0).max().unwrap_or(0) + 1);
         let shared = Shared::new(self.instance().clone(), id);
         configure_room(&shared, &self.config);
         let run = RoomRun {
@@ -711,6 +727,12 @@ impl<'a> Session<'a> {
         run.room = Some(room);
         self.rooms.push(run);
         self.instance().open.borrow_mut().insert(id);
+        // Opening, it's open now (a room started as it opened stays started).
+        if let Some(info) = self.instance().rooms.borrow_mut().get_mut(&id)
+            && info.state == crate::rooms::RoomState::Opening
+        {
+            info.state = crate::rooms::RoomState::Open;
+        }
         let run = self.rooms.last().expect("just pushed");
         self.released_in(run);
         self.report_in(run);
@@ -738,6 +760,7 @@ impl<'a> Session<'a> {
         instance.open.borrow_mut().remove(&id);
         instance.network_inbound.borrow_mut().remove(&id);
         instance.network_listening.borrow_mut().remove(&id);
+        instance.rooms.borrow_mut().remove(&id);
         self.update_watched();
     }
 
@@ -764,6 +787,52 @@ impl<'a> Session<'a> {
         run.costs.borrow_mut().clear();
         run.warned.borrow_mut().problems.clear();
         self.rooms[at].room = None;
+    }
+
+    /// Does what scripts asked of the rooms this tick (`nf.rooms`): rooms open and close, players move, rooms' events
+    /// are raised. What scripts ask meanwhile (a room's `room_close` handler sending someone on) waits for the next
+    /// tick's end, so a lobby that opens a room for everyone who comes back can't keep a tick going.
+    pub fn apply_room_requests(&mut self) {
+        use crate::rooms::RoomRequest;
+        {
+            let requests = std::mem::take(&mut *self.instance().room_requests.borrow_mut());
+            for request in requests {
+                match request {
+                    RoomRequest::Open { id, .. } => {
+                        if self.open_room_as(id).is_none() {
+                            self.instance().rooms.borrow_mut().remove(&id);
+                        }
+                    }
+                    RoomRequest::Close(id) => {
+                        self.raise_room_event(id, "room_close");
+                        self.close_room(id);
+                    }
+                    RoomRequest::Send { player, to } => self.move_player(player, to),
+                    RoomRequest::Raise { id, event } => self.raise_room_event(id, event),
+                }
+            }
+        }
+    }
+
+    /// Raises `event` (a `RoomEvent`) on `nf` in room `id`, while it runs.
+    fn raise_room_event(&self, id: crate::instance::RoomId, event: &str) {
+        let Some(run) = self.run(id) else { return };
+        let Some(room) = run.room() else { return };
+        use netherforge_api::codec::Codec;
+        let lua = room.host().lua();
+        let payload = netherforge_api::codecs::RoomEvent.push(
+            lua,
+            netherforge_api::shapes::RoomEvent {
+                room: netherforge_api::handles::Room {
+                    id: i64::from(id.0),
+                },
+            },
+        );
+        if let Ok(mlua::Value::Table(fields)) = payload {
+            room.scripts()
+                .raise(&crate::scripts::Target::Nf, event, fields);
+        }
+        self.released_in(run);
     }
 
     /// Gives world `world` to room `room`: its blocks, entities and events are the room's from now on.

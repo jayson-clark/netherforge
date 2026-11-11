@@ -147,6 +147,11 @@ export const CATEGORIES: Category[] = [
     pages: ['nf.network', 'NetworkChannel', 'NetworkMap', 'NetworkHold'],
   },
   {
+    title: 'Rooms',
+    doc: "Several rooms of the project on one server, each its own Lua state, players and worlds: matches, parties, owners' worlds.",
+    pages: ['nf.rooms', 'Room'],
+  },
+  {
     title: 'Testing',
     doc: 'What `*_test.lua` files run on.',
     pages: ['nf.test'],
@@ -494,6 +499,7 @@ export const EVENT_GROUPS: Record<string, Group[]> = {
       'The network',
       'network_connect network_disconnect network_state network_server_connect network_server_disconnect network_player_join network_player_switch network_player_quit',
     ),
+    group('This room', 'room_start room_finish room_close'),
   ],
   Player: [
     group('Joining and leaving', 'join quit kick arrive resource_pack_status'),

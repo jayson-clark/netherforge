@@ -676,4 +676,22 @@ pub const RAISABLE: &[Raisable] = &[
         payload: Some(|lua, value| { let read = codecs::PlayerArriveEvent.read(lua, value, "payload")?; codecs::PlayerArriveEvent.push(lua, read).map_err(|e| ApiError(e.to_string())) }),
         first: None,
     },
+    Raisable {
+        event: "room_start",
+        fields: &["room"],
+        payload: Some(|lua, value| { let read = codecs::RoomEvent.read(lua, value, "payload")?; codecs::RoomEvent.push(lua, read).map_err(|e| ApiError(e.to_string())) }),
+        first: None,
+    },
+    Raisable {
+        event: "room_finish",
+        fields: &["room"],
+        payload: Some(|lua, value| { let read = codecs::RoomEvent.read(lua, value, "payload")?; codecs::RoomEvent.push(lua, read).map_err(|e| ApiError(e.to_string())) }),
+        first: None,
+    },
+    Raisable {
+        event: "room_close",
+        fields: &["room"],
+        payload: Some(|lua, value| { let read = codecs::RoomEvent.read(lua, value, "payload")?; codecs::RoomEvent.push(lua, read).map_err(|e| ApiError(e.to_string())) }),
+        first: None,
+    },
 ];

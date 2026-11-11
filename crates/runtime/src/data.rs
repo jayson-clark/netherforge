@@ -91,13 +91,15 @@ impl ScriptData {
             }
             match table.carried.take() {
                 Some(text) => Some(text),
-                // A room's own named tables start empty: the store's are the main room's.
-                None if !saved_by(shared, &owner) => None,
-                None => {
-                    let read = shared.instance.store.data(&owner);
-                    table.saved.clone_from(&read);
-                    read
-                }
+                None => match stored_as(shared, &owner) {
+                    // A room without a key has named tables of its own, empty as it opens.
+                    None => None,
+                    Some(stored) => {
+                        let read = shared.instance.store.data(&stored);
+                        table.saved.clone_from(&read);
+                        read
+                    }
+                },
             }
         };
         let made = match text
@@ -161,9 +163,11 @@ impl ScriptData {
             return Some(text);
         }
         table.too_big = false;
-        if table.saved.as_deref() != Some(text.as_str()) && saved_by(shared, owner) {
+        if table.saved.as_deref() != Some(text.as_str())
+            && let Some(stored) = stored_as(shared, owner)
+        {
             table.saved = Some(text.clone());
-            shared.instance.store.put_data(owner, text.clone());
+            shared.instance.store.put_data(&stored, text.clone());
         }
         Some(text)
     }
@@ -179,11 +183,20 @@ impl ScriptData {
     }
 }
 
-/// Whether `owner`'s table is kept in the store from `shared`'s room: a player's and a centity's always (they're the
-/// thing's, wherever it is), `nf.data(name)` only from the main room. A room opened beside it has its own named
-/// tables, which last as long as it does.
-fn saved_by(shared: &Shared, owner: &Owner) -> bool {
-    !matches!(owner, Owner::Named { .. }) || shared.room == crate::instance::RoomId::MAIN
+/// What `owner`'s table is kept as in the store from `shared`'s room: a player's and a centity's as themselves (they're
+/// the thing's, wherever it is), `nf.data(name)` as itself in the main room and under the room's key in a room opened
+/// with one (`<namespace>#<key>`); none for a room opened without a key, whose named tables last as long as it does.
+fn stored_as(shared: &Shared, owner: &Owner) -> Option<Owner> {
+    match owner {
+        Owner::Named { namespace, name } if shared.room != crate::instance::RoomId::MAIN => {
+            let key = shared.instance.room_key(shared.room)?;
+            Some(Owner::Named {
+                namespace: format!("{namespace}#{key}"),
+                name: name.clone(),
+            })
+        }
+        _ => Some(owner.clone()),
+    }
 }
 
 /// Saved tables as a session's service: autosave, a player's on quit, every one at the end.

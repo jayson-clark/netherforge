@@ -182,6 +182,16 @@ Has the fields and methods of [Event](#event) too.
 | `player` | [`NetworkPlayer`](types.md#networkplayer) | Who, and the server they are on now. |
 | `previous` | `string` | The server they came from. |
 
+### RoomEvent {#roomevent}
+
+Something happened to this room.
+
+Has the fields and methods of [Event](#event) too.
+
+| Field | Type | |
+| --- | --- | --- |
+| `room` | [`Room`](room.md) | The room: this one. |
+
 ## Centities and effects
 
 ### EventOptions {#eventoptions}
@@ -3206,6 +3216,16 @@ Has the fields and methods of [Event](#event) too.
 | Field | Type | |
 | --- | --- | --- |
 | `map` | [`NetworkMap`](networkmap.md) | The map. |
+
+## Rooms
+
+### RoomOptions {#roomoptions}
+
+How `nf.rooms.open` opens a room.
+
+| Field | Type | |
+| --- | --- | --- |
+| `key` | `string?` | What it's for (an owner's id, a match's): its `nf.data` tables are kept under it, so a room opened again with the same key finds them. Without one they last as long as the room. |
 
 ## Testing
 

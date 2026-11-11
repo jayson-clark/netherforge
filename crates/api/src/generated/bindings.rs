@@ -478,6 +478,33 @@ fn nf_teams_all(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Val
     Ok(MultiValue::from_vec(vec![result(lua, List(HandleOf::<handles::Team>::default()), api.nf_teams().all(&caller))?]))
 }
 
+fn nf_rooms_current(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.rooms.current needs a calling script"))? };
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Room>::default(), api.nf_rooms().current(&caller))?]))
+}
+
+fn nf_rooms_main(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.rooms.main needs a calling script"))? };
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Room>::default(), api.nf_rooms().main(&caller))?]))
+}
+
+fn nf_rooms_all(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.rooms.all needs a calling script"))? };
+    Ok(MultiValue::from_vec(vec![result(lua, List(HandleOf::<handles::Room>::default()), api.nf_rooms().all(&caller))?]))
+}
+
+fn nf_rooms_get(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.rooms.get needs a calling script"))? };
+    let a_id = arg(lua, args, 0, "id", Int)?;
+    Ok(MultiValue::from_vec(vec![result(lua, Opt(HandleOf::<handles::Room>::default()), api.nf_rooms().get(&caller, a_id))?]))
+}
+
+fn nf_rooms_open(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.rooms.open needs a calling script"))? };
+    let a_options = arg(lua, args, 0, "options", Opt(codecs::RoomOptions))?;
+    Ok(MultiValue::from_vec(vec![result(lua, HandleOf::<handles::Room>::default(), api.nf_rooms().open(&caller, a_options))?]))
+}
+
 fn nf_schedule_daily(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.schedule.daily needs a calling script"))? };
     let a_time = arg(lua, args, 0, "time", Str)?;
@@ -1218,7 +1245,7 @@ fn nf_test_player(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[V
 
 fn nf_test_raise(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let caller = crate::Caller { scope: scope.ok_or_else(|| mlua::Error::runtime("nf.test.raise needs a calling script"))? };
-    let a_event = arg(lua, args, 0, "event", Choice(&["tick", "player_join", "player_resource_pack_status", "player_quit", "player_chat", "player_interact", "player_interact_entity", "player_move", "player_teleport", "player_change_world", "player_death", "player_respawn", "player_drop_item", "player_pickup_item", "player_use_item", "player_consume_item", "player_swap_hands", "player_sneak", "player_command", "block_break", "block_place", "entity_damage", "entity_death", "entity_spawn", "world_dusk", "world_dawn", "player_input", "player_change_slot", "player_swing", "player_sprint", "player_fly", "player_jump", "player_change_game_mode", "player_change_food", "player_gain_experience", "player_change_level", "player_kick", "player_complete_advancement", "player_stop_using_item", "player_break_item", "entity_heal", "projectile_launch", "projectile_hit", "entity_shoot_bow", "entity_target", "entity_explode", "block_explode", "entity_combust", "entity_change_effect", "block_ignite", "block_burn", "block_spread", "block_flow", "block_grow", "block_fade", "block_form", "leaves_decay", "piston_extend", "piston_retract", "block_redstone", "sign_change", "block_start_break", "block_drop_item", "weather_change", "thunder_change", "lightning_strike", "chunk_load", "chunk_generated", "chunk_unload", "world_load", "world_unload", "entity_mount", "entity_dismount", "vehicle_move", "vehicle_damage", "vehicle_destroy", "player_open_inventory", "player_close_inventory", "player_click_inventory", "player_drag_inventory", "player_craft", "player_prepare_craft", "player_prepare_anvil", "player_prepare_smithing", "player_prepare_grindstone", "player_enchant_item", "furnace_smelt", "server_list_ping", "centity_click", "recipe_craft", "item_view", "centity_natural_spawn", "menu_open", "menu_close", "menu_click", "dialog_press", "setting_changed", "network_connect", "network_disconnect", "network_state", "network_server_connect", "network_server_disconnect", "network_player_join", "network_player_switch", "network_player_quit", "player_arrive"]))?;
+    let a_event = arg(lua, args, 0, "event", Choice(&["tick", "player_join", "player_resource_pack_status", "player_quit", "player_chat", "player_interact", "player_interact_entity", "player_move", "player_teleport", "player_change_world", "player_death", "player_respawn", "player_drop_item", "player_pickup_item", "player_use_item", "player_consume_item", "player_swap_hands", "player_sneak", "player_command", "block_break", "block_place", "entity_damage", "entity_death", "entity_spawn", "world_dusk", "world_dawn", "player_input", "player_change_slot", "player_swing", "player_sprint", "player_fly", "player_jump", "player_change_game_mode", "player_change_food", "player_gain_experience", "player_change_level", "player_kick", "player_complete_advancement", "player_stop_using_item", "player_break_item", "entity_heal", "projectile_launch", "projectile_hit", "entity_shoot_bow", "entity_target", "entity_explode", "block_explode", "entity_combust", "entity_change_effect", "block_ignite", "block_burn", "block_spread", "block_flow", "block_grow", "block_fade", "block_form", "leaves_decay", "piston_extend", "piston_retract", "block_redstone", "sign_change", "block_start_break", "block_drop_item", "weather_change", "thunder_change", "lightning_strike", "chunk_load", "chunk_generated", "chunk_unload", "world_load", "world_unload", "entity_mount", "entity_dismount", "vehicle_move", "vehicle_damage", "vehicle_destroy", "player_open_inventory", "player_close_inventory", "player_click_inventory", "player_drag_inventory", "player_craft", "player_prepare_craft", "player_prepare_anvil", "player_prepare_smithing", "player_prepare_grindstone", "player_enchant_item", "furnace_smelt", "server_list_ping", "centity_click", "recipe_craft", "item_view", "centity_natural_spawn", "menu_open", "menu_close", "menu_click", "dialog_press", "setting_changed", "network_connect", "network_disconnect", "network_state", "network_server_connect", "network_server_disconnect", "network_player_join", "network_player_switch", "network_player_quit", "player_arrive", "room_start", "room_finish", "room_close"]))?;
     let a_payload = arg(lua, args, 1, "payload", ANY)?;
     Ok(MultiValue::from_vec(vec![result(lua, codecs::RaisedEvent, api.nf_test().raise(&caller, a_event, a_payload))?]))
 }
@@ -7209,6 +7236,107 @@ fn team_remove(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Valu
     Ok(MultiValue::from_vec(vec![result(lua, Bool, api.team().remove(&this))?]))
 }
 
+fn room_id(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Room>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Room methods with ':' (Room:id)"));
+    };
+    let this = HandleOf::<handles::Room>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![result(lua, Int, api.room().id(&this))?]))
+}
+
+fn room_key(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Room>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Room methods with ':' (Room:key)"));
+    };
+    let this = HandleOf::<handles::Room>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![result(lua, Opt(Str), api.room().key(&this))?]))
+}
+
+fn room_is_main(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Room>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Room methods with ':' (Room:is_main)"));
+    };
+    let this = HandleOf::<handles::Room>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.room().is_main(&this))?]))
+}
+
+fn room_state(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Room>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Room methods with ':' (Room:state)"));
+    };
+    let this = HandleOf::<handles::Room>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![result(lua, Choice(&["opening", "open", "started", "finished", "closed"]), api.room().state(&this))?]))
+}
+
+fn room_players(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Room>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Room methods with ':' (Room:players)"));
+    };
+    let this = HandleOf::<handles::Room>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![result(lua, List(HandleOf::<handles::Player>::default()), api.room().players(&this))?]))
+}
+
+fn room_worlds(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Room>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Room methods with ':' (Room:worlds)"));
+    };
+    let this = HandleOf::<handles::Room>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![result(lua, List(HandleOf::<handles::World>::default()), api.room().worlds(&this))?]))
+}
+
+fn room_start(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Room>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Room methods with ':' (Room:start)"));
+    };
+    let this = HandleOf::<handles::Room>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.room().start(&this))?]))
+}
+
+fn room_finish(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Room>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Room methods with ':' (Room:finish)"));
+    };
+    let this = HandleOf::<handles::Room>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.room().finish(&this))?]))
+}
+
+fn room_close(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Room>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Room methods with ':' (Room:close)"));
+    };
+    let this = HandleOf::<handles::Room>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.room().close(&this))?]))
+}
+
+fn room_send(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Room>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Room methods with ':' (Room:send)"));
+    };
+    let this = HandleOf::<handles::Room>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_player = arg(lua, args, 1, "player", HandleOf::<handles::Player>::default())?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.room().send(&this, a_player))?]))
+}
+
+fn room_give_world(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Room>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Room methods with ':' (Room:give_world)"));
+    };
+    let this = HandleOf::<handles::Room>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    let a_world = arg(lua, args, 1, "world", HandleOf::<handles::World>::default())?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.room().give_world(&this, a_world))?]))
+}
+
 fn database_query(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::Database>::default().accepts(v)).cloned() else {
@@ -9802,6 +9930,11 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "nf.teams", name: "create", method: false, waits: false, call: nf_teams_create },
     Binding { class: "nf.teams", name: "get", method: false, waits: false, call: nf_teams_get },
     Binding { class: "nf.teams", name: "all", method: false, waits: false, call: nf_teams_all },
+    Binding { class: "nf.rooms", name: "current", method: false, waits: false, call: nf_rooms_current },
+    Binding { class: "nf.rooms", name: "main", method: false, waits: false, call: nf_rooms_main },
+    Binding { class: "nf.rooms", name: "all", method: false, waits: false, call: nf_rooms_all },
+    Binding { class: "nf.rooms", name: "get", method: false, waits: false, call: nf_rooms_get },
+    Binding { class: "nf.rooms", name: "open", method: false, waits: false, call: nf_rooms_open },
     Binding { class: "nf.schedule", name: "daily", method: false, waits: false, call: nf_schedule_daily },
     Binding { class: "nf.schedule", name: "weekly", method: false, waits: false, call: nf_schedule_weekly },
     Binding { class: "nf.schedule", name: "cron", method: false, waits: false, call: nf_schedule_cron },
@@ -10509,6 +10642,17 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "Team", name: "collision", method: true, waits: false, call: team_collision },
     Binding { class: "Team", name: "set_collision", method: true, waits: false, call: team_set_collision },
     Binding { class: "Team", name: "remove", method: true, waits: false, call: team_remove },
+    Binding { class: "Room", name: "id", method: true, waits: false, call: room_id },
+    Binding { class: "Room", name: "key", method: true, waits: false, call: room_key },
+    Binding { class: "Room", name: "is_main", method: true, waits: false, call: room_is_main },
+    Binding { class: "Room", name: "state", method: true, waits: false, call: room_state },
+    Binding { class: "Room", name: "players", method: true, waits: false, call: room_players },
+    Binding { class: "Room", name: "worlds", method: true, waits: false, call: room_worlds },
+    Binding { class: "Room", name: "start", method: true, waits: false, call: room_start },
+    Binding { class: "Room", name: "finish", method: true, waits: false, call: room_finish },
+    Binding { class: "Room", name: "close", method: true, waits: false, call: room_close },
+    Binding { class: "Room", name: "send", method: true, waits: false, call: room_send },
+    Binding { class: "Room", name: "give_world", method: true, waits: false, call: room_give_world },
     Binding { class: "Database", name: "query", method: true, waits: true, call: database_query },
     Binding { class: "Database", name: "execute", method: true, waits: true, call: database_execute },
     Binding { class: "Database", name: "transaction", method: true, waits: true, call: database_transaction },

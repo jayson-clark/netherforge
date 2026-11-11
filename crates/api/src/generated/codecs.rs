@@ -5903,6 +5903,46 @@ impl Codec for PlayerArriveEvent {
 }
 
 #[derive(Clone, Copy, Default)]
+pub struct RoomEvent;
+impl Codec for RoomEvent {
+    type T = shapes::RoomEvent;
+    fn expected(&self) -> String { "RoomEvent".into() }
+    fn accepts(&self, value: &Value) -> bool { matches!(value, Value::Table(t) if t.metatable().is_none()) }
+    fn read(&self, lua: &Lua, value: Value, at: &str) -> crate::ApiResult<shapes::RoomEvent> {
+        let t = shape_table(&value, at, "RoomEvent", &["room"])?;
+        let _ = (&lua, &t);
+        Ok(shapes::RoomEvent {
+            room: field(lua, t, at, "room", HandleOf::<handles::Room>::default())?,
+        })
+    }
+    fn push(&self, lua: &Lua, value: shapes::RoomEvent) -> mlua::Result<Value> {
+        let t: Table = lua.create_table_with_capacity(0, 1)?;
+        set_field(lua, &t, "room", HandleOf::<handles::Room>::default(), value.room)?;
+        Ok(Value::Table(t))
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct RoomOptions;
+impl Codec for RoomOptions {
+    type T = shapes::RoomOptions;
+    fn expected(&self) -> String { "RoomOptions".into() }
+    fn accepts(&self, value: &Value) -> bool { matches!(value, Value::Table(t) if t.metatable().is_none()) }
+    fn read(&self, lua: &Lua, value: Value, at: &str) -> crate::ApiResult<shapes::RoomOptions> {
+        let t = shape_table(&value, at, "RoomOptions", &["key"])?;
+        let _ = (&lua, &t);
+        Ok(shapes::RoomOptions {
+            key: field(lua, t, at, "key", Opt(Str))?,
+        })
+    }
+    fn push(&self, lua: &Lua, value: shapes::RoomOptions) -> mlua::Result<Value> {
+        let t: Table = lua.create_table_with_capacity(0, 1)?;
+        set_field(lua, &t, "key", Opt(Str), value.key)?;
+        Ok(Value::Table(t))
+    }
+}
+
+#[derive(Clone, Copy, Default)]
 pub struct ParticlePlayOptions;
 impl Codec for ParticlePlayOptions {
     type T = shapes::ParticlePlayOptions;

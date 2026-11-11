@@ -1395,7 +1395,7 @@ fn every_room_hears_the_network_and_a_request_is_answered_once() {
     );
     let platform = Platform::default();
     let mut session = start(&files, &platform, dev(), None);
-    let room = session.open_room().expect("a room");
+    let room = session.open_room(None).expect("a room");
     for _ in 0..3 {
         session.tick();
     }

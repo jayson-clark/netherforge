@@ -212,6 +212,14 @@ What `nf.on` listens for.
 | `network_player_switch` | [NetworkPlayerSwitchEvent](types.md#networkplayerswitchevent) | A player went from one server of the network to another, whoever moved them (a command on the proxy, a script). |
 | `network_player_quit` | [NetworkPlayerEvent](types.md#networkplayerevent) | A player left the network: they were on `event.player.server` and are now on none. |
 
+### This room
+
+| Event | Payload | |
+| --- | --- | --- |
+| `room_start` | [RoomEvent](types.md#roomevent) | This room's match began: `room:start()` was called (by this room's scripts, another room's, or the server's owner through the admin API). Before it, the room is open: players can be sent in and the world got ready. |
+| `room_finish` | [RoomEvent](types.md#roomevent) | This room's match ended: `room:finish()` was called. Its players are still here; the room closes when it's told to (`room:close()`), which is where a game says who won and sends everyone on. |
+| `room_close` | [RoomEvent](types.md#roomevent) | This room is about to close: its scripts' last chance, before its players go back to the main room and its Lua state ends. Its worlds are the main room's afterwards. |
+
 #### Example: nf tick
 
 ```lua
@@ -408,6 +416,16 @@ end)
 nf.on("player_arrive", function(event)
   if event.data and event.data.kit == "archer" then
     event.player:give_item({ kind = "minecraft:bow" })
+  end
+end)
+```
+
+#### Example: nf room_start
+
+```lua
+nf.on("room_start", function(event)
+  for _, player in ipairs(nf.players.online()) do
+    player:send_title("<green>Go!")
   end
 end)
 ```

@@ -46,6 +46,7 @@ import { statShapes } from './stats.ts'
 import { playerShapes } from './players.ts'
 import { blockClass, worldBorderClass, worldClass, worldShapes } from './worlds.ts'
 import { teamClass, teamShapes } from './teams.ts'
+import { roomClass, roomShapes } from './rooms.ts'
 import { scheduleClass, scheduleShapes } from './schedule.ts'
 import { randomClass, utilityShapes } from './utilities.ts'
 import { encodingShapes } from './encoding.ts'
@@ -118,6 +119,7 @@ const classes = [
   bossBarClass,
   sidebarClass,
   teamClass,
+  roomClass,
   databaseClass,
   menuClass,
   slotClass,
@@ -212,6 +214,7 @@ export const api: ApiSpec = {
     ...wasmShapes,
     ...networkShapes,
     ...networkEventShapes,
+    ...roomShapes,
     ...particleShapes,
     ...cutsceneShapes,
     ...screenShapes,

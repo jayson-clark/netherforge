@@ -203,6 +203,12 @@ pub struct Team {
     pub name: String,
 }
 
+/// A room of the server: one copy of the project with its own Lua state, its own players and its own worlds. The main room is always there (it holds every world and player no other room does, and it's the only one on a server that never opens another); the others are opened by `nf.rooms.open` or the server's owner, and closed once their match is over. A room's scripts reach nothing of another room's except through these methods. Once it has closed its methods answer `nil` or `false`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Room {
+    pub id: i64,
+}
+
 /// A database, from `nf.db()` or `nf.db('network')`. `nf.db()` is this package's own: one SQLite file per package, kept across restarts, which every other package (a dependency, or the project using one) never sees; its tables are made by the package's `migrations/NNN_name.sql` files, applied in order when the project loads. `nf.db('network')` (a name) is a connection to a MySQL or PostgreSQL server that the server's owner set up under `databases:` in the plugin's `config.yml`: shared by every package the owner lists for it, so give tables a name no other package would (`shop_scores`), create them yourself (`CREATE TABLE IF NOT EXISTS`: migrations belong to the package's own database only), and write the SQL in the server's dialect. The handle is the same either way: the same calls, `?` and `params`, rows and `value, err` answers. Every function is asynchronous (see `nf.task`): the work runs on a background thread, so a slow query never holds up the server, and one database runs its work in the order it was given, so a task's `db:execute` is always done before its next `db:query`. Use it from a task (`local rows, err = db:query(...)`) or give a callback. A mistake in the SQL, a constraint a row breaks or a database that couldn't be migrated is `nil, err`, never a thrown error.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Database {
@@ -400,6 +406,7 @@ pub enum Handle {
     BossBar(BossBar),
     Sidebar(Sidebar),
     Team(Team),
+    Room(Room),
     Database(Database),
     Menu(Menu),
     Slot(Slot),
@@ -453,6 +460,7 @@ impl Handle {
             Handle::BossBar(_) => "BossBar",
             Handle::Sidebar(_) => "Sidebar",
             Handle::Team(_) => "Team",
+            Handle::Room(_) => "Room",
             Handle::Database(_) => "Database",
             Handle::Menu(_) => "Menu",
             Handle::Slot(_) => "Slot",
@@ -506,6 +514,7 @@ pub const CHAINS: &[&[&str]] = &[
     &["BossBar"],
     &["Sidebar"],
     &["Team"],
+    &["Room"],
     &["Database"],
     &["Menu"],
     &["Slot"],
@@ -838,6 +847,21 @@ impl HandleClass for Team {
     fn from_key(key: &[KeyPart]) -> Option<Self> {
         match key {
             [KeyPart::Str(name)] => Some(Team { name: name.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl HandleClass for Room {
+    const NAME: &'static str = "Room";
+    const ROOT: &'static str = "Room";
+    const CLASSES: &'static [&'static str] = &["Room"];
+    fn key(&self) -> Key {
+        vec![KeyPart::Int(self.id.clone())]
+    }
+    fn from_key(key: &[KeyPart]) -> Option<Self> {
+        match key {
+            [KeyPart::Int(id)] => Some(Room { id: id.clone() }),
             _ => None,
         }
     }
@@ -1272,6 +1296,7 @@ impl Handle {
             Handle::BossBar(h) => h.key(),
             Handle::Sidebar(h) => h.key(),
             Handle::Team(h) => h.key(),
+            Handle::Room(h) => h.key(),
             Handle::Database(h) => h.key(),
             Handle::Menu(h) => h.key(),
             Handle::Slot(h) => h.key(),
@@ -1325,6 +1350,7 @@ impl Handle {
             "BossBar" => BossBar::from_key(key).map(Handle::BossBar),
             "Sidebar" => Sidebar::from_key(key).map(Handle::Sidebar),
             "Team" => Team::from_key(key).map(Handle::Team),
+            "Room" => Room::from_key(key).map(Handle::Room),
             "Database" => Database::from_key(key).map(Handle::Database),
             "Menu" => Menu::from_key(key).map(Handle::Menu),
             "Slot" => Slot::from_key(key).map(Handle::Slot),

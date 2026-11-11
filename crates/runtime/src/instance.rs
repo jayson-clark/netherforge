@@ -129,6 +129,12 @@ pub struct Instance {
     pub next_bar: std::cell::Cell<i32>,
     /// The rooms open now, the main room among them.
     pub open: RefCell<std::collections::BTreeSet<RoomId>>,
+    /// Every room there is (opening or closing ones too): what it's for and where it is in its life.
+    pub rooms: RefCell<std::collections::BTreeMap<RoomId, crate::rooms::RoomInfo>>,
+    /// What scripts asked of the rooms this tick, for the session at its end.
+    pub room_requests: RefCell<Vec<crate::rooms::RoomRequest>>,
+    /// The last room number given.
+    last_room: std::cell::Cell<u32>,
     /// The players being moved between rooms right now: what the server holds for everyone (the pack, their
     /// permissions, their presence on the network) doesn't hear them leave or arrive.
     moving: RefCell<std::collections::HashSet<Uuid>>,
@@ -202,6 +208,18 @@ impl Instance {
             commands: RefCell::default(),
             recipes: RefCell::default(),
             open: RefCell::new([RoomId::MAIN].into()),
+            rooms: RefCell::new(
+                [(
+                    RoomId::MAIN,
+                    crate::rooms::RoomInfo {
+                        key: None,
+                        state: crate::rooms::RoomState::Open,
+                    },
+                )]
+                .into(),
+            ),
+            room_requests: RefCell::default(),
+            last_room: Default::default(),
             moving: RefCell::default(),
             network_inbound: RefCell::default(),
             network_listening: RefCell::default(),
@@ -215,6 +233,18 @@ impl Instance {
             .entry(name)
             .or_insert_with(|| crate::http::Workers::lane(&format!("NetherForge {name}")))
             .clone()
+    }
+
+    /// The next room's number: never one given before while the server runs.
+    pub fn next_room_id(&self) -> RoomId {
+        let id = self.last_room.get() + 1;
+        self.last_room.set(id);
+        RoomId(id)
+    }
+
+    /// What room `room` is for (an owner's id, a match's), when it was opened with a key.
+    pub fn room_key(&self, room: RoomId) -> Option<String> {
+        self.rooms.borrow().get(&room).and_then(|r| r.key.clone())
     }
 
     /// Whether `player` is being moved between rooms now.
