@@ -324,6 +324,29 @@ fn running_out_of_memory_fails_the_call_and_blames_the_holder() {
 }
 
 #[test]
+fn the_limit_holds_only_while_a_script_runs_and_the_hosts_own_memory_counts() {
+    let host = small_host();
+    let scope = host.open_scope("s", "s").unwrap();
+    // Between calls the host builds what it hands scripts without the limit (mlua's fast path), so it may go past it.
+    let big = host.lua().create_string("x".repeat(40 * 1024 * 1024)).unwrap();
+    // A script's next allocation, past the limit, fails as running out does.
+    let result = host.run::<()>(scope, BUDGET, "s.lua", "local t = {} for i = 1, 1000 do t[i] = {} end");
+    assert_eq!(result.unwrap_err(), Failure::Memory);
+    drop(big);
+    host.lua().gc_collect().unwrap();
+    // Once it's let go, scripts run again, and a call that went past the limit didn't leave it off.
+    host.run::<()>(scope, BUDGET, "s.lua", "local t = {} for i = 1, 1000 do t[i] = {} end")
+        .unwrap();
+    let hog = host.run::<()>(
+        scope,
+        u64::MAX,
+        "hog.lua",
+        "kept = {} for i = 1, 1e9 do kept[i] = string.rep('x', 1000) .. i end",
+    );
+    assert_eq!(hog.unwrap_err(), Failure::Memory);
+}
+
+#[test]
 fn instances_of_one_script_share_its_memory_key() {
     let host = small_host();
     let one = host.open_scope("tower 1", "centities/tower").unwrap();
