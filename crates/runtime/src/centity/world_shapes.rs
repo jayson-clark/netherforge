@@ -4,7 +4,8 @@
 //! the world changes between ticks.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+/// foldhash, not SipHash: a mover reads its region every tick, keyed by nothing an attacker picks.
+type HashMap<K, V> = std::collections::HashMap<K, V, foldhash::fast::RandomState>;
 
 use netherforge_format::math::{BoundingBox, Vec3};
 use netherforge_platform::WorldOps;
@@ -43,7 +44,7 @@ impl<'w> RegionShapes<'w> {
             size,
             cells: vec![None; (size.0.max(0) * size.1.max(0) * size.2.max(0)) as usize],
         };
-        let mut loaded: HashMap<(i32, i32), bool> = HashMap::new();
+        let mut loaded: HashMap<(i32, i32), bool> = HashMap::default();
         for x in 0..size.0 {
             for z in 0..size.2 {
                 let chunk = ((x0 + x) >> 4, (z0 + z) >> 4);

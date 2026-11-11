@@ -19,7 +19,9 @@
 //! hears `collide` for what its body started touching, and `wake` and `sleep` when it changed between moving
 //! and settled. Velocities are blocks a second; spin is degrees a second to scripts, radians here.
 
-use std::collections::{HashMap, HashSet};
+/// foldhash, not SipHash: these maps are read every tick (bodies, sections, chunks), keyed by nothing an attacker picks.
+type HashMap<K, V> = std::collections::HashMap<K, V, foldhash::fast::RandomState>;
+type HashSet<K> = std::collections::HashSet<K, foldhash::fast::RandomState>;
 use std::rc::Rc;
 
 use netherforge_format::game::GameData;
@@ -216,8 +218,8 @@ impl World {
             rapier,
             events,
             collector: ChannelEventCollector::new(collisions, forces, tears),
-            sections: HashMap::new(),
-            scenery: HashMap::new(),
+            sections: HashMap::default(),
+            scenery: HashMap::default(),
         }
     }
 
@@ -380,8 +382,8 @@ impl Physics {
         self.tick += 1;
         let game = platform.game();
         let ids: Vec<Uuid> = centities.all().map(|i| i.id).collect();
-        let mut live: HashSet<(Uuid, String)> = HashSet::new();
-        let mut worlds_with_bodies: HashSet<String> = HashSet::new();
+        let mut live: HashSet<(Uuid, String)> = HashSet::default();
+        let mut worlds_with_bodies: HashSet<String> = HashSet::default();
         for id in &ids {
             let Some(instance) = centities.get_mut(*id) else {
                 continue;
@@ -659,7 +661,7 @@ impl Physics {
     /// Fixed colliders for the blocks around every awake body in `name`.
     fn blocks(&mut self, platform: &dyn Platform, name: &str, tick: u64) {
         let world = self.worlds.get_mut(name).expect("made");
-        let mut needed: HashSet<(i32, i32, i32)> = HashSet::new();
+        let mut needed: HashSet<(i32, i32, i32)> = HashSet::default();
         for (_, body) in world.rapier.bodies.iter() {
             if !body.is_dynamic() || body.is_sleeping() {
                 continue;
@@ -786,7 +788,7 @@ impl Physics {
     fn write_back(&mut self, centities: &mut super::Centities) -> Vec<Settled> {
         let mut settled = Vec::new();
         let keys: Vec<(Uuid, String)> = self.bodies.keys().cloned().collect();
-        let mut touched: HashSet<Uuid> = HashSet::new();
+        let mut touched: HashSet<Uuid> = HashSet::default();
         for key in keys {
             let entry = &self.bodies[&key];
             let Some(world) = self.worlds.get_mut(&entry.world) else {
