@@ -69,15 +69,16 @@ pub trait EventSession {
 
 /// A UUID as text, as handles key on it: `8-4-4-4-12` hex digits, lower case.
 pub fn uuid_text(id: &Uuid) -> String {
-    let hex = format!("{:032x}", id.0);
-    format!(
-        "{}-{}-{}-{}-{}",
-        &hex[0..8],
-        &hex[8..12],
-        &hex[12..16],
-        &hex[16..20],
-        &hex[20..32]
-    )
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut text = String::with_capacity(36);
+    for i in 0..32 {
+        if matches!(i, 8 | 12 | 16 | 20) {
+            text.push('-');
+        }
+        let nibble = (id.0 >> (124 - 4 * i)) & 0xf;
+        text.push(HEX[nibble as usize] as char);
+    }
+    text
 }
 
 /// A UUID from its text (`uuid_text`'s, or without the dashes, either case); none for anything else.
@@ -531,5 +532,22 @@ impl Around for Running<'_, '_> {
             self.session.block_changed(&event.block);
         }
         cancelled
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_uuid_is_written_as_java_writes_it_and_read_back() {
+        let id = Uuid(0x0123_4567_89ab_cdef_0011_2233_4455_6677);
+        assert_eq!(uuid_text(&id), "01234567-89ab-cdef-0011-223344556677");
+        assert_eq!(uuid_text(&Uuid(0)), "00000000-0000-0000-0000-000000000000");
+        assert_eq!(
+            uuid_text(&Uuid(u128::MAX)),
+            "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        );
+        assert_eq!(parse_uuid(&uuid_text(&id)), Some(id));
     }
 }

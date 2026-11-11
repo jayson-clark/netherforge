@@ -27,9 +27,15 @@ pub struct Writer {
     pub bytes: Vec<u8>,
 }
 
+/// What a call's arguments start with room for: most calls' (a location, a pose, a few ids) fit, so writing them
+/// doesn't grow the buffer field by field.
+const START: usize = 256;
+
 impl Writer {
     pub fn new() -> Writer {
-        Writer::default()
+        Writer {
+            bytes: Vec::with_capacity(START),
+        }
     }
 
     pub fn u8(&mut self, v: u8) {

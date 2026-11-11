@@ -1673,6 +1673,8 @@ dependencies = [
 name = "netherforge-platform"
 version = "0.0.0"
 dependencies = [
+ "foldhash 0.2.0",
+ "indexmap",
  "netherforge-format",
 ]
 

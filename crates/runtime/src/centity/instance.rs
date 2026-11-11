@@ -143,7 +143,7 @@ pub struct Instance {
     /// Node name → its hitbox's interaction entity.
     pub hitboxes: IndexMap<String, Uuid>,
     /// Each hitbox entity's box as last sent.
-    pub pushed_hitboxes: HashMap<Uuid, super::hitboxes::Bounds>,
+    pub pushed_hitboxes: netherforge_platform::UuidMap<super::hitboxes::Bounds>,
     /// The invisible entity at the anchor every display rides: moving the centity is one teleport of it.
     pub anchor_entity: Option<Uuid>,
     /// The entities known to ride the anchor entity now.
@@ -238,10 +238,10 @@ pub struct Instance {
     /// `placed`, kept until the pose or facing changes.
     placed_cache: Option<Vec<Matrix4>>,
 
-    pub pushed_poses: HashMap<Uuid, PushedPose>,
-    pub pushed_looks: HashMap<Uuid, DisplayLook>,
+    pub pushed_poses: netherforge_platform::UuidMap<PushedPose>,
+    pub pushed_looks: netherforge_platform::UuidMap<DisplayLook>,
     /// Where each billboarded display was last put: one stands on its own at its node.
-    pub pushed_spots: HashMap<Uuid, Location>,
+    pub pushed_spots: netherforge_platform::UuidMap<Location>,
 }
 
 impl Instance {
@@ -258,7 +258,7 @@ impl Instance {
             yaw: wrap_degrees(yaw),
             displays: IndexMap::new(),
             hitboxes: IndexMap::new(),
-            pushed_hitboxes: HashMap::new(),
+            pushed_hitboxes: Default::default(),
             anchor_entity: None,
             riders: HashSet::new(),
             orphans: Vec::new(),
@@ -306,9 +306,9 @@ impl Instance {
             due: Vec::new(),
             pose_dirty: true,
             placed_cache: None,
-            pushed_poses: HashMap::new(),
-            pushed_looks: HashMap::new(),
-            pushed_spots: HashMap::new(),
+            pushed_poses: Default::default(),
+            pushed_looks: Default::default(),
+            pushed_spots: Default::default(),
         };
         instance.redefine(definition);
         instance

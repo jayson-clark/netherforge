@@ -32,6 +32,13 @@ pub use terrain::{GeneratedChunk, GeneratedLoot, SharedTerrain, TerrainSource, T
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Uuid(pub u128);
 
+/// What maps and sets keyed by [Uuid] hash with: foldhash's fast hasher, not SipHash. Seeded per process, so keys can't
+/// be picked to collide; the runtime looks its centities, entities and players up by UUID every tick.
+pub type UuidHasher = foldhash::fast::RandomState;
+pub type UuidMap<V> = std::collections::HashMap<Uuid, V, UuidHasher>;
+pub type UuidSet = std::collections::HashSet<Uuid, UuidHasher>;
+pub type UuidIndexMap<V> = indexmap::IndexMap<Uuid, V, UuidHasher>;
+
 /// What went wrong on the other side: its message (the server's exception's).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlatformError {

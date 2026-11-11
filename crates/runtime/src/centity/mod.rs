@@ -31,12 +31,12 @@ pub mod world_shapes;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
 
-use indexmap::IndexMap;
 use netherforge_format::kind::centity::DisplayDef;
 use netherforge_format::kind::centity::compiled::CompiledCentity;
 use netherforge_format::math::Matrix4;
 use netherforge_platform::{
     DisplayLook, DisplayPose, EntityOps, EntityRole, EntityTag, Location, Platform, Uuid,
+    UuidIndexMap, UuidMap,
 };
 
 pub use instance::Instance;
@@ -48,9 +48,9 @@ pub const ANCHOR_NODE: &str = "";
 #[derive(Default)]
 pub struct Centities {
     definitions: BTreeMap<String, Rc<CompiledCentity>>,
-    instances: IndexMap<Uuid, Instance>,
+    instances: UuidIndexMap<Instance>,
     /// Each entity of ours, by its instance and node.
-    owners: HashMap<Uuid, (Uuid, String)>,
+    owners: UuidMap<(Uuid, String)>,
     /// Where every instance's hitboxes are, by world cell.
     grid: spatial::Grid,
     /// The instances reshaped since the grid last filed them: each instance holds this set too.
@@ -58,9 +58,9 @@ pub struct Centities {
     /// The namespace the project's own centities are named in.
     home: String,
     /// Records whose centity is gone, kept until it comes back.
-    inert: IndexMap<Uuid, crate::store::InstanceRecord>,
+    inert: UuidIndexMap<crate::store::InstanceRecord>,
     /// Where each stored instance was last stored, so an unmoved one isn't written again.
-    stored: HashMap<Uuid, (Location, f64)>,
+    stored: UuidMap<(Location, f64)>,
     /// Instances whose identity changed since the store last heard.
     changed: indexmap::IndexSet<Uuid>,
     /// Anchored texts already warned about, so one set every tick warns once.

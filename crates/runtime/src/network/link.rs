@@ -596,7 +596,10 @@ fn process_started() -> Option<Instant> {
 /// How long ago a process started, from its `/proc/<pid>/stat` and the system's `/proc/uptime`.
 fn process_age(stat: &str, uptime: &str) -> Option<std::time::Duration> {
     // The command name, in parentheses, may hold spaces: fields count from after its last `)`.
-    let fields: Vec<&str> = stat.get(stat.rfind(')')? + 1..)?.split_whitespace().collect();
+    let fields: Vec<&str> = stat
+        .get(stat.rfind(')')? + 1..)?
+        .split_whitespace()
+        .collect();
     // `starttime` is field 22; after the name, field 3 is the first here.
     let started_ticks: f64 = fields.get(22 - 3)?.parse().ok()?;
     let up: f64 = uptime.split_whitespace().next()?.parse().ok()?;

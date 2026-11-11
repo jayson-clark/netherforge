@@ -400,13 +400,12 @@ fn a_function_another_packages_timer_runs_names_things_as_its_own_package() {
     let lines = platform.take();
     // The project's function, run by acme's timer, is still the project's code; acme's own is acme's.
     assert!(
-        lines.iter().any(|l| l.starts_with("info [module shop] demo:p/box")),
+        lines
+            .iter()
+            .any(|l| l.starts_with("info [module shop] demo:p/box")),
         "{lines:?}"
     );
-    assert!(
-        lines.iter().any(|l| l.contains("acme:p/gem")),
-        "{lines:?}"
-    );
+    assert!(lines.iter().any(|l| l.contains("acme:p/gem")), "{lines:?}");
 }
 
 #[test]
