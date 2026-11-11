@@ -47,6 +47,7 @@ pub mod files;
 pub mod http;
 pub mod huds;
 pub mod images;
+pub mod instance;
 pub mod interop;
 pub mod inventory;
 pub mod items;

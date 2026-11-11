@@ -932,9 +932,11 @@ impl ScreensContext {
                     .remove(&(screen.namespace.clone(), key.clone()))
                 {
                     for tile in tiles.keys() {
-                        self.shared
-                            .store
-                            .forget_screen_map(&screen.namespace, &key, *tile);
+                        self.shared.instance.store.forget_screen_map(
+                            &screen.namespace,
+                            &key,
+                            *tile,
+                        );
                     }
                 }
             }
@@ -1194,7 +1196,14 @@ impl GameContext {
         } else {
             netherforge_format::kinds::package_path(&key.namespace, pack)
         };
-        if !self.shared.packs.borrow().pack_files.contains(&name) {
+        if !self
+            .shared
+            .instance
+            .packs
+            .borrow()
+            .pack_files
+            .contains(&name)
+        {
             let elsewhere = if key.namespace != from {
                 format!(" in package \"{}\"", key.namespace)
             } else {
@@ -1315,7 +1324,7 @@ impl NfScreensApi for GameContext {
         };
         let key = options.key.as_ref().map(|k| format!("key:{k}"));
         let maps = screens.maps(
-            &self.shared.store,
+            &self.shared.instance.store,
             &namespace,
             key.as_deref(),
             columns,
@@ -2132,7 +2141,7 @@ impl ScreensService {
 
     fn define(&self, project: &Define) {
         let platform = project.platform;
-        let store = &self.shared.store;
+        let store = &self.shared.instance.store;
         let home = project.project.namespace().to_owned();
         let mut screens = self.shared.screens.borrow_mut();
         screens.kept = store.screen_maps();
@@ -2184,7 +2193,7 @@ impl ScreensService {
         if !exists {
             let Some(next) = next else { return };
             let screen = self.shared.screens.borrow_mut().project_screen(
-                &self.shared.store,
+                &self.shared.instance.store,
                 platform,
                 id,
                 &next,
@@ -2224,7 +2233,7 @@ impl ScreensService {
             let bare = netherforge_format::kinds::split_package(id).1.to_owned();
             let mut screens = self.shared.screens.borrow_mut();
             let maps = screens.maps(
-                &self.shared.store,
+                &self.shared.instance.store,
                 &namespace,
                 Some(&format!("screen:{bare}")),
                 next.width,

@@ -121,7 +121,7 @@ impl<'a> ServerEvents<'a> {
     /// lines and errors go to its console. The session should run on `bridge.platform()`, so the runtime's own log
     /// lines reach the editor too.
     pub fn attach_bridge(&self, bridge: Rc<crate::bridge::Bridge>) {
-        *self.session().shared().console.borrow_mut() = Some(bridge.console());
+        *self.session().shared().instance.console.borrow_mut() = Some(bridge.console());
         self.profiler().attach_bridge(bridge.clone());
         let debugger =
             crate::debug::Debugger::new(bridge.dap_sender(), Some(bridge.config().project.clone()));
@@ -350,7 +350,7 @@ impl<'a> ServerEvents<'a> {
         let wanted = match self.any() {
             Some(session) => {
                 session.tick();
-                session.shared().packs.borrow().wanted
+                session.shared().instance.packs.borrow().wanted
             }
             None => false,
         };
@@ -901,7 +901,7 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         let s = self.open()?;
         let shared = s.session().shared().clone();
         let log = shared.platform.log();
-        let Some(id) = shared.loot.borrow().id_of(&table) else {
+        let Some(id) = shared.instance.loot.borrow().id_of(&table) else {
             log.warn(format!(
                 "A generated container at {} {} {} {} names the loot table \"{table}\", which isn't running: it's left empty",
                 location.world, location.x as i64, location.y as i64, location.z as i64
@@ -954,6 +954,7 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         let changed = s
             .session()
             .shared()
+            .instance
             .packs
             .borrow_mut()
             .status_changed(player, pack, status);
@@ -963,7 +964,7 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         // The project's pack loaded: the network hears it, for the next server they go to.
         if name.is_none() && status == crate::packs::LOADED {
             let shared = s.session().shared().clone();
-            let sent = shared.packs.borrow().sent_to(player);
+            let sent = shared.instance.packs.borrow().sent_to(player);
             if let Some(sha1) = sent {
                 crate::packs::tell_network_loaded(&shared, player, sha1);
             }

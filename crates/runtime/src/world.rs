@@ -1179,12 +1179,15 @@ impl WorldApi for GameContext {
         };
         // It reads only what the world's generator reads, and can take seconds: on its lane, off the main thread.
         let (send, receive) = std::sync::mpsc::channel();
-        self.shared.lane(BIOME_SEARCH_LANE).submit(move || {
-            let found = search
-                .run()
-                .ok_or_else(|| format!("no {biome} within {radius} blocks"));
-            let _ = send.send(found);
-        });
+        self.shared
+            .instance
+            .lane(BIOME_SEARCH_LANE)
+            .submit(move || {
+                let found = search
+                    .run()
+                    .ok_or_else(|| format!("no {biome} within {radius} blocks"));
+                let _ = send.send(found);
+            });
         let reply = crate::http::Reply(receive);
         Ok(Box::pin(async move {
             let at = reply.await.map_err(ApiError)?;

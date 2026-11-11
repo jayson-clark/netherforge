@@ -20,9 +20,9 @@ pub struct DataTable {
 }
 
 pub struct Shared {
+    /// What every room of the server shares: the store, the pack, the databases...
+    pub instance: Rc<crate::instance::Instance>,
     pub platform: Rc<dyn Platform>,
-    /// The packages the server provides that the project loaded, as `/nf requires` lists them: the adapter's.
-    pub provided_packages: RefCell<Option<crate::session::WrittenPackFiles>>,
     pub centities: RefCell<Centities>,
     /// The project's `fonts/default.json`, which anchored text is measured with.
     pub font: RefCell<Option<DefaultFontFile>>,
@@ -32,12 +32,8 @@ pub struct Shared {
     pub next_flight: std::cell::Cell<u64>,
     /// Places searched this tick by walks finding a new path on their own.
     pub path_nodes: std::cell::Cell<usize>,
-    /// The runtime's store: placements and saved tables.
-    pub store: Rc<crate::store::Store>,
     /// Scripts' saved tables: `centity:data()`, `player:data()`, `nf.data(name)`.
     pub data: RefCell<crate::data::ScriptData>,
-    /// The permission nodes scripts set on players.
-    pub permissions: RefCell<crate::permissions::Permissions>,
     /// `player:session()`: a plain table per online player, never saved.
     pub session_tables: RefCell<std::collections::HashMap<netherforge_platform::Uuid, mlua::Table>>,
     /// `nf.schedule`'s live schedules.
@@ -50,10 +46,6 @@ pub struct Shared {
     pub screens: RefCell<crate::screen::Screens>,
     /// Every online player's HUD.
     pub huds: RefCell<crate::huds::Huds>,
-    /// The resource pack as last built, and the characters it draws glyphs and skins with.
-    pub packs: RefCell<crate::packs::Packs>,
-    /// The scripts' data directory (`nf.files`), when the server has one.
-    pub files: RefCell<Option<crate::files::ScriptFiles>>,
     /// The tables `block:data()` hands out.
     pub block_data: RefCell<crate::block_data::BlockData>,
     /// Who's mining the project's blocks (and the game's with rules), and whose speed is turned down.
@@ -62,8 +54,6 @@ pub struct Shared {
     pub blocks: RefCell<crate::custom_blocks::CustomBlocks>,
     /// The project's recipes and those scripts registered.
     pub recipes: RefCell<crate::recipes::Recipes>,
-    /// The project's loot tables.
-    pub loot: RefCell<crate::loot::LootTables>,
     /// The project's particle effects and every one playing.
     pub particles: RefCell<crate::particles::Particles>,
     /// The project's cutscenes and every one playing.
@@ -119,21 +109,10 @@ pub struct Shared {
     pub gone: RefCell<Vec<netherforge_platform::Uuid>>,
     /// Mobs' walks (`mob:move_to`) and the goals scripts added.
     pub mobs: Rc<crate::mob::Mobs>,
-    /// The packages' own databases (`nf.db`), and the owner's connections.
-    pub databases: RefCell<crate::databases::Databases>,
     /// The worlds the project made and may take away.
     pub managed_worlds: RefCell<crate::managed_worlds::ManagedWorlds>,
-    /// What the worlds' file work said as it failed on its lane, for the log at a tick.
-    pub managed_failures: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     /// Structures: the project's, its builds, scripts' saves, and the gradual work going.
     pub structures: RefCell<crate::structures::Structures>,
-    /// What services say of the reload running now (what kept running on each resource): read once it's done.
-    pub reloading: RefCell<crate::reload::Notes>,
-    /// The dev bridge's console, while there's a bridge: what scripts say and how they fail goes there as itself
-    /// (a line with where it was written, an error with its traceback) rather than as a plain log line.
-    pub console: RefCell<Option<Rc<dyn crate::bridge::Console>>>,
-    /// Lanes work goes to off the main thread, by name, made as they're first wanted (a biome search's).
-    pub lanes: RefCell<std::collections::HashMap<&'static str, crate::http::Workers>>,
 }
 
 impl Shared {
@@ -144,45 +123,25 @@ impl Shared {
         self.block_shapes.changed(world, x, y, z);
     }
 
-    /// Says that `count` things kept running on resource `kind:id`'s new version (live instances, windows kept,
-    /// players sent the rebuilt pack): its `reattached` in the reload's answer.
-    pub fn reattached(&self, kind: &'static str, id: &str, count: usize) {
-        *self
-            .reloading
-            .borrow_mut()
-            .reattached
-            .entry((kind, id.to_owned()))
-            .or_default() += count as i32;
-    }
-
-    pub fn new(platform: Rc<dyn Platform>, store: Rc<crate::store::Store>) -> Rc<Shared> {
+    pub fn new(instance: Rc<crate::instance::Instance>) -> Rc<Shared> {
+        let platform = instance.platform.clone();
         Rc::new(Shared {
+            instance,
             mobs: crate::mob::Mobs::new(platform.clone()),
-            lanes: RefCell::default(),
             structures: RefCell::default(),
-            reloading: RefCell::default(),
-            console: RefCell::default(),
             managed_worlds: RefCell::default(),
-            databases: RefCell::default(),
-            managed_failures: Default::default(),
             platform,
-            store,
             data: RefCell::default(),
-            permissions: RefCell::default(),
             session_tables: RefCell::default(),
             schedules: RefCell::default(),
             names: RefCell::default(),
             skies: RefCell::default(),
             screens: RefCell::default(),
             huds: RefCell::default(),
-            packs: RefCell::default(),
-            provided_packages: RefCell::default(),
-            files: RefCell::default(),
             block_data: RefCell::default(),
             mining: RefCell::default(),
             blocks: RefCell::default(),
             recipes: RefCell::default(),
-            loot: RefCell::default(),
             particles: RefCell::default(),
             cutscenes: RefCell::default(),
             bars: RefCell::default(),
@@ -215,15 +174,6 @@ impl Shared {
             entities: RefCell::default(),
             gone: RefCell::default(),
         })
-    }
-
-    /// The lane named `name`: one thread whose jobs run in order, made the first time it's wanted.
-    pub fn lane(&self, name: &'static str) -> crate::http::Workers {
-        self.lanes
-            .borrow_mut()
-            .entry(name)
-            .or_insert_with(|| crate::http::Workers::lane(&format!("NetherForge {name}")))
-            .clone()
     }
 
     /// The entity `info` describes as the handle the spec's types say (`Entity`), made the class it is
@@ -312,7 +262,7 @@ impl Shared {
     /// their bare characters) included, and how many lines it is; none when the project has no font facts.
     pub fn measure_text(&self, text: &str) -> Option<(i32, i32)> {
         let font = self.font.borrow();
-        let packs = self.packs.borrow();
+        let packs = self.instance.packs.borrow();
         let width = netherforge_format::text::TextWidth::of_font(font.as_ref()?)
             .with_glyphs(|reference| packs.glyph_advance(reference))
             .with_glyph_chars(|code| packs.glyph_char_advance(code));

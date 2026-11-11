@@ -229,7 +229,7 @@ impl ItemContext {
         self.start_script(id);
         if changed {
             let players = self.refresh_online();
-            self.shared.reattached("item", id, players);
+            self.shared.instance.reattached("item", id, players);
         }
     }
 

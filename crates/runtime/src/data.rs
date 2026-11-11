@@ -92,7 +92,7 @@ impl ScriptData {
             match table.carried.take() {
                 Some(text) => Some(text),
                 None => {
-                    let read = shared.store.data(&owner);
+                    let read = shared.instance.store.data(&owner);
                     table.saved.clone_from(&read);
                     read
                 }
@@ -161,7 +161,7 @@ impl ScriptData {
         table.too_big = false;
         if table.saved.as_deref() != Some(text.as_str()) {
             table.saved = Some(text.clone());
-            shared.store.put_data(owner, text.clone());
+            shared.instance.store.put_data(owner, text.clone());
         }
         Some(text)
     }
@@ -242,7 +242,7 @@ impl Service for DataService {
                 table.carried = text.or_else(|| table.saved.clone());
             }
         }
-        self.shared.store.commit();
+        self.shared.instance.store.commit();
     }
 }
 

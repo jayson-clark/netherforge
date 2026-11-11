@@ -584,7 +584,7 @@ impl AdminCommand {
                 None => sender.player(),
             }
             .ok_or("say who to send it to: /nf pack send <player>")?;
-            let mut packs = session.shared().packs.borrow_mut();
+            let mut packs = session.shared().instance.packs.borrow_mut();
             packs.forget(target.uuid);
             let sent = packs.send(&*platform, target.uuid);
             sender.reply(if sent {
@@ -594,7 +594,7 @@ impl AdminCommand {
             });
             return Ok(());
         }
-        let packs = session.shared().packs.borrow();
+        let packs = session.shared().instance.packs.borrow();
         let Some(built) = &packs.built else {
             sender.reply("<gray>No resource pack: the project has no resource packs, or they couldn't be built.".into());
             return Ok(());
@@ -628,6 +628,7 @@ impl AdminCommand {
             .collect();
         let mut owner: Vec<String> = session
             .shared()
+            .instance
             .provided_packages
             .borrow()
             .as_ref()
@@ -641,6 +642,7 @@ impl AdminCommand {
         for namespace in &sorted {
             if let Some(at) = session
                 .shared()
+                .instance
                 .databases
                 .borrow_mut()
                 .describe_own(namespace)
@@ -1231,7 +1233,7 @@ impl AdminCommand {
         let events = self.events()?;
         let session = shared(&events)?;
         session.save_data();
-        let store = &session.shared().store;
+        let store = &session.shared().instance.store;
         let file = store.file();
         let bytes = file
             .as_ref()
@@ -1275,7 +1277,7 @@ impl AdminCommand {
         let events = self.events()?;
         let session = shared(&events)?;
         session.save_data();
-        let (rows, total) = session.shared().store.rows(table, MAX_ROWS)?;
+        let (rows, total) = session.shared().instance.store.rows(table, MAX_ROWS)?;
         if rows.is_empty() {
             sender.reply(format!("<gray>{table} is empty."));
             return Ok(());
@@ -1343,7 +1345,7 @@ impl AdminCommand {
             _ => return Err(wrong),
         };
         session.save_data_of(&owner);
-        let Some(text) = session.shared().store.data(&owner) else {
+        let Some(text) = session.shared().instance.store.data(&owner) else {
             sender.reply(format!("<gray>Nothing is saved for {label}."));
             return Ok(());
         };
@@ -1376,7 +1378,7 @@ impl AdminCommand {
         let file = self.state_dir.join("exports").join(name);
         sender.reply("<gold>Exporting the store…".into());
         let (tx, rx) = std::sync::mpsc::channel();
-        session.shared().store.export(file, move |result| {
+        session.shared().instance.store.export(file, move |result| {
             let _ = tx.send(result);
         });
         self.exports.borrow_mut().push((rx, sender.clone()));
@@ -1473,7 +1475,7 @@ impl AdminCommand {
             1 => ["show", "export"]
                 .iter()
                 .map(|s| s.to_string())
-                .chain(session.shared().store.table_names())
+                .chain(session.shared().instance.store.table_names())
                 .collect(),
             2 if show => vec!["player".into(), "centity".into(), "named".into()],
             3 if show && args[1].eq_ignore_ascii_case("player") => online(session),
@@ -1763,7 +1765,7 @@ fn online(session: &Session) -> Vec<String> {
 fn records(session: &Session) -> Vec<Uuid> {
     let mut ids: Vec<Uuid> = session.centities().all().map(|i| i.id).collect();
     ids.extend(session.centities().inert().map(|r| r.id));
-    for record in session.shared().store.instances() {
+    for record in session.shared().instance.store.instances() {
         if !ids.contains(&record.id) {
             ids.push(record.id);
         }

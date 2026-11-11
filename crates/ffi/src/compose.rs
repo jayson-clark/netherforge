@@ -375,7 +375,7 @@ pub(crate) fn bind(
         let on = on.clone();
         Box::new(move |reference: String| {
             on(&|shared| {
-                let mut packs = shared.packs.try_borrow_mut().ok()?;
+                let mut packs = shared.instance.packs.try_borrow_mut().ok()?;
                 packs.text_glyph(&*shared.platform, &reference)
             })
         })
@@ -416,7 +416,7 @@ pub(crate) fn bind(
         let on = on.clone();
         Box::new(move |px: i32| {
             on(&|s| {
-                let built = s.packs.try_borrow().ok()?.built.is_some();
+                let built = s.instance.packs.try_borrow().ok()?.built.is_some();
                 built.then(|| netherforge_format::kind::resource_pack::fonts::offset(px))
             })
         })
@@ -428,7 +428,7 @@ pub(crate) fn bind(
         }
         on(&|shared| {
             let font = shared.font.borrow();
-            let packs = shared.packs.try_borrow().ok()?;
+            let packs = shared.instance.packs.try_borrow().ok()?;
             let width = match font.as_ref() {
                 Some(font) => netherforge_format::text::TextWidth::of_font(font),
                 None => netherforge_format::text::TextWidth::new(|_| None),

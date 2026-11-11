@@ -118,7 +118,10 @@ impl ManagedWorlds {
             dimension_type,
             keep_spawn_loaded: false,
         };
-        shared.store.own_world(&self.namespace, name, &owned);
+        shared
+            .instance
+            .store
+            .own_world(&self.namespace, name, &owned);
         self.created.insert(name.to_owned(), owned);
     }
 }
@@ -200,6 +203,7 @@ impl ManagedContext {
     fn own(&self, name: &str, owned: OwnedWorld) {
         let mut managed = self.shared.managed_worlds.borrow_mut();
         self.shared
+            .instance
             .store
             .own_world(&managed.namespace, name, &owned);
         managed.created.insert(name.to_owned(), owned);
@@ -208,7 +212,7 @@ impl ManagedContext {
     /// `name` is gone (deleted, or its copy failed): nobody's any more.
     fn forget(&self, name: &str) {
         self.shared.managed_worlds.borrow_mut().created.remove(name);
-        self.shared.store.forget_world(name);
+        self.shared.instance.store.forget_world(name);
     }
 
     /// The server's name of the project terrain `reference` names: an error naming what there is when it names none.
@@ -467,7 +471,7 @@ impl ManagedContext {
             },
         );
         let (send, done) = mpsc::channel();
-        self.shared.lane(FILES).submit(move || {
+        self.shared.instance.lane(FILES).submit(move || {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work.run()))
                 .map_err(|e| panic_text(&e));
             let _ = send.send(result);
@@ -598,9 +602,9 @@ impl ManagedContext {
         if delete {
             let work = ops.delete(name.to_owned());
             // Nobody waits for it, so a failure is the log's alone, said at a tick.
-            let failures = self.shared.managed_failures.clone();
+            let failures = self.shared.instance.managed_failures.clone();
             let world = name.to_owned();
-            self.shared.lane(FILES).submit(move || {
+            self.shared.instance.lane(FILES).submit(move || {
                 if let Err(e) =
                     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work.run()))
                 {
@@ -668,7 +672,7 @@ impl Service for ManagedWorldsService {
 
     fn start(&self, _room: &Room, project: &Define) {
         let namespace = project.project.namespace().to_owned();
-        let created = self.shared.store.worlds_of(&namespace);
+        let created = self.shared.instance.store.worlds_of(&namespace);
         let mut managed = self.shared.managed_worlds.borrow_mut();
         // Worlds still loaded from a run before (a restart) hold their spawns again: stopping let go of them.
         let keep: Vec<String> = created
@@ -700,6 +704,7 @@ impl Service for ManagedWorldsService {
         let failures = std::mem::take(
             &mut *self
                 .shared
+                .instance
                 .managed_failures
                 .lock()
                 .unwrap_or_else(|e| e.into_inner()),

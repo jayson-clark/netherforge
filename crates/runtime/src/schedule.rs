@@ -307,9 +307,12 @@ impl ScheduleContext {
         let runs = schedules
             .last_runs
             .entry(namespace.to_owned())
-            .or_insert_with(|| self.shared.store.schedule_runs(namespace));
+            .or_insert_with(|| self.shared.instance.store.schedule_runs(namespace));
         runs.insert(id.to_owned(), millis);
-        self.shared.store.schedule_ran(namespace, id, millis);
+        self.shared
+            .instance
+            .store
+            .schedule_ran(namespace, id, millis);
     }
 
     fn start(
@@ -359,7 +362,7 @@ impl ScheduleContext {
             let runs = schedules
                 .last_runs
                 .entry(namespace.clone())
-                .or_insert_with(|| self.shared.store.schedule_runs(&namespace));
+                .or_insert_with(|| self.shared.instance.store.schedule_runs(&namespace));
             runs.get(id).copied()
         });
         if let Some(id) = &id

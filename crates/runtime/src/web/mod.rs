@@ -473,7 +473,7 @@ impl Service for WebService {
         if !enabled {
             return;
         }
-        let mut packs = self.shared.packs.borrow_mut();
+        let mut packs = self.shared.instance.packs.borrow_mut();
         let Some(listener) = packs.listener(project.platform) else {
             return;
         };
@@ -537,7 +537,7 @@ impl Service for WebService {
                 call.answer(unavailable());
             }
         }
-        if let Ok(packs) = self.shared.packs.try_borrow_mut()
+        if let Ok(packs) = self.shared.instance.packs.try_borrow_mut()
             && let Some(listener) = packs.server()
         {
             listener.set_web(None);

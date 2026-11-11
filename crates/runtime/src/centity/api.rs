@@ -1328,7 +1328,7 @@ impl CentityContext {
         for id in ids {
             self.stop_script(id);
         }
-        let store = &self.shared.store;
+        let store = &self.shared.instance.store;
         let mut centities = self.shared.centities.borrow_mut();
         centities.flush(store);
         centities.save_placements(store);
@@ -1346,11 +1346,14 @@ impl CentityContext {
             self.shared
                 .centities
                 .borrow_mut()
-                .save_placements(&self.shared.store);
+                .save_placements(&self.shared.instance.store);
         }
-        self.shared.centities.borrow_mut().flush(&self.shared.store);
-        self.shared.store.commit();
-        for failure in self.shared.store.take_failures() {
+        self.shared
+            .centities
+            .borrow_mut()
+            .flush(&self.shared.instance.store);
+        self.shared.instance.store.commit();
+        for failure in self.shared.instance.store.take_failures() {
             self.shared.platform.log().error(failure, None);
         }
     }

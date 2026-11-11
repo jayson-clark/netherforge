@@ -200,6 +200,7 @@ impl Menus {
         };
         let shift = width.map_or(0, |w| window.definition.kind.skin_shift(w));
         let skin = shared
+            .instance
             .packs
             .borrow()
             .skin_title(skin, shift)
@@ -1254,7 +1255,7 @@ impl MenuContext {
                 .is_some_and(|p| p.kind == next.kind && p.size == next.size);
             let uuid = self.window_uuid(&window).expect("live");
             if same_shape {
-                self.shared.reattached("menu", id, 1);
+                self.shared.instance.reattached("menu", id, 1);
                 let previous = previous.as_ref().expect("same shape");
                 {
                     let mut menus = self.shared.menus.borrow_mut();

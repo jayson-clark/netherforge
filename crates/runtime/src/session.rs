@@ -358,12 +358,12 @@ impl<'a> Session<'a> {
         config: Config,
     ) -> Session<'a> {
         let project = load(source, packages);
-        let shared = Shared::new(platform.clone(), store);
+        let shared = Shared::new(crate::instance::Instance::new(platform.clone(), store));
         shared.schedules.borrow_mut().now = config.wall_clock;
         shared.schedules.borrow_mut().rate = config.wall_clock_rate;
-        shared.packs.borrow_mut().config = config.pack.clone();
-        shared.packs.borrow_mut().prebuilt = config.prebuilt_pack.clone();
-        *shared.provided_packages.borrow_mut() = config.provided_packages.clone();
+        shared.instance.packs.borrow_mut().config = config.pack.clone();
+        shared.instance.packs.borrow_mut().prebuilt = config.prebuilt_pack.clone();
+        *shared.instance.provided_packages.borrow_mut() = config.provided_packages.clone();
         {
             let mut http = shared.http.borrow_mut();
             http.config = config.http.clone();
@@ -422,7 +422,7 @@ impl<'a> Session<'a> {
             screens.paths = config.paths.clone();
         }
         {
-            let mut databases = shared.databases.borrow_mut();
+            let mut databases = shared.instance.databases.borrow_mut();
             databases.dir = config.databases_dir.clone();
             databases.config = config.databases.clone();
         }
@@ -441,7 +441,7 @@ impl<'a> Session<'a> {
                 .map(|d| d.join(".nf").join("structures"));
         }
         if let Some(root) = &config.data_dir {
-            *shared.files.borrow_mut() =
+            *shared.instance.files.borrow_mut() =
                 Some(crate::files::ScriptFiles::new(root.clone(), config.files));
         }
         if let Some(zone) = &config.time_zone {
@@ -646,7 +646,7 @@ impl<'a> Session<'a> {
         };
         *self.shared.names.borrow_mut() = self.project.names();
         // Files from before each package had a folder are the project's.
-        if let Some(files) = self.shared.files.borrow_mut().as_mut() {
+        if let Some(files) = self.shared.instance.files.borrow_mut().as_mut() {
             files.adopt(self.project.namespace());
         }
         let define = Define {
@@ -794,13 +794,13 @@ impl<'a> Session<'a> {
     /// The world is saving (`PlatformEvents::world_saving`): what its services keep of it is written as of now.
     pub fn world_saving(&self, world: &str) {
         self.each(|s| s.world_saving(world));
-        self.shared.store.commit();
+        self.shared.instance.store.commit();
     }
 
     /// A chunk is unloading, its scripts told: what its services keep of it is written now.
     pub fn chunk_unloading(&self, world: &str, chunk_x: i32, chunk_z: i32) {
         self.each(|s| s.chunk_unloading(world, chunk_x, chunk_z));
-        self.shared.store.commit();
+        self.shared.instance.store.commit();
     }
 
     /// A chunk came into memory: its services hear of it before its scripts do (its blocks are the project's,
@@ -1109,7 +1109,7 @@ impl<'a> Session<'a> {
                 "{label} is slow: {:.1} ms a tick on average over the last {} ticks, over the {limit} ms limit; see /nf scripts",
                 slow.average_millis, slow.ticks
             );
-            match self.shared.console.borrow().clone() {
+            match self.shared.instance.console.borrow().clone() {
                 Some(console) => console.script_error(
                     format!("{message}{place}{more}"),
                     format!("{message}{more}"),
@@ -1247,7 +1247,7 @@ impl<'a> Session<'a> {
             .any(|(kind, _)| crate::reload::STARTUP_KINDS.contains(kind))
             && self.check_startup()
             || self.services.iter().any(|s| s.needs_restart());
-        let notes = std::mem::take(&mut *self.shared.reloading.borrow_mut());
+        let notes = std::mem::take(&mut *self.shared.instance.reloading.borrow_mut());
         let resources = crate::reload::outcomes(
             &order,
             self.project.namespace(),
@@ -1271,7 +1271,7 @@ impl<'a> Session<'a> {
         let failed: Vec<Problem> = self.collected().into_iter().map(|f| f.problem).collect();
         let restart = (self.has_startup_resources() && self.check_startup())
             || self.services.iter().any(|s| s.needs_restart());
-        std::mem::take(&mut *self.shared.reloading.borrow_mut());
+        std::mem::take(&mut *self.shared.instance.reloading.borrow_mut());
         let mut problems = self.problems();
         for problem in &failed {
             if !problems.contains(problem) {
@@ -1464,15 +1464,15 @@ impl<'a> Session<'a> {
         self.shared
             .centities
             .borrow_mut()
-            .save_placements(&self.shared.store);
-        self.shared.store.commit();
+            .save_placements(&self.shared.instance.store);
+        self.shared.instance.store.commit();
     }
 
     /// Saves `owner`'s saved table now, if it has one.
     pub fn save_data_of(&self, owner: &crate::data::Owner) {
         if let Some(room) = &self.room {
             crate::data::ScriptData::save(&self.shared, room.host(), owner);
-            self.shared.store.commit();
+            self.shared.instance.store.commit();
         }
     }
 
@@ -1572,7 +1572,7 @@ impl<'a> Session<'a> {
 
     /// The project's packs read again from disk and rebuilt (`nf.packs.rebuild`), when a script asked for it.
     pub fn rebuild_packs(&mut self) {
-        if !std::mem::take(&mut self.shared.packs.borrow_mut().wanted) {
+        if !std::mem::take(&mut self.shared.instance.packs.borrow_mut().wanted) {
             return;
         }
         if self.refusal.is_some() {
@@ -1608,7 +1608,7 @@ impl<'a> Session<'a> {
         // What the scripts said as they were stopped (an `end` handler of a cutscene that unloaded) is still told.
         self.report();
         // What the services staged as they stopped is written before anything else opens the store.
-        self.shared.store.flush();
+        self.shared.instance.store.flush();
         self.shared.tests.borrow_mut().clear();
         // A full reload: what this Lua state measured goes to the profiler before it closes.
         if let (Some(room), Some(p)) = (&self.room, self.profiler()) {
@@ -1696,7 +1696,7 @@ impl<'a> Session<'a> {
                     file: f.clone(),
                     line: line.map(|l| l as i32),
                 });
-            let console = self.shared.console.borrow().clone();
+            let console = self.shared.instance.console.borrow().clone();
             // The server's console gets the line; the editor's, the error located with its traceback.
             let warn = |text: String, entry: String, traceback: Option<String>| match &console {
                 Some(console) => console.script_error(text, entry, source.clone(), traceback),
@@ -1811,7 +1811,7 @@ impl<'a> Session<'a> {
                 });
             let at = line.location.map(|l| format!(" ({l})")).unwrap_or_default();
             let text = format!("[{}] {}{at}", label(room, line.scope), line.line);
-            match self.shared.console.borrow().clone() {
+            match self.shared.instance.console.borrow().clone() {
                 Some(console) => console.script_line(text, line.line, source),
                 None => log.info(text),
             }
@@ -2061,7 +2061,8 @@ impl Service for CentitiesService {
         self.context(room).define_buffs(buffs(project));
         let mut centities = self.shared.centities.borrow_mut();
         centities.set_home(project.project.namespace());
-        *self.restored.borrow_mut() = centities.restore(project.platform, &self.shared.store);
+        *self.restored.borrow_mut() =
+            centities.restore(project.platform, &self.shared.instance.store);
     }
 
     fn after_start(&self, room: &Room) {
@@ -2088,7 +2089,7 @@ impl Service for CentitiesService {
         let centities = self.shared.centities.borrow();
         for id in ids {
             let live = centities.all().filter(|i| i.declared.id == *id).count();
-            self.shared.reattached("centity", id, live);
+            self.shared.instance.reattached("centity", id, live);
         }
     }
 
@@ -2127,7 +2128,7 @@ impl Service for CentitiesService {
         self.shared
             .centities
             .borrow_mut()
-            .save_placements_of(&self.shared.store, &|i| i.anchor().world == world);
+            .save_placements_of(&self.shared.instance.store, &|i| i.anchor().world == world);
     }
 
     /// The entities at its instances' anchors go with it: their places are saved now.
@@ -2136,7 +2137,7 @@ impl Service for CentitiesService {
         self.shared
             .centities
             .borrow_mut()
-            .save_placements_of(&self.shared.store, &|i| {
+            .save_placements_of(&self.shared.instance.store, &|i| {
                 let a = i.anchor();
                 a.world == world && chunk(a.x) == chunk_x && chunk(a.z) == chunk_z
             });
