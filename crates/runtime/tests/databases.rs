@@ -321,7 +321,8 @@ db:query("SELECT 1", nil, function(rows, err) print(rows, err) end)
 }
 
 /// A connection to the server `NETHERFORGE_TEST_<KIND>` names (`host:port:user:database`, no password), or none:
-/// the test then says it was skipped.
+/// the test then says it was skipped. `NETHERFORGE_TEST_<KIND>_SSL` is its `ssl-mode` (`disable` unless it says
+/// `prefer` or `require`): `prefer` against a server with a self-signed certificate is what a managed one often is.
 fn server(kind: &str, own: &[&str]) -> Option<netherforge_runtime::databases::ConnectionConfig> {
     let var = format!("NETHERFORGE_TEST_{}", kind.to_uppercase());
     let Ok(value) = std::env::var(&var) else {
@@ -338,7 +339,11 @@ fn server(kind: &str, own: &[&str]) -> Option<netherforge_runtime::databases::Co
         password: std::env::var(format!("{var}_PASSWORD")).unwrap_or_default(),
         pool_size: 2,
         packages: ["shop".to_owned()].into(),
-        ssl_mode: netherforge_runtime::databases::SslMode::Disable,
+        ssl_mode: match std::env::var(format!("{var}_SSL")).as_deref() {
+            Ok("prefer") => netherforge_runtime::databases::SslMode::Prefer,
+            Ok("require") => netherforge_runtime::databases::SslMode::Require,
+            _ => netherforge_runtime::databases::SslMode::Disable,
+        },
         own_databases: own.iter().map(|s| s.to_string()).collect(),
     })
 }

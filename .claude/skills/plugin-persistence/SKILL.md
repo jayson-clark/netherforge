@@ -64,7 +64,12 @@ the chunk; node poses only in memory.
 - **MySQL and PostgreSQL** (`nf.db("network")`, and a package's own database there, `own-databases`): the Rust
   runtime's `remote_db.rs`, its own drivers (no JDBC, nothing fetched). What scripts see, the pool, the own
   databases' schemas, transactions behind a pooler and the migrations' lock are the plugin-runtime skill's "Package
-  databases".
+  databases". **`ssl-mode`**: `prefer` (the default) encrypts when the server offers TLS and doesn't check its
+  certificate (as JDBC's and libpq's `prefer`; a managed server's is often self-signed: CloudNativePG's pooler),
+  `require` checks it against the platform's trust (rustls-platform-verifier), `disable` never encrypts. A connect
+  error carries its causes (`with_causes`: the driver alone says only "error performing TLS handshake"). The
+  server tests in `tests/databases.rs` take `NETHERFORGE_TEST_<KIND>_SSL` (`prefer`, `require`); rustls won't read
+  a version 1 certificate even unchecked, and macOS's `openssl req -x509` makes one unless given an `-addext`.
 - `/nf data` (`crates/runtime/src/admin.rs`) shows it: table sizes (by namespace), a
   table's first rows, one saved table's JSON (`show player|centity|named`),
   and `export` (every table into `exports/store-<time>.json` on the lane,

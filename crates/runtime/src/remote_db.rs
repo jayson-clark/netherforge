@@ -203,7 +203,12 @@ impl Remote {
                             STATEMENT_SECONDS * 1000
                         )]);
                     if tls {
-                        builder = builder.ssl_opts(Some(mysql::SslOpts::default()));
+                        // `prefer` encrypts without checking the certificate, as JDBC's does (a managed server's
+                        // is often its own, signed by nobody the platform trusts); `require` checks it.
+                        let unchecked = c.ssl_mode == SslMode::Prefer;
+                        builder = builder.ssl_opts(Some(
+                            mysql::SslOpts::default().with_danger_accept_invalid_certs(unchecked),
+                        ));
                     }
                     builder
                 };
@@ -237,14 +242,14 @@ impl Remote {
                 let client = if c.ssl_mode == SslMode::Disable {
                     config.connect(postgres::NoTls)
                 } else {
-                    let tls = tls_config()?;
+                    let tls = tls_config(c.ssl_mode == SslMode::Require)?;
                     config.connect(postgres_rustls::MakeTlsConnector::new(
                         tokio_rustls::TlsConnector::from(tls),
                     ))
                 };
                 client
                     .map(|c| Conn::Pg(Box::new(c)))
-                    .map_err(|e| e.to_string())
+                    .map_err(|e| with_causes(&e))
             }
         }
     }
@@ -603,15 +608,94 @@ fn now() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
-fn tls_config() -> Result<Arc<rustls::ClientConfig>, String> {
+/// An error and what caused it, each once: the driver's own message ("error performing TLS handshake") says nothing
+/// of why.
+fn with_causes(e: &dyn std::error::Error) -> String {
+    let mut text = e.to_string();
+    let mut cause = e.source();
+    while let Some(c) = cause {
+        let more = c.to_string();
+        if !text.contains(&more) {
+            text.push_str(": ");
+            text.push_str(&more);
+        }
+        cause = c.source();
+    }
+    text
+}
+
+/// TLS for a PostgreSQL connection: `require` checks the server's certificate against the platform's trust; `prefer`
+/// encrypts without checking it, as JDBC's and libpq's `prefer` do (and the guide says). A managed server's
+/// certificate is often its own (CloudNativePG's pooler signs its own), and checking it in `prefer` failed the
+/// handshake, with no plain fallback.
+fn tls_config(checked: bool) -> Result<Arc<rustls::ClientConfig>, String> {
     use rustls_platform_verifier::BuilderVerifierExt as _;
     let provider = Arc::new(rustls::crypto::ring::default_provider());
-    rustls::ClientConfig::builder_with_provider(provider)
+    let builder = rustls::ClientConfig::builder_with_provider(provider.clone())
         .with_safe_default_protocol_versions()
-        .map_err(|e| e.to_string())?
-        .with_platform_verifier()
-        .map_err(|e| e.to_string())
-        .map(|b| Arc::new(b.with_no_client_auth()))
+        .map_err(|e| e.to_string())?;
+    let config = if checked {
+        builder
+            .with_platform_verifier()
+            .map_err(|e| e.to_string())?
+            .with_no_client_auth()
+    } else {
+        builder
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(Unchecked(provider)))
+            .with_no_client_auth()
+    };
+    Ok(Arc::new(config))
+}
+
+/// `prefer`'s verifier: any certificate, but the handshake's signatures still checked, so the session is encrypted
+/// with the key of the server that answered.
+#[derive(Debug)]
+struct Unchecked(Arc<rustls::crypto::CryptoProvider>);
+
+impl rustls::client::danger::ServerCertVerifier for Unchecked {
+    fn verify_server_cert(
+        &self,
+        _: &rustls::pki_types::CertificateDer<'_>,
+        _: &[rustls::pki_types::CertificateDer<'_>],
+        _: &rustls::pki_types::ServerName<'_>,
+        _: &[u8],
+        _: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        self.0.signature_verification_algorithms.supported_schemes()
+    }
 }
 
 // ---- MySQL's statements -------------------------------------------------------------
