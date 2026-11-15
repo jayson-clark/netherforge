@@ -780,11 +780,17 @@ impl<'a> Session<'a> {
     /// Closes room `id` (never the main room): its players go back to the main room as if they'd come from the
     /// server, its services stop in reverse order and its Lua state closes. Its worlds are the main room's again.
     pub fn close_room(&mut self, id: crate::instance::RoomId) {
+        self.close_room_as(id, true);
+    }
+
+    /// Closes room `id`, its players moved to the main room first when `moving` (not as the server stops: they're
+    /// leaving it, and the server takes no changes to what they see while its plugins are disabled).
+    fn close_room_as(&mut self, id: crate::instance::RoomId, moving: bool) {
         if id == crate::instance::RoomId::MAIN {
             return;
         }
         let players = self.instance().routes.borrow().players_of(id);
-        for player in players {
+        for player in players.into_iter().filter(|_| moving) {
             self.move_player(player, crate::instance::RoomId::MAIN);
         }
         let Some(at) = self.rooms.iter().position(|r| r.id == id) else {
@@ -2061,7 +2067,7 @@ impl<'a> Session<'a> {
     pub fn stop(&mut self) {
         while self.rooms.len() > 1 {
             let id = self.rooms[self.rooms.len() - 1].id;
-            self.close_room(id);
+            self.close_room_as(id, false);
         }
         if self.rooms[0].room.is_none() {
             return;

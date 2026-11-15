@@ -1262,3 +1262,33 @@ end
         "{managed:?}"
     );
 }
+
+#[test]
+fn a_rooms_worlds_go_with_it_as_the_server_stops() {
+    let files = Files::new(
+        &[],
+        r#"
+if not nf.rooms.current():is_main() then
+  nf.worlds.create("arena", { generator = "void" })
+end
+"#,
+    );
+    let platform = Fake::new();
+    let mut session = start(&files, &platform, Config::default());
+    session
+        .open_room(Some("m-1".into()), false)
+        .expect("a room");
+    session
+        .open_room(Some("owner-1".into()), true)
+        .expect("a room");
+    session.stop();
+    let managed = platform.managed.lock().unwrap().clone();
+    assert!(
+        managed.iter().any(|m| m == "unload arena__m_1 false"),
+        "{managed:?}"
+    );
+    assert!(
+        managed.iter().any(|m| m == "unload arena__owner_1 true"),
+        "{managed:?}"
+    );
+}

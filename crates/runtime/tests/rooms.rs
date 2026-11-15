@@ -615,3 +615,27 @@ end
         ]
     );
 }
+
+#[test]
+fn as_the_server_stops_a_rooms_players_arent_moved_to_the_main_room() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("modules/t/init.lua", COUNTER),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    server.game().player_join(&mut alex_join());
+    let room = server.session_mut().open_room(None, false).expect("a room");
+    server.session().move_player(alex().uuid, room);
+    server.tick();
+    platform.take();
+    server.session_mut().stop();
+    let said = printed(&platform.take());
+    assert!(
+        said.iter()
+            .all(|l| !l.starts_with("join") && !l.starts_with("quit")),
+        "{said:?}"
+    );
+    assert_eq!(server.session().rooms().len(), 1);
+}
