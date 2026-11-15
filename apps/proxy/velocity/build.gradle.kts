@@ -22,8 +22,10 @@ tasks.withType<JavaCompile>().configureEach { options.release.set(25) }
 dependencies {
     implementation(project(":network"))
     implementation(libs.serialization.json)
-    // The proxy brings its API.
-    compileOnly(libs.velocity.api)
+    // The proxy brings its API. Its release names Velocity's Brigadier fork only as a snapshot
+    // (com.velocitypowered:velocity-brigadier:1.0.0-SNAPSHOT, republished in place, so no checksum
+    // holds); the plugin uses no Brigadier type, so it compiles without it.
+    compileOnly(libs.velocity.api) { exclude(group = "com.velocitypowered", module = "velocity-brigadier") }
 
     testImplementation(kotlin("test"))
     testImplementation(platform(libs.junit.bom))

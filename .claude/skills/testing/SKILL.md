@@ -714,7 +714,12 @@ The Gradle build checks everything it downloads:
   Paper server's `spark-api` and `velocity-native` (republished in place),
   and Minecraft 1.21.11's `paper-api` and `dev-bundle`, which Paper only
   published as snapshots (Gradle doesn't record the file a snapshot resolves
-  to). Each `<trust>` says why.
+  to). Each `<trust>` says why. Neither is added for a snapshot a dependency
+  only drags in: Velocity's API 4.3.0 (a release) names its Brigadier fork
+  `velocity-brigadier:1.0.0-SNAPSHOT`, republished in place (it broke the
+  build on 2026-11-10); the proxy plugin uses no Brigadier type, so
+  `apps/proxy/velocity` excludes it from `compileOnly`. Prefer that (or a
+  release substituted for the snapshot) over trusting one.
 - **Kotlin/JS's npm packages** are pinned in
   `tools/gradle/kotlin-js-store/package-lock.json`; a build fails if they'd
   change (`kotlinStorePackageLock`).
