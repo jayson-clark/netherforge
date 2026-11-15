@@ -180,6 +180,13 @@ under name tags is one dummy objective, `nf.below_name`, in the below-name
 slot with blank numbers and an empty title, each line a score's fixed number
 format; it's unregistered when nobody has a line (Minecraft draws an empty
 line under everyone while the slot shows anything). Lines go on quit and when the session ends.
+**Rooms share the main scoreboard** (decided, phase 2): a room's teams are `nf.<room>.<name>` there, so every client
+is sent every room's teams and their entries, though a room's players never see another room's (not listed, not
+shown), so nothing is drawn. A scoreboard per room (as sidebars are per player) isn't cheap or clean: `TeamOps` would
+take a board (the Platform spec, the adapter, every fake), each room's players would be put on its board and a shown
+sidebar's per-player board copied from the room's rather than the main one, and room players would lose what `/team`
+and other plugins keep on the main board unless it's copied in every second for every room. Revisit if team packets
+across rooms show up as a cost or a leak that matters.
 `player:set_listed_for` is kept by the teams service too and re-applied
 when either player joins; a player's tab name and order are the server's and
 last until they leave.
