@@ -27,14 +27,20 @@ class AdminApiTest {
         val shown = ArrayList<String>()
         lateinit var hub: Hub
 
+        /** When set, every move waits for it (a proxy slow to move players). */
+        @Volatile var held: CompletableFuture<Unit>? = null
+
         override fun servers() = names
 
         override fun players() = emptyList<PlayerState>()
 
         override fun send(id: String, server: String): CompletionStage<String?> {
             synchronized(sends) { sends += id to server }
-            hub.playerMoved(id, id.uppercase(), server)
-            return CompletableFuture.completedFuture(null)
+            val wait = held ?: CompletableFuture.completedFuture(Unit)
+            return wait.thenApply {
+                hub.playerMoved(id, id.uppercase(), server)
+                null
+            }
         }
 
         override fun message(id: String, kind: String, text: String, subtitle: String?): String? {
@@ -142,6 +148,26 @@ class AdminApiTest {
             hub.tick()
             Thread.sleep(10)
         }
+    }
+
+    @Test
+    fun `many slow sends at once leave the API answering everyone else`() {
+        // FR 43: a pool of 48 threads with nowhere to wait reset every connection past them, placements' answers too.
+        val players = (1..120).map { "p-$it" }
+        for (id in players) hub.playerMoved(id, id.uppercase(), "lobby")
+        val held = CompletableFuture<Unit>()
+        proxy.held = held
+        val sends = players.map { id ->
+            val request = HttpRequest.newBuilder(URI("http://127.0.0.1:${admin.port}/v1/players/$id/send"))
+                .header("Authorization", "Bearer ${all.token}")
+                .POST(HttpRequest.BodyPublishers.ofString("""{ "server": "arena-1" }""")).build()
+            http.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+        }
+        waitFor { synchronized(proxy.sends) { proxy.sends.size } == players.size }
+        assertEquals(200, call("GET", "/v1/players").first, "answered while 120 sends wait on the proxy")
+        held.complete(Unit)
+        val statuses = sends.map { it.get(10, TimeUnit.SECONDS).statusCode() }
+        assertEquals(List(players.size) { 200 }, statuses)
     }
 
     @Test

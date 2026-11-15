@@ -11,8 +11,8 @@ import java.net.InetSocketAddress
 import java.net.URLDecoder
 import java.security.MessageDigest
 import java.util.concurrent.ExecutorService
-import java.util.concurrent.SynchronousQueue
-import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.Executors
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicInteger
@@ -56,6 +56,7 @@ class HubAdmin(
 ) {
     private var server: HttpServer? = null
     private var executor: ExecutorService? = null
+    private val inFlight = Semaphore(MAX_REQUESTS)
     private val streaming = AtomicInteger()
 
     /** The port it listens on, once started (the one asked for, or the one picked for 0). */
@@ -130,13 +131,23 @@ class HubAdmin(
     data class Answer(val name: String? = null, val server: String? = null, val error: String? = null)
 
     fun start() {
-        val http = HttpServer.create(bind, 32)
-        // A thread per open stream as well as for requests, up to a bound.
-        val pool = ThreadPoolExecutor(2, MAX_THREADS, 30, TimeUnit.SECONDS, SynchronousQueue()) {
-            Thread(it, "NetherForge hub admin").apply { isDaemon = true }
-        }
+        val http = HttpServer.create(bind, BACKLOG)
+        // A virtual thread per request and per open stream: a send waiting on the proxy (up to its wait and
+        // SEND_SLACK) holds nothing another caller needs. Past MAX_REQUESTS at once a caller is told to come back
+        // (503, Retry-After), never reset: a reset looks like the hub being down (FR 43).
+        val pool = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("NetherForge hub admin ", 0).factory())
         http.executor = pool
         http.createContext("/v1/") { exchange ->
+            if (!inFlight.tryAcquire()) {
+                try {
+                    exchange.responseHeaders.set("Retry-After", "1")
+                    answer(exchange, 503, Answer(error = "the hub is busy: $MAX_REQUESTS admin requests are open; try again"))
+                } catch (_: IOException) {
+                } finally {
+                    exchange.close()
+                }
+                return@createContext
+            }
             try {
                 handle(exchange)
             } catch (e: Fail) {
@@ -150,6 +161,7 @@ class HubAdmin(
                 } catch (_: Exception) {
                 }
             } finally {
+                inFlight.release()
                 exchange.close()
             }
         }
@@ -483,7 +495,10 @@ class HubAdmin(
 
     companion object {
         private const val MAX_BODY = 64 * 1024
-        private const val MAX_THREADS = 48
+
+        /** Requests (streams included) open at once before callers are told to retry (FR 43; was 48 threads, reset past them). */
+        internal const val MAX_REQUESTS = 1024
+        private const val BACKLOG = 256
         private const val MAX_STREAMS = 32
         private const val PING_MILLIS = 15_000L
 
