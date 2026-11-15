@@ -1168,8 +1168,8 @@ impl netherforge_platform::FakeLootOps for Fake {
     }
 }
 
-/// Real file work on the fake's `storage`: a map's overworld copied in as a world's folder (only the game's own
-/// folders, as Paper's import keeps), or a folder deleted.
+/// Real file work on the fake's `storage`: a map's overworld copied in as a world's folder (all of it but its
+/// identity, as the adapter installs a map), or a folder deleted.
 struct FolderWork {
     from: Option<std::path::PathBuf>,
     to: std::path::PathBuf,
@@ -1189,15 +1189,14 @@ impl netherforge_platform::FakeFileWork for FolderWork {
             }
         }
         match &self.from {
-            // As Paper's import of a map: the game's own folders of its overworld, nothing else.
+            // As the adapter installs a map: its overworld is the world's folder, all of it but its identity.
             Some(map) => {
-                for folder in ["region", "entities", "poi"] {
-                    let from = map.join("dimensions/minecraft/overworld").join(folder);
-                    if from.is_dir() {
-                        copy(&from, &self.to.join(folder));
-                    }
+                let overworld = map.join("dimensions/minecraft/overworld");
+                if overworld.is_dir() {
+                    copy(&overworld, &self.to);
                 }
                 std::fs::create_dir_all(&self.to).unwrap();
+                let _ = std::fs::remove_file(self.to.join("data/paper/metadata.dat"));
             }
             None => {
                 let _ = std::fs::remove_dir_all(&self.to);

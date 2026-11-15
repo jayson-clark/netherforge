@@ -408,10 +408,25 @@ first isn't called, but the world is made. A full reload first leaves the
 copy's files saved and still the project's, unloaded: loading it was the old
 session's step, dropped with it; `nf.worlds.load` loads it. Where a world's files live is the version's business (`PaperVersion.worlds`,
 a `WorldStorage`): from 26.1 a world is a dimension inside the main world's
-storage (`world/dimensions/minecraft/<name>`), and a map copied to
-`<container>/<name>/` is imported by Paper's own legacy-world migration
-(`DimensionStorage`); before, it's a folder of its own there, and a map's
-`level.dat` and overworld are copied into one (`WorldFolders`).
+storage (`world/dimensions/minecraft/<name>`), and a map's overworld is
+copied in as that folder, all of it (regions, entities, and `data/`: game
+rules, clock, weather, border, raids, Paper's spawn and persistent data,
+NetherForge's centities' records, anything a plugin keeps there) but the
+world's identity (`session.lock`, `uid.dat`, `data/paper/metadata.dat`, so
+Paper gives it a new UUID); `createWorld` loads it as it is
+(`DimensionStorage`). Not through Paper's own import of an old-layout folder at
+`<container>/<name>/`: that moves only `region/`, `entities/`, `poi/`, copies the
+game's saved data by a list of its own and makes the spawn from the map's
+`level.dat` (the main world's of the server it came from), so the rest of
+`data/` was lost; a map from before 26.1 (no
+`data/minecraft/world_gen_settings.dat` in its overworld) still goes that way,
+for Paper to upgrade. A map without Paper's `level_overrides.dat` (the editor's
+capture leaves `data/paper/` out) gets the server's own spawn, game mode and
+difficulty, as a new world does. Server-wide on 26.x, so never a world's:
+command storage, map items and their index, the scoreboard, boss bars,
+stopwatches, random sequences (`world/data/minecraft/`). Before 26.1 a world is
+a folder of its own there, and a map's `level.dat` and overworld are copied into
+one (`WorldFolders`).
 
 `crates/runtime/src/structures.rs` (its module doc the model): the project's `structures/<id>.nbt`, and those
 scripts save, in `<data>/.nf/structures/` (never the project: a running

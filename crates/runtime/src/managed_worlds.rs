@@ -73,6 +73,9 @@ pub struct OwnedWorld {
 struct Copy {
     name: String,
     terrain: Option<String>,
+    /// Its centities' records, read from the folder it's copied from: put in the store once its files are in.
+    records: Vec<(crate::store::InstanceRecord, Option<serde_json::Value>)>,
+    /// What it's copied from, as the log names it.
     from: String,
     done: mpsc::Receiver<Result<(), String>>,
     outcome: Rc<RefCell<Option<Result<String, String>>>>,
@@ -487,8 +490,8 @@ impl ManagedContext {
         let work = self
             .platform()
             .world_manager()
-            .copy(folder, name.to_owned());
-        Ok(self.copy_in(work, name, None, format!("map \"{map}\"")))
+            .copy(folder.clone(), name.to_owned());
+        self.copy_in(work, name, None, folder, format!("map \"{map}\""))
     }
 
     /// Imports the world in `folder` (under `worlds.import-root`) as a new world `name`, the project's from now on.
@@ -528,18 +531,23 @@ impl ManagedContext {
         let work = self
             .platform()
             .world_manager()
-            .copy(source, name.to_owned());
-        Ok(self.copy_in(work, name, terrain, format!("folder \"{folder}\"")))
+            .copy(source.clone(), name.to_owned());
+        self.copy_in(work, name, terrain, source, format!("folder \"{folder}\""))
     }
 
-    /// `work` puts `name`'s files in place, then it's loaded (with `terrain`) as the project's at a tick.
+    /// `work` puts `name`'s files in place (the map `source`'s world folder, all of it), then it's loaded (with
+    /// `terrain`) as the project's at a tick, the centities' records that folder carries put in the store first (as a
+    /// save wrote them, `centity::saving`). A records file it can't read refuses the copy.
     fn copy_in(
         &self,
         work: Box<dyn netherforge_platform::FileWork>,
         name: &str,
         terrain: Option<String>,
+        source: PathBuf,
         from: String,
-    ) -> Pending<handles::World> {
+    ) -> ApiResult<Pending<handles::World>> {
+        let records = crate::centity::saving::read_map_records(&source, name)
+            .map_err(|why| err(format!("couldn't copy {from} into world \"{name}\": {why}")))?;
         self.own(
             name,
             OwnedWorld {
@@ -562,17 +570,18 @@ impl ManagedContext {
         managed.copies.push(Copy {
             name: name.to_owned(),
             terrain,
+            records,
             from,
             done,
             outcome: outcome.clone(),
         });
-        Box::pin(std::future::poll_fn(move |_| {
+        Ok(Box::pin(std::future::poll_fn(move |_| {
             match outcome.borrow_mut().take() {
                 Some(Ok(name)) => std::task::Poll::Ready(Ok(handles::World { name })),
                 Some(Err(why)) => std::task::Poll::Ready(Err(ApiError(why))),
                 None => std::task::Poll::Pending,
             }
-        }))
+        })))
     }
 
     /// The copies whose files are in place: each loaded now, or forgotten saying why it isn't.
@@ -602,6 +611,9 @@ impl ManagedContext {
             let why = match result {
                 Err(e) => Some(format!("couldn't copy its files ({e})")),
                 Ok(()) => {
+                    // Its centities in the store as the world's before its entities load, so they're restored as
+                    // themselves rather than taken for strays.
+                    self.shared.instance.store.put_records(copy.records);
                     let ops = self.platform().world_manager();
                     let loaded = self.timed(&copy.name, || {
                         ops.load(copy.name.clone(), NORMAL.into(), copy.terrain.clone())
@@ -613,6 +625,7 @@ impl ManagedContext {
                 None => Ok(copy.name.clone()),
                 Some(why) => {
                     self.forget(&copy.name);
+                    self.shared.instance.store.forget_world_records(&copy.name);
                     self.platform().log().warn(format!(
                         "Couldn't copy {} into world \"{}\": {why}",
                         copy.from, copy.name

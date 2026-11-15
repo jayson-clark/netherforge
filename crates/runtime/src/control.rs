@@ -819,8 +819,8 @@ impl ServerControl {
         if instance.room_keyed(&key).is_some() {
             return refused(format!("a room keyed \"{key}\" is open already"));
         }
-        let (dir, names, data) = match &folder {
-            None => (std::path::PathBuf::new(), Vec::new(), None),
+        let (names, data) = match &folder {
+            None => (Vec::new(), None),
             Some(f) => match read_room_folder(session, f) {
                 Ok(read) => read,
                 Err(why) => return refused(why),
@@ -840,20 +840,10 @@ impl ServerControl {
                 "the server has a world named \"{taken}\" already (what room {key} left: close it with delete first)"
             ));
         }
-        // Each world's centities, as its save wrote them into its folder: put in the store as the world's before its
-        // room's scripts start, so they're restored as themselves rather than taken for strays as its entities load.
-        let mut records = Vec::new();
-        for (name, real) in names.iter().zip(&reals) {
-            match crate::centity::saving::read_map_records(&dir.join("worlds").join(name), real) {
-                Ok(read) => records.extend(read),
-                Err(why) => return refused(format!("room {key}'s world {name}: {why}")),
-            }
-        }
         let id = match instance.reserve_room(Some(key.clone()), keep) {
             Ok(id) => id,
             Err(why) => return refused(why),
         };
-        instance.store.put_records(records);
         if let Some(data) = data {
             // The folder is what the room keeps: what this server had of it goes.
             instance.store.forget_kept_tables(&key);
@@ -1182,14 +1172,9 @@ fn tables_file(
     Ok(())
 }
 
-/// What a room's folder (`POST /rooms/open`'s, under `worlds.import-root`) holds: where it is, the worlds in its
-/// `worlds/` (each a map, named as its scripts call it) and its `data.json` (`{ "<namespace>": { "<table>": <value> }
-/// }`), if any.
-type RoomFolder = (
-    std::path::PathBuf,
-    Vec<String>,
-    Option<serde_json::Map<String, Value>>,
-);
+/// What a room's folder (`POST /rooms/open`'s, under `worlds.import-root`) holds: the worlds in its `worlds/` (each a
+/// map, named as its scripts call it) and its `data.json` (`{ "<namespace>": { "<table>": <value> } }`), if any.
+type RoomFolder = (Vec<String>, Option<serde_json::Map<String, Value>>);
 
 fn read_room_folder(session: &Session, folder: &str) -> Result<RoomFolder, String> {
     let root = session
@@ -1245,7 +1230,7 @@ fn read_room_folder(session: &Session, folder: &str) -> Result<RoomFolder, Strin
             _ => return Err(format!("{folder}/data.json isn't a JSON object")),
         },
     };
-    Ok((dir, names, data))
+    Ok((names, data))
 }
 
 /// What the kept room `key` left once closed goes: its worlds' files and its tables.

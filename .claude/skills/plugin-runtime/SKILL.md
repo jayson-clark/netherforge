@@ -1504,10 +1504,12 @@ data service saves its tables) and answers each world's `save_files` paths and `
 `RoomRequest::Close` and with `delete` `forget_left` (`ManagedContext::delete_saved`). **A world's centities travel in
 its folder**: `/save {room}` and a kept room's close (after it stopped) write the store's records of each world's
 centities, with their `centity:data()`, into `data/netherforge/centities.json` there (`centity::saving::write_world_records`,
-`Store::world_records`), and `/rooms/open` reads them from each map in the folder into the store as the imported world's
-(`read_map_records`, `Store::put_records`) before the room's scripts start, so they're restored as themselves, not
-removed as strays; a file it can't read refuses the open. From the map, not the loaded world: Paper's import of a map
-(its legacy-world migration) moves only `region/`, `entities/` and `poi/` into the new dimension. A world deleted with its room (a match's, `forget_left`, a killed match's leftovers) takes its records
+`Store::world_records`), and every copy of a map (`nf.worlds.copy`, `import`, so each world `/rooms/open` brings in)
+reads them from the map into the store as the new world's (`ManagedContext::copy_in`: `read_map_records` before the
+file work, `Store::put_records` before the load), so they're restored as themselves, not removed as strays; a file it
+can't read refuses the copy (and the open). Read from the map as the copy starts because the server says where a world's
+files are only once it's loaded; the copy carries the file too, with the rest of the world's folder (plugin-world
+skill's managed worlds), stale until its next save writes it again, and nothing reads it there. A world deleted with its room (a match's, `forget_left`, a killed match's leftovers) takes its records
 (`Store::forget_world_records`), staged after the room stopped so no live centity stages them again. **Its tables too**: `/save {room}` and a kept room's
 close write its `kept_data` as `<plugin folder>/rooms/<key>/data.json` (`Instance::write_room_tables`, `Config::
 room_tables_dir`) and the answer names it (`data_file`, canonical: Kosmoi's agent sees the plugin folder as `/srv/data`);

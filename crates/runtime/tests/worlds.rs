@@ -1638,3 +1638,63 @@ end
     assert_eq!(status, 404);
     endpoint.stop(&*platform);
 }
+
+#[test]
+fn a_maps_centities_records_come_with_every_copy_of_it_and_a_file_that_isnt_refuses_it() {
+    // Maps on disk: one whose world folder carries its centities' records (as a save writes them), one whose file
+    // isn't records.
+    let project = tempfile::tempdir().unwrap();
+    let records = "dimensions/minecraft/overworld/data/netherforge/centities.json";
+    for (map, text) in [
+        (
+            "track",
+            r#"{"centities": [{"id": "00000000-0000-0000-0000-000000000007", "centity": "test:lamp",
+                "x": 3, "y": 64, "z": 4, "data": {"lit": 7}}]}"#,
+        ),
+        ("torn", "{ not json"),
+    ] {
+        let file = project.path().join("maps").join(map).join(records);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, text).unwrap();
+    }
+    let files = Files::new(
+        &[("maps/track/level.dat", ""), ("maps/torn/level.dat", "")],
+        r#"
+nf.worlds.copy("track", "track_1", function(w, err) print("copied", w and w:name(), err) end)
+local ok, why = pcall(nf.worlds.copy, "torn", "torn_1", print)
+print(ok, (tostring(why):gsub("^.*couldn't copy", "couldn't copy"):gsub(": .*isn't", ": isn't")))
+"#,
+    );
+    let platform = Fake::new();
+    let store = Rc::new(netherforge_runtime::store::Store::in_memory());
+    let root = project.path().to_owned();
+    let config = Config {
+        paths: Some(netherforge_runtime::screen::video::ProjectPaths(Rc::new(
+            move |path: &str| Some(root.join(path)),
+        ))),
+        ..Config::default()
+    };
+    let session =
+        Session::start_configured(platform.clone(), &files, &NoPackages, store.clone(), config);
+    let mut lines = printed(&session, &platform, 2);
+    lines.sort();
+    assert_eq!(
+        lines,
+        [
+            "copied track_1 nil",
+            "false couldn't copy map \"torn\" into world \"torn_1\": isn't centities' records: key must be a string at line 1 column 3",
+        ]
+    );
+    // The track's record is the copy's, its table too, before the copy loaded; the torn map was never copied.
+    let copied: Vec<_> = store
+        .instances()
+        .into_iter()
+        .map(|r| (r.centity, r.anchor.world, r.anchor.x))
+        .collect();
+    assert_eq!(
+        copied,
+        [("test:lamp".to_owned(), "track_1".to_owned(), 3.0)]
+    );
+    let managed = platform.managed.lock().unwrap().clone();
+    assert!(!managed.iter().any(|m| m.contains("torn")), "{managed:?}");
+}

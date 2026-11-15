@@ -12,8 +12,10 @@ use crate::store::{InstanceRecord, Store};
 
 /// Where a world's centities' records go in its own folder (beside the game's saved data, in our namespace), so they
 /// travel with its files: a kept room's world saved on one server and opened on another (the control endpoint's
-/// `/save` and `/rooms/open`). The store is what a server reads; this file is only written for a world leaving it and
-/// read (from the map a tool copied it into, [`read_map_records`]) for one coming in.
+/// `/save` and `/rooms/open`), or any map a world is copied from. The store is what a server reads; this file is only
+/// written for a world leaving it (`/save`, a kept room's close) and read, from the map, for one coming in (every copy
+/// and import, [`read_map_records`]). The copy has it too, as the rest of the map's world folder: a stale one in a
+/// world here until its next save writes it again, which nothing reads.
 pub const RECORDS_FILE: &str = "data/netherforge/centities.json";
 
 /// The store's records of the centities in `world` written into its folder `dimension` (no file when it has none).
@@ -45,7 +47,8 @@ pub fn write_world_records(
 pub const MAP_DIMENSION: &str = "dimensions/minecraft/overworld";
 
 /// The records in map `map`'s world folder, if it has any, as the centities of world `world` (what it's brought in as).
-/// Read from the map, not the world made from it: the server's import keeps only the game's own folders of it.
+/// Read from the map as the copy starts (the server says where a world's files are only once it's loaded), so a file
+/// that isn't records refuses the copy before anything is written.
 pub fn read_map_records(
     map: &std::path::Path,
     world: &str,
