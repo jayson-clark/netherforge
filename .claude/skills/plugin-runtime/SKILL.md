@@ -1581,6 +1581,10 @@ events weakly (so the adapter's events live as long as the plugin, as the test r
   tick) after `Session::save_data` stages every saved table and place; `show` saves the one table first.
 - `/nf shutdown` starts the network's shutdown (drain, wait for empty, fallback); its end sets `stop_server`, which
   `ServerEvents::tick` now hands the platform (`shutdown_server`): Kotlin's did, the Rust runtime only noted it before.
+- **`/nf room <room> <what…>`** runs `list`, `find`, `kill`, `tp`, `modules`, `schedules` or `scripts` (`IN_A_ROOM`) in
+  that room (`Instance::room_called`: its key, its number, or `main`); without it they're the main room's, except
+  `scripts`, which lists every room's, each labelled. The rest are the server's and refuse a room; `spawn` already
+  spawns in the room of the player's world.
 - `/nf requires` lists `http.allow-private`'s grants; Kotlin's `packages.provided` and `own-databases` lines wait for
   those features. The fake's `escape` is `<` as `\<`.
 

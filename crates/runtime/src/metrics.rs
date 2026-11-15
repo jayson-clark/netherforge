@@ -333,21 +333,20 @@ impl ServerMetrics {
             );
             let home = session.project().namespace().to_owned();
             let mut by_package: BTreeMap<String, (f64, usize, usize)> = BTreeMap::new();
-            if let Some(room) = session.room() {
-                // A script's instances share one memory category, each reporting all of it: counted once.
-                let mut counted = std::collections::HashSet::new();
-                for entry in session.costs() {
-                    let namespace = room
-                        .scripts()
-                        .namespace(entry.scope)
-                        .unwrap_or_else(|| home.clone());
-                    let sums = by_package.entry(namespace).or_default();
-                    sums.0 += entry.average_millis;
-                    if entry.category.is_none_or(|c| counted.insert(c)) {
-                        sums.1 += entry.bytes;
-                    }
-                    sums.2 += 1;
+            // Every room's scripts, by package. A script's instances share one memory category in their room's
+            // state, each reporting all of it: counted once.
+            let mut counted = std::collections::HashSet::new();
+            for entry in session.costs() {
+                let namespace = entry.namespace.clone().unwrap_or_else(|| home.clone());
+                let sums = by_package.entry(namespace).or_default();
+                sums.0 += entry.average_millis;
+                if entry
+                    .category
+                    .is_none_or(|c| counted.insert((entry.room.clone(), c)))
+                {
+                    sums.1 += entry.bytes;
                 }
+                sums.2 += 1;
             }
             for (namespace, (millis, bytes, scripts)) in &by_package {
                 let labels = [("package", namespace.as_str())];

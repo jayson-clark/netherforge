@@ -423,3 +423,53 @@ nf.every(1, function() print("timer " .. n) end)"#,
         "{problems:?}"
     );
 }
+
+#[test]
+fn every_rooms_scopes_are_profiled_each_under_its_rooms_name() {
+    let s = server(&[(
+        "modules/shop/init.lua",
+        r#"nf.on("tick", function()
+end)
+"#,
+    )]);
+    s.events
+        .session_mut()
+        .open_room(Some("arena".into()), false)
+        .expect("a room");
+    s.events
+        .session_mut()
+        .open_room(None, false)
+        .expect("a room");
+    s.stream();
+    s.tick(20);
+    let samples = s.samples();
+    let sample = &samples[0];
+    let mut scopes: Vec<&str> = sample.scopes.iter().map(|t| t.scope.as_str()).collect();
+    scopes.sort();
+    assert_eq!(
+        scopes,
+        [
+            "module shop",
+            "room 2 module shop",
+            "room arena module shop"
+        ]
+    );
+    let mut scripts: Vec<&str> = sample.handlers.iter().map(|h| h.script.as_str()).collect();
+    scripts.sort();
+    scripts.dedup();
+    assert_eq!(
+        scripts,
+        [
+            "module shop",
+            "room 2 module shop",
+            "room arena module shop"
+        ]
+    );
+    // A tick's top is every room's, not the last one's.
+    let top: Vec<&str> = sample.ticks[5]
+        .top
+        .iter()
+        .map(|t| t.scope.as_str())
+        .collect();
+    assert_eq!(top.len(), 3, "{top:?}");
+}

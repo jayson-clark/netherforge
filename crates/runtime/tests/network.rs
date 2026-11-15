@@ -1360,18 +1360,18 @@ fn the_owners_policy_that_stops_projects_refuses_one_that_requires_what_it_denie
     );
 }
 
-/// What each room's scripts printed: `main …` or `room 1 …`.
+/// What each room's scripts printed: `main …`, or after the room's label (`room 1 …`, `room owner-1 …`).
 fn room_lines(platform: &Fake) -> Vec<String> {
     platform
         .take()
         .into_iter()
         .filter_map(|line| {
             let (room, rest) = if let Some(rest) = line.strip_prefix("info [module t] ") {
-                ("main", rest)
+                ("main".to_owned(), rest)
             } else {
                 let rest = line.strip_prefix("info [room ")?;
                 let (n, rest) = rest.split_once(" module t] ")?;
-                (if n == "1" { "room 1" } else { "room ?" }, rest)
+                (format!("room {n}"), rest)
             };
             let text = rest.rsplit_once(" (modules/").map_or(rest, |(t, _)| t);
             Some(format!("{room} {}", text.replace('\t', " ")))
@@ -1497,7 +1497,7 @@ fn a_player_sent_for_a_room_arrives_in_it_and_it_opens_for_them() {
         seen.extend(room_lines(&platform));
         std::thread::sleep(Duration::from_millis(2));
     }
-    assert_eq!(seen, ["room 1 arrived owner-1 survival"]);
+    assert_eq!(seen, ["room owner-1 arrived owner-1 survival"]);
 }
 
 #[test]

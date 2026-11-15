@@ -1535,7 +1535,7 @@ impl<'a> Session<'a> {
                 .iter()
                 .filter_map(|(id, cost)| {
                     Some(netherforge_format::bridge::ScopeTime {
-                        scope: host.scope_title(*id)?,
+                        scope: in_room(run, host.scope_title(*id)?),
                         nanos: cost.nanos as i64,
                         calls: cost.calls as i32,
                         max: 0,
@@ -1561,8 +1561,8 @@ impl<'a> Session<'a> {
             .filter_map(|c| {
                 let title = host.scope_title(c.scope)?;
                 Some(crate::profile::Call {
-                    script: crate::costs::script_label(&title),
-                    scope: title,
+                    script: in_room(run, crate::costs::script_label(&title)),
+                    scope: in_room(run, title),
                     kind: c.kind.clone(),
                     // A script's body starts at no line of its own: it's its file.
                     source: c.file.map(|file| netherforge_format::bridge::SourceRef {
@@ -1686,29 +1686,30 @@ impl<'a> Session<'a> {
         ));
     }
 
-    /// Every live scope's costs (`/nf scripts`), the most expensive first: its window's numbers, what it holds
-    /// here, every service's counts of what it owns, and the bytes its script's memory key holds.
+    /// Every live scope's costs in every room (`/nf scripts`, each labelled by its room), the most expensive first: its
+    /// window's numbers, what it holds here, every service's counts of what it owns, and the bytes its script's memory
+    /// key holds.
     pub fn costs(&self) -> Vec<crate::costs::Entry> {
-        let Some(room) = &self.rooms[0].room else {
-            return Vec::new();
-        };
-        let host = room.host();
-        let scripts = room.scripts();
-        let costs = self.rooms[0].costs.borrow();
-        let entries = scripts
-            .live_scopes()
-            .into_iter()
-            .map(|scope| {
+        let mut entries = Vec::new();
+        for run in &self.rooms {
+            let Some(room) = &run.room else { continue };
+            let host = room.host();
+            let scripts = room.scripts();
+            let costs = run.costs.borrow();
+            let label = run.shared.instance.room_label(run.id);
+            entries.extend(scripts.live_scopes().into_iter().map(|scope| {
                 let (average_millis, max_millis, calls) = costs.of(scope);
                 let (subscriptions, tasks) = scripts.held(scope);
                 let mut counts = vec![(
                     "waits",
                     netherforge_api::pending::waiting(host.lua(), scope),
                 )];
-                for service in &self.rooms[0].services {
+                for service in &run.services {
                     counts.extend(service.costs(scope));
                 }
                 crate::costs::Entry {
+                    room: label.clone(),
+                    namespace: scripts.namespace(scope),
                     scope,
                     title: host.scope_name(scope).unwrap_or_default(),
                     average_millis,
@@ -1720,8 +1721,8 @@ impl<'a> Session<'a> {
                     bytes: host.scope_memory(scope).unwrap_or(0),
                     category: host.scope_category(scope),
                 }
-            })
-            .collect();
+            }));
+        }
         crate::costs::sorted(entries)
     }
 
@@ -2809,10 +2810,15 @@ fn label(run: &RoomRun, room: &Room, scope: netherforge_luau::ScopeId) -> String
         .host()
         .scope_name(scope)
         .unwrap_or_else(|| "script".into());
-    if run.id == crate::instance::RoomId::MAIN {
-        name
-    } else {
-        format!("{} {name}", run.id)
+    in_room(run, name)
+}
+
+/// `name` (a scope's or script's) as the log and the tools show it in `run`'s room: after the room's label when it isn't
+/// the main room (`room player_7f2c module door`).
+fn in_room(run: &RoomRun, name: String) -> String {
+    match run.shared.instance.room_label(run.id) {
+        Some(room) => format!("{room} {name}"),
+        None => name,
     }
 }
 

@@ -387,11 +387,11 @@ end)
         [
             "module t] room 0 true nil 1",
             "module t] opening 1 opening true",
-            "room 1 module t] room 1 false match-1 1",
-            "room 1 module t] arrived Alex 1",
-            "room 1 module t] start 1 started",
-            "room 1 module t] finish 1",
-            "room 1 module t] close 1 1",
+            "room match-1 module t] room 1 false match-1 1",
+            "room match-1 module t] arrived Alex 1",
+            "room match-1 module t] start 1 started",
+            "room match-1 module t] finish 1",
+            "room match-1 module t] close 1 1",
         ],
         "{lines:?}"
     );

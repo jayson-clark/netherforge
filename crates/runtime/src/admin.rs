@@ -25,7 +25,7 @@ use netherforge_platform::{
 use serde_json::Value;
 
 use crate::server::ServerEvents;
-use crate::session::Session;
+use crate::session::{RoomRun, Session};
 
 /// Who may run `/nf`.
 pub const PERMISSION: &str = "netherforge.admin";
@@ -51,10 +51,21 @@ const SUBCOMMANDS: &[&str] = &[
     "network",
     "drain",
     "shutdown",
+    "room",
 ];
 
 /// How long `/nf shutdown --after-empty` waits for the server to empty, unless `--timeout` says.
 const DEFAULT_SHUTDOWN_SECONDS: u64 = 60;
+/// What `/nf room <room> …` runs in that room rather than the main one: what a room's scripts and centities are.
+const IN_A_ROOM: &[&str] = &[
+    "list",
+    "find",
+    "kill",
+    "tp",
+    "modules",
+    "schedules",
+    "scripts",
+];
 const MAX_PROBLEMS: usize = 5;
 const MAX_SCRIPTS: usize = 15;
 const BYTES_PER_MB: usize = 1024 * 1024;
@@ -198,26 +209,45 @@ impl AdminCommand {
     }
 
     fn dispatch(&self, sender: &Rc<dyn CommandSender>, text: &str) -> Said {
-        let args: Vec<&str> = text.split(' ').filter(|w| !w.is_empty()).collect();
+        let words: Vec<&str> = text.split(' ').filter(|w| !w.is_empty()).collect();
+        // `/nf room <room> <what>`: what a room's scripts and centities are, in that room (the main room's otherwise).
+        let (room, args) = match words.first() {
+            Some(w) if w.eq_ignore_ascii_case("room") => match words.get(1) {
+                Some(room) => (Some(*room), &words[2..]),
+                None => {
+                    return usage(sender, &format!("room <room> <{}>", IN_A_ROOM.join("|")));
+                }
+            },
+            _ => (None, &words[..]),
+        };
         let rest = args.get(1..).unwrap_or_default();
         let first = args.first().map(|a| a.to_lowercase());
+        if let (Some(room), Some(what)) = (room, first.as_deref())
+            && !IN_A_ROOM.contains(&what)
+        {
+            return Err(format!(
+                "/nf {what} is the server's, not room {room}'s: /nf room <room> takes {}",
+                IN_A_ROOM.join(", ")
+            ));
+        }
         let say = |line: String| sender.reply(line);
         match first.as_deref() {
             Some("spawn") => self.spawn(sender, rest),
-            Some("list") => self.list(sender, None),
+            Some("list") => self.list(sender, room, None),
             Some("find") => match rest.first() {
-                Some(c) => self.list(sender, Some(c)),
+                Some(c) => self.list(sender, room, Some(c)),
                 None => usage(sender, "find <centity>"),
             },
-            Some("kill") => self.kill(sender, rest),
+            Some("kill") => self.kill(sender, room, rest),
             Some("tp") => match rest.first() {
-                Some(t) => self.teleport(sender, t),
+                Some(t) => self.teleport(sender, room, t),
                 None => usage(sender, "tp <instance>"),
             },
             Some("reload") => self.reload(sender, rest),
-            Some("modules") => self.modules(sender),
+            Some("modules") => self.modules(sender, room),
             Some("scripts") => self.scripts(
                 sender,
+                room,
                 rest.first().is_some_and(|a| a.eq_ignore_ascii_case("all")),
             ),
             Some("profile") => self.profile(sender, rest.first().copied()),
@@ -225,7 +255,7 @@ impl AdminCommand {
             Some("data") => self.data(sender, rest),
             Some("settings") => self.settings(sender, rest, text),
             Some("requires") => self.requires(sender),
-            Some("schedules") => self.schedules(sender),
+            Some("schedules") => self.schedules(sender, room),
             Some("network") => self.network(sender),
             Some("drain") => self.drain(sender, rest),
             Some("shutdown") => self.shutdown(sender, rest),
@@ -290,13 +320,19 @@ impl AdminCommand {
         Ok(())
     }
 
-    fn list(&self, sender: &Rc<dyn CommandSender>, centity: Option<&str>) -> Said {
+    fn list(
+        &self,
+        sender: &Rc<dyn CommandSender>,
+        room: Option<&str>,
+        centity: Option<&str>,
+    ) -> Said {
         let events = self.events()?;
         let session = shared(&events)?;
+        let run = pick(&session, room)?;
         let here = sender
             .player()
             .and_then(|p| session.platform().players().location(p.uuid));
-        let centities = session.centities();
+        let centities = run.shared().centities.borrow();
         let mut instances: Vec<(Uuid, String, Location)> = centities
             .all()
             .filter(|i| !i.removed && centity.is_none_or(|c| i.centity() == c))
@@ -342,14 +378,17 @@ impl AdminCommand {
         Ok(())
     }
 
-    fn kill(&self, sender: &Rc<dyn CommandSender>, args: &[&str]) -> Said {
+    fn kill(&self, sender: &Rc<dyn CommandSender>, room: Option<&str>, args: &[&str]) -> Said {
         let Some(target) = args.first() else {
             return usage(sender, "kill <instance|centity|all>");
         };
         let events = self.events()?;
         let session = shared(&events)?;
-        let all: Vec<(Uuid, String)> = session
-            .centities()
+        let run = pick(&session, room)?;
+        let all: Vec<(Uuid, String)> = run
+            .shared()
+            .centities
+            .borrow()
             .all()
             .filter(|i| !i.removed)
             .map(|i| (i.id, i.centity().to_owned()))
@@ -368,15 +407,16 @@ impl AdminCommand {
                 "instance or centity",
             )?]
         };
-        let Some(context) = centity_context(&session) else {
+        let Some(context) = centity_context(run) else {
             return Err(not_running(&session));
         };
         let mut removed = chosen.iter().filter(|id| context.remove(**id)).count();
         if *target == "all" {
-            let inert: Vec<Uuid> = session.centities().inert().map(|r| r.id).collect();
+            let mut centities = run.shared().centities.borrow_mut();
+            let inert: Vec<Uuid> = centities.inert().map(|r| r.id).collect();
             let platform = session.platform_rc();
             for id in inert {
-                if session.centities().remove_inert(&*platform, id) {
+                if centities.remove_inert(&*platform, id) {
                     removed += 1;
                 }
             }
@@ -385,14 +425,21 @@ impl AdminCommand {
         Ok(())
     }
 
-    fn teleport(&self, sender: &Rc<dyn CommandSender>, target: &str) -> Said {
+    fn teleport(&self, sender: &Rc<dyn CommandSender>, room: Option<&str>, target: &str) -> Said {
         let player = sender.player().ok_or("only a player can teleport")?;
         let events = self.events()?;
         let session = shared(&events)?;
-        let ids: Vec<Uuid> = session.centities().all().map(|i| i.id).collect();
+        let run = pick(&session, room)?;
+        let ids: Vec<Uuid> = run
+            .shared()
+            .centities
+            .borrow()
+            .all()
+            .map(|i| i.id)
+            .collect();
         let id = by_prefix(ids.into_iter(), target, "instance or centity")?;
         let (centity, anchor) = {
-            let centities = session.centities();
+            let centities = run.shared().centities.borrow();
             let instance = centities.get(id).ok_or("it's gone")?;
             (instance.centity().to_owned(), instance.anchor().clone())
         };
@@ -447,10 +494,11 @@ impl AdminCommand {
         Ok(())
     }
 
-    fn modules(&self, sender: &Rc<dyn CommandSender>) -> Said {
+    fn modules(&self, sender: &Rc<dyn CommandSender>, room: Option<&str>) -> Said {
         let events = self.events()?;
         let session = shared(&events)?;
-        let Some(modules) = session.shared().modules.borrow().clone() else {
+        let run = pick(&session, room)?;
+        let Some(modules) = run.shared().modules.borrow().clone() else {
             sender.reply("<gray>This project has no modules.".into());
             return Ok(());
         };
@@ -460,7 +508,7 @@ impl AdminCommand {
             return Ok(());
         }
         let mut commands: HashMap<String, Vec<String>> = HashMap::new();
-        for (name, scope) in session.shared().commands.borrow().all() {
+        for (name, scope) in run.shared().commands.borrow().all() {
             if let Some(crate::modules::Owner::Module(id)) = modules.owner(scope) {
                 commands.entry(id).or_default().push(format!("/{name}"));
             }
@@ -483,10 +531,15 @@ impl AdminCommand {
     /// `/nf scripts [all]`: every running script, the most expensive first: its average and worst milliseconds a
     /// tick over the last `costs::WINDOW` ticks, then what it holds (memory once it's a megabyte or more). The top
     /// `MAX_SCRIPTS` unless `all`.
-    fn scripts(&self, sender: &Rc<dyn CommandSender>, all: bool) -> Said {
+    fn scripts(&self, sender: &Rc<dyn CommandSender>, room: Option<&str>, all: bool) -> Said {
         let events = self.events()?;
         let session = shared(&events)?;
-        let entries = session.costs();
+        let mut entries = session.costs();
+        if room.is_some() {
+            let run = pick(&session, room)?;
+            let label = session.instance().room_label(run.id);
+            entries.retain(|e| e.room == label);
+        }
         if entries.is_empty() {
             sender.reply("<gray>No scripts are running.".into());
             return Ok(());
@@ -519,8 +572,12 @@ impl AdminCommand {
             if entry.bytes / BYTES_PER_MB > 0 {
                 holds.push(format!("{} MB", entry.bytes / BYTES_PER_MB));
             }
+            let room = entry
+                .room
+                .as_ref()
+                .map_or(String::new(), |r| format!("<aqua>{r} "));
             sender.reply(format!(
-                "<yellow>{:.2} <gray>/ {:.2} <white>{} <gray>{}",
+                "<yellow>{:.2} <gray>/ {:.2} {room}<white>{} <gray>{}",
                 entry.average_millis,
                 entry.max_millis,
                 entry.title,
@@ -723,10 +780,11 @@ impl AdminCommand {
     }
 
     /// `/nf schedules`: every live `nf.schedule`, soonest first.
-    fn schedules(&self, sender: &Rc<dyn CommandSender>) -> Said {
+    fn schedules(&self, sender: &Rc<dyn CommandSender>, room: Option<&str>) -> Said {
         let events = self.events()?;
         let session = shared(&events)?;
-        let schedules = session.shared().schedules.borrow();
+        let run = pick(&session, room)?;
+        let schedules = run.shared().schedules.borrow();
         if schedules.entries.is_empty() {
             sender.reply("<gray>No schedules are running.".into());
             return Ok(());
@@ -740,7 +798,7 @@ impl AdminCommand {
         ));
         let mut entries: Vec<_> = schedules.entries.values().collect();
         entries.sort_by_key(|e| e.next.map_or(i64::MAX, |n| n.timestamp_millis()));
-        let host = session.room().map(|r| r.host().clone());
+        let host = run.room().map(|r| r.host().clone());
         for entry in entries {
             let when = match entry.next {
                 None => "never".to_owned(),
@@ -1421,6 +1479,32 @@ impl AdminCommand {
         };
         let first = args.first().map(|a| a.to_lowercase()).unwrap_or_default();
         let owned = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        if first == "room" {
+            // `/nf room <room> <what> …`: the open rooms by key (or number), then what runs in one.
+            let options = match args.len() {
+                2 => {
+                    let instance = session.instance();
+                    let open = instance.open.borrow();
+                    let rooms: Vec<String> = std::iter::once("main".to_owned())
+                        .chain(
+                            open.iter()
+                                .filter(|id| **id != crate::instance::RoomId::MAIN)
+                                .map(|id| {
+                                    instance.room_key(*id).unwrap_or_else(|| id.0.to_string())
+                                }),
+                        )
+                        .collect();
+                    rooms
+                }
+                3 => owned(IN_A_ROOM),
+                _ => Vec::new(),
+            };
+            let lower = prefix.to_lowercase();
+            return options
+                .into_iter()
+                .filter(|o| o.to_lowercase().starts_with(&lower))
+                .collect();
+        }
         let options: Vec<String> = if args.len() >= 2 && first == "data" {
             self.data_options(&session, &args[1..])
         } else {
@@ -1536,12 +1620,27 @@ fn escape(session: &Session, text: &str) -> String {
     session.platform().text().escape(text.to_owned())
 }
 
-fn centity_context(session: &Session) -> Option<crate::centity::api::CentityContext> {
-    let room = session.room()?;
+fn centity_context(run: &RoomRun) -> Option<crate::centity::api::CentityContext> {
+    let room = run.room()?;
     Some(crate::centity::api::CentityContext::new(
-        session.shared().clone(),
+        run.shared().clone(),
         room.scripts().clone(),
     ))
+}
+
+/// The room `/nf room <room>` names (`Instance::room_called`: its key or number), or the main room without one.
+fn pick<'s>(session: &'s Session<'static>, room: Option<&str>) -> Result<&'s RoomRun, String> {
+    let id = match room {
+        None => crate::instance::RoomId::MAIN,
+        Some(name) => session.instance().room_called(name).ok_or_else(|| {
+            format!(
+                "no room \"{name}\" is open (name one by its key, or its number as the log says it)"
+            )
+        })?,
+    };
+    session
+        .run(id)
+        .ok_or_else(|| format!("room {} isn't open", room.unwrap_or("main")))
 }
 
 fn short(id: Uuid) -> String {

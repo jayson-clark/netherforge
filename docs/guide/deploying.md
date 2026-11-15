@@ -173,24 +173,25 @@ The `/netherforge` command (alias `/nf`) needs the `netherforge.admin`
 permission, which operators have by default. Commands your modules add with
 `nf.commands.register` use whatever `permission` you gave them.
 
-| Command                              | Does                                                                                     |
-| ------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `/nf reload [paths…]`                | Reloads the project, or only the resources you name.                                     |
-| `/nf spawn <centity> [player]`       | Spawns a centity at a player (you, by default).                                          |
-| `/nf list`, `/nf find <centity>`     | Lists spawned centities, nearest first.                                                  |
-| `/nf tp <instance>`                  | Teleports you to one, by the start of its id.                                            |
-| `/nf kill <instance\|centity\|all>`  | Removes one instance, every instance of a centity, or all of them.                       |
-| `/nf modules`                        | Each module, whether it's running, and the commands it added.                            |
-| `/nf scripts [all]`                  | Every running script by what it costs a tick, with its subscriptions, tasks and effects. |
-| `/nf profile <seconds>`              | Records every tick for that long (1 to 600 s) and writes a report; see below.            |
-| `/nf pack`, `/nf pack send [player]` | The resource pack's hash, size and URL; or sends it again to a player (you, by default). |
-| `/nf data [table]`                   | What NetherForge keeps: every table and its size, or one table's first rows.             |
-| `/nf data show <kind> <who>`         | One saved table as JSON: `player <name\|uuid>`, `centity <instance>`, `named <name>`.    |
-| `/nf data export`                    | Writes everything NetherForge keeps into `plugins/NetherForge/exports/` as JSON.         |
-| `/nf settings …`                     | The project's server-owner settings; see below.                                          |
-| `/nf schedules`                      | Every live `nf.schedule`, with its next run in the server's time zone.                   |
-| `/nf requires`                       | What the project and its packages declare they need, and who asks for each.              |
-| `/nf network`                        | How this server is in its network: connected or not, every server and who's on it.       |
+| Command                              | Does                                                                                                                                |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `/nf reload [paths…]`                | Reloads the project, or only the resources you name.                                                                                |
+| `/nf spawn <centity> [player]`       | Spawns a centity at a player (you, by default).                                                                                     |
+| `/nf list`, `/nf find <centity>`     | Lists spawned centities, nearest first.                                                                                             |
+| `/nf tp <instance>`                  | Teleports you to one, by the start of its id.                                                                                       |
+| `/nf kill <instance\|centity\|all>`  | Removes one instance, every instance of a centity, or all of them.                                                                  |
+| `/nf modules`                        | Each module, whether it's running, and the commands it added.                                                                       |
+| `/nf scripts [all]`                  | Every running script by what it costs a tick, with its subscriptions, tasks and effects.                                            |
+| `/nf profile <seconds>`              | Records every tick for that long (1 to 600 s) and writes a report; see below.                                                       |
+| `/nf pack`, `/nf pack send [player]` | The resource pack's hash, size and URL; or sends it again to a player (you, by default).                                            |
+| `/nf data [table]`                   | What NetherForge keeps: every table and its size, or one table's first rows.                                                        |
+| `/nf data show <kind> <who>`         | One saved table as JSON: `player <name\|uuid>`, `centity <instance>`, `named <name>`.                                               |
+| `/nf data export`                    | Writes everything NetherForge keeps into `plugins/NetherForge/exports/` as JSON.                                                    |
+| `/nf settings …`                     | The project's server-owner settings; see below.                                                                                     |
+| `/nf schedules`                      | Every live `nf.schedule`, with its next run in the server's time zone.                                                              |
+| `/nf requires`                       | What the project and its packages declare they need, and who asks for each.                                                         |
+| `/nf network`                        | How this server is in its network: connected or not, every server and who's on it.                                                  |
+| `/nf room <room> <what…>`            | `list`, `find`, `kill`, `tp`, `modules`, `schedules` or `scripts` in one room (its key, or its number); the main room's without it. |
 
 ## Server-owner settings
 

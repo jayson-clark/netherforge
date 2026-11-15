@@ -36,6 +36,11 @@ pub struct Slow {
 /// holds.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Entry {
+    /// Its room's label (`Instance::room_label`): none for the main room's.
+    pub room: Option<String>,
+    /// The package its script is in.
+    pub namespace: Option<String>,
+    /// Its scope in its room's Lua state (another room's may have the same number).
     pub scope: ScopeId,
     pub title: String,
     pub average_millis: f64,
@@ -46,7 +51,8 @@ pub struct Entry {
     pub counts: Vec<(&'static str, usize)>,
     /// What its memory key holds: shared by every scope of one script (each instance of a centity's).
     pub bytes: usize,
-    /// The Luau memory category `bytes` is of, so a sum over scopes counts each once.
+    /// The Luau memory category `bytes` is of, so a sum over scopes counts each once (per room: each room's state
+    /// has its own categories).
     pub category: Option<u8>,
 }
 

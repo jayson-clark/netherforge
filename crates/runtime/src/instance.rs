@@ -327,6 +327,35 @@ impl Instance {
         self.rooms.borrow().get(&room).and_then(|r| r.key.clone())
     }
 
+    /// What the log and the tools (`/nf scripts`, the profiler) call room `room`: `room <key>` for a keyed one,
+    /// `room <number>` for one without; none for the main room, whose scripts go by their own names.
+    pub fn room_label(&self, room: RoomId) -> Option<String> {
+        if room == RoomId::MAIN {
+            return None;
+        }
+        Some(match self.room_key(room) {
+            Some(key) => format!("room {key}"),
+            None => room.to_string(),
+        })
+    }
+
+    /// The room `/nf room <room>` names: by its key, or by its number (`3`, as the log calls a room without a key
+    /// `room 3`); `main` is the main room. None when no room is called that.
+    pub fn room_called(&self, name: &str) -> Option<RoomId> {
+        if name == "main" {
+            return Some(RoomId::MAIN);
+        }
+        if let Some(id) = self.room_keyed(name) {
+            return Some(id);
+        }
+        let number: u32 = name.parse().ok()?;
+        self.rooms
+            .borrow()
+            .keys()
+            .copied()
+            .find(|id| id.0 == number && *id != RoomId::MAIN)
+    }
+
     /// Room `room`'s key when it's kept (its worlds saved as it closes, its `nf.data` under the key); none for a room
     /// whose worlds and tables go with it, and for the main room.
     pub fn kept_key(&self, room: RoomId) -> Option<String> {
