@@ -154,19 +154,10 @@ impl Shared {
         if self.room == crate::instance::RoomId::MAIN {
             return None;
         }
-        Some(match self.instance.room_key(self.room) {
-            Some(key) => key
-                .chars()
-                .map(|c| {
-                    if c.is_ascii_alphanumeric() {
-                        c.to_ascii_lowercase()
-                    } else {
-                        '_'
-                    }
-                })
-                .collect(),
-            None => format!("r{}", self.room.0),
-        })
+        Some(crate::instance::world_suffix(
+            self.instance.room_key(self.room).as_deref(),
+            self.room,
+        ))
     }
 
     /// The server's name of the world this room's scripts call `name`: in a room beside the main one, its own world of

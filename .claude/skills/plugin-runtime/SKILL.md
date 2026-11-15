@@ -1493,9 +1493,17 @@ threads of its own (one request a connection, 64 KiB bodies, 16 connections at o
 threads (when the last tick ended: a stuck main thread is `stalled`), and a watchdog says `stalled` once; `/state` and
 `/events` (Server-Sent Events) from the snapshot the main thread makes every 5 ticks (and on the first, and after an
 action); actions (`/drain`, `/shutdown`, `/save` with `pause`, `/resume`, `/worlds/create`, `/worlds/load` (an
-import answered once its files are copied), `/worlds/unload`) are queued for the main thread and done at its next tick
-(`ServerControl::tick`, called by `ServerEvents::run_tick`), each logged with where it came from. Tests:
-`tests/control.rs` (TCP with a token, and a Unix socket).
+import answered once its files are copied), `/worlds/unload`, `/rooms/open`, `/rooms/close`) are queued for the main
+thread and done at its next tick (`ServerControl::tick`, called by `ServerEvents::run_tick`), each logged with where it
+came from. **Rooms** (kept rooms carried between servers, Kosmoi's owner worlds): `/rooms/open` reserves the key
+(`Instance::reserve_room`), puts `data.json`'s tables in the store under `<ns>#<key>` (`Store::kept_tables`/
+`forget_kept_tables`), imports each `worlds/<name>` map as `<name>__<suffix>` (`instance::world_suffix`) through the
+main room's `ManagedContext::import`, then (`poll_rooms`) gives the worlds to the room before `RoomRequest::Open`, so
+its scripts start with them; `/save {room}` runs `Session::save_room` (each world's `world_saving`, `room_saving`: the
+data service saves its tables) and answers each world's `save_files` paths and `kept_data`; `/rooms/close` asks
+`RoomRequest::Close` and with `delete` `forget_left` (`ManagedContext::delete_saved`). `/state` has `rooms` (keyed,
+open), `/events` `room_open`/`room_close`. Tests: `tests/control.rs` (TCP with a token, and a Unix socket; a kept
+room saved, closed and brought back).
 
 ## Config, policy and the hub (`crates/runtime/src/config.rs`, `session.rs`)
 

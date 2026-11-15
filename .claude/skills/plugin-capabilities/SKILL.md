@@ -316,7 +316,7 @@ seconds` (`network::wait_for_hub`, the link's `await_welcome`) and `require-hub`
 - **Outside the network but beside it**: the control endpoint (`control.rs`), a Unix socket or loopback port with a
   token file, for whoever runs the server (`/state` with `running` and `refused`, `last_tick`/`tick_ms` kept every tick
   and read off the main thread, `/healthz` without a token, a watchdog thread's `stalled` after `stall-seconds`,
-  `/events`, `/drain`, `/shutdown`, `/save` with pause, `/resume`, `/worlds/load|unload`); `policy.json` (format's
+  `/events`, `/drain`, `/shutdown`, `/save` with pause (a world's, or a room's with its tables), `/resume`, `/worlds/load|unload`, `/rooms/open|close`); `policy.json` (format's
   `Policy`, `runtime.policy`, also sent by the hub as `policy.<role>`) allows and denies requirement kinds and lowers
   limits (`limits_under_policy`, `config.rs`); bundles are signed (`bundles.require-signature`/`trusted-keys`,
   `project_files.rs`) and fetched by URL and hash (`bundle_fetch.rs`); packs can live in S3-compatible storage

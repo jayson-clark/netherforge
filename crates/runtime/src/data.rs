@@ -242,6 +242,13 @@ impl Service for DataService {
         }
     }
 
+    /// The room is saved now (a kept room's save): every table that changed.
+    fn room_saving(&self) {
+        if let Some(host) = self.host.borrow().clone() {
+            self.save_all(&host);
+        }
+    }
+
     /// They left: their table is saved now, after their `player_quit` handlers, and let go of, so the room they
     /// join next (this one again, or another) reads it as it was saved, whatever another room did with it meanwhile.
     fn player_quit(&self, player: &PlayerRef) {

@@ -228,6 +228,62 @@ impl ManagedContext {
         managed.created.insert(name.to_owned(), owned);
     }
 
+    /// The worlds the project has kept whose server names end `__<suffix>`: a room's, by its suffix
+    /// (`instance::world_suffix`), loaded or left on disk.
+    pub fn worlds_ending(&self, suffix: &str) -> Vec<String> {
+        let namespace = self.shared.managed_worlds.borrow().namespace.clone();
+        let end = format!("__{suffix}");
+        self.shared
+            .instance
+            .store
+            .worlds_of(&namespace)
+            .into_keys()
+            .filter(|name| name.ends_with(&end))
+            .collect()
+    }
+
+    /// Deletes world `name`'s files, unloaded (a kept room's world, its room closed): the project forgets it. False when
+    /// it's loaded, or isn't the project's.
+    pub fn delete_saved(&self, name: &str) -> bool {
+        let platform = self.platform();
+        if platform.worlds().exists(name.to_owned()) || !self.is_managed_anywhere(name) {
+            return false;
+        }
+        let ops = platform.world_manager();
+        if ops.is_saved(name.to_owned()) {
+            let work = ops.delete(name.to_owned());
+            let failures = self.shared.instance.managed_failures.clone();
+            let world = name.to_owned();
+            self.shared.instance.lane(FILES).submit(move || {
+                if let Err(e) =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work.run()))
+                {
+                    failures
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .push(format!(
+                            "Couldn't delete all of world \"{world}\"'s files: {}",
+                            panic_text(&e)
+                        ));
+                }
+            });
+        }
+        self.forget(name);
+        true
+    }
+
+    /// Whether the project keeps `name` in the store, whichever room made it.
+    fn is_managed_anywhere(&self, name: &str) -> bool {
+        let namespace = self.shared.managed_worlds.borrow().namespace.clone();
+        self.is_managed(name)
+            || self
+                .shared
+                .instance
+                .store
+                .worlds_of(&namespace)
+                .contains_key(name)
+    }
+
     /// `name` is gone (deleted, or its copy failed): nobody's any more.
     fn forget(&self, name: &str) {
         self.shared.managed_worlds.borrow_mut().created.remove(name);

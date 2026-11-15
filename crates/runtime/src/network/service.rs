@@ -861,8 +861,8 @@ impl NetworkContext {
         }
     }
 
-    /// The players the hub sent into a room that had closed here, now they've arrived (in the main room): sent back
-    /// to the network to be placed again, to this server's group, as whoever placed them would have them (Kosmoi's
+    /// The players the hub sent into a room that had closed here, now they've arrived (in the main room), and those of
+    /// a room that closed on a draining server: sent back to the network to be placed again, to this server's group, as whoever placed them would have them (Kosmoi's
     /// matchmaker answers the group's placement). Not connected, or with no group, they stay in the main room.
     fn place_again(&self, link: &NetworkLink) {
         let players = self.platform().players();
@@ -891,12 +891,12 @@ impl NetworkContext {
             let log = self.platform().log();
             if sent {
                 log.info(format!(
-                    "{name} was sent into a room that has closed here: sent back to {} to be placed again",
+                    "{name}'s room has closed here: sent back to {} to be placed again",
                     group.unwrap_or_default()
                 ));
             } else {
                 log.warn(format!(
-                    "{name} was sent into a room that has closed here, and couldn't be sent back to be placed again: they stay in the main room"
+                    "{name}'s room has closed here, and they couldn't be sent back to be placed again: they stay in the main room"
                 ));
             }
         }

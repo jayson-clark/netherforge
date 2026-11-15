@@ -36,6 +36,24 @@ impl std::fmt::Display for RoomId {
     }
 }
 
+/// What a room's worlds are called on the server after their scripts' names (`<name>__<suffix>`): its key made a world
+/// name (lowercase, any other character `_`) for a room with one, `r<number>` for one without.
+pub fn world_suffix(key: Option<&str>, room: RoomId) -> String {
+    match key {
+        Some(key) => key
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() {
+                    c.to_ascii_lowercase()
+                } else {
+                    '_'
+                }
+            })
+            .collect(),
+        None => format!("r{}", room.0),
+    }
+}
+
 /// Which room each world and each player is in: one that isn't named is the main room's.
 #[derive(Default)]
 pub struct Routes {
@@ -287,7 +305,7 @@ impl Instance {
     }
 
     /// The open room keyed `key` (closing ones aside).
-    fn room_keyed(&self, key: &str) -> Option<RoomId> {
+    pub fn room_keyed(&self, key: &str) -> Option<RoomId> {
         self.rooms
             .borrow()
             .iter()
@@ -332,9 +350,7 @@ impl Instance {
         let id = match self.room_keyed(key) {
             Some(id) => id,
             None if self.closed_keys.borrow().contains(key) => {
-                self.to_place_again
-                    .borrow_mut()
-                    .insert(player, std::time::Instant::now());
+                self.place_again(player);
                 return;
             }
             None => {
@@ -396,6 +412,14 @@ impl Instance {
         while closed.len() > MAX_CLOSED_KEYS {
             closed.shift_remove_index(0);
         }
+    }
+
+    /// `player` (here, or on their way) is sent back to the network to be placed again, from the main room, once
+    /// they're here: one sent into a room that had closed, or in a room closing on a server that's draining.
+    pub fn place_again(&self, player: Uuid) {
+        self.to_place_again
+            .borrow_mut()
+            .insert(player, std::time::Instant::now());
     }
 
     /// The players sent into a room that had closed who are here now, to send back to the network to be placed again;

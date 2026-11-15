@@ -97,6 +97,9 @@ pub trait Service {
     fn chunk_loaded(&self, _world: &str, _chunk_x: i32, _chunk_z: i32, _generated: bool) {}
     /// A world is being saved (an autosave, `/save-all`, the server stopping).
     fn world_saving(&self, _world: &str) {}
+    /// Its room is being saved as it is now (the control endpoint saving a kept room): what it keeps beside its worlds
+    /// (its `nf.data` tables) is written now.
+    fn room_saving(&self) {}
     /// Another plugin was enabled or disabled, or a service provider registered or went.
     fn plugins_changed(&self) {}
     /// A block was placed or broken (once scripts let it be): what's built from the world's blocks reads it again.
@@ -791,8 +794,19 @@ impl<'a> Session<'a> {
             return;
         }
         let players = self.instance().routes.borrow().players_of(id);
+        // On a server draining (an old release on its way out), they're placed again through the network rather than
+        // kept in the main room: the hub's placement finds them a room on a server that isn't going.
+        let draining = self
+            .shared()
+            .network
+            .borrow()
+            .link()
+            .is_some_and(|l| l.lifecycle() == crate::network::protocol::Lifecycle::Draining);
         for player in players.into_iter().filter(|_| moving) {
             self.move_player(player, crate::instance::RoomId::MAIN);
+            if draining {
+                self.instance().place_again(player);
+            }
         }
         let Some(at) = self.rooms.iter().position(|r| r.id == id) else {
             return;
@@ -1192,6 +1206,16 @@ impl<'a> Session<'a> {
         let room = self.route(crate::events::Route::World(world));
         self.each_in(room, |s| s.world_saving(world));
         self.instance().store.commit();
+    }
+
+    /// Room `id` is saved as it is now (the control endpoint's `/save` of a room): its worlds as for a world's save,
+    /// and its `nf.data` tables, all in the store once this returns.
+    pub fn save_room(&self, id: crate::instance::RoomId) {
+        for world in self.instance().routes.borrow().worlds_of(id) {
+            self.each_in(id, |s| s.world_saving(&world));
+        }
+        self.each_in(id, |s| s.room_saving());
+        self.instance().store.flush();
     }
 
     /// A chunk is unloading, its scripts told: what its room's services keep of it is written now.

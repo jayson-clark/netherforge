@@ -571,6 +571,48 @@ impl Store {
         );
     }
 
+    /// Every `nf.data` table kept for the room keyed `key` (stored under `<namespace>#<key>`): its namespace (without
+    /// the key), its name and its value, sorted.
+    pub fn kept_tables(&self, key: &str) -> Vec<(String, String, String)> {
+        let suffix = format!("#{key}");
+        let connection = self.settled();
+        let Ok(mut statement) = connection.prepare(
+            "SELECT namespace, name, value FROM named_data WHERE length(namespace) > length(?1) AND substr(namespace, length(namespace) - length(?1) + 1) = ?1 ORDER BY namespace, name",
+        ) else {
+            return Vec::new();
+        };
+        let rows = statement.query_map(params![suffix], |r| {
+            Ok((r.get::<_, String>(0)?, r.get(1)?, r.get(2)?))
+        });
+        rows.map(|rows| {
+            rows.filter_map(Result::ok)
+                .map(|(namespace, name, value)| {
+                    let namespace = namespace
+                        .strip_suffix(&suffix)
+                        .unwrap_or(&namespace)
+                        .to_owned();
+                    (namespace, name, value)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+    }
+
+    /// The `nf.data` tables kept for the room keyed `key` go.
+    pub fn forget_kept_tables(&self, key: &str) {
+        let suffix = format!("#{key}");
+        self.stage(
+            format!("named_data #{key}"),
+            Box::new(move |c| {
+                c.execute(
+                    "DELETE FROM named_data WHERE length(namespace) > length(?1) AND substr(namespace, length(namespace) - length(?1) + 1) = ?1",
+                    params![suffix],
+                )?;
+                Ok(())
+            }),
+        );
+    }
+
     pub fn delete_data(&self, owner: &crate::data::Owner) {
         use crate::data::Owner;
         let owner = owner.clone();

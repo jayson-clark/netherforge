@@ -1709,10 +1709,55 @@ fn a_player_sent_into_a_room_that_closed_here_is_sent_back_to_be_placed_again() 
         std::thread::sleep(Duration::from_millis(2));
     }
     assert!(
-        seen.iter().any(|l| l
-            == "info Ana was sent into a room that has closed here: sent back to dev to be placed again"),
+        seen.iter()
+            .any(|l| l == "info Ana's room has closed here: sent back to dev to be placed again"),
         "{seen:?}"
     );
     // A script may still open that key again.
     assert!(session.open_room(Some("m-1".into()), false).is_some());
+}
+
+#[test]
+fn a_room_closing_on_a_draining_server_sends_its_players_back_to_be_placed_again() {
+    let files = project("", NETWORK);
+    let platform = Platform::default();
+    let mut session = start(&files, &platform, dev(), None);
+    for _ in 0..3 {
+        session.tick();
+    }
+    let owner = session
+        .open_room(Some("player_7f".into()), true)
+        .expect("a room");
+    session.tick();
+    let ana = PlayerRef {
+        uuid: uuid(9),
+        name: "Ana".into(),
+    };
+    platform.online.borrow_mut().push(ana.clone());
+    session.player_joined(netherforge_runtime::instance::RoomId::MAIN, &ana);
+    session.move_player(uuid(9), owner);
+    session.tick();
+    platform.take();
+    session
+        .shared()
+        .network
+        .borrow()
+        .link()
+        .unwrap()
+        .set_draining(true);
+    session.close_room(owner);
+    let mut seen = Vec::new();
+    let started = Instant::now();
+    while started.elapsed() < Duration::from_secs(10)
+        && !seen.iter().any(|l: &String| l.contains("placed again"))
+    {
+        session.tick();
+        seen.extend(platform.take());
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert!(
+        seen.iter()
+            .any(|l| l == "info Ana's room has closed here: sent back to dev to be placed again"),
+        "{seen:?}"
+    );
 }
