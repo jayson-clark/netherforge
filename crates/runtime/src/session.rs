@@ -903,8 +903,9 @@ impl<'a> Session<'a> {
 
     /// Tells the network's hub that room `id` is at `state` in its life, when it has a key (what the hub's sends and
     /// placements name it by): whoever placed players in it (Kosmoi's matchmaker) hears its match begin and end and
-    /// the room go, from the hub, with no SDK of its own in the game. What can't be told now (the link down) is told
-    /// once it's back: a room open then says where it is at the welcome, and a close not told is told then.
+    /// the room go, from the hub, with no SDK of its own in the game. What a drop may lose is told once the link is
+    /// back: a room open then says where it is at the welcome, and a close is told again (one the link refused, or one
+    /// of the last minute's, which a link dropping as it wrote may have lost).
     fn report_room(&self, id: crate::instance::RoomId, state: RoomLife) {
         let key = self
             .instance()
@@ -914,14 +915,13 @@ impl<'a> Session<'a> {
             .and_then(|info| info.key.clone());
         let Some(room) = key else { return };
         let link = self.shared().network.borrow().link();
-        if let Some(link) = link
-            && !link.send(crate::network::ServerFrame::RoomState {
-                room: room.clone(),
-                state,
-            })
-            && state == RoomLife::Closed
-        {
-            self.instance().untold_closes.borrow_mut().push(room);
+        let Some(link) = link else { return };
+        let told = link.send(crate::network::ServerFrame::RoomState {
+            room: room.clone(),
+            state,
+        });
+        if state == RoomLife::Closed {
+            self.instance().close_to_retell(room, told);
         }
     }
 

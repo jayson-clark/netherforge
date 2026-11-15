@@ -1652,6 +1652,30 @@ fn what_a_dropped_link_couldnt_tell_of_the_rooms_is_told_once_it_is_back() {
             told("m-b", RoomLife::Finished)
         ]
     );
+    // A close the link took is told again at the next welcome too: a link dropping as it wrote may have lost it.
+    let a = session
+        .instance()
+        .rooms
+        .borrow()
+        .iter()
+        .find(|(_, r)| r.key.as_deref() == Some("m-a"))
+        .map(|(id, _)| *id)
+        .unwrap();
+    session.close_room(a);
+    assert_eq!(
+        hub.room_states().last(),
+        Some(&told("m-a", RoomLife::Closed))
+    );
+    let before = hub.room_states().len();
+    hub.drop_here();
+    session.tick();
+    hub.reconnect_here(Lifecycle::Ready);
+    session.tick();
+    assert!(
+        hub.room_states()[before..].contains(&told("m-a", RoomLife::Closed)),
+        "{:?}",
+        hub.room_states()
+    );
 }
 
 #[test]

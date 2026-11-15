@@ -684,7 +684,7 @@ server started, finished or closed, as its scripts' `room:start()`,
 `room:finish()` and `room:close()` said; a placing service knows when a room
 it filled is under way and when it's gone. A server whose link dropped says it
 again as it's welcomed back: each keyed room under way its state, and each that
-closed meanwhile `closed`, so a client must take a state it heard before as
+closed meanwhile or just before `closed`, so a client must take a state it heard before as
 nothing new), and with `?listen=lobby:news,lobby:queue` messages on those channels. Its first
 event is `hello`, with the hub's `started` time and an `instance` id that's new
 on every start, so a client reconnecting knows whether the hub restarted.

@@ -124,6 +124,8 @@ impl Routes {
 /// How many closed rooms' keys the instance remembers (`closed_keys`): far more than a server closes in the time a
 /// player sent to one takes to arrive.
 const MAX_CLOSED_KEYS: usize = 4096;
+/// How long a room's close the link took is told again at a welcome: longer than a dropped link takes to be seen.
+const RETELL_SECONDS: u64 = 60;
 /// How long a player sent into a closed room may take to arrive.
 const ARRIVING_SECONDS: u64 = 60;
 
@@ -164,8 +166,9 @@ pub struct Instance {
     pub room_requests: RefCell<Vec<crate::rooms::RoomRequest>>,
     /// The last room number given.
     last_room: std::cell::Cell<u32>,
-    /// The keys of rooms that closed while the network's link was down, for the hub to be told once it's back.
-    pub untold_closes: RefCell<Vec<String>>,
+    /// The keys of rooms that closed, for the hub to be told again once the link is welcomed back: since when, and
+    /// whether the link took the frame (`close_to_retell`).
+    untold_closes: RefCell<Vec<(String, std::time::Instant, bool)>>,
     /// The keys of rooms that have closed while the server runs, latest last (the most recent `MAX_CLOSED_KEYS`): a
     /// player the hub sends to one isn't given a room of that key again, as nobody placing players means it now.
     closed_keys: RefCell<indexmap::IndexSet<String>>,
@@ -393,7 +396,12 @@ impl Instance {
             .collect();
         let open: std::collections::HashSet<&str> =
             rooms.values().filter_map(|r| r.key.as_deref()).collect();
-        let mut closes = std::mem::take(&mut *self.untold_closes.borrow_mut());
+        let mut closes: Vec<String> = std::mem::take(&mut *self.untold_closes.borrow_mut())
+            .into_iter()
+            .filter(|(_, at, told)| !told || at.elapsed().as_secs() < RETELL_SECONDS)
+            .map(|(key, _, _)| key)
+            .collect();
+        closes.sort();
         closes.dedup();
         out.extend(
             closes
@@ -402,6 +410,15 @@ impl Instance {
                 .map(|key| (key, RoomLife::Closed)),
         );
         out
+    }
+
+    /// Room `key` closed, and the link took the frame saying so (`told`) or didn't: it's told again at the next
+    /// welcome unless it was told more than `RETELL_SECONDS` ago (a frame the link takes and loses as it drops is
+    /// lost within moments).
+    pub fn close_to_retell(&self, key: String, told: bool) {
+        let mut closes = self.untold_closes.borrow_mut();
+        closes.retain(|(_, at, told)| !told || at.elapsed().as_secs() < RETELL_SECONDS);
+        closes.push((key, std::time::Instant::now(), told));
     }
 
     /// Room `key` closed: a player sent into it later is placed again (`place_in_room`).
