@@ -496,6 +496,8 @@ pub enum HubFrame {
     },
     /// `player`, on their way here (logging in, or sent), belongs in the room `room` names: they're put in it as they
     /// arrive, a room opened for it when none has that key yet (kept, when `keep`: its worlds and `nf.data` outlast it).
+    /// A key whose room has closed here isn't opened again: they arrive in the main room and are sent back to the
+    /// server's group to be placed again (`Instance::place_in_room`).
     /// Before the player gets here, and before any `Arriving`.
     Room {
         player: String,

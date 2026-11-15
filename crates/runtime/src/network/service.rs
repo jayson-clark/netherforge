@@ -850,12 +850,54 @@ impl NetworkContext {
         if !main {
             return;
         }
+        self.place_again(&link);
         self.life(&link, now);
         if let Some(hub) = link.local() {
             for (id, message) in hub.take_kicks() {
                 if let Some(uuid) = parse_uuid(&id) {
                     self.platform().players().kick(uuid, Some(message));
                 }
+            }
+        }
+    }
+
+    /// The players the hub sent into a room that had closed here, now they've arrived (in the main room): sent back
+    /// to the network to be placed again, to this server's group, as whoever placed them would have them (Kosmoi's
+    /// matchmaker answers the group's placement). Not connected, or with no group, they stay in the main room.
+    fn place_again(&self, link: &NetworkLink) {
+        let players = self.platform().players();
+        let again = self
+            .shared
+            .instance
+            .take_to_place_again(|p| players.get(p).is_some());
+        for player in again {
+            let name = players
+                .get(player)
+                .map_or_else(|| uuid_text(&player), |p| p.name);
+            let group = link.group();
+            let sent = group.clone().is_some_and(|group| {
+                link.send(ServerFrame::Send {
+                    id: link.next_id(),
+                    players: vec![uuid_text(&player)],
+                    server: None,
+                    data: None,
+                    group: Some(group),
+                    balance: None,
+                    wait_millis: None,
+                    room: None,
+                    keep: false,
+                })
+            });
+            let log = self.platform().log();
+            if sent {
+                log.info(format!(
+                    "{name} was sent into a room that has closed here: sent back to {} to be placed again",
+                    group.unwrap_or_default()
+                ));
+            } else {
+                log.warn(format!(
+                    "{name} was sent into a room that has closed here, and couldn't be sent back to be placed again: they stay in the main room"
+                ));
             }
         }
     }

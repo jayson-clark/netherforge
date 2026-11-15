@@ -274,6 +274,12 @@ Servers behind one Velocity proxy, talking through a **hub** the proxy runs. Thr
   Sending to a group picks an instance accepting players with room (`least` or `fill`; `send_players` keeps a party
   together); a send can wait (`wait`, `on_wait`, the hub's `max-waiting`) or fall back (`fallback`). Publishing and
   requesting to a group reach its instances.
+- **Rooms in sends** (`HubFrame.Room` ahead of the player, from a placement answer's or a send's `room`/`keep`):
+  `Instance::place_in_room` puts them in the open room of that key, or opens one for them. A key whose room has closed
+  here (`closed_keys`, the latest 4096) isn't opened by an arrival: whoever placed them did before it closed, and a
+  room nobody placing players knows would be nobody's. They land in the main room and the main room's network tick
+  (`place_again`) sends them to the server's own group, where the hub's placement hook places them again. Scripts
+  and the control endpoint may still open a closed key.
 - **Registration** (`network.register.address`, `server-name: auto` numbering `<group>-<n>`; or `HubAdmin`'s
   `POST /v1/servers`): a server not in `velocity.toml` adds itself through `HubProxy.register`, and comes off as it
   stops or after `unregister-after-seconds`.

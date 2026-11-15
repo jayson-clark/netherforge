@@ -266,7 +266,9 @@ sealed interface HubFrame {
     /**
      * [player], on their way here (logging in, or sent), belongs in the room [room] names: the server puts them in it as
      * they arrive, opening it when no room has that key yet, kept when [keep] (its worlds and data outlast it: an
-     * owner's, a party's; a match's isn't). Before the player gets here, and before any [Arriving].
+     * owner's, a party's; a match's isn't). A key whose room has closed on the server isn't opened again: they arrive in
+     * its main room and it sends them back to its group to be placed again. Before the player gets here, and before any
+     * [Arriving].
      */
     @Serializable
     @SerialName("room")

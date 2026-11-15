@@ -706,7 +706,10 @@ sends `place` with the players and an `id`, and the service answers
 - `{ "server": "arena-3" }`: they go there. Add `"room": "match-7"` to put
   them in that room of the server (one that runs several rooms of its project,
   see `nf.rooms`): the server opens a room with that key for the first player
-  sent for it. Add `"keep": true` for a room whose worlds and `nf.data` outlast
+  sent for it. A key whose room has closed on that server isn't opened again
+  that way (the service placed them before it closed, a match that ended as
+  they came): they arrive in its main room and it sends them back to its group,
+  where the service places them again. Add `"keep": true` for a room whose worlds and `nf.data` outlast
   it (an owner's world, a party's): it saves them as it closes, and the room
   opened again with that key finds them. Without it the room is a match's: its
   worlds are deleted and its data forgotten when it closes.

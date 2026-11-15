@@ -1653,3 +1653,66 @@ fn what_a_dropped_link_couldnt_tell_of_the_rooms_is_told_once_it_is_back() {
         ]
     );
 }
+
+#[test]
+fn a_player_sent_into_a_room_that_closed_here_is_sent_back_to_be_placed_again() {
+    let files = project("", NETWORK);
+    let platform = Platform::default();
+    let mut session = start(&files, &platform, dev(), None);
+    let hub = hub(&session);
+    let survival = hub.peer("survival", None, None, Lifecycle::Ready);
+    for _ in 0..3 {
+        session.tick();
+    }
+    let race = session
+        .open_room(Some("m-1".into()), false)
+        .expect("a room");
+    session.tick();
+    session.close_room(race);
+    platform.take();
+    // Placed in m-1 before it closed, Ana is on her way: no room opens for her, and she arrives in the main room.
+    hub.accept_joins();
+    hub.place(&uuid_text(9), "Ana", "survival");
+    survival.send(ServerFrame::Send {
+        id: 1,
+        players: vec![uuid_text(9)],
+        server: Some("dev".into()),
+        data: None,
+        group: None,
+        balance: None,
+        wait_millis: None,
+        room: Some("m-1".into()),
+        keep: false,
+    });
+    for _ in 0..5 {
+        session.tick();
+        session.apply_room_requests();
+    }
+    assert_eq!(session.instance().rooms.borrow().len(), 1, "no room opened");
+    assert_eq!(
+        session.route(netherforge_runtime::events::Route::Player(uuid(9))),
+        netherforge_runtime::instance::RoomId::MAIN
+    );
+    let ana = PlayerRef {
+        uuid: uuid(9),
+        name: "Ana".into(),
+    };
+    platform.online.borrow_mut().push(ana.clone());
+    session.player_joined(netherforge_runtime::instance::RoomId::MAIN, &ana);
+    let mut seen = Vec::new();
+    let started = Instant::now();
+    while started.elapsed() < Duration::from_secs(10)
+        && !seen.iter().any(|l: &String| l.contains("placed again"))
+    {
+        session.tick();
+        seen.extend(platform.take());
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert!(
+        seen.iter().any(|l| l
+            == "info Ana was sent into a room that has closed here: sent back to dev to be placed again"),
+        "{seen:?}"
+    );
+    // A script may still open that key again.
+    assert!(session.open_room(Some("m-1".into()), false).is_some());
+}

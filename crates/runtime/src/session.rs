@@ -816,6 +816,9 @@ impl<'a> Session<'a> {
             }
         }
         self.report_room(id, RoomLife::Closed);
+        if let Some(key) = self.instance().room_key(id) {
+            self.instance().closed_key(&key);
+        }
         self.stop_room(at);
         self.rooms.remove(at);
         let instance = self.instance();

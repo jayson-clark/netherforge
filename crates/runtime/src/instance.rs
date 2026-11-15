@@ -103,6 +103,12 @@ impl Routes {
     }
 }
 
+/// How many closed rooms' keys the instance remembers (`closed_keys`): far more than a server closes in the time a
+/// player sent to one takes to arrive.
+const MAX_CLOSED_KEYS: usize = 4096;
+/// How long a player sent into a closed room may take to arrive.
+const ARRIVING_SECONDS: u64 = 60;
+
 pub struct Instance {
     pub platform: Rc<dyn Platform>,
     /// The runtime's store: placements and saved tables.
@@ -142,6 +148,12 @@ pub struct Instance {
     last_room: std::cell::Cell<u32>,
     /// The keys of rooms that closed while the network's link was down, for the hub to be told once it's back.
     pub untold_closes: RefCell<Vec<String>>,
+    /// The keys of rooms that have closed while the server runs, latest last (the most recent `MAX_CLOSED_KEYS`): a
+    /// player the hub sends to one isn't given a room of that key again, as nobody placing players means it now.
+    closed_keys: RefCell<indexmap::IndexSet<String>>,
+    /// Players on their way here into a room that has closed, since when: sent back to the network to be placed again
+    /// as they arrive (`take_to_place_again`).
+    to_place_again: RefCell<HashMap<Uuid, std::time::Instant>>,
     /// The players being moved between rooms right now: what the server holds for everyone (the pack, their
     /// permissions, their presence on the network) doesn't hear them leave or arrive.
     moving: RefCell<std::collections::HashSet<Uuid>>,
@@ -235,6 +247,8 @@ impl Instance {
             room_requests: RefCell::default(),
             last_room: Default::default(),
             untold_closes: RefCell::default(),
+            closed_keys: RefCell::default(),
+            to_place_again: RefCell::default(),
             moving: RefCell::default(),
             network_inbound: RefCell::default(),
             network_listening: RefCell::default(),
@@ -309,9 +323,20 @@ impl Instance {
     /// `player`, on their way here, belongs in the room keyed `key`: the room open with that key, or one opened for it
     /// at the end of the tick (kept or not as `keep` says; a room open already stays as it was opened). Already here,
     /// they're moved there then. Nothing for an empty key.
+    ///
+    /// A key whose room has closed here isn't opened again for them: whoever placed them did so before it closed (a
+    /// match that ended as they were on their way), and a room it no longer knows of would be nobody's. They're sent
+    /// back to the network to be placed again instead, as they arrive (`take_to_place_again`); a script or the control
+    /// endpoint may still open that key again.
     pub fn place_in_room(&self, player: Uuid, key: &str, keep: bool) {
         let id = match self.room_keyed(key) {
             Some(id) => id,
+            None if self.closed_keys.borrow().contains(key) => {
+                self.to_place_again
+                    .borrow_mut()
+                    .insert(player, std::time::Instant::now());
+                return;
+            }
             None => {
                 let Ok(id) = self.reserve_room(Some(key.to_owned()), keep) else {
                     return;
@@ -360,6 +385,32 @@ impl Instance {
                 .filter(|key| !open.contains(key.as_str()))
                 .map(|key| (key, RoomLife::Closed)),
         );
+        out
+    }
+
+    /// Room `key` closed: a player sent into it later is placed again (`place_in_room`).
+    pub fn closed_key(&self, key: &str) {
+        let mut closed = self.closed_keys.borrow_mut();
+        closed.shift_remove(key);
+        closed.insert(key.to_owned());
+        while closed.len() > MAX_CLOSED_KEYS {
+            closed.shift_remove_index(0);
+        }
+    }
+
+    /// The players sent into a room that had closed who are here now, to send back to the network to be placed again;
+    /// those who haven't come within `ARRIVING_SECONDS` are forgotten.
+    pub fn take_to_place_again(&self, here: impl Fn(Uuid) -> bool) -> Vec<Uuid> {
+        let mut waiting = self.to_place_again.borrow_mut();
+        let mut out = Vec::new();
+        waiting.retain(|player, since| {
+            if here(*player) {
+                out.push(*player);
+                false
+            } else {
+                since.elapsed().as_secs() < ARRIVING_SECONDS
+            }
+        });
         out
     }
 
