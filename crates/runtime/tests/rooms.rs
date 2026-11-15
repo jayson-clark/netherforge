@@ -529,3 +529,29 @@ end)
             .any(|l| l.ends_with("shown to 77"))
     );
 }
+
+#[test]
+fn a_module_saved_reloads_in_every_room() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("modules/t/init.lua", r#"print("v1")"#),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    server.session_mut().open_room(None).expect("a room");
+    platform.take();
+    files.write("modules/t/init.lua", r#"print("v2")"#);
+    server
+        .session_mut()
+        .reload(&["modules/t/init.lua".to_owned()]);
+    let lines: Vec<String> = platform
+        .take()
+        .into_iter()
+        .filter(|l| l.starts_with("info [") && l.contains("v2"))
+        .map(|l| {
+            l.split_once(']')
+                .map_or(l.clone(), |(label, _)| label.to_owned())
+        })
+        .collect();
+    assert_eq!(lines, ["info [module t", "info [room 1 module t"]);
+}

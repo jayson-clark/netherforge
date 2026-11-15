@@ -1662,7 +1662,6 @@ impl<'a> Session<'a> {
             return self.reload_all();
         }
         self.project = load(self.source, self.packages);
-        *self.rooms[0].shared.names.borrow_mut() = self.project.names();
         self.collect();
         let order = self.reload_kinds(wanted, &followed);
         let failed = self.collected();
@@ -1747,12 +1746,32 @@ impl<'a> Session<'a> {
 
     /// Reloads the resources in `wanted` (and what goes with them), the project as it read last, kind by kind in
     /// format's order, and tells the services that follow `followed` documents: every resource it reloaded, in order.
+    /// Every room reloads them, each its own Lua state: the main room's answer is what reloaded.
     fn reload_kinds(
         &mut self,
         wanted: Vec<crate::reload::Key>,
         followed: &[&'static str],
     ) -> Vec<crate::reload::Key> {
-        let Some(room) = self.rooms[0].room.as_ref() else {
+        let names = self.project.names();
+        let mut order = Vec::new();
+        for (at, run) in self.rooms.iter().enumerate() {
+            *run.shared.names.borrow_mut() = names.clone();
+            let reloaded = self.reload_kinds_in(run, wanted.clone(), followed);
+            if at == 0 {
+                order = reloaded;
+            }
+        }
+        order
+    }
+
+    /// `reload_kinds`, in room `run`.
+    fn reload_kinds_in(
+        &self,
+        run: &RoomRun,
+        wanted: Vec<crate::reload::Key>,
+        followed: &[&'static str],
+    ) -> Vec<crate::reload::Key> {
+        let Some(room) = run.room.as_ref() else {
             return Vec::new();
         };
         let mut order = wanted;
@@ -1775,7 +1794,7 @@ impl<'a> Session<'a> {
             };
             asked.insert(kind);
             let ids = ids_of(&order, kind);
-            for service in &self.rooms[0].services {
+            for service in &run.services {
                 for (also, id) in service.restarts(kind, &ids) {
                     let key = (also, id);
                     if kind_order(also) >= kind_order(kind) && !order.contains(&key) {
@@ -1800,35 +1819,27 @@ impl<'a> Session<'a> {
             platform: &*self.platform,
         };
         // Whatever reloads next runs the Lua as it reads now.
-        if let Some(modules) = self.rooms[0].shared.modules.borrow().clone() {
+        if let Some(modules) = run.shared.modules.borrow().clone() {
             modules.update(lua_of(&define));
         }
         for (kind, ids) in &by_kind {
-            if let Some(service) = self.rooms[0]
-                .services
-                .iter()
-                .find(|s| s.reloads().contains(kind))
-            {
+            if let Some(service) = run.services.iter().find(|s| s.reloads().contains(kind)) {
                 service.unload(room, kind, ids);
             }
         }
-        self.released();
+        self.released_in(run);
         for (kind, ids) in &by_kind {
-            if let Some(service) = self.rooms[0]
-                .services
-                .iter()
-                .find(|s| s.reloads().contains(kind))
-            {
+            if let Some(service) = run.services.iter().find(|s| s.reloads().contains(kind)) {
                 service.reload(room, kind, ids, &define);
             }
         }
         let mut kinds: BTreeSet<&str> = by_kind.iter().map(|(k, _)| *k).collect();
         kinds.extend(followed.iter().copied());
-        for service in &self.rooms[0].services {
+        for service in &run.services {
             service.reloaded(room, &kinds, &define);
         }
-        self.released();
-        self.report();
+        self.released_in(run);
+        self.report_in(run);
         order
     }
 
