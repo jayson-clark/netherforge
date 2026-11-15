@@ -24,8 +24,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    # About 20 minutes; macOS is the slowest.
-    timeout-minutes: 45
+    # About 20 minutes with main's Rust cache; from cold (a new stable Rust, or no cache yet) macOS and
+    # Windows compile both Cargo workspaces from scratch, which takes most of an hour.
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
