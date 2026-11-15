@@ -1456,7 +1456,7 @@ impl FastNoiseLite {
          * let R3 = 2. / 3.;
          * let r = (x + y + z) * R3; // Rotation, not skew
          * x = r - x; y = r - y; z = r - z;
-        	*/
+         */
 
         let i = Self::fast_floor(x);
         let j = Self::fast_floor(y);

@@ -488,9 +488,9 @@ pub fn polygon(canvas: &mut Canvas, points: &[i32], fill: i32, outline: i32, thi
                 }
             }
             crossings.sort_by(f64::total_cmp);
-            for pair in crossings.chunks_exact(2) {
-                let from = (pair[0] - 0.5).ceil() as i32;
-                let to = (pair[1] - 0.5).floor() as i32;
+            for [a, b] in crossings.as_chunks::<2>().0 {
+                let from = (a - 0.5).ceil() as i32;
+                let to = (b - 0.5).floor() as i32;
                 if from <= to {
                     canvas.span(y, from, to, fill);
                 }

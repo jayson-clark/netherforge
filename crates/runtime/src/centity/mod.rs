@@ -812,7 +812,7 @@ impl Centities {
         let Some(instance) = self.instances.get_mut(&id) else {
             return;
         };
-        let orphans: Vec<Uuid> = instance.orphans.drain(..).collect();
+        let orphans = std::mem::take(&mut instance.orphans);
         let entities = ops(platform, &self.instances[&id]);
         for entity in orphans {
             entities.remove(entity);

@@ -148,8 +148,10 @@ impl Header {
 /// Where each frame's record starts, from the index after the header (`bytes`, `frames` × 8 of them).
 pub fn index(bytes: &[u8]) -> Vec<u64> {
     bytes
-        .chunks_exact(8)
-        .map(|b| u64::from_be_bytes(b.try_into().expect("8 bytes")))
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|b| u64::from_be_bytes(*b))
         .collect()
 }
 
