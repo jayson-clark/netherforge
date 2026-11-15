@@ -1214,8 +1214,18 @@ impl Service for DialogsService {
     }
 
     /// The player left: whatever they had open just goes.
+    /// Forgotten; moving to another room, the dialog this room showed them goes from their screen too.
     fn player_quit(&self, player: &PlayerRef) {
-        self.shared.dialogs.borrow_mut().open.remove(&player.uuid);
+        let open = self
+            .shared
+            .dialogs
+            .borrow_mut()
+            .open
+            .remove(&player.uuid)
+            .is_some();
+        if open && self.shared.instance.is_moving(player.uuid) {
+            self.shared.platform.dialogs().close(player.uuid);
+        }
     }
 
     /// The dialogs a stopped scope made go, and every handler on them.

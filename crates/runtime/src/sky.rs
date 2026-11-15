@@ -355,10 +355,16 @@ impl Service for SkiesService {
         }
     }
 
+    /// Forgotten; moving to another room, they're shown their world's own sky again (the server forgets a player
+    /// who leaves it).
     fn player_quit(&self, player: &PlayerRef) {
         let mut skies = self.shared.skies.borrow_mut();
-        skies.viewers.remove(&player.uuid);
+        let viewer = skies.viewers.remove(&player.uuid);
         skies.players.remove(&player.uuid);
+        if self.shared.instance.is_moving(player.uuid) && viewer.is_some_and(|v| v.shown.is_some())
+        {
+            self.shared.platform.skies().show(player.uuid, None);
+        }
     }
 
     /// Everyone shown the world's own biomes again.

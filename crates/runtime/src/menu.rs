@@ -2356,7 +2356,24 @@ impl Service for MenusService {
         context.show_worn();
     }
 
+    /// Moving to another room, the windows of this room's menus they had open close (heard here, as when they leave
+    /// the server, which closes them itself).
     fn player_quit(&self, player: &PlayerRef) {
+        if self.shared.instance.is_moving(player.uuid) {
+            let ops = self.shared.platform.menus();
+            let open: Vec<Uuid> = self
+                .shared
+                .menus
+                .borrow()
+                .windows
+                .values()
+                .map(|w| w.uuid)
+                .filter(|w| ops.viewers(*w).contains(&player.uuid))
+                .collect();
+            for window in open {
+                ops.close(window, Some(player.uuid));
+            }
+        }
         if let Some(scripts) = self.scripts.borrow().clone() {
             MenuContext {
                 shared: self.shared.clone(),

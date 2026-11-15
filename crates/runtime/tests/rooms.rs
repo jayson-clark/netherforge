@@ -485,3 +485,47 @@ end)
     );
     assert_eq!(printed(&lines), ["sam\ttrue\tfalse\ttrue"], "{lines:?}");
 }
+
+#[test]
+fn a_player_moved_on_stops_seeing_the_rooms_bars_and_sees_them_again_back() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"
+local bar = nf.bossbars.create({ text = "main" })
+nf.on("player_join", function(e)
+  if nf.rooms.current():is_main() then bar:show_to(e.player) end
+end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let room = server.session_mut().open_room(None).expect("a room");
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    server.game().player_join(&mut alex_join());
+    let bars = |lines: Vec<String>| -> Vec<String> {
+        lines
+            .into_iter()
+            .filter(|l| l.starts_with("bar ") && !l.contains(" made "))
+            .collect()
+    };
+    assert!(
+        bars(platform.take())
+            .iter()
+            .any(|l| l.ends_with("shown to 77"))
+    );
+    // Gone to room 1: the main room's bar leaves their screen, as if they'd left the server.
+    server.session().move_player(alex().uuid, room);
+    let moved = bars(platform.take());
+    assert_eq!(moved.len(), 1, "{moved:?}");
+    assert!(moved[0].ends_with("hidden from 77"), "{moved:?}");
+    // Back: still its viewer, they see it again.
+    server.session().move_player(alex().uuid, RoomId::MAIN);
+    assert!(
+        bars(platform.take())
+            .iter()
+            .any(|l| l.ends_with("shown to 77"))
+    );
+}
