@@ -21869,7 +21869,7 @@
         {
           "name": "message",
           "type": "Text?",
-          "doc": "The join message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none."
+          "doc": "The join message everyone in the player's room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none."
         }
       ],
       "extends": "Event"
@@ -21912,7 +21912,7 @@
         {
           "name": "message",
           "type": "Text?",
-          "doc": "The leave message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none."
+          "doc": "The leave message everyone in the player's room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none."
         }
       ],
       "extends": "Event"

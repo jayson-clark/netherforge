@@ -537,7 +537,10 @@ sealed interface GameEvent {
         val player: PlayerRef,
         /** Whether they have never played here before. */
         val firstJoin: Boolean,
-        /** The join message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none. */
+        /**
+         * The join message everyone in the player's room sees (everyone online, on a server that runs one
+         * room), as MiniMessage. Writable: assign another, or `nil` for none.
+         */
         var message: String?
     ) : GameEvent
 
@@ -545,7 +548,10 @@ sealed interface GameEvent {
     data class PlayerQuit(
         /** Who it was. */
         val player: PlayerRef,
-        /** The leave message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none. */
+        /**
+         * The leave message everyone in the player's room sees (everyone online, on a server that runs one
+         * room), as MiniMessage. Writable: assign another, or `nil` for none.
+         */
         var message: String?
     ) : GameEvent
 

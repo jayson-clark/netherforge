@@ -214,7 +214,7 @@ export const shapes: LuaClass[] = [
     {
       name: 'message',
       type: 'Text?',
-      doc: 'The join message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none.',
+      doc: 'The join message everyone in the player\'s room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none.',
     },
   ]),
   payload(
@@ -239,7 +239,7 @@ export const shapes: LuaClass[] = [
     {
       name: 'message',
       type: 'Text?',
-      doc: 'The leave message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none.',
+      doc: 'The leave message everyone in the player\'s room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none.',
     },
   ]),
   payload('PlayerChatEvent', 'A player is saying something in chat.', [

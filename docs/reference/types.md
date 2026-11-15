@@ -969,7 +969,7 @@ Has the fields and methods of [Event](#event) too.
 | --- | --- | --- |
 | `player` | [`Player`](player.md) | Who it was. |
 | `first_join` | `boolean` | Whether they have never played here before. |
-| `message` | [`Text`](index.md#types)`?` | The join message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none. |
+| `message` | [`Text`](index.md#types)`?` | The join message everyone in the player's room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none. |
 
 ### PlayerResourcePackStatusEvent {#playerresourcepackstatusevent}
 
@@ -992,7 +992,7 @@ Has the fields and methods of [Event](#event) too.
 | Field | Type | |
 | --- | --- | --- |
 | `player` | [`Player`](player.md) | Who it was. |
-| `message` | [`Text`](index.md#types)`?` | The leave message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none. |
+| `message` | [`Text`](index.md#types)`?` | The leave message everyone in the player's room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none. |
 
 ### PlayerChatEvent {#playerchatevent}
 

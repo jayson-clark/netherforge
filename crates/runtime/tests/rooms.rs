@@ -639,3 +639,47 @@ fn as_the_server_stops_a_rooms_players_arent_moved_to_the_main_room() {
     );
     assert_eq!(server.session().rooms().len(), 1);
 }
+
+#[test]
+fn join_and_leave_messages_are_the_rooms() {
+    // Found by the rooms load test (k3d, owner mode): an owner in one room saw "Owner2 joined the game" from another.
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[("netherforge.json", MANIFEST), ("modules/t/init.lua", "")]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let room = server.session_mut().open_room(None, false).expect("a room");
+    let sam = FakeBot {
+        name: "Sam".into(),
+        id: Uuid(88),
+        at: place(0.0, 64.0, 0.0),
+    };
+    platform.bots.online.borrow_mut().push(FakeBot {
+        name: "Sam".into(),
+        id: Uuid(88),
+        at: place(0.0, 64.0, 0.0),
+    });
+    server.session().move_player(sam.id, room);
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    platform.take();
+    let mut join = game_event::PlayerJoin {
+        message: Some("<yellow>Alex joined the game".into()),
+        ..alex_join()
+    };
+    server.game().player_join(&mut join);
+    assert_eq!(join.message, None, "not broadcast to the server");
+    let messages: Vec<String> = platform
+        .take()
+        .into_iter()
+        .filter(|l| l.starts_with("message"))
+        .collect();
+    assert_eq!(messages, ["message 77 <yellow>Alex joined the game"]);
+    let mut quit = game_event::PlayerQuit {
+        player: sam.player(),
+        message: Some("<yellow>Sam left the game".into()),
+    };
+    server.game().player_quit(&mut quit);
+    assert_eq!(quit.message, None);
+    assert!(
+        !platform.take().iter().any(|l| l.starts_with("message")),
+        "nobody else is in Sam's room"
+    );
+}

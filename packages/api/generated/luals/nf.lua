@@ -6798,7 +6798,7 @@ function Event:uncancel() end
 ---@class PlayerJoinEvent: Event
 ---@field player Player Who it was.
 ---@field first_join boolean Whether they have never played here before.
----@field message Text? The join message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none.
+---@field message Text? The join message everyone in the player's room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none.
 
 --- What a player's game said about a resource pack the server sent it.
 ---@class PlayerResourcePackStatusEvent: Event
@@ -6809,7 +6809,7 @@ function Event:uncancel() end
 --- A player left the server.
 ---@class PlayerQuitEvent: Event
 ---@field player Player Who it was.
----@field message Text? The leave message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none.
+---@field message Text? The leave message everyone in the player's room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none.
 
 --- A player is saying something in chat.
 ---@class PlayerChatEvent: Event

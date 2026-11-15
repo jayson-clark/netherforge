@@ -475,6 +475,24 @@ impl Running<'_, '_> {
     }
 }
 
+impl Running<'_, '_> {
+    /// A join or leave message on a server with rooms beside the main one is its room's: shown to the players in
+    /// the room (`but` left out: the one leaving), not broadcast to the whole server as Paper would.
+    fn to_room(&self, message: &mut Option<String>, but: Option<Uuid>) {
+        if self.session.rooms().len() <= 1 {
+            return;
+        }
+        let Some(text) = message.take() else { return };
+        let players = self.shared().platform.players();
+        let routes = self.shared().instance.routes.borrow();
+        for player in players.online() {
+            if Some(player.uuid) != but && routes.player(player.uuid) == self.at {
+                players.message(player.uuid, text.clone());
+            }
+        }
+    }
+}
+
 /// What the session's services do around the server's events (Kotlin's `RuntimeGameEvents`): they hear of a join
 /// before scripts and of a quit after, keep a chunk's centities once its scripts have had it, and physics reads
 /// again the blocks a placement changed.
@@ -489,7 +507,8 @@ impl Around for Running<'_, '_> {
             self.session.relist(event.player.uuid);
         }
         self.session.player_joined(self.at, &event.player);
-        raise(event)
+        raise(event);
+        self.to_room(&mut event.message, None);
     }
 
     fn player_quit(
@@ -498,6 +517,7 @@ impl Around for Running<'_, '_> {
         raise: &dyn Fn(&mut netherforge_platform::game_event::PlayerQuit),
     ) {
         raise(event);
+        self.to_room(&mut event.message, Some(event.player.uuid));
         self.session.player_quit(self.at, &event.player);
     }
 

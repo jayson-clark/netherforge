@@ -127,7 +127,7 @@ pub struct PlayerJoinEvent {
     pub player: handles::Player,
     /// Whether they have never played here before.
     pub first_join: bool,
-    /// The join message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none.
+    /// The join message everyone in the player's room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none.
     pub message: Option<values::Text>,
 }
 
@@ -147,7 +147,7 @@ pub struct PlayerResourcePackStatusEvent {
 pub struct PlayerQuitEvent {
     /// Who it was.
     pub player: handles::Player,
-    /// The leave message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none.
+    /// The leave message everyone in the player's room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none.
     pub message: Option<values::Text>,
 }
 
