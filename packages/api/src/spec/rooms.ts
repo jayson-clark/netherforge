@@ -190,7 +190,7 @@ export const roomShapes: LuaClass[] = [
       {
         name: 'keep',
         type: 'boolean?',
-        doc: "Whether what it made outlasts it, for a room opened again with the same key to find (an owner's world, a party's): its worlds are saved when it closes rather than deleted, and its `nf.data` tables are kept under its key. A match's room isn't kept (the default): its worlds and `nf.data` tables go with it. A kept room needs a `key`.",
+        doc: "Whether what it made outlasts it, for a room opened again with the same key to find (an owner's world, a party's): its worlds are saved when it closes rather than deleted, and its `nf.data` tables are kept under its key. A match's room isn't kept (the default): its worlds and `nf.data` tables go with it, and the worlds of one the server went without closing (killed mid-match) are deleted as it next starts. A kept room needs a `key`.",
       },
     ],
   },

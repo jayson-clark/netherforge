@@ -39,6 +39,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "keep spawn loaded",
         include_str!("../migrations/002_keep_spawn_loaded.sql"),
     ),
+    (
+        3,
+        "goes with room",
+        include_str!("../migrations/003_goes_with_room.sql"),
+    ),
 ];
 
 /// A spawned centity as the store keeps it, so it comes back after a restart (Kotlin's `InstanceRecord`).
@@ -863,7 +868,7 @@ impl Store {
     ) -> BTreeMap<String, crate::managed_worlds::OwnedWorld> {
         let connection = self.settled();
         let Ok(mut statement) = connection.prepare(
-            "SELECT world, environment, terrain, dimension_type, keep_spawn_loaded FROM worlds WHERE namespace = ?1",
+            "SELECT world, environment, terrain, dimension_type, keep_spawn_loaded, goes_with_room FROM worlds WHERE namespace = ?1",
         ) else {
             return BTreeMap::new();
         };
@@ -876,6 +881,7 @@ impl Store {
                         terrain: r.get(2)?,
                         dimension_type: r.get(3)?,
                         keep_spawn_loaded: r.get(4)?,
+                        goes_with_room: r.get(5)?,
                     },
                 ))
             })
@@ -897,8 +903,8 @@ impl Store {
             format!("worlds {name}"),
             Box::new(move |c| {
                 c.execute(
-                    "INSERT INTO worlds (world, namespace, environment, terrain, dimension_type, keep_spawn_loaded) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (world) DO UPDATE SET namespace = excluded.namespace, environment = excluded.environment, terrain = excluded.terrain, dimension_type = excluded.dimension_type, keep_spawn_loaded = excluded.keep_spawn_loaded",
-                    params![name, namespace, owned.environment, owned.terrain, owned.dimension_type, owned.keep_spawn_loaded],
+                    "INSERT INTO worlds (world, namespace, environment, terrain, dimension_type, keep_spawn_loaded, goes_with_room) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT (world) DO UPDATE SET namespace = excluded.namespace, environment = excluded.environment, terrain = excluded.terrain, dimension_type = excluded.dimension_type, keep_spawn_loaded = excluded.keep_spawn_loaded, goes_with_room = excluded.goes_with_room",
+                    params![name, namespace, owned.environment, owned.terrain, owned.dimension_type, owned.keep_spawn_loaded, owned.goes_with_room],
                 )?;
                 Ok(())
             }),

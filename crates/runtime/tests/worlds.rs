@@ -1292,3 +1292,76 @@ end
         "{managed:?}"
     );
 }
+
+#[test]
+fn a_server_killed_with_rooms_open_deletes_their_worlds_as_it_starts_again_but_a_kept_rooms() {
+    let files = Files::new(
+        &[],
+        r#"
+if not nf.rooms.current():is_main() then
+  nf.worlds.create("arena", { generator = "void" })
+end
+"#,
+    );
+    let platform = Fake::new();
+    let store = Rc::new(netherforge_runtime::store::Store::in_memory());
+    let session = Session::start_configured(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        store.clone(),
+        Config::default(),
+    );
+    let mut session = session;
+    session
+        .open_room(Some("m-1".into()), false)
+        .expect("a room");
+    session
+        .open_room(Some("owner-1".into()), true)
+        .expect("a room");
+    session.open_room(None, false).expect("a room");
+    store.flush();
+    // Killed: nothing closes, and as the server starts again none of those worlds is loaded.
+    std::mem::forget(session);
+    for world in ["arena__m_1", "arena__owner_1", "arena__r3"] {
+        assert!(platform.worlds.borrow_mut().remove(world), "{world}");
+        platform.saved.borrow_mut().insert(world.into());
+    }
+    platform.managed.lock().unwrap().clear();
+    let mut again = Session::start_configured(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        store.clone(),
+        Config::default(),
+    );
+    let managed = platform.managed.lock().unwrap().clone();
+    assert_eq!(managed, ["delete arena__m_1", "delete arena__r3"]);
+    assert_eq!(
+        platform.saved.borrow().iter().cloned().collect::<Vec<_>>(),
+        ["arena__owner_1"],
+        "the kept room's world stays"
+    );
+    // A room numbered as a dead one was makes its world afresh, the name free again.
+    let one = again.open_room(None, false).expect("a room");
+    assert!(platform.worlds.borrow().contains("arena__r1"));
+    again.close_room(one);
+    again.stop();
+    drop(again);
+    store.flush();
+    platform.managed.lock().unwrap().clear();
+    let _third = Session::start_configured(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        store,
+        Config::default(),
+    );
+    let managed = platform.managed.lock().unwrap().clone();
+    assert!(
+        !managed
+            .iter()
+            .any(|m| m.starts_with("delete") && m != "delete arena__r1"),
+        "forgotten once deleted (the closed room's own deletion aside): {managed:?}"
+    );
+}

@@ -64,6 +64,9 @@ pub struct OwnedWorld {
     pub dimension_type: Option<String>,
     /// Made with `keep_spawn_loaded`: the chunks around its spawn are held whenever it's loaded.
     pub keep_spawn_loaded: bool,
+    /// Made by a room that isn't kept (a match's): deleted as the room closes, and as the server next starts when it
+    /// went before the room closed (killed mid-match). A kept room's worlds, and the main room's, never are.
+    pub goes_with_room: bool,
 }
 
 /// A copy being made: its files on the lane, then its load at a tick.
@@ -117,6 +120,7 @@ impl ManagedWorlds {
             terrain,
             dimension_type,
             keep_spawn_loaded: false,
+            goes_with_room: false,
         };
         shared
             .instance
@@ -212,8 +216,10 @@ impl ManagedContext {
         }
     }
 
-    fn own(&self, name: &str, owned: OwnedWorld) {
+    fn own(&self, name: &str, mut owned: OwnedWorld) {
         self.adopt(name);
+        owned.goes_with_room =
+            self.shared.room != crate::instance::RoomId::MAIN && !self.shared.keeps_worlds();
         let mut managed = self.shared.managed_worlds.borrow_mut();
         self.shared
             .instance
@@ -347,6 +353,7 @@ impl ManagedContext {
                 terrain,
                 dimension_type,
                 keep_spawn_loaded,
+                goes_with_room: false,
             },
         );
         if keep_spawn_loaded {
@@ -484,6 +491,7 @@ impl ManagedContext {
                 terrain: terrain.clone(),
                 dimension_type: None,
                 keep_spawn_loaded: false,
+                goes_with_room: false,
             },
         );
         let (send, done) = mpsc::channel();
@@ -688,7 +696,10 @@ impl Service for ManagedWorldsService {
 
     fn start(&self, _room: &Room, project: &Define) {
         let namespace = project.project.namespace().to_owned();
-        let created = self.shared.instance.store.worlds_of(&namespace);
+        let mut created = self.shared.instance.store.worlds_of(&namespace);
+        if self.shared.room == crate::instance::RoomId::MAIN {
+            self.delete_leftovers(&mut created);
+        }
         let mut managed = self.shared.managed_worlds.borrow_mut();
         // Worlds still loaded from a run before (a restart) hold their spawns again: stopping let go of them.
         let keep: Vec<String> = created
@@ -739,6 +750,41 @@ impl Service for ManagedWorldsService {
         managed.copies.clear();
         managed.copying.clear();
         self.shared.chunk_holds.borrow_mut().release_all(platform);
+    }
+}
+
+impl ManagedWorldsService {
+    /// The worlds of rooms that weren't kept and never closed (the server killed mid-match, a deletion that didn't
+    /// finish) are deleted as the main room starts, before any room opens again and might want the name: on the main
+    /// thread, as nothing waits on the files lane yet. A loaded one is left (nothing at a start loads them), and so is
+    /// every kept room's world.
+    fn delete_leftovers(&self, created: &mut BTreeMap<String, OwnedWorld>) {
+        let platform = &*self.shared.platform;
+        let leftover: Vec<String> = created
+            .iter()
+            .filter(|(name, w)| w.goes_with_room && !platform.worlds().exists((*name).clone()))
+            .map(|(name, _)| name.clone())
+            .collect();
+        for name in leftover {
+            let ops = platform.world_manager();
+            if ops.is_saved(name.clone()) {
+                let work = ops.delete(name.clone());
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work.run())) {
+                    Ok(()) => platform.log().info(format!(
+                        "Deleted world \"{name}\", left by a room that didn't close (the server stopped before it did)"
+                    )),
+                    Err(e) => {
+                        platform.log().warn(format!(
+                            "Couldn't delete all of world \"{name}\"'s files, left by a room that didn't close: {}",
+                            panic_text(&e)
+                        ));
+                        continue;
+                    }
+                }
+            }
+            created.remove(&name);
+            self.shared.instance.store.forget_world(&name);
+        }
     }
 }
 

@@ -1392,7 +1392,10 @@ not both; a project dimension type as the server keys it, which `WorldManagerOps
 (a world made with a dimension type the server lacks is an error), `copy` (a map's folder) and `import` (a folder under
 `worlds.import-root`), `world:is_managed` and `unload` (players moved to `move_players_to`'s spawn or the main world's;
 `delete` deletes its files). Only worlds the project's scripts made, or `managedWorlds` names, may be unloaded; never the
-main world. What scripts made is the store's `worlds` table (`Store::worlds_of`, `own_world`, `forget_world`).
+main world. What scripts made is the store's `worlds` table (`Store::worlds_of`, `own_world`, `forget_world`); a world an unkept
+room made is marked `goes_with_room` (migration 3), and the main room's start deletes those left unloaded on disk by
+a server that went without closing the room (`ManagedWorldsService::delete_leftovers`, on the main thread before any
+room opens), never a kept room's.
 Copies' and deletions' file work runs on the `world files` lane, one at a time; a copy is loaded at the next tick
 after its files are in place (`ManagedContext::tick`), its world then the script's (a script that stopped first isn't
 called; the world is kept). File work fails by panicking with its reason. Not yet: the worlds `netherforge.json` makes
