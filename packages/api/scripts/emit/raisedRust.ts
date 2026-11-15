@@ -257,19 +257,35 @@ function stages(it: RaisedEvent): { first?: [string, string]; nf: [string, strin
 const payloadType = (it: RaisedEvent) => `game_event::${it.payload.name}`
 const returns = (it: RaisedEvent) => (it.event.cancellable ? ' -> bool' : '')
 
+/** The classes whose handle says which room an event goes to. */
+const ROUTED = new Set(['Player', 'Entity', 'Living', 'Mob', 'Block', 'World', 'Inventory'])
+
+/** The class of handle [field] holds (through an optional), or none. */
+function heldClass(field: RaisedEvent['payload']['fields'][number]): string | undefined {
+  const inner = field.codec.kind === 'optional' ? field.codec.inner : field.codec
+  return inner.kind === 'handle' ? inner.cls.name : undefined
+}
+
 /**
  * The room an event goes to: the room of what it's first heard on (its player, its entity, its block's or its
- * own world, its inventory's holder), the main room for an event heard only on `nf`.
+ * own world, its inventory's holder). An event heard only on `nf` goes by the first field holding one of those (a
+ * world that loads, a vehicle that moves: the room of its world), and to the main room when none does.
  */
 function route(it: RaisedEvent): string {
-  if (!it.first) return 'Route::Main'
-  const field = it.first.field
+  const by = it.first
+    ? { cls: it.first.cls, field: it.first.field }
+    : (() => {
+        const field = it.payload.fields.find((f) => !f.lazy && ROUTED.has(heldClass(f) ?? ''))
+        return field ? { cls: heldClass(field)!, field } : undefined
+      })()
+  if (!by) return 'Route::Main'
+  const field = by.field
   const optional = field.codec.kind === 'optional'
   const inner = optional && field.codec.kind === 'optional' ? field.codec.inner : field.codec
   const held = inner.kind === 'handle' ? inner.cls.name : inner.kind === 'runtime' ? inner.name : ''
   // `x` names the field's value; `byRef` when it's a reference already (an optional's `x0`).
   const of = (x: string, byRef: boolean): string => {
-    switch (it.first!.cls) {
+    switch (by.cls) {
       case 'Player':
         return `Route::Player(${x}.uuid)`
       case 'Entity':
@@ -285,7 +301,7 @@ function route(it: RaisedEvent): string {
       case 'Inventory':
         return `Route::Inventory(${byRef ? x : `&${x}`})`
       default:
-        throw new Error(`no route for an event first heard on a ${it.first!.cls}`)
+        throw new Error(`no route for an event first heard on a ${by.cls}`)
     }
   }
   const value = `event.${ident(field.name)}`

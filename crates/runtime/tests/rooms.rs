@@ -35,6 +35,9 @@ end)
 nf.on("block_place", function(e)
   print("placed in world")
 end)
+nf.on("world_load", function(e)
+  print("loaded", e.world:name())
+end)
 "#;
 
 fn alex_join() -> game_event::PlayerJoin {
@@ -122,6 +125,19 @@ fn a_rooms_world_hears_its_events_and_no_other_room_does() {
     assert_eq!(placed.len(), 1, "{lines:?}");
     assert!(
         placed[0].starts_with("info [room 1 module t] placed in world"),
+        "{lines:?}"
+    );
+    // A world loading is heard by its room alone, though it's heard on `nf`, not on the world.
+    server.session().give_world("arena", room);
+    server.game().world_load(&mut game_event::World {
+        world: "arena".into(),
+    });
+    server.tick();
+    let lines = platform.take();
+    let loaded: Vec<&String> = lines.iter().filter(|l| l.contains("loaded")).collect();
+    assert_eq!(loaded.len(), 1, "{lines:?}");
+    assert!(
+        loaded[0].starts_with("info [room 1 module t] loaded"),
         "{lines:?}"
     );
 }

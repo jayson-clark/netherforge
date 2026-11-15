@@ -602,12 +602,12 @@ impl<S: EventSource> GameEvents for GameEventDispatch<S> {
     }
 
     fn world_load(&self, event: &mut game_event::World) {
-        let Some(s) = self.0.open(Route::Main) else { return ; };
+        let Some(s) = self.0.open(Route::World(&event.world)) else { return ; };
         s.world_load(event, &|event| world_load(&s, event))
     }
 
     fn world_unload(&self, event: &mut game_event::World) {
-        let Some(s) = self.0.open(Route::Main) else { return ; };
+        let Some(s) = self.0.open(Route::World(&event.world)) else { return ; };
         s.world_unload(event, &|event| world_unload(&s, event))
     }
 
@@ -622,17 +622,17 @@ impl<S: EventSource> GameEvents for GameEventDispatch<S> {
     }
 
     fn vehicle_move(&self, event: &mut game_event::VehicleMove) {
-        let Some(s) = self.0.open(Route::Main) else { return ; };
+        let Some(s) = self.0.open(Route::Entity(event.vehicle)) else { return ; };
         s.vehicle_move(event, &|event| vehicle_move(&s, event))
     }
 
     fn vehicle_damage(&self, event: &mut game_event::VehicleDamage) -> bool {
-        let Some(s) = self.0.open(Route::Main) else { return false; };
+        let Some(s) = self.0.open(Route::Entity(event.vehicle)) else { return false; };
         s.vehicle_damage(event, &|event| vehicle_damage(&s, event))
     }
 
     fn vehicle_destroy(&self, event: &mut game_event::VehicleDestroy) -> bool {
-        let Some(s) = self.0.open(Route::Main) else { return false; };
+        let Some(s) = self.0.open(Route::Entity(event.vehicle)) else { return false; };
         s.vehicle_destroy(event, &|event| vehicle_destroy(&s, event))
     }
 
