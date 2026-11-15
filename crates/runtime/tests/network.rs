@@ -1761,3 +1761,48 @@ fn a_room_closing_on_a_draining_server_sends_its_players_back_to_be_placed_again
         "{seen:?}"
     );
 }
+
+#[test]
+fn a_send_naming_a_room_on_the_server_a_player_is_on_puts_them_in_it() {
+    let files = project("", NETWORK);
+    let platform = Platform::default();
+    let mut session = start(&files, &platform, dev(), None);
+    let hub = hub(&session);
+    let survival = hub.peer("survival", None, None, Lifecycle::Ready);
+    for _ in 0..3 {
+        session.tick();
+    }
+    let ana = PlayerRef {
+        uuid: uuid(9),
+        name: "Ana".into(),
+    };
+    platform.online.borrow_mut().push(ana.clone());
+    session.player_joined(netherforge_runtime::instance::RoomId::MAIN, &ana);
+    hub.place(&uuid_text(9), "Ana", "dev");
+    // Placed again (her room closed here), into a room on the server she's on: nobody moves, the room is hers.
+    survival.send(ServerFrame::Send {
+        id: 1,
+        players: vec![uuid_text(9)],
+        server: Some("dev".into()),
+        data: None,
+        group: None,
+        balance: None,
+        wait_millis: None,
+        room: Some("player_7f".into()),
+        keep: true,
+    });
+    let started = Instant::now();
+    let mut room = netherforge_runtime::instance::RoomId::MAIN;
+    while started.elapsed() < Duration::from_secs(10)
+        && room == netherforge_runtime::instance::RoomId::MAIN
+    {
+        session.tick();
+        session.apply_room_requests();
+        room = session.route(netherforge_runtime::events::Route::Player(uuid(9)));
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert_eq!(
+        session.instance().kept_key(room).as_deref(),
+        Some("player_7f")
+    );
+}

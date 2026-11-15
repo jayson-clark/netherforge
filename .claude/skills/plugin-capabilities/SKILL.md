@@ -279,7 +279,9 @@ Servers behind one Velocity proxy, talking through a **hub** the proxy runs. Thr
   here (`closed_keys`, the latest 4096) isn't opened by an arrival: whoever placed them did before it closed, and a
   room nobody placing players knows would be nobody's. They land in the main room and the main room's network tick
   (`place_again`) sends them to the server's own group, where the hub's placement hook places them again. Scripts
-  and the control endpoint may still open a closed key.
+  and the control endpoint may still open a closed key. A send naming a room on the server a player is on already isn't
+  "already on": the hub (`Hub.place`/`go`, `local.rs`'s `Placement::Go.staying`) tells that server the room, and nobody
+  moves.
 - **Registration** (`network.register.address`, `server-name: auto` numbering `<group>-<n>`; or `HubAdmin`'s
   `POST /v1/servers`): a server not in `velocity.toml` adds itself through `HubProxy.register`, and comes off as it
   stops or after `unregister-after-seconds`.

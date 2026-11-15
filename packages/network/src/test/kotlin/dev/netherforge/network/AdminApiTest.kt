@@ -297,6 +297,26 @@ class AdminApiTest {
     }
 
     @Test
+    fun `a player sent back to their server's group is put in a room there when the placement names one`() {
+        val (arenaLink, arena) = join("arena-1", "arena")
+        hub.playerMoved("p", "P", "arena-1")
+        val events = stream("?place=arena")
+        Thread.sleep(200)
+        // The server sends them back to be placed again (their room closed there): the client places them in a new
+        // room on the same server, which is told the room though nobody moves.
+        arenaLink.send(ServerFrame.Send(1, listOf("p"), group = "arena"))
+        val id = Regex("\"id\":(\\d+)").find(events.next("place").second)!!.groupValues[1]
+        assertEquals(200, call("POST", "/v1/placements/$id", """{ "server": "arena-1", "room": "player_7f", "keep": true }""").first)
+        waitFor { arena.of<HubFrame.SendResult>().isNotEmpty() }
+        assertEquals(HubFrame.SendResult(1, null, "arena-1"), arena.of<HubFrame.SendResult>().single())
+        assertEquals(listOf(HubFrame.Room("p", "player_7f", keep = true)), arena.of<HubFrame.Room>())
+        // Naming no room, it's nothing to do.
+        arenaLink.send(ServerFrame.Send(2, listOf("p"), server = "arena-1"))
+        waitFor { arena.of<HubFrame.SendResult>().size == 2 }
+        assertEquals("they're already on arena-1", arena.of<HubFrame.SendResult>().last().error)
+    }
+
+    @Test
     fun `logins are placed by the client placing them, or by the proxy without one`() {
         assertEquals(LoginPlace(), hub.placeLogin("u-9", "Zed").get(1, TimeUnit.SECONDS))
         val events = stream("?place=${Hub.LOGINS}")

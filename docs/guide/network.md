@@ -709,7 +709,9 @@ sends `place` with the players and an `id`, and the service answers
   sent for it. A key whose room has closed on that server isn't opened again
   that way (the service placed them before it closed, a match that ended as
   they came): they arrive in its main room and it sends them back to its group,
-  where the service places them again. Add `"keep": true` for a room whose worlds and `nf.data` outlast
+  where the service places them again. A send or placement that names a room
+  on the server a player is on already puts them in that room (nobody moves).
+  Add `"keep": true` for a room whose worlds and `nf.data` outlast
   it (an owner's world, a party's): it saves them as it closes, and the room
   opened again with that key finds them. Without it the room is a match's: its
   worlds are deleted and its data forgotten when it closes.

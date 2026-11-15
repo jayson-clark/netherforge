@@ -144,6 +144,8 @@ enum Placement {
         server: String,
         party: usize,
         moving: Vec<PlayerState>,
+        /// Those of the party on `server` already: a send naming a room puts them in it.
+        staying: Vec<PlayerState>,
     },
 }
 
@@ -1292,7 +1294,13 @@ impl Hub {
             .filter(|p| p.server.as_deref() != Some(&server))
             .cloned()
             .collect();
-        if moving.is_empty() {
+        // Already there: a send naming a room puts them in it (the server moves them there), else it's nothing.
+        let staying: Vec<PlayerState> = party
+            .iter()
+            .filter(|p| p.server.as_deref() == Some(&server))
+            .cloned()
+            .collect();
+        if moving.is_empty() && frame.room.is_none() {
             return Placement::Failed(if party.len() == 1 {
                 format!("they're already on {server}")
             } else {
@@ -1303,6 +1311,7 @@ impl Hub {
             server,
             party: party.len(),
             moving,
+            staying,
         }
     }
 
@@ -1320,7 +1329,8 @@ impl Hub {
                 server,
                 party,
                 moving,
-            } => self.go(origin, &frame, server, party, moving),
+                staying,
+            } => self.go(origin, &frame, server, party, moving, staying),
             Placement::Later(target, why) => {
                 let wait = frame.wait_millis.map(|w| w.min(MAX_WAIT_MILLIS));
                 let Some(wait) = wait.filter(|w| *w > 0) else {
@@ -1366,8 +1376,21 @@ impl Hub {
         server: String,
         party: usize,
         moving: Vec<PlayerState>,
+        staying: Vec<PlayerState>,
     ) {
         let target = self.sessions.contains_key(&server).then(|| server.clone());
+        if let (Some(target), Some(room)) = (&target, &frame.room) {
+            for player in &staying {
+                self.deliver(
+                    target,
+                    HubFrame::Room {
+                        player: player.id.clone(),
+                        room: room.clone(),
+                        keep: frame.keep,
+                    },
+                );
+            }
+        }
         if let Some(target) = &target {
             for player in &moving {
                 if let Some(room) = &frame.room {
@@ -1433,7 +1456,8 @@ impl Hub {
                         server,
                         party,
                         moving,
-                    } => self.go(&origin, &frame, server, party, moving),
+                        staying,
+                    } => self.go(&origin, &frame, server, party, moving, staying),
                 }
                 if let Some(queue) = self.queues.get_mut(&key) {
                     queue.pop_front();
@@ -1493,9 +1517,10 @@ impl Hub {
                 server,
                 party,
                 moving,
+                staying,
             } = self.place(&frame)
             {
-                self.go(name, &frame, server, party, moving);
+                self.go(name, &frame, server, party, moving, staying);
             }
         }
     }

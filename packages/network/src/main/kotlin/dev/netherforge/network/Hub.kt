@@ -1734,7 +1734,8 @@ class Hub(
         }
         val target = byName[server]
         val moving = party.filter { it.server != server }
-        if (moving.isEmpty()) {
+        // Already there: a send naming a room puts them in it (the server moves them there), else it's nothing.
+        if (moving.isEmpty() && frame.room == null) {
             return Placement.Failed(if (party.size == 1) "they're already on $server" else "they're all already on $server")
         }
         for (player in moving) {
@@ -1793,6 +1794,7 @@ class Hub(
         val target = placement.target
         val party = placement.party
         val moving = placement.moving
+        frame.room?.let { room -> party.filter { it !in moving }.forEach { target?.send(HubFrame.Room(it.id, room, frame.keep)) } }
         for (player in moving) {
             frame.room?.let { target?.send(HubFrame.Room(player.id, it, frame.keep)) }
             target?.send(HubFrame.Arriving(player.id, from, frame.data))
