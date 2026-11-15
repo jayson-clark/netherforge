@@ -140,6 +140,8 @@ pub struct Instance {
     pub room_requests: RefCell<Vec<crate::rooms::RoomRequest>>,
     /// The last room number given.
     last_room: std::cell::Cell<u32>,
+    /// The keys of rooms that closed while the network's link was down, for the hub to be told once it's back.
+    pub untold_closes: RefCell<Vec<String>>,
     /// The players being moved between rooms right now: what the server holds for everyone (the pack, their
     /// permissions, their presence on the network) doesn't hear them leave or arrive.
     moving: RefCell<std::collections::HashSet<Uuid>>,
@@ -232,6 +234,7 @@ impl Instance {
             ),
             room_requests: RefCell::default(),
             last_room: Default::default(),
+            untold_closes: RefCell::default(),
             moving: RefCell::default(),
             network_inbound: RefCell::default(),
             network_listening: RefCell::default(),
@@ -326,6 +329,38 @@ impl Instance {
         } else {
             self.routes.borrow_mut().put_player(player, id);
         }
+    }
+
+    /// What the network's hub is told of the rooms as the link is welcomed again (after a drop, or as it first joins):
+    /// each open keyed room that has started or finished says so again, and each room that closed while the link was
+    /// down says it closed (unless a room has that key again), so whoever placed players in them (Kosmoi's matchmaker)
+    /// misses nothing a drop lost. Saying a state again changes nothing for whoever hears it.
+    pub fn room_states_to_tell(&self) -> Vec<(String, crate::network::protocol::RoomLife)> {
+        use crate::network::protocol::RoomLife;
+        use crate::rooms::RoomState;
+        let rooms = self.rooms.borrow();
+        let mut out: Vec<(String, RoomLife)> = rooms
+            .values()
+            .filter_map(|info| {
+                let life = match info.state {
+                    RoomState::Started => RoomLife::Started,
+                    RoomState::Finished => RoomLife::Finished,
+                    RoomState::Opening | RoomState::Open | RoomState::Closing => return None,
+                };
+                Some((info.key.clone()?, life))
+            })
+            .collect();
+        let open: std::collections::HashSet<&str> =
+            rooms.values().filter_map(|r| r.key.as_deref()).collect();
+        let mut closes = std::mem::take(&mut *self.untold_closes.borrow_mut());
+        closes.dedup();
+        out.extend(
+            closes
+                .into_iter()
+                .filter(|key| !open.contains(key.as_str()))
+                .map(|key| (key, RoomLife::Closed)),
+        );
+        out
     }
 
     /// Whether `player` is being moved between rooms now.

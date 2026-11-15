@@ -1541,6 +1541,8 @@ fn deliver(sink: &Sink, frame: HubFrame) {
 /// The local network: its hub, this server's place in it, and the test's other servers.
 pub struct LocalHub {
     hub: RefCell<Hub>,
+    /// This server's inbox while its connection is dropped (`drop_here`).
+    dropped: RefCell<Option<Arc<Inbox>>>,
 }
 
 impl LocalHub {
@@ -1574,6 +1576,7 @@ impl LocalHub {
                     .duration_since(std::time::UNIX_EPOCH)
                     .map_or(0, |d| d.as_millis() as i64),
             }),
+            dropped: RefCell::default(),
         })
     }
 
@@ -1590,6 +1593,26 @@ impl LocalHub {
         let here = self.hub.borrow().here.clone();
         self.hub.borrow_mut().close(&here);
         self.after();
+    }
+
+    /// This server's connection drops, as a remote one's does (the hub restarting): it hears it's lost, and nothing it
+    /// says reaches the hub until `reconnect_here` welcomes it again with the same inbox.
+    pub fn drop_here(&self) {
+        let here = self.hub.borrow().here.clone();
+        let inbox = match self.hub.borrow().sessions.get(&here).map(|s| &s.sink) {
+            Some(Sink::Here(inbox)) => inbox.clone(),
+            _ => return,
+        };
+        self.disconnect_here();
+        inbox.push(Inbound::Disconnected("the local hub dropped it".into()));
+        *self.dropped.borrow_mut() = Some(inbox);
+    }
+
+    /// This server joins again after `drop_here`, welcomed as it is now.
+    pub fn reconnect_here(&self, state: Lifecycle) {
+        if let Some(inbox) = self.dropped.borrow_mut().take() {
+            self.connect_here(inbox, state);
+        }
     }
 
     /// A frame from this server.

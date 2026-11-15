@@ -1565,3 +1565,91 @@ fn a_keyed_rooms_start_finish_and_close_are_told_to_the_hub() {
     );
     assert_eq!(hub.room_states().len(), 4);
 }
+
+#[test]
+fn what_a_dropped_link_couldnt_tell_of_the_rooms_is_told_once_it_is_back() {
+    let files = project(
+        r#"
+        nf.on("test:open", function()
+            local a = nf.rooms.open({ key = "m-a" })
+            nf.rooms.open({ key = "m-b" })
+            nf.rooms.open({ key = "m-c" })
+            nf.rooms.open({ key = "m-idle" })
+            a:start()
+        end)
+        nf.on("test:down", function()
+            for _, room in nf.rooms.all() do
+                if room:key() == "m-b" then room:start() room:finish() end
+                if room:key() == "m-c" then room:close() end
+            end
+        end)
+    "#,
+        NETWORK,
+    );
+    let platform = Platform::default();
+    let mut session = start(&files, &platform, dev(), None);
+    let hub = hub(&session);
+    let emit = |session: &Session, event: &str| {
+        session
+            .room()
+            .unwrap()
+            .scripts()
+            .emit_custom(
+                netherforge_runtime::scripts::Target::Nf,
+                event.into(),
+                mlua::Value::Nil,
+            )
+            .unwrap();
+    };
+    for _ in 0..3 {
+        session.tick();
+    }
+    emit(&session, "test:open");
+    for _ in 0..3 {
+        session.tick();
+        session.apply_room_requests();
+    }
+    use netherforge_runtime::network::protocol::{Lifecycle, RoomLife};
+    let told = |key: &str, life: RoomLife| ("dev".to_owned(), key.to_owned(), life);
+    assert_eq!(hub.room_states(), [told("m-a", RoomLife::Started)]);
+    // The link drops: b's start and finish and c's close are lost on the way.
+    hub.drop_here();
+    session.tick();
+    emit(&session, "test:down");
+    for _ in 0..3 {
+        session.tick();
+        session.apply_room_requests();
+    }
+    assert_eq!(hub.room_states().len(), 1, "nothing reached the hub");
+    // Back: every open keyed room under way says where it is, and c's close is told. A room only open (m-idle) has
+    // nothing to say.
+    hub.reconnect_here(Lifecycle::Ready);
+    for _ in 0..3 {
+        session.tick();
+        session.apply_room_requests();
+    }
+    let mut again = hub.room_states()[1..].to_vec();
+    again.sort_by(|a, b| a.1.cmp(&b.1));
+    assert_eq!(
+        again,
+        [
+            told("m-a", RoomLife::Started),
+            told("m-b", RoomLife::Finished),
+            told("m-c", RoomLife::Closed),
+        ]
+    );
+    // Told once: another welcome says the open rooms again, and the close no more.
+    hub.drop_here();
+    session.tick();
+    hub.reconnect_here(Lifecycle::Ready);
+    session.tick();
+    let mut third = hub.room_states()[4..].to_vec();
+    third.sort_by(|a, b| a.1.cmp(&b.1));
+    assert_eq!(
+        third,
+        [
+            told("m-a", RoomLife::Started),
+            told("m-b", RoomLife::Finished)
+        ]
+    );
+}

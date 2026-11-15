@@ -880,6 +880,12 @@ impl NetworkContext {
         match item {
             Inbound::Connected(welcome) => {
                 self.shared.network.borrow_mut().listened = None;
+                // The rooms' life as it is now, for the hub: what a drop lost is told again (the main room's to say).
+                if self.shared.room == crate::instance::RoomId::MAIN {
+                    for (room, state) in self.shared.instance.room_states_to_tell() {
+                        link.send(ServerFrame::RoomState { room, state });
+                    }
+                }
                 if self.scripts.listening(&Target::Nf, "network_connect") {
                     self.raise_nf(
                         "network_connect",
