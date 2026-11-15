@@ -123,6 +123,22 @@ impl Shared {
         self.instance.routes.borrow().player(player) == self.room
     }
 
+    /// Whether this room's scripts may reach entity `id`: anything but a player in another room. Without rooms beside
+    /// the main one, everything.
+    pub fn reaches(&self, id: netherforge_platform::Uuid) -> bool {
+        if self.instance.open.borrow().len() <= 1 {
+            return true;
+        }
+        match self.instance.routes.borrow().room_of(id) {
+            Some(room) => room == self.room,
+            // In no room beside the main one: a player there, or not a player.
+            None => {
+                self.room == crate::instance::RoomId::MAIN
+                    || self.platform.players().get(id).is_none()
+            }
+        }
+    }
+
     /// The online players in this room: what "everyone" means to its scripts and services.
     pub fn online_players(&self) -> Vec<netherforge_platform::PlayerRef> {
         let mut online = self.platform.players().online();

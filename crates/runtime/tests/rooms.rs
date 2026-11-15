@@ -442,3 +442,46 @@ fn each_rooms_share_is_a_metric() {
         "{text}"
     );
 }
+
+#[test]
+fn another_rooms_player_is_as_good_as_offline() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"
+nf.on("player_join", function(e)
+  if nf.rooms.current():is_main() and e.player:name() == "Alex" then
+    local sam = nf.players.get("Sam")
+    print("sam", sam ~= nil, sam:send_message("hi"), sam:location() == nil)
+  end
+end)
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    let room = server.session_mut().open_room(None).expect("a room");
+    let sam = FakeBot {
+        name: "Sam".into(),
+        id: Uuid(88),
+        at: place(0.0, 64.0, 0.0),
+    };
+    platform.bots.online.borrow_mut().push(FakeBot {
+        name: "Sam".into(),
+        id: Uuid(88),
+        at: place(0.0, 64.0, 0.0),
+    });
+    server.session().move_player(sam.id, room);
+    *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
+    platform.take();
+    // The main room finds Sam by name, but can't message or place them: they're in room 1.
+    server.game().player_join(&mut alex_join());
+    server.tick();
+    let lines = platform.take();
+    assert!(
+        !lines.iter().any(|l| l.starts_with("message 88")),
+        "{lines:?}"
+    );
+    assert_eq!(printed(&lines), ["sam\ttrue\tfalse\ttrue"], "{lines:?}");
+}

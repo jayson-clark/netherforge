@@ -751,7 +751,7 @@ nf.players = {}
 ---@return Player[]
 function nf.players.online() end
 
---- A player by name (any case) or UUID: anyone who has ever joined this server, online or not, or `nil` for someone who never has. For someone offline, `exists()` is `false` and what needs them in the world (`position()`, `send_message`) answers `nil` or `false` until they come back.
+--- A player by name (any case) or UUID: anyone who has ever joined this server, online or not, or `nil` for someone who never has. For someone offline, `exists()` is `false` and what needs them in the world (`position()`, `send_message`) answers `nil` or `false` until they come back. Someone in another room (`nf.rooms`) is as good as offline here.
 ---@param name_or_id string A name, or a UUID like `player:id()`.
 ---@return Player?
 function nf.players.get(name_or_id) end

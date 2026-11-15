@@ -52,6 +52,11 @@ impl Routes {
         self.players.get(&player).copied().unwrap_or(RoomId::MAIN)
     }
 
+    /// The room beside the main one `player` is in, if any.
+    pub fn room_of(&self, player: Uuid) -> Option<RoomId> {
+        self.players.get(&player).copied()
+    }
+
     /// `world` is `room`'s from now on.
     pub fn give_world(&mut self, world: &str, room: RoomId) {
         if room == RoomId::MAIN {

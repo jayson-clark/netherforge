@@ -195,7 +195,7 @@ pub trait NfPlayersApi {
     /// Everyone online.
     fn online(&self, caller: &Caller) -> ApiResult<Vec<handles::Player>>;
 
-    /// A player by name (any case) or UUID: anyone who has ever joined this server, online or not, or `nil` for someone who never has. For someone offline, `exists()` is `false` and what needs them in the world (`position()`, `send_message`) answers `nil` or `false` until they come back.
+    /// A player by name (any case) or UUID: anyone who has ever joined this server, online or not, or `nil` for someone who never has. For someone offline, `exists()` is `false` and what needs them in the world (`position()`, `send_message`) answers `nil` or `false` until they come back. Someone in another room (`nf.rooms`) is as good as offline here.
     fn get(&self, caller: &Caller, name_or_id: String) -> ApiResult<Option<handles::Player>>;
 
     /// Everyone who has ever joined this server, online or not, in no particular order. On a server that's been running a long time that's a lot of players, so call it when you need it (building a leaderboard) rather than every tick.

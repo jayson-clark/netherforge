@@ -109,9 +109,10 @@ impl GameContext {
         }))
     }
 
-    /// Their UUID while they're online.
+    /// Their UUID while they're online in this room: in another, they're as good as offline here.
     fn player_online(&self, this: &handles::Player) -> Option<Uuid> {
-        parse_uuid(&this.id).filter(|id| self.players().get(*id).is_some())
+        parse_uuid(&this.id)
+            .filter(|id| self.shared.reaches(*id) && self.players().get(*id).is_some())
     }
 
     fn player_holder(&self, this: &handles::Player) -> Option<crate::stats::Holder> {
@@ -393,7 +394,9 @@ impl PlayerApi for GameContext {
             .is_some_and(|id| self.players().set_display_name(id, text.0)))
     }
     fn send_message(&self, this: &handles::Player, text: values::Text) -> ApiResult<bool> {
-        Ok(parse_uuid(&this.id).is_some_and(|id| self.players().message(id, text.0)))
+        Ok(self
+            .player_online(this)
+            .is_some_and(|id| self.players().message(id, text.0)))
     }
     /// Drawn in the middle of their HUD's line while they have one; else sent as it is.
     fn send_actionbar(&self, this: &handles::Player, text: values::Text) -> ApiResult<bool> {
@@ -494,7 +497,7 @@ impl PlayerApi for GameContext {
         ))
     }
     fn run(&self, this: &handles::Player, command: String) -> ApiResult<bool> {
-        Ok(parse_uuid(&this.id).is_some_and(|id| {
+        Ok(self.player_online(this).is_some_and(|id| {
             self.players()
                 .run_command(id, command.strip_prefix('/').unwrap_or(&command).to_owned())
         }))
