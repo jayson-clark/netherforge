@@ -28,6 +28,18 @@ pub struct WasmData {
 }
 
 impl WasmData {
+    /// What it is, into `hash`: each file's path here and where it's on disk, or its bytes.
+    pub fn hash_into(&self, hash: &mut impl std::hash::Hasher) {
+        use std::hash::Hash;
+        for (name, file) in &self.files {
+            name.hash(hash);
+            match file {
+                DataFile::Disk(path) => path.hash(hash),
+                DataFile::Bytes(bytes) => bytes.hash(hash),
+            }
+        }
+    }
+
     pub fn new(files: BTreeMap<String, DataFile>) -> WasmData {
         let mut folders = BTreeSet::from([String::new()]);
         for file in files.keys() {

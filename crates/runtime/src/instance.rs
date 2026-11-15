@@ -129,6 +129,34 @@ const RETELL_SECONDS: u64 = 60;
 /// How long a player sent into a closed room may take to arrive.
 const ARRIVING_SECONDS: u64 = 60;
 
+/// A count kept over every room of the server, against an owner's limit on the server's total (WebAssembly programs
+/// running, HTTP connections open): each room takes a [`Seat`] for one of its own and the seat is given back as it's
+/// dropped, however that happens (ended, released, the room's state reset).
+#[derive(Clone, Debug, Default)]
+pub struct Seats(Rc<std::cell::Cell<usize>>);
+
+impl Seats {
+    /// How many are taken now.
+    pub fn taken(&self) -> usize {
+        self.0.get()
+    }
+
+    pub fn take(&self) -> Seat {
+        self.0.set(self.0.get() + 1);
+        Seat(self.0.clone())
+    }
+}
+
+/// One of a [`Seats`]' count, held by what it counts.
+#[derive(Debug)]
+pub struct Seat(Rc<std::cell::Cell<usize>>);
+
+impl Drop for Seat {
+    fn drop(&mut self) {
+        self.0.set(self.0.get().saturating_sub(1));
+    }
+}
+
 pub struct Instance {
     pub platform: Rc<dyn Platform>,
     /// The runtime's store: placements and saved tables.
@@ -139,6 +167,11 @@ pub struct Instance {
     pub packs: RefCell<crate::packs::Packs>,
     /// The scripts' data directory (`nf.files`), when the server has one.
     pub files: RefCell<Option<crate::files::ScriptFiles>>,
+    /// What of WebAssembly there is once per server: the threads, the memory, the compiles, the programs running.
+    pub wasm: Rc<crate::wasm::ServerWasm>,
+    /// The HTTP connections (`nf.http.stream`, `nf.http.websocket`) open in every room, against
+    /// `http.connections.max-total`.
+    pub http_connections: Seats,
     /// Where each kept room's tables are written for the tool carrying it (`<plugin folder>/rooms/<key>/data.json`,
     /// [`Instance::write_room_tables`]), when the server has a folder for them.
     pub room_tables: RefCell<Option<std::path::PathBuf>>,
@@ -272,6 +305,8 @@ impl Instance {
             packs: RefCell::default(),
             files: RefCell::default(),
             room_tables: RefCell::default(),
+            wasm: Rc::default(),
+            http_connections: Seats::default(),
             loot: RefCell::default(),
             databases: RefCell::default(),
             permissions: RefCell::default(),

@@ -956,3 +956,83 @@ fn a_body_is_split_into_lines_events_or_chunks() {
         Err("TooLarge(TooLarge(3))".into())
     );
 }
+
+/// Ticks until the rooms beside the main one have printed `count` lines (at most five seconds): each `<key> <line>`,
+/// with every warning and error, sorted.
+fn rooms_printed(session: &Session, platform: &Fake, count: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let started = Instant::now();
+    while started.elapsed() < Duration::from_secs(5) {
+        for line in platform.take() {
+            if let Some((key, rest)) = line
+                .strip_prefix("info [room ")
+                .and_then(|l| l.split_once(" module net] "))
+            {
+                let text = rest.rsplit_once(" (modules/").map_or(rest, |(t, _)| t);
+                lines.push(format!("{key} {text}"));
+            } else if line.starts_with("warn") || line.starts_with("error") {
+                lines.push(line);
+            }
+        }
+        if lines.len() >= count {
+            lines.sort();
+            return lines;
+        }
+        session.tick();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    panic!("only {} of {count} lines: {lines:?}", lines.len());
+}
+
+#[test]
+fn two_rooms_ask_in_the_same_tick_and_connections_are_counted_over_every_room() {
+    // Each request answered with its path; `/held` sends a line, then holds the connection open.
+    let server = serve(|request, stream| {
+        if request.path == "/held" {
+            let _ = stream
+                .write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nhi!\n\r\n");
+            let _ = stream.flush();
+            std::thread::sleep(Duration::from_secs(10));
+        } else {
+            respond(stream, "200 OK", &[], request.path.as_bytes());
+        }
+    });
+    let module = format!(
+        r#"
+        local room = nf.rooms.current()
+        if room:is_main() then return end
+        local key = room:key()
+        nf.http.request({{ url = "{base}" .. key }}, function(response, err)
+            print("got", response.body, err)
+        end)
+        nf.task(function()
+            print("waited", nf.http.request({{ url = "{base}" .. key .. "/again" }}).body)
+        end)
+        local held = nf.http.stream({{ url = "{held}" }})
+        held:on("message", function(e) print("held", e.data) end)
+        held:on("end", function(e) print("end", e.reason, e.detail) end)
+        "#,
+        base = server.url("/"),
+        held = server.url("/held"),
+    );
+    let files = project(&["127.0.0.1"], &module);
+    let platform = Rc::default();
+    let mut limits = allowing(server.port);
+    limits.connections.max_total = 1;
+    let mut session = start(&files, &platform, config(limits));
+    for key in ["a", "b"] {
+        session.open_room(Some(key.into()), false).expect("a room");
+    }
+    // Each room's answers its own, though asked in the same tick; the connections the server's, not each room's.
+    assert_eq!(
+        rooms_printed(&session, &platform, 6),
+        [
+            "a got\t/a\tnil",
+            "a held\thi!",
+            "a waited\t/a/again",
+            "b end\tlimit\tthe server already has 1 connections open, its limit (http.connections.max-total in config.yml)",
+            "b got\t/b\tnil",
+            "b waited\t/b/again",
+        ]
+    );
+}

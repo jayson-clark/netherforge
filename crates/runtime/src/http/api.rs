@@ -933,9 +933,10 @@ impl Service for HttpService {
             api.unload_where(|_| true);
         }
         let mut http = self.shared.http.borrow_mut();
-        let testing = http.connections.testing;
+        let (testing, server) = (http.connections.testing, http.connections.server.clone());
         http.connections = Connections::default();
         http.connections.testing = testing;
+        http.connections.server = server;
         http.close();
     }
 }

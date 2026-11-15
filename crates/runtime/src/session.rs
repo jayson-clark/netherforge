@@ -2410,6 +2410,7 @@ fn configure_room(shared: &Shared, config: &Config) {
     {
         let mut http = shared.http.borrow_mut();
         http.config = config.http.clone();
+        http.connections.server = shared.instance.http_connections.clone();
         http.hooks = config.net.clone();
         // A test run looks no name up: `localhost` is this machine, any other name leads nowhere.
         if config.testing.is_some() && http.hooks.resolve.is_none() {
@@ -2441,6 +2442,7 @@ fn configure_room(shared: &Shared, config: &Config) {
     {
         let mut wasm = shared.wasm.borrow_mut();
         wasm.config = config.wasm.clone();
+        wasm.server = shared.instance.wasm.clone();
         wasm.sources = crate::wasm::Sources {
             bytes: config.bytes.clone(),
             paths: config.paths.clone(),

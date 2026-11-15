@@ -409,6 +409,7 @@ impl WasmApi {
                 return false;
             };
             program.ended = true;
+            program.seat = None;
             program.shared.stop();
             program.handle.clone()
         };
@@ -801,7 +802,7 @@ impl NfWasmApi for WasmApi {
                 "package \"{namespace}\" already has {} WebAssembly programs running, the server's limit (wasm.max-processes-per-package in config.yml)",
                 config.max_processes_per_package
             ))
-        } else if running.len() >= config.max_processes_total {
+        } else if wasm.server.programs.taken() >= config.max_processes_total {
             Some(format!(
                 "the server already has {} WebAssembly programs running, its limit (wasm.max-processes-total in config.yml)",
                 config.max_processes_total
@@ -809,6 +810,7 @@ impl NfWasmApi for WasmApi {
         } else {
             None
         };
+        let seat = refusal.is_none().then(|| wasm.server.programs.take());
         wasm.programs.insert(
             number,
             Program {
@@ -820,6 +822,7 @@ impl NfWasmApi for WasmApi {
                 shared: shared.clone(),
                 ended: false,
                 stand_in: stand_in.then_some(false),
+                seat,
             },
         );
         if let Some(why) = refusal {
@@ -1325,11 +1328,20 @@ impl Service for WasmService {
             api.release_where(|_| true);
         }
         let mut wasm = self.shared.wasm.borrow_mut();
-        wasm.close();
-        let (config, sources) = (wasm.config.clone(), wasm.sources.clone());
+        // The server's threads and compiles end with the session, the main room stopping last; another room's own
+        // instances and programs went just above.
+        if self.shared.room == crate::instance::RoomId::MAIN {
+            wasm.server.close();
+        }
+        let (config, sources, server) = (
+            wasm.config.clone(),
+            wasm.sources.clone(),
+            wasm.server.clone(),
+        );
         *wasm = Wasm {
             config,
             sources,
+            server,
             ..Wasm::default()
         };
     }

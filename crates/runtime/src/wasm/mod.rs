@@ -216,6 +216,8 @@ pub struct Program {
     pub ended: bool,
     /// A test's stand-in answers it (`nf.test.stub_wasm`): nothing runs, and its end was queued once its input closed.
     pub stand_in: Option<bool>,
+    /// Its place in the server's programs (`ServerWasm::programs`) until it ends: none for one refused.
+    pub seat: Option<crate::instance::Seat>,
 }
 
 /// A stand-in instance, in a test run: the test's functions answer for module `key`. It holds nothing.
@@ -233,13 +235,56 @@ pub struct Sources {
     pub paths: Option<crate::screen::video::ProjectPaths>,
 }
 
-/// The session's WebAssembly.
+/// What of WebAssembly there is once per server, whichever room runs it (the instance's): the engine and its threads
+/// (`wasm.threads` for every room, one epoch ticker), the memory every instance and program counts against
+/// (`max-memory-total-mb`), each module's compile (every room runs the same project: a module is compiled once, and
+/// again only when its files change) and how many programs run (`max-processes-total`). Each room's [`Wasm`] holds the
+/// rest: its instances and programs, and the per-package limits, a room being one run of the game.
+#[derive(Default)]
+pub struct ServerWasm {
+    threads: std::cell::RefCell<Option<Arc<Threads>>>,
+    budget: std::cell::RefCell<Option<Arc<Budget>>>,
+    /// Each module's compile by the server's name, with what it was compiled from (`fingerprint`).
+    compiled: std::cell::RefCell<HashMap<String, (u64, Arc<Compile>)>>,
+    /// Programs started in any room that haven't ended (stand-ins too), against `max-processes-total`.
+    pub programs: crate::instance::Seats,
+}
+
+impl ServerWasm {
+    /// Ends the threads and forgets every compile, as the session stops: what's running was stopped by its guard;
+    /// nothing new runs. The next need makes them again.
+    pub fn close(&self) {
+        if let Some(threads) = self.threads.borrow_mut().take() {
+            threads.stopping.store(true, Ordering::SeqCst);
+            threads.pool.close();
+            // Its last tick reaches every store still running, which then stops.
+            threads
+                .ticker
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
+        }
+        self.budget.borrow_mut().take();
+        self.compiled.borrow_mut().clear();
+    }
+}
+
+/// What a module is compiled from, as a number: its bytes and its data's (a file on disk by where it is), so a room
+/// asking for a module another already compiled the same way shares that compile.
+fn fingerprint(bytes: &[u8], data: &files::WasmData) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hash = std::hash::DefaultHasher::new();
+    bytes.hash(&mut hash);
+    data.hash_into(&mut hash);
+    hash.finish()
+}
+
+/// A room's WebAssembly; what's the server's is in `server` (the instance's [`ServerWasm`]).
 #[derive(Default)]
 pub struct Wasm {
     pub config: WasmConfig,
     pub sources: Sources,
-    threads: Option<Arc<Threads>>,
-    budget: Option<Arc<Budget>>,
+    pub server: std::rc::Rc<ServerWasm>,
     /// Every module that read (errors or not), by the server's name, with its `module.wasm`'s path: what scripts
     /// may name.
     pub known: BTreeMap<String, String>,
@@ -270,9 +315,9 @@ pub enum On<'a> {
 }
 
 impl Wasm {
-    /// The threads, made now if they weren't.
+    /// The server's threads, made now if they weren't.
     pub fn threads(&mut self) -> Result<Arc<Threads>, String> {
-        if let Some(threads) = &self.threads {
+        if let Some(threads) = &*self.server.threads.borrow() {
             return Ok(threads.clone());
         }
         let warnings = std::cell::RefCell::new(Vec::new());
@@ -285,13 +330,16 @@ impl Wasm {
             stopping: Arc::default(),
             ticker: Mutex::new(Some(ticker)),
         });
-        self.threads = Some(threads.clone());
+        *self.server.threads.borrow_mut() = Some(threads.clone());
         Ok(threads)
     }
 
+    /// The server's memory budget.
     pub fn budget(&mut self) -> Arc<Budget> {
         let pages = self.config.max_memory_total_mb * compiled::PAGES_PER_MB;
-        self.budget
+        self.server
+            .budget
+            .borrow_mut()
             .get_or_insert_with(|| Arc::new(Budget::new(pages)))
             .clone()
     }
@@ -302,14 +350,29 @@ impl Wasm {
     }
 
     /// Compiles `bytes` as module `key` with its `data`, off the main thread; what was compiled of it before is
-    /// replaced (a compile still going finishes unseen).
+    /// replaced (a compile still going finishes unseen). The server's compile of the same bytes and data, another
+    /// room's, is taken as it is.
     pub fn compile(&mut self, key: &str, bytes: Option<Vec<u8>>, data: files::WasmData) {
+        let print = bytes.as_deref().map(|b| fingerprint(b, &data));
+        if let Some(print) = print
+            && let Some((made, compile)) = self.server.compiled.borrow().get(key)
+            && *made == print
+        {
+            self.compiled.insert(key.to_owned(), compile.clone());
+            return;
+        }
         let compile = Arc::new(Compile::default());
         self.compiled.insert(key.to_owned(), compile.clone());
         let Some(bytes) = bytes else {
             compile.set(Err("module.wasm can't be read".into()));
             return;
         };
+        if let Some(print) = print {
+            self.server
+                .compiled
+                .borrow_mut()
+                .insert(key.to_owned(), (print, compile.clone()));
+        }
         let threads = match self.threads() {
             Ok(threads) => threads,
             Err(e) => {
@@ -418,22 +481,12 @@ impl Wasm {
     /// Whether nothing given to the pool is queued or running, and every program can go no further on its own:
     /// what a test run's tick will wait on.
     pub fn quiet(&self) -> bool {
-        self.threads.as_ref().is_none_or(|t| t.pool.idle())
+        self.server
+            .threads
+            .borrow()
+            .as_ref()
+            .is_none_or(|t| t.pool.idle())
             && self.programs.values().all(|p| p.ended || p.shared.quiet())
-    }
-
-    /// Ends the threads: what's running was stopped by its guard; nothing new runs.
-    pub fn close(&mut self) {
-        if let Some(threads) = self.threads.take() {
-            threads.stopping.store(true, Ordering::SeqCst);
-            threads.pool.close();
-            // Its last tick reaches every store still running, which then stops.
-            threads
-                .ticker
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .take();
-        }
     }
 }
 

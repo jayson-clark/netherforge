@@ -100,6 +100,11 @@ answers after the end). The module's doc has the design; in short:
   `request`) makes the connection anyway and queues `ended("limit")` for the next tick, so a script handles every
   limit in `end`. A script's own mistake (a message over `max-message-bytes` sent, a bad close code) is an error at
   its line.
+- **Rooms.** Each room has its own `Http` (client, request threads, rates, connections), so a room's requests never
+  wait on another's; `max-total` is the server's, every room's connections counted together (`Instance::http_connections`,
+  a `Seats`: each counted connection holds a `Seat` until it ends, however it ends). Per-package limits
+  (`max-per-package`, `requests-per-minute`) are per room: a room is one run of the game. Test:
+  `two_rooms_ask_in_the_same_tick_and_connections_are_counted_over_every_room`.
 - **Bytes are counted** per package against `bytes-per-minute`: a WebSocket's on the wire (its socket is the
   runtime's own, under TLS), a stream's as its body is read (after ureq decodes a gzipped one). A WebSocket's message
   and frame are capped at `max-message-bytes` too, which is what stops a far end making the server buffer an endless
@@ -189,6 +194,12 @@ its module docs the design. In short:
   freed once read. Each instance's calls run one at a time on its own `Lane` over the pool (`threads.rs`); a trap or
   a timeout closes the instance (its memory may be half-written), and its handle still answers `module()` until its
   scope goes.
+- **Rooms**: what's the server's is `Instance::wasm`, a `ServerWasm`: the engine and its pool (`wasm.threads` for every
+  room) and ticker, the memory `Budget` (`max-memory-total-mb`), each module's compile (shared by every room that
+  compiles the same bytes and data, `fingerprint`; a reload's new bytes compile once more) and the programs running
+  (`max-processes-total`, `Seats`). The main room's stop (the session's, last) closes it. A room's own `Wasm` keeps its
+  instances, programs and per-package counts. Tests: `two_rooms_call_their_modules_in_the_same_tick_under_the_servers_memory`,
+  `programs_running_are_counted_over_every_room`.
 - **Time** (`threads.rs`): one thread ticks the engine's epoch every `EPOCH`, and every store checks its `Guard` at
   each tick (wasmtime's epoch deadline callback): closed, or past `max-call-seconds`, its code traps there. That stops
   compiled code and Pulley alike, and replaces Kotlin's watchdog and `Thread.interrupt`.
