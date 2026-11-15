@@ -30,7 +30,9 @@ class PaperServer(
     /** Whether the game generates its structures (`generate-structures`): off, so worlds compare block for block. */
     private val structures: Boolean = false,
     /** More system properties for the server's JVM, given each time it starts: `-Dname=value`. */
-    private val jvmProperties: List<String> = emptyList()
+    private val jvmProperties: List<String> = emptyList(),
+    /** More of NetherForge's `config.yml` (top-level sections, YAML), after what every scenario's has. */
+    private val config: String = ""
 ) {
     val folder: Path = Adapter.server
 
@@ -76,7 +78,7 @@ class PaperServer(
         Files.createDirectories(folder.resolve("plugins/NetherForge"))
         // Web routes are on, as a server owner turns them on: examples/showcase declares some, which would otherwise be a
         // warning (`runtime.web-disabled`) on a project every scenario expects to load clean.
-        folder.resolve("plugins/NetherForge/config.yml").writeText("performance:\n  warn-ms: 0\nweb:\n  enabled: true\n")
+        folder.resolve("plugins/NetherForge/config.yml").writeText("performance:\n  warn-ms: 0\nweb:\n  enabled: true\n$config")
         // examples/showcase's expo builds its booths over the main world's spawn, hands everyone a tour guide and shows them
         // a boss bar: what a server whose main world isn't the expo's plaza turns off, as these scenarios' worlds aren't.
         Files.createDirectories(folder.resolve("plugins/NetherForge/settings"))

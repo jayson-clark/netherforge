@@ -1502,8 +1502,10 @@ main room's `ManagedContext::import`, then (`poll_rooms`) gives the worlds to th
 its scripts start with them; `/save {room}` runs `Session::save_room` (each world's `world_saving`, `room_saving`: the
 data service saves its tables) and answers each world's `save_files` paths and `kept_data`; `/rooms/close` asks
 `RoomRequest::Close` and with `delete` `forget_left` (`ManagedContext::delete_saved`). `/state` has `rooms` (keyed,
-open), `/events` `room_open`/`room_close`. Tests: `tests/control.rs` (TCP with a token, and a Unix socket; a kept
-room saved, closed and brought back).
+open), `/events` `room_open`/`room_close`; an open or close answered takes a snapshot at once, so the next `/state`
+has it. Tests: `tests/control.rs` (TCP with a token, and a Unix socket), `tests/worlds.rs` (a kept room saved, closed
+and brought back through the endpoint), and on Paper `OwnerRoomsScenario` (two owners' rooms copied out as an agent
+copies them, deleted, and opened again from the copies).
 
 ## Config, policy and the hub (`crates/runtime/src/config.rs`, `session.rs`)
 

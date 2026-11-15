@@ -457,9 +457,10 @@ impl ServerControl {
             }
         }
         self.poll_loading();
-        self.poll_rooms(session, platform);
+        // A room answered as open or closed is in the next `/state` its tool reads.
+        let answered = self.poll_rooms(session, platform);
         let first = self.main.borrow().last.is_none();
-        if acted || first || tick.is_multiple_of(SNAPSHOT_TICKS) {
+        if acted || answered || first || tick.is_multiple_of(SNAPSHOT_TICKS) {
             self.snapshot(tick, session, platform, !acted);
         }
     }
@@ -868,13 +869,16 @@ impl ServerControl {
         None
     }
 
-    /// The rooms being opened and closed: each answered once it's open (its worlds in) or closed.
-    fn poll_rooms(&self, session: Option<&Session>, _platform: &dyn Platform) {
-        let Some(session) = session else { return };
+    /// The rooms being opened and closed: each answered once it's open (its worlds in) or closed. Whether any was.
+    fn poll_rooms(&self, session: Option<&Session>, _platform: &dyn Platform) -> bool {
+        let Some(session) = session else {
+            return false;
+        };
         let instance = session.instance();
         let waker = std::task::Waker::noop();
         let mut cx = std::task::Context::from_waker(waker);
         let mut main = self.main.borrow_mut();
+        let waiting = main.opening.len() + main.closing.len();
         main.opening.retain_mut(|o| {
             let mut failed = None;
             for (_, _, pending) in &mut o.worlds {
@@ -933,6 +937,7 @@ impl ServerControl {
             let _ = c.reply.send(Ok(json!({ "room": c.key, "closed": true })));
             false
         });
+        main.opening.len() + main.closing.len() < waiting
     }
 
     fn snapshot(&self, tick: u64, session: Option<&Session>, platform: &dyn Platform, tell: bool) {
