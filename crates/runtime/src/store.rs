@@ -673,6 +673,23 @@ impl Store {
         .unwrap_or_default()
     }
 
+    /// The `nf.data` tables kept for the room keyed `key`, by namespace and name: each as the JSON it's saved as
+    /// (`{ "<namespace>": { "<table>": <value> } }`, a room's `data.json`).
+    pub fn kept_data(&self, key: &str) -> serde_json::Map<String, serde_json::Value> {
+        use serde_json::Value;
+        let mut out = serde_json::Map::new();
+        for (namespace, name, text) in self.kept_tables(key) {
+            let value = serde_json::from_str(&text).unwrap_or(Value::String(text));
+            if let Value::Object(tables) = out
+                .entry(namespace)
+                .or_insert_with(|| Value::Object(serde_json::Map::new()))
+            {
+                tables.insert(name, value);
+            }
+        }
+        out
+    }
+
     /// The `nf.data` tables kept for the room keyed `key` go.
     pub fn forget_kept_tables(&self, key: &str) {
         let suffix = format!("#{key}");

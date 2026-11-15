@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.SocketChannel
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -113,6 +114,9 @@ class OwnerRoomsScenario : Scenario("owner_rooms") {
             copyMap(server.folder.resolve(home.getValue("level").text()), server.folder.resolve(home.getValue("folder").text()), map)
             val tables = saved.getValue("data").jsonObject.getValue("showcase").jsonObject
             assertEquals("""{"opened":1}""", tables.getValue("notes").toString())
+            // The same tables, in the file the server keeps them in until it stops (read again after a SIGTERM).
+            val kept = Json.parseToJsonElement(Path.of(saved.getValue("data_file").text()).readText())
+            assertEquals(saved.getValue("data"), kept)
             imports.resolve(key).resolve("data.json").writeText(saved.getValue("data").toString())
             assertEquals(200, ask("POST", "/resume", """{"room": "$key"}""").first)
         }

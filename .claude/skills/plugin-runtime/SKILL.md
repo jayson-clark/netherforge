@@ -1508,7 +1508,13 @@ centities, with their `centity:data()`, into `data/netherforge/centities.json` t
 (`read_map_records`, `Store::put_records`) before the room's scripts start, so they're restored as themselves, not
 removed as strays; a file it can't read refuses the open. From the map, not the loaded world: Paper's import of a map
 (its legacy-world migration) moves only `region/`, `entities/` and `poi/` into the new dimension. A world deleted with its room (a match's, `forget_left`, a killed match's leftovers) takes its records
-(`Store::forget_world_records`), staged after the room stopped so no live centity stages them again. `/state` has `rooms` (keyed,
+(`Store::forget_world_records`), staged after the room stopped so no live centity stages them again. **Its tables too**: `/save {room}` and a kept room's
+close write its `kept_data` as `<plugin folder>/rooms/<key>/data.json` (`Instance::write_room_tables`, `Config::
+room_tables_dir`) and the answer names it (`data_file`, canonical: Kosmoi's agent sees the plugin folder as `/srv/data`);
+`forget_left` deletes it. A stopping server closes its rooms in place (worlds saved, records and tables written), so
+after SIGTERM a tool's last save, reading the same files again, has the room as it stopped. Sound because Paper disables
+the plugin (closing the rooms) before it exits, and Kosmoi's agent is a native sidecar that gets SIGTERM only after the
+server container has exited. `/state` has `rooms` (keyed,
 open), `/events` `room_open`/`room_close`; an open or close answered takes a snapshot at once, so the next `/state`
 has it. Tests: `tests/control.rs` (TCP with a token, and a Unix socket; a kept room's centity carried to another server
 in its world's folder), `tests/worlds.rs` (a kept room saved, closed

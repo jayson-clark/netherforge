@@ -139,6 +139,9 @@ pub struct Instance {
     pub packs: RefCell<crate::packs::Packs>,
     /// The scripts' data directory (`nf.files`), when the server has one.
     pub files: RefCell<Option<crate::files::ScriptFiles>>,
+    /// Where each kept room's tables are written for the tool carrying it (`<plugin folder>/rooms/<key>/data.json`,
+    /// [`Instance::write_room_tables`]), when the server has a folder for them.
+    pub room_tables: RefCell<Option<std::path::PathBuf>>,
     /// The project's loot tables.
     pub loot: RefCell<crate::loot::LootTables>,
     /// The packages' own databases (`nf.db`), and the owner's connections.
@@ -235,6 +238,32 @@ impl CommandHandler for RoomCommand {
 }
 
 impl Instance {
+    /// The kept room `key`'s `nf.data` tables as the store has them, written as its `data.json` into the folder the
+    /// server keeps for them (`room_tables`): where it is, or none without a folder. A save writes it (the control
+    /// endpoint's `/save`) and so does the room's close, the server's stop's included, so a tool reading it after the
+    /// server has gone (Kosmoi's last save after SIGTERM) reads them as the room left them. The path is absolute.
+    pub fn write_room_tables(&self, key: &str) -> Result<Option<std::path::PathBuf>, String> {
+        let Some(root) = self.room_tables.borrow().clone() else {
+            return Ok(None);
+        };
+        let file = root.join(key).join("data.json");
+        let partial = file.with_extension("json.partial");
+        let text = serde_json::Value::Object(self.store.kept_data(key)).to_string();
+        std::fs::create_dir_all(file.parent().expect("a folder"))
+            .and_then(|()| std::fs::write(&partial, text))
+            .and_then(|()| std::fs::rename(&partial, &file))
+            .map_err(|e| format!("couldn't write {}: {e}", file.display()))?;
+        // As another process finds it: absolute, through any link the plugin's folder is (Kosmoi's `/srv/data`).
+        Ok(Some(std::fs::canonicalize(&file).unwrap_or(file)))
+    }
+
+    /// The kept room `key`'s tables file goes (`write_room_tables`): what it keeps was copied and deleted.
+    pub fn forget_room_tables(&self, key: &str) {
+        if let Some(root) = self.room_tables.borrow().as_ref() {
+            let _ = std::fs::remove_dir_all(root.join(key));
+        }
+    }
+
     pub fn new(platform: Rc<dyn Platform>, store: Rc<crate::store::Store>) -> Rc<Instance> {
         Rc::new(Instance {
             platform,
@@ -242,6 +271,7 @@ impl Instance {
             provided_packages: RefCell::default(),
             packs: RefCell::default(),
             files: RefCell::default(),
+            room_tables: RefCell::default(),
             loot: RefCell::default(),
             databases: RefCell::default(),
             permissions: RefCell::default(),

@@ -198,6 +198,7 @@ impl Server {
         let store = Rc::new(netherforge_runtime::store::Store::in_memory());
         let mut config = netherforge_runtime::session::Config::default();
         config.worlds.import_root = Some(imports.to_owned());
+        config.room_tables_dir = Some(dir.join("plugin/rooms"));
         let events = ServerEvents::new(Session::start_configured(
             platform.clone(),
             files,
@@ -345,6 +346,10 @@ end
         std::thread::sleep(std::time::Duration::from_millis(2));
     }
     assert!(
+        !one_dir.path().join("plugin/rooms/player_alice").exists(),
+        "its tables' file went too"
+    );
+    assert!(
         !one.store
             .instances()
             .iter()
@@ -373,4 +378,79 @@ end
     let records = std::fs::read_to_string(left.join("data/netherforge/centities.json")).unwrap();
     assert!(records.contains(&id), "{records}");
     two.control.stop(&*two.platform);
+}
+
+#[test]
+fn a_kept_room_left_by_a_stopping_server_is_on_disk_as_it_stopped() {
+    let imports = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(
+        imports
+            .path()
+            .join("first/worlds/home/dimensions/minecraft/overworld"),
+    )
+    .unwrap();
+    let files: &'static Files = Box::leak(Box::new(Files::new(&[
+        ("netherforge.json", MANIFEST),
+        ("centities/lamp/centity.json", &lamp(1.0)),
+        (
+            "modules/game/init.lua",
+            r#"
+local room = nf.rooms.current()
+if not room:is_main() then
+  local home = assert(nf.worlds.get("home"))
+  local lamp = assert(nf.centities.spawn("lamp", home:location(vector.create(3, 64, 4))))
+  local notes = nf.data("notes")
+  nf.every(1, function()
+    notes.ticks = (notes.ticks or 0) + 1
+    lamp:data().ticks = notes.ticks
+  end)
+end
+"#,
+        ),
+    ])));
+    let dir = tempfile::tempdir().unwrap();
+    let server = Server::start(files, imports.path(), dir.path());
+    let (status, opened) = server.ask(
+        "/rooms/open",
+        r#"{"key": "player_alice", "keep": true, "folder": "first"}"#,
+    );
+    assert_eq!(status, 200, "{opened}");
+
+    // A save says where the room's tables are kept, as well as what they are.
+    let (status, saved) = server.ask("/save", r#"{"room": "player_alice"}"#);
+    assert_eq!(status, 200, "{saved}");
+    let tables = std::path::PathBuf::from(saved["data_file"].as_str().expect("a data file"));
+    assert_eq!(
+        tables,
+        std::fs::canonicalize(dir.path().join("plugin/rooms/player_alice/data.json")).unwrap()
+    );
+    let read = |file: &std::path::Path| -> serde_json::Value {
+        serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap()
+    };
+    assert_eq!(read(&tables), saved["data"]);
+    let at_save = saved["data"]["demo"]["notes"]["ticks"].as_i64().unwrap();
+    let folder = std::path::PathBuf::from(saved["worlds"][0]["folder"].as_str().unwrap());
+    let records = folder.join("data/netherforge/centities.json");
+
+    // Played on, then the server stops (SIGTERM): the room closes in place, and what a tool reads afterwards from the
+    // same places is the room as it stopped, not as it was saved.
+    for _ in 0..10 {
+        server.events.tick();
+    }
+    server.events.session_mut().stop();
+    let stopped = read(&tables)["demo"]["notes"]["ticks"].as_i64().unwrap();
+    assert!(stopped >= at_save + 10, "{at_save} then {stopped}");
+    assert_eq!(
+        read(&records)["centities"][0]["data"]["ticks"].as_i64(),
+        Some(stopped),
+        "the centity's table as the room stopped"
+    );
+    assert!(
+        server
+            .platform
+            .take()
+            .contains(&"unload world home__player_alice true".to_owned()),
+        "its world saved"
+    );
+    server.control.stop(&*server.platform);
 }

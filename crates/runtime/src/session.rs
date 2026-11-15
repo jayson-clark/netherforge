@@ -149,6 +149,9 @@ pub struct Config {
     pub wall_clock_rate: f64,
     /// The scripts' data directory (`plugins/NetherForge/data/`): none, and `nf.files` finds nothing there.
     pub data_dir: Option<std::path::PathBuf>,
+    /// `plugins/NetherForge/rooms/`, where each kept room's tables are written for a tool carrying it
+    /// (`Instance::write_room_tables`): none, and they're only in the control endpoint's answers.
+    pub room_tables_dir: Option<std::path::PathBuf>,
     /// `files:` in `config.yml`: what each package may keep there.
     pub files: crate::files::FilesConfig,
     /// `resource-pack:` in `config.yml`: where the pack is served from.
@@ -426,6 +429,7 @@ impl<'a> Session<'a> {
             databases.dir = config.databases_dir.clone();
             databases.config = config.databases.clone();
         }
+        *instance.room_tables.borrow_mut() = config.room_tables_dir.clone();
         if let Some(root) = &config.data_dir {
             *instance.files.borrow_mut() =
                 Some(crate::files::ScriptFiles::new(root.clone(), config.files));
@@ -814,13 +818,14 @@ impl<'a> Session<'a> {
         // Its own worlds go with it: a match's deleted, a kept room's saved for the next time it opens.
         let mut went = Vec::new();
         let mut kept = Vec::new();
+        let keep = self.rooms[at].shared.keeps_worlds();
+        let key = self.instance().room_key(id);
         if let Some(room) = self.rooms[at].room() {
             let shared = self.rooms[at].shared.clone();
             let managed = crate::managed_worlds::ManagedContext {
                 shared: shared.clone(),
                 scripts: room.scripts().clone(),
             };
-            let keep = shared.keeps_worlds();
             for world in self.instance().routes.borrow().worlds_of(id) {
                 if !managed.is_managed(&world) {
                     continue;
@@ -840,8 +845,8 @@ impl<'a> Session<'a> {
             }
         }
         self.report_room(id, RoomLife::Closed);
-        if let Some(key) = self.instance().room_key(id) {
-            self.instance().closed_key(&key);
+        if let Some(key) = &key {
+            self.instance().closed_key(key);
         }
         self.stop_room(at);
         // Its centities' records as it stopped: in a kept world's files, to travel with them; gone with a deleted one.
@@ -858,6 +863,14 @@ impl<'a> Session<'a> {
             store.forget_world_records(&world);
         }
         store.commit();
+        // And its tables, where a tool reads them once the server has gone.
+        if let Some(key) = key.filter(|_| keep)
+            && let Err(why) = self.instance().write_room_tables(&key)
+        {
+            self.platform.log().warn(format!(
+                "{id}'s tables weren't written for its next server: {why}"
+            ));
+        }
         self.rooms.remove(at);
         let instance = self.instance();
         instance.routes.borrow_mut().forget(id);

@@ -742,7 +742,7 @@ impl ServerControl {
         };
         let Some(id) = instance.room_keyed(key) else {
             let left = managed(Some(session)).map_or_else(Vec::new, |c| c.worlds_ending(&suffix));
-            let data = kept_data(instance, key);
+            let data = instance.store.kept_data(key);
             if left.is_empty() && data.is_empty() {
                 return Err((
                     404,
@@ -753,9 +753,9 @@ impl ServerControl {
                 .iter()
                 .map(|real| json!({ "name": script(real), "world": real }))
                 .collect();
-            return Ok(
-                json!({ "room": key, "closed": true, "worlds": worlds, "data": data, "writes_paused": false }),
-            );
+            let mut answer = json!({ "room": key, "closed": true, "worlds": worlds, "data": data, "writes_paused": false });
+            tables_file(instance, key, &mut answer)?;
+            return Ok(answer);
         };
         session.save_room(id);
         let names = instance.routes.borrow().worlds_of(id);
@@ -789,12 +789,14 @@ impl ServerControl {
             }
             worlds.push(world);
         }
-        Ok(json!({
+        let mut answer = json!({
             "room": key,
             "worlds": worlds,
-            "data": kept_data(instance, key),
+            "data": instance.store.kept_data(key),
             "writes_paused": pause,
-        }))
+        });
+        tables_file(instance, key, &mut answer)?;
+        Ok(answer)
     }
 
     /// `POST /rooms/open`: reserves room `key`, brings in what `folder` (under `worlds.import-root`) saved of it (its
@@ -1165,20 +1167,19 @@ fn managed(session: Option<&Session>) -> Option<crate::managed_worlds::ManagedCo
     })
 }
 
-/// The server's state in its network: `ready` for a server in none.
-/// The `nf.data` tables kept for room `key`, by namespace and name: each as the JSON it's saved as.
-fn kept_data(instance: &crate::instance::Instance, key: &str) -> serde_json::Map<String, Value> {
-    let mut out = serde_json::Map::new();
-    for (namespace, name, text) in instance.store.kept_tables(key) {
-        let value = serde_json::from_str(&text).unwrap_or(Value::String(text));
-        if let Value::Object(tables) = out
-            .entry(namespace)
-            .or_insert_with(|| Value::Object(serde_json::Map::new()))
-        {
-            tables.insert(name, value);
-        }
+/// A room save's `data` written where the server keeps the room's tables (`Instance::write_room_tables`), named in the
+/// answer as `data_file`: kept as the room's tables are until it closes, its server's stop included.
+fn tables_file(
+    instance: &crate::instance::Instance,
+    key: &str,
+    answer: &mut Value,
+) -> Result<(), (u16, String)> {
+    match instance.write_room_tables(key) {
+        Ok(Some(file)) => answer["data_file"] = json!(file.display().to_string()),
+        Ok(None) => {}
+        Err(why) => return Err((500, format!("room {key}'s tables: {why}"))),
     }
-    out
+    Ok(())
 }
 
 /// What a room's folder (`POST /rooms/open`'s, under `worlds.import-root`) holds: where it is, the worlds in its
@@ -1259,8 +1260,10 @@ fn forget_left(session: &Session, key: &str) {
     let store = &session.instance().store;
     store.forget_kept_tables(key);
     store.commit();
+    session.instance().forget_room_tables(key);
 }
 
+/// The server's state in its network: `ready` for a server in none.
 fn lifecycle(session: Option<&Session>) -> String {
     session
         .and_then(|s| s.shared().network.borrow().link())
