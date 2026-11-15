@@ -1,7 +1,8 @@
 -- Owners' rooms, as Kosmoi's agent opens them through the control endpoint: each a kept room keyed by its owner
 -- (player_alice, player_bob). Its world "home" is made the first time and marked with a block that says whose it is;
--- its nf.data counts how often it opened. Brought back on another server (here, the same one after its files went),
--- the world and the count are as they were. The main room sends players into rooms by key (`/it-owner send <key> <name>`).
+-- its nf.data counts how often it opened, and a placard stands in it saying whose it is (its centity:data()). Brought back
+-- on another server (here, the same one after its files went), the world, the count and the placard are as they were:
+-- the same instance, its table too. The main room sends players into rooms by key (`/it-owner send <key> <name>`).
 
 local here = nf.rooms.current()
 
@@ -43,6 +44,15 @@ if made then
 end
 local notes = nf.data("notes")
 notes.opened = (notes.opened or 0) + 1
+local placards = nf.centities.all({ kind = "placard", world = home })
+if made then
+  local placard = assert(nf.centities.spawn("placard", home:location(vec3(3, 64, 3))))
+  placard:data().owner = key
+  placards = { placard }
+end
+for _, placard in ipairs(placards) do
+  log("placard", key, tostring(#placards), placard:data().owner)
+end
 log(
   "owner",
   key,

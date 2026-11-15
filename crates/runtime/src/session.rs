@@ -812,6 +812,8 @@ impl<'a> Session<'a> {
             return;
         };
         // Its own worlds go with it: a match's deleted, a kept room's saved for the next time it opens.
+        let mut went = Vec::new();
+        let mut kept = Vec::new();
         if let Some(room) = self.rooms[at].room() {
             let shared = self.rooms[at].shared.clone();
             let managed = crate::managed_worlds::ManagedContext {
@@ -820,12 +822,20 @@ impl<'a> Session<'a> {
             };
             let keep = shared.keeps_worlds();
             for world in self.instance().routes.borrow().worlds_of(id) {
-                if managed.is_managed(&world)
-                    && let Err(e) = managed.unload(&world, keep, !keep, None)
-                {
-                    self.platform
+                if !managed.is_managed(&world) {
+                    continue;
+                }
+                // Where a kept world's files are, for its centities' records once the room has stopped.
+                let files = keep
+                    .then(|| self.platform.world_manager().save_files(world.clone()))
+                    .flatten();
+                match managed.unload(&world, keep, !keep, None) {
+                    Err(e) => self
+                        .platform
                         .log()
-                        .warn(format!("{id}'s world \"{world}\" wasn't unloaded: {}", e.0));
+                        .warn(format!("{id}'s world \"{world}\" wasn't unloaded: {}", e.0)),
+                    Ok(_) if keep => kept.extend(files.map(|f| (world, f.dimension))),
+                    Ok(_) => went.push(world),
                 }
             }
         }
@@ -834,6 +844,20 @@ impl<'a> Session<'a> {
             self.instance().closed_key(&key);
         }
         self.stop_room(at);
+        // Its centities' records as it stopped: in a kept world's files, to travel with them; gone with a deleted one.
+        let store = &self.instance().store;
+        for (world, dimension) in kept {
+            if let Err(why) = crate::centity::saving::write_world_records(store, &world, &dimension)
+            {
+                self.platform.log().warn(format!(
+                    "{id}'s world \"{world}\" left its centities behind: {why}"
+                ));
+            }
+        }
+        for world in went {
+            store.forget_world_records(&world);
+        }
+        store.commit();
         self.rooms.remove(at);
         let instance = self.instance();
         instance.routes.borrow_mut().forget(id);

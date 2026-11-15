@@ -840,6 +840,7 @@ impl ManagedWorldsService {
             }
             created.remove(&name);
             self.shared.instance.store.forget_world(&name);
+            self.shared.instance.store.forget_world_records(&name);
         }
     }
 }

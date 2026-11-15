@@ -27,9 +27,10 @@ import kotlin.test.assertTrue
 
 /**
  * Two owners' rooms on one server (`fixtures/owner_rooms`), driven through the control endpoint as Kosmoi's agent
- * drives them: each opened kept and keyed by its owner, its world made and marked; saved with its writes paused and
- * copied out (each world as a map, its tables as data.json) as the agent copies them to its world storage; closed with
- * its files deleted; and opened again from the copies, its world and its nf.data as they were.
+ * drives them: each opened kept and keyed by its owner, its world made and marked and a placard spawned in it; saved
+ * with its writes paused and copied out (each world as a map, its tables as data.json) as the agent copies them to its
+ * world storage; closed with its files deleted; and opened again from the copies, its world, its nf.data and its
+ * placard (the same instance, with its record and its table, which travel in the world's folder) as they were.
  */
 class OwnerRoomsScenario : Scenario("owner_rooms") {
     private val control: Path = Files.createTempDirectory("nfc").resolve("control.sock")
@@ -74,6 +75,7 @@ class OwnerRoomsScenario : Scenario("owner_rooms") {
         for (key in owners.keys) {
             val (status, opened) = ask("POST", "/rooms/open", """{"key": "$key", "keep": true}""")
             assertEquals(200, status, "$opened")
+            editor.logged("placard", key, "1", key)
             editor.logged("owner", key, "home", "true", marks.getValue(key), "1", "true")
         }
         val (_, state) = ask("GET", "/state")
@@ -137,7 +139,8 @@ class OwnerRoomsScenario : Scenario("owner_rooms") {
             val (status, opened) = ask("POST", "/rooms/open", """{"key": "$key", "keep": true, "folder": "$key"}""")
             assertEquals(200, status, "$opened")
             assertEquals(JsonArray(listOf(Json.parseToJsonElement("\"home\""))), opened.getValue("worlds"))
-            // Not made again: the copy, its block where it was, and its count of openings carried on.
+            // Not made again: the copy, its block where it was, its placard and its count of openings carried on.
+            editor.logged("placard", key, "1", key)
             editor.logged("owner", key, "home", "false", marks.getValue(key), "2", "true")
             editor.run("it-owner $key $name")
             editor.logged("home", key, name)

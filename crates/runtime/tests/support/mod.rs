@@ -1168,22 +1168,99 @@ impl netherforge_platform::FakeLootOps for Fake {
     }
 }
 
-/// Worlds saved into `storage`: the main one's dimension is the overworld's.
+/// Real file work on the fake's `storage`: a map's overworld copied in as a world's folder (only the game's own
+/// folders, as Paper's import keeps), or a folder deleted.
+struct FolderWork {
+    from: Option<std::path::PathBuf>,
+    to: std::path::PathBuf,
+}
+
+impl netherforge_platform::FakeFileWork for FolderWork {
+    fn run(&self) {
+        fn copy(from: &std::path::Path, to: &std::path::Path) {
+            std::fs::create_dir_all(to).unwrap();
+            for entry in std::fs::read_dir(from).unwrap().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    copy(&path, &to.join(entry.file_name()));
+                } else {
+                    std::fs::copy(&path, to.join(entry.file_name())).unwrap();
+                }
+            }
+        }
+        match &self.from {
+            // As Paper's import of a map: the game's own folders of its overworld, nothing else.
+            Some(map) => {
+                for folder in ["region", "entities", "poi"] {
+                    let from = map.join("dimensions/minecraft/overworld").join(folder);
+                    if from.is_dir() {
+                        copy(&from, &self.to.join(folder));
+                    }
+                }
+                std::fs::create_dir_all(&self.to).unwrap();
+            }
+            None => {
+                let _ = std::fs::remove_dir_all(&self.to);
+            }
+        }
+    }
+}
+
+impl Fake {
+    /// World `name`'s own folder in `storage`.
+    fn dimension(&self, name: &str) -> Option<std::path::PathBuf> {
+        let storage = self.storage.borrow().clone()?;
+        let dimension = if name == "world" { "overworld" } else { name };
+        Some(storage.join("dimensions").join("minecraft").join(dimension))
+    }
+}
+
+/// Worlds saved into `storage`: the main one's dimension is the overworld's. Other worlds' folders are real: a map
+/// copied in is its overworld's files, a loaded world one of `extra_worlds`.
 impl netherforge_platform::FakeWorldManagerOps for Fake {
+    fn is_saved(&self, name: String) -> bool {
+        FakeWorldOps::exists(self, name.clone())
+            || self.dimension(&name).is_some_and(|d| d.is_dir())
+    }
+    fn copy(
+        &self,
+        map: std::path::PathBuf,
+        name: String,
+    ) -> Box<dyn netherforge_platform::FileWork> {
+        let to = self.dimension(&name).expect("a storage to copy into");
+        Box::new(FolderWork {
+            from: Some(map),
+            to,
+        })
+    }
+    fn load(&self, name: String, _: String, _: Option<String>) -> bool {
+        if !self.dimension(&name).is_some_and(|d| d.is_dir()) {
+            return false;
+        }
+        self.call(format!("load world {name}"));
+        self.extra_worlds.borrow_mut().push(name);
+        true
+    }
+    fn unload(&self, name: String, save: bool) -> bool {
+        self.call(format!("unload world {name} {save}"));
+        self.extra_worlds.borrow_mut().retain(|w| *w != name);
+        true
+    }
+    fn delete(&self, name: String) -> Box<dyn netherforge_platform::FileWork> {
+        let to = self.dimension(&name).expect("a storage to delete from");
+        Box::new(FolderWork { from: None, to })
+    }
     fn save_files(&self, name: String) -> Option<netherforge_platform::WorldFiles> {
         let storage = self.storage.borrow().clone()?;
         if !FakeWorldOps::exists(self, name.clone()) {
             return None;
         }
         self.saved_worlds.borrow_mut().push(name.clone());
-        let dimension = if name == "world" {
-            "overworld".to_owned()
-        } else {
-            name
-        };
+        let dimension = self.dimension(&name)?;
+        std::fs::create_dir_all(&dimension).ok()?;
         Some(netherforge_platform::WorldFiles {
             level: storage.join("level.dat"),
-            dimension: storage.join("dimensions").join("minecraft").join(dimension),
+            dimension,
         })
     }
     fn set_saving(&self, name: String, saving: bool) -> bool {

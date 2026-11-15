@@ -510,6 +510,81 @@ impl Store {
         );
     }
 
+    /// The records of every centity anchored in `world`, each with its `centity:data()` table, as JSON that travels
+    /// with the world's files (a kept room's world carried to another server): `{"centities": [{"id", "centity",
+    /// "x", "y", "z", "yaw", "displays": {node: uuid}, "hitboxes": {node: uuid}, "anchor", "orphans", "data"}]}`. The
+    /// world isn't in it: it's the world whose folder it's in.
+    pub fn world_records(&self, world: &str) -> serde_json::Value {
+        use serde_json::{Value, json};
+        let nodes = |of: &IndexMap<String, Uuid>| -> serde_json::Map<String, Value> {
+            of.iter()
+                .map(|(node, entity)| (node.clone(), Value::String(uuid_text(entity))))
+                .collect()
+        };
+        let records: Vec<Value> = self
+            .instances()
+            .into_iter()
+            .filter(|r| r.anchor.world == world)
+            .map(|r| {
+                let data = self
+                    .data(&crate::data::Owner::Centity(r.id))
+                    .map(|text| serde_json::from_str(&text).unwrap_or(Value::String(text)));
+                let mut record = json!({
+                    "id": uuid_text(&r.id),
+                    "centity": r.centity,
+                    "x": r.anchor.x,
+                    "y": r.anchor.y,
+                    "z": r.anchor.z,
+                    "yaw": r.yaw,
+                    "displays": nodes(&r.displays),
+                    "hitboxes": nodes(&r.hitboxes),
+                    "anchor": r.anchor_entity.map(|e| uuid_text(&e)),
+                    "orphans": r.orphans.iter().map(uuid_text).collect::<Vec<_>>(),
+                });
+                if let Some(data) = data {
+                    record["data"] = data;
+                }
+                record
+            })
+            .collect();
+        json!({ "centities": records })
+    }
+
+    /// Records read by [`records_from_json`] in the store, each with its table (or none), replacing what the store had
+    /// of the same instances.
+    pub fn put_records(&self, records: Vec<(InstanceRecord, Option<serde_json::Value>)>) {
+        for (record, data) in records {
+            let owner = crate::data::Owner::Centity(record.id);
+            match data {
+                Some(data) => self.put_data(&owner, data.to_string()),
+                None => self.delete_data(&owner),
+            }
+            self.put_instance(record);
+        }
+    }
+
+    /// The records of every centity anchored in `world` go, with their tables: the world's files are gone. Staged under
+    /// a key of its own, so it's for a world no running room's centities are in (they'd stage their records again).
+    pub fn forget_world_records(&self, world: &str) {
+        let world = world.to_owned();
+        self.stage(
+            format!("records in {world}"),
+            Box::new(move |c| {
+                let mine = "SELECT id FROM instances WHERE world = ?1";
+                c.execute(
+                    &format!("DELETE FROM centity_data WHERE instance IN ({mine})"),
+                    params![world],
+                )?;
+                c.execute(
+                    &format!("DELETE FROM instance_entities WHERE instance IN ({mine})"),
+                    params![world],
+                )?;
+                c.execute("DELETE FROM instances WHERE world = ?1", params![world])?;
+                Ok(())
+            }),
+        );
+    }
+
     // ---- saved tables ----
 
     /// `owner`'s saved table as last saved (the codec's JSON), or none when it never was.
@@ -964,6 +1039,66 @@ impl Store {
             }),
         );
     }
+}
+
+/// The records `records` (as [`Store::world_records`] wrote them) as centities anchored in `world`, each with its
+/// `centity:data()` table if it had one. An error for JSON that isn't records.
+pub fn records_from_json(
+    world: &str,
+    records: &serde_json::Value,
+) -> Result<Vec<(InstanceRecord, Option<serde_json::Value>)>, String> {
+    use serde_json::Value;
+    let list = records
+        .get("centities")
+        .and_then(Value::as_array)
+        .ok_or("it has no \"centities\" list")?;
+    let nodes = |v: Option<&Value>| -> Option<IndexMap<String, Uuid>> {
+        match v {
+            None | Some(Value::Null) => Some(IndexMap::new()),
+            Some(Value::Object(map)) => map
+                .iter()
+                .map(|(node, e)| Some((node.clone(), parse_uuid(e.as_str()?)?)))
+                .collect(),
+            Some(_) => None,
+        }
+    };
+    let mut read = Vec::new();
+    for (at, r) in list.iter().enumerate() {
+        let bad = || format!("centity {at} isn't a record");
+        let number = |key: &str| r.get(key).and_then(Value::as_f64).ok_or_else(bad);
+        let record = InstanceRecord {
+            id: r
+                .get("id")
+                .and_then(Value::as_str)
+                .and_then(parse_uuid)
+                .ok_or_else(bad)?,
+            centity: r
+                .get("centity")
+                .and_then(Value::as_str)
+                .filter(|c| c.contains(':'))
+                .ok_or_else(bad)?
+                .to_owned(),
+            anchor: Location {
+                world: world.to_owned(),
+                x: number("x")?,
+                y: number("y")?,
+                z: number("z")?,
+                yaw: 0.0,
+                pitch: 0.0,
+            },
+            yaw: r.get("yaw").and_then(Value::as_f64).unwrap_or(0.0),
+            displays: nodes(r.get("displays")).ok_or_else(bad)?,
+            hitboxes: nodes(r.get("hitboxes")).ok_or_else(bad)?,
+            anchor_entity: r.get("anchor").and_then(Value::as_str).and_then(parse_uuid),
+            orphans: r
+                .get("orphans")
+                .and_then(Value::as_array)
+                .map(|o| o.iter().filter_map(|e| parse_uuid(e.as_str()?)).collect())
+                .unwrap_or_default(),
+        };
+        read.push((record, r.get("data").cloned()));
+    }
+    Ok(read)
 }
 
 #[cfg(test)]

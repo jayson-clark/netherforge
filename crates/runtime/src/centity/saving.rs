@@ -10,6 +10,58 @@ use netherforge_platform::{Location, Platform, Uuid};
 use super::{Centities, Instance, autoplay, health};
 use crate::store::{InstanceRecord, Store};
 
+/// Where a world's centities' records go in its own folder (beside the game's saved data, in our namespace), so they
+/// travel with its files: a kept room's world saved on one server and opened on another (the control endpoint's
+/// `/save` and `/rooms/open`). The store is what a server reads; this file is only written for a world leaving it and
+/// read (from the map a tool copied it into, [`read_map_records`]) for one coming in.
+pub const RECORDS_FILE: &str = "data/netherforge/centities.json";
+
+/// The store's records of the centities in `world` written into its folder `dimension` (no file when it has none).
+pub fn write_world_records(
+    store: &Store,
+    world: &str,
+    dimension: &std::path::Path,
+) -> Result<(), String> {
+    let file = dimension.join(RECORDS_FILE);
+    let records = store.world_records(world);
+    let none = records["centities"].as_array().is_none_or(Vec::is_empty);
+    let written = if none {
+        match std::fs::remove_file(&file) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+            _ => Ok(()),
+        }
+    } else {
+        let partial = file.with_extension("json.partial");
+        std::fs::create_dir_all(file.parent().expect("a folder"))
+            .and_then(|()| std::fs::write(&partial, records.to_string()))
+            .and_then(|()| std::fs::rename(&partial, &file))
+    };
+    written.map_err(|e| format!("couldn't write {}: {e}", file.display()))
+}
+
+/// Where a map (`worlds/<name>/` in a room's folder, as a tool copied a world: its `level.dat`, its own folder as the
+/// map's overworld) has the world's own folder: the map layout the adapter installs from (Paper's
+/// `WorldStorage.MAP_DIMENSION`).
+pub const MAP_DIMENSION: &str = "dimensions/minecraft/overworld";
+
+/// The records in map `map`'s world folder, if it has any, as the centities of world `world` (what it's brought in as).
+/// Read from the map, not the world made from it: the server's import keeps only the game's own folders of it.
+pub fn read_map_records(
+    map: &std::path::Path,
+    world: &str,
+) -> Result<Vec<(InstanceRecord, Option<serde_json::Value>)>, String> {
+    let file = map.join(MAP_DIMENSION).join(RECORDS_FILE);
+    let text = match std::fs::read_to_string(&file) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("couldn't read {}: {e}", file.display())),
+        Ok(text) => text,
+    };
+    serde_json::from_str(&text)
+        .map_err(|e| e.to_string())
+        .and_then(|records| crate::store::records_from_json(world, &records))
+        .map_err(|e| format!("{} isn't centities' records: {e}", file.display()))
+}
+
 /// A random UUID (version 4), as the server's own entities have.
 pub fn random_uuid() -> Uuid {
     let mut bytes = [0u8; 16];

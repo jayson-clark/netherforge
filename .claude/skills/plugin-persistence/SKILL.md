@@ -88,7 +88,10 @@ when the world would save the entities anyway: `worldSaving` (that world's
 instances), `chunkUnloading` (instances anchored in that chunk) and `stop`,
 only where they differ from what the store has. So a centity turning every
 tick writes nothing, and after a crash the store's anchors
-are as old as the world's own entities. Node transforms aren't persisted:
+are as old as the world's own entities. A kept room's world carries its centities' records (and their `centity:data()`)
+in its own folder, `data/netherforge/centities.json`, written as the control endpoint saves the room and as it closes,
+and read into the store as the world comes in on another server (the plugin-runtime skill's control endpoint); a world
+deleted with its room takes its records with it. Node transforms aren't persisted:
 scripts re-establish state in their body.
 
 What scripts keep is `nf.files.get` and the saved
