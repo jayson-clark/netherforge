@@ -348,6 +348,9 @@ struct Hub {
     told: HashMap<String, ServerState>,
     reports: Vec<Report>,
     next_report: i64,
+    /// What servers told of their rooms (`ServerFrame::RoomState`): the admin clients' to hear on the real hub, which
+    /// a local network has none of; kept for tests, the latest `MAX_REPORTS`.
+    room_states: Vec<(String, String, protocol::RoomLife)>,
     queues: IndexMap<String, VecDeque<Wait>>,
     incoming: HashMap<String, i32>,
     moves: Vec<Move>,
@@ -810,6 +813,24 @@ impl Hub {
                 self.reports.push(report);
                 if self.reports.len() > MAX_REPORTS {
                     self.reports.remove(0);
+                }
+            }
+            ServerFrame::RoomState { room, state } => {
+                if !is_key(&room) {
+                    self.deliver(
+                        from,
+                        HubFrame::Problem {
+                            message: format!(
+                                "a room's key is 1 to {} characters, none a control character",
+                                protocol::MAX_KEY_LENGTH
+                            ),
+                        },
+                    );
+                    return;
+                }
+                self.room_states.push((from.into(), room, state));
+                if self.room_states.len() > MAX_REPORTS {
+                    self.room_states.remove(0);
                 }
             }
             ServerFrame::PackLoaded { player, sha1 } => {
@@ -1539,6 +1560,7 @@ impl LocalHub {
                 told: HashMap::new(),
                 reports: Vec::new(),
                 next_report: 0,
+                room_states: Vec::new(),
                 queues: IndexMap::new(),
                 incoming: HashMap::new(),
                 moves: Vec::new(),
@@ -1745,6 +1767,11 @@ impl LocalHub {
     /// What scripts reported, newest first.
     pub fn reports(&self) -> Vec<Report> {
         self.hub.borrow().reports.iter().rev().cloned().collect()
+    }
+
+    /// What servers told of their rooms, oldest first: (server, room key, state).
+    pub fn room_states(&self) -> Vec<(String, String, protocol::RoomLife)> {
+        self.hub.borrow().room_states.clone()
     }
 
     /// A map's entries as the hub holds them.

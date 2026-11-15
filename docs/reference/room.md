@@ -57,7 +57,7 @@ The worlds it holds: those it was given or its scripts made or loaded. The main 
 
 ### `room:start()` {#start}
 
-Begins its match: its scripts hear `room_start` (at the end of this tick for a room still opening, once it has). `false` once it has started already, finished or closed.
+Begins its match: its scripts hear `room_start` (at the end of this tick for a room still opening, once it has). On a server in a network, the network's hub is told of a room with a key starting, finishing and closing (its admin stream's `room_state`), so a matchmaker that placed players in it knows when its match is under way and when it's gone, with nothing in the game's scripts of its own. `false` once it has started already, finished or closed.
 
 **Returns** `boolean`
 

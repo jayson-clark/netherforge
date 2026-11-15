@@ -26,6 +26,7 @@ use netherforge_platform::{BlockRef, EntityTag, Platform, PlayerRef, Uuid};
 
 use crate::centity::api::CentityContext;
 use crate::modules::{self, Modules, Owner};
+use crate::network::protocol::RoomLife;
 use crate::{Room, Shared};
 
 /// The Lua budget a module's body and handlers run with (instructions' worth of steps).
@@ -814,6 +815,7 @@ impl<'a> Session<'a> {
                 }
             }
         }
+        self.report_room(id, RoomLife::Closed);
         self.stop_room(at);
         self.rooms.remove(at);
         let instance = self.instance();
@@ -869,9 +871,34 @@ impl<'a> Session<'a> {
                         self.close_room(id);
                     }
                     RoomRequest::Send { player, to } => self.move_player(player, to),
-                    RoomRequest::Raise { id, event } => self.raise_room_event(id, event),
+                    RoomRequest::Raise { id, event } => {
+                        self.raise_room_event(id, event);
+                        match event {
+                            "room_start" => self.report_room(id, RoomLife::Started),
+                            "room_finish" => self.report_room(id, RoomLife::Finished),
+                            _ => {}
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    /// Tells the network's hub that room `id` is at `state` in its life, when it has a key (what the hub's sends and
+    /// placements name it by): whoever placed players in it (Kosmoi's matchmaker) hears its match begin and end and
+    /// the room go, from the hub, with no SDK of its own in the game. Not connected, it's not told: the hub knows the
+    /// server went.
+    fn report_room(&self, id: crate::instance::RoomId, state: RoomLife) {
+        let key = self
+            .instance()
+            .rooms
+            .borrow()
+            .get(&id)
+            .and_then(|info| info.key.clone());
+        let Some(room) = key else { return };
+        let link = self.shared().network.borrow().link();
+        if let Some(link) = link {
+            link.send(crate::network::ServerFrame::RoomState { room, state });
         }
     }
 

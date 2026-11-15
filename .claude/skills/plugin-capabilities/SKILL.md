@@ -289,7 +289,7 @@ seconds` (`network::wait_for_hub`, the link's `await_welcome`) and `require-hub`
   Adventure built to the same lists before showing it (`allowed`), so a reading that differs can only refuse more.
 - **The admin API** (`HubAdmin`, `admin.properties` as `AdminClientsFile`, `AdminScope`s per client, never a server's
   credential; constant-time token compare): HTTP and JSON plus SSE `/v1/events` (first `hello` with `Hub.started`/`instance`, then `server_connected` and
-  `server_disconnected` for every server as its session is welcomed and closed, beside `server` for changes); servers, players, sends, messages,
+  `server_disconnected` for every server as its session is welcomed and closed, beside `server` for changes, and `room_state` for a keyed room's start, finish and close, `ServerFrame.RoomState` from `Session::report_room`); servers, players, sends, messages,
   kicks, publishing and requests answered by an admin client (`{admin=...}`), moderation, placement hooks per group and
   holding a login until one answers. The JDK's `HttpServer` gives no socket (no keepalive, no write timeout), so a
   stream whose client's network vanished looks open for ~15 minutes: a placement it doesn't answer in time closes it

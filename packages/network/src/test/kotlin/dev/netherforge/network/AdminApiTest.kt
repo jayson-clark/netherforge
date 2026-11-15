@@ -188,6 +188,28 @@ class AdminApiTest {
     }
 
     @Test
+    fun `a server's keyed rooms starting, finishing and closing are heard by clients that read servers`() {
+        val events = stream()
+        val watching = stream(client = reader)
+        val (arena, recorder) = join("arena-1", group = "arena")
+        events.next("server_connected")
+        arena.send(ServerFrame.RoomState("m-7", RoomLife.STARTED))
+        arena.send(ServerFrame.RoomState("m-7", RoomLife.FINISHED))
+        arena.send(ServerFrame.RoomState("", RoomLife.CLOSED))
+        arena.send(ServerFrame.RoomState("m-7", RoomLife.CLOSED))
+        assertEquals("room_state" to """{"t":"room_state","server":"arena-1","room":"m-7","state":"started"}""", events.next("room_state"))
+        assertEquals("""{"t":"room_state","server":"arena-1","room":"m-7","state":"finished"}""", events.next("room_state").second)
+        // A key that isn't one is the server's mistake, told to it, and nobody else's.
+        assertEquals("""{"t":"room_state","server":"arena-1","room":"m-7","state":"closed"}""", events.next("room_state").second)
+        waitFor { recorder.of<HubFrame.Problem>().any { it.message.contains("a room's key") } }
+        // presence:read alone hears none of it.
+        hub.playerMoved("u-9", "Cy", "lobby")
+        assertEquals("hello", watching.next().first)
+        assertEquals("player_joined", watching.next().first)
+        assertTrue(watching.none { it.first == "room_state" })
+    }
+
+    @Test
     fun `a client sends players, shows them messages and kicks them`() {
         join("lobby")
         join("arena-1", "arena")

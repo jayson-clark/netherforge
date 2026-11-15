@@ -35,8 +35,8 @@ import java.util.concurrent.atomic.AtomicInteger
  *   MiniMessage held to [RichText] (clicks that run or suggest a command, copy or open a link; hovers that show text)
  *   (players:message), `POST /v1/players/<id or name>/kick` `{ "message" }` (players:kick).
  * - `POST /v1/channels/publish` `{ "channel", "value", "server"?, "group"? }` (channels:publish).
- * - `GET /v1/events?listen=<channels>&place=<groups>` (Server-Sent Events): presence (presence:read), servers
- *   (servers:read), messages on the channels listened to and requests to this client (channels:read), and players to
+ * - `GET /v1/events?listen=<channels>&place=<groups>` (Server-Sent Events): presence (presence:read), servers and
+ *   their keyed rooms' starts, finishes and closes (servers:read), messages on the channels listened to and requests to this client (channels:read), and players to
  *   place for the groups named (`*login` for logins; placement), for as long as it's connected.
  * - `POST /v1/requests/<id>/reply` `{ "value"?, "error"? }` (channels:read), `POST /v1/placements/<id>`
  *   `{ "server" | "hold" | "fail" }` (placement).

@@ -11,6 +11,9 @@ const ROOM_STATE = '"opening"|"open"|"started"|"finished"|"closed"'
 const LATER =
   "It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script."
 
+const TOLD =
+  "On a server in a network, the network's hub is told of a room with a key starting, finishing and closing (its admin stream's `room_state`), so a matchmaker that placed players in it knows when its match is under way and when it's gone, with nothing in the game's scripts of its own."
+
 /** A room's events, heard on `nf` in the room itself. */
 export const roomEvents: EventSpec[] = [
   {
@@ -84,7 +87,7 @@ export const roomClass: LuaClass = {
     },
     {
       name: 'start',
-      doc: 'Begins its match: its scripts hear `room_start` (at the end of this tick for a room still opening, once it has). `false` once it has started already, finished or closed.',
+      doc: `Begins its match: its scripts hear \`room_start\` (at the end of this tick for a room still opening, once it has). ${TOLD} \`false\` once it has started already, finished or closed.`,
       params: [],
       returns: [{ type: 'boolean' }],
     },

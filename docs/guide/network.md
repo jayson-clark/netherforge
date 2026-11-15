@@ -679,7 +679,10 @@ server with their own permissions.
 allow: `player_joined`, `player_moved`, `player_left`, `server_connected` and
 `server_disconnected` (every server, as it joins or leaves the hub, with its
 state, group, capacity and players), `server` (a change to a connected one),
-and with `?listen=lobby:news,lobby:queue` messages on those channels. Its first
+`room_state` (`{ "server", "room", "state" }`: a room with a key on that
+server started, finished or closed, as its scripts' `room:start()`,
+`room:finish()` and `room:close()` said; a placing service knows when a room
+it filled is under way and when it's gone), and with `?listen=lobby:news,lobby:queue` messages on those channels. Its first
 event is `hello`, with the hub's `started` time and an `instance` id that's new
 on every start, so a client reconnecting knows whether the hub restarted.
 `GET /v1/servers` gives each connected server's `connectedSince`. A script asks a

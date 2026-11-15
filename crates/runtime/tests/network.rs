@@ -83,7 +83,7 @@ fn the_recorded_sessions_are_this_sides_protocol_line_for_line() {
         }
     }
     // Every kind a server sends or hears, so a frame added to the protocol is recorded too.
-    assert_eq!(kinds.len(), 22 + 14, "{kinds:?}");
+    assert_eq!(kinds.len(), 22 + 15, "{kinds:?}");
 }
 
 #[test]
@@ -1498,4 +1498,70 @@ fn a_player_sent_for_a_room_arrives_in_it_and_it_opens_for_them() {
         std::thread::sleep(Duration::from_millis(2));
     }
     assert_eq!(seen, ["room 1 arrived owner-1 survival"]);
+}
+
+#[test]
+fn a_keyed_rooms_start_finish_and_close_are_told_to_the_hub() {
+    let files = project(
+        r#"
+        nf.on("test:go", function()
+            local match = nf.rooms.open({ key = "m-1" })
+            local plain = nf.rooms.open()
+            match:start()
+            plain:start()
+            nf.after(1, function()
+                match:finish()
+                plain:finish()
+                nf.after(1, function()
+                    match:close()
+                    plain:close()
+                end)
+            end)
+        end)
+    "#,
+        NETWORK,
+    );
+    let platform = Platform::default();
+    let mut session = start(&files, &platform, dev(), None);
+    let hub = hub(&session);
+    for _ in 0..3 {
+        session.tick();
+    }
+    session
+        .room()
+        .unwrap()
+        .scripts()
+        .emit_custom(
+            netherforge_runtime::scripts::Target::Nf,
+            "test:go".into(),
+            mlua::Value::Nil,
+        )
+        .unwrap();
+    for _ in 0..6 {
+        session.tick();
+        session.apply_room_requests();
+    }
+    assert_eq!(session.instance().rooms.borrow().len(), 1, "both closed");
+    use netherforge_runtime::network::protocol::RoomLife;
+    // Only the keyed room: an unkeyed one is nothing the hub could name.
+    assert_eq!(
+        hub.room_states(),
+        [
+            ("dev".to_owned(), "m-1".to_owned(), RoomLife::Started),
+            ("dev".to_owned(), "m-1".to_owned(), RoomLife::Finished),
+            ("dev".to_owned(), "m-1".to_owned(), RoomLife::Closed),
+        ]
+    );
+    // Its key free again, a room opened with it and the server stopping tell it closed.
+    let again = session
+        .open_room(Some("m-1".into()), false)
+        .expect("a room");
+    session.tick();
+    assert!(session.run(again).is_some());
+    session.stop();
+    assert_eq!(
+        hub.room_states().last(),
+        Some(&("dev".to_owned(), "m-1".to_owned(), RoomLife::Closed))
+    );
+    assert_eq!(hub.room_states().len(), 4);
 }

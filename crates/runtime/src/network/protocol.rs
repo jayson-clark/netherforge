@@ -653,7 +653,25 @@ pub enum ServerFrame {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         keep: bool,
     },
+    /// Room `room` (its key) on this server is at `state` in its life (`ServerFrame.RoomState`): only a keyed room is
+    /// told, as that's what the hub's sends name. Admin clients hear it (a matchmaker freeing the room's slot).
+    RoomState {
+        room: String,
+        state: RoomLife,
+    },
     Ping,
+}
+
+/// Where a room is in its life, as a server tells the hub (`RoomLife`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RoomLife {
+    /// Its match began (`room:start()`).
+    Started,
+    /// Its match ended (`room:finish()`); its players are still in it.
+    Finished,
+    /// It closed: its players went to the main room, and its key may be opened again.
+    Closed,
 }
 
 /// A frame as its line.

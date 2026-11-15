@@ -1049,6 +1049,13 @@ class Hub(
                 }
                 is ServerFrame.MapWrite -> write(frame, from)
                 is ServerFrame.Send -> sendPlayer(this, frame, from)
+                is ServerFrame.RoomState -> {
+                    if (!NetworkNames.isKey(frame.room)) {
+                        val why = "a room's key is 1 to ${NetworkNames.MAX_KEY_LENGTH} characters, none a control character"
+                        return send(HubFrame.Problem(why))
+                    }
+                    tellAdmins(AdminScope.SERVERS_READ, AdminEvent.RoomState(from, frame.room, frame.state))
+                }
                 is ServerFrame.ProxyServers, is ServerFrame.ProxyPlayer, is ServerFrame.ProxyPresence, is ServerFrame.ProxyPlayerLeft,
                 is ServerFrame.ProxyResult, is ServerFrame.ProxyLogin -> send(HubFrame.Problem("only a proxy says that"))
             }

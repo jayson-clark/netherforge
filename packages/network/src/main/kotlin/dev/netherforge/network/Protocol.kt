@@ -498,6 +498,15 @@ sealed interface ServerFrame {
         val keep: Boolean = false
     ) : ServerFrame
 
+    /**
+     * Room [room] (its key) on this server is at [state] in its life: its match began or ended, or the room closed.
+     * Only a room with a key is told: it's what the hub's sends and placements name. Admin clients hear it as a
+     * [AdminEvent.RoomState], so whoever placed players in the room (a matchmaker) knows when it's under way and gone.
+     */
+    @Serializable
+    @SerialName("room_state")
+    data class RoomState(val room: String, val state: RoomLife) : ServerFrame
+
     @Serializable
     @SerialName("ping")
     data object Ping : ServerFrame
@@ -532,6 +541,22 @@ sealed interface ServerFrame {
     @Serializable
     @SerialName("proxy_login")
     data class ProxyLogin(val id: Long, val player: String, val name: String) : ServerFrame
+}
+
+/** Where a room is in its life, as a server tells the hub ([ServerFrame.RoomState]). */
+@Serializable
+enum class RoomLife {
+    /** Its match began (`room:start()`). */
+    @SerialName("started")
+    STARTED,
+
+    /** Its match ended (`room:finish()`); its players are still in it. */
+    @SerialName("finished")
+    FINISHED,
+
+    /** It closed: its players went to the server's main room, and its key may be opened again. */
+    @SerialName("closed")
+    CLOSED
 }
 
 @Serializable

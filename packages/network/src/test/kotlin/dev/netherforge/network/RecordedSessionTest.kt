@@ -66,6 +66,8 @@ class RecordedSessionTest {
         ServerFrame.Report("11111111-2222-3333-4444-555555555555", "Steve", "spam", value("""{"lines":3}"""), "Alex"),
         ServerFrame.Report("11111111-2222-3333-4444-555555555555", "Steve", "spam"),
         ServerFrame.PackLoaded("11111111-2222-3333-4444-555555555555", "a".repeat(40)),
+        ServerFrame.RoomState("m-01hx", RoomLife.STARTED),
+        ServerFrame.RoomState("m-01hx", RoomLife.CLOSED),
         ServerFrame.Evacuate,
         ServerFrame.Leaving,
         ServerFrame.Ping

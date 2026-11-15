@@ -168,6 +168,14 @@ sealed interface AdminEvent {
     @SerialName("server")
     data class Server(val server: ServerState) : AdminEvent
 
+    /**
+     * Room [room] (its key) on [server] is at [state] in its life: its match began or ended, or it closed
+     * ([ServerFrame.RoomState]).
+     */
+    @Serializable
+    @SerialName("room_state")
+    data class RoomState(val server: String, val room: String, val state: RoomLife) : AdminEvent
+
     /** Something published on a channel it listens to. */
     @Serializable
     @SerialName("message")
@@ -201,6 +209,7 @@ sealed interface AdminEvent {
             is PlayerMoved -> "player_moved"
             is PlayerLeft -> "player_left"
             is Server -> "server"
+            is RoomState -> "room_state"
             is Message -> "message"
             is Request -> "request"
             is Place -> "place"
