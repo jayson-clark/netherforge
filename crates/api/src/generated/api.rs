@@ -2631,8 +2631,11 @@ pub trait RoomApi {
     /// Its number: `0` for the main room, then `1`, `2`... in the order rooms were opened, never used twice while the server runs.
     fn id(&self, this: &handles::Room) -> ApiResult<i64>;
 
-    /// What it's for, as it was opened with it (an owner's id, a match's): `nil` for the main room and for a room opened without one. Its `nf.data` tables are kept under it.
+    /// What it's for, as it was opened with it (an owner's id, a match's): `nil` for the main room and for a room opened without one.
     fn key(&self, this: &handles::Room) -> ApiResult<Option<String>>;
+
+    /// Whether what it made outlasts it (`RoomOptions.keep`): its worlds saved when it closes and its `nf.data` tables kept under its key. `false` for the main room, whose worlds and tables are the server's anyway.
+    fn is_kept(&self, this: &handles::Room) -> ApiResult<bool>;
 
     /// Whether it's the main room.
     fn is_main(&self, this: &handles::Room) -> ApiResult<bool>;
@@ -2652,7 +2655,7 @@ pub trait RoomApi {
     /// Ends its match: its scripts hear `room_finish`. `false` unless it's open or started.
     fn finish(&self, this: &handles::Room) -> ApiResult<bool>;
 
-    /// Closes it: its scripts hear `room_close`, its players go back to the main room (as if they'd joined the server), its Lua state ends and its worlds are the main room's. It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script. `false` for the main room, and once it's closing or closed.
+    /// Closes it: its scripts hear `room_close`, its players go back to the main room (as if they'd joined the server), its Lua state ends, the worlds its scripts made or loaded are unloaded (saved for a kept room, deleted for the rest) and those it was given are the main room's. It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script. `false` for the main room, and once it's closing or closed.
     fn close(&self, this: &handles::Room) -> ApiResult<bool>;
 
     /// Moves a player into it: their room's scripts hear them quit and this room's hear them join, as if they'd left the server and come back. Their `player:data()` goes with them; their `player:session()` table is the room's, so it starts empty here. It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script. `false` when the player isn't online or the room is closing or closed.

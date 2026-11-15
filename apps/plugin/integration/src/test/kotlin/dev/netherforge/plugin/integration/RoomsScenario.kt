@@ -20,11 +20,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Two rooms beside the main one on one server (`fixtures/rooms`): r1, a match (opened without a key), and b, keyed.
+ * Two rooms beside the main one on one server (`fixtures/rooms`): r1, a match (opened without a key), and b, keyed and
+ * kept.
  * Each copies the main world's map as its own "track" and four bots play in them, two a room. What each room's players
  * see (the player list, chat, boss bars, teams) and what its scripts hear (players, events, worlds) stays in it; a
- * player sent on arrives in the other; closing the match unloads its world and deletes it, and the keyed room's stays
- * on disk for the next time it opens.
+ * player sent on arrives in the other; closing the match unloads its world and deletes it, and the kept room's stays on
+ * disk for the next time it opens.
  */
 class RoomsScenario : Scenario("rooms") {
     override val server = PaperServer(onlineMode = true, maxPlayers = 4)
@@ -53,7 +54,7 @@ class RoomsScenario : Scenario("rooms") {
         assertEquals(listOf("map:it_track" to true), result.resources.map { it.label to it.ok })
         editor.run("difficulty peaceful")
         editor.run("it-rooms open")
-        editor.logged("opened", "1", "opening", "2", "b")
+        editor.logged("opened", "1", "opening", "2", "b", "false", "true")
         // Each room's "track" is its own world, the server's track__r1 and track__b; each lists only its own.
         editor.logged("track", "r1", "track", "nil", "track")
         editor.logged("track", "b", "track", "nil", "track")
@@ -145,7 +146,7 @@ class RoomsScenario : Scenario("rooms") {
 
     @Test
     @Order(6)
-    fun `closing the match sends its player back and deletes its world, and the keyed room's world is kept`() {
+    fun `closing the match sends its player back and deletes its world, and the kept room's world is kept`() {
         editor.run("it-rooms close r1")
         editor.logged("close", "r1", "true", "true")
         editor.logged("closing", "r1", "Bob")
@@ -162,7 +163,7 @@ class RoomsScenario : Scenario("rooms") {
         }
         bots.eventually("Bob") { listed(it) == listOf("Alice", "Bob", "Carol", "Dave") }
         // Unloaded (the main room, which holds every world no room does, has neither track), but kept on disk: a room
-        // keyed b finds it again.
+        // keyed b, kept, finds it again.
         editor.run("it-rooms who")
         val worlds = editor.line("who")[3].split(',')
         assertTrue(worlds.none { it.startsWith("track") }, "the main room's worlds: $worlds")

@@ -184,12 +184,12 @@ impl ScriptData {
 }
 
 /// What `owner`'s table is kept as in the store from `shared`'s room: a player's and a centity's as themselves (they're
-/// the thing's, wherever it is), `nf.data(name)` as itself in the main room and under the room's key in a room opened
-/// with one (`<namespace>#<key>`); none for a room opened without a key, whose named tables last as long as it does.
+/// the thing's, wherever it is), `nf.data(name)` as itself in the main room and under the room's key in a kept room
+/// (`<namespace>#<key>`); none for any other room, whose named tables last as long as it does.
 fn stored_as(shared: &Shared, owner: &Owner) -> Option<Owner> {
     match owner {
         Owner::Named { namespace, name } if shared.room != crate::instance::RoomId::MAIN => {
-            let key = shared.instance.room_key(shared.room)?;
+            let key = shared.instance.kept_key(shared.room)?;
             Some(Owner::Named {
                 namespace: format!("{namespace}#{key}"),
                 name: name.clone(),

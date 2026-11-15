@@ -244,7 +244,7 @@ class AdminApiTest {
     fun `a placing client decides where a group's players go, holds them, or turns them away`() {
         val (lobbyLink, lobby) = join("lobby")
         join("arena-1", "arena")
-        join("arena-2", "arena")
+        val (_, arena2) = join("arena-2", "arena")
         for (id in listOf("p", "q", "r")) hub.playerMoved(id, id.uppercase(), "lobby")
         val events = stream("?place=arena")
         Thread.sleep(200)
@@ -252,9 +252,11 @@ class AdminApiTest {
         lobbyLink.send(ServerFrame.Send(1, listOf("p"), group = "arena"))
         val ask = events.next("place")
         val first = Regex("\"id\":(\\d+)").find(ask.second)!!.groupValues[1]
-        assertEquals(200, call("POST", "/v1/placements/$first", """{ "server": "arena-2" }""").first)
+        val answer = """{ "server": "arena-2", "room": "party-1", "keep": true }"""
+        assertEquals(200, call("POST", "/v1/placements/$first", answer).first)
         waitFor { lobby.of<HubFrame.SendResult>().isNotEmpty() }
         assertEquals(HubFrame.SendResult(1, null, "arena-2"), lobby.of<HubFrame.SendResult>().single(), "not least: the client's pick")
+        assertEquals(listOf(HubFrame.Room("p", "party-1", keep = true)), arena2.of<HubFrame.Room>(), "the room, kept, as the answer said")
 
         lobbyLink.send(ServerFrame.Send(2, listOf("q"), group = "arena", waitMillis = 60_000))
         val held = Regex("\"id\":(\\d+)").find(events.next("place").second)!!.groupValues[1]
@@ -281,8 +283,12 @@ class AdminApiTest {
         val ask = events.next("place")
         assertTrue(ask.second.contains("\"login\":true"), ask.second)
         val id = Regex("\"id\":(\\d+)").find(ask.second)!!.groupValues[1]
-        call("POST", "/v1/placements/$id", """{ "server": "lobby" }""")
+        val (_, lobby) = join("lobby")
+        call("POST", "/v1/placements/$id", """{ "server": "lobby", "room": "m-1" }""")
         assertEquals(LoginPlace("lobby"), placed.get(5, TimeUnit.SECONDS))
+        // A match's room: not kept.
+        waitFor { lobby.of<HubFrame.Room>().isNotEmpty() }
+        assertEquals(listOf(HubFrame.Room("u-9", "m-1", keep = false)), lobby.of<HubFrame.Room>())
     }
 
     @Test

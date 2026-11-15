@@ -5093,9 +5093,13 @@ local Room = {}
 ---@return integer
 function Room:id() end
 
---- What it's for, as it was opened with it (an owner's id, a match's): `nil` for the main room and for a room opened without one. Its `nf.data` tables are kept under it.
+--- What it's for, as it was opened with it (an owner's id, a match's): `nil` for the main room and for a room opened without one.
 ---@return string?
 function Room:key() end
+
+--- Whether what it made outlasts it (`RoomOptions.keep`): its worlds saved when it closes and its `nf.data` tables kept under its key. `false` for the main room, whose worlds and tables are the server's anyway.
+---@return boolean
+function Room:is_kept() end
 
 --- Whether it's the main room.
 ---@return boolean
@@ -5121,7 +5125,7 @@ function Room:start() end
 ---@return boolean
 function Room:finish() end
 
---- Closes it: its scripts hear `room_close`, its players go back to the main room (as if they'd joined the server), its Lua state ends and its worlds are the main room's. It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script. `false` for the main room, and once it's closing or closed.
+--- Closes it: its scripts hear `room_close`, its players go back to the main room (as if they'd joined the server), its Lua state ends, the worlds its scripts made or loaded are unloaded (saved for a kept room, deleted for the rest) and those it was given are the main room's. It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script. `false` for the main room, and once it's closing or closed.
 ---@return boolean
 function Room:close() end
 
@@ -8422,7 +8426,8 @@ function Event:uncancel() end
 
 --- How `nf.rooms.open` opens a room.
 ---@class RoomOptions
----@field key string? What it's for (an owner's id, a match's): its `nf.data` tables are kept under it, so a room opened again with the same key finds them. Without one they last as long as the room.
+---@field key string? What it's for (an owner's id, a match's): the room's identity. A player the server's owner sends to a key goes into the room open with it, and its worlds are named after it. Two rooms can't be open with the same key at once.
+---@field keep boolean? Whether what it made outlasts it, for a room opened again with the same key to find (an owner's world, a party's): its worlds are saved when it closes rather than deleted, and its `nf.data` tables are kept under its key. A match's room isn't kept (the default): its worlds and `nf.data` tables go with it. A kept room needs a `key`.
 
 --- How `nf.particles.play` plays an effect. Every key is optional; a key that isn't one of these is an error.
 ---@class ParticlePlayOptions

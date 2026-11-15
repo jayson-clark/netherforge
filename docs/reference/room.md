@@ -9,7 +9,7 @@ A handle: call its methods with a colon, `room:method()`.
 
 | | Methods |
 | --- | --- |
-| [Methods](#methods) | [`id`](#id) [`key`](#key) [`is_main`](#is_main) [`state`](#state) [`players`](#players) [`worlds`](#worlds) [`start`](#start) [`finish`](#finish) [`close`](#close) [`send`](#send) [`give_world`](#give_world) |
+| [Methods](#methods) | [`id`](#id) [`key`](#key) [`is_kept`](#is_kept) [`is_main`](#is_main) [`state`](#state) [`players`](#players) [`worlds`](#worlds) [`start`](#start) [`finish`](#finish) [`close`](#close) [`send`](#send) [`give_world`](#give_world) |
 
 ## Methods {#methods}
 
@@ -21,9 +21,15 @@ Its number: `0` for the main room, then `1`, `2`... in the order rooms were open
 
 ### `room:key()` {#key}
 
-What it's for, as it was opened with it (an owner's id, a match's): `nil` for the main room and for a room opened without one. Its `nf.data` tables are kept under it.
+What it's for, as it was opened with it (an owner's id, a match's): `nil` for the main room and for a room opened without one.
 
 **Returns** `string?`
+
+### `room:is_kept()` {#is_kept}
+
+Whether what it made outlasts it (`RoomOptions.keep`): its worlds saved when it closes and its `nf.data` tables kept under its key. `false` for the main room, whose worlds and tables are the server's anyway.
+
+**Returns** `boolean`
 
 ### `room:is_main()` {#is_main}
 
@@ -63,7 +69,7 @@ Ends its match: its scripts hear `room_finish`. `false` unless it's open or star
 
 ### `room:close()` {#close}
 
-Closes it: its scripts hear `room_close`, its players go back to the main room (as if they'd joined the server), its Lua state ends and its worlds are the main room's. It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script. `false` for the main room, and once it's closing or closed.
+Closes it: its scripts hear `room_close`, its players go back to the main room (as if they'd joined the server), its Lua state ends, the worlds its scripts made or loaded are unloaded (saved for a kept room, deleted for the rest) and those it was given are the main room's. It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script. `false` for the main room, and once it's closing or closed.
 
 **Returns** `boolean`
 

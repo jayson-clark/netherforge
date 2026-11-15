@@ -73,7 +73,7 @@ fn each_room_runs_the_project_in_a_lua_state_of_its_own() {
         ("modules/t/init.lua", COUNTER),
     ]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    let room = server.session_mut().open_room(None).expect("a room");
+    let room = server.session_mut().open_room(None, false).expect("a room");
     assert_eq!(room, RoomId(1));
     assert_eq!(printed(&platform.take()), ["started\t?", "started\t?"]);
     // Alex arrives in the main room, then moves: each room counts for itself, and sees only its own players.
@@ -103,7 +103,7 @@ fn a_rooms_world_hears_its_events_and_no_other_room_does() {
         ("modules/t/init.lua", COUNTER),
     ]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    let room = server.session_mut().open_room(None).expect("a room");
+    let room = server.session_mut().open_room(None, false).expect("a room");
     platform.take();
     server.game().block_place(&mut placed("world"));
     server.tick();
@@ -160,7 +160,7 @@ end)
         ),
     ]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    let room = server.session_mut().open_room(None).expect("a room");
+    let room = server.session_mut().open_room(None, false).expect("a room");
     // Only room 1 has a player: its timer fails, the main room's carries on.
     *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
     server.session().move_player(alex().uuid, room);
@@ -180,7 +180,7 @@ fn a_closed_room_sends_its_players_back_and_its_lua_state_goes() {
         ("modules/t/init.lua", COUNTER),
     ]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    let room = server.session_mut().open_room(None).expect("a room");
+    let room = server.session_mut().open_room(None, false).expect("a room");
     *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
     server.game().player_join(&mut alex_join());
     server.session().move_player(alex().uuid, room);
@@ -219,7 +219,7 @@ end)
         ),
     ]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    let room = server.session_mut().open_room(None).expect("a room");
+    let room = server.session_mut().open_room(None, false).expect("a room");
     *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
     server.game().player_join(&mut alex_join());
     server.session().move_player(alex().uuid, room);
@@ -253,7 +253,7 @@ end)
         ),
     ]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    let room = server.session_mut().open_room(None).expect("a room");
+    let room = server.session_mut().open_room(None, false).expect("a room");
     assert_eq!(platform.commands.borrow().len(), 1);
     *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
     server.game().player_join(&mut alex_join());
@@ -295,7 +295,7 @@ fn a_rooms_players_see_only_each_other_in_the_list_and_in_chat() {
     let platform = std::rc::Rc::new(Fake::default());
     let files = Files::new(&[("netherforge.json", MANIFEST), ("modules/t/init.lua", "")]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    let room = server.session_mut().open_room(None).expect("a room");
+    let room = server.session_mut().open_room(None, false).expect("a room");
     *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
     let sam = FakeBot {
         name: "Sam".into(),
@@ -414,7 +414,7 @@ fn each_rooms_share_is_a_metric() {
     server.game().player_join(&mut alex_join());
     let room = server
         .session_mut()
-        .open_room(Some("match-1".into()))
+        .open_room(Some("match-1".into()), false)
         .expect("a room");
     server.session().move_player(alex().uuid, room);
     server.session().give_world("world", room);
@@ -461,7 +461,7 @@ end)
         ),
     ]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    let room = server.session_mut().open_room(None).expect("a room");
+    let room = server.session_mut().open_room(None, false).expect("a room");
     let sam = FakeBot {
         name: "Sam".into(),
         id: Uuid(88),
@@ -502,7 +502,7 @@ end)
         ),
     ]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    let room = server.session_mut().open_room(None).expect("a room");
+    let room = server.session_mut().open_room(None, false).expect("a room");
     *platform.player.borrow_mut() = Some(place(0.0, 64.0, 0.0));
     server.game().player_join(&mut alex_join());
     let bars = |lines: Vec<String>| -> Vec<String> {
@@ -538,7 +538,7 @@ fn a_module_saved_reloads_in_every_room() {
         ("modules/t/init.lua", r#"print("v1")"#),
     ]);
     let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
-    server.session_mut().open_room(None).expect("a room");
+    server.session_mut().open_room(None, false).expect("a room");
     platform.take();
     files.write("modules/t/init.lua", r#"print("v2")"#);
     server
@@ -554,4 +554,64 @@ fn a_module_saved_reloads_in_every_room() {
         })
         .collect();
     assert_eq!(lines, ["info [module t", "info [room 1 module t"]);
+}
+
+#[test]
+fn only_a_kept_room_keeps_its_data_under_its_key() {
+    let platform = std::rc::Rc::new(Fake::default());
+    let files = Files::new(&[
+        ("netherforge.json", MANIFEST),
+        (
+            "modules/t/init.lua",
+            r#"
+local here = nf.rooms.current()
+local saved = nf.data("saved")
+saved.n = (saved.n or 0) + 1
+if here:is_main() then
+  local function try(options)
+    local ok, err = pcall(nf.rooms.open, options)
+    print("open", ok, ok and "" or (tostring(err):gsub("^[^:]+:%d+: ", "")))
+  end
+  try({ keep = true })
+  try({ key = "" })
+  local owner = nf.rooms.open({ key = "owner-1", keep = true })
+  try({ key = "owner-1" })
+  local match = nf.rooms.open({ key = "m-1" })
+  print("kept", here:is_kept(), owner:is_kept(), match:is_kept())
+  nf.after(1, function()
+    owner:close()
+    match:close()
+    nf.after(1, function()
+      nf.rooms.open({ key = "owner-1", keep = true })
+      nf.rooms.open({ key = "m-1" })
+    end)
+  end)
+else
+  print(here:key(), saved.n)
+end
+"#,
+        ),
+    ]);
+    let server = ServerEvents::new(Session::start(platform.clone(), &files, &NoPackages));
+    for _ in 0..8 {
+        server.tick();
+    }
+    let said: Vec<String> = printed(&platform.take())
+        .into_iter()
+        .map(|l| l.replace('\t', " "))
+        .collect();
+    assert_eq!(
+        said,
+        [
+            "open false bad argument 'options' (a kept room needs a key)",
+            "open false bad argument 'options' (a room's key can't be empty)",
+            "open false bad argument 'options' (a room keyed \"owner-1\" is open already)",
+            "kept false true false",
+            "owner-1 1",
+            "m-1 1",
+            // Opened again: the kept room finds its table, the match's room starts afresh.
+            "owner-1 2",
+            "m-1 1",
+        ]
+    );
 }

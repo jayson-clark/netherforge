@@ -607,6 +607,7 @@ fn presence_sending_players_and_arrivals() {
         balance: None,
         wait_millis: None,
         room: None,
+        keep: false,
     });
     assert_eq!(hub.take_joins(), [(uuid_text(9), "Sam".to_owned())]);
     platform.online.borrow_mut().push(sam.clone());
@@ -1396,7 +1397,7 @@ fn every_room_hears_the_network_and_a_request_is_answered_once() {
     );
     let platform = Platform::default();
     let mut session = start(&files, &platform, dev(), None);
-    let room = session.open_room(None).expect("a room");
+    let room = session.open_room(None, false).expect("a room");
     for _ in 0..3 {
         session.tick();
     }
@@ -1459,7 +1460,8 @@ fn a_player_sent_for_a_room_arrives_in_it_and_it_opens_for_them() {
         group: None,
         balance: None,
         wait_millis: None,
-        room: Some("match-1".into()),
+        room: Some("owner-1".into()),
+        keep: true,
     });
     // The main room reads the link; at the tick's end the room opens, and Sam is its as they arrive.
     let started = Instant::now();
@@ -1475,7 +1477,12 @@ fn a_player_sent_for_a_room_arrives_in_it_and_it_opens_for_them() {
     assert_ne!(room, netherforge_runtime::instance::RoomId::MAIN);
     assert_eq!(
         session.instance().room_key(room).as_deref(),
-        Some("match-1")
+        Some("owner-1")
+    );
+    // Opened for them as the send said: kept.
+    assert_eq!(
+        session.instance().kept_key(room).as_deref(),
+        Some("owner-1")
     );
     let sam = PlayerRef {
         uuid: uuid(9),
@@ -1490,5 +1497,5 @@ fn a_player_sent_for_a_room_arrives_in_it_and_it_opens_for_them() {
         seen.extend(room_lines(&platform));
         std::thread::sleep(Duration::from_millis(2));
     }
-    assert_eq!(seen, ["room 1 arrived match-1 survival"]);
+    assert_eq!(seen, ["room 1 arrived owner-1 survival"]);
 }

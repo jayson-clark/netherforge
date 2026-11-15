@@ -1231,6 +1231,7 @@ impl NfTestApi for TestContext {
             balance: None,
             wait_millis: None,
             room: None,
+            keep: false,
         });
         self.join_sent()?;
         let joined = self

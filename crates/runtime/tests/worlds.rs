@@ -1215,9 +1215,14 @@ end
     let platform = Fake::new();
     let mut session = start(&files, &platform, Config::default());
     platform.lines();
-    let one = session.open_room(None).expect("a room");
-    let two = session.open_room(Some("owner 7".into())).expect("a room");
-    let said = printed(&session, &platform, 3);
+    let one = session.open_room(None, false).expect("a room");
+    let two = session
+        .open_room(Some("owner 7".into()), true)
+        .expect("a room");
+    let three = session
+        .open_room(Some("m-1".into()), false)
+        .expect("a room");
+    let said = printed(&session, &platform, 4);
     let mut said: Vec<String> = said
         .into_iter()
         .filter(|l| !l.starts_with("info Requires") && !l.starts_with("info Running"))
@@ -1225,16 +1230,24 @@ end
     said.sort();
     assert_eq!(
         said,
-        ["1 arena true 1", "2 arena true 1", "main sees arena false",]
+        [
+            "1 arena true 1",
+            "2 arena true 1",
+            "3 arena true 1",
+            "main sees arena false",
+        ]
     );
     let worlds = platform.worlds.borrow().clone();
     assert!(
-        worlds.contains("arena__r1") && worlds.contains("arena__owner_7"),
+        worlds.contains("arena__r1")
+            && worlds.contains("arena__owner_7")
+            && worlds.contains("arena__m_1"),
         "{worlds:?}"
     );
-    // A match's worlds go with it; a keyed room's are saved for next time.
+    // A match's worlds go with it, keyed or not; a kept room's are saved for next time.
     session.close_room(one);
     session.close_room(two);
+    session.close_room(three);
     let managed = platform.managed.lock().unwrap().clone();
     assert!(
         managed.iter().any(|m| m == "unload arena__r1 false"),
@@ -1242,6 +1255,10 @@ end
     );
     assert!(
         managed.iter().any(|m| m == "unload arena__owner_7 true"),
+        "{managed:?}"
+    );
+    assert!(
+        managed.iter().any(|m| m == "unload arena__m_1 false"),
         "{managed:?}"
     );
 }

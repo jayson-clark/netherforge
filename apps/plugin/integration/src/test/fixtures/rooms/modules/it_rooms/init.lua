@@ -1,5 +1,5 @@
 -- Two rooms beside the main one, each a copy of this module in a Lua state of its own: room 1 a match (no key) and
--- room 2 keyed "b". Every room says what it hears, tagged with its name ("main", "r1", "b"); its players get its boss
+-- room 2 keyed "b" and kept. Every room says what it hears, tagged with its name ("main", "r1", "b"); its players get its boss
 -- bar and team, and a room's players play on its own copy of the it_track map ("track", the server's track__r1 or
 -- track__b).
 
@@ -69,8 +69,16 @@ local steps = {}
 
 function steps.open()
   local match = nf.rooms.open()
-  local keyed = nf.rooms.open({ key = "b" })
-  log("opened", match:id(), match:state(), keyed:id(), keyed:key())
+  local keyed = nf.rooms.open({ key = "b", keep = true })
+  log(
+    "opened",
+    match:id(),
+    match:state(),
+    keyed:id(),
+    keyed:key(),
+    tostring(match:is_kept()),
+    tostring(keyed:is_kept())
+  )
 end
 
 -- From the console (the main room): Alice and Bob to r1, Carol and Dave to b.

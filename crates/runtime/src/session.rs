@@ -691,16 +691,22 @@ impl<'a> Session<'a> {
     /// Opens a room beside the main one, with a Lua state of its own and the project started in it: its id, or
     /// none while the project doesn't run (or the room's Lua state didn't start, which the log says). It holds no
     /// world and no player until it's given them ([`give_world`](Self::give_world),
-    /// [`move_player`](Self::move_player)).
-    pub fn open_room(&mut self, key: Option<String>) -> Option<crate::instance::RoomId> {
-        let id = self.instance().next_room_id();
-        self.instance().rooms.borrow_mut().insert(
-            id,
-            crate::rooms::RoomInfo {
-                key: key.clone(),
-                state: crate::rooms::RoomState::Opening,
-            },
-        );
+    /// [`move_player`](Self::move_player)). Kept (`keep`: its worlds saved as it closes, its `nf.data` under `key`)
+    /// only with a key; none, logged, for a key another room has open.
+    pub fn open_room(
+        &mut self,
+        key: Option<String>,
+        keep: bool,
+    ) -> Option<crate::instance::RoomId> {
+        let id = match self.instance().reserve_room(key, keep) {
+            Ok(id) => id,
+            Err(why) => {
+                self.platform
+                    .log()
+                    .error(format!("A room didn't open: {why}"), None);
+                return None;
+            }
+        };
         let opened = self.open_room_as(id);
         if opened.is_none() {
             self.instance().rooms.borrow_mut().remove(&id);
@@ -784,7 +790,7 @@ impl<'a> Session<'a> {
         let Some(at) = self.rooms.iter().position(|r| r.id == id) else {
             return;
         };
-        // Its own worlds go with it: a match's deleted, a keyed room's saved for the next time it opens.
+        // Its own worlds go with it: a match's deleted, a kept room's saved for the next time it opens.
         if let Some(room) = self.rooms[at].room() {
             let shared = self.rooms[at].shared.clone();
             let managed = crate::managed_worlds::ManagedContext {
@@ -847,7 +853,7 @@ impl<'a> Session<'a> {
             let requests = std::mem::take(&mut *self.instance().room_requests.borrow_mut());
             for request in requests {
                 match request {
-                    RoomRequest::Open { id, .. } => {
+                    RoomRequest::Open(id) => {
                         if self.open_room_as(id).is_none() {
                             self.instance().rooms.borrow_mut().remove(&id);
                         }

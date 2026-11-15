@@ -124,6 +124,7 @@ struct Send {
     balance: Option<Balance>,
     wait_millis: Option<i64>,
     room: Option<String>,
+    keep: bool,
 }
 
 /// Players to move once the frame is handled, and whom to tell.
@@ -985,6 +986,7 @@ impl Hub {
                 balance,
                 wait_millis,
                 room,
+                keep,
             } => self.send_player(
                 from,
                 Send {
@@ -996,6 +998,7 @@ impl Hub {
                     balance,
                     wait_millis,
                     room,
+                    keep,
                 },
             ),
         }
@@ -1352,6 +1355,7 @@ impl Hub {
                         HubFrame::Room {
                             player: player.id.clone(),
                             room: room.clone(),
+                            keep: frame.keep,
                         },
                     );
                 }
@@ -1462,6 +1466,7 @@ impl Hub {
                 balance: None,
                 wait_millis: None,
                 room: None,
+                keep: false,
             };
             if let Placement::Go {
                 server,

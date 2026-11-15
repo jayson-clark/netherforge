@@ -2902,8 +2902,10 @@ pub struct RoomEvent {
 /// How `nf.rooms.open` opens a room.
 #[derive(Clone, Debug)]
 pub struct RoomOptions {
-    /// What it's for (an owner's id, a match's): its `nf.data` tables are kept under it, so a room opened again with the same key finds them. Without one they last as long as the room.
+    /// What it's for (an owner's id, a match's): the room's identity. A player the server's owner sends to a key goes into the room open with it, and its worlds are named after it. Two rooms can't be open with the same key at once.
     pub key: Option<String>,
+    /// Whether what it made outlasts it, for a room opened again with the same key to find (an owner's world, a party's): its worlds are saved when it closes rather than deleted, and its `nf.data` tables are kept under its key. A match's room isn't kept (the default): its worlds and `nf.data` tables go with it. A kept room needs a `key`.
+    pub keep: Option<bool>,
 }
 
 /// How `nf.particles.play` plays an effect. Every key is optional; a key that isn't one of these is an error.

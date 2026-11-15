@@ -1765,6 +1765,8 @@ impl RoomApi for Unported {
     #[allow(unused_variables)]
     fn key(&self, this: &handles::Room) -> ApiResult<Option<String>> { unported("Room:key") }
     #[allow(unused_variables)]
+    fn is_kept(&self, this: &handles::Room) -> ApiResult<bool> { unported("Room:is_kept") }
+    #[allow(unused_variables)]
     fn is_main(&self, this: &handles::Room) -> ApiResult<bool> { unported("Room:is_main") }
     #[allow(unused_variables)]
     fn state(&self, this: &handles::Room) -> ApiResult<String> { unported("Room:state") }

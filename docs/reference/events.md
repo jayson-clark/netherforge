@@ -218,7 +218,7 @@ What `nf.on` listens for.
 | --- | --- | --- |
 | `room_start` | [RoomEvent](types.md#roomevent) | This room's match began: `room:start()` was called (by this room's scripts, another room's, or the server's owner through the admin API). Before it, the room is open: players can be sent in and the world got ready. |
 | `room_finish` | [RoomEvent](types.md#roomevent) | This room's match ended: `room:finish()` was called. Its players are still here; the room closes when it's told to (`room:close()`), which is where a game says who won and sends everyone on. |
-| `room_close` | [RoomEvent](types.md#roomevent) | This room is about to close: its scripts' last chance, before its players go back to the main room and its Lua state ends. Its worlds are the main room's afterwards. |
+| `room_close` | [RoomEvent](types.md#roomevent) | This room is about to close: its scripts' last chance, before its players go back to the main room and its Lua state ends. Afterwards the worlds its scripts made or loaded are unloaded, saved for a kept room (`RoomOptions.keep`) and deleted for the rest, and those it was given are the main room's. |
 
 #### Example: nf tick
 

@@ -210,10 +210,17 @@ sealed interface AdminEvent {
 
 /**
  * An admin client's answer to a [AdminEvent.Place]: one of a [server] (and the [room] on it they go into, when the
- * server runs several), a [hold] with its status, or a [fail] reason.
+ * server runs several, which [keep]s its worlds and data when it's opened for them), a [hold] with its status, or a
+ * [fail] reason.
  */
 @Serializable
-data class PlaceAnswer(val server: String? = null, val hold: String? = null, val fail: String? = null, val room: String? = null)
+data class PlaceAnswer(
+    val server: String? = null,
+    val hold: String? = null,
+    val fail: String? = null,
+    val room: String? = null,
+    val keep: Boolean = false
+)
 
 /** Where a player logging in goes: [server] (null: the proxy's own choice), or turned away with [deny]. */
 data class LoginPlace(val server: String? = null, val deny: String? = null)

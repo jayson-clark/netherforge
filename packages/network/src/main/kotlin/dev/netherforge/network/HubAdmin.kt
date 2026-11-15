@@ -109,7 +109,9 @@ class HubAdmin(
         /** Seconds it may wait for an instance with room. */
         val wait: Double? = null,
         /** The room on the server they go into (a match's key, an owner's). */
-        val room: String? = null
+        val room: String? = null,
+        /** Whether [room], opened for them, is kept (its worlds and data outlast it: an owner's, a party's). */
+        val keep: Boolean = false
     )
 
     @Serializable
@@ -346,7 +348,7 @@ class HubAdmin(
                 val id = hub.findPlayer(player)?.id ?: throw Fail(404, "nobody called $player is online")
                 val waitMillis = send.wait?.let { (it.coerceIn(0.0, Hub.MAX_WAIT_MILLIS / 1000.0) * 1000).toLong() }
                 val outcome = try {
-                    hub.adminSend(client.id, listOf(id), send.server, send.group, balance, send.data, waitMillis, send.room)
+                    hub.adminSend(client.id, listOf(id), send.server, send.group, balance, send.data, waitMillis, send.room, send.keep)
                         .get((waitMillis ?: 0) + SEND_ANSWER_MILLIS, TimeUnit.MILLISECONDS)
                 } catch (_: TimeoutException) {
                     throw Fail(504, "the proxy didn't move them in time")

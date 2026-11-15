@@ -189,10 +189,10 @@ impl Shared {
         }
     }
 
-    /// Whether this room's worlds are kept when it closes (a room opened with a key: an owner's world, a party's) or
-    /// go with it (a match's).
+    /// Whether this room's worlds are kept when it closes (a kept room: an owner's world, a party's) or go with it (a
+    /// match's).
     pub fn keeps_worlds(&self) -> bool {
-        self.instance.room_key(self.room).is_some()
+        self.instance.kept_key(self.room).is_some()
     }
 
     /// This room's default world (`nf.worlds.default()`): the server's for the main room, the first world it was given

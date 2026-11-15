@@ -649,6 +649,7 @@ impl NetworkContext {
             balance,
             wait_millis: wait.map(|w| (w * 1000.0) as i64),
             room: None,
+            keep: false,
         };
         let link = network.link();
         drop(network);
@@ -1098,11 +1099,11 @@ impl NetworkContext {
                     );
                 }
             }
-            HubFrame::Room { player, room } => {
+            HubFrame::Room { player, room, keep } => {
                 if self.shared.room == crate::instance::RoomId::MAIN
                     && let Some(player) = parse_uuid(&player)
                 {
-                    self.shared.instance.place_in_room(player, &room);
+                    self.shared.instance.place_in_room(player, &room, keep);
                 }
             }
             HubFrame::Problem { message } => {

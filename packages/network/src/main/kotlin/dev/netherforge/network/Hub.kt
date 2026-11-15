@@ -1390,7 +1390,8 @@ class Hub(
         balance: Balance?,
         data: JsonElement?,
         waitMillis: Long?,
-        room: String? = null
+        room: String? = null,
+        keep: Boolean = false
     ): java.util.concurrent.CompletableFuture<SendOutcome> {
         val outcome = java.util.concurrent.CompletableFuture<SendOutcome>()
         val origin = object : HubEndpoint {
@@ -1403,7 +1404,11 @@ class Hub(
             override fun who() = "the admin client $client"
         }
         synchronized(lock) {
-            sendPlayer(origin, ServerFrame.Send(nextPlace++, players, server, data, group, balance, waitMillis, room), "admin:$client")
+            sendPlayer(
+                origin,
+                ServerFrame.Send(nextPlace++, players, server, data, group, balance, waitMillis, room, keep),
+                "admin:$client"
+            )
         }
         runLater()
         return outcome
@@ -1458,12 +1463,12 @@ class Hub(
                     pending.remove(id)
                     if (entry.login != null) {
                         // The server hears which room they're for before the proxy connects them.
-                        answer.room?.let { room -> entry.party.forEach { byName[server]?.send(HubFrame.Room(it.id, room)) } }
+                        answer.room?.let { room -> entry.party.forEach { byName[server]?.send(HubFrame.Room(it.id, room, answer.keep)) } }
                         entry.login.complete(LoginPlace(server))
                     } else {
                         sendPlayer(
                             entry.origin!!,
-                            entry.frame.copy(server = server, group = null, room = answer.room),
+                            entry.frame.copy(server = server, group = null, room = answer.room, keep = answer.keep),
                             entry.from!!,
                             asked = true
                         )
@@ -1782,7 +1787,7 @@ class Hub(
         val party = placement.party
         val moving = placement.moving
         for (player in moving) {
-            frame.room?.let { target?.send(HubFrame.Room(player.id, it)) }
+            frame.room?.let { target?.send(HubFrame.Room(player.id, it, frame.keep)) }
             target?.send(HubFrame.Arriving(player.id, from, frame.data))
         }
         incoming.merge(server, moving.size, Int::plus)

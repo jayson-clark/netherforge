@@ -5929,15 +5929,17 @@ impl Codec for RoomOptions {
     fn expected(&self) -> String { "RoomOptions".into() }
     fn accepts(&self, value: &Value) -> bool { matches!(value, Value::Table(t) if t.metatable().is_none()) }
     fn read(&self, lua: &Lua, value: Value, at: &str) -> crate::ApiResult<shapes::RoomOptions> {
-        let t = shape_table(&value, at, "RoomOptions", &["key"])?;
+        let t = shape_table(&value, at, "RoomOptions", &["key", "keep"])?;
         let _ = (&lua, &t);
         Ok(shapes::RoomOptions {
             key: field(lua, t, at, "key", Opt(Str))?,
+            keep: field(lua, t, at, "keep", Opt(Bool))?,
         })
     }
     fn push(&self, lua: &Lua, value: shapes::RoomOptions) -> mlua::Result<Value> {
-        let t: Table = lua.create_table_with_capacity(0, 1)?;
+        let t: Table = lua.create_table_with_capacity(0, 2)?;
         set_field(lua, &t, "key", Opt(Str), value.key)?;
+        set_field(lua, &t, "keep", Opt(Bool), value.keep)?;
         Ok(Value::Table(t))
     }
 }

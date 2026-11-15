@@ -34,20 +34,21 @@ impl RoomState {
     }
 }
 
-/// What the instance knows of a room: what it's for and where it is in its life.
+/// What the instance knows of a room: what it's for, whether what it makes outlasts it, and where it is in its life.
 #[derive(Clone, Debug)]
 pub struct RoomInfo {
+    /// Its identity (an owner's id, a match's): one open room at a time has it.
     pub key: Option<String>,
+    /// Whether its worlds are saved when it closes and its `nf.data` tables kept under its key (an owner's world, a
+    /// party's), rather than going with it (a match's). Only a room with a key is kept.
+    pub keep: bool,
     pub state: RoomState,
 }
 
 /// What a room's scripts asked of the session's rooms, done at the end of the tick.
 #[derive(Clone, Debug)]
 pub enum RoomRequest {
-    Open {
-        id: RoomId,
-        key: Option<String>,
-    },
+    Open(RoomId),
     Close(RoomId),
     Send {
         player: netherforge_platform::Uuid,
@@ -123,21 +124,13 @@ impl netherforge_api::api::NfRoomsApi for RoomsContext {
     }
 
     fn open(&self, _: &Caller, options: Option<shapes::RoomOptions>) -> ApiResult<handles::Room> {
-        let key = options.and_then(|o| o.key);
-        if key.as_deref().is_some_and(str::is_empty) {
-            return Err(err(
-                "bad argument 'options.key' (a room's key can't be empty)",
-            ));
-        }
-        let id = self.shared.instance.next_room_id();
-        self.shared.instance.rooms.borrow_mut().insert(
-            id,
-            RoomInfo {
-                key: key.clone(),
-                state: RoomState::Opening,
-            },
-        );
-        self.ask(RoomRequest::Open { id, key });
+        let (key, keep) = options.map_or((None, false), |o| (o.key, o.keep.unwrap_or(false)));
+        let id = self
+            .shared
+            .instance
+            .reserve_room(key, keep)
+            .map_err(|why| err(format!("bad argument 'options' ({why})")))?;
+        self.ask(RoomRequest::Open(id));
         Ok(handle(id))
     }
 }
@@ -149,6 +142,10 @@ impl netherforge_api::api::RoomApi for RoomsContext {
 
     fn key(&self, this: &handles::Room) -> ApiResult<Option<String>> {
         Ok(self.info(this).and_then(|(_, info)| info.key))
+    }
+
+    fn is_kept(&self, this: &handles::Room) -> ApiResult<bool> {
+        Ok(self.info(this).is_some_and(|(_, info)| info.keep))
     }
 
     fn is_main(&self, this: &handles::Room) -> ApiResult<bool> {

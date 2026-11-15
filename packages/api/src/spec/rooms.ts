@@ -27,7 +27,7 @@ export const roomEvents: EventSpec[] = [
   },
   {
     name: 'room_close',
-    doc: "This room is about to close: its scripts' last chance, before its players go back to the main room and its Lua state ends. Its worlds are the main room's afterwards.",
+    doc: "This room is about to close: its scripts' last chance, before its players go back to the main room and its Lua state ends. Afterwards the worlds its scripts made or loaded are unloaded, saved for a kept room (`RoomOptions.keep`) and deleted for the rest, and those it was given are the main room's.",
     payload: 'RoomEvent',
   },
 ]
@@ -48,9 +48,15 @@ export const roomClass: LuaClass = {
     },
     {
       name: 'key',
-      doc: "What it's for, as it was opened with it (an owner's id, a match's): `nil` for the main room and for a room opened without one. Its `nf.data` tables are kept under it.",
+      doc: "What it's for, as it was opened with it (an owner's id, a match's): `nil` for the main room and for a room opened without one.",
       params: [],
       returns: [{ type: 'string?' }],
+    },
+    {
+      name: 'is_kept',
+      doc: "Whether what it made outlasts it (`RoomOptions.keep`): its worlds saved when it closes and its `nf.data` tables kept under its key. `false` for the main room, whose worlds and tables are the server's anyway.",
+      params: [],
+      returns: [{ type: 'boolean' }],
     },
     {
       name: 'is_main',
@@ -90,7 +96,7 @@ export const roomClass: LuaClass = {
     },
     {
       name: 'close',
-      doc: `Closes it: its scripts hear \`room_close\`, its players go back to the main room (as if they'd joined the server), its Lua state ends and its worlds are the main room's. ${LATER} \`false\` for the main room, and once it's closing or closed.`,
+      doc: `Closes it: its scripts hear \`room_close\`, its players go back to the main room (as if they'd joined the server), its Lua state ends, the worlds its scripts made or loaded are unloaded (saved for a kept room, deleted for the rest) and those it was given are the main room's. ${LATER} \`false\` for the main room, and once it's closing or closed.`,
       params: [],
       returns: [{ type: 'boolean' }],
     },
@@ -176,7 +182,12 @@ export const roomShapes: LuaClass[] = [
       {
         name: 'key',
         type: 'string?',
-        doc: "What it's for (an owner's id, a match's): its `nf.data` tables are kept under it, so a room opened again with the same key finds them. Without one they last as long as the room.",
+        doc: "What it's for (an owner's id, a match's): the room's identity. A player the server's owner sends to a key goes into the room open with it, and its worlds are named after it. Two rooms can't be open with the same key at once.",
+      },
+      {
+        name: 'keep',
+        type: 'boolean?',
+        doc: "Whether what it made outlasts it, for a room opened again with the same key to find (an owner's world, a party's): its worlds are saved when it closes rather than deleted, and its `nf.data` tables are kept under its key. A match's room isn't kept (the default): its worlds and `nf.data` tables go with it. A kept room needs a `key`.",
       },
     ],
   },

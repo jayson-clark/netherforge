@@ -265,11 +265,12 @@ sealed interface HubFrame {
 
     /**
      * [player], on their way here (logging in, or sent), belongs in the room [room] names: the server puts them in it as
-     * they arrive, opening it when no room has that key yet. Before the player gets here, and before any [Arriving].
+     * they arrive, opening it when no room has that key yet, kept when [keep] (its worlds and data outlast it: an
+     * owner's, a party's; a match's isn't). Before the player gets here, and before any [Arriving].
      */
     @Serializable
     @SerialName("room")
-    data class Room(val player: String, val room: String) : HubFrame
+    data class Room(val player: String, val room: String, val keep: Boolean = false) : HubFrame
 
     /** The [Arriving] for [player] won't happen after all: the proxy couldn't move them. */
     @Serializable
@@ -492,7 +493,9 @@ sealed interface ServerFrame {
         /** How long it may wait for an instance with room (or a server that's starting) before it fails. */
         val waitMillis: Long? = null,
         /** The room on the server they go into (a match's key, an owner's): the server's own choice when null. */
-        val room: String? = null
+        val room: String? = null,
+        /** Whether [room], opened for them, is kept (its worlds and data outlast it). */
+        val keep: Boolean = false
     ) : ServerFrame
 
     @Serializable

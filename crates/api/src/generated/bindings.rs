@@ -7254,6 +7254,15 @@ fn room_key(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value])
     Ok(MultiValue::from_vec(vec![result(lua, Opt(Str), api.room().key(&this))?]))
 }
 
+fn room_is_kept(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
+    let _ = scope;
+    let Some(this) = args.first().filter(|v| HandleOf::<handles::Room>::default().accepts(v)).cloned() else {
+        return Err(mlua::Error::runtime("call Room methods with ':' (Room:is_kept)"));
+    };
+    let this = HandleOf::<handles::Room>::default().read(lua, this, "self").map_err(|e| mlua::Error::runtime(e.0))?;
+    Ok(MultiValue::from_vec(vec![result(lua, Bool, api.room().is_kept(&this))?]))
+}
+
 fn room_is_main(lua: &Lua, api: &dyn LuaApi, scope: Option<ScopeId>, args: &[Value]) -> mlua::Result<MultiValue> {
     let _ = scope;
     let Some(this) = args.first().filter(|v| HandleOf::<handles::Room>::default().accepts(v)).cloned() else {
@@ -10644,6 +10653,7 @@ pub const BINDINGS: &[Binding] = &[
     Binding { class: "Team", name: "remove", method: true, waits: false, call: team_remove },
     Binding { class: "Room", name: "id", method: true, waits: false, call: room_id },
     Binding { class: "Room", name: "key", method: true, waits: false, call: room_key },
+    Binding { class: "Room", name: "is_kept", method: true, waits: false, call: room_is_kept },
     Binding { class: "Room", name: "is_main", method: true, waits: false, call: room_is_main },
     Binding { class: "Room", name: "state", method: true, waits: false, call: room_state },
     Binding { class: "Room", name: "players", method: true, waits: false, call: room_players },

@@ -495,10 +495,13 @@ pub enum HubFrame {
         data: Option<Value>,
     },
     /// `player`, on their way here (logging in, or sent), belongs in the room `room` names: they're put in it as they
-    /// arrive, a room opened for it when none has that key yet. Before the player gets here, and before any `Arriving`.
+    /// arrive, a room opened for it when none has that key yet (kept, when `keep`: its worlds and `nf.data` outlast it).
+    /// Before the player gets here, and before any `Arriving`.
     Room {
         player: String,
         room: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        keep: bool,
     },
     ArrivalCancelled {
         player: String,
@@ -646,6 +649,9 @@ pub enum ServerFrame {
         /// The room on the server they go into (a match's key, an owner's): the server's own choice when none.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         room: Option<String>,
+        /// Whether that room, opened for them, is kept (its worlds and `nf.data` outlast it: an owner's, a party's).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        keep: bool,
     },
     Ping,
 }

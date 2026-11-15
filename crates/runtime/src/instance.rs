@@ -224,6 +224,7 @@ impl Instance {
                     RoomId::MAIN,
                     crate::rooms::RoomInfo {
                         key: None,
+                        keep: false,
                         state: crate::rooms::RoomState::Open,
                     },
                 )]
@@ -258,34 +259,66 @@ impl Instance {
         self.rooms.borrow().get(&room).and_then(|r| r.key.clone())
     }
 
-    /// `player`, on their way here, belongs in the room keyed `key`: the room open with that key, or one opened for it
-    /// at the end of the tick. Already here, they're moved there then.
-    pub fn place_in_room(&self, player: Uuid, key: &str) {
-        let found = self
-            .rooms
+    /// Room `room`'s key when it's kept (its worlds saved as it closes, its `nf.data` under the key); none for a room
+    /// whose worlds and tables go with it, and for the main room.
+    pub fn kept_key(&self, room: RoomId) -> Option<String> {
+        self.rooms
+            .borrow()
+            .get(&room)
+            .filter(|r| r.keep)
+            .and_then(|r| r.key.clone())
+    }
+
+    /// The open room keyed `key` (closing ones aside).
+    fn room_keyed(&self, key: &str) -> Option<RoomId> {
+        self.rooms
             .borrow()
             .iter()
             .find(|(_, r)| {
                 r.key.as_deref() == Some(key) && r.state != crate::rooms::RoomState::Closing
             })
-            .map(|(id, _)| *id);
-        let id = found.unwrap_or_else(|| {
-            let id = self.next_room_id();
-            self.rooms.borrow_mut().insert(
-                id,
-                crate::rooms::RoomInfo {
-                    key: Some(key.to_owned()),
-                    state: crate::rooms::RoomState::Opening,
-                },
-            );
-            self.room_requests
-                .borrow_mut()
-                .push(crate::rooms::RoomRequest::Open {
-                    id,
-                    key: Some(key.to_owned()),
-                });
-            id
-        });
+            .map(|(id, _)| *id)
+    }
+
+    /// A new room's number, the instance knowing it as opening with `key` and `keep`: or why it can't be (an empty key,
+    /// a key another open room has, a kept room without a key). What every way of opening a room goes through.
+    pub fn reserve_room(&self, key: Option<String>, keep: bool) -> Result<RoomId, String> {
+        match key.as_deref() {
+            Some("") => return Err("a room's key can't be empty".into()),
+            Some(key) if self.room_keyed(key).is_some() => {
+                return Err(format!("a room keyed \"{key}\" is open already"));
+            }
+            None if keep => return Err("a kept room needs a key".into()),
+            _ => {}
+        }
+        let id = self.next_room_id();
+        self.rooms.borrow_mut().insert(
+            id,
+            crate::rooms::RoomInfo {
+                key,
+                keep,
+                state: crate::rooms::RoomState::Opening,
+            },
+        );
+        Ok(id)
+    }
+
+    /// `player`, on their way here, belongs in the room keyed `key`: the room open with that key, or one opened for it
+    /// at the end of the tick (kept or not as `keep` says; a room open already stays as it was opened). Already here,
+    /// they're moved there then. Nothing for an empty key.
+    pub fn place_in_room(&self, player: Uuid, key: &str, keep: bool) {
+        let id = match self.room_keyed(key) {
+            Some(id) => id,
+            None => {
+                let Ok(id) = self.reserve_room(Some(key.to_owned()), keep) else {
+                    return;
+                };
+                self.room_requests
+                    .borrow_mut()
+                    .push(crate::rooms::RoomRequest::Open(id));
+                id
+            }
+        };
         if self.platform.players().get(player).is_some() {
             self.room_requests
                 .borrow_mut()
