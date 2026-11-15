@@ -1513,7 +1513,9 @@ impl NetworkContext {
                 ),
             );
         }
-        let empty = self.shared.network.borrow().joined_at.is_empty();
+        // Empty is nobody on the server, in any room: the main room's own joins are only its own (a player the hub
+        // sent into a room joined that room).
+        let empty = self.platform().players().online().is_empty();
         let idle = {
             let mut network = self.shared.network.borrow_mut();
             network.empty_since = if empty {

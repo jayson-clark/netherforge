@@ -1830,3 +1830,68 @@ fn a_send_naming_a_room_on_the_server_a_player_is_on_puts_them_in_it() {
         Some("player_7f")
     );
 }
+
+#[test]
+fn a_server_whose_players_were_all_in_rooms_is_empty_once_they_have_gone() {
+    // Found by the rooms load test (k3d, kart): a drain "after empty" waited out its timeout on a server nobody was on.
+    let files = project("", NETWORK);
+    let platform = Platform::default();
+    let mut session = start(&files, &platform, dev(), None);
+    let hub = hub(&session);
+    for _ in 0..3 {
+        session.tick();
+    }
+    let race = session
+        .open_room(Some("m-1".into()), false)
+        .expect("a room");
+    session.tick();
+    // Both arrive straight into the race (the hub named its room ahead of them).
+    let ana = PlayerRef {
+        uuid: uuid(9),
+        name: "Ana".into(),
+    };
+    let bea = PlayerRef {
+        uuid: uuid(10),
+        name: "Bea".into(),
+    };
+    hub.place(&uuid_text(9), "Ana", "dev");
+    hub.place(&uuid_text(10), "Bea", "dev");
+    platform.online.borrow_mut().push(ana.clone());
+    session.player_joined(race, &ana);
+    platform.online.borrow_mut().push(bea.clone());
+    session.player_joined(race, &bea);
+    for _ in 0..3 {
+        session.tick();
+    }
+    let room = session.room().unwrap();
+    netherforge_runtime::network::service::NetworkContext {
+        shared: session.shared().clone(),
+        scripts: room.scripts().clone(),
+    }
+    .shutdown(true, 600);
+    for _ in 0..5 {
+        session.tick();
+    }
+    assert_eq!(
+        session.shared().network.borrow().stop_server,
+        None,
+        "two players are in the race: not empty"
+    );
+    // Both leave from the race.
+    for player in [&ana, &bea] {
+        platform
+            .online
+            .borrow_mut()
+            .retain(|p| p.uuid != player.uuid);
+        session.player_quit(race, player);
+    }
+    let mut stop = None;
+    for _ in 0..200 {
+        session.tick();
+        stop = session.shared().network.borrow_mut().stop_server.take();
+        if stop.is_some() {
+            break;
+        }
+    }
+    assert_eq!(stop.as_deref(), Some("NetherForge: /nf shutdown"));
+}
