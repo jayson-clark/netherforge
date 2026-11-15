@@ -41,6 +41,15 @@ end
 home:hold_chunk(at)
 if made then
   home:set_block(at, mark)
+  -- What the world keeps of itself beside its blocks: game rules, its clock, its border, its weather, its spawn.
+  home:set_game_rule("keep_inventory", true)
+  home:set_game_rule("advance_time", false)
+  home:set_time_of_day(18000)
+  local border = assert(home:border())
+  border:set_center(vec3(8, 0, 8))
+  border:set_size(123)
+  home:set_weather("rain", { ticks = 1000000 })
+  home:set_spawn_location(vec3(5, 70, 6))
 end
 local notes = nf.data("notes")
 notes.opened = (notes.opened or 0) + 1
@@ -61,6 +70,20 @@ log(
   home:block(at):kind(),
   tostring(notes.opened),
   tostring(here:is_kept())
+)
+
+local border = assert(home:border())
+local spawn = assert(home:spawn_location()).position
+log(
+  "kept",
+  key,
+  tostring(home:game_rule("keep_inventory")),
+  tostring(home:game_rule("advance_time")),
+  tostring(home:time_of_day()),
+  tostring(border:size()),
+  tostring(border:center().x) .. "," .. tostring(border:center().z),
+  tostring(home:weather()),
+  tostring(spawn.x) .. "," .. tostring(spawn.y) .. "," .. tostring(spawn.z)
 )
 
 nf.on("player_join", function(event)

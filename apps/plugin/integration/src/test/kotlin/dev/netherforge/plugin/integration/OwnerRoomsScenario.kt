@@ -31,7 +31,8 @@ import kotlin.test.assertTrue
  * drives them: each opened kept and keyed by its owner, its world made and marked and a placard spawned in it; saved
  * with its writes paused and copied out (each world as a map, its tables as data.json) as the agent copies them to its
  * world storage; closed with its files deleted; and opened again from the copies, its world, its nf.data and its
- * placard (the same instance, with its record and its table, which travel in the world's folder) as they were.
+ * placard (the same instance, with its record and its table, which travel in the world's folder) as they were, and
+ * the rest of what its folder keeps: its game rules, clock, border, weather and spawn, and another plugin's file.
  */
 class OwnerRoomsScenario : Scenario("owner_rooms") {
     private val control: Path = Files.createTempDirectory("nfc").resolve("control.sock")
@@ -68,6 +69,15 @@ class OwnerRoomsScenario : Scenario("owner_rooms") {
         }
     }
 
+    /**
+     * What each room's world was set to as it was made (keep_inventory, advance_time, the time of day, the border's
+     * size and centre, the weather, the spawn), as its script says it.
+     */
+    private val kept = arrayOf("true", "false", "18000", "123", "8,8", "rain", "5,70,6")
+
+    /** A file of another plugin's in a world's data/: nothing NetherForge or the game knows of. */
+    private val elsewhere = "data/elsewhere/notes.txt"
+
     private fun JsonElement.text(): String = jsonPrimitive.content
 
     @Test
@@ -78,6 +88,7 @@ class OwnerRoomsScenario : Scenario("owner_rooms") {
             assertEquals(200, status, "$opened")
             editor.logged("placard", key, "1", key)
             editor.logged("owner", key, "home", "true", marks.getValue(key), "1", "true")
+            editor.logged("kept", key, *kept)
         }
         val (_, state) = ask("GET", "/state")
         val rooms = state.getValue("rooms").jsonArray.associate {
@@ -111,6 +122,9 @@ class OwnerRoomsScenario : Scenario("owner_rooms") {
             assertEquals(listOf("home"), worlds.map { it.jsonObject.getValue("name").text() })
             val home = worlds.single().jsonObject
             val map = imports.resolve(key).resolve("worlds/home")
+            val others = server.folder.resolve(home.getValue("folder").text()).resolve(elsewhere)
+            Files.createDirectories(others.parent)
+            others.writeText(key)
             copyMap(server.folder.resolve(home.getValue("level").text()), server.folder.resolve(home.getValue("folder").text()), map)
             val tables = saved.getValue("data").jsonObject.getValue("showcase").jsonObject
             assertEquals("""{"opened":1}""", tables.getValue("notes").toString())
@@ -146,13 +160,20 @@ class OwnerRoomsScenario : Scenario("owner_rooms") {
             // Not made again: the copy, its block where it was, its placard and its count of openings carried on.
             editor.logged("placard", key, "1", key)
             editor.logged("owner", key, "home", "false", marks.getValue(key), "2", "true")
+            // Its game rules, clock, border, weather and spawn: the world's own saved data, which came with its folder.
+            editor.logged("kept", key, *kept)
+            // And a file another plugin keeps in the world's data/, which the game doesn't know.
+            assertEquals(key, server.folder.resolve("world/dimensions/minecraft/home__$key/$elsewhere").readText())
             editor.run("it-owner $key $name")
             editor.logged("home", key, name)
             bots.eventually(name) { world(it) == "home__$key" }
         }
     }
 
-    /** What Kosmoi's agent saves of a world: its level.dat at the top and its folder as the map's overworld. */
+    /**
+     * What Kosmoi's agent saves of a world: its level.dat at the top and its folder as the map's overworld, all of it
+     * but what makes it this world (its identity, Paper's metadata.dat) and players' data.
+     */
     private fun copyMap(level: Path, folder: Path, map: Path) {
         val overworld = map.resolve("dimensions/minecraft/overworld")
         Files.createDirectories(overworld)
@@ -162,7 +183,7 @@ class OwnerRoomsScenario : Scenario("owner_rooms") {
                 val relative = folder.relativize(file).joinToString("/")
                 val skipped = file.fileName.toString() in setOf("session.lock", "uid.dat", "level.dat_old", "paper-world.yml")
                 val players = relative.split('/').dropLast(1).any { it in setOf("players", "playerdata", "stats", "advancements") }
-                if (skipped || players || relative.startsWith("data/paper/")) continue
+                if (skipped || players || relative == "data/paper/metadata.dat") continue
                 val target = overworld.resolve(relative)
                 Files.createDirectories(target.parent)
                 Files.copy(file, target)

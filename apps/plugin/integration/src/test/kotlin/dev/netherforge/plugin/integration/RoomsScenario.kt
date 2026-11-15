@@ -49,15 +49,18 @@ class RoomsScenario : Scenario("rooms") {
     @Test
     @Order(1)
     fun `the main world becomes a map each room copies as its own track`() {
+        // A game rule of the main world's: the map carries it, so every copy has it (and the main world goes back).
+        editor.run("gamerule max_entity_cramming 31")
         Maps.capture(folder, Maps.save(editor, "world"), project.file("maps/it_track"))
+        editor.run("gamerule max_entity_cramming 24")
         val result = editor.reload("maps/it_track/level.dat")
         assertEquals(listOf("map:it_track" to true), result.resources.map { it.label to it.ok })
         editor.run("difficulty peaceful")
         editor.run("it-rooms open")
         editor.logged("opened", "1", "opening", "2", "b", "false", "true")
         // Each room's "track" is its own world, the server's track__r1 and track__b; each lists only its own.
-        editor.logged("track", "r1", "track", "nil", "track")
-        editor.logged("track", "b", "track", "nil", "track")
+        editor.logged("track", "r1", "track", "nil", "track", "31")
+        editor.logged("track", "b", "track", "nil", "track", "31")
         editor.logged("world_load", "r1", "track")
         editor.logged("world_load", "b", "track")
         editor.assertNone("a room heard another's world load") {

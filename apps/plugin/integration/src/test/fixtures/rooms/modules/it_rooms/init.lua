@@ -22,7 +22,14 @@ local track
 if not here:is_main() then
   nf.worlds.copy("it_track", "track", function(world, err)
     track = world
-    log("track", name, world and world:name() or "nil", tostring(err), names(nf.worlds.all()))
+    log(
+      "track",
+      name,
+      world and world:name() or "nil",
+      tostring(err),
+      names(nf.worlds.all()),
+      tostring(world and world:game_rule("max_entity_cramming"))
+    )
   end)
 end
 
