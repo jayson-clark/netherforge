@@ -158,9 +158,13 @@ function that ran.
   nothing and holds nothing back**: tests run unoptimised, where 25 ms a tick is easy to reach.
 - **`Service::costs(scope)`**: what a scope owns, by the word `/nf scripts` shows it as (effects, cutscenes, goals,
   gradual, connections, schedules, routes, logins, placeholders, wasm instances, wasm programs, screens, videos); the
-  session adds `waits` (`pending::waiting`). `Session::costs()` is `/nf scripts`' list, the most expensive first, with
-  subscriptions and tasks (`Scripts::held`) and the bytes its script's memory key holds (per key, so a centity's
-  instances each show the script's).
+  session adds `waits` (`pending::waiting`). `Session::costs()` is `/nf scripts`' list, every room's, the most expensive
+  first, with subscriptions and tasks (`Scripts::held`) and the bytes its script's memory key holds (per key, so a
+  centity's instances each show the script's). **Rooms**: each entry has its room's label (`Instance::room_label`: none
+  for the main room, `room <key>`, else `room <number>`) and its package; scope numbers and memory categories are per
+  Lua state, so a sum over rooms counts a category once per room (the metrics' `(room, category)`). The profiler names a
+  room's scopes and scripts after its label as the log does (`session.rs`'s `in_room`), so the bridge's `profiler`
+  stream and the editor need nothing new; a tick's `top` is every room's (`Profiler::scopes` adds each room's).
 - **Phases**: Rust's tick has three, `scripts` (timers, async values, `tick` handlers), `services` (each service's share
   a part, `services/<name>`) and `accounts`. Kotlin's eight `TickPhase`s don't exist on the Rust runtime.
 - **The profiler** is `ServerEvents`' (it outlives sessions; `set_profiler` hands the adapter's, writing into the plugin's

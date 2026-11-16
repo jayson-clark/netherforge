@@ -96,7 +96,7 @@ impl GameContext {
     /// `pack`, an `onDemand` pack the calling script named, as the server names it; an error when it isn't one.
     fn on_demand_pack(&self, pack: &str) -> ApiResult<String> {
         let name = self.with_names(|names| names.resource("resource_pack", pack))?;
-        let packs = self.shared.packs.borrow();
+        let packs = self.shared.instance.packs.borrow();
         if packs.on_demand_files.contains(&name) {
             return Ok(name);
         }
@@ -109,9 +109,10 @@ impl GameContext {
         }))
     }
 
-    /// Their UUID while they're online.
+    /// Their UUID while they're online in this room: in another, they're as good as offline here.
     fn player_online(&self, this: &handles::Player) -> Option<Uuid> {
-        parse_uuid(&this.id).filter(|id| self.players().get(*id).is_some())
+        parse_uuid(&this.id)
+            .filter(|id| self.shared.reaches(*id) && self.players().get(*id).is_some())
     }
 
     fn player_holder(&self, this: &handles::Player) -> Option<crate::stats::Holder> {
@@ -187,7 +188,7 @@ impl GameContext {
     /// That the calling package allows `node` in its `netherforge.json` (Kotlin's `checkPermission`); code no
     /// package's scope runs needs every package to.
     fn check_permission(&self, node: &str, what: &str) -> ApiResult<()> {
-        let state = self.shared.permissions.borrow();
+        let state = self.shared.instance.permissions.borrow();
         let Some(scope) = self.scripts.host().running_scope() else {
             if !state.allows.is_empty() && state.allows.values().all(|a| a.allows_permission(node))
             {
@@ -393,7 +394,9 @@ impl PlayerApi for GameContext {
             .is_some_and(|id| self.players().set_display_name(id, text.0)))
     }
     fn send_message(&self, this: &handles::Player, text: values::Text) -> ApiResult<bool> {
-        Ok(parse_uuid(&this.id).is_some_and(|id| self.players().message(id, text.0)))
+        Ok(self
+            .player_online(this)
+            .is_some_and(|id| self.players().message(id, text.0)))
     }
     /// Drawn in the middle of their HUD's line while they have one; else sent as it is.
     fn send_actionbar(&self, this: &handles::Player, text: values::Text) -> ApiResult<bool> {
@@ -494,7 +497,7 @@ impl PlayerApi for GameContext {
         ))
     }
     fn run(&self, this: &handles::Player, command: String) -> ApiResult<bool> {
-        Ok(parse_uuid(&this.id).is_some_and(|id| {
+        Ok(self.player_online(this).is_some_and(|id| {
             self.players()
                 .run_command(id, command.strip_prefix('/').unwrap_or(&command).to_owned())
         }))
@@ -525,6 +528,7 @@ impl PlayerApi for GameContext {
         let id = anyone(this)?;
         Ok(self
             .shared
+            .instance
             .permissions
             .borrow()
             .nodes
@@ -1150,7 +1154,12 @@ impl PlayerApi for GameContext {
         let Some(uuid) = self.player_online(this) else {
             return Ok(None);
         };
-        Ok(self.shared.packs.borrow().status(uuid, name.as_deref()))
+        Ok(self
+            .shared
+            .instance
+            .packs
+            .borrow()
+            .status(uuid, name.as_deref()))
     }
     fn push_resource_pack(&self, this: &handles::Player, pack: String) -> ApiResult<bool> {
         let name = self.on_demand_pack(&pack)?;
@@ -1159,6 +1168,7 @@ impl PlayerApi for GameContext {
         };
         Ok(self
             .shared
+            .instance
             .packs
             .borrow_mut()
             .push(&*self.shared.platform, uuid, &name))
@@ -1170,6 +1180,7 @@ impl PlayerApi for GameContext {
         };
         Ok(self
             .shared
+            .instance
             .packs
             .borrow_mut()
             .pop(&*self.shared.platform, uuid, &name))

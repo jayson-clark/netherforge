@@ -206,6 +206,19 @@ impl NfTeamsApi for Unported {
     fn all(&self, caller: &Caller) -> ApiResult<Vec<handles::Team>> { unported("nf.teams.all") }
 }
 
+impl NfRoomsApi for Unported {
+    #[allow(unused_variables)]
+    fn current(&self, caller: &Caller) -> ApiResult<handles::Room> { unported("nf.rooms.current") }
+    #[allow(unused_variables)]
+    fn main(&self, caller: &Caller) -> ApiResult<handles::Room> { unported("nf.rooms.main") }
+    #[allow(unused_variables)]
+    fn all(&self, caller: &Caller) -> ApiResult<Vec<handles::Room>> { unported("nf.rooms.all") }
+    #[allow(unused_variables)]
+    fn get(&self, caller: &Caller, id: i64) -> ApiResult<Option<handles::Room>> { unported("nf.rooms.get") }
+    #[allow(unused_variables)]
+    fn open(&self, caller: &Caller, options: Option<shapes::RoomOptions>) -> ApiResult<handles::Room> { unported("nf.rooms.open") }
+}
+
 impl NfScheduleApi for Unported {
     #[allow(unused_variables)]
     fn daily(&self, caller: &Caller, time: String, callback: Function, options: Option<shapes::ScheduleOptions>) -> ApiResult<handles::Schedule> { unported("nf.schedule.daily") }
@@ -1744,6 +1757,33 @@ impl TeamApi for Unported {
     fn set_collision(&self, this: &handles::Team, rule: String) -> ApiResult<bool> { unported("Team:set_collision") }
     #[allow(unused_variables)]
     fn remove(&self, this: &handles::Team) -> ApiResult<bool> { unported("Team:remove") }
+}
+
+impl RoomApi for Unported {
+    #[allow(unused_variables)]
+    fn id(&self, this: &handles::Room) -> ApiResult<i64> { unported("Room:id") }
+    #[allow(unused_variables)]
+    fn key(&self, this: &handles::Room) -> ApiResult<Option<String>> { unported("Room:key") }
+    #[allow(unused_variables)]
+    fn is_kept(&self, this: &handles::Room) -> ApiResult<bool> { unported("Room:is_kept") }
+    #[allow(unused_variables)]
+    fn is_main(&self, this: &handles::Room) -> ApiResult<bool> { unported("Room:is_main") }
+    #[allow(unused_variables)]
+    fn state(&self, this: &handles::Room) -> ApiResult<String> { unported("Room:state") }
+    #[allow(unused_variables)]
+    fn players(&self, this: &handles::Room) -> ApiResult<Vec<handles::Player>> { unported("Room:players") }
+    #[allow(unused_variables)]
+    fn worlds(&self, this: &handles::Room) -> ApiResult<Vec<handles::World>> { unported("Room:worlds") }
+    #[allow(unused_variables)]
+    fn start(&self, this: &handles::Room) -> ApiResult<bool> { unported("Room:start") }
+    #[allow(unused_variables)]
+    fn finish(&self, this: &handles::Room) -> ApiResult<bool> { unported("Room:finish") }
+    #[allow(unused_variables)]
+    fn close(&self, this: &handles::Room) -> ApiResult<bool> { unported("Room:close") }
+    #[allow(unused_variables)]
+    fn send(&self, this: &handles::Room, player: handles::Player) -> ApiResult<bool> { unported("Room:send") }
+    #[allow(unused_variables)]
+    fn give_world(&self, this: &handles::Room, world: handles::World) -> ApiResult<bool> { unported("Room:give_world") }
 }
 
 impl DatabaseApi for Unported {

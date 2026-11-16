@@ -490,7 +490,7 @@ fn real(path: &Path) -> Option<PathBuf> {
 
 impl GameContext {
     fn with_files<R>(&self, f: impl FnOnce(&mut ScriptFiles) -> R) -> Option<R> {
-        self.shared.files.borrow_mut().as_mut().map(f)
+        self.shared.instance.files.borrow_mut().as_mut().map(f)
     }
 
     /// The handle's full path, checked again: handles are only made from normalized paths.

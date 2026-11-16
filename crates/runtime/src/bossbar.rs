@@ -79,7 +79,6 @@ impl Bar {
 /// The session's boss bars and sidebars.
 #[derive(Default)]
 pub struct Bars {
-    next: i32,
     bars: BTreeMap<i32, Bar>,
     sidebars: HashMap<Uuid, Sidebar>,
 }
@@ -237,8 +236,9 @@ impl NfBossbarsApi for GameContext {
             style: options.style.unwrap_or_else(|| "progress".into()),
         };
         let mut bars = self.shared.bars.borrow_mut();
-        bars.next += 1;
-        let id = bars.next;
+        // The server's boss bars are numbered for every room at once.
+        let id = self.shared.instance.next_bar.get() + 1;
+        self.shared.instance.next_bar.set(id);
         let bar = Bar {
             scope: caller.scope,
             look,
@@ -564,8 +564,23 @@ impl Service for BarsService {
         }
     }
 
+    /// Their sidebar is forgotten. Moving to another room, they stop seeing this room's bars and sidebar too (the
+    /// server does that for a player who leaves it); they're still the bars' viewers, should they come back.
     fn player_quit(&self, player: &PlayerRef) {
-        self.shared.bars.borrow_mut().sidebars.remove(&player.uuid);
+        let platform = &*self.shared.platform;
+        let mut bars = self.shared.bars.borrow_mut();
+        let sidebar = bars.sidebars.remove(&player.uuid);
+        if !self.shared.instance.is_moving(player.uuid) {
+            return;
+        }
+        for (id, bar) in &bars.bars {
+            if bar.viewers.contains(&player.uuid) {
+                platform.boss_bars().hide(*id, player.uuid);
+            }
+        }
+        if sidebar.is_some_and(|s| s.visible) {
+            platform.sidebars().hide(player.uuid);
+        }
     }
 
     /// A scope is going: its bars go with it.

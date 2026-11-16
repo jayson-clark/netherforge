@@ -621,8 +621,9 @@ impl<P: Fn(&BoxState) -> bool> Flood<'_, P> {
 }
 
 impl WorldApi for GameContext {
+    /// As the room's scripts call it: a room's own world without what the server adds to its name.
     fn name(&self, this: &handles::World) -> ApiResult<String> {
-        Ok(this.name.clone())
+        Ok(self.shared.script_world(&this.name))
     }
 
     fn exists(&self, this: &handles::World) -> ApiResult<bool> {
@@ -1179,12 +1180,15 @@ impl WorldApi for GameContext {
         };
         // It reads only what the world's generator reads, and can take seconds: on its lane, off the main thread.
         let (send, receive) = std::sync::mpsc::channel();
-        self.shared.lane(BIOME_SEARCH_LANE).submit(move || {
-            let found = search
-                .run()
-                .ok_or_else(|| format!("no {biome} within {radius} blocks"));
-            let _ = send.send(found);
-        });
+        self.shared
+            .instance
+            .lane(BIOME_SEARCH_LANE)
+            .submit(move || {
+                let found = search
+                    .run()
+                    .ok_or_else(|| format!("no {biome} within {radius} blocks"));
+                let _ = send.send(found);
+            });
         let reply = crate::http::Reply(receive);
         Ok(Box::pin(async move {
             let at = reply.await.map_err(ApiError)?;
@@ -1945,23 +1949,35 @@ fn filter_of(options: Option<&shapes::QueryOptions>) -> ApiResult<QueryFilter> {
 }
 
 impl NfWorldsApi for GameContext {
+    /// The room's worlds, its default first.
     fn all(&self, _: &Caller) -> ApiResult<Vec<handles::World>> {
         let worlds = self.platform().worlds();
-        let default = worlds.default_world();
+        let default = self.shared.default_world();
         let mut names = vec![default.clone()];
-        names.extend(worlds.names().into_iter().filter(|n| *n != default));
+        names.extend(
+            worlds
+                .names()
+                .into_iter()
+                .filter(|n| *n != default && self.shared.owns_world(n)),
+        );
         Ok(names
             .into_iter()
             .map(|name| handles::World { name })
             .collect())
     }
 
+    /// The room's world of that name: one it was given by that name, or in a room beside the main one its own (none
+    /// while it has none by that name).
     fn get(&self, _: &Caller, name: String) -> ApiResult<Option<handles::World>> {
-        Ok(self
-            .platform()
-            .worlds()
-            .exists(name.clone())
-            .then_some(handles::World { name }))
+        let name = if self.shared.owns_world(&name) {
+            name
+        } else {
+            self.shared.real_world(&name)
+        };
+        Ok(
+            (self.platform().worlds().exists(name.clone()) && self.shared.owns_world(&name))
+                .then_some(handles::World { name }),
+        )
     }
 
     fn create(
@@ -1970,15 +1986,16 @@ impl NfWorldsApi for GameContext {
         name: String,
         options: Option<shapes::WorldCreateOptions>,
     ) -> ApiResult<Option<handles::World>> {
-        self.managed().create(&name, options)
+        self.managed()
+            .create(&self.shared.real_world(&name), options)
     }
 
     fn load(&self, _: &Caller, name: String) -> ApiResult<Option<handles::World>> {
-        self.managed().load(&name)
+        self.managed().load(&self.shared.real_world(&name))
     }
 
     fn copy(&self, _: &Caller, map: String, name: String) -> ApiResult<Pending<handles::World>> {
-        self.managed().copy(&map, &name)
+        self.managed().copy(&map, &self.shared.real_world(&name))
     }
 
     fn import(
@@ -1988,13 +2005,16 @@ impl NfWorldsApi for GameContext {
         name: String,
         options: Option<shapes::WorldImportOptions>,
     ) -> ApiResult<Pending<handles::World>> {
-        self.managed()
-            .import(&folder, &name, options.and_then(|o| o.terrain))
+        self.managed().import(
+            &folder,
+            &self.shared.real_world(&name),
+            options.and_then(|o| o.terrain),
+        )
     }
 
     fn default(&self, _: &Caller) -> ApiResult<handles::World> {
         Ok(handles::World {
-            name: self.platform().worlds().default_world(),
+            name: self.shared.default_world(),
         })
     }
 }

@@ -40,10 +40,11 @@ pub fn is_night(time_of_day: i64) -> bool {
 }
 
 /// Dusk and dawn.
-#[derive(Default)]
 pub struct DaylightService {
+    /// The room it raises dusk and dawn in, for its own worlds.
+    pub shared: std::rc::Rc<crate::shared::Shared>,
     /// Whether each world was at night when last looked at, while something listens.
-    night: RefCell<HashMap<String, bool>>,
+    pub night: RefCell<HashMap<String, bool>>,
 }
 
 impl DaylightService {
@@ -67,6 +68,9 @@ impl Service for DaylightService {
         }
         let worlds = platform.worlds();
         for world in worlds.names() {
+            if !self.shared.owns_world(&world) {
+                continue;
+            }
             let Some(full) = worlds.full_time(world.clone()) else {
                 continue;
             };
@@ -169,6 +173,10 @@ fn set_rule(platform: &dyn Platform, world: &str, rule: &str, value: &serde_json
 impl Service for SpawnRatesService {
     fn name(&self) -> &'static str {
         "spawn rates"
+    }
+    /// Once per server, in the main room.
+    fn instance_wide(&self) -> bool {
+        true
     }
 
     fn start(&self, _room: &Room, project: &Define) {

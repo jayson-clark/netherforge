@@ -63,7 +63,7 @@ What `nf.on` listens for.
 
 | Event | Payload | |
 | --- | --- | --- |
-| `player_chat` | [PlayerChatEvent](types.md#playerchatevent) | A player is saying something in chat. `event:cancel()` stops anyone seeing it; assign `event.message` to change what they said, or `event.format` to change how the line looks. Handlers run on the main thread while the chat waits for them, so keep them quick. **Cancellable.** Writable: `message`, `format`. |
+| `player_chat` | [PlayerChatEvent](types.md#playerchatevent) | A player is saying something in chat. `event:cancel()` stops anyone seeing it; assign `event.message` to change what they said, or `event.format` to change how the line looks. Handlers run on the main thread while the chat waits for them, so keep them quick. **Cancellable.** Writable: `message`, `format`, `recipients`. |
 | `player_command` | [PlayerCommandEvent](types.md#playercommandevent) | A player typed a command (any command: Minecraft's, a plugin's or a script's), before it runs. `event:cancel()` stops it running. **Cancellable.** |
 
 ### Players: moving
@@ -211,6 +211,14 @@ What `nf.on` listens for.
 | `network_player_join` | [NetworkPlayerEvent](types.md#networkplayerevent) | A player joined the network, on any server of it, this one included (where `player_join` is heard too). |
 | `network_player_switch` | [NetworkPlayerSwitchEvent](types.md#networkplayerswitchevent) | A player went from one server of the network to another, whoever moved them (a command on the proxy, a script). |
 | `network_player_quit` | [NetworkPlayerEvent](types.md#networkplayerevent) | A player left the network: they were on `event.player.server` and are now on none. |
+
+### This room
+
+| Event | Payload | |
+| --- | --- | --- |
+| `room_start` | [RoomEvent](types.md#roomevent) | This room's match began: `room:start()` was called (by this room's scripts, another room's, or the server's owner through the admin API). Before it, the room is open: players can be sent in and the world got ready. |
+| `room_finish` | [RoomEvent](types.md#roomevent) | This room's match ended: `room:finish()` was called. Its players are still here; the room closes when it's told to (`room:close()`), which is where a game says who won and sends everyone on. |
+| `room_close` | [RoomEvent](types.md#roomevent) | This room is about to close: its scripts' last chance, before its players go back to the main room and its Lua state ends. Afterwards the worlds its scripts made or loaded are unloaded, saved for a kept room (`RoomOptions.keep`) and deleted for the rest, and those it was given are the main room's. |
 
 #### Example: nf tick
 
@@ -408,6 +416,16 @@ end)
 nf.on("player_arrive", function(event)
   if event.data and event.data.kit == "archer" then
     event.player:give_item({ kind = "minecraft:bow" })
+  end
+end)
+```
+
+#### Example: nf room_start
+
+```lua
+nf.on("room_start", function(event)
+  for _, player in ipairs(nf.players.online()) do
+    player:send_title("<green>Go!")
   end
 end)
 ```
@@ -695,7 +713,7 @@ What [Player](player.md) listens for.
 
 | Event | Payload | |
 | --- | --- | --- |
-| `chat` | [PlayerChatEvent](types.md#playerchatevent) | A player is saying something in chat. `event:cancel()` stops anyone seeing it; assign `event.message` to change what they said, or `event.format` to change how the line looks. Handlers run on the main thread while the chat waits for them, so keep them quick. Only this player's: heard before `nf.on("player_chat")`, with the same event, so `event:stop()` keeps it from there. **Cancellable.** Bubbles. Writable: `message`, `format`. |
+| `chat` | [PlayerChatEvent](types.md#playerchatevent) | A player is saying something in chat. `event:cancel()` stops anyone seeing it; assign `event.message` to change what they said, or `event.format` to change how the line looks. Handlers run on the main thread while the chat waits for them, so keep them quick. Only this player's: heard before `nf.on("player_chat")`, with the same event, so `event:stop()` keeps it from there. **Cancellable.** Bubbles. Writable: `message`, `format`, `recipients`. |
 | `command` | [PlayerCommandEvent](types.md#playercommandevent) | A player typed a command (any command: Minecraft's, a plugin's or a script's), before it runs. `event:cancel()` stops it running. Only this player's: heard before `nf.on("player_command")`, with the same event, so `event:stop()` keeps it from there. **Cancellable.** Bubbles. |
 
 ### Moving

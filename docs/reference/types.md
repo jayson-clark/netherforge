@@ -182,6 +182,16 @@ Has the fields and methods of [Event](#event) too.
 | `player` | [`NetworkPlayer`](types.md#networkplayer) | Who, and the server they are on now. |
 | `previous` | `string` | The server they came from. |
 
+### RoomEvent {#roomevent}
+
+Something happened to this room.
+
+Has the fields and methods of [Event](#event) too.
+
+| Field | Type | |
+| --- | --- | --- |
+| `room` | [`Room`](room.md) | The room: this one. |
+
 ## Centities and effects
 
 ### EventOptions {#eventoptions}
@@ -959,7 +969,7 @@ Has the fields and methods of [Event](#event) too.
 | --- | --- | --- |
 | `player` | [`Player`](player.md) | Who it was. |
 | `first_join` | `boolean` | Whether they have never played here before. |
-| `message` | [`Text`](index.md#types)`?` | The join message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none. |
+| `message` | [`Text`](index.md#types)`?` | The join message everyone in the player's room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none. |
 
 ### PlayerResourcePackStatusEvent {#playerresourcepackstatusevent}
 
@@ -982,7 +992,7 @@ Has the fields and methods of [Event](#event) too.
 | Field | Type | |
 | --- | --- | --- |
 | `player` | [`Player`](player.md) | Who it was. |
-| `message` | [`Text`](index.md#types)`?` | The leave message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none. |
+| `message` | [`Text`](index.md#types)`?` | The leave message everyone in the player's room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none. |
 
 ### PlayerChatEvent {#playerchatevent}
 
@@ -995,6 +1005,7 @@ Has the fields and methods of [Event](#event) too.
 | `player` | [`Player`](player.md) | Who it was. |
 | `message` | `string` | What they said, as plain text: never MiniMessage, so it can be shown as it is. Writable: assign other text to change what everyone sees. |
 | `format` | [`Text`](index.md#types) | How the line is shown, as MiniMessage, where `<player>` is the player's display name and `<message>` what they said (both shown as they are, never read as tags). Starts as Minecraft's own look, `"\\<<player>> <message>"`. Writable: assign another, like `"<gray><player>: <white><message>"`. |
+| `recipients` | [`Player`](player.md)`[]` | Who sees the line: every player in the speaker's room to begin with (everyone online, on a server that runs one room). Writable: assign a list to show it to only those players. The server's console always sees it. |
 
 ### PlayerInteractEvent {#playerinteractevent}
 
@@ -3205,6 +3216,17 @@ Has the fields and methods of [Event](#event) too.
 | Field | Type | |
 | --- | --- | --- |
 | `map` | [`NetworkMap`](networkmap.md) | The map. |
+
+## Rooms
+
+### RoomOptions {#roomoptions}
+
+How `nf.rooms.open` opens a room.
+
+| Field | Type | |
+| --- | --- | --- |
+| `key` | `string?` | What it's for (an owner's id, a match's): the room's identity. A player the server's owner sends to a key goes into the room open with it, and its worlds are named after it. Two rooms can't be open with the same key at once. |
+| `keep` | `boolean?` | Whether what it made outlasts it, for a room opened again with the same key to find (an owner's world, a party's): its worlds are saved when it closes rather than deleted, and its `nf.data` tables are kept under its key. A match's room isn't kept (the default): its worlds and `nf.data` tables go with it, and the worlds of one the server went without closing (killed mid-match) are deleted as it next starts. A kept room needs a `key`. |
 
 ## Testing
 

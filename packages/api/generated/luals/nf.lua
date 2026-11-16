@@ -6,7 +6,7 @@
 -- project's modules: "Lua.runtime.path": ["modules/?.lua", "modules/?/init.lua"].
 -- The sandbox removes io, os, package, load, loadstring, dofile, loadfile, debug, collectgarbage, warn, java.
 
----@alias nf.Event "tick"|"unload"|"player_join"|"player_resource_pack_status"|"player_quit"|"player_chat"|"player_interact"|"player_interact_entity"|"player_move"|"player_teleport"|"player_change_world"|"player_death"|"player_respawn"|"player_drop_item"|"player_pickup_item"|"player_use_item"|"player_consume_item"|"player_swap_hands"|"player_sneak"|"player_command"|"block_break"|"block_place"|"entity_damage"|"entity_death"|"entity_spawn"|"world_dusk"|"world_dawn"|"player_input"|"player_change_slot"|"player_swing"|"player_sprint"|"player_fly"|"player_jump"|"player_change_game_mode"|"player_change_food"|"player_gain_experience"|"player_change_level"|"player_kick"|"player_complete_advancement"|"player_stop_using_item"|"player_break_item"|"entity_heal"|"projectile_launch"|"projectile_hit"|"entity_shoot_bow"|"entity_target"|"entity_explode"|"block_explode"|"entity_combust"|"entity_change_effect"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"world_load"|"world_unload"|"entity_mount"|"entity_dismount"|"vehicle_move"|"vehicle_damage"|"vehicle_destroy"|"player_open_inventory"|"player_close_inventory"|"player_click_inventory"|"player_drag_inventory"|"player_craft"|"player_prepare_craft"|"player_prepare_anvil"|"player_prepare_smithing"|"player_prepare_grindstone"|"player_enchant_item"|"furnace_smelt"|"server_list_ping"|"centity_click"|"recipe_craft"|"item_view"|"centity_natural_spawn"|"menu_open"|"menu_close"|"menu_click"|"dialog_press"|"setting_changed"|"network_connect"|"network_disconnect"|"network_state"|"network_server_connect"|"network_server_disconnect"|"network_player_join"|"network_player_switch"|"network_player_quit"|"player_arrive"|string
+---@alias nf.Event "tick"|"unload"|"player_join"|"player_resource_pack_status"|"player_quit"|"player_chat"|"player_interact"|"player_interact_entity"|"player_move"|"player_teleport"|"player_change_world"|"player_death"|"player_respawn"|"player_drop_item"|"player_pickup_item"|"player_use_item"|"player_consume_item"|"player_swap_hands"|"player_sneak"|"player_command"|"block_break"|"block_place"|"entity_damage"|"entity_death"|"entity_spawn"|"world_dusk"|"world_dawn"|"player_input"|"player_change_slot"|"player_swing"|"player_sprint"|"player_fly"|"player_jump"|"player_change_game_mode"|"player_change_food"|"player_gain_experience"|"player_change_level"|"player_kick"|"player_complete_advancement"|"player_stop_using_item"|"player_break_item"|"entity_heal"|"projectile_launch"|"projectile_hit"|"entity_shoot_bow"|"entity_target"|"entity_explode"|"block_explode"|"entity_combust"|"entity_change_effect"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"world_load"|"world_unload"|"entity_mount"|"entity_dismount"|"vehicle_move"|"vehicle_damage"|"vehicle_destroy"|"player_open_inventory"|"player_close_inventory"|"player_click_inventory"|"player_drag_inventory"|"player_craft"|"player_prepare_craft"|"player_prepare_anvil"|"player_prepare_smithing"|"player_prepare_grindstone"|"player_enchant_item"|"furnace_smelt"|"server_list_ping"|"centity_click"|"recipe_craft"|"item_view"|"centity_natural_spawn"|"menu_open"|"menu_close"|"menu_click"|"dialog_press"|"setting_changed"|"network_connect"|"network_disconnect"|"network_state"|"network_server_connect"|"network_server_disconnect"|"network_player_join"|"network_player_switch"|"network_player_quit"|"player_arrive"|"room_start"|"room_finish"|"room_close"|string
 ---@alias Centity.Event "spawn"|"remove"|"tick"|"click"|"animation_start"|"animation_end"|"chunk_load"|"chunk_unload"|"hit"|"bounce"|"stick"|"flight_end"|"damage"|"death"|"land"|"bump"|"touch"|"path_end"|"buff_add"|"buff_end"|string
 ---@alias Node.Event "click"|"collide"|"wake"|"sleep"
 ---@alias Entity.Event "damage"|"interact"|"hit"|"explode"|"combust"|"mount"|"dismount"
@@ -60,7 +60,7 @@
 --- MiniMessage a player reads, like `"<green>Done!"`: a string. A `<glyph:pack/key>` tag in it names a glyph the way the script's own files would: one of its own package's resource packs bare, or `<glyph:namespace:pack/key>` for one a package it depends on exports. The tag means that glyph wherever and whenever the text is shown, whoever shows it; one naming a glyph the script can't use draws nothing, and the server log says why. Text handed back to a script names its glyphs the same way.
 ---@alias Text string
 
---- Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.images`, `nf.files`, `nf.text`, `nf.looks`, `nf.packs`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
+--- Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.rooms`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.images`, `nf.files`, `nf.text`, `nf.looks`, `nf.packs`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
 ---@class nf
 ---@field server nf.server The server itself: its clock, its performance, its version, its settings (players, message of the day, whitelist), and saying or running things as the console.
 ---@field commands nf.commands Slash commands a module adds to the server for as long as it runs, with typed arguments, tab completion and usage messages from their declaration.
@@ -78,6 +78,7 @@
 ---@field loot nf.loot Loot tables: the project's own (`loot/<id>.json`) and the game's. A roll picks from each of a table's pools, weighing its entries against each other, and gives the items it picked. The same `seed` always gives the same items (the editor rolls the same way). A table the project doesn't have, or that the game doesn't, is an error; so is a game table that needs something the roll doesn't say (a mob's table needs the mob, as `looted`).
 ---@field bossbars nf.bossbars Boss bars: bars across the top of players' screens.
 ---@field teams nf.teams The project's scoreboard teams: prefixes and suffixes on names, name colours and glow colours, friendly fire, name tags and collision.
+---@field rooms nf.rooms The server's rooms. Each runs the project in a Lua state of its own, with its own players and worlds, and `nf` in a room is that room: `nf.players.online()`, broadcasts, events, timers, teams and the rest are its own. What's shared between rooms is the store's tables of players and centities, the databases, the network, and these functions.
 ---@field schedule nf.schedule Runs a function at a time of day, every day or week, or by a cron expression: real time, as opposed to ticks (`nf.after`, `nf.every`). Times are in the server owner's time zone (`schedules.time-zone` in `config.yml`, the server's own zone by default), not the player's. Daylight saving follows the zone's rules. A daily or weekly time the clocks skip runs the same distance after the gap begins (`"02:30"` runs at 03:30 on the day clocks jump from 02:00 to 03:00), and one that happens twice runs the first time only. A cron expression matches the clock as it reads: a time the clocks skip doesn't happen that day, one for a single time of day that happens twice (`"30 1 * * *"`) runs the first time only, and one that matches every half hour keeps matching through an hour that repeats. A schedule belongs to the script that made it and ends when that script unloads (a reload, the server stopping), so the script's body makes it again. It's checked once a tick, so a callback runs within a tick (50 ms) of its time. A run the server missed (it was off at the time) is skipped, unless the schedule has `catch_up = true` and an `id`: then it runs once, on start. What a schedule last ran is kept in the server's store by `id`, per package.
 ---@field economy nf.economy Players' money, as the server's economy plugin keeps it, through [Vault](https://www.spigotmc.org/resources/vault.34315/): whichever economy is registered with it (EssentialsX, CMI, …) answers, so a project never names one. Needs Vault and an economy plugin. The plugin has to be on the server and enabled: a package that declares it (`requires`) while it isn't is a problem on the project's problem list until it is, and calling without it is an error. A plugin that is enabled after NetherForge counts from then on. The economy is looked up when it's asked, so one that registers late (after NetherForge starts) works from then on. Amounts are plain numbers in the economy's own currency; a player who is offline works as well as one who is online.
 ---@field placeholders nf.placeholders Placeholders, through [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/): fill in the `%player_name%`-style placeholders every plugin offers, and offer your own as `%<namespace>_<key>%` to every plugin that reads them (scoreboards, chat formats, holograms). Needs PlaceholderAPI. The plugin has to be on the server and enabled: a package that declares it (`requires`) while it isn't is a problem on the project's problem list until it is, and calling without it is an error. A plugin that is enabled after NetherForge counts from then on.
@@ -214,6 +215,9 @@ nf = {}
 ---@overload fun(event: "network_player_switch", handler: fun(event: NetworkPlayerSwitchEvent)): Subscription
 ---@overload fun(event: "network_player_quit", handler: fun(event: NetworkPlayerEvent)): Subscription
 ---@overload fun(event: "player_arrive", handler: fun(event: PlayerArriveEvent)): Subscription
+---@overload fun(event: "room_start", handler: fun(event: RoomEvent)): Subscription
+---@overload fun(event: "room_finish", handler: fun(event: RoomEvent)): Subscription
+---@overload fun(event: "room_close", handler: fun(event: RoomEvent)): Subscription
 function nf.on(event, handler, options) end
 
 --- Like `nf.on`, but the handler runs only the next time the event happens, then stops listening.
@@ -327,6 +331,9 @@ function nf.on(event, handler, options) end
 ---@overload fun(event: "network_player_switch", handler: fun(event: NetworkPlayerSwitchEvent)): Subscription
 ---@overload fun(event: "network_player_quit", handler: fun(event: NetworkPlayerEvent)): Subscription
 ---@overload fun(event: "player_arrive", handler: fun(event: PlayerArriveEvent)): Subscription
+---@overload fun(event: "room_start", handler: fun(event: RoomEvent)): Subscription
+---@overload fun(event: "room_finish", handler: fun(event: RoomEvent)): Subscription
+---@overload fun(event: "room_close", handler: fun(event: RoomEvent)): Subscription
 function nf.once(event, handler) end
 
 --- Raises a custom event for every script: every `nf.on(event)` handler hears it now, in the order they were registered, before this returns. The payload is handed to them as it is, not copied, so a field a handler assigns is there for the caller to read afterwards. A name without a `:` is an error: built-in events are the server's to raise.
@@ -481,6 +488,9 @@ function nf.wait_until(predicate, timeout) end
 ---@overload fun(handle: nf, event: "network_player_switch", filter?: fun(event: NetworkPlayerSwitchEvent): boolean): NetworkPlayerSwitchEvent
 ---@overload fun(handle: nf, event: "network_player_quit", filter?: fun(event: NetworkPlayerEvent): boolean): NetworkPlayerEvent
 ---@overload fun(handle: nf, event: "player_arrive", filter?: fun(event: PlayerArriveEvent): boolean): PlayerArriveEvent
+---@overload fun(handle: nf, event: "room_start", filter?: fun(event: RoomEvent): boolean): RoomEvent
+---@overload fun(handle: nf, event: "room_finish", filter?: fun(event: RoomEvent): boolean): RoomEvent
+---@overload fun(handle: nf, event: "room_close", filter?: fun(event: RoomEvent): boolean): RoomEvent
 ---@overload fun(handle: Centity, event: "spawn", filter?: fun(event: CentityEvent): boolean): CentityEvent
 ---@overload fun(handle: Centity, event: "remove", filter?: fun(event: CentityEvent): boolean): CentityEvent
 ---@overload fun(handle: Centity, event: "tick", filter?: fun(event: TickEvent): boolean): TickEvent
@@ -741,7 +751,7 @@ nf.players = {}
 ---@return Player[]
 function nf.players.online() end
 
---- A player by name (any case) or UUID: anyone who has ever joined this server, online or not, or `nil` for someone who never has. For someone offline, `exists()` is `false` and what needs them in the world (`position()`, `send_message`) answers `nil` or `false` until they come back.
+--- A player by name (any case) or UUID: anyone who has ever joined this server, online or not, or `nil` for someone who never has. For someone offline, `exists()` is `false` and what needs them in the world (`position()`, `send_message`) answers `nil` or `false` until they come back. Someone in another room (`nf.rooms`) is as good as offline here.
 ---@param name_or_id string A name, or a UUID like `player:id()`.
 ---@return Player?
 function nf.players.get(name_or_id) end
@@ -1022,6 +1032,32 @@ function nf.teams.get(name) end
 --- Every team the project has now, in the order they were made. Teams made with `/team` or by other plugins aren't among them.
 ---@return Team[]
 function nf.teams.all() end
+
+--- The server's rooms. Each runs the project in a Lua state of its own, with its own players and worlds, and `nf` in a room is that room: `nf.players.online()`, broadcasts, events, timers, teams and the rest are its own. What's shared between rooms is the store's tables of players and centities, the databases, the network, and these functions.
+---@class nf.rooms
+nf.rooms = {}
+
+--- The room this script runs in.
+---@return Room
+function nf.rooms.current() end
+
+--- The main room.
+---@return Room
+function nf.rooms.main() end
+
+--- Every room open now (opening ones too), the main room first.
+---@return Room[]
+function nf.rooms.all() end
+
+--- Room `id`, or `nil` when no room open has it.
+---@param id integer
+---@return Room?
+function nf.rooms.get(id) end
+
+--- Opens a room: the project starts in it, in a Lua state of its own. It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script. It holds no world and no player until it's given them (`room:give_world`, `room:send`), or its scripts make or load a world.
+---@param options? RoomOptions
+---@return Room
+function nf.rooms.open(options) end
 
 --- Runs a function at a time of day, every day or week, or by a cron expression: real time, as opposed to ticks (`nf.after`, `nf.every`). Times are in the server owner's time zone (`schedules.time-zone` in `config.yml`, the server's own zone by default), not the player's. Daylight saving follows the zone's rules. A daily or weekly time the clocks skip runs the same distance after the gap begins (`"02:30"` runs at 03:30 on the day clocks jump from 02:00 to 03:00), and one that happens twice runs the first time only. A cron expression matches the clock as it reads: a time the clocks skip doesn't happen that day, one for a single time of day that happens twice (`"30 1 * * *"`) runs the first time only, and one that matches every half hour keeps matching through an hour that repeats. A schedule belongs to the script that made it and ends when that script unloads (a reload, the server stopping), so the script's body makes it again. It's checked once a tick, so a callback runs within a tick (50 ms) of its time. A run the server missed (it was off at the time) is skipped, unless the schedule has `catch_up = true` and an `id`: then it runs once, on start. What a schedule last ran is kept in the server's store by `id`, per package.
 ---@class nf.schedule
@@ -1712,7 +1748,7 @@ function nf.test.advance(ticks) end
 function nf.test.player(name) end
 
 --- Raises a server-wide event as the server would, to the scripts: whoever listens to `event` with `nf.on` hears it, and, for an event the server raises about a player, an entity or a world, the handlers on that handle (`player:on("chat")`) hear it first, in the order the server uses. Each can `stop()` or `cancel()` it or set its writable fields. The few events the runtime stages itself (a death, damage, a click on a centity) reach `nf.on` handlers only. `payload` is what the event carries, the same table its handlers read (`event.player`, `event.message`): a field the event does not have is an error naming the fields. What the server would then do with a cancelled event is not simulated: read the result.
----@param event "tick"|"player_join"|"player_resource_pack_status"|"player_quit"|"player_chat"|"player_interact"|"player_interact_entity"|"player_move"|"player_teleport"|"player_change_world"|"player_death"|"player_respawn"|"player_drop_item"|"player_pickup_item"|"player_use_item"|"player_consume_item"|"player_swap_hands"|"player_sneak"|"player_command"|"block_break"|"block_place"|"entity_damage"|"entity_death"|"entity_spawn"|"world_dusk"|"world_dawn"|"player_input"|"player_change_slot"|"player_swing"|"player_sprint"|"player_fly"|"player_jump"|"player_change_game_mode"|"player_change_food"|"player_gain_experience"|"player_change_level"|"player_kick"|"player_complete_advancement"|"player_stop_using_item"|"player_break_item"|"entity_heal"|"projectile_launch"|"projectile_hit"|"entity_shoot_bow"|"entity_target"|"entity_explode"|"block_explode"|"entity_combust"|"entity_change_effect"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"world_load"|"world_unload"|"entity_mount"|"entity_dismount"|"vehicle_move"|"vehicle_damage"|"vehicle_destroy"|"player_open_inventory"|"player_close_inventory"|"player_click_inventory"|"player_drag_inventory"|"player_craft"|"player_prepare_craft"|"player_prepare_anvil"|"player_prepare_smithing"|"player_prepare_grindstone"|"player_enchant_item"|"furnace_smelt"|"server_list_ping"|"centity_click"|"recipe_craft"|"item_view"|"centity_natural_spawn"|"menu_open"|"menu_close"|"menu_click"|"dialog_press"|"setting_changed"|"network_connect"|"network_disconnect"|"network_state"|"network_server_connect"|"network_server_disconnect"|"network_player_join"|"network_player_switch"|"network_player_quit"|"player_arrive" The event's name, as `nf.on` takes it.
+---@param event "tick"|"player_join"|"player_resource_pack_status"|"player_quit"|"player_chat"|"player_interact"|"player_interact_entity"|"player_move"|"player_teleport"|"player_change_world"|"player_death"|"player_respawn"|"player_drop_item"|"player_pickup_item"|"player_use_item"|"player_consume_item"|"player_swap_hands"|"player_sneak"|"player_command"|"block_break"|"block_place"|"entity_damage"|"entity_death"|"entity_spawn"|"world_dusk"|"world_dawn"|"player_input"|"player_change_slot"|"player_swing"|"player_sprint"|"player_fly"|"player_jump"|"player_change_game_mode"|"player_change_food"|"player_gain_experience"|"player_change_level"|"player_kick"|"player_complete_advancement"|"player_stop_using_item"|"player_break_item"|"entity_heal"|"projectile_launch"|"projectile_hit"|"entity_shoot_bow"|"entity_target"|"entity_explode"|"block_explode"|"entity_combust"|"entity_change_effect"|"block_ignite"|"block_burn"|"block_spread"|"block_flow"|"block_grow"|"block_fade"|"block_form"|"leaves_decay"|"piston_extend"|"piston_retract"|"block_redstone"|"sign_change"|"block_start_break"|"block_drop_item"|"weather_change"|"thunder_change"|"lightning_strike"|"chunk_load"|"chunk_generated"|"chunk_unload"|"world_load"|"world_unload"|"entity_mount"|"entity_dismount"|"vehicle_move"|"vehicle_damage"|"vehicle_destroy"|"player_open_inventory"|"player_close_inventory"|"player_click_inventory"|"player_drag_inventory"|"player_craft"|"player_prepare_craft"|"player_prepare_anvil"|"player_prepare_smithing"|"player_prepare_grindstone"|"player_enchant_item"|"furnace_smelt"|"server_list_ping"|"centity_click"|"recipe_craft"|"item_view"|"centity_natural_spawn"|"menu_open"|"menu_close"|"menu_click"|"dialog_press"|"setting_changed"|"network_connect"|"network_disconnect"|"network_state"|"network_server_connect"|"network_server_disconnect"|"network_player_join"|"network_player_switch"|"network_player_quit"|"player_arrive"|"room_start"|"room_finish"|"room_close" The event's name, as `nf.on` takes it.
 ---@param payload? table The payload: its fields by name. Leave it out for an event that has none.
 ---@return RaisedEvent # Whether a handler cancelled it, and the event as the handlers left it.
 function nf.test.raise(event, payload) end
@@ -5049,6 +5085,60 @@ function Team:set_collision(rule) end
 ---@return boolean # `false` once it's gone already.
 function Team:remove() end
 
+--- A room of the server: one copy of the project with its own Lua state, its own players and its own worlds. The main room is always there (it holds every world and player no other room does, and it's the only one on a server that never opens another); the others are opened by `nf.rooms.open` or the server's owner, and closed once their match is over. A room's scripts reach nothing of another room's except through these methods. Once it has closed its methods answer `nil` or `false`.
+---@class Room
+local Room = {}
+
+--- Its number: `0` for the main room, then `1`, `2`... in the order rooms were opened, never used twice while the server runs.
+---@return integer
+function Room:id() end
+
+--- What it's for, as it was opened with it (an owner's id, a match's): `nil` for the main room and for a room opened without one.
+---@return string?
+function Room:key() end
+
+--- Whether what it made outlasts it (`RoomOptions.keep`): its worlds saved when it closes and its `nf.data` tables kept under its key. `false` for the main room, whose worlds and tables are the server's anyway.
+---@return boolean
+function Room:is_kept() end
+
+--- Whether it's the main room.
+---@return boolean
+function Room:is_main() end
+
+--- `"opening"` until the end of the tick it was opened in, then `"open"`, `"started"` once its match began, `"finished"` once it ended, and `"closed"` once it has gone. The main room is `"open"` until it starts.
+---@return "opening"|"open"|"started"|"finished"|"closed"
+function Room:state() end
+
+--- The players in it now. Empty once it has closed.
+---@return Player[]
+function Room:players() end
+
+--- The worlds it holds: those it was given or its scripts made or loaded. The main room's are every world no other room holds.
+---@return World[]
+function Room:worlds() end
+
+--- Begins its match: its scripts hear `room_start` (at the end of this tick for a room still opening, once it has). On a server in a network, the network's hub is told of a room with a key starting, finishing and closing (its admin stream's `room_state`), so a matchmaker that placed players in it knows when its match is under way and when it's gone, with nothing in the game's scripts of its own. `false` once it has started already, finished or closed.
+---@return boolean
+function Room:start() end
+
+--- Ends its match: its scripts hear `room_finish`. `false` unless it's open or started.
+---@return boolean
+function Room:finish() end
+
+--- Closes it: its scripts hear `room_close`, its players go back to the main room (as if they'd joined the server), its Lua state ends, the worlds its scripts made or loaded are unloaded (saved for a kept room, deleted for the rest) and those it was given are the main room's. It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script. `false` for the main room, and once it's closing or closed.
+---@return boolean
+function Room:close() end
+
+--- Moves a player into it: their room's scripts hear them quit and this room's hear them join, as if they'd left the server and come back. Their `player:data()` goes with them; their `player:session()` table is the room's, so it starts empty here. It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script. `false` when the player isn't online or the room is closing or closed.
+---@param player Player
+---@return boolean
+function Room:send(player) end
+
+--- Gives it a world: the world's blocks, entities and events are this room's from now on. `false` when the world isn't loaded or the room is closed.
+---@param world World
+---@return boolean
+function Room:give_world(world) end
+
 --- A database, from `nf.db()` or `nf.db('network')`. `nf.db()` is this package's own: one SQLite file per package, kept across restarts, which every other package (a dependency, or the project using one) never sees; its tables are made by the package's `migrations/NNN_name.sql` files, applied in order when the project loads. `nf.db('network')` (a name) is a connection to a MySQL or PostgreSQL server that the server's owner set up under `databases:` in the plugin's `config.yml`: shared by every package the owner lists for it, so give tables a name no other package would (`shop_scores`), create them yourself (`CREATE TABLE IF NOT EXISTS`: migrations belong to the package's own database only), and write the SQL in the server's dialect. The handle is the same either way: the same calls, `?` and `params`, rows and `value, err` answers. Every function is asynchronous (see `nf.task`): the work runs on a background thread, so a slow query never holds up the server, and one database runs its work in the order it was given, so a task's `db:execute` is always done before its next `db:query`. Use it from a task (`local rows, err = db:query(...)`) or give a callback. A mistake in the SQL, a constraint a row breaks or a database that couldn't be migrated is `nil, err`, never a thrown error.
 ---@class Database
 local Database = {}
@@ -6708,7 +6798,7 @@ function Event:uncancel() end
 ---@class PlayerJoinEvent: Event
 ---@field player Player Who it was.
 ---@field first_join boolean Whether they have never played here before.
----@field message Text? The join message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none.
+---@field message Text? The join message everyone in the player's room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none.
 
 --- What a player's game said about a resource pack the server sent it.
 ---@class PlayerResourcePackStatusEvent: Event
@@ -6719,13 +6809,14 @@ function Event:uncancel() end
 --- A player left the server.
 ---@class PlayerQuitEvent: Event
 ---@field player Player Who it was.
----@field message Text? The leave message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none.
+---@field message Text? The leave message everyone in the player's room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none.
 
 --- A player is saying something in chat.
 ---@class PlayerChatEvent: Event
 ---@field player Player Who it was.
 ---@field message string What they said, as plain text: never MiniMessage, so it can be shown as it is. Writable: assign other text to change what everyone sees.
 ---@field format Text How the line is shown, as MiniMessage, where `<player>` is the player's display name and `<message>` what they said (both shown as they are, never read as tags). Starts as Minecraft's own look, `"\\<<player>> <message>"`. Writable: assign another, like `"<gray><player>: <white><message>"`.
+---@field recipients Player[] Who sees the line: every player in the speaker's room to begin with (everyone online, on a server that runs one room). Writable: assign a list to show it to only those players. The server's console always sees it.
 
 --- A player clicked a block or the air with one hand. The game asks for each hand in turn, so one right click can arrive twice: once for the main hand and, unless that did something, once for the off hand.
 ---@class PlayerInteractEvent: Event
@@ -8328,6 +8419,15 @@ function Event:uncancel() end
 ---@field player Player The player, on this server now.
 ---@field from string The server that sent them.
 ---@field data any What the script that sent them gave `send_player`, as `nf.json` would read it back; `nil` when it gave nothing.
+
+--- Something happened to this room.
+---@class RoomEvent: Event
+---@field room Room The room: this one.
+
+--- How `nf.rooms.open` opens a room.
+---@class RoomOptions
+---@field key string? What it's for (an owner's id, a match's): the room's identity. A player the server's owner sends to a key goes into the room open with it, and its worlds are named after it. Two rooms can't be open with the same key at once.
+---@field keep boolean? Whether what it made outlasts it, for a room opened again with the same key to find (an owner's world, a party's): its worlds are saved when it closes rather than deleted, and its `nf.data` tables are kept under its key. A match's room isn't kept (the default): its worlds and `nf.data` tables go with it, and the worlds of one the server went without closing (killed mid-match) are deleted as it next starts. A kept room needs a `key`.
 
 --- How `nf.particles.play` plays an effect. Every key is optional; a key that isn't one of these is an error.
 ---@class ParticlePlayOptions

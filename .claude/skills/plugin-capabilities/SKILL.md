@@ -100,6 +100,11 @@ answers after the end). The module's doc has the design; in short:
   `request`) makes the connection anyway and queues `ended("limit")` for the next tick, so a script handles every
   limit in `end`. A script's own mistake (a message over `max-message-bytes` sent, a bad close code) is an error at
   its line.
+- **Rooms.** Each room has its own `Http` (client, request threads, rates, connections), so a room's requests never
+  wait on another's; `max-total` is the server's, every room's connections counted together (`Instance::http_connections`,
+  a `Seats`: each counted connection holds a `Seat` until it ends, however it ends). Per-package limits
+  (`max-per-package`, `requests-per-minute`) are per room: a room is one run of the game. Test:
+  `two_rooms_ask_in_the_same_tick_and_connections_are_counted_over_every_room`.
 - **Bytes are counted** per package against `bytes-per-minute`: a WebSocket's on the wire (its socket is the
   runtime's own, under TLS), a stream's as its body is read (after ureq decodes a gzipped one). A WebSocket's message
   and frame are capped at `max-message-bytes` too, which is what stops a far end making the server buffer an endless
@@ -189,6 +194,12 @@ its module docs the design. In short:
   freed once read. Each instance's calls run one at a time on its own `Lane` over the pool (`threads.rs`); a trap or
   a timeout closes the instance (its memory may be half-written), and its handle still answers `module()` until its
   scope goes.
+- **Rooms**: what's the server's is `Instance::wasm`, a `ServerWasm`: the engine and its pool (`wasm.threads` for every
+  room) and ticker, the memory `Budget` (`max-memory-total-mb`), each module's compile (shared by every room that
+  compiles the same bytes and data, `fingerprint`; a reload's new bytes compile once more) and the programs running
+  (`max-processes-total`, `Seats`). The main room's stop (the session's, last) closes it. A room's own `Wasm` keeps its
+  instances, programs and per-package counts. Tests: `two_rooms_call_their_modules_in_the_same_tick_under_the_servers_memory`,
+  `programs_running_are_counted_over_every_room`.
 - **Time** (`threads.rs`): one thread ticks the engine's epoch every `EPOCH`, and every store checks its `Guard` at
   each tick (wasmtime's epoch deadline callback): closed, or past `max-call-seconds`, its code traps there. That stops
   compiled code and Pulley alike, and replaces Kotlin's watchdog and `Thread.interrupt`.
@@ -274,6 +285,14 @@ Servers behind one Velocity proxy, talking through a **hub** the proxy runs. Thr
   Sending to a group picks an instance accepting players with room (`least` or `fill`; `send_players` keeps a party
   together); a send can wait (`wait`, `on_wait`, the hub's `max-waiting`) or fall back (`fallback`). Publishing and
   requesting to a group reach its instances.
+- **Rooms in sends** (`HubFrame.Room` ahead of the player, from a placement answer's or a send's `room`/`keep`):
+  `Instance::place_in_room` puts them in the open room of that key, or opens one for them. A key whose room has closed
+  here (`closed_keys`, the latest 4096) isn't opened by an arrival: whoever placed them did before it closed, and a
+  room nobody placing players knows would be nobody's. They land in the main room and the main room's network tick
+  (`place_again`) sends them to the server's own group, where the hub's placement hook places them again. Scripts
+  and the control endpoint may still open a closed key. A send naming a room on the server a player is on already isn't
+  "already on": the hub (`Hub.place`/`go`, `local.rs`'s `Placement::Go.staying`) tells that server the room, and nobody
+  moves.
 - **Registration** (`network.register.address`, `server-name: auto` numbering `<group>-<n>`; or `HubAdmin`'s
   `POST /v1/servers`): a server not in `velocity.toml` adds itself through `HubProxy.register`, and comes off as it
   stops or after `unregister-after-seconds`.
@@ -289,7 +308,7 @@ seconds` (`network::wait_for_hub`, the link's `await_welcome`) and `require-hub`
   Adventure built to the same lists before showing it (`allowed`), so a reading that differs can only refuse more.
 - **The admin API** (`HubAdmin`, `admin.properties` as `AdminClientsFile`, `AdminScope`s per client, never a server's
   credential; constant-time token compare): HTTP and JSON plus SSE `/v1/events` (first `hello` with `Hub.started`/`instance`, then `server_connected` and
-  `server_disconnected` for every server as its session is welcomed and closed, beside `server` for changes); servers, players, sends, messages,
+  `server_disconnected` for every server as its session is welcomed and closed, beside `server` for changes, and `room_state` for a keyed room's start, finish and close, `ServerFrame.RoomState` from `Session::report_room`; at each welcome the main room's `Inbound::Connected` says again `Instance::room_states_to_tell`: open keyed rooms started or finished, and the closes a down link refused or that it took in the last 60 s, which a link dropping as it wrote may have lost: `Instance::close_to_retell`); servers, players, sends, messages,
   kicks, publishing and requests answered by an admin client (`{admin=...}`), moderation, placement hooks per group and
   holding a login until one answers. The JDK's `HttpServer` gives no socket (no keepalive, no write timeout), so a
   stream whose client's network vanished looks open for ~15 minutes: a placement it doesn't answer in time closes it
@@ -310,7 +329,7 @@ seconds` (`network::wait_for_hub`, the link's `await_welcome`) and `require-hub`
 - **Outside the network but beside it**: the control endpoint (`control.rs`), a Unix socket or loopback port with a
   token file, for whoever runs the server (`/state` with `running` and `refused`, `last_tick`/`tick_ms` kept every tick
   and read off the main thread, `/healthz` without a token, a watchdog thread's `stalled` after `stall-seconds`,
-  `/events`, `/drain`, `/shutdown`, `/save` with pause, `/resume`, `/worlds/load|unload`); `policy.json` (format's
+  `/events`, `/drain`, `/shutdown`, `/save` with pause (a world's, or a room's with its tables), `/resume`, `/worlds/load|unload`, `/rooms/open|close`); `policy.json` (format's
   `Policy`, `runtime.policy`, also sent by the hub as `policy.<role>`) allows and denies requirement kinds and lowers
   limits (`limits_under_policy`, `config.rs`); bundles are signed (`bundles.require-signature`/`trusted-keys`,
   `project_files.rs`) and fetched by URL and hash (`bundle_fetch.rs`); packs can live in S3-compatible storage

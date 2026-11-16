@@ -1049,6 +1049,13 @@ class Hub(
                 }
                 is ServerFrame.MapWrite -> write(frame, from)
                 is ServerFrame.Send -> sendPlayer(this, frame, from)
+                is ServerFrame.RoomState -> {
+                    if (!NetworkNames.isKey(frame.room)) {
+                        val why = "a room's key is 1 to ${NetworkNames.MAX_KEY_LENGTH} characters, none a control character"
+                        return send(HubFrame.Problem(why))
+                    }
+                    tellAdmins(AdminScope.SERVERS_READ, AdminEvent.RoomState(from, frame.room, frame.state))
+                }
                 is ServerFrame.ProxyServers, is ServerFrame.ProxyPlayer, is ServerFrame.ProxyPresence, is ServerFrame.ProxyPlayerLeft,
                 is ServerFrame.ProxyResult, is ServerFrame.ProxyLogin -> send(HubFrame.Problem("only a proxy says that"))
             }
@@ -1389,7 +1396,9 @@ class Hub(
         group: String?,
         balance: Balance?,
         data: JsonElement?,
-        waitMillis: Long?
+        waitMillis: Long?,
+        room: String? = null,
+        keep: Boolean = false
     ): java.util.concurrent.CompletableFuture<SendOutcome> {
         val outcome = java.util.concurrent.CompletableFuture<SendOutcome>()
         val origin = object : HubEndpoint {
@@ -1402,7 +1411,11 @@ class Hub(
             override fun who() = "the admin client $client"
         }
         synchronized(lock) {
-            sendPlayer(origin, ServerFrame.Send(nextPlace++, players, server, data, group, balance, waitMillis), "admin:$client")
+            sendPlayer(
+                origin,
+                ServerFrame.Send(nextPlace++, players, server, data, group, balance, waitMillis, room, keep),
+                "admin:$client"
+            )
         }
         runLater()
         return outcome
@@ -1456,9 +1469,16 @@ class Hub(
                     val server = serverNamed(answer.server) ?: return "the proxy has no server named ${answer.server}"
                     pending.remove(id)
                     if (entry.login != null) {
+                        // The server hears which room they're for before the proxy connects them.
+                        answer.room?.let { room -> entry.party.forEach { byName[server]?.send(HubFrame.Room(it.id, room, answer.keep)) } }
                         entry.login.complete(LoginPlace(server))
                     } else {
-                        sendPlayer(entry.origin!!, entry.frame.copy(server = server, group = null), entry.from!!, asked = true)
+                        sendPlayer(
+                            entry.origin!!,
+                            entry.frame.copy(server = server, group = null, room = answer.room, keep = answer.keep),
+                            entry.from!!,
+                            asked = true
+                        )
                     }
                     null
                 }
@@ -1714,7 +1734,8 @@ class Hub(
         }
         val target = byName[server]
         val moving = party.filter { it.server != server }
-        if (moving.isEmpty()) {
+        // Already there: a send naming a room puts them in it (the server moves them there), else it's nothing.
+        if (moving.isEmpty() && frame.room == null) {
             return Placement.Failed(if (party.size == 1) "they're already on $server" else "they're all already on $server")
         }
         for (player in moving) {
@@ -1773,7 +1794,11 @@ class Hub(
         val target = placement.target
         val party = placement.party
         val moving = placement.moving
-        for (player in moving) target?.send(HubFrame.Arriving(player.id, from, frame.data))
+        frame.room?.let { room -> party.filter { it !in moving }.forEach { target?.send(HubFrame.Room(it.id, room, frame.keep)) } }
+        for (player in moving) {
+            frame.room?.let { target?.send(HubFrame.Room(player.id, it, frame.keep)) }
+            target?.send(HubFrame.Arriving(player.id, from, frame.data))
+        }
         incoming.merge(server, moving.size, Int::plus)
         later += {
             val results = moving.map { player ->

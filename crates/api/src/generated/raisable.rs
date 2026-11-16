@@ -66,7 +66,7 @@ pub const RAISABLE: &[Raisable] = &[
     },
     Raisable {
         event: "player_chat",
-        fields: &["format", "message", "player"],
+        fields: &["format", "message", "player", "recipients"],
         payload: Some(|lua, value| { let read = codecs::PlayerChatEvent.read(lua, value, "payload")?; codecs::PlayerChatEvent.push(lua, read).map_err(|e| ApiError(e.to_string())) }),
         first: Some(First { class: "Player", event: "chat", field: "player", via: Via::Handle }),
     },
@@ -674,6 +674,24 @@ pub const RAISABLE: &[Raisable] = &[
         event: "player_arrive",
         fields: &["data", "from", "player"],
         payload: Some(|lua, value| { let read = codecs::PlayerArriveEvent.read(lua, value, "payload")?; codecs::PlayerArriveEvent.push(lua, read).map_err(|e| ApiError(e.to_string())) }),
+        first: None,
+    },
+    Raisable {
+        event: "room_start",
+        fields: &["room"],
+        payload: Some(|lua, value| { let read = codecs::RoomEvent.read(lua, value, "payload")?; codecs::RoomEvent.push(lua, read).map_err(|e| ApiError(e.to_string())) }),
+        first: None,
+    },
+    Raisable {
+        event: "room_finish",
+        fields: &["room"],
+        payload: Some(|lua, value| { let read = codecs::RoomEvent.read(lua, value, "payload")?; codecs::RoomEvent.push(lua, read).map_err(|e| ApiError(e.to_string())) }),
+        first: None,
+    },
+    Raisable {
+        event: "room_close",
+        fields: &["room"],
+        payload: Some(|lua, value| { let read = codecs::RoomEvent.read(lua, value, "payload")?; codecs::RoomEvent.push(lua, read).map_err(|e| ApiError(e.to_string())) }),
         first: None,
     },
 ];

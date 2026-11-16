@@ -83,7 +83,7 @@ fn the_recorded_sessions_are_this_sides_protocol_line_for_line() {
         }
     }
     // Every kind a server sends or hears, so a frame added to the protocol is recorded too.
-    assert_eq!(kinds.len(), 22 + 14, "{kinds:?}");
+    assert_eq!(kinds.len(), 22 + 15, "{kinds:?}");
 }
 
 #[test]
@@ -559,7 +559,7 @@ fn presence_sending_players_and_arrivals() {
     let hub = hub(&session);
     let survival = hub.peer("survival", None, None, Lifecycle::Ready);
     platform.online.borrow_mut().push(alex.clone());
-    session.player_joined(&alex);
+    session.player_joined(netherforge_runtime::instance::RoomId::MAIN, &alex);
     let seen = printed(&session, &platform, 10);
     assert_eq!(
         seen,
@@ -589,7 +589,7 @@ fn presence_sending_players_and_arrivals() {
             Some(serde_json::json!({ "kit": "starter" }))
         )]
     );
-    session.player_quit(&alex);
+    session.player_quit(netherforge_runtime::instance::RoomId::MAIN, &alex);
     // Another player sent here by survival arrives the tick after they join (the test joins them, as the proxy's
     // move would).
     let sam = PlayerRef {
@@ -606,10 +606,12 @@ fn presence_sending_players_and_arrivals() {
         group: None,
         balance: None,
         wait_millis: None,
+        room: None,
+        keep: false,
     });
     assert_eq!(hub.take_joins(), [(uuid_text(9), "Sam".to_owned())]);
     platform.online.borrow_mut().push(sam.clone());
-    session.player_joined(&sam);
+    session.player_joined(netherforge_runtime::instance::RoomId::MAIN, &sam);
     assert_eq!(
         printed(&session, &platform, 3),
         [
@@ -1200,7 +1202,7 @@ fn bans_mutes_and_reports_go_through_the_hub() {
     };
     let session = start(&files, &platform, dev(), None);
     platform.online.borrow_mut().push(alex.clone());
-    session.player_joined(&alex);
+    session.player_joined(netherforge_runtime::instance::RoomId::MAIN, &alex);
     assert_eq!(
         printed(&session, &platform, 9),
         [
@@ -1356,4 +1358,540 @@ fn the_owners_policy_that_stops_projects_refuses_one_that_requires_what_it_denie
             .and_then(|p| p.code.as_deref()),
         Some("runtime.policy")
     );
+}
+
+/// What each room's scripts printed: `main …`, or after the room's label (`room 1 …`, `room owner-1 …`).
+fn room_lines(platform: &Fake) -> Vec<String> {
+    platform
+        .take()
+        .into_iter()
+        .filter_map(|line| {
+            let (room, rest) = if let Some(rest) = line.strip_prefix("info [module t] ") {
+                ("main".to_owned(), rest)
+            } else {
+                let rest = line.strip_prefix("info [room ")?;
+                let (n, rest) = rest.split_once(" module t] ")?;
+                (format!("room {n}"), rest)
+            };
+            let text = rest.rsplit_once(" (modules/").map_or(rest, |(t, _)| t);
+            Some(format!("{room} {}", text.replace('\t', " ")))
+        })
+        .collect()
+}
+
+#[test]
+fn every_room_hears_the_network_and_a_request_is_answered_once() {
+    let files = project(
+        r#"
+        local chat = nf.network.channel("chat")
+        chat:on("message", function(e) print("heard", e.value) end)
+        chat:on("request", function(e) print("answering"); e.reply = "yes" end)
+        nf.on("test:go", function()
+            nf.task(function()
+                print("published", chat:publish("hi"))
+                print("answer", chat:request("dev", 1))
+            end)
+        end)
+    "#,
+        NETWORK,
+    );
+    let platform = Platform::default();
+    let mut session = start(&files, &platform, dev(), None);
+    let room = session.open_room(None, false).expect("a room");
+    for _ in 0..3 {
+        session.tick();
+    }
+    room_lines(&platform);
+    // Room 1 publishes and asks: both rooms hear it, and only the main room (the first listening) answers.
+    let run = session.run(room).unwrap();
+    run.room()
+        .unwrap()
+        .scripts()
+        .emit_custom(
+            netherforge_runtime::scripts::Target::Nf,
+            "test:go".into(),
+            mlua::Value::Nil,
+        )
+        .unwrap();
+    let mut seen = Vec::new();
+    let started = Instant::now();
+    while started.elapsed() < Duration::from_secs(10) && seen.len() < 5 {
+        session.tick();
+        seen.extend(room_lines(&platform));
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    seen.sort();
+    assert_eq!(
+        seen,
+        [
+            "main answering",
+            "main heard hi",
+            "room 1 answer yes nil",
+            "room 1 heard hi",
+            "room 1 published true",
+        ]
+    );
+}
+
+#[test]
+fn a_player_sent_for_a_room_arrives_in_it_and_it_opens_for_them() {
+    let files = project(
+        r#"
+        local here = nf.rooms.current()
+        nf.on("player_arrive", function(e) print("arrived", here:key(), e.from) end)
+    "#,
+        NETWORK,
+    );
+    let platform = Platform::default();
+    let mut session = start(&files, &platform, dev(), None);
+    let hub = hub(&session);
+    let survival = hub.peer("survival", None, None, Lifecycle::Ready);
+    // Ready once it has ticked.
+    for _ in 0..3 {
+        session.tick();
+    }
+    hub.accept_joins();
+    hub.place(&uuid_text(9), "Sam", "survival");
+    survival.send(ServerFrame::Send {
+        id: 1,
+        players: vec![uuid_text(9)],
+        server: Some("dev".into()),
+        data: None,
+        group: None,
+        balance: None,
+        wait_millis: None,
+        room: Some("owner-1".into()),
+        keep: true,
+    });
+    // The main room reads the link; at the tick's end the room opens, and Sam is its as they arrive.
+    let started = Instant::now();
+    let mut room = netherforge_runtime::instance::RoomId::MAIN;
+    while started.elapsed() < Duration::from_secs(10)
+        && room == netherforge_runtime::instance::RoomId::MAIN
+    {
+        session.tick();
+        session.apply_room_requests();
+        room = session.route(netherforge_runtime::events::Route::Player(uuid(9)));
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert_ne!(room, netherforge_runtime::instance::RoomId::MAIN);
+    assert_eq!(
+        session.instance().room_key(room).as_deref(),
+        Some("owner-1")
+    );
+    // Opened for them as the send said: kept.
+    assert_eq!(
+        session.instance().kept_key(room).as_deref(),
+        Some("owner-1")
+    );
+    let sam = PlayerRef {
+        uuid: uuid(9),
+        name: "Sam".into(),
+    };
+    platform.online.borrow_mut().push(sam.clone());
+    session.player_joined(room, &sam);
+    let mut seen = Vec::new();
+    let started = Instant::now();
+    while started.elapsed() < Duration::from_secs(10) && seen.is_empty() {
+        session.tick();
+        seen.extend(room_lines(&platform));
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert_eq!(seen, ["room owner-1 arrived owner-1 survival"]);
+}
+
+#[test]
+fn a_keyed_rooms_start_finish_and_close_are_told_to_the_hub() {
+    let files = project(
+        r#"
+        nf.on("test:go", function()
+            local match = nf.rooms.open({ key = "m-1" })
+            local plain = nf.rooms.open()
+            match:start()
+            plain:start()
+            nf.after(1, function()
+                match:finish()
+                plain:finish()
+                nf.after(1, function()
+                    match:close()
+                    plain:close()
+                end)
+            end)
+        end)
+    "#,
+        NETWORK,
+    );
+    let platform = Platform::default();
+    let mut session = start(&files, &platform, dev(), None);
+    let hub = hub(&session);
+    for _ in 0..3 {
+        session.tick();
+    }
+    session
+        .room()
+        .unwrap()
+        .scripts()
+        .emit_custom(
+            netherforge_runtime::scripts::Target::Nf,
+            "test:go".into(),
+            mlua::Value::Nil,
+        )
+        .unwrap();
+    for _ in 0..6 {
+        session.tick();
+        session.apply_room_requests();
+    }
+    assert_eq!(session.instance().rooms.borrow().len(), 1, "both closed");
+    use netherforge_runtime::network::protocol::RoomLife;
+    // Only the keyed room: an unkeyed one is nothing the hub could name.
+    assert_eq!(
+        hub.room_states(),
+        [
+            ("dev".to_owned(), "m-1".to_owned(), RoomLife::Started),
+            ("dev".to_owned(), "m-1".to_owned(), RoomLife::Finished),
+            ("dev".to_owned(), "m-1".to_owned(), RoomLife::Closed),
+        ]
+    );
+    // Its key free again, a room opened with it and the server stopping tell it closed.
+    let again = session
+        .open_room(Some("m-1".into()), false)
+        .expect("a room");
+    session.tick();
+    assert!(session.run(again).is_some());
+    session.stop();
+    assert_eq!(
+        hub.room_states().last(),
+        Some(&("dev".to_owned(), "m-1".to_owned(), RoomLife::Closed))
+    );
+    assert_eq!(hub.room_states().len(), 4);
+}
+
+#[test]
+fn what_a_dropped_link_couldnt_tell_of_the_rooms_is_told_once_it_is_back() {
+    let files = project(
+        r#"
+        nf.on("test:open", function()
+            local a = nf.rooms.open({ key = "m-a" })
+            nf.rooms.open({ key = "m-b" })
+            nf.rooms.open({ key = "m-c" })
+            nf.rooms.open({ key = "m-idle" })
+            a:start()
+        end)
+        nf.on("test:down", function()
+            for _, room in nf.rooms.all() do
+                if room:key() == "m-b" then room:start() room:finish() end
+                if room:key() == "m-c" then room:close() end
+            end
+        end)
+    "#,
+        NETWORK,
+    );
+    let platform = Platform::default();
+    let mut session = start(&files, &platform, dev(), None);
+    let hub = hub(&session);
+    let emit = |session: &Session, event: &str| {
+        session
+            .room()
+            .unwrap()
+            .scripts()
+            .emit_custom(
+                netherforge_runtime::scripts::Target::Nf,
+                event.into(),
+                mlua::Value::Nil,
+            )
+            .unwrap();
+    };
+    for _ in 0..3 {
+        session.tick();
+    }
+    emit(&session, "test:open");
+    for _ in 0..3 {
+        session.tick();
+        session.apply_room_requests();
+    }
+    use netherforge_runtime::network::protocol::{Lifecycle, RoomLife};
+    let told = |key: &str, life: RoomLife| ("dev".to_owned(), key.to_owned(), life);
+    assert_eq!(hub.room_states(), [told("m-a", RoomLife::Started)]);
+    // The link drops: b's start and finish and c's close are lost on the way.
+    hub.drop_here();
+    session.tick();
+    emit(&session, "test:down");
+    for _ in 0..3 {
+        session.tick();
+        session.apply_room_requests();
+    }
+    assert_eq!(hub.room_states().len(), 1, "nothing reached the hub");
+    // Back: every open keyed room under way says where it is, and c's close is told. A room only open (m-idle) has
+    // nothing to say.
+    hub.reconnect_here(Lifecycle::Ready);
+    for _ in 0..3 {
+        session.tick();
+        session.apply_room_requests();
+    }
+    let mut again = hub.room_states()[1..].to_vec();
+    again.sort_by(|a, b| a.1.cmp(&b.1));
+    assert_eq!(
+        again,
+        [
+            told("m-a", RoomLife::Started),
+            told("m-b", RoomLife::Finished),
+            told("m-c", RoomLife::Closed),
+        ]
+    );
+    // Told once: another welcome says the open rooms again, and the close no more.
+    hub.drop_here();
+    session.tick();
+    hub.reconnect_here(Lifecycle::Ready);
+    session.tick();
+    let mut third = hub.room_states()[4..].to_vec();
+    third.sort_by(|a, b| a.1.cmp(&b.1));
+    assert_eq!(
+        third,
+        [
+            told("m-a", RoomLife::Started),
+            told("m-b", RoomLife::Finished)
+        ]
+    );
+    // A close the link took is told again at the next welcome too: a link dropping as it wrote may have lost it.
+    let a = session
+        .instance()
+        .rooms
+        .borrow()
+        .iter()
+        .find(|(_, r)| r.key.as_deref() == Some("m-a"))
+        .map(|(id, _)| *id)
+        .unwrap();
+    session.close_room(a);
+    assert_eq!(
+        hub.room_states().last(),
+        Some(&told("m-a", RoomLife::Closed))
+    );
+    let before = hub.room_states().len();
+    hub.drop_here();
+    session.tick();
+    hub.reconnect_here(Lifecycle::Ready);
+    session.tick();
+    assert!(
+        hub.room_states()[before..].contains(&told("m-a", RoomLife::Closed)),
+        "{:?}",
+        hub.room_states()
+    );
+}
+
+#[test]
+fn a_player_sent_into_a_room_that_closed_here_is_sent_back_to_be_placed_again() {
+    let files = project("", NETWORK);
+    let platform = Platform::default();
+    let mut session = start(&files, &platform, dev(), None);
+    let hub = hub(&session);
+    let survival = hub.peer("survival", None, None, Lifecycle::Ready);
+    for _ in 0..3 {
+        session.tick();
+    }
+    let race = session
+        .open_room(Some("m-1".into()), false)
+        .expect("a room");
+    session.tick();
+    session.close_room(race);
+    platform.take();
+    // Placed in m-1 before it closed, Ana is on her way: no room opens for her, and she arrives in the main room.
+    hub.accept_joins();
+    hub.place(&uuid_text(9), "Ana", "survival");
+    survival.send(ServerFrame::Send {
+        id: 1,
+        players: vec![uuid_text(9)],
+        server: Some("dev".into()),
+        data: None,
+        group: None,
+        balance: None,
+        wait_millis: None,
+        room: Some("m-1".into()),
+        keep: false,
+    });
+    for _ in 0..5 {
+        session.tick();
+        session.apply_room_requests();
+    }
+    assert_eq!(session.instance().rooms.borrow().len(), 1, "no room opened");
+    assert_eq!(
+        session.route(netherforge_runtime::events::Route::Player(uuid(9))),
+        netherforge_runtime::instance::RoomId::MAIN
+    );
+    let ana = PlayerRef {
+        uuid: uuid(9),
+        name: "Ana".into(),
+    };
+    platform.online.borrow_mut().push(ana.clone());
+    session.player_joined(netherforge_runtime::instance::RoomId::MAIN, &ana);
+    let mut seen = Vec::new();
+    let started = Instant::now();
+    while started.elapsed() < Duration::from_secs(10)
+        && !seen.iter().any(|l: &String| l.contains("placed again"))
+    {
+        session.tick();
+        seen.extend(platform.take());
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert!(
+        seen.iter()
+            .any(|l| l == "info Ana's room has closed here: sent back to dev to be placed again"),
+        "{seen:?}"
+    );
+    // A script may still open that key again.
+    assert!(session.open_room(Some("m-1".into()), false).is_some());
+}
+
+#[test]
+fn a_room_closing_on_a_draining_server_sends_its_players_back_to_be_placed_again() {
+    let files = project("", NETWORK);
+    let platform = Platform::default();
+    let mut session = start(&files, &platform, dev(), None);
+    for _ in 0..3 {
+        session.tick();
+    }
+    let owner = session
+        .open_room(Some("player_7f".into()), true)
+        .expect("a room");
+    session.tick();
+    let ana = PlayerRef {
+        uuid: uuid(9),
+        name: "Ana".into(),
+    };
+    platform.online.borrow_mut().push(ana.clone());
+    session.player_joined(netherforge_runtime::instance::RoomId::MAIN, &ana);
+    session.move_player(uuid(9), owner);
+    session.tick();
+    platform.take();
+    session
+        .shared()
+        .network
+        .borrow()
+        .link()
+        .unwrap()
+        .set_draining(true);
+    session.close_room(owner);
+    let mut seen = Vec::new();
+    let started = Instant::now();
+    while started.elapsed() < Duration::from_secs(10)
+        && !seen.iter().any(|l: &String| l.contains("placed again"))
+    {
+        session.tick();
+        seen.extend(platform.take());
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert!(
+        seen.iter()
+            .any(|l| l == "info Ana's room has closed here: sent back to dev to be placed again"),
+        "{seen:?}"
+    );
+}
+
+#[test]
+fn a_send_naming_a_room_on_the_server_a_player_is_on_puts_them_in_it() {
+    let files = project("", NETWORK);
+    let platform = Platform::default();
+    let mut session = start(&files, &platform, dev(), None);
+    let hub = hub(&session);
+    let survival = hub.peer("survival", None, None, Lifecycle::Ready);
+    for _ in 0..3 {
+        session.tick();
+    }
+    let ana = PlayerRef {
+        uuid: uuid(9),
+        name: "Ana".into(),
+    };
+    platform.online.borrow_mut().push(ana.clone());
+    session.player_joined(netherforge_runtime::instance::RoomId::MAIN, &ana);
+    hub.place(&uuid_text(9), "Ana", "dev");
+    // Placed again (her room closed here), into a room on the server she's on: nobody moves, the room is hers.
+    survival.send(ServerFrame::Send {
+        id: 1,
+        players: vec![uuid_text(9)],
+        server: Some("dev".into()),
+        data: None,
+        group: None,
+        balance: None,
+        wait_millis: None,
+        room: Some("player_7f".into()),
+        keep: true,
+    });
+    let started = Instant::now();
+    let mut room = netherforge_runtime::instance::RoomId::MAIN;
+    while started.elapsed() < Duration::from_secs(10)
+        && room == netherforge_runtime::instance::RoomId::MAIN
+    {
+        session.tick();
+        session.apply_room_requests();
+        room = session.route(netherforge_runtime::events::Route::Player(uuid(9)));
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert_eq!(
+        session.instance().kept_key(room).as_deref(),
+        Some("player_7f")
+    );
+}
+
+#[test]
+fn a_server_whose_players_were_all_in_rooms_is_empty_once_they_have_gone() {
+    // Found by the rooms load test (k3d, kart): a drain "after empty" waited out its timeout on a server nobody was on.
+    let files = project("", NETWORK);
+    let platform = Platform::default();
+    let mut session = start(&files, &platform, dev(), None);
+    let hub = hub(&session);
+    for _ in 0..3 {
+        session.tick();
+    }
+    let race = session
+        .open_room(Some("m-1".into()), false)
+        .expect("a room");
+    session.tick();
+    // Both arrive straight into the race (the hub named its room ahead of them).
+    let ana = PlayerRef {
+        uuid: uuid(9),
+        name: "Ana".into(),
+    };
+    let bea = PlayerRef {
+        uuid: uuid(10),
+        name: "Bea".into(),
+    };
+    hub.place(&uuid_text(9), "Ana", "dev");
+    hub.place(&uuid_text(10), "Bea", "dev");
+    platform.online.borrow_mut().push(ana.clone());
+    session.player_joined(race, &ana);
+    platform.online.borrow_mut().push(bea.clone());
+    session.player_joined(race, &bea);
+    for _ in 0..3 {
+        session.tick();
+    }
+    let room = session.room().unwrap();
+    netherforge_runtime::network::service::NetworkContext {
+        shared: session.shared().clone(),
+        scripts: room.scripts().clone(),
+    }
+    .shutdown(true, 600);
+    for _ in 0..5 {
+        session.tick();
+    }
+    assert_eq!(
+        session.shared().network.borrow().stop_server,
+        None,
+        "two players are in the race: not empty"
+    );
+    // Both leave from the race.
+    for player in [&ana, &bea] {
+        platform
+            .online
+            .borrow_mut()
+            .retain(|p| p.uuid != player.uuid);
+        session.player_quit(race, player);
+    }
+    let mut stop = None;
+    for _ in 0..200 {
+        session.tick();
+        stop = session.shared().network.borrow_mut().stop_server.take();
+        if stop.is_some() {
+            break;
+        }
+    }
+    assert_eq!(stop.as_deref(), Some("NetherForge: /nf shutdown"));
 }

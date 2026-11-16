@@ -903,7 +903,12 @@ impl NfCommandsApi for GameContext {
             scripts: self.scripts.downgrade(),
         });
         let taken = self.shared.commands.borrow().declared.contains_key(&name);
-        if taken || !self.shared.platform.commands().register(spec, handler) {
+        if taken
+            || !self
+                .shared
+                .instance
+                .declare_command(self.shared.room, spec, handler)
+        {
             self.shared.platform.log().warn(format!(
                 "module {module}: /{name} is already a command, so it wasn't declared"
             ));
@@ -926,14 +931,14 @@ pub struct CommandsService {
 }
 
 impl CommandsService {
-    fn unregister(&self, platform: &dyn Platform, names: Vec<String>) {
+    fn unregister(&self, names: Vec<String>) {
         for name in names {
             self.shared
                 .commands
                 .borrow_mut()
                 .declared
                 .shift_remove(&name);
-            platform.commands().unregister(name);
+            self.shared.instance.drop_command(self.shared.room, &name);
         }
     }
 }
@@ -953,10 +958,10 @@ impl Service for CommandsService {
             .filter(|(_, d)| scopes.contains(&d.scope))
             .map(|(n, _)| n.clone())
             .collect();
-        self.unregister(&*self.shared.platform, names);
+        self.unregister(names);
     }
 
-    fn stop(&self, _room: &crate::Room, platform: &dyn Platform) {
+    fn stop(&self, _room: &crate::Room, _platform: &dyn Platform) {
         let names: Vec<String> = self
             .shared
             .commands
@@ -965,7 +970,7 @@ impl Service for CommandsService {
             .keys()
             .cloned()
             .collect();
-        self.unregister(platform, names);
+        self.unregister(names);
     }
 }
 

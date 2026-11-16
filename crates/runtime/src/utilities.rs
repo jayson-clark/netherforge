@@ -124,9 +124,7 @@ impl NfPlayersApi for UtilitiesContext {
     fn online(&self, _: &Caller) -> ApiResult<Vec<handles::Player>> {
         Ok(self
             .shared
-            .platform
-            .players()
-            .online()
+            .online_players()
             .iter()
             .map(player_handle)
             .collect())
@@ -824,12 +822,12 @@ impl NfTextApi for UtilitiesContext {
         let key = game.with_names(|names| {
             names.look(netherforge_format::reference::RefKind::Glyph, &glyph)
         })?;
-        Ok(self.shared.packs.borrow().glyph(&key))
+        Ok(self.shared.instance.packs.borrow().glyph(&key))
     }
     /// Characters that move the cursor `pixels` (held to what the pack's space font reaches); nil while there's no
     /// built pack to draw them.
     fn space(&self, _: &Caller, pixels: i64) -> ApiResult<Option<String>> {
-        if self.shared.packs.borrow().built.is_none() {
+        if self.shared.instance.packs.borrow().built.is_none() {
             return Ok(None);
         }
         let most = i64::from(netherforge_format::kind::resource_pack::fonts::MAX_OFFSET);

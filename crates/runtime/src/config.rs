@@ -201,6 +201,7 @@ pub fn read(
     let mut session = Config {
         time_zone: text(section(settings, "schedules"), "time-zone"),
         data_dir: Some(plugin_folder.join("data")),
+        room_tables_dir: Some(plugin_folder.join("rooms")),
         settings_dir: Some(plugin_folder.join("settings")),
         databases_dir: Some(plugin_folder.join("databases")),
         files: files(section(settings, "files")),

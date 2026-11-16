@@ -193,7 +193,7 @@ impl GameContext {
     ) -> ApiResult<String> {
         let known = self.with_names(|names| names.look_name(RefKind::Hud, name))?;
         let (pack, key) = known.rsplit_once('/').unwrap_or(("", known.as_str()));
-        let huds = self.shared.packs.borrow().huds();
+        let huds = self.shared.instance.packs.borrow().huds();
         let Some(compiled) = huds.get(pack) else {
             return Err(err(format!(
                 "resource pack \"{pack}\" has errors, so its HUD isn't built"
@@ -471,7 +471,7 @@ impl Service for HudsService {
             return;
         }
         let now = room.scripts().tick_count();
-        let packs = self.shared.packs.borrow().huds();
+        let packs = self.shared.instance.packs.borrow().huds();
         let measure = |text: &str| self.shared.measure_text(text).map(|(w, _)| w);
         let mut sends = Vec::new();
         {

@@ -313,6 +313,7 @@ fn the_pack_is_built_and_its_glyphs_drawn_until_a_pack_has_errors() {
     );
     let built = session
         .shared()
+        .instance
         .packs
         .borrow()
         .built
@@ -323,6 +324,7 @@ fn the_pack_is_built_and_its_glyphs_drawn_until_a_pack_has_errors() {
     assert!(
         session
             .shared()
+            .instance
             .packs
             .borrow()
             .on_demand
@@ -330,6 +332,7 @@ fn the_pack_is_built_and_its_glyphs_drawn_until_a_pack_has_errors() {
     );
     let skin = session
         .shared()
+        .instance
         .packs
         .borrow()
         .skin_title("ui/shop", 0)
@@ -353,6 +356,7 @@ fn the_pack_is_built_and_its_glyphs_drawn_until_a_pack_has_errors() {
     assert_eq!(
         session
             .shared()
+            .instance
             .packs
             .borrow()
             .built
@@ -363,6 +367,7 @@ fn the_pack_is_built_and_its_glyphs_drawn_until_a_pack_has_errors() {
     assert!(
         session
             .shared()
+            .instance
             .packs
             .borrow()
             .skin_title("ui/shop", 0)
@@ -435,6 +440,7 @@ end)
     let built = events
         .session()
         .shared()
+        .instance
         .packs
         .borrow()
         .built
@@ -452,7 +458,9 @@ end)
     assert_eq!(fetch("POST", &url).0, "HTTP/1.1 405 Method Not Allowed");
 
     // Joining again with this build sends nothing; a changed pack is sent, replacing only the project's.
-    events.session().player_joined(&alex());
+    events
+        .session()
+        .player_joined(netherforge_runtime::instance::RoomId::MAIN, &alex());
     assert!(!platform.take().iter().any(|l| l.starts_with("offer")));
     files.write(
         "resource_packs/ui/pack.json",
@@ -569,7 +577,14 @@ fn an_owners_url_is_sent_and_the_zip_written_for_them() {
         .into_iter()
         .filter(|l| l.starts_with("offer"))
         .collect();
-    let built = session.shared().packs.borrow().built.clone().unwrap();
+    let built = session
+        .shared()
+        .instance
+        .packs
+        .borrow()
+        .built
+        .clone()
+        .unwrap();
     assert_eq!(
         offers,
         [format!(
@@ -670,7 +685,15 @@ fn with_a_store_each_build_is_uploaded_before_anyone_is_sent_it() {
         std::rc::Rc::new(netherforge_runtime::store::Store::in_memory()),
         config,
     );
-    let sha1 = session.shared().packs.borrow().built.clone().unwrap().sha1;
+    let sha1 = session
+        .shared()
+        .instance
+        .packs
+        .borrow()
+        .built
+        .clone()
+        .unwrap()
+        .sha1;
     assert!(
         !platform.take().iter().any(|l| l.starts_with("offer")),
         "sent before it was stored"
@@ -912,26 +935,28 @@ fn a_pack_the_network_says_a_player_loaded_elsewhere_isnt_sent_again() {
     let session = Session::start(platform.clone(), &files, &NoPackages);
     platform.take();
     let shared = session.shared().clone();
-    let sha1 = shared.packs.borrow().built.clone().unwrap().sha1;
+    let sha1 = shared.instance.packs.borrow().built.clone().unwrap().sha1;
     let alex = netherforge_platform::Uuid(77);
     // Another pack loaded elsewhere is no reason not to send this one.
     assert!(
         shared
+            .instance
             .packs
             .borrow_mut()
             .send_unless(&*platform, alex, Some("0000"))
     );
-    shared.packs.borrow_mut().forget(alex);
+    shared.instance.packs.borrow_mut().forget(alex);
     platform.take();
     // This very pack, loaded on the server they came from: nothing sent, and it counts as loaded.
     assert!(
         !shared
+            .instance
             .packs
             .borrow_mut()
             .send_unless(&*platform, alex, Some(&sha1))
     );
     assert!(!platform.take().iter().any(|l| l.starts_with("offer")));
-    let packs = shared.packs.borrow();
+    let packs = shared.instance.packs.borrow();
     assert_eq!(packs.status(alex, None).as_deref(), Some("loaded"));
     assert_eq!(packs.sent_to(alex), Some(sha1));
 }

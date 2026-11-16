@@ -27,6 +27,7 @@ pub trait LuaApi: crate::Runtime {
     fn nf_loot(&self) -> &dyn NfLootApi { &crate::unported::Unported }
     fn nf_bossbars(&self) -> &dyn NfBossbarsApi { &crate::unported::Unported }
     fn nf_teams(&self) -> &dyn NfTeamsApi { &crate::unported::Unported }
+    fn nf_rooms(&self) -> &dyn NfRoomsApi { &crate::unported::Unported }
     fn nf_schedule(&self) -> &dyn NfScheduleApi { &crate::unported::Unported }
     fn nf_economy(&self) -> &dyn NfEconomyApi { &crate::unported::Unported }
     fn nf_placeholders(&self) -> &dyn NfPlaceholdersApi { &crate::unported::Unported }
@@ -69,6 +70,7 @@ pub trait LuaApi: crate::Runtime {
     fn bossbar(&self) -> &dyn BossBarApi { &crate::unported::Unported }
     fn sidebar(&self) -> &dyn SidebarApi { &crate::unported::Unported }
     fn team(&self) -> &dyn TeamApi { &crate::unported::Unported }
+    fn room(&self) -> &dyn RoomApi { &crate::unported::Unported }
     fn database(&self) -> &dyn DatabaseApi { &crate::unported::Unported }
     fn menu(&self) -> &dyn MenuApi { &crate::unported::Unported }
     fn slot(&self) -> &dyn SlotApi { &crate::unported::Unported }
@@ -98,7 +100,7 @@ pub trait LuaApi: crate::Runtime {
     fn hud(&self) -> &dyn HudApi { &crate::unported::Unported }
 }
 
-/// Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.images`, `nf.files`, `nf.text`, `nf.looks`, `nf.packs`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
+/// Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.rooms`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.images`, `nf.files`, `nf.text`, `nf.looks`, `nf.packs`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
 pub trait NfApi {
     /// Calls `handler` every time `event` happens, until the subscription is cancelled or its script unloads. A handler lives as long as both the script that registered it and the handle it's on. Handlers run in the order they were registered, each with the event object; what one returns means nothing. A handler that errors is logged and the rest still run; after 20 errors in a row it's cancelled. An event this table doesn't have is an error, so a typo is caught where it was made.
     fn on(&self, caller: &Caller, event: String, handler: Function, options: Option<shapes::EventOptions>) -> ApiResult<handles::Subscription>;
@@ -193,7 +195,7 @@ pub trait NfPlayersApi {
     /// Everyone online.
     fn online(&self, caller: &Caller) -> ApiResult<Vec<handles::Player>>;
 
-    /// A player by name (any case) or UUID: anyone who has ever joined this server, online or not, or `nil` for someone who never has. For someone offline, `exists()` is `false` and what needs them in the world (`position()`, `send_message`) answers `nil` or `false` until they come back.
+    /// A player by name (any case) or UUID: anyone who has ever joined this server, online or not, or `nil` for someone who never has. For someone offline, `exists()` is `false` and what needs them in the world (`position()`, `send_message`) answers `nil` or `false` until they come back. Someone in another room (`nf.rooms`) is as good as offline here.
     fn get(&self, caller: &Caller, name_or_id: String) -> ApiResult<Option<handles::Player>>;
 
     /// Everyone who has ever joined this server, online or not, in no particular order. On a server that's been running a long time that's a lot of players, so call it when you need it (building a leaderboard) rather than every tick.
@@ -357,6 +359,24 @@ pub trait NfTeamsApi {
 
     /// Every team the project has now, in the order they were made. Teams made with `/team` or by other plugins aren't among them.
     fn all(&self, caller: &Caller) -> ApiResult<Vec<handles::Team>>;
+}
+
+/// The server's rooms. Each runs the project in a Lua state of its own, with its own players and worlds, and `nf` in a room is that room: `nf.players.online()`, broadcasts, events, timers, teams and the rest are its own. What's shared between rooms is the store's tables of players and centities, the databases, the network, and these functions.
+pub trait NfRoomsApi {
+    /// The room this script runs in.
+    fn current(&self, caller: &Caller) -> ApiResult<handles::Room>;
+
+    /// The main room.
+    fn main(&self, caller: &Caller) -> ApiResult<handles::Room>;
+
+    /// Every room open now (opening ones too), the main room first.
+    fn all(&self, caller: &Caller) -> ApiResult<Vec<handles::Room>>;
+
+    /// Room `id`, or `nil` when no room open has it.
+    fn get(&self, caller: &Caller, id: i64) -> ApiResult<Option<handles::Room>>;
+
+    /// Opens a room: the project starts in it, in a Lua state of its own. It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script. It holds no world and no player until it's given them (`room:give_world`, `room:send`), or its scripts make or load a world.
+    fn open(&self, caller: &Caller, options: Option<shapes::RoomOptions>) -> ApiResult<handles::Room>;
 }
 
 /// Runs a function at a time of day, every day or week, or by a cron expression: real time, as opposed to ticks (`nf.after`, `nf.every`). Times are in the server owner's time zone (`schedules.time-zone` in `config.yml`, the server's own zone by default), not the player's. Daylight saving follows the zone's rules. A daily or weekly time the clocks skip runs the same distance after the gap begins (`"02:30"` runs at 03:30 on the day clocks jump from 02:00 to 03:00), and one that happens twice runs the first time only. A cron expression matches the clock as it reads: a time the clocks skip doesn't happen that day, one for a single time of day that happens twice (`"30 1 * * *"`) runs the first time only, and one that matches every half hour keeps matching through an hour that repeats. A schedule belongs to the script that made it and ends when that script unloads (a reload, the server stopping), so the script's body makes it again. It's checked once a tick, so a callback runs within a tick (50 ms) of its time. A run the server missed (it was off at the time) is skipped, unless the schedule has `catch_up = true` and an `id`: then it runs once, on start. What a schedule last ran is kept in the server's store by `id`, per package.
@@ -2604,6 +2624,45 @@ pub trait TeamApi {
 
     /// Takes it off the scoreboard for good; its members are in no team any more.
     fn remove(&self, this: &handles::Team) -> ApiResult<bool>;
+}
+
+/// A room of the server: one copy of the project with its own Lua state, its own players and its own worlds. The main room is always there (it holds every world and player no other room does, and it's the only one on a server that never opens another); the others are opened by `nf.rooms.open` or the server's owner, and closed once their match is over. A room's scripts reach nothing of another room's except through these methods. Once it has closed its methods answer `nil` or `false`.
+pub trait RoomApi {
+    /// Its number: `0` for the main room, then `1`, `2`... in the order rooms were opened, never used twice while the server runs.
+    fn id(&self, this: &handles::Room) -> ApiResult<i64>;
+
+    /// What it's for, as it was opened with it (an owner's id, a match's): `nil` for the main room and for a room opened without one.
+    fn key(&self, this: &handles::Room) -> ApiResult<Option<String>>;
+
+    /// Whether what it made outlasts it (`RoomOptions.keep`): its worlds saved when it closes and its `nf.data` tables kept under its key. `false` for the main room, whose worlds and tables are the server's anyway.
+    fn is_kept(&self, this: &handles::Room) -> ApiResult<bool>;
+
+    /// Whether it's the main room.
+    fn is_main(&self, this: &handles::Room) -> ApiResult<bool>;
+
+    /// `"opening"` until the end of the tick it was opened in, then `"open"`, `"started"` once its match began, `"finished"` once it ended, and `"closed"` once it has gone. The main room is `"open"` until it starts.
+    fn state(&self, this: &handles::Room) -> ApiResult<String>;
+
+    /// The players in it now. Empty once it has closed.
+    fn players(&self, this: &handles::Room) -> ApiResult<Vec<handles::Player>>;
+
+    /// The worlds it holds: those it was given or its scripts made or loaded. The main room's are every world no other room holds.
+    fn worlds(&self, this: &handles::Room) -> ApiResult<Vec<handles::World>>;
+
+    /// Begins its match: its scripts hear `room_start` (at the end of this tick for a room still opening, once it has). On a server in a network, the network's hub is told of a room with a key starting, finishing and closing (its admin stream's `room_state`), so a matchmaker that placed players in it knows when its match is under way and when it's gone, with nothing in the game's scripts of its own. `false` once it has started already, finished or closed.
+    fn start(&self, this: &handles::Room) -> ApiResult<bool>;
+
+    /// Ends its match: its scripts hear `room_finish`. `false` unless it's open or started.
+    fn finish(&self, this: &handles::Room) -> ApiResult<bool>;
+
+    /// Closes it: its scripts hear `room_close`, its players go back to the main room (as if they'd joined the server), its Lua state ends, the worlds its scripts made or loaded are unloaded (saved for a kept room, deleted for the rest) and those it was given are the main room's. It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script. `false` for the main room, and once it's closing or closed.
+    fn close(&self, this: &handles::Room) -> ApiResult<bool>;
+
+    /// Moves a player into it: their room's scripts hear them quit and this room's hear them join, as if they'd left the server and come back. Their `player:data()` goes with them; their `player:session()` table is the room's, so it starts empty here. It happens at the end of this tick, once every script's tick is done, so a room never changes under a running script. `false` when the player isn't online or the room is closing or closed.
+    fn send(&self, this: &handles::Room, player: handles::Player) -> ApiResult<bool>;
+
+    /// Gives it a world: the world's blocks, entities and events are this room's from now on. `false` when the world isn't loaded or the room is closed.
+    fn give_world(&self, this: &handles::Room, world: handles::World) -> ApiResult<bool>;
 }
 
 /// A database, from `nf.db()` or `nf.db('network')`. `nf.db()` is this package's own: one SQLite file per package, kept across restarts, which every other package (a dependency, or the project using one) never sees; its tables are made by the package's `migrations/NNN_name.sql` files, applied in order when the project loads. `nf.db('network')` (a name) is a connection to a MySQL or PostgreSQL server that the server's owner set up under `databases:` in the plugin's `config.yml`: shared by every package the owner lists for it, so give tables a name no other package would (`shop_scores`), create them yourself (`CREATE TABLE IF NOT EXISTS`: migrations belong to the package's own database only), and write the SQL in the server's dialect. The handle is the same either way: the same calls, `?` and `params`, rows and `value, err` answers. Every function is asynchronous (see `nf.task`): the work runs on a background thread, so a slow query never holds up the server, and one database runs its work in the order it was given, so a task's `db:execute` is always done before its next `db:query`. Use it from a task (`local rows, err = db:query(...)`) or give a callback. A mistake in the SQL, a constraint a row breaks or a database that couldn't be migrated is `nil, err`, never a thrown error.

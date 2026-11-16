@@ -177,7 +177,9 @@ fn data_shows_what_the_store_keeps_as_it_is_now() {
         .session()
         .spawn("c", place(1.0, 64.0, 2.0), 0.0)
         .expect("spawned");
-    events.session().player_joined(&alex());
+    events
+        .session()
+        .player_joined(netherforge_runtime::instance::RoomId::MAIN, &alex());
     {
         let session = events.session();
         let room = session.room().unwrap();
@@ -463,7 +465,88 @@ fn schedules_pack_and_an_unknown_word() {
     assert_eq!(
         nf(&platform, "nf what"),
         [
-            "<gray>/nf spawn|list|find|kill|tp|reload|modules|scripts|profile|pack|data|settings|requires|schedules|network|drain|shutdown"
+            "<gray>/nf spawn|list|find|kill|tp|reload|modules|scripts|profile|pack|data|settings|requires|schedules|network|drain|shutdown|room"
         ]
+    );
+}
+
+#[test]
+fn scripts_are_every_rooms_and_room_picks_where_the_others_look() {
+    let (platform, events, _) = server(&[
+        ("centities/tower/centity.json", SCRIPTED),
+        ("centities/tower/script.lua", ""),
+        (
+            "modules/game/init.lua",
+            r#"
+if nf.rooms.current():key() == "arena" then
+  nf.schedule.daily("06:00", function() end, { id = "dawn" })
+  nf.centities.spawn("tower", vector.create(4, 64, 0))
+end
+"#,
+        ),
+    ]);
+    events
+        .session_mut()
+        .open_room(Some("arena".into()), false)
+        .expect("a room");
+    tick(&events, 3);
+
+    // Every room's scripts, each after its room's name; one room's with `room`.
+    let all = nf(&platform, "nf scripts");
+    assert!(all[0].starts_with("<gold>3 scripts"), "{all:?}");
+    assert!(
+        all.iter()
+            .any(|l| l.contains("<aqua>room arena <white>module game")),
+        "{all:?}"
+    );
+    assert!(
+        all.iter()
+            .any(|l| l.contains("<gray>/ ") && l.contains(" <white>module game")),
+        "the main room's, as it was: {all:?}"
+    );
+    let arena = nf(&platform, "nf room arena scripts");
+    assert!(arena[0].starts_with("<gold>2 scripts,"), "{arena:?}");
+    assert!(
+        arena[1..].iter().all(|l| l.contains("<aqua>room arena ")),
+        "{arena:?}"
+    );
+
+    // What a room's scripts and centities are, in that room; the main room's without one.
+    assert_eq!(nf(&platform, "nf list"), ["<gray>No centities spawned."]);
+    let listed = nf(&platform, "nf room arena list");
+    assert_eq!(listed[0], "<gold>1 spawned:", "{listed:?}");
+    assert_eq!(
+        nf(&platform, "nf room main list"),
+        ["<gray>No centities spawned."]
+    );
+    assert_eq!(
+        nf(&platform, "nf schedules"),
+        ["<gray>No schedules are running."]
+    );
+    let schedules = nf(&platform, "nf room arena schedules");
+    assert!(
+        schedules[0].starts_with("<gold>1 schedule"),
+        "{schedules:?}"
+    );
+    assert_eq!(
+        nf(&platform, "nf room 1 kill all"),
+        ["<green>Removed 1."],
+        "by its number too"
+    );
+
+    assert_eq!(
+        nf(&platform, "nf room nowhere list"),
+        [
+            "<red>no room \"nowhere\" is open (name one by its key, or its number as the log says it)"
+        ]
+    );
+    assert!(
+        nf(&platform, "nf room arena pack")[0]
+            .starts_with("<red>/nf pack is the server's, not room arena's")
+    );
+    assert_eq!(
+        complete(&platform, "nf room "),
+        ["main", "arena"],
+        "the open rooms"
     );
 }

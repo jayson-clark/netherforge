@@ -229,7 +229,7 @@ impl ItemContext {
         self.start_script(id);
         if changed {
             let players = self.refresh_online();
-            self.shared.reattached("item", id, players);
+            self.shared.instance.reattached("item", id, players);
         }
     }
 
@@ -392,9 +392,8 @@ impl ItemContext {
     /// Every online player's own inventory.
     /// Every online player's own inventory: how many players had stacks rewritten.
     pub(crate) fn refresh_online(&self) -> usize {
-        self.platform()
-            .players()
-            .online()
+        self.shared
+            .online_players()
             .into_iter()
             .filter(|player| self.refresh(player.uuid) > 0)
             .count()
@@ -412,9 +411,8 @@ impl ItemContext {
             (pending, everyone, views)
         };
         let views = if everyone {
-            self.platform()
-                .players()
-                .online()
+            self.shared
+                .online_players()
                 .into_iter()
                 .map(|p| p.uuid)
                 .collect()

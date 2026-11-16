@@ -902,7 +902,7 @@ nf.on("demo:own", function() this:for_player(nf.players.get("Alex")) end)
     assert_eq!(printed(&platform.take()), ["hover\t32\t48"]);
     {
         let session = events.session();
-        session.player_quit(&alex);
+        session.player_quit(netherforge_runtime::instance::RoomId::MAIN, &alex);
     }
     events.tick();
     assert_eq!(

@@ -1,6 +1,7 @@
 import type { EventSpec, Field, Fn, LuaClass, Raised } from '../types.ts'
 import { gameNkEvents } from './gameEvents.ts'
 import { networkEvents } from './networkEvents.ts'
+import { roomEvents } from './rooms.ts'
 
 const shape = (
   name: string,
@@ -213,7 +214,7 @@ export const shapes: LuaClass[] = [
     {
       name: 'message',
       type: 'Text?',
-      doc: 'The join message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none.',
+      doc: "The join message everyone in the player's room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none.",
     },
   ]),
   payload(
@@ -238,7 +239,7 @@ export const shapes: LuaClass[] = [
     {
       name: 'message',
       type: 'Text?',
-      doc: 'The leave message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none.',
+      doc: "The leave message everyone in the player's room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none.",
     },
   ]),
   payload('PlayerChatEvent', 'A player is saying something in chat.', [
@@ -252,6 +253,11 @@ export const shapes: LuaClass[] = [
       name: 'format',
       type: 'Text',
       doc: 'How the line is shown, as MiniMessage, where `<player>` is the player\'s display name and `<message>` what they said (both shown as they are, never read as tags). Starts as Minecraft\'s own look, `"\\\\<<player>> <message>"`. Writable: assign another, like `"<gray><player>: <white><message>"`.',
+    },
+    {
+      name: 'recipients',
+      type: 'Player[]',
+      doc: "Who sees the line: every player in the speaker's room to begin with (everyone online, on a server that runs one room). Writable: assign a list to show it to only those players. The server's console always sees it.",
     },
   ]),
   payload(
@@ -493,7 +499,7 @@ export const nfEvents: EventSpec[] = [
     doc: 'A player is saying something in chat. `event:cancel()` stops anyone seeing it; assign `event.message` to change what they said, or `event.format` to change how the line looks. Handlers run on the main thread while the chat waits for them, so keep them quick.',
     payload: 'PlayerChatEvent',
     cancellable: true,
-    writable: ['message', 'format'],
+    writable: ['message', 'format', 'recipients'],
     example:
       'nf.on("player_chat", function(event)\n  event.format = "<gray><player> <dark_gray>»</dark_gray> <white><message>"\nend)',
     raised: byPlayer('player_chat', { watched: true }),
@@ -702,6 +708,7 @@ export const nfEvents: EventSpec[] = [
       'local greeting = nf.config("greeting")\nnf.on("setting_changed", function(event)\n  if event.setting == "greeting" then\n    greeting = event.value\n  end\nend)',
   },
   ...networkEvents,
+  ...roomEvents,
 ]
 
 /**

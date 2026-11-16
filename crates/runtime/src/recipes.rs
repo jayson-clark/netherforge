@@ -51,6 +51,8 @@ pub struct Recipes {
     sent: HashSet<String>,
     /// Whether players' recipe lists are behind the server's.
     dirty: bool,
+    /// What every room's recipes go to the server through: the server has one of each, however many rooms give it.
+    pub server: Option<Rc<crate::instance::Instance>>,
 }
 
 impl Recipes {
@@ -99,10 +101,19 @@ impl Recipes {
             return true;
         }
         self.dirty = true;
-        let added = platform.recipes().add(RecipeSpec {
-            id: id.to_owned(),
-            file: file.clone(),
-        });
+        if self.sent.contains(id)
+            && let Some(server) = &self.server
+        {
+            server.take_recipe(id);
+            self.sent.remove(id);
+        }
+        let added = match &self.server {
+            Some(server) => server.give_recipe(id, file),
+            None => platform.recipes().add(RecipeSpec {
+                id: id.to_owned(),
+                file: file.clone(),
+            }),
+        };
         if added {
             self.sent.insert(id.to_owned());
         } else {
@@ -116,7 +127,12 @@ impl Recipes {
     fn take(&mut self, platform: &dyn Platform, id: &str) {
         if self.sent.remove(id) {
             self.dirty = true;
-            platform.recipes().remove(id.to_owned());
+            match &self.server {
+                Some(server) => server.take_recipe(id),
+                None => {
+                    platform.recipes().remove(id.to_owned());
+                }
+            }
         }
     }
 
@@ -736,6 +752,7 @@ impl Service for RecipesService {
     fn start(&self, _room: &Room, project: &Define) {
         let platform = &*self.shared.platform;
         let mut recipes = self.shared.recipes.borrow_mut();
+        recipes.server = Some(self.shared.instance.clone());
         recipes.paths = paths(project);
         for (id, file) in project.project.running::<RecipeFile>() {
             if recipes.put(platform, &id, file) {

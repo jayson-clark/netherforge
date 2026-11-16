@@ -77,7 +77,11 @@ impl Fake {
         std::mem::take(&mut *self.lines.borrow_mut())
             .into_iter()
             .filter_map(|line| {
-                if let Some(rest) = line.strip_prefix("info [module t] ") {
+                let room = line
+                    .strip_prefix("info [room ")
+                    .and_then(|r| r.split_once(" module t] "))
+                    .map(|(_, rest)| rest);
+                if let Some(rest) = line.strip_prefix("info [module t] ").or(room) {
                     let text = rest.rsplit_once(" (modules/").map_or(rest, |(t, _)| t);
                     Some(text.replace('\t', " "))
                 } else if line.starts_with("warn") || line.starts_with("error") {
@@ -333,6 +337,22 @@ impl netherforge_platform::FakeWorldManagerOps for Fake {
         self.saved.borrow_mut().insert(name);
         true
     }
+    fn save_files(&self, name: String) -> Option<netherforge_platform::WorldFiles> {
+        self.worlds
+            .borrow()
+            .contains(&name)
+            .then(|| netherforge_platform::WorldFiles {
+                level: "/srv/world/level.dat".into(),
+                dimension: format!("/srv/world/dimensions/minecraft/{name}").into(),
+            })
+    }
+    fn set_saving(&self, name: String, saving: bool) -> bool {
+        self.managed
+            .lock()
+            .unwrap()
+            .push(format!("saving {name} {saving}"));
+        true
+    }
     fn delete(&self, name: String) -> Box<dyn netherforge_platform::FileWork> {
         self.saved.borrow_mut().remove(&name);
         Box::new(Work {
@@ -480,6 +500,15 @@ impl FakePlatform for Fake {
     }
     fn teams(&self) -> &dyn netherforge_platform::TeamOps {
         self
+    }
+    fn performance(&self) -> &dyn netherforge_platform::PerformanceOps {
+        self
+    }
+}
+
+impl netherforge_platform::FakePerformanceOps for Fake {
+    fn last_tick_milliseconds(&self) -> f64 {
+        5.0
     }
 }
 
@@ -1192,4 +1221,480 @@ fn a_packages_terrain_script_reads_its_packages_own_files() {
             Some(2)
         )
     );
+}
+
+#[test]
+fn a_rooms_worlds_are_its_own_by_name_and_go_or_stay_with_it() {
+    let files = Files::new(
+        &[("maps/tracks/level.dat", "")],
+        r#"
+local here = nf.rooms.current()
+if not here:is_main() then
+  local arena = nf.worlds.create("arena", { generator = "void" })
+  print(here:id(), arena:name(), nf.worlds.get("arena") == arena, #here:worlds())
+else
+  nf.after(1, function() print("main sees arena", nf.worlds.get("arena") ~= nil) end)
+end
+"#,
+    );
+    let platform = Fake::new();
+    let mut session = start(&files, &platform, Config::default());
+    platform.lines();
+    let one = session.open_room(None, false).expect("a room");
+    let two = session
+        .open_room(Some("owner 7".into()), true)
+        .expect("a room");
+    let three = session
+        .open_room(Some("m-1".into()), false)
+        .expect("a room");
+    let said = printed(&session, &platform, 4);
+    let mut said: Vec<String> = said
+        .into_iter()
+        .filter(|l| !l.starts_with("info Requires") && !l.starts_with("info Running"))
+        .collect();
+    said.sort();
+    assert_eq!(
+        said,
+        [
+            "1 arena true 1",
+            "2 arena true 1",
+            "3 arena true 1",
+            "main sees arena false",
+        ]
+    );
+    let worlds = platform.worlds.borrow().clone();
+    assert!(
+        worlds.contains("arena__r1")
+            && worlds.contains("arena__owner_7")
+            && worlds.contains("arena__m_1"),
+        "{worlds:?}"
+    );
+    // A match's worlds go with it, keyed or not; a kept room's are saved for next time.
+    session.close_room(one);
+    session.close_room(two);
+    session.close_room(three);
+    let managed = platform.managed.lock().unwrap().clone();
+    assert!(
+        managed.iter().any(|m| m == "unload arena__r1 false"),
+        "{managed:?}"
+    );
+    assert!(
+        managed.iter().any(|m| m == "unload arena__owner_7 true"),
+        "{managed:?}"
+    );
+    assert!(
+        managed.iter().any(|m| m == "unload arena__m_1 false"),
+        "{managed:?}"
+    );
+}
+
+#[test]
+fn a_rooms_worlds_go_with_it_as_the_server_stops() {
+    let files = Files::new(
+        &[],
+        r#"
+if not nf.rooms.current():is_main() then
+  nf.worlds.create("arena", { generator = "void" })
+end
+"#,
+    );
+    let platform = Fake::new();
+    let mut session = start(&files, &platform, Config::default());
+    session
+        .open_room(Some("m-1".into()), false)
+        .expect("a room");
+    session
+        .open_room(Some("owner-1".into()), true)
+        .expect("a room");
+    session.stop();
+    let managed = platform.managed.lock().unwrap().clone();
+    assert!(
+        managed.iter().any(|m| m == "unload arena__m_1 false"),
+        "{managed:?}"
+    );
+    assert!(
+        managed.iter().any(|m| m == "unload arena__owner_1 true"),
+        "{managed:?}"
+    );
+}
+
+#[test]
+fn a_server_killed_with_rooms_open_deletes_their_worlds_as_it_starts_again_but_a_kept_rooms() {
+    let files = Files::new(
+        &[],
+        r#"
+if not nf.rooms.current():is_main() then
+  nf.worlds.create("arena", { generator = "void" })
+end
+"#,
+    );
+    let platform = Fake::new();
+    let store = Rc::new(netherforge_runtime::store::Store::in_memory());
+    let session = Session::start_configured(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        store.clone(),
+        Config::default(),
+    );
+    let mut session = session;
+    session
+        .open_room(Some("m-1".into()), false)
+        .expect("a room");
+    session
+        .open_room(Some("owner-1".into()), true)
+        .expect("a room");
+    session.open_room(None, false).expect("a room");
+    store.flush();
+    // Killed: nothing closes, and as the server starts again none of those worlds is loaded.
+    std::mem::forget(session);
+    for world in ["arena__m_1", "arena__owner_1", "arena__r3"] {
+        assert!(platform.worlds.borrow_mut().remove(world), "{world}");
+        platform.saved.borrow_mut().insert(world.into());
+    }
+    platform.managed.lock().unwrap().clear();
+    let mut again = Session::start_configured(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        store.clone(),
+        Config::default(),
+    );
+    let managed = platform.managed.lock().unwrap().clone();
+    assert_eq!(managed, ["delete arena__m_1", "delete arena__r3"]);
+    assert_eq!(
+        platform.saved.borrow().iter().cloned().collect::<Vec<_>>(),
+        ["arena__owner_1"],
+        "the kept room's world stays"
+    );
+    // A room numbered as a dead one was makes its world afresh, the name free again.
+    let one = again.open_room(None, false).expect("a room");
+    assert!(platform.worlds.borrow().contains("arena__r1"));
+    again.close_room(one);
+    again.stop();
+    drop(again);
+    store.flush();
+    platform.managed.lock().unwrap().clear();
+    let _third = Session::start_configured(
+        platform.clone(),
+        &files,
+        &NoPackages,
+        store,
+        Config::default(),
+    );
+    let managed = platform.managed.lock().unwrap().clone();
+    assert!(
+        !managed
+            .iter()
+            .any(|m| m.starts_with("delete") && m != "delete arena__r1"),
+        "forgotten once deleted (the closed room's own deletion aside): {managed:?}"
+    );
+}
+
+/// `method path` with `body` to the control endpoint on `port`, answered while the session goes on ticking (its
+/// rooms opening and closing at each tick's end): the status and the JSON.
+fn control(
+    session: &mut Session,
+    control: &netherforge_runtime::control::ServerControl,
+    platform: &Fake,
+    (port, token): (u16, &str),
+    (method, path, body): (&str, &str, &str),
+    tick: &mut u64,
+) -> (u16, serde_json::Value) {
+    use std::io::{Read as _, Write as _};
+    let (method, path, body, token) = (
+        method.to_owned(),
+        path.to_owned(),
+        body.to_owned(),
+        token.to_owned(),
+    );
+    let asking = std::thread::spawn(move || {
+        let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        write!(
+            stream,
+            "{method} {path} HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        )
+        .unwrap();
+        let mut answer = String::new();
+        stream.read_to_string(&mut answer).unwrap();
+        answer
+    });
+    while !asking.is_finished() {
+        *tick += 1;
+        control.tick(*tick, Some(session), platform);
+        session.tick();
+        session.apply_room_requests();
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let answer = asking.join().unwrap();
+    let status = answer[9..12].parse().unwrap();
+    let json = answer.split_once("\r\n\r\n").map_or("null", |(_, b)| b);
+    (status, serde_json::from_str(json).unwrap())
+}
+
+#[test]
+fn a_kept_room_is_saved_closed_and_brought_back_through_the_control_endpoint() {
+    let imports = tempfile::tempdir().unwrap();
+    let alice = imports.path().join("alice");
+    std::fs::create_dir_all(alice.join("worlds/home/dimensions/minecraft/overworld")).unwrap();
+    std::fs::write(alice.join("worlds/home/level.dat"), b"level").unwrap();
+    std::fs::write(
+        alice.join("data.json"),
+        r#"{ "test": { "notes": { "visits": 2 } } }"#,
+    )
+    .unwrap();
+    let files = Files::new(
+        &[],
+        r#"
+local room = nf.rooms.current()
+if not room:is_main() then
+  local home = nf.worlds.get("home")
+  local notes = nf.data("notes")
+  print("open", room:key(), room:is_kept(), home and home:name(), notes.visits or 0, nf.worlds.default():name())
+  notes.visits = (notes.visits or 0) + 1
+end
+"#,
+    );
+    let platform = Fake::new();
+    let mut config = Config::default();
+    config.worlds.import_root = Some(imports.path().to_owned());
+    let mut session = start(&files, &platform, config);
+    let dir = tempfile::tempdir().unwrap();
+    let endpoint = netherforge_runtime::control::ServerControl::start(
+        &netherforge_runtime::config::ControlConfig {
+            socket: None,
+            port: Some(0),
+            token_file: dir.path().join("control.token"),
+            stall_seconds: 10,
+        },
+        &*platform,
+    )
+    .expect("listening");
+    let token = std::fs::read_to_string(dir.path().join("control.token")).unwrap();
+    let at = (endpoint.port().unwrap(), token.trim());
+    let mut ticks = 0;
+    let mut ask = |session: &mut Session, method: &str, path: &str, body: &str| {
+        control(
+            session,
+            &endpoint,
+            &platform,
+            at,
+            (method, path, body),
+            &mut ticks,
+        )
+    };
+    session.tick();
+    platform.lines();
+
+    // Alice's room comes back from what was saved of it: its world and its tables, there as its scripts start.
+    let (status, opened) = ask(
+        &mut session,
+        "POST",
+        "/rooms/open",
+        r#"{"key": "player_alice", "keep": true, "folder": "alice"}"#,
+    );
+    assert_eq!(status, 200, "{opened}");
+    assert_eq!(opened["worlds"], serde_json::json!(["home"]));
+    let (status, bob) = ask(
+        &mut session,
+        "POST",
+        "/rooms/open",
+        r#"{"key": "player_bob", "keep": true}"#,
+    );
+    assert_eq!(status, 200, "{bob}");
+    assert_eq!(
+        platform.lines(),
+        [
+            "open player_alice true home 2 home",
+            "open player_bob true nil 0 world"
+        ]
+    );
+    let (status, again) = ask(
+        &mut session,
+        "POST",
+        "/rooms/open",
+        r#"{"key": "player_bob"}"#,
+    );
+    assert_eq!(status, 409, "{again}");
+    let (_, state) = ask(&mut session, "GET", "/state", "");
+    let rooms: Vec<(String, serde_json::Value)> = state["rooms"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| (r["key"].as_str().unwrap().to_owned(), r["worlds"].clone()))
+        .collect();
+    assert_eq!(
+        rooms,
+        [
+            (
+                "player_alice".to_owned(),
+                serde_json::json!(["home__player_alice"])
+            ),
+            ("player_bob".to_owned(), serde_json::json!([])),
+        ]
+    );
+
+    // Saved with its writes paused: what to copy, and its tables as they are now.
+    let (status, saved) = ask(
+        &mut session,
+        "POST",
+        "/save",
+        r#"{"room": "player_alice", "pause": true}"#,
+    );
+    assert_eq!(status, 200, "{saved}");
+    assert_eq!(
+        saved["worlds"],
+        serde_json::json!([{
+            "name": "home",
+            "world": "home__player_alice",
+            "level": "/srv/world/level.dat",
+            "folder": "/srv/world/dimensions/minecraft/home__player_alice",
+        }])
+    );
+    assert_eq!(
+        saved["data"],
+        serde_json::json!({ "test": { "notes": { "visits": 3 } } })
+    );
+    assert!(
+        platform
+            .managed
+            .lock()
+            .unwrap()
+            .contains(&"saving home__player_alice false".to_owned())
+    );
+    let (status, _) = ask(
+        &mut session,
+        "POST",
+        "/resume",
+        r#"{"room": "player_alice"}"#,
+    );
+    assert_eq!(status, 200);
+
+    // Closed with delete, once copied: its world unloaded and deleted, its tables gone.
+    let (status, closed) = ask(
+        &mut session,
+        "POST",
+        "/rooms/close",
+        r#"{"key": "player_alice", "delete": true}"#,
+    );
+    assert_eq!(status, 200, "{closed}");
+    assert_eq!(closed["closed"], true);
+    let started = Instant::now();
+    while !platform
+        .managed
+        .lock()
+        .unwrap()
+        .contains(&"delete home__player_alice".to_owned())
+    {
+        assert!(started.elapsed() < Duration::from_secs(5), "never deleted");
+        session.tick();
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert!(
+        platform
+            .managed
+            .lock()
+            .unwrap()
+            .contains(&"unload home__player_alice true".to_owned())
+    );
+    let (status, gone) = ask(&mut session, "POST", "/save", r#"{"room": "player_alice"}"#);
+    assert_eq!(status, 404, "{gone}");
+
+    // Brought back elsewhere (here again) from what the save said: as it was.
+    std::fs::write(alice.join("data.json"), saved["data"].to_string()).unwrap();
+    let (status, _) = ask(
+        &mut session,
+        "POST",
+        "/rooms/open",
+        r#"{"key": "player_alice", "keep": true, "folder": "alice"}"#,
+    );
+    assert_eq!(status, 200);
+    assert_eq!(platform.lines(), ["open player_alice true home 3 home"]);
+
+    // Bob's closes without delete: what it left is still there to save.
+    let (status, _) = ask(
+        &mut session,
+        "POST",
+        "/rooms/close",
+        r#"{"key": "player_bob"}"#,
+    );
+    assert_eq!(status, 200);
+    let (status, left) = ask(&mut session, "POST", "/save", r#"{"room": "player_bob"}"#);
+    assert_eq!(status, 200, "{left}");
+    assert_eq!(left["closed"], true);
+    assert_eq!(
+        left["data"],
+        serde_json::json!({ "test": { "notes": { "visits": 1 } } })
+    );
+    let (status, _) = ask(
+        &mut session,
+        "POST",
+        "/rooms/close",
+        r#"{"key": "player_bob", "delete": true}"#,
+    );
+    assert_eq!(status, 200);
+    let (status, _) = ask(&mut session, "POST", "/save", r#"{"room": "player_bob"}"#);
+    assert_eq!(status, 404);
+    endpoint.stop(&*platform);
+}
+
+#[test]
+fn a_maps_centities_records_come_with_every_copy_of_it_and_a_file_that_isnt_refuses_it() {
+    // Maps on disk: one whose world folder carries its centities' records (as a save writes them), one whose file
+    // isn't records.
+    let project = tempfile::tempdir().unwrap();
+    let records = "dimensions/minecraft/overworld/data/netherforge/centities.json";
+    for (map, text) in [
+        (
+            "track",
+            r#"{"centities": [{"id": "00000000-0000-0000-0000-000000000007", "centity": "test:lamp",
+                "x": 3, "y": 64, "z": 4, "data": {"lit": 7}}]}"#,
+        ),
+        ("torn", "{ not json"),
+    ] {
+        let file = project.path().join("maps").join(map).join(records);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, text).unwrap();
+    }
+    let files = Files::new(
+        &[("maps/track/level.dat", ""), ("maps/torn/level.dat", "")],
+        r#"
+nf.worlds.copy("track", "track_1", function(w, err) print("copied", w and w:name(), err) end)
+local ok, why = pcall(nf.worlds.copy, "torn", "torn_1", print)
+print(ok, (tostring(why):gsub("^.*couldn't copy", "couldn't copy"):gsub(": .*isn't", ": isn't")))
+"#,
+    );
+    let platform = Fake::new();
+    let store = Rc::new(netherforge_runtime::store::Store::in_memory());
+    let root = project.path().to_owned();
+    let config = Config {
+        paths: Some(netherforge_runtime::screen::video::ProjectPaths(Rc::new(
+            move |path: &str| Some(root.join(path)),
+        ))),
+        ..Config::default()
+    };
+    let session =
+        Session::start_configured(platform.clone(), &files, &NoPackages, store.clone(), config);
+    let mut lines = printed(&session, &platform, 2);
+    lines.sort();
+    assert_eq!(
+        lines,
+        [
+            "copied track_1 nil",
+            "false couldn't copy map \"torn\" into world \"torn_1\": isn't centities' records: key must be a string at line 1 column 3",
+        ]
+    );
+    // The track's record is the copy's, its table too, before the copy loaded; the torn map was never copied.
+    let copied: Vec<_> = store
+        .instances()
+        .into_iter()
+        .map(|r| (r.centity, r.anchor.world, r.anchor.x))
+        .collect();
+    assert_eq!(
+        copied,
+        [("test:lamp".to_owned(), "track_1".to_owned(), 3.0)]
+    );
+    let managed = platform.managed.lock().unwrap().clone();
+    assert!(!managed.iter().any(|m| m.contains("torn")), "{managed:?}");
 }

@@ -645,7 +645,7 @@ allow; `/nfhub admins revoke <id>` ends it and its streams.
 | `servers:read`     | `GET /v1/servers` (each with its group, state, players and room), and server changes streamed.                                                                |
 | `servers:write`    | `POST /v1/servers`, `DELETE /v1/servers/<name>`, `POST /v1/servers/<name>/drain`.                                                                             |
 | `presence:read`    | `GET /v1/players`, and joins, moves and leaves streamed.                                                                                                      |
-| `players:send`     | `POST /v1/players/<id or name>/send` `{ "server" \| "group", "balance", "data", "wait" }`.                                                                    |
+| `players:send`     | `POST /v1/players/<id or name>/send` `{ "server" \| "group", "balance", "data", "wait", "room", "keep" }`.                                                    |
 | `players:message`  | `POST /v1/players/<id or name>/message` `{ "kind": "chat" \| "title" \| "actionbar", "text", "subtitle" }`, shown by the proxy wherever they are (see below). |
 | `players:kick`     | `POST /v1/players/<id or name>/kick` `{ "message" }`.                                                                                                         |
 | `channels:publish` | `POST /v1/channels/publish` `{ "channel": "lobby:news", "value", "server", "group" }`.                                                                        |
@@ -679,7 +679,13 @@ server with their own permissions.
 allow: `player_joined`, `player_moved`, `player_left`, `server_connected` and
 `server_disconnected` (every server, as it joins or leaves the hub, with its
 state, group, capacity and players), `server` (a change to a connected one),
-and with `?listen=lobby:news,lobby:queue` messages on those channels. Its first
+`room_state` (`{ "server", "room", "state" }`: a room with a key on that
+server started, finished or closed, as its scripts' `room:start()`,
+`room:finish()` and `room:close()` said; a placing service knows when a room
+it filled is under way and when it's gone. A server whose link dropped says it
+again as it's welcomed back: each keyed room under way its state, and each that
+closed meanwhile or just before `closed`, so a client must take a state it heard before as
+nothing new), and with `?listen=lobby:news,lobby:queue` messages on those channels. Its first
 event is `hello`, with the hub's `started` time and an `instance` id that's new
 on every start, so a client reconnecting knows whether the hub restarted.
 `GET /v1/servers` gives each connected server's `connectedSince`. A script asks a
@@ -697,7 +703,18 @@ players logging in) decides where those players go. For each send, the hub
 sends `place` with the players and an `id`, and the service answers
 `POST /v1/placements/<id>` with one of:
 
-- `{ "server": "arena-3" }`: they go there.
+- `{ "server": "arena-3" }`: they go there. Add `"room": "match-7"` to put
+  them in that room of the server (one that runs several rooms of its project,
+  see `nf.rooms`): the server opens a room with that key for the first player
+  sent for it. A key whose room has closed on that server isn't opened again
+  that way (the service placed them before it closed, a match that ended as
+  they came): they arrive in its main room and it sends them back to its group,
+  where the service places them again. A send or placement that names a room
+  on the server a player is on already puts them in that room (nobody moves).
+  Add `"keep": true` for a room whose worlds and `nf.data` outlast
+  it (an owner's world, a party's): it saves them as it closes, and the room
+  opened again with that key finds them. Without it the room is a match's: its
+  worlds are deleted and its data forgotten when it closes.
 - `{ "hold": "Finding you a match…" }`: they wait where they are, seeing the
   status on their action bar (or the send's `on_wait` hears it), until the
   service answers again or the send's `wait` runs out. A player logging in

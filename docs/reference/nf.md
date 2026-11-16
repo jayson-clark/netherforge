@@ -2,7 +2,7 @@
 
 # nf
 
-Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.images`, `nf.files`, `nf.text`, `nf.looks`, `nf.packs`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
+Everything outside the script itself. The core verbs (events, timers, tasks and waiting, saved data, the budget) are on `nf`; everything else is grouped into namespaces under it: `nf.server`, `nf.commands`, `nf.players`, `nf.bots`, `nf.worlds`, `nf.structures`, `nf.centities`, `nf.spawning`, `nf.menus`, `nf.dialogs`, `nf.items`, `nf.blocks`, `nf.recipes`, `nf.loot`, `nf.bossbars`, `nf.teams`, `nf.rooms`, `nf.schedule`, `nf.economy`, `nf.placeholders`, `nf.particles`, `nf.cutscenes`, `nf.screens`, `nf.images`, `nf.files`, `nf.text`, `nf.looks`, `nf.packs`, `nf.json`, `nf.encoding`, `nf.crypto`, `nf.http`, `nf.web`, `nf.wasm`, `nf.network`, `nf.time`, `nf.random`, `nf.math` and `nf.test`. Plain functions on tables, so call them with a dot: `nf.players.online()`.
 
 A table of functions: call them with a dot.
 
@@ -10,7 +10,7 @@ A table of functions: call them with a dot.
 | --- | --- |
 | [Timers and tasks](#timers-and-tasks) | [`after`](#after) [`every`](#every) [`task`](#task) [`wait`](#wait) [`wait_until`](#wait_until) [`wait_for`](#wait_for) [`instructions_left`](#instructions_left) |
 | [Data and settings](#data-and-settings) | [`data`](#data) [`db`](#db) [`config`](#config) |
-| [Events](#events) | [`on`](#on) [`once`](#once) [`emit`](#emit) and 107 events |
+| [Events](#events) | [`on`](#on) [`once`](#once) [`emit`](#emit) and 110 events |
 
 ## Namespaces
 
@@ -32,6 +32,7 @@ A table of functions: call them with a dot.
 | [`nf.loot`](nf.loot.md) | Loot tables: the project's own (`loot/<id>.json`) and the game's. |
 | [`nf.bossbars`](nf.bossbars.md) | Boss bars: bars across the top of players' screens. |
 | [`nf.teams`](nf.teams.md) | The project's scoreboard teams: prefixes and suffixes on names, name colours and glow colours, friendly fire, name tags and collision. |
+| [`nf.rooms`](nf.rooms.md) | The server's rooms. |
 | [`nf.schedule`](nf.schedule.md) | Runs a function at a time of day, every day or week, or by a cron expression: real time, as opposed to ticks (`nf.after`, `nf.every`). |
 | [`nf.economy`](nf.economy.md) | Players' money, as the server's economy plugin keeps it, through [Vault](https://www.spigotmc.org/resources/vault.34315/): whichever economy is registered with it (EssentialsX, CMI, …) answers, so a project never names one. |
 | [`nf.placeholders`](nf.placeholders.md) | Placeholders, through [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/): fill in the `%player_name%`-style placeholders every plugin offers, and offer your own as `%<namespace>_<key>%` to every plugin that reads them (scoreboards, chat formats, holograms). |
@@ -261,7 +262,7 @@ What `nf.on(event, handler)` listens for. See [Events](events.md) for how events
 
 | Event | Payload | |
 | --- | --- | --- |
-| `player_chat` | [PlayerChatEvent](types.md#playerchatevent) | A player is saying something in chat. `event:cancel()` stops anyone seeing it; assign `event.message` to change what they said, or `event.format` to change how the line looks. Handlers run on the main thread while the chat waits for them, so keep them quick. **Cancellable.** Writable: `message`, `format`. |
+| `player_chat` | [PlayerChatEvent](types.md#playerchatevent) | A player is saying something in chat. `event:cancel()` stops anyone seeing it; assign `event.message` to change what they said, or `event.format` to change how the line looks. Handlers run on the main thread while the chat waits for them, so keep them quick. **Cancellable.** Writable: `message`, `format`, `recipients`. |
 | `player_command` | [PlayerCommandEvent](types.md#playercommandevent) | A player typed a command (any command: Minecraft's, a plugin's or a script's), before it runs. `event:cancel()` stops it running. **Cancellable.** |
 
 ### Players: moving
@@ -409,6 +410,14 @@ What `nf.on(event, handler)` listens for. See [Events](events.md) for how events
 | `network_player_join` | [NetworkPlayerEvent](types.md#networkplayerevent) | A player joined the network, on any server of it, this one included (where `player_join` is heard too). |
 | `network_player_switch` | [NetworkPlayerSwitchEvent](types.md#networkplayerswitchevent) | A player went from one server of the network to another, whoever moved them (a command on the proxy, a script). |
 | `network_player_quit` | [NetworkPlayerEvent](types.md#networkplayerevent) | A player left the network: they were on `event.player.server` and are now on none. |
+
+### This room
+
+| Event | Payload | |
+| --- | --- | --- |
+| `room_start` | [RoomEvent](types.md#roomevent) | This room's match began: `room:start()` was called (by this room's scripts, another room's, or the server's owner through the admin API). Before it, the room is open: players can be sent in and the world got ready. |
+| `room_finish` | [RoomEvent](types.md#roomevent) | This room's match ended: `room:finish()` was called. Its players are still here; the room closes when it's told to (`room:close()`), which is where a game says who won and sends everyone on. |
+| `room_close` | [RoomEvent](types.md#roomevent) | This room is about to close: its scripts' last chance, before its players go back to the main room and its Lua state ends. Afterwards the worlds its scripts made or loaded are unloaded, saved for a kept room (`RoomOptions.keep`) and deleted for the rest, and those it was given are the main room's. |
 
 ### `nf.on(event, handler, options?)` {#on}
 

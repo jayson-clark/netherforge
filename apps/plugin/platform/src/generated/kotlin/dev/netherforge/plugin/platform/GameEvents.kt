@@ -28,8 +28,8 @@ interface GameEvents {
      * A player is saying something in chat. `event:cancel()` stops anyone seeing it; assign
      * `event.message` to change what they said, or `event.format` to change how the line looks. Handlers
      * run on the main thread while the chat waits for them, so keep them quick. True when it ended
-     * cancelled. What handlers made of `message`, `format` is written back into [event]. Only while
-     * [WatchedEvent.PLAYER_CHAT] is watched.
+     * cancelled. What handlers made of `message`, `format`, `recipients` is written back into [event].
+     * Only while [WatchedEvent.PLAYER_CHAT] is watched.
      */
     fun playerChat(event: GameEvent.PlayerChat): Boolean
 
@@ -537,7 +537,10 @@ sealed interface GameEvent {
         val player: PlayerRef,
         /** Whether they have never played here before. */
         val firstJoin: Boolean,
-        /** The join message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none. */
+        /**
+         * The join message everyone in the player's room sees (everyone online, on a server that runs one
+         * room), as MiniMessage. Writable: assign another, or `nil` for none.
+         */
         var message: String?
     ) : GameEvent
 
@@ -545,7 +548,10 @@ sealed interface GameEvent {
     data class PlayerQuit(
         /** Who it was. */
         val player: PlayerRef,
-        /** The leave message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none. */
+        /**
+         * The leave message everyone in the player's room sees (everyone online, on a server that runs one
+         * room), as MiniMessage. Writable: assign another, or `nil` for none.
+         */
         var message: String?
     ) : GameEvent
 
@@ -563,7 +569,13 @@ sealed interface GameEvent {
          * what they said (both shown as they are, never read as tags). Starts as Minecraft's own look,
          * `"\\<<player>> <message>"`. Writable: assign another, like `"<gray><player>: <white><message>"`.
          */
-        var format: String
+        var format: String,
+        /**
+         * Who sees the line: every player in the speaker's room to begin with (everyone online, on a server
+         * that runs one room). Writable: assign a list to show it to only those players. The server's console
+         * always sees it.
+         */
+        var recipients: List<PlayerRef>
     ) : GameEvent
 
     /** A player walked, swam, flew or fell into another block. */

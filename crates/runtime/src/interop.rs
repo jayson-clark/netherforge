@@ -198,7 +198,10 @@ impl InteropContext {
 
     fn release(&self, expansion: &Expansion) {
         expansion.live.set(false);
-        if self.platform().plugins().is_enabled(PLACEHOLDER_API.into()) {
+        // Only the main room gives the server placeholders, so only it takes them back.
+        if self.shared.room == crate::instance::RoomId::MAIN
+            && self.platform().plugins().is_enabled(PLACEHOLDER_API.into())
+        {
             self.platform()
                 .placeholders()
                 .unregister(expansion.namespace.clone());
@@ -402,7 +405,11 @@ impl Service for InteropService {
             }
         }
         // PlaceholderAPI was reloaded or enabled again: it forgot what was registered with the one before.
-        if expansions.is_empty() || !platform.plugins().is_enabled(PLACEHOLDER_API.into()) {
+        // The server's placeholders are the main room's (a namespace is the server's, whichever player it's for).
+        if expansions.is_empty()
+            || self.shared.room != crate::instance::RoomId::MAIN
+            || !platform.plugins().is_enabled(PLACEHOLDER_API.into())
+        {
             return;
         }
         let Some(context) = self.context.borrow().clone() else {

@@ -20,9 +20,11 @@ pub struct DataTable {
 }
 
 pub struct Shared {
+    /// What every room of the server shares: the store, the pack, the databases...
+    pub instance: Rc<crate::instance::Instance>,
+    /// Which of the server's rooms this is.
+    pub room: crate::instance::RoomId,
     pub platform: Rc<dyn Platform>,
-    /// The packages the server provides that the project loaded, as `/nf requires` lists them: the adapter's.
-    pub provided_packages: RefCell<Option<crate::session::WrittenPackFiles>>,
     pub centities: RefCell<Centities>,
     /// The project's `fonts/default.json`, which anchored text is measured with.
     pub font: RefCell<Option<DefaultFontFile>>,
@@ -32,12 +34,8 @@ pub struct Shared {
     pub next_flight: std::cell::Cell<u64>,
     /// Places searched this tick by walks finding a new path on their own.
     pub path_nodes: std::cell::Cell<usize>,
-    /// The runtime's store: placements and saved tables.
-    pub store: Rc<crate::store::Store>,
     /// Scripts' saved tables: `centity:data()`, `player:data()`, `nf.data(name)`.
     pub data: RefCell<crate::data::ScriptData>,
-    /// The permission nodes scripts set on players.
-    pub permissions: RefCell<crate::permissions::Permissions>,
     /// `player:session()`: a plain table per online player, never saved.
     pub session_tables: RefCell<std::collections::HashMap<netherforge_platform::Uuid, mlua::Table>>,
     /// `nf.schedule`'s live schedules.
@@ -50,10 +48,6 @@ pub struct Shared {
     pub screens: RefCell<crate::screen::Screens>,
     /// Every online player's HUD.
     pub huds: RefCell<crate::huds::Huds>,
-    /// The resource pack as last built, and the characters it draws glyphs and skins with.
-    pub packs: RefCell<crate::packs::Packs>,
-    /// The scripts' data directory (`nf.files`), when the server has one.
-    pub files: RefCell<Option<crate::files::ScriptFiles>>,
     /// The tables `block:data()` hands out.
     pub block_data: RefCell<crate::block_data::BlockData>,
     /// Who's mining the project's blocks (and the game's with rules), and whose speed is turned down.
@@ -62,8 +56,6 @@ pub struct Shared {
     pub blocks: RefCell<crate::custom_blocks::CustomBlocks>,
     /// The project's recipes and those scripts registered.
     pub recipes: RefCell<crate::recipes::Recipes>,
-    /// The project's loot tables.
-    pub loot: RefCell<crate::loot::LootTables>,
     /// The project's particle effects and every one playing.
     pub particles: RefCell<crate::particles::Particles>,
     /// The project's cutscenes and every one playing.
@@ -119,24 +111,103 @@ pub struct Shared {
     pub gone: RefCell<Vec<netherforge_platform::Uuid>>,
     /// Mobs' walks (`mob:move_to`) and the goals scripts added.
     pub mobs: Rc<crate::mob::Mobs>,
-    /// The packages' own databases (`nf.db`), and the owner's connections.
-    pub databases: RefCell<crate::databases::Databases>,
     /// The worlds the project made and may take away.
     pub managed_worlds: RefCell<crate::managed_worlds::ManagedWorlds>,
-    /// What the worlds' file work said as it failed on its lane, for the log at a tick.
-    pub managed_failures: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     /// Structures: the project's, its builds, scripts' saves, and the gradual work going.
     pub structures: RefCell<crate::structures::Structures>,
-    /// What services say of the reload running now (what kept running on each resource): read once it's done.
-    pub reloading: RefCell<crate::reload::Notes>,
-    /// The dev bridge's console, while there's a bridge: what scripts say and how they fail goes there as itself
-    /// (a line with where it was written, an error with its traceback) rather than as a plain log line.
-    pub console: RefCell<Option<Rc<dyn crate::bridge::Console>>>,
-    /// Lanes work goes to off the main thread, by name, made as they're first wanted (a biome search's).
-    pub lanes: RefCell<std::collections::HashMap<&'static str, crate::http::Workers>>,
 }
 
 impl Shared {
+    /// Whether `player` is in this room (an online player not in another room is the main room's).
+    pub fn has_player(&self, player: netherforge_platform::Uuid) -> bool {
+        self.instance.routes.borrow().player(player) == self.room
+    }
+
+    /// Whether this room's scripts may reach entity `id`: anything but a player in another room. Without rooms beside
+    /// the main one, everything.
+    pub fn reaches(&self, id: netherforge_platform::Uuid) -> bool {
+        if self.instance.open.borrow().len() <= 1 {
+            return true;
+        }
+        match self.instance.routes.borrow().room_of(id) {
+            Some(room) => room == self.room,
+            // In no room beside the main one: a player there, or not a player.
+            None => {
+                self.room == crate::instance::RoomId::MAIN
+                    || self.platform.players().get(id).is_none()
+            }
+        }
+    }
+
+    /// The online players in this room: what "everyone" means to its scripts and services.
+    pub fn online_players(&self) -> Vec<netherforge_platform::PlayerRef> {
+        let mut online = self.platform.players().online();
+        let routes = self.instance.routes.borrow();
+        online.retain(|p| routes.player(p.uuid) == self.room);
+        online
+    }
+
+    /// What this room's worlds are called on the server after their scripts' names: `__<key>` (its key, made a world
+    /// name: lowercase, any other character `_`) for a room opened with one, `__r<number>` for one without, nothing for
+    /// the main room.
+    fn world_suffix(&self) -> Option<String> {
+        if self.room == crate::instance::RoomId::MAIN {
+            return None;
+        }
+        Some(crate::instance::world_suffix(
+            self.instance.room_key(self.room).as_deref(),
+            self.room,
+        ))
+    }
+
+    /// The server's name of the world this room's scripts call `name`: in a room beside the main one, its own world of
+    /// that name (`kart__match_7`), so every room's `nf.worlds.get("kart")` is its own; in the main room, `name`.
+    pub fn real_world(&self, name: &str) -> String {
+        match self.world_suffix() {
+            Some(suffix) if !name.ends_with(&format!("__{suffix}")) => format!("{name}__{suffix}"),
+            _ => name.to_owned(),
+        }
+    }
+
+    /// What this room's scripts call the server's world `real` (`kart` for `kart__match_7` in that room).
+    pub fn script_world(&self, real: &str) -> String {
+        match self.world_suffix() {
+            Some(suffix) => real
+                .strip_suffix(&format!("__{suffix}"))
+                .unwrap_or(real)
+                .to_owned(),
+            None => real.to_owned(),
+        }
+    }
+
+    /// Whether this room's worlds are kept when it closes (a kept room: an owner's world, a party's) or go with it (a
+    /// match's).
+    pub fn keeps_worlds(&self) -> bool {
+        self.instance.kept_key(self.room).is_some()
+    }
+
+    /// This room's default world (`nf.worlds.default()`): the server's for the main room, the first world it was given
+    /// for any other (the server's while it has none).
+    pub fn default_world(&self) -> String {
+        if self.room != crate::instance::RoomId::MAIN
+            && let Some(first) = self
+                .instance
+                .routes
+                .borrow()
+                .worlds_of(self.room)
+                .into_iter()
+                .next()
+        {
+            return first;
+        }
+        self.platform.worlds().default_world()
+    }
+
+    /// Whether `world` is this room's (a world not given to another room is the main room's).
+    pub fn owns_world(&self, world: &str) -> bool {
+        self.instance.routes.borrow().world(world) == self.room
+    }
+
     /// The block at (x, y, z) in `world` was set or broken (by a script, a walk, or the server's events): bodies near
     /// it and what movers keep of it see it as it is now.
     pub fn block_changed(&self, world: &str, x: i32, y: i32, z: i32) {
@@ -144,45 +215,29 @@ impl Shared {
         self.block_shapes.changed(world, x, y, z);
     }
 
-    /// Says that `count` things kept running on resource `kind:id`'s new version (live instances, windows kept,
-    /// players sent the rebuilt pack): its `reattached` in the reload's answer.
-    pub fn reattached(&self, kind: &'static str, id: &str, count: usize) {
-        *self
-            .reloading
-            .borrow_mut()
-            .reattached
-            .entry((kind, id.to_owned()))
-            .or_default() += count as i32;
-    }
-
-    pub fn new(platform: Rc<dyn Platform>, store: Rc<crate::store::Store>) -> Rc<Shared> {
+    pub fn new(
+        instance: Rc<crate::instance::Instance>,
+        room: crate::instance::RoomId,
+    ) -> Rc<Shared> {
+        let platform = instance.platform.clone();
         Rc::new(Shared {
+            instance,
+            room,
             mobs: crate::mob::Mobs::new(platform.clone()),
-            lanes: RefCell::default(),
             structures: RefCell::default(),
-            reloading: RefCell::default(),
-            console: RefCell::default(),
             managed_worlds: RefCell::default(),
-            databases: RefCell::default(),
-            managed_failures: Default::default(),
             platform,
-            store,
             data: RefCell::default(),
-            permissions: RefCell::default(),
             session_tables: RefCell::default(),
             schedules: RefCell::default(),
             names: RefCell::default(),
             skies: RefCell::default(),
             screens: RefCell::default(),
             huds: RefCell::default(),
-            packs: RefCell::default(),
-            provided_packages: RefCell::default(),
-            files: RefCell::default(),
             block_data: RefCell::default(),
             mining: RefCell::default(),
             blocks: RefCell::default(),
             recipes: RefCell::default(),
-            loot: RefCell::default(),
             particles: RefCell::default(),
             cutscenes: RefCell::default(),
             bars: RefCell::default(),
@@ -215,15 +270,6 @@ impl Shared {
             entities: RefCell::default(),
             gone: RefCell::default(),
         })
-    }
-
-    /// The lane named `name`: one thread whose jobs run in order, made the first time it's wanted.
-    pub fn lane(&self, name: &'static str) -> crate::http::Workers {
-        self.lanes
-            .borrow_mut()
-            .entry(name)
-            .or_insert_with(|| crate::http::Workers::lane(&format!("NetherForge {name}")))
-            .clone()
     }
 
     /// The entity `info` describes as the handle the spec's types say (`Entity`), made the class it is
@@ -312,7 +358,7 @@ impl Shared {
     /// their bare characters) included, and how many lines it is; none when the project has no font facts.
     pub fn measure_text(&self, text: &str) -> Option<(i32, i32)> {
         let font = self.font.borrow();
-        let packs = self.packs.borrow();
+        let packs = self.instance.packs.borrow();
         let width = netherforge_format::text::TextWidth::of_font(font.as_ref()?)
             .with_glyphs(|reference| packs.glyph_advance(reference))
             .with_glyph_chars(|code| packs.glyph_char_advance(code));

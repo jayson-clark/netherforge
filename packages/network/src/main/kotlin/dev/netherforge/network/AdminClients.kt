@@ -168,6 +168,14 @@ sealed interface AdminEvent {
     @SerialName("server")
     data class Server(val server: ServerState) : AdminEvent
 
+    /**
+     * Room [room] (its key) on [server] is at [state] in its life: its match began or ended, or it closed
+     * ([ServerFrame.RoomState]).
+     */
+    @Serializable
+    @SerialName("room_state")
+    data class RoomState(val server: String, val room: String, val state: RoomLife) : AdminEvent
+
     /** Something published on a channel it listens to. */
     @Serializable
     @SerialName("message")
@@ -201,6 +209,7 @@ sealed interface AdminEvent {
             is PlayerMoved -> "player_moved"
             is PlayerLeft -> "player_left"
             is Server -> "server"
+            is RoomState -> "room_state"
             is Message -> "message"
             is Request -> "request"
             is Place -> "place"
@@ -208,9 +217,19 @@ sealed interface AdminEvent {
     }
 }
 
-/** An admin client's answer to a [AdminEvent.Place]: one of a [server], a [hold] with its status, or a [fail] reason. */
+/**
+ * An admin client's answer to a [AdminEvent.Place]: one of a [server] (and the [room] on it they go into, when the
+ * server runs several, which [keep]s its worlds and data when it's opened for them), a [hold] with its status, or a
+ * [fail] reason.
+ */
 @Serializable
-data class PlaceAnswer(val server: String? = null, val hold: String? = null, val fail: String? = null)
+data class PlaceAnswer(
+    val server: String? = null,
+    val hold: String? = null,
+    val fail: String? = null,
+    val room: String? = null,
+    val keep: Boolean = false
+)
 
 /** Where a player logging in goes: [server] (null: the proxy's own choice), or turned away with [deny]. */
 data class LoginPlace(val server: String? = null, val deny: String? = null)

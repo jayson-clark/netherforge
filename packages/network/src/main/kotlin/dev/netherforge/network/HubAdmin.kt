@@ -11,8 +11,8 @@ import java.net.InetSocketAddress
 import java.net.URLDecoder
 import java.security.MessageDigest
 import java.util.concurrent.ExecutorService
-import java.util.concurrent.SynchronousQueue
-import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.Executors
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicInteger
@@ -35,8 +35,8 @@ import java.util.concurrent.atomic.AtomicInteger
  *   MiniMessage held to [RichText] (clicks that run or suggest a command, copy or open a link; hovers that show text)
  *   (players:message), `POST /v1/players/<id or name>/kick` `{ "message" }` (players:kick).
  * - `POST /v1/channels/publish` `{ "channel", "value", "server"?, "group"? }` (channels:publish).
- * - `GET /v1/events?listen=<channels>&place=<groups>` (Server-Sent Events): presence (presence:read), servers
- *   (servers:read), messages on the channels listened to and requests to this client (channels:read), and players to
+ * - `GET /v1/events?listen=<channels>&place=<groups>` (Server-Sent Events): presence (presence:read), servers and
+ *   their keyed rooms' starts, finishes and closes (servers:read), messages on the channels listened to and requests to this client (channels:read), and players to
  *   place for the groups named (`*login` for logins; placement), for as long as it's connected.
  * - `POST /v1/requests/<id>/reply` `{ "value"?, "error"? }` (channels:read), `POST /v1/placements/<id>`
  *   `{ "server" | "hold" | "fail" }` (placement).
@@ -56,6 +56,7 @@ class HubAdmin(
 ) {
     private var server: HttpServer? = null
     private var executor: ExecutorService? = null
+    private val inFlight = Semaphore(MAX_REQUESTS)
     private val streaming = AtomicInteger()
 
     /** The port it listens on, once started (the one asked for, or the one picked for 0). */
@@ -107,7 +108,11 @@ class HubAdmin(
         val balance: String? = null,
         val data: JsonElement? = null,
         /** Seconds it may wait for an instance with room. */
-        val wait: Double? = null
+        val wait: Double? = null,
+        /** The room on the server they go into (a match's key, an owner's). */
+        val room: String? = null,
+        /** Whether [room], opened for them, is kept (its worlds and data outlast it: an owner's, a party's). */
+        val keep: Boolean = false
     )
 
     @Serializable
@@ -126,13 +131,23 @@ class HubAdmin(
     data class Answer(val name: String? = null, val server: String? = null, val error: String? = null)
 
     fun start() {
-        val http = HttpServer.create(bind, 32)
-        // A thread per open stream as well as for requests, up to a bound.
-        val pool = ThreadPoolExecutor(2, MAX_THREADS, 30, TimeUnit.SECONDS, SynchronousQueue()) {
-            Thread(it, "NetherForge hub admin").apply { isDaemon = true }
-        }
+        val http = HttpServer.create(bind, BACKLOG)
+        // A virtual thread per request and per open stream: a send waiting on the proxy (up to its wait and
+        // SEND_SLACK) holds nothing another caller needs. Past MAX_REQUESTS at once a caller is told to come back
+        // (503, Retry-After), never reset: a reset looks like the hub being down (FR 43).
+        val pool = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("NetherForge hub admin ", 0).factory())
         http.executor = pool
         http.createContext("/v1/") { exchange ->
+            if (!inFlight.tryAcquire()) {
+                try {
+                    exchange.responseHeaders.set("Retry-After", "1")
+                    answer(exchange, 503, Answer(error = "the hub is busy: $MAX_REQUESTS admin requests are open; try again"))
+                } catch (_: IOException) {
+                } finally {
+                    exchange.close()
+                }
+                return@createContext
+            }
             try {
                 handle(exchange)
             } catch (e: Fail) {
@@ -146,6 +161,7 @@ class HubAdmin(
                 } catch (_: Exception) {
                 }
             } finally {
+                inFlight.release()
                 exchange.close()
             }
         }
@@ -344,7 +360,7 @@ class HubAdmin(
                 val id = hub.findPlayer(player)?.id ?: throw Fail(404, "nobody called $player is online")
                 val waitMillis = send.wait?.let { (it.coerceIn(0.0, Hub.MAX_WAIT_MILLIS / 1000.0) * 1000).toLong() }
                 val outcome = try {
-                    hub.adminSend(client.id, listOf(id), send.server, send.group, balance, send.data, waitMillis)
+                    hub.adminSend(client.id, listOf(id), send.server, send.group, balance, send.data, waitMillis, send.room, send.keep)
                         .get((waitMillis ?: 0) + SEND_ANSWER_MILLIS, TimeUnit.MILLISECONDS)
                 } catch (_: TimeoutException) {
                     throw Fail(504, "the proxy didn't move them in time")
@@ -479,7 +495,10 @@ class HubAdmin(
 
     companion object {
         private const val MAX_BODY = 64 * 1024
-        private const val MAX_THREADS = 48
+
+        /** Requests (streams included) open at once before callers are told to retry (FR 43; was 48 threads, reset past them). */
+        internal const val MAX_REQUESTS = 1024
+        private const val BACKLOG = 256
         private const val MAX_STREAMS = 32
         private const val PING_MILLIS = 15_000L
 

@@ -979,7 +979,7 @@ fn files(
 impl netherforge_api::api::NfPacksApi for crate::world::GameContext {
     /// The packs are read again from disk and rebuilt at the end of the tick, and sent to who lacks the new build.
     fn rebuild(&self, _caller: &netherforge_api::Caller) -> netherforge_api::ApiResult<()> {
-        self.shared.packs.borrow_mut().wanted = true;
+        self.shared.instance.packs.borrow_mut().wanted = true;
         Ok(())
     }
 
@@ -990,6 +990,7 @@ impl netherforge_api::api::NfPacksApi for crate::world::GameContext {
     ) -> netherforge_api::ApiResult<Vec<String>> {
         let names: Vec<String> = self
             .shared
+            .instance
             .packs
             .borrow()
             .on_demand
@@ -1014,13 +1015,14 @@ impl PacksService {
     /// Builds again, and sends it to everyone online whose client doesn't have this hash.
     fn rebuild(&self, project: &Define) {
         let platform = &*self.shared.platform;
-        let mut packs = self.shared.packs.borrow_mut();
+        let mut packs = self.shared.instance.packs.borrow_mut();
         let problems = packs.rebuild(platform, project);
         *self.problems.borrow_mut() = problems;
     }
 
     fn send_all(&self) -> usize {
         self.shared
+            .instance
             .packs
             .borrow_mut()
             .send_all(&*self.shared.platform)
@@ -1030,6 +1032,10 @@ impl PacksService {
 impl Service for PacksService {
     fn name(&self) -> &'static str {
         "resource pack"
+    }
+    /// Once per server, in the main room.
+    fn instance_wide(&self) -> bool {
+        true
     }
 
     fn reloads(&self) -> &'static [&'static str] {
@@ -1047,7 +1053,12 @@ impl Service for PacksService {
 
     /// A pack the store has now is sent to whoever doesn't have it.
     fn tick(&self, _room: &Room, platform: &dyn Platform) {
-        let stored = self.shared.packs.borrow_mut().uploads_done(platform);
+        let stored = self
+            .shared
+            .instance
+            .packs
+            .borrow_mut()
+            .uploads_done(platform);
         if stored {
             self.send_all();
         }
@@ -1055,7 +1066,7 @@ impl Service for PacksService {
 
     fn player_joined(&self, player: &netherforge_platform::PlayerRef) {
         let elsewhere = loaded_elsewhere(&self.shared, player.uuid);
-        self.shared.packs.borrow_mut().send_unless(
+        self.shared.instance.packs.borrow_mut().send_unless(
             &*self.shared.platform,
             player.uuid,
             elsewhere.as_deref(),
@@ -1063,7 +1074,7 @@ impl Service for PacksService {
     }
 
     fn player_quit(&self, player: &netherforge_platform::PlayerRef) {
-        self.shared.packs.borrow_mut().forget(player.uuid);
+        self.shared.instance.packs.borrow_mut().forget(player.uuid);
     }
 
     /// Built again and sent to everyone online whose client doesn't have this hash.
@@ -1071,16 +1082,16 @@ impl Service for PacksService {
         self.rebuild(project);
         let sent = self.send_all();
         // Every pack is in the one build: each that reloaded answers with it, and whom it went to.
-        let built = self.shared.packs.borrow().built.as_ref().map(|b| {
+        let built = self.shared.instance.packs.borrow().built.as_ref().map(|b| {
             netherforge_format::bridge::PackBuild {
                 sha1: b.sha1.clone(),
                 url: b.url.clone(),
                 bytes: b.bytes.len() as i32,
             }
         });
-        self.shared.reloading.borrow_mut().pack = built;
+        self.shared.instance.reloading.borrow_mut().pack = built;
         for id in ids {
-            self.shared.reattached("resource_pack", id, sent);
+            self.shared.instance.reattached("resource_pack", id, sent);
         }
         let loaded = project.project;
         if !loaded.present("resource_pack").is_empty() && loaded.compiled_resource_packs.is_empty()

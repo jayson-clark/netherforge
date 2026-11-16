@@ -127,7 +127,7 @@ pub struct PlayerJoinEvent {
     pub player: handles::Player,
     /// Whether they have never played here before.
     pub first_join: bool,
-    /// The join message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none.
+    /// The join message everyone in the player's room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none.
     pub message: Option<values::Text>,
 }
 
@@ -147,7 +147,7 @@ pub struct PlayerResourcePackStatusEvent {
 pub struct PlayerQuitEvent {
     /// Who it was.
     pub player: handles::Player,
-    /// The leave message everyone sees, as MiniMessage. Writable: assign another, or `nil` for none.
+    /// The leave message everyone in the player's room sees (everyone online, on a server that runs one room), as MiniMessage. Writable: assign another, or `nil` for none.
     pub message: Option<values::Text>,
 }
 
@@ -160,6 +160,8 @@ pub struct PlayerChatEvent {
     pub message: String,
     /// How the line is shown, as MiniMessage, where `<player>` is the player's display name and `<message>` what they said (both shown as they are, never read as tags). Starts as Minecraft's own look, `"\\<<player>> <message>"`. Writable: assign another, like `"<gray><player>: <white><message>"`.
     pub format: values::Text,
+    /// Who sees the line: every player in the speaker's room to begin with (everyone online, on a server that runs one room). Writable: assign a list to show it to only those players. The server's console always sees it.
+    pub recipients: Vec<handles::Player>,
 }
 
 /// A player clicked a block or the air with one hand. The game asks for each hand in turn, so one right click can arrive twice: once for the main hand and, unless that did something, once for the off hand.
@@ -2888,6 +2890,22 @@ pub struct PlayerArriveEvent {
     pub from: String,
     /// What the script that sent them gave `send_player`, as `nf.json` would read it back; `nil` when it gave nothing.
     pub data: Value,
+}
+
+/// Something happened to this room.
+#[derive(Clone, Debug)]
+pub struct RoomEvent {
+    /// The room: this one.
+    pub room: handles::Room,
+}
+
+/// How `nf.rooms.open` opens a room.
+#[derive(Clone, Debug)]
+pub struct RoomOptions {
+    /// What it's for (an owner's id, a match's): the room's identity. A player the server's owner sends to a key goes into the room open with it, and its worlds are named after it. Two rooms can't be open with the same key at once.
+    pub key: Option<String>,
+    /// Whether what it made outlasts it, for a room opened again with the same key to find (an owner's world, a party's): its worlds are saved when it closes rather than deleted, and its `nf.data` tables are kept under its key. A match's room isn't kept (the default): its worlds and `nf.data` tables go with it, and the worlds of one the server went without closing (killed mid-match) are deleted as it next starts. A kept room needs a `key`.
+    pub keep: Option<bool>,
 }
 
 /// How `nf.particles.play` plays an effect. Every key is optional; a key that isn't one of these is an error.

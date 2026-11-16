@@ -199,7 +199,7 @@ class FakePlayers(private val platform: FakePlatform) : PlayerOps {
 
     /** [player] says [message]: scripts hear it only while the runtime watches chat. False when cancelled. */
     fun chat(player: FakePlayer, message: String): Boolean {
-        val line = GameEvent.PlayerChat(player.ref, message, DEFAULT_CHAT_FORMAT)
+        val line = GameEvent.PlayerChat(player.ref, message, DEFAULT_CHAT_FORMAT, online())
         if (platform.raise.playerChat(line)) return false
         chat += line.format.replace("<player>", player.ref.name).replace("<message>", line.message)
         return true

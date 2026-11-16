@@ -850,3 +850,131 @@ fn the_interpreter_runs_what_the_compiler_does() {
         ]
     );
 }
+
+/// What each room beside the main one printed (`room <key> module t`), and every warning and error: `<key> <line>`.
+fn room_lines(platform: &Fake) -> Vec<String> {
+    let mut lines = Vec::new();
+    for line in platform.take() {
+        if let Some((key, rest)) = line
+            .strip_prefix("info [room ")
+            .and_then(|l| l.split_once(" module t] "))
+        {
+            let text = rest.rsplit_once(" (modules/").map_or(rest, |(t, _)| t);
+            lines.push(format!("{key} {text}"));
+        } else if line.starts_with("warn") || line.starts_with("error") {
+            lines.push(line);
+        }
+    }
+    lines
+}
+
+/// Ticks until the rooms have printed `count` lines (at most ten seconds), and gives them sorted.
+fn rooms_printed(session: &Session, platform: &Fake, count: usize) -> Vec<String> {
+    let mut seen = Vec::new();
+    let started = Instant::now();
+    while started.elapsed() < Duration::from_secs(10) {
+        seen.extend(room_lines(platform));
+        if seen.len() >= count {
+            seen.sort();
+            return seen;
+        }
+        session.tick();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    panic!("only {} of {count} lines: {seen:?}", seen.len());
+}
+
+#[test]
+fn two_rooms_call_their_modules_in_the_same_tick_under_the_servers_memory() {
+    let files = standard(
+        r#"
+        local room = nf.rooms.current()
+        if room:is_main() then return end
+        local key = room:key()
+        nf.task(function()
+          local lib, err = nf.wasm.instantiate("math")
+          print("add", lib:call("add", { key == "a" and 1 or 10, 2 })[1], lib:call("count")[1], lib:call("count")[1])
+          nf.wait(5)
+          print("another", select(2, nf.wasm.instantiate("math")))
+        end)
+        "#,
+    );
+    let platform = Rc::default();
+    let mut session = start(
+        &files,
+        &platform,
+        WasmConfig {
+            max_memory_mb: 1,
+            max_memory_total_mb: 2,
+            ..WasmConfig::default()
+        },
+    );
+    for key in ["a", "b"] {
+        session.open_room(Some(key.into()), false).expect("a room");
+    }
+    let lines = rooms_printed(&session, &platform, 4);
+    // Each room's calls answered in its own instance (its own count); the memory the server's, not each room's.
+    let taken = "the server's WebAssembly memory is taken: its modules may hold 2 MiB together (wasm.max-memory-total-mb in config.yml), and each instance or program counts as 1 MiB (wasm.max-memory-mb); close one";
+    assert_eq!(
+        lines,
+        [
+            "a add\t3\t1\t2".to_owned(),
+            format!("a another\t{taken}"),
+            "b add\t12\t1\t2".to_owned(),
+            format!("b another\t{taken}"),
+        ]
+    );
+    // One project, so each module compiled once for every room.
+    let compiles: Vec<_> = session
+        .rooms()
+        .iter()
+        .map(|r| {
+            r.shared()
+                .wasm
+                .borrow()
+                .compiled
+                .get("math")
+                .cloned()
+                .expect("compiled")
+        })
+        .collect();
+    assert_eq!(compiles.len(), 3);
+    assert!(
+        compiles
+            .windows(2)
+            .all(|w| std::sync::Arc::ptr_eq(&w[0], &w[1]))
+    );
+}
+
+#[test]
+fn programs_running_are_counted_over_every_room() {
+    let files = standard(
+        r#"
+        local room = nf.rooms.current()
+        if room:is_main() then return end
+        local echo = nf.wasm.start("echo")
+        echo:on("output", function(e) print("echo", e.line) end)
+        echo:on("end", function(e) print("end", e.reason, e.detail) end)
+        echo:send(room:key())
+        "#,
+    );
+    let platform = Rc::default();
+    let mut session = start(
+        &files,
+        &platform,
+        WasmConfig {
+            max_processes_total: 1,
+            ..WasmConfig::default()
+        },
+    );
+    for key in ["a", "b"] {
+        session.open_room(Some(key.into()), false).expect("a room");
+    }
+    assert_eq!(
+        rooms_printed(&session, &platform, 2),
+        [
+            "a echo\techo: a",
+            "b end\tlimit\tthe server already has 1 WebAssembly programs running, its limit (wasm.max-processes-total in config.yml)"
+        ]
+    );
+}

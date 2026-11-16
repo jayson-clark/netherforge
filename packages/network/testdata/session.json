@@ -298,17 +298,27 @@
                 },
                 {
                     "from": "server",
-                    "line": "~fARpI/pfqOP66ydrjQKDt0ATe/ra3VZKVKP5c1RgCwE=",
+                    "line": "~fARpI/pfv/r05Q15jQbVr/q/vFfv42B278DUurRP3HvEYq360M1Tj1kae6yTE982CV5udbuPFL60xLIa5hqJBMZpysc=",
+                    "frame": "{\"t\":\"room_state\",\"room\":\"m-01hx\",\"state\":\"started\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "~0iVZ4it9zG03opJXMLSAavmCGeV9wrjdv3X9Sqqg5S47WDN1oYYEes8HPI/0j9pPoPU4ET8MHZSlGjcv0JzDCVu8fQ==",
+                    "frame": "{\"t\":\"room_state\",\"room\":\"m-01hx\",\"state\":\"closed\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "~PxM/uiUSv/kcFOgCUmT/vrXyStzoZci0TcQG0S0FHDc=",
                     "frame": "{\"t\":\"evacuate\"}"
                 },
                 {
                     "from": "server",
-                    "line": "~0iVZ4it90mc5uaRKI/eJpoMaPyPtQ2svvEtFhkq0tA==",
+                    "line": "~09IGp9SkpesfRisioCcNUP7SyKLKRBm7MNrynjRZIA==",
                     "frame": "{\"t\":\"leaving\"}"
                 },
                 {
                     "from": "server",
-                    "line": "~PxM/uiUSquYTEL8eLMSsjcg4mYEQ2VUfKC+siA==",
+                    "line": "~H2KvQkxGpGwjWdKbS3K5GLwJEwV/hr/jFSvvxA==",
                     "frame": "{\"t\":\"ping\"}"
                 }
             ]

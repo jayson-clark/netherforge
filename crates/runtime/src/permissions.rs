@@ -50,7 +50,7 @@ impl Permissions {
 /// Holds what applies to `player` on them, while the project runs.
 pub fn apply(shared: &Shared, player: Uuid) {
     let nodes = {
-        let state = shared.permissions.borrow();
+        let state = shared.instance.permissions.borrow();
         if !state.running {
             return;
         }
@@ -62,13 +62,14 @@ pub fn apply(shared: &Shared, player: Uuid) {
 /// Sets `node` on `player` (`player:set_permission`).
 pub fn set(shared: &Shared, player: Uuid, node: &str, value: bool) {
     {
-        let mut state = shared.permissions.borrow_mut();
+        let mut state = shared.instance.permissions.borrow_mut();
         let namespace = state.namespace.clone();
         let mine = state.nodes.entry(player).or_default();
         if mine.insert(node.to_owned(), value) == Some(value) {
             return;
         }
         shared
+            .instance
             .store
             .set_permission(&namespace, player, node, Some(value));
     }
@@ -78,7 +79,7 @@ pub fn set(shared: &Shared, player: Uuid, node: &str, value: bool) {
 /// Takes `node` off `player`: false when nothing was set for it.
 pub fn unset(shared: &Shared, player: Uuid, node: &str) -> bool {
     {
-        let mut state = shared.permissions.borrow_mut();
+        let mut state = shared.instance.permissions.borrow_mut();
         let namespace = state.namespace.clone();
         let Some(mine) = state.nodes.get_mut(&player) else {
             return false;
@@ -89,7 +90,10 @@ pub fn unset(shared: &Shared, player: Uuid, node: &str) -> bool {
         if mine.is_empty() {
             state.nodes.remove(&player);
         }
-        shared.store.set_permission(&namespace, player, node, None);
+        shared
+            .instance
+            .store
+            .set_permission(&namespace, player, node, None);
     }
     apply(shared, player);
     true
@@ -102,6 +106,10 @@ pub struct PermissionsService {
 impl Service for PermissionsService {
     fn name(&self) -> &'static str {
         "permissions"
+    }
+    /// Once per server, in the main room.
+    fn instance_wide(&self) -> bool {
+        true
     }
 
     /// The project runs: everyone online gets what's allowed now, before any script (so `has_permission`
@@ -116,8 +124,8 @@ impl Service for PermissionsService {
                 Some((ns, allow))
             })
             .collect();
-        *self.shared.permissions.borrow_mut() = Permissions {
-            nodes: self.shared.store.permissions_of(&namespace),
+        *self.shared.instance.permissions.borrow_mut() = Permissions {
+            nodes: self.shared.instance.store.permissions_of(&namespace),
             namespace,
             allows,
             running: true,
@@ -129,7 +137,7 @@ impl Service for PermissionsService {
 
     /// The project stops: everyone online loses what it set.
     fn stop(&self, _room: &Room, platform: &dyn Platform) {
-        self.shared.permissions.borrow_mut().running = false;
+        self.shared.instance.permissions.borrow_mut().running = false;
         for player in platform.players().online() {
             platform.permissions().apply(player.uuid, HashMap::new());
         }
@@ -139,6 +147,7 @@ impl Service for PermissionsService {
     fn player_joined(&self, player: &PlayerRef) {
         if self
             .shared
+            .instance
             .permissions
             .borrow()
             .nodes

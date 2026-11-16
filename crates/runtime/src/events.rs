@@ -23,6 +23,19 @@ mod dispatch;
 
 pub use dispatch::{Around, EventSource, GameEventDispatch, RAISED, WATCHED};
 
+/// What an event is about, which decides the room it goes to (`Session::route`): a player is in a room, an entity
+/// and a block are in a world, a world is a room's, an inventory is its holder's. `Main` is the main room.
+#[derive(Clone, Copy, Debug)]
+pub enum Route<'r> {
+    Main,
+    Player(Uuid),
+    Entity(Uuid),
+    World(&'r str),
+    Inventory(&'r InventoryRef),
+    /// A menu window: the room that opened it.
+    Window(Uuid),
+}
+
 /// One stage of an event's path: the event's name there, on a handle or on `nf` (none).
 pub type Stage<'a> = (&'a str, Option<Handle>);
 
@@ -65,6 +78,9 @@ pub trait EventSession {
     ) -> Option<ItemData>;
     /// As `item_back`, for a list of items.
     fn items_back(&self, after: Vec<values::Item>, before: &[ItemData]) -> Vec<ItemData>;
+    /// The players a handler left in a list of players: those `before` had as they were, any other online player as
+    /// the server has them (one that isn't online is left out).
+    fn players_back(&self, after: Vec<handles::Player>, before: &[PlayerRef]) -> Vec<PlayerRef>;
 }
 
 /// A UUID as text, as handles key on it: `8-4-4-4-12` hex digits, lower case.
@@ -152,16 +168,74 @@ pub fn pack(x: i32, y: i32, z: i32) -> i64 {
 /// The session running now, as the dispatch asks for it: open while the event is handled, and only while it
 /// runs (`Running::open`).
 pub struct Running<'b, 'a> {
-    session: std::cell::Ref<'b, Session<'a>>,
+    session: Held<'b, 'a>,
+    /// The room the event goes to.
+    at: crate::instance::RoomId,
+}
+
+/// The session an event reached: held for the event (from the server), or lent by the session itself (a player
+/// moved between rooms hears their quit and join from inside it).
+enum Held<'b, 'a> {
+    Borrowed(std::cell::Ref<'b, Session<'a>>),
+    Lent(&'b Session<'a>),
+}
+
+impl<'a> std::ops::Deref for Held<'_, 'a> {
+    type Target = Session<'a>;
+    fn deref(&self) -> &Session<'a> {
+        match self {
+            Held::Borrowed(session) => session,
+            Held::Lent(session) => session,
+        }
+    }
+}
+
+/// The dispatch's source for one room of a session the caller already has: every event goes to that room.
+pub struct InRoom<'b, 'a> {
+    pub session: &'b Session<'a>,
+    pub at: crate::instance::RoomId,
+}
+
+impl<'b, 'a> EventSource for InRoom<'b, 'a> {
+    type Open<'c>
+        = Running<'c, 'a>
+    where
+        Self: 'c;
+
+    fn open(&self, _route: Route<'_>) -> Option<Running<'_, 'a>> {
+        self.session.run(self.at)?.room()?;
+        Some(Running {
+            session: Held::Lent(self.session),
+            at: self.at,
+        })
+    }
 }
 
 impl<'b, 'a> Running<'b, 'a> {
     /// The session in `cell`, when it runs and isn't being changed (a reload, a stop: an event the server
     /// raises meanwhile goes through unchanged).
-    pub fn open(cell: &'b RefCell<Session<'a>>) -> Option<Running<'b, 'a>> {
+    pub fn open(cell: &'b RefCell<Session<'a>>, route: Route<'_>) -> Option<Running<'b, 'a>> {
         let session = cell.try_borrow().ok()?;
-        session.room()?;
-        Some(Running { session })
+        let at = session.run_for(route)?.id;
+        Some(Running {
+            session: Held::Borrowed(session),
+            at,
+        })
+    }
+
+    /// The room the event went to.
+    pub fn run(&self) -> &crate::session::RoomRun {
+        self.session.run(self.at).expect("open only while it runs")
+    }
+
+    /// What the event's room's services share with its API.
+    pub fn shared(&self) -> &std::rc::Rc<crate::shared::Shared> {
+        self.run().shared()
+    }
+
+    /// The event's room.
+    pub fn at(&self) -> crate::instance::RoomId {
+        self.at
     }
 
     pub fn session(&self) -> &Session<'a> {
@@ -169,7 +243,7 @@ impl<'b, 'a> Running<'b, 'a> {
     }
 
     pub fn room(&self) -> &Room {
-        self.session.room().expect("open only while it runs")
+        self.run().room().expect("open only while it runs")
     }
 
     pub fn platform(&self) -> &dyn Platform {
@@ -209,7 +283,7 @@ impl EventSession for Running<'_, '_> {
             .collect();
         let delivered = room.scripts().raise_path(&path, fields, false);
         // What a handler's scope let go of meanwhile goes now (a temporary centity it spawned).
-        self.session.released();
+        self.session.released_in(self.run());
         Some(Emitted {
             cancelled: delivered.cancelled,
             fields: delivered.fields,
@@ -251,7 +325,7 @@ impl EventSession for Running<'_, '_> {
     /// The block, its value a `CustomBlock`'s when the project's block is there (Kotlin's `blockAs`).
     fn block(&self, block: &BlockRef) -> handles::Block {
         let position = pack(block.x, block.y, block.z);
-        let shared = self.session.shared();
+        let shared = self.shared();
         let custom = shared
             .blocks
             .borrow()
@@ -370,22 +444,52 @@ impl EventSession for Running<'_, '_> {
             })
             .collect()
     }
+
+    fn players_back(&self, after: Vec<handles::Player>, before: &[PlayerRef]) -> Vec<PlayerRef> {
+        after
+            .into_iter()
+            .filter_map(|p| {
+                let id = parse_uuid(&p.id)?;
+                match before.iter().find(|b| b.uuid == id) {
+                    Some(was) => Some(was.clone()),
+                    None => self.platform().players().get(id),
+                }
+            })
+            .collect()
+    }
 }
 
 impl Running<'_, '_> {
     fn blocks(&self) -> crate::custom_blocks::BlocksContext {
         crate::custom_blocks::BlocksContext {
-            shared: self.session.shared().clone(),
+            shared: self.shared().clone(),
             scripts: self.room().scripts().clone(),
         }
     }
 
     fn exploded(&self, event: &netherforge_platform::game_event::Explode, cancelled: bool) {
-        if cancelled || !event.breaks_blocks || !self.session.shared().blocks.borrow().explodable()
-        {
+        if cancelled || !event.breaks_blocks || !self.shared().blocks.borrow().explodable() {
             return;
         }
         self.blocks().exploded(&(event.blocks)(), event.r#yield);
+    }
+}
+
+impl Running<'_, '_> {
+    /// A join or leave message on a server with rooms beside the main one is its room's: shown to the players in
+    /// the room (`but` left out: the one leaving), not broadcast to the whole server as Paper would.
+    fn to_room(&self, message: &mut Option<String>, but: Option<Uuid>) {
+        if self.session.rooms().len() <= 1 {
+            return;
+        }
+        let Some(text) = message.take() else { return };
+        let players = self.shared().platform.players();
+        let routes = self.shared().instance.routes.borrow();
+        for player in players.online() {
+            if Some(player.uuid) != but && routes.player(player.uuid) == self.at {
+                players.message(player.uuid, text.clone());
+            }
+        }
     }
 }
 
@@ -398,8 +502,13 @@ impl Around for Running<'_, '_> {
         event: &mut netherforge_platform::game_event::PlayerJoin,
         raise: &dyn Fn(&mut netherforge_platform::game_event::PlayerJoin),
     ) {
-        self.session.player_joined(&event.player);
-        raise(event)
+        // Arriving on a server with rooms beside the main one, they see only their room in the player list.
+        if self.session.rooms().len() > 1 && !self.shared().instance.is_moving(event.player.uuid) {
+            self.session.relist(event.player.uuid);
+        }
+        self.session.player_joined(self.at, &event.player);
+        raise(event);
+        self.to_room(&mut event.message, None);
     }
 
     fn player_quit(
@@ -408,7 +517,8 @@ impl Around for Running<'_, '_> {
         raise: &dyn Fn(&mut netherforge_platform::game_event::PlayerQuit),
     ) {
         raise(event);
-        self.session.player_quit(&event.player);
+        self.to_room(&mut event.message, Some(event.player.uuid));
+        self.session.player_quit(self.at, &event.player);
     }
 
     /// The services first, so a world's configured spawn rates are in place before scripts hear of it.
@@ -427,19 +537,20 @@ impl Around for Running<'_, '_> {
         event: &mut netherforge_platform::game_event::PlayerChat,
         raise: &dyn Fn(&mut netherforge_platform::game_event::PlayerChat) -> bool,
     ) -> bool {
-        let muted = self
-            .session
-            .shared()
-            .network
-            .borrow()
-            .muted(event.player.uuid);
+        let muted = self.shared().network.borrow().muted(event.player.uuid);
         if let Some(why) = muted {
-            self.session
-                .shared()
+            self.shared()
                 .platform
                 .players()
                 .message(event.player.uuid, why);
             return true;
+        }
+        // What's said in a room is heard in it: the rest of the server's players don't see the line.
+        if self.session.rooms().len() > 1 {
+            let routes = self.shared().instance.routes.borrow();
+            event
+                .recipients
+                .retain(|p| routes.player(p.uuid) == self.at);
         }
         raise(event)
     }
@@ -460,7 +571,7 @@ impl Around for Running<'_, '_> {
         event: &mut netherforge_platform::game_event::BlockStartBreak,
         raise: &dyn Fn(&mut netherforge_platform::game_event::BlockStartBreak) -> bool,
     ) -> bool {
-        let shared = self.session.shared().clone();
+        let shared = self.shared().clone();
         let refused = {
             let blocks = shared.blocks.borrow();
             shared

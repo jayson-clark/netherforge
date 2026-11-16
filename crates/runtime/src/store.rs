@@ -39,6 +39,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "keep spawn loaded",
         include_str!("../migrations/002_keep_spawn_loaded.sql"),
     ),
+    (
+        3,
+        "goes with room",
+        include_str!("../migrations/003_goes_with_room.sql"),
+    ),
 ];
 
 /// A spawned centity as the store keeps it, so it comes back after a restart (Kotlin's `InstanceRecord`).
@@ -505,6 +510,81 @@ impl Store {
         );
     }
 
+    /// The records of every centity anchored in `world`, each with its `centity:data()` table, as JSON that travels
+    /// with the world's files (a kept room's world carried to another server): `{"centities": [{"id", "centity",
+    /// "x", "y", "z", "yaw", "displays": {node: uuid}, "hitboxes": {node: uuid}, "anchor", "orphans", "data"}]}`. The
+    /// world isn't in it: it's the world whose folder it's in.
+    pub fn world_records(&self, world: &str) -> serde_json::Value {
+        use serde_json::{Value, json};
+        let nodes = |of: &IndexMap<String, Uuid>| -> serde_json::Map<String, Value> {
+            of.iter()
+                .map(|(node, entity)| (node.clone(), Value::String(uuid_text(entity))))
+                .collect()
+        };
+        let records: Vec<Value> = self
+            .instances()
+            .into_iter()
+            .filter(|r| r.anchor.world == world)
+            .map(|r| {
+                let data = self
+                    .data(&crate::data::Owner::Centity(r.id))
+                    .map(|text| serde_json::from_str(&text).unwrap_or(Value::String(text)));
+                let mut record = json!({
+                    "id": uuid_text(&r.id),
+                    "centity": r.centity,
+                    "x": r.anchor.x,
+                    "y": r.anchor.y,
+                    "z": r.anchor.z,
+                    "yaw": r.yaw,
+                    "displays": nodes(&r.displays),
+                    "hitboxes": nodes(&r.hitboxes),
+                    "anchor": r.anchor_entity.map(|e| uuid_text(&e)),
+                    "orphans": r.orphans.iter().map(uuid_text).collect::<Vec<_>>(),
+                });
+                if let Some(data) = data {
+                    record["data"] = data;
+                }
+                record
+            })
+            .collect();
+        json!({ "centities": records })
+    }
+
+    /// Records read by [`records_from_json`] in the store, each with its table (or none), replacing what the store had
+    /// of the same instances.
+    pub fn put_records(&self, records: Vec<(InstanceRecord, Option<serde_json::Value>)>) {
+        for (record, data) in records {
+            let owner = crate::data::Owner::Centity(record.id);
+            match data {
+                Some(data) => self.put_data(&owner, data.to_string()),
+                None => self.delete_data(&owner),
+            }
+            self.put_instance(record);
+        }
+    }
+
+    /// The records of every centity anchored in `world` go, with their tables: the world's files are gone. Staged under
+    /// a key of its own, so it's for a world no running room's centities are in (they'd stage their records again).
+    pub fn forget_world_records(&self, world: &str) {
+        let world = world.to_owned();
+        self.stage(
+            format!("records in {world}"),
+            Box::new(move |c| {
+                let mine = "SELECT id FROM instances WHERE world = ?1";
+                c.execute(
+                    &format!("DELETE FROM centity_data WHERE instance IN ({mine})"),
+                    params![world],
+                )?;
+                c.execute(
+                    &format!("DELETE FROM instance_entities WHERE instance IN ({mine})"),
+                    params![world],
+                )?;
+                c.execute("DELETE FROM instances WHERE world = ?1", params![world])?;
+                Ok(())
+            }),
+        );
+    }
+
     // ---- saved tables ----
 
     /// `owner`'s saved table as last saved (the codec's JSON), or none when it never was.
@@ -561,6 +641,65 @@ impl Store {
                         params![namespace, name, text],
                     )?,
                 };
+                Ok(())
+            }),
+        );
+    }
+
+    /// Every `nf.data` table kept for the room keyed `key` (stored under `<namespace>#<key>`): its namespace (without
+    /// the key), its name and its value, sorted.
+    pub fn kept_tables(&self, key: &str) -> Vec<(String, String, String)> {
+        let suffix = format!("#{key}");
+        let connection = self.settled();
+        let Ok(mut statement) = connection.prepare(
+            "SELECT namespace, name, value FROM named_data WHERE length(namespace) > length(?1) AND substr(namespace, length(namespace) - length(?1) + 1) = ?1 ORDER BY namespace, name",
+        ) else {
+            return Vec::new();
+        };
+        let rows = statement.query_map(params![suffix], |r| {
+            Ok((r.get::<_, String>(0)?, r.get(1)?, r.get(2)?))
+        });
+        rows.map(|rows| {
+            rows.filter_map(Result::ok)
+                .map(|(namespace, name, value)| {
+                    let namespace = namespace
+                        .strip_suffix(&suffix)
+                        .unwrap_or(&namespace)
+                        .to_owned();
+                    (namespace, name, value)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+    }
+
+    /// The `nf.data` tables kept for the room keyed `key`, by namespace and name: each as the JSON it's saved as
+    /// (`{ "<namespace>": { "<table>": <value> } }`, a room's `data.json`).
+    pub fn kept_data(&self, key: &str) -> serde_json::Map<String, serde_json::Value> {
+        use serde_json::Value;
+        let mut out = serde_json::Map::new();
+        for (namespace, name, text) in self.kept_tables(key) {
+            let value = serde_json::from_str(&text).unwrap_or(Value::String(text));
+            if let Value::Object(tables) = out
+                .entry(namespace)
+                .or_insert_with(|| Value::Object(serde_json::Map::new()))
+            {
+                tables.insert(name, value);
+            }
+        }
+        out
+    }
+
+    /// The `nf.data` tables kept for the room keyed `key` go.
+    pub fn forget_kept_tables(&self, key: &str) {
+        let suffix = format!("#{key}");
+        self.stage(
+            format!("named_data #{key}"),
+            Box::new(move |c| {
+                c.execute(
+                    "DELETE FROM named_data WHERE length(namespace) > length(?1) AND substr(namespace, length(namespace) - length(?1) + 1) = ?1",
+                    params![suffix],
+                )?;
                 Ok(())
             }),
         );
@@ -863,7 +1002,7 @@ impl Store {
     ) -> BTreeMap<String, crate::managed_worlds::OwnedWorld> {
         let connection = self.settled();
         let Ok(mut statement) = connection.prepare(
-            "SELECT world, environment, terrain, dimension_type, keep_spawn_loaded FROM worlds WHERE namespace = ?1",
+            "SELECT world, environment, terrain, dimension_type, keep_spawn_loaded, goes_with_room FROM worlds WHERE namespace = ?1",
         ) else {
             return BTreeMap::new();
         };
@@ -876,6 +1015,7 @@ impl Store {
                         terrain: r.get(2)?,
                         dimension_type: r.get(3)?,
                         keep_spawn_loaded: r.get(4)?,
+                        goes_with_room: r.get(5)?,
                     },
                 ))
             })
@@ -897,8 +1037,8 @@ impl Store {
             format!("worlds {name}"),
             Box::new(move |c| {
                 c.execute(
-                    "INSERT INTO worlds (world, namespace, environment, terrain, dimension_type, keep_spawn_loaded) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (world) DO UPDATE SET namespace = excluded.namespace, environment = excluded.environment, terrain = excluded.terrain, dimension_type = excluded.dimension_type, keep_spawn_loaded = excluded.keep_spawn_loaded",
-                    params![name, namespace, owned.environment, owned.terrain, owned.dimension_type, owned.keep_spawn_loaded],
+                    "INSERT INTO worlds (world, namespace, environment, terrain, dimension_type, keep_spawn_loaded, goes_with_room) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT (world) DO UPDATE SET namespace = excluded.namespace, environment = excluded.environment, terrain = excluded.terrain, dimension_type = excluded.dimension_type, keep_spawn_loaded = excluded.keep_spawn_loaded, goes_with_room = excluded.goes_with_room",
+                    params![name, namespace, owned.environment, owned.terrain, owned.dimension_type, owned.keep_spawn_loaded, owned.goes_with_room],
                 )?;
                 Ok(())
             }),
@@ -916,6 +1056,66 @@ impl Store {
             }),
         );
     }
+}
+
+/// The records `records` (as [`Store::world_records`] wrote them) as centities anchored in `world`, each with its
+/// `centity:data()` table if it had one. An error for JSON that isn't records.
+pub fn records_from_json(
+    world: &str,
+    records: &serde_json::Value,
+) -> Result<Vec<(InstanceRecord, Option<serde_json::Value>)>, String> {
+    use serde_json::Value;
+    let list = records
+        .get("centities")
+        .and_then(Value::as_array)
+        .ok_or("it has no \"centities\" list")?;
+    let nodes = |v: Option<&Value>| -> Option<IndexMap<String, Uuid>> {
+        match v {
+            None | Some(Value::Null) => Some(IndexMap::new()),
+            Some(Value::Object(map)) => map
+                .iter()
+                .map(|(node, e)| Some((node.clone(), parse_uuid(e.as_str()?)?)))
+                .collect(),
+            Some(_) => None,
+        }
+    };
+    let mut read = Vec::new();
+    for (at, r) in list.iter().enumerate() {
+        let bad = || format!("centity {at} isn't a record");
+        let number = |key: &str| r.get(key).and_then(Value::as_f64).ok_or_else(bad);
+        let record = InstanceRecord {
+            id: r
+                .get("id")
+                .and_then(Value::as_str)
+                .and_then(parse_uuid)
+                .ok_or_else(bad)?,
+            centity: r
+                .get("centity")
+                .and_then(Value::as_str)
+                .filter(|c| c.contains(':'))
+                .ok_or_else(bad)?
+                .to_owned(),
+            anchor: Location {
+                world: world.to_owned(),
+                x: number("x")?,
+                y: number("y")?,
+                z: number("z")?,
+                yaw: 0.0,
+                pitch: 0.0,
+            },
+            yaw: r.get("yaw").and_then(Value::as_f64).unwrap_or(0.0),
+            displays: nodes(r.get("displays")).ok_or_else(bad)?,
+            hitboxes: nodes(r.get("hitboxes")).ok_or_else(bad)?,
+            anchor_entity: r.get("anchor").and_then(Value::as_str).and_then(parse_uuid),
+            orphans: r
+                .get("orphans")
+                .and_then(Value::as_array)
+                .map(|o| o.iter().filter_map(|e| parse_uuid(e.as_str()?)).collect())
+                .unwrap_or_default(),
+        };
+        read.push((record, r.get("data").cloned()));
+    }
+    Ok(read)
 }
 
 #[cfg(test)]

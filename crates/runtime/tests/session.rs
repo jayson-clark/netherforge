@@ -540,6 +540,7 @@ nf.on('player_chat', function(e) if e.message == 'bad' then e:cancel() end end)"
         player: alex.clone(),
         message: "bad".into(),
         format: "<Alex> bad".into(),
+        recipients: vec![alex.clone()],
     };
     assert!(server.game().player_chat(&mut chat), "cancelled");
     chat.message = "fine".into();

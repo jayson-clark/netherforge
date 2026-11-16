@@ -470,10 +470,12 @@ impl Service for WebService {
             self.shared.web.borrow_mut().base = Some(base.trim_end_matches('/').to_owned());
             return;
         }
-        if !enabled {
+        // The server's routes are the main room's: an HTTP request comes from no room's player. A room beside it may
+        // declare routes, which the main room's answer.
+        if !enabled || self.shared.room != crate::instance::RoomId::MAIN {
             return;
         }
-        let mut packs = self.shared.packs.borrow_mut();
+        let mut packs = self.shared.instance.packs.borrow_mut();
         let Some(listener) = packs.listener(project.platform) else {
             return;
         };
@@ -537,7 +539,8 @@ impl Service for WebService {
                 call.answer(unavailable());
             }
         }
-        if let Ok(packs) = self.shared.packs.try_borrow_mut()
+        if self.shared.room == crate::instance::RoomId::MAIN
+            && let Ok(packs) = self.shared.instance.packs.try_borrow_mut()
             && let Some(listener) = packs.server()
         {
             listener.set_web(None);

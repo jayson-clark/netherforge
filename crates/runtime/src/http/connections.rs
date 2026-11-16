@@ -278,6 +278,8 @@ pub struct Connection {
     pub last_activity: u64,
     /// `end` is being or has been heard, and nothing more is read.
     pub ended: bool,
+    /// Its place in the server's connections until it ends: none for one refused.
+    seat: Option<crate::instance::Seat>,
     link: Option<Box<dyn Link>>,
     sink: Arc<Sink>,
 }
@@ -299,6 +301,8 @@ impl Connection {
 #[derive(Default)]
 pub struct Connections {
     pub active: IndexMap<i64, Connection>,
+    /// The connections open in every room (the instance's), against `max-total`.
+    pub server: crate::instance::Seats,
     next: i64,
     bytes: Option<Arc<ByteRate>>,
     /// A script test run's: nothing reaches the network, each connection's far end is a [`Far`] the test plays, and
@@ -383,6 +387,7 @@ impl Connections {
                 sent: Vec::new(),
             });
         }
+        let seat = refusal.is_none().then(|| self.server.take());
         let link: Option<Box<dyn Link>> = match refusal {
             Some(why) => {
                 sink.ended(End::Limit, None, Some(why));
@@ -435,6 +440,7 @@ impl Connections {
                 protocol: None,
                 last_activity: tick,
                 ended: false,
+                seat,
                 link,
                 sink,
             },
@@ -451,7 +457,7 @@ impl Connections {
                 limits.max_per_package
             ));
         }
-        if open.len() >= limits.max_total {
+        if self.server.taken() >= limits.max_total {
             return Some(format!(
                 "the server already has {} connections open, its limit (http.connections.max-total in config.yml)",
                 limits.max_total
@@ -501,6 +507,7 @@ impl Connections {
     ) -> Option<Heard> {
         let connection = self.active.get_mut(&number).filter(|c| !c.ended)?;
         connection.ended = true;
+        connection.seat = None;
         connection.sink.ending.store(true, Ordering::SeqCst);
         if let Some(link) = &connection.link {
             link.close(close_code.unwrap_or(reason.close_code()), close_reason);

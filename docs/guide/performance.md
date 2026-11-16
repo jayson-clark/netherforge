@@ -92,7 +92,9 @@ every call into every script, so you can see which ones use the most.
 The first number is the script's average milliseconds a tick over the last
 100 ticks, the second its worst tick, then how many calls it had and what it
 holds (subscriptions, tasks, playing effects and cutscenes). It shows the top
-15; `/nf scripts all` shows every one. Time a script spends in something it
+15; `/nf scripts all` shows every one. With rooms open, every room's scripts are listed, each after its room's
+name (`room <key>`, or `room <number>` for one without a key), and `/nf room <room> scripts` lists one room's; the
+Profiler names them the same way. Time a script spends in something it
 started (a centity it spawned, whose script then runs) counts for that other
 script.
 

@@ -45,9 +45,13 @@ interface WorldStorage {
         /** Where a map keeps the world's own data. */
         const val MAP_DIMENSION = "dimensions/minecraft/overworld"
 
-        /** What the server writes for itself and a copy mustn't carry: a copied uid.dat would make two worlds one. */
-        private val SKIPPED = setOf("session.lock", "uid.dat")
+        /**
+         * What the server writes for itself and a copy mustn't carry, by its path in a world's folder: its lock and
+         * its identity (a copied uid.dat, or Paper's metadata.dat from 26.1, would make two worlds one).
+         */
+        private val SKIPPED = setOf("session.lock", "uid.dat", "data/paper/metadata.dat")
 
+        /** Copies the tree [from] into [to], all but what's [SKIPPED]. */
         internal fun copyTree(from: Path, to: Path) {
             Files.walkFileTree(
                 from,
@@ -58,7 +62,8 @@ interface WorldStorage {
                     }
 
                     override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
-                        if (file.fileName.toString() !in SKIPPED) {
+                        val relative = from.relativize(file).joinToString("/")
+                        if (relative !in SKIPPED && file.fileName.toString() !in SKIPPED) {
                             Files.copy(file, to.resolve(from.relativize(file).toString()), StandardCopyOption.COPY_ATTRIBUTES)
                         }
                         return FileVisitResult.CONTINUE
@@ -78,11 +83,23 @@ interface WorldStorage {
  * Minecraft 26.1 on: a world is a dimension inside the main world's storage,
  * `world/dimensions/<namespace>/<path>/`, its key `minecraft:<name>` for a
  * world made with `WorldCreator(name)`, beside the one `level.dat` every world
- * shares. A world folder in the old layout at `<world container>/<name>/` (a
- * `level.dat` at its top: a singleplayer save or a map) is imported
- * into that storage by Paper's own legacy-world migration when `createWorld`
- * loads it, and the folder is removed; so installing a map is copying it
- * there as it is.
+ * shares. A map's overworld is the world's whole folder (its regions and
+ * entities, and its `data/`: the game's saved data of the world, its game
+ * rules, clock, weather, border, raids, Paper's spawn and persistent data, and
+ * whatever else a plugin keeps there, NetherForge's centities' records
+ * among them), so installing one is copying that folder in as the world's
+ * dimension, all of it but what makes it this world ([WorldStorage.copyTree]):
+ * `createWorld` loads it as it is and gives it a new UUID.
+ *
+ * Not through Paper's own import of a world folder in the old layout at
+ * `<world container>/<name>/`, which `createWorld` runs when it finds one:
+ * that moves only `region/`, `entities/` and `poi/`, copies the game's saved
+ * data by a list of its own, and makes Paper's (the spawn) from the map's
+ * `level.dat`, the main world's of the server it came from, so the rest of a
+ * world's `data/` never arrived. A map from before 26.1 (no
+ * `data/minecraft/world_gen_settings.dat` in its overworld: its saved data
+ * is in the old places and its `level.dat`) still goes that way, as Paper's
+ * import upgrades it.
  */
 object DimensionStorage : WorldStorage {
     /** The main world's storage: its overworld is `<storage>/dimensions/minecraft/overworld`. */
@@ -101,15 +118,20 @@ object DimensionStorage : WorldStorage {
         Files.isDirectory(dimension(name)) || Files.isRegularFile(legacy(name).resolve(WorldStorage.LEVEL))
 
     override fun install(map: Path, name: String) {
-        val target = legacy(name)
+        val overworld = map.resolve(WorldStorage.MAP_DIMENSION)
+        val current = Files.isRegularFile(overworld.resolve(GEN_SETTINGS))
+        val target = if (current) dimension(name) else legacy(name)
         if (Files.exists(target)) throw IOException("$target is already there")
         try {
-            WorldStorage.copyTree(map, target)
+            WorldStorage.copyTree(if (current) overworld else map, target)
         } catch (e: IOException) {
             WorldStorage.deleteTree(target)
             throw e
         }
     }
+
+    /** A 26.x world's own saved data that every world has: a map's overworld with it is in the current layout. */
+    private const val GEN_SETTINGS = "data/minecraft/world_gen_settings.dat"
 
     override fun delete(name: String, dimension: Path) {
         WorldStorage.deleteTree(dimension)

@@ -93,15 +93,13 @@ pub struct EntityState {
 }
 
 impl GameContext {
-    fn uuid(this: &handles::Entity) -> Option<Uuid> {
-        parse_uuid(&this.id)
+    /// Its UUID, while this room may reach it: another room's player is as good as gone here.
+    fn uuid(&self, this: &handles::Entity) -> Option<Uuid> {
+        parse_uuid(&this.id).filter(|id| self.shared.reaches(*id))
     }
 
     fn info(&self, this: &handles::Entity) -> Option<EntityInfo> {
-        self.shared
-            .platform
-            .world_entities()
-            .info(Self::uuid(this)?)
+        self.shared.platform.world_entities().info(self.uuid(this)?)
     }
 
     fn here(&self, this: &handles::Entity) -> Option<Location> {
@@ -109,12 +107,13 @@ impl GameContext {
     }
 
     pub(crate) fn flag(&self, this: &handles::Entity, flag: EntityFlag) -> bool {
-        Self::uuid(this).and_then(|id| self.shared.platform.world_entities().flag(id, flag))
+        self.uuid(this)
+            .and_then(|id| self.shared.platform.world_entities().flag(id, flag))
             == Some(true)
     }
 
     pub(crate) fn set_flag(&self, this: &handles::Entity, flag: EntityFlag, value: bool) -> bool {
-        Self::uuid(this).is_some_and(|id| {
+        self.uuid(this).is_some_and(|id| {
             self.shared
                 .platform
                 .world_entities()
@@ -126,13 +125,13 @@ impl GameContext {
         self.shared
             .platform
             .world_entities()
-            .number(Self::uuid(this)?, number)
+            .number(self.uuid(this)?, number)
     }
 
     /// The class the handle's value is, made as specific as the server can say first.
     fn class_of(&self, this: &handles::Entity) -> Option<&'static str> {
         let lua = self.scripts.host().lua().clone();
-        if let Some(id) = Self::uuid(this) {
+        if let Some(id) = self.uuid(this) {
             self.shared.entity_by_id(&lua, id);
         }
         let pushed = netherforge_api::handle::push_any(&lua, &Handle::Entity(this.clone())).ok()?;
@@ -154,8 +153,9 @@ impl GameContext {
         if distance < 0.0 || !distance.is_finite() {
             return Err(err("max_distance can't be below 0"));
         }
-        let Some(eye) =
-            Self::uuid(this).and_then(|id| self.shared.platform.world_entities().eye(id))
+        let Some(eye) = self
+            .uuid(this)
+            .and_then(|id| self.shared.platform.world_entities().eye(id))
         else {
             return Ok(None);
         };
@@ -235,7 +235,8 @@ impl EntityApi for GameContext {
     }
 
     fn eye_position(&self, this: &handles::Entity) -> ApiResult<Option<values::Vec3>> {
-        Ok(Self::uuid(this)
+        Ok(self
+            .uuid(this)
             .and_then(|id| self.shared.platform.world_entities().eye(id))
             .map(|e| values::Vec3 {
                 x: e.x,
@@ -257,7 +258,7 @@ impl EntityApi for GameContext {
     }
 
     fn set_yaw(&self, this: &handles::Entity, degrees: f64) -> ApiResult<bool> {
-        let (Some(id), Some(at)) = (Self::uuid(this), self.here(this)) else {
+        let (Some(id), Some(at)) = (self.uuid(this), self.here(this)) else {
             return Ok(false);
         };
         Ok(self
@@ -268,7 +269,7 @@ impl EntityApi for GameContext {
     }
 
     fn set_pitch(&self, this: &handles::Entity, degrees: f64) -> ApiResult<bool> {
-        let (Some(id), Some(at)) = (Self::uuid(this), self.here(this)) else {
+        let (Some(id), Some(at)) = (self.uuid(this), self.here(this)) else {
             return Ok(false);
         };
         Ok(self.shared.platform.world_entities().set_rotation(
@@ -280,7 +281,7 @@ impl EntityApi for GameContext {
 
     fn look_at(&self, this: &handles::Entity, point: values::Vec3) -> ApiResult<bool> {
         let entities = self.shared.platform.world_entities();
-        let Some(id) = Self::uuid(this) else {
+        let Some(id) = self.uuid(this) else {
             return Ok(false);
         };
         let Some(eye) = entities.eye(id) else {
@@ -303,7 +304,7 @@ impl EntityApi for GameContext {
         location_or_position: unions::LocationOrVec3,
     ) -> ApiResult<bool> {
         let entities = self.shared.platform.world_entities();
-        let (Some(id), Some(at)) = (Self::uuid(this), self.here(this)) else {
+        let (Some(id), Some(at)) = (self.uuid(this), self.here(this)) else {
             return Ok(false);
         };
         let to = match location_or_position {
@@ -326,13 +327,14 @@ impl EntityApi for GameContext {
     }
 
     fn velocity(&self, this: &handles::Entity) -> ApiResult<Option<values::Vec3>> {
-        Ok(Self::uuid(this)
+        Ok(self
+            .uuid(this)
             .and_then(|id| self.shared.platform.world_entities().velocity(id))
             .map(value))
     }
 
     fn set_velocity(&self, this: &handles::Entity, velocity: values::Vec3) -> ApiResult<bool> {
-        Ok(Self::uuid(this).is_some_and(|id| {
+        Ok(self.uuid(this).is_some_and(|id| {
             self.shared
                 .platform
                 .world_entities()
@@ -342,7 +344,7 @@ impl EntityApi for GameContext {
 
     fn add_velocity(&self, this: &handles::Entity, velocity: values::Vec3) -> ApiResult<bool> {
         let entities = self.shared.platform.world_entities();
-        let Some(id) = Self::uuid(this) else {
+        let Some(id) = self.uuid(this) else {
             return Ok(false);
         };
         let Some(now) = entities.velocity(id) else {
@@ -357,7 +359,7 @@ impl EntityApi for GameContext {
 
     /// A player can't be removed; anything else goes, and what's kept for it with it.
     fn remove(&self, this: &handles::Entity) -> ApiResult<bool> {
-        let Some(id) = Self::uuid(this) else {
+        let Some(id) = self.uuid(this) else {
             return Ok(false);
         };
         if self.shared.platform.players().get(id).is_some()
@@ -370,13 +372,15 @@ impl EntityApi for GameContext {
     }
 
     fn name(&self, this: &handles::Entity) -> ApiResult<Option<values::Text>> {
-        Ok(Self::uuid(this)
+        Ok(self
+            .uuid(this)
             .and_then(|id| self.shared.platform.world_entities().name(id))
             .map(values::Text))
     }
 
     fn custom_name(&self, this: &handles::Entity) -> ApiResult<Option<values::Text>> {
-        Ok(Self::uuid(this)
+        Ok(self
+            .uuid(this)
             .and_then(|id| self.shared.platform.world_entities().custom_name(id))
             .map(values::Text))
     }
@@ -386,7 +390,7 @@ impl EntityApi for GameContext {
         this: &handles::Entity,
         text: Option<values::Text>,
     ) -> ApiResult<bool> {
-        Ok(Self::uuid(this).is_some_and(|id| {
+        Ok(self.uuid(this).is_some_and(|id| {
             self.shared
                 .platform
                 .world_entities()
@@ -414,18 +418,20 @@ impl EntityApi for GameContext {
 
     fn add_tag(&self, this: &handles::Entity, tag: String) -> ApiResult<bool> {
         check_tag(&tag)?;
-        Ok(Self::uuid(this)
+        Ok(self
+            .uuid(this)
             .is_some_and(|id| self.shared.platform.world_entities().add_tag(id, tag)))
     }
 
     fn remove_tag(&self, this: &handles::Entity, tag: String) -> ApiResult<bool> {
-        Ok(Self::uuid(this)
+        Ok(self
+            .uuid(this)
             .is_some_and(|id| self.shared.platform.world_entities().remove_tag(id, tag)))
     }
 
     /// The entity's table, the same to every script; nil when it isn't in the world (and wasn't read before).
     fn data(&self, this: &handles::Entity) -> ApiResult<Value> {
-        let Some(id) = Self::uuid(this) else {
+        let Some(id) = self.uuid(this) else {
             return Ok(Value::Nil);
         };
         if let Some(kept) = self.shared.entities.borrow().data.get(&id) {
@@ -506,7 +512,7 @@ impl EntityApi for GameContext {
     }
 
     fn is_hidden_from(&self, this: &handles::Entity, player: handles::Player) -> ApiResult<bool> {
-        let (Some(id), Some(viewer)) = (Self::uuid(this), parse_uuid(&player.id)) else {
+        let (Some(id), Some(viewer)) = (self.uuid(this), parse_uuid(&player.id)) else {
             return Ok(false);
         };
         Ok(self
@@ -548,7 +554,8 @@ impl EntityApi for GameContext {
 
     fn passengers(&self, this: &handles::Entity) -> ApiResult<Vec<handles::Entity>> {
         let lua = self.scripts.host().lua().clone();
-        Ok(Self::uuid(this)
+        Ok(self
+            .uuid(this)
             .and_then(|id| self.shared.platform.world_entities().passengers(id))
             .unwrap_or_default()
             .into_iter()
@@ -557,7 +564,7 @@ impl EntityApi for GameContext {
     }
 
     fn add_passenger(&self, this: &handles::Entity, entity: handles::Entity) -> ApiResult<bool> {
-        let (Some(id), Some(rider)) = (Self::uuid(this), Self::uuid(&entity)) else {
+        let (Some(id), Some(rider)) = (self.uuid(this), self.uuid(&entity)) else {
             return Ok(false);
         };
         Ok(id != rider
@@ -569,7 +576,7 @@ impl EntityApi for GameContext {
     }
 
     fn remove_passenger(&self, this: &handles::Entity, entity: handles::Entity) -> ApiResult<bool> {
-        let (Some(id), Some(rider)) = (Self::uuid(this), Self::uuid(&entity)) else {
+        let (Some(id), Some(rider)) = (self.uuid(this), self.uuid(&entity)) else {
             return Ok(false);
         };
         Ok(self
@@ -581,7 +588,8 @@ impl EntityApi for GameContext {
 
     fn vehicle(&self, this: &handles::Entity) -> ApiResult<Option<handles::Entity>> {
         let lua = self.scripts.host().lua().clone();
-        Ok(Self::uuid(this)
+        Ok(self
+            .uuid(this)
             .and_then(|id| self.shared.platform.world_entities().vehicle(id))
             .map(|id| self.shared.entity_by_id(&lua, id)))
     }

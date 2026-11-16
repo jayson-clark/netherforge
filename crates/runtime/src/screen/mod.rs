@@ -464,6 +464,8 @@ pub struct Screens {
     /// The map numbers kept for good, by (namespace, screen key), each by its tile's stable number.
     kept: BTreeMap<(String, String), BTreeMap<i64, i64>>,
     next_map: i64,
+    /// The room they're of: only the main room's keyed screens keep their numbers for good.
+    room: crate::instance::RoomId,
     font_files: BTreeMap<String, ScreenFontFile>,
     /// Each screen's folder and each font's, where their scripts and files are.
     folders: BTreeMap<String, String>,
@@ -572,6 +574,8 @@ impl Screens {
         columns: i32,
         rows: i32,
     ) -> Vec<i64> {
+        // A room beside the main one lasts as long as its match: its screens' numbers are for now, whatever key.
+        let key = key.filter(|_| self.room == crate::instance::RoomId::MAIN);
         (0..columns * rows)
             .map(|tile| {
                 let stable = i64::from((tile / columns) * MAX_TILES + tile % columns);
@@ -583,8 +587,9 @@ impl Screens {
                 {
                     return *map;
                 }
-                let map = self.next_map;
-                self.next_map += 1;
+                // The store's next number is every room's: two rooms never give out the same one.
+                let map = self.next_map.max(store.screen_map_next().unwrap_or(0));
+                self.next_map = map + 1;
                 store.set_screen_map_next(self.next_map);
                 if let Some(key) = key {
                     self.kept
@@ -932,9 +937,11 @@ impl ScreensContext {
                     .remove(&(screen.namespace.clone(), key.clone()))
                 {
                     for tile in tiles.keys() {
-                        self.shared
-                            .store
-                            .forget_screen_map(&screen.namespace, &key, *tile);
+                        self.shared.instance.store.forget_screen_map(
+                            &screen.namespace,
+                            &key,
+                            *tile,
+                        );
                     }
                 }
             }
@@ -1194,7 +1201,14 @@ impl GameContext {
         } else {
             netherforge_format::kinds::package_path(&key.namespace, pack)
         };
-        if !self.shared.packs.borrow().pack_files.contains(&name) {
+        if !self
+            .shared
+            .instance
+            .packs
+            .borrow()
+            .pack_files
+            .contains(&name)
+        {
             let elsewhere = if key.namespace != from {
                 format!(" in package \"{}\"", key.namespace)
             } else {
@@ -1315,7 +1329,7 @@ impl NfScreensApi for GameContext {
         };
         let key = options.key.as_ref().map(|k| format!("key:{k}"));
         let maps = screens.maps(
-            &self.shared.store,
+            &self.shared.instance.store,
             &namespace,
             key.as_deref(),
             columns,
@@ -2132,9 +2146,10 @@ impl ScreensService {
 
     fn define(&self, project: &Define) {
         let platform = project.platform;
-        let store = &self.shared.store;
+        let store = &self.shared.instance.store;
         let home = project.project.namespace().to_owned();
         let mut screens = self.shared.screens.borrow_mut();
+        screens.room = self.shared.room;
         screens.kept = store.screen_maps();
         let most_kept = screens
             .kept
@@ -2184,7 +2199,7 @@ impl ScreensService {
         if !exists {
             let Some(next) = next else { return };
             let screen = self.shared.screens.borrow_mut().project_screen(
-                &self.shared.store,
+                &self.shared.instance.store,
                 platform,
                 id,
                 &next,
@@ -2224,7 +2239,7 @@ impl ScreensService {
             let bare = netherforge_format::kinds::split_package(id).1.to_owned();
             let mut screens = self.shared.screens.borrow_mut();
             let maps = screens.maps(
-                &self.shared.store,
+                &self.shared.instance.store,
                 &namespace,
                 Some(&format!("screen:{bare}")),
                 next.width,

@@ -269,7 +269,7 @@ impl Profiler {
         *self.parts.borrow_mut().entry(name.to_owned()).or_default() += nanos as i64;
     }
 
-    /// Each scope's own time this tick, named (`calls` its calls in).
+    /// One room's scopes' own time this tick, named (`calls` its calls in): each room's are added to the tick's.
     pub fn scopes(&self, scopes: Vec<ScopeTime>) {
         let mut batch = self.batch.borrow_mut();
         let mut recording = self.recording.borrow_mut();
@@ -279,7 +279,7 @@ impl Profiler {
                 r.totals.scope(scope);
             }
         }
-        *self.tick_scopes.borrow_mut() = scopes;
+        self.tick_scopes.borrow_mut().extend(scopes);
     }
 
     /// What each function cost since the last time, one entry per scope and function.

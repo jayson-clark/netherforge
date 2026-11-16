@@ -1235,6 +1235,9 @@ impl BlocksContext {
     fn reconcile_loaded(&self) {
         let platform = self.platform();
         for world in platform.worlds().names() {
+            if !self.shared.owns_world(&world) {
+                continue;
+            }
             for (x, z) in platform.worlds().loaded_chunks(world.clone()) {
                 self.reconcile(&world, x, z, false);
             }
@@ -1956,10 +1959,11 @@ impl BlocksContext {
                 .after_break(platform, &*blocks, done, broke);
         }
         let blocks = self.shared.blocks.borrow();
+        let online = self.shared.online_players();
         self.shared
             .mining
             .borrow_mut()
-            .watch_looks(platform, &*blocks);
+            .watch_looks(platform, &online, &*blocks);
     }
 
     /// Tells the server which of the world's own breaks and changes this service wants to hear of.
@@ -1986,7 +1990,10 @@ impl BlocksContext {
             };
             (drops, falls)
         };
-        if self.shared.blocks.borrow().watched == (drops.clone(), falls.clone()) {
+        // What the server tells about is for every room: the main room's say, as every room runs the same project.
+        if self.shared.room != crate::instance::RoomId::MAIN
+            || self.shared.blocks.borrow().watched == (drops.clone(), falls.clone())
+        {
             return;
         }
         self.shared.blocks.borrow_mut().watched = (drops.clone(), falls.clone());
@@ -2265,7 +2272,7 @@ impl Service for BlocksService {
             (blocks.plan.is_some(), !blocks.game_rules.is_empty())
         };
         if planned || ruled {
-            for player in self.shared.platform.players().online() {
+            for player in self.shared.online_players() {
                 self.shared
                     .mining
                     .borrow_mut()

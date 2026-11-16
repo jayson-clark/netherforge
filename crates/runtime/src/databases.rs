@@ -563,7 +563,7 @@ fn migrations_of(define: &Define) -> BTreeMap<String, Vec<MigrationFile>> {
 /// Brings `namespace`'s database up to date with its migrations, or records why it can't be.
 fn apply(shared: &Shared, namespace: &str, migrations: &[MigrationFile]) {
     let platform = &*shared.platform;
-    let mut databases = shared.databases.borrow_mut();
+    let mut databases = shared.instance.databases.borrow_mut();
     databases.failures.remove(namespace);
     if migrations.is_empty() {
         return;
@@ -640,7 +640,7 @@ fn apply(shared: &Shared, namespace: &str, migrations: &[MigrationFile]) {
             let _ = send.send(remote.migrate(&scope, &steps));
         });
         let applied = receive.recv();
-        let mut databases = shared.databases.borrow_mut();
+        let mut databases = shared.instance.databases.borrow_mut();
         for line in databases.take_logs() {
             platform.log().error(line, None);
         }
@@ -700,7 +700,7 @@ fn apply(shared: &Shared, namespace: &str, migrations: &[MigrationFile]) {
         Ok(c) => migrate(c, &scope, &steps),
         Err(why) => Err((String::new(), why)),
     });
-    let mut databases = shared.databases.borrow_mut();
+    let mut databases = shared.instance.databases.borrow_mut();
     match applied {
         Some(Ok(())) => {}
         Some(Err((file, why))) => {
@@ -970,6 +970,7 @@ impl DatabaseContext {
         };
         if let Some(problem) = self
             .shared
+            .instance
             .databases
             .borrow()
             .config
@@ -996,6 +997,7 @@ impl DatabaseContext {
         if this.connection.is_empty()
             && self
                 .shared
+                .instance
                 .databases
                 .borrow()
                 .own(&this.namespace)
@@ -1017,7 +1019,7 @@ impl DatabaseContext {
         work: crate::remote_db::Work,
     ) -> mpsc::Receiver<Result<crate::remote_db::Answer, String>> {
         let (send, receive) = mpsc::channel();
-        let mut databases = self.shared.databases.borrow_mut();
+        let mut databases = self.shared.instance.databases.borrow_mut();
         for line in databases.take_logs() {
             self.shared.platform.log().error(line, None);
         }
@@ -1165,6 +1167,10 @@ impl Service for DatabasesService {
     fn name(&self) -> &'static str {
         "package databases"
     }
+    /// Once per server, in the main room.
+    fn instance_wide(&self) -> bool {
+        true
+    }
 
     fn reloads(&self) -> &'static [&'static str] {
         &["migration"]
@@ -1172,7 +1178,7 @@ impl Service for DatabasesService {
 
     fn start(&self, _room: &Room, project: &Define) {
         {
-            let databases = self.shared.databases.borrow();
+            let databases = self.shared.instance.databases.borrow();
             let log = self.shared.platform.log();
             for (name, why) in &databases.config.invalid {
                 log.error(
@@ -1209,7 +1215,7 @@ impl Service for DatabasesService {
                 log.info(format!("Database connections: {}", each.join("; ")));
             }
         }
-        self.shared.databases.borrow_mut().failures.clear();
+        self.shared.instance.databases.borrow_mut().failures.clear();
         for (namespace, migrations) in migrations_of(project) {
             apply(&self.shared, &namespace, &migrations);
         }
@@ -1236,7 +1242,7 @@ impl Service for DatabasesService {
     }
 
     fn problems(&self) -> Vec<Problem> {
-        self.shared.databases.borrow().problems()
+        self.shared.instance.databases.borrow().problems()
     }
 }
 

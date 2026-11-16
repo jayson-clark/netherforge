@@ -91,11 +91,15 @@ impl ScriptData {
             }
             match table.carried.take() {
                 Some(text) => Some(text),
-                None => {
-                    let read = shared.store.data(&owner);
-                    table.saved.clone_from(&read);
-                    read
-                }
+                None => match stored_as(shared, &owner) {
+                    // A room without a key has named tables of its own, empty as it opens.
+                    None => None,
+                    Some(stored) => {
+                        let read = shared.instance.store.data(&stored);
+                        table.saved.clone_from(&read);
+                        read
+                    }
+                },
             }
         };
         let made = match text
@@ -159,9 +163,11 @@ impl ScriptData {
             return Some(text);
         }
         table.too_big = false;
-        if table.saved.as_deref() != Some(text.as_str()) {
+        if table.saved.as_deref() != Some(text.as_str())
+            && let Some(stored) = stored_as(shared, owner)
+        {
             table.saved = Some(text.clone());
-            shared.store.put_data(owner, text.clone());
+            shared.instance.store.put_data(&stored, text.clone());
         }
         Some(text)
     }
@@ -174,6 +180,22 @@ impl ScriptData {
     /// `owner` is gone for good (a removed centity): its table goes. The store's row goes with the thing's.
     pub fn forget(shared: &Shared, owner: &Owner) {
         shared.data.borrow_mut().tables.remove(owner);
+    }
+}
+
+/// What `owner`'s table is kept as in the store from `shared`'s room: a player's and a centity's as themselves (they're
+/// the thing's, wherever it is), `nf.data(name)` as itself in the main room and under the room's key in a kept room
+/// (`<namespace>#<key>`); none for any other room, whose named tables last as long as it does.
+fn stored_as(shared: &Shared, owner: &Owner) -> Option<Owner> {
+    match owner {
+        Owner::Named { namespace, name } if shared.room != crate::instance::RoomId::MAIN => {
+            let key = shared.instance.kept_key(shared.room)?;
+            Some(Owner::Named {
+                namespace: format!("{namespace}#{key}"),
+                name: name.clone(),
+            })
+        }
+        _ => Some(owner.clone()),
     }
 }
 
@@ -220,10 +242,20 @@ impl Service for DataService {
         }
     }
 
-    /// They left: their table is saved now, after their `player_quit` handlers.
+    /// The room is saved now (a kept room's save): every table that changed.
+    fn room_saving(&self) {
+        if let Some(host) = self.host.borrow().clone() {
+            self.save_all(&host);
+        }
+    }
+
+    /// They left: their table is saved now, after their `player_quit` handlers, and let go of, so the room they
+    /// join next (this one again, or another) reads it as it was saved, whatever another room did with it meanwhile.
     fn player_quit(&self, player: &PlayerRef) {
         if let Some(host) = self.host.borrow().clone() {
-            ScriptData::save(&self.shared, &host, &Owner::Player(player.uuid));
+            let owner = Owner::Player(player.uuid);
+            ScriptData::save(&self.shared, &host, &owner);
+            ScriptData::forget(&self.shared, &owner);
         }
     }
 
@@ -242,7 +274,7 @@ impl Service for DataService {
                 table.carried = text.or_else(|| table.saved.clone());
             }
         }
-        self.shared.store.commit();
+        self.shared.instance.store.commit();
     }
 }
 

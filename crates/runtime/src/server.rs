@@ -23,7 +23,7 @@ use netherforge_platform::{
     StructureMarker, Uuid,
 };
 
-use crate::events::{Emitted, EventSession, EventSource, GameEventDispatch, Running, Stage};
+use crate::events::{Emitted, EventSession, EventSource, GameEventDispatch, Route, Running, Stage};
 use crate::session::Session;
 
 /// The session the server's events go to: the dispatch's source.
@@ -35,8 +35,8 @@ impl<'a> EventSource for Current<'a> {
     where
         Self: 'b;
 
-    fn open(&self) -> Option<Running<'_, 'a>> {
-        Running::open(&self.0)
+    fn open(&self, route: Route<'_>) -> Option<Running<'_, 'a>> {
+        Running::open(&self.0, route)
     }
 }
 
@@ -121,7 +121,7 @@ impl<'a> ServerEvents<'a> {
     /// lines and errors go to its console. The session should run on `bridge.platform()`, so the runtime's own log
     /// lines reach the editor too.
     pub fn attach_bridge(&self, bridge: Rc<crate::bridge::Bridge>) {
-        *self.session().shared().console.borrow_mut() = Some(bridge.console());
+        *self.session().shared().instance.console.borrow_mut() = Some(bridge.console());
         self.profiler().attach_bridge(bridge.clone());
         let debugger =
             crate::debug::Debugger::new(bridge.dap_sender(), Some(bridge.config().project.clone()));
@@ -170,9 +170,9 @@ impl<'a> ServerEvents<'a> {
         self.game.0.0.borrow_mut()
     }
 
-    /// The session while it runs, for one event.
-    fn open(&self) -> Option<Running<'_, 'a>> {
-        self.game.0.open()
+    /// The room `route` reaches while it runs, for one event.
+    fn open(&self, route: Route<'_>) -> Option<Running<'_, 'a>> {
+        self.game.0.open(route)
     }
 
     /// The session's scripts, whatever it's doing: none while it's being changed.
@@ -202,7 +202,7 @@ fn cancelled(out: Option<Emitted>) -> bool {
 /// The project items' side of the running session.
 fn items(s: &Running) -> crate::project_items::ItemContext {
     crate::project_items::ItemContext {
-        shared: s.session().shared().clone(),
+        shared: s.shared().clone(),
         scripts: s.room().scripts().clone(),
     }
 }
@@ -210,7 +210,7 @@ fn items(s: &Running) -> crate::project_items::ItemContext {
 /// The screens' side of the running session.
 fn screens(s: &Running) -> crate::screen::ScreensContext {
     crate::screen::ScreensContext {
-        shared: s.session().shared().clone(),
+        shared: s.shared().clone(),
         scripts: s.room().scripts().clone(),
     }
 }
@@ -218,7 +218,7 @@ fn screens(s: &Running) -> crate::screen::ScreensContext {
 /// The project blocks' side of the running session.
 fn blocks(s: &Running) -> crate::custom_blocks::BlocksContext {
     crate::custom_blocks::BlocksContext {
-        shared: s.session().shared().clone(),
+        shared: s.shared().clone(),
         scripts: s.room().scripts().clone(),
     }
 }
@@ -239,7 +239,7 @@ fn block_click(
         return false;
     };
     let context = blocks(s);
-    let shared = s.session().shared().clone();
+    let shared = s.shared().clone();
     if !shared.blocks.borrow().is_usable() {
         return false;
     }
@@ -350,7 +350,7 @@ impl<'a> ServerEvents<'a> {
         let wanted = match self.any() {
             Some(session) => {
                 session.tick();
-                session.shared().packs.borrow().wanted
+                session.shared().instance.packs.borrow().wanted
             }
             None => false,
         };
@@ -406,6 +406,10 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
     fn tick(&self) {
         let started = std::time::Instant::now();
         self.run_tick();
+        // What scripts asked of the rooms this tick, now that none runs.
+        if let Ok(mut session) = self.game.0.0.try_borrow_mut() {
+            session.apply_room_requests();
+        }
         let metrics = self.metrics.borrow().clone();
         if let Some(metrics) = metrics {
             metrics.record(started.elapsed().as_nanos() as u64);
@@ -415,19 +419,20 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         }
     }
     fn item_rendered(&self, stack: ItemData) -> ItemData {
-        match self.open() {
+        match self.open(Route::Main) {
             Some(s) => items(&s).render(stack),
             None => stack,
         }
     }
 
     fn item_viewing(&self, reference: Option<String>) -> bool {
-        self.open()
+        self.open(Route::Main)
             .is_some_and(|s| items(&s).viewing(reference.as_deref()))
     }
 
     fn item_viewed(&self, player: Uuid, stack: ItemData) -> Option<ItemView> {
-        self.open().and_then(|s| items(&s).view(player, &stack))
+        self.open(Route::Player(player))
+            .and_then(|s| items(&s).view(player, &stack))
     }
 
     fn player_interact(
@@ -439,7 +444,9 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         item: Option<ItemData>,
         hand: String,
     ) -> bool {
-        let Some(s) = self.open() else { return false };
+        let Some(s) = self.open(Route::Player(player.uuid)) else {
+            return false;
+        };
         // A click aimed at a screen within its click range is the screen's, before anything in the world hears it.
         if screens(&s).swing(&player, button) {
             return true;
@@ -473,7 +480,9 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
     }
 
     fn player_use_item(&self, player: PlayerRef, item: ItemData, hand: String) -> bool {
-        let Some(s) = self.open() else { return false };
+        let Some(s) = self.open(Route::Player(player.uuid)) else {
+            return false;
+        };
         let stages = with_item(
             items(&s).stage(Some(&item)),
             "use",
@@ -492,7 +501,7 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
     }
 
     fn draws_without_ammo(&self, item: ItemData) -> bool {
-        self.open().is_some_and(|s| {
+        self.open(Route::Main).is_some_and(|s| {
             s.session()
                 .shared()
                 .items
@@ -512,7 +521,7 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
             drops: None,
             experience,
         };
-        let Some(s) = self.open() else {
+        let Some(s) = self.open(Route::World(&block.world)) else {
             return Some(unchanged);
         };
         let custom = blocks(&s);
@@ -597,8 +606,10 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
 
     /// A player let go of the block they were mining, or looked away.
     fn block_stop_break(&self, player: PlayerRef, block: BlockRef) {
-        let Some(s) = self.open() else { return };
-        let shared = s.session().shared().clone();
+        let Some(s) = self.open(Route::World(&block.world)) else {
+            return;
+        };
+        let shared = s.shared().clone();
         shared.mining.borrow_mut().stopped_breaking(
             &*shared.platform,
             &player,
@@ -608,18 +619,18 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
     }
 
     fn world_broke(&self, block: BlockRef) -> Option<Vec<ItemData>> {
-        let s = self.open()?;
+        let s = self.open(Route::World(&block.world))?;
         blocks(&s).world_broke(&block)
     }
 
     fn block_updated(&self, block: BlockRef) {
-        if let Some(s) = self.open() {
+        if let Some(s) = self.open(Route::World(&block.world)) {
             blocks(&s).block_updated(&block);
         }
     }
 
     fn falling_landed(&self, entity: Uuid, block: BlockRef) {
-        if let Some(s) = self.open() {
+        if let Some(s) = self.open(Route::World(&block.world)) {
             blocks(&s).falling_landed(entity, &block);
         }
     }
@@ -630,7 +641,7 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         block: BlockRef,
         inventory: Vec<Option<ItemData>>,
     ) -> Option<PickAnswer> {
-        let s = self.open()?;
+        let s = self.open(Route::Player(player.uuid))?;
         blocks(&s).picking(&player, &block, &inventory)
     }
 
@@ -645,7 +656,7 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         drops: Vec<ItemData>,
         experience: i32,
     ) -> DeathAnswer {
-        let Some(s) = self.open() else {
+        let Some(s) = self.open(Route::Player(player.uuid)) else {
             return DeathAnswer {
                 message,
                 keep_inventory,
@@ -704,7 +715,9 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
     }
 
     fn player_drop_item(&self, player: PlayerRef, item: ItemData) -> bool {
-        let Some(s) = self.open() else { return false };
+        let Some(s) = self.open(Route::Player(player.uuid)) else {
+            return false;
+        };
         let stages = with_item(
             items(&s).stage(Some(&item)),
             "drop",
@@ -722,7 +735,9 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
     }
 
     fn player_pickup_item(&self, player: PlayerRef, item: ItemData, entity: Uuid) -> bool {
-        let Some(s) = self.open() else { return false };
+        let Some(s) = self.open(Route::Player(player.uuid)) else {
+            return false;
+        };
         let stages = with_item(
             items(&s).stage(Some(&item)),
             "pickup",
@@ -748,7 +763,9 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
     }
 
     fn player_consume_item(&self, player: PlayerRef, item: ItemData) -> bool {
-        let Some(s) = self.open() else { return false };
+        let Some(s) = self.open(Route::Player(player.uuid)) else {
+            return false;
+        };
         let stages = with_item(
             items(&s).stage(Some(&item)),
             "consume",
@@ -796,9 +813,15 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
 
     /// Markers of centities in a structure came into the world: each turns into its centity.
     fn structure_markers_loaded(&self, markers: Vec<StructureMarker>) {
-        let Some(s) = self.open() else { return };
+        let Some(s) = self.open(
+            markers
+                .first()
+                .map_or(Route::Main, |m| Route::World(&m.at.world)),
+        ) else {
+            return;
+        };
         crate::structures::StructuresContext {
-            shared: s.session().shared().clone(),
+            shared: s.shared().clone(),
             scripts: s.room().scripts().clone(),
         }
         .spawn(markers);
@@ -817,7 +840,7 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         cause: String,
         attacker: Option<Uuid>,
     ) -> Option<f64> {
-        let Some(s) = self.open() else {
+        let Some(s) = self.open(Route::Entity(entity)) else {
             return Some(amount);
         };
         let target = s.entity(&entity);
@@ -865,7 +888,9 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
             drops: None,
             experience,
         };
-        let Some(s) = self.open() else { return answer };
+        let Some(s) = self.open(Route::Entity(entity)) else {
+            return answer;
+        };
         let target = s.living(&entity);
         let stages = [
             ("death", Some(Handle::Living(target.clone()))),
@@ -898,10 +923,10 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         player: Option<Uuid>,
         location: Location,
     ) -> Option<Vec<ItemData>> {
-        let s = self.open()?;
-        let shared = s.session().shared().clone();
+        let s = self.open(Route::World(&location.world))?;
+        let shared = s.shared().clone();
         let log = shared.platform.log();
-        let Some(id) = shared.loot.borrow().id_of(&table) else {
+        let Some(id) = shared.instance.loot.borrow().id_of(&table) else {
             log.warn(format!(
                 "A generated container at {} {} {} {} names the loot table \"{table}\", which isn't running: it's left empty",
                 location.world, location.x as i64, location.y as i64, location.z as i64
@@ -929,7 +954,9 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
     }
 
     fn player_interact_entity(&self, player: PlayerRef, entity: Uuid, hand: String) -> bool {
-        let Some(s) = self.open() else { return false };
+        let Some(s) = self.open(Route::Player(player.uuid)) else {
+            return false;
+        };
         let target = s.entity(&entity);
         let held = items(&s).held_stage(player.uuid, &hand);
         let mut stages = vec![("interact", Some(Handle::Entity(target.clone())))];
@@ -950,10 +977,13 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
 
     /// Only our packs' statuses are kept; scripts hear each (the `onDemand` pack's name, or none for the project's).
     fn resource_pack_status(&self, player: Uuid, pack: Uuid, status: Option<String>) {
-        let Some(s) = self.open() else { return };
+        let Some(s) = self.open(Route::Player(player)) else {
+            return;
+        };
         let changed = s
             .session()
             .shared()
+            .instance
             .packs
             .borrow_mut()
             .status_changed(player, pack, status);
@@ -962,8 +992,8 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         };
         // The project's pack loaded: the network hears it, for the next server they go to.
         if name.is_none() && status == crate::packs::LOADED {
-            let shared = s.session().shared().clone();
-            let sent = shared.packs.borrow().sent_to(player);
+            let shared = s.shared().clone();
+            let sent = shared.instance.packs.borrow().sent_to(player);
             if let Some(sha1) = sent {
                 crate::packs::tell_network_loaded(&shared, player, sha1);
             }
@@ -980,7 +1010,7 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
             shapes::PlayerResourcePackStatusEvent {
                 player: s.player(&who),
                 pack: name.map(|n| {
-                    let shared = s.session().shared().clone();
+                    let shared = s.shared().clone();
                     let names = shared.names.borrow();
                     let home = names.home.clone();
                     crate::names::Calling {
@@ -995,9 +1025,11 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
     }
 
     fn menu_clicked(&self, window: Uuid, click: MenuClick) -> bool {
-        let Some(s) = self.open() else { return false };
+        let Some(s) = self.open(Route::Player(click.player.uuid)) else {
+            return false;
+        };
         crate::menu::MenuContext {
-            shared: s.session().shared().clone(),
+            shared: s.shared().clone(),
             scripts: s.room().scripts().clone(),
         }
         .click(window, click)
@@ -1012,18 +1044,22 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         own_slots: Vec<i32>,
         click: String,
     ) -> bool {
-        let Some(s) = self.open() else { return false };
+        let Some(s) = self.open(Route::Player(player.uuid)) else {
+            return false;
+        };
         crate::menu::MenuContext {
-            shared: s.session().shared().clone(),
+            shared: s.shared().clone(),
             scripts: s.room().scripts().clone(),
         }
         .drag(window, &player, &slots, cursor.as_ref(), &own_slots, &click)
     }
 
     fn menu_closed(&self, window: Uuid, player: PlayerRef) {
-        let Some(s) = self.open() else { return };
+        let Some(s) = self.open(Route::Player(player.uuid)) else {
+            return;
+        };
         crate::menu::MenuContext {
-            shared: s.session().shared().clone(),
+            shared: s.shared().clone(),
             scripts: s.room().scripts().clone(),
         }
         .closed(window, &player);
@@ -1031,9 +1067,11 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
 
     /// What a viewer's click or drag moved: the bound slots' storages hold it now.
     fn menu_changed(&self, window: Uuid, slots: Vec<i32>) {
-        let Some(s) = self.open() else { return };
+        let Some(s) = self.open(Route::Window(window)) else {
+            return;
+        };
         crate::menu::MenuContext {
-            shared: s.session().shared().clone(),
+            shared: s.shared().clone(),
             scripts: s.room().scripts().clone(),
         }
         .changed(window, &slots);
@@ -1046,18 +1084,22 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         button: String,
         values: HashMap<String, Dynamic>,
     ) {
-        let Some(s) = self.open() else { return };
+        let Some(s) = self.open(Route::Player(player.uuid)) else {
+            return;
+        };
         crate::dialog::DialogContext {
-            shared: s.session().shared().clone(),
+            shared: s.shared().clone(),
             scripts: s.room().scripts().clone(),
         }
         .pressed(&player, &dialog, &button, values, false);
     }
 
     fn dialog_closed(&self, player: PlayerRef, dialog: String) {
-        let Some(s) = self.open() else { return };
+        let Some(s) = self.open(Route::Player(player.uuid)) else {
+            return;
+        };
         crate::dialog::DialogContext {
-            shared: s.session().shared().clone(),
+            shared: s.shared().clone(),
             scripts: s.room().scripts().clone(),
         }
         .closed(&player, &dialog, false);
@@ -1069,9 +1111,11 @@ impl<'a> PlatformEvents for ServerEvents<'a> {
         id: String,
         answers: Rc<dyn DialogAnswers>,
     ) -> bool {
-        let Some(s) = self.open() else { return false };
+        let Some(s) = self.open(Route::Player(player.uuid)) else {
+            return false;
+        };
         crate::dialog::DialogContext {
-            shared: s.session().shared().clone(),
+            shared: s.shared().clone(),
             scripts: s.room().scripts().clone(),
         }
         .registry_clicked(&player, &id, &*answers)

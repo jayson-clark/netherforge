@@ -124,7 +124,7 @@ impl LootContext for Conditions<'_> {
 impl GameContext {
     /// `table` as the server names it: a project or package table that's there, or a game table's id.
     fn loot_named(&self, table: &str) -> ApiResult<String> {
-        let home = self.shared.loot.borrow().home.clone();
+        let home = self.shared.instance.loot.borrow().home.clone();
         if let Some((namespace, _)) = table.split_once(':')
             && namespace != home
             && !self
@@ -137,18 +137,23 @@ impl GameContext {
             return Ok(table.to_owned());
         }
         let name = self.with_names(|names| names.resource(KIND, table))?;
-        self.shared.loot.borrow().id_of(&name).ok_or_else(|| {
-            err(format!(
-                "there's no loot table \"{table}\" (loot/{name}.json)"
-            ))
-        })
+        self.shared
+            .instance
+            .loot
+            .borrow()
+            .id_of(&name)
+            .ok_or_else(|| {
+                err(format!(
+                    "there's no loot table \"{table}\" (loot/{name}.json)"
+                ))
+            })
     }
 
     /// What one roll of `table` gives: a project table as the project names it, or one of the game's by its
     /// id. `seed` makes it give the same every time.
     pub fn roll_loot(&self, table: &str, roll: &LootRoll, seed: i64) -> ApiResult<Vec<ItemData>> {
         let (own, home) = {
-            let loot = self.shared.loot.borrow();
+            let loot = self.shared.instance.loot.borrow();
             (loot.tables.get(table).cloned(), loot.home.clone())
         };
         let Some(own) = own else {
@@ -169,7 +174,7 @@ impl GameContext {
             return self.game_loot(table, roll, seed);
         };
         let drops = {
-            let loot = self.shared.loot.borrow();
+            let loot = self.shared.instance.loot.borrow();
             let find = |reference: &str| {
                 let id = resolve_any(&home, reference)?.relative_to(&home);
                 loot.tables.get(&id).cloned()
@@ -412,13 +417,17 @@ impl Service for LootService {
     fn name(&self) -> &'static str {
         "loot tables"
     }
+    /// Once per server, in the main room.
+    fn instance_wide(&self) -> bool {
+        true
+    }
 
     fn reloads(&self) -> &'static [&'static str] {
         &[KIND]
     }
 
     fn start(&self, _room: &Room, project: &Define) {
-        let mut loot = self.shared.loot.borrow_mut();
+        let mut loot = self.shared.instance.loot.borrow_mut();
         loot.tables = running(project);
         loot.home = project.project.namespace().to_owned();
     }
@@ -432,7 +441,7 @@ impl Service for LootService {
             .into_iter()
             .map(|(id, _)| id)
             .collect();
-        let mut loot = self.shared.loot.borrow_mut();
+        let mut loot = self.shared.instance.loot.borrow_mut();
         for id in ids {
             match next.remove(id) {
                 Some(table) => {
@@ -447,6 +456,6 @@ impl Service for LootService {
     }
 
     fn stop(&self, _room: &Room, _platform: &dyn Platform) {
-        *self.shared.loot.borrow_mut() = LootTables::default();
+        *self.shared.instance.loot.borrow_mut() = LootTables::default();
     }
 }

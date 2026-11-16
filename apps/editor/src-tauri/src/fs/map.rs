@@ -43,8 +43,8 @@ pub struct CaptureProgress {
 }
 
 /// Files a map never carries, by their path inside the world's folder:
-/// what the server writes for itself (its lock, the world's identity, Paper's
-/// metadata and per-world config, backups) and what belongs to players.
+/// what the server writes for itself (its lock, the world's identity in `uid.dat`
+/// and Paper's `metadata.dat`, per-world config, backups) and what belongs to players.
 pub fn is_excluded(relative: &str) -> bool {
     const FILES: [&str; 4] = [
         "session.lock",
@@ -64,8 +64,9 @@ pub fn is_excluded(relative: &str) -> bool {
     {
         return true;
     }
-    // Paper's saved data: the world's UUID, its persistent data and overrides of the main level data.
-    relative.starts_with("data/paper/")
+    // Paper's metadata is the world's UUID; the rest of `data/paper/` (its persistent data and
+    // overrides of the main level data: spawn, game mode, difficulty) travels with the map.
+    relative == "data/paper/metadata.dat" || relative.ends_with("/data/paper/metadata.dat")
 }
 
 /// Whether [segment] is a group folder: an id in parentheses, `(arenas)`
@@ -314,6 +315,7 @@ mod tests {
             [
                 "dimensions/minecraft/overworld/data/minecraft/game_rules.dat",
                 "dimensions/minecraft/overworld/data/minecraft/world_gen_settings.dat",
+                "dimensions/minecraft/overworld/data/paper/level_overrides.dat",
                 "dimensions/minecraft/overworld/entities/r.0.0.mca",
                 "dimensions/minecraft/overworld/poi/r.0.0.mca",
                 "dimensions/minecraft/overworld/region/r.0.0.mca",
@@ -437,6 +439,7 @@ mod tests {
         for path in [
             "region/r.0.0.mca",
             "data/minecraft/game_rules.dat",
+            "data/paper/level_overrides.dat",
             "entities/r.0.0.mca",
             "stats.txt",
         ] {

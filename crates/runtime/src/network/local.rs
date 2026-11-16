@@ -123,6 +123,8 @@ struct Send {
     group: Option<String>,
     balance: Option<Balance>,
     wait_millis: Option<i64>,
+    room: Option<String>,
+    keep: bool,
 }
 
 /// Players to move once the frame is handled, and whom to tell.
@@ -142,6 +144,8 @@ enum Placement {
         server: String,
         party: usize,
         moving: Vec<PlayerState>,
+        /// Those of the party on `server` already: a send naming a room puts them in it.
+        staying: Vec<PlayerState>,
     },
 }
 
@@ -346,6 +350,9 @@ struct Hub {
     told: HashMap<String, ServerState>,
     reports: Vec<Report>,
     next_report: i64,
+    /// What servers told of their rooms (`ServerFrame::RoomState`): the admin clients' to hear on the real hub, which
+    /// a local network has none of; kept for tests, the latest `MAX_REPORTS`.
+    room_states: Vec<(String, String, protocol::RoomLife)>,
     queues: IndexMap<String, VecDeque<Wait>>,
     incoming: HashMap<String, i32>,
     moves: Vec<Move>,
@@ -810,6 +817,24 @@ impl Hub {
                     self.reports.remove(0);
                 }
             }
+            ServerFrame::RoomState { room, state } => {
+                if !is_key(&room) {
+                    self.deliver(
+                        from,
+                        HubFrame::Problem {
+                            message: format!(
+                                "a room's key is 1 to {} characters, none a control character",
+                                protocol::MAX_KEY_LENGTH
+                            ),
+                        },
+                    );
+                    return;
+                }
+                self.room_states.push((from.into(), room, state));
+                if self.room_states.len() > MAX_REPORTS {
+                    self.room_states.remove(0);
+                }
+            }
             ServerFrame::PackLoaded { player, sha1 } => {
                 if let Some(state) = self.players.get_mut(&player)
                     && state.pack.as_deref() != Some(&sha1)
@@ -983,6 +1008,8 @@ impl Hub {
                 group,
                 balance,
                 wait_millis,
+                room,
+                keep,
             } => self.send_player(
                 from,
                 Send {
@@ -993,6 +1020,8 @@ impl Hub {
                     group,
                     balance,
                     wait_millis,
+                    room,
+                    keep,
                 },
             ),
         }
@@ -1265,7 +1294,13 @@ impl Hub {
             .filter(|p| p.server.as_deref() != Some(&server))
             .cloned()
             .collect();
-        if moving.is_empty() {
+        // Already there: a send naming a room puts them in it (the server moves them there), else it's nothing.
+        let staying: Vec<PlayerState> = party
+            .iter()
+            .filter(|p| p.server.as_deref() == Some(&server))
+            .cloned()
+            .collect();
+        if moving.is_empty() && frame.room.is_none() {
             return Placement::Failed(if party.len() == 1 {
                 format!("they're already on {server}")
             } else {
@@ -1276,6 +1311,7 @@ impl Hub {
             server,
             party: party.len(),
             moving,
+            staying,
         }
     }
 
@@ -1293,7 +1329,8 @@ impl Hub {
                 server,
                 party,
                 moving,
-            } => self.go(origin, &frame, server, party, moving),
+                staying,
+            } => self.go(origin, &frame, server, party, moving, staying),
             Placement::Later(target, why) => {
                 let wait = frame.wait_millis.map(|w| w.min(MAX_WAIT_MILLIS));
                 let Some(wait) = wait.filter(|w| *w > 0) else {
@@ -1339,10 +1376,33 @@ impl Hub {
         server: String,
         party: usize,
         moving: Vec<PlayerState>,
+        staying: Vec<PlayerState>,
     ) {
         let target = self.sessions.contains_key(&server).then(|| server.clone());
+        if let (Some(target), Some(room)) = (&target, &frame.room) {
+            for player in &staying {
+                self.deliver(
+                    target,
+                    HubFrame::Room {
+                        player: player.id.clone(),
+                        room: room.clone(),
+                        keep: frame.keep,
+                    },
+                );
+            }
+        }
         if let Some(target) = &target {
             for player in &moving {
+                if let Some(room) = &frame.room {
+                    self.deliver(
+                        target,
+                        HubFrame::Room {
+                            player: player.id.clone(),
+                            room: room.clone(),
+                            keep: frame.keep,
+                        },
+                    );
+                }
                 self.deliver(
                     target,
                     HubFrame::Arriving {
@@ -1396,7 +1456,8 @@ impl Hub {
                         server,
                         party,
                         moving,
-                    } => self.go(&origin, &frame, server, party, moving),
+                        staying,
+                    } => self.go(&origin, &frame, server, party, moving, staying),
                 }
                 if let Some(queue) = self.queues.get_mut(&key) {
                     queue.pop_front();
@@ -1449,14 +1510,17 @@ impl Hub {
                 group: Some(FALLBACK.into()),
                 balance: None,
                 wait_millis: None,
+                room: None,
+                keep: false,
             };
             if let Placement::Go {
                 server,
                 party,
                 moving,
+                staying,
             } = self.place(&frame)
             {
-                self.go(name, &frame, server, party, moving);
+                self.go(name, &frame, server, party, moving, staying);
             }
         }
     }
@@ -1502,6 +1566,8 @@ fn deliver(sink: &Sink, frame: HubFrame) {
 /// The local network: its hub, this server's place in it, and the test's other servers.
 pub struct LocalHub {
     hub: RefCell<Hub>,
+    /// This server's inbox while its connection is dropped (`drop_here`).
+    dropped: RefCell<Option<Arc<Inbox>>>,
 }
 
 impl LocalHub {
@@ -1521,6 +1587,7 @@ impl LocalHub {
                 told: HashMap::new(),
                 reports: Vec::new(),
                 next_report: 0,
+                room_states: Vec::new(),
                 queues: IndexMap::new(),
                 incoming: HashMap::new(),
                 moves: Vec::new(),
@@ -1534,6 +1601,7 @@ impl LocalHub {
                     .duration_since(std::time::UNIX_EPOCH)
                     .map_or(0, |d| d.as_millis() as i64),
             }),
+            dropped: RefCell::default(),
         })
     }
 
@@ -1550,6 +1618,26 @@ impl LocalHub {
         let here = self.hub.borrow().here.clone();
         self.hub.borrow_mut().close(&here);
         self.after();
+    }
+
+    /// This server's connection drops, as a remote one's does (the hub restarting): it hears it's lost, and nothing it
+    /// says reaches the hub until `reconnect_here` welcomes it again with the same inbox.
+    pub fn drop_here(&self) {
+        let here = self.hub.borrow().here.clone();
+        let inbox = match self.hub.borrow().sessions.get(&here).map(|s| &s.sink) {
+            Some(Sink::Here(inbox)) => inbox.clone(),
+            _ => return,
+        };
+        self.disconnect_here();
+        inbox.push(Inbound::Disconnected("the local hub dropped it".into()));
+        *self.dropped.borrow_mut() = Some(inbox);
+    }
+
+    /// This server joins again after `drop_here`, welcomed as it is now.
+    pub fn reconnect_here(&self, state: Lifecycle) {
+        if let Some(inbox) = self.dropped.borrow_mut().take() {
+            self.connect_here(inbox, state);
+        }
     }
 
     /// A frame from this server.
@@ -1727,6 +1815,11 @@ impl LocalHub {
     /// What scripts reported, newest first.
     pub fn reports(&self) -> Vec<Report> {
         self.hub.borrow().reports.iter().rev().cloned().collect()
+    }
+
+    /// What servers told of their rooms, oldest first: (server, room key, state).
+    pub fn room_states(&self) -> Vec<(String, String, protocol::RoomLife)> {
+        self.hub.borrow().room_states.clone()
     }
 
     /// A map's entries as the hub holds them.

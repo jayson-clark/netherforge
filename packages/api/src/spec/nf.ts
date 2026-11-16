@@ -17,6 +17,7 @@ import { nfNetwork } from './network.ts'
 import { nfBots } from './bots.ts'
 import { nfLoot } from './loot.ts'
 import { nfTeams } from './teams.ts'
+import { nfRooms } from './rooms.ts'
 import { nfSchedule } from './schedule.ts'
 import { nfSpawning } from './spawning.ts'
 import { nfEconomy, nfPlaceholders } from './interop.ts'
@@ -144,7 +145,7 @@ export const nfPlayers = namespace(
     },
     {
       name: 'get',
-      doc: 'A player by name (any case) or UUID: anyone who has ever joined this server, online or not, or `nil` for someone who never has. For someone offline, `exists()` is `false` and what needs them in the world (`position()`, `send_message`) answers `nil` or `false` until they come back.',
+      doc: 'A player by name (any case) or UUID: anyone who has ever joined this server, online or not, or `nil` for someone who never has. For someone offline, `exists()` is `false` and what needs them in the world (`position()`, `send_message`) answers `nil` or `false` until they come back. Someone in another room (`nf.rooms`) is as good as offline here.',
       params: [
         { name: 'name_or_id', type: 'string', doc: 'A name, or a UUID like `player:id()`.' },
       ],
@@ -457,6 +458,7 @@ const namespaces = [
   nfLoot,
   nfBossbars,
   nfTeams,
+  nfRooms,
   nfSchedule,
   nfEconomy,
   nfPlaceholders,

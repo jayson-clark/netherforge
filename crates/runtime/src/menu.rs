@@ -162,6 +162,11 @@ pub struct Template {
 }
 
 impl Menus {
+    /// Whether window `uuid` is one of these menus'.
+    pub fn has_window(&self, uuid: Uuid) -> bool {
+        self.by_uuid(uuid).is_some()
+    }
+
     fn by_uuid(&self, uuid: Uuid) -> Option<&Window> {
         self.windows.values().find(|w| w.uuid == uuid)
     }
@@ -200,6 +205,7 @@ impl Menus {
         };
         let shift = width.map_or(0, |w| window.definition.kind.skin_shift(w));
         let skin = shared
+            .instance
             .packs
             .borrow()
             .skin_title(skin, shift)
@@ -1254,7 +1260,7 @@ impl MenuContext {
                 .is_some_and(|p| p.kind == next.kind && p.size == next.size);
             let uuid = self.window_uuid(&window).expect("live");
             if same_shape {
-                self.shared.reattached("menu", id, 1);
+                self.shared.instance.reattached("menu", id, 1);
                 let previous = previous.as_ref().expect("same shape");
                 {
                     let mut menus = self.shared.menus.borrow_mut();
@@ -2350,7 +2356,24 @@ impl Service for MenusService {
         context.show_worn();
     }
 
+    /// Moving to another room, the windows of this room's menus they had open close (heard here, as when they leave
+    /// the server, which closes them itself).
     fn player_quit(&self, player: &PlayerRef) {
+        if self.shared.instance.is_moving(player.uuid) {
+            let ops = self.shared.platform.menus();
+            let open: Vec<Uuid> = self
+                .shared
+                .menus
+                .borrow()
+                .windows
+                .values()
+                .map(|w| w.uuid)
+                .filter(|w| ops.viewers(*w).contains(&player.uuid))
+                .collect();
+            for window in open {
+                ops.close(window, Some(player.uuid));
+            }
+        }
         if let Some(scripts) = self.scripts.borrow().clone() {
             MenuContext {
                 shared: self.shared.clone(),

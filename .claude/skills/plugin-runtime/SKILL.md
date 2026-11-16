@@ -1392,7 +1392,10 @@ not both; a project dimension type as the server keys it, which `WorldManagerOps
 (a world made with a dimension type the server lacks is an error), `copy` (a map's folder) and `import` (a folder under
 `worlds.import-root`), `world:is_managed` and `unload` (players moved to `move_players_to`'s spawn or the main world's;
 `delete` deletes its files). Only worlds the project's scripts made, or `managedWorlds` names, may be unloaded; never the
-main world. What scripts made is the store's `worlds` table (`Store::worlds_of`, `own_world`, `forget_world`).
+main world. What scripts made is the store's `worlds` table (`Store::worlds_of`, `own_world`, `forget_world`); a world an unkept
+room made is marked `goes_with_room` (migration 3), and the main room's start deletes those left unloaded on disk by
+a server that went without closing the room (`ManagedWorldsService::delete_leftovers`, on the main thread before any
+room opens), never a kept room's.
 Copies' and deletions' file work runs on the `world files` lane, one at a time; a copy is loaded at the next tick
 after its files are in place (`ManagedContext::tick`), its world then the script's (a script that stopped first isn't
 called; the world is kept). File work fails by panicking with its reason. Not yet: the worlds `netherforge.json` makes
@@ -1490,9 +1493,35 @@ threads of its own (one request a connection, 64 KiB bodies, 16 connections at o
 threads (when the last tick ended: a stuck main thread is `stalled`), and a watchdog says `stalled` once; `/state` and
 `/events` (Server-Sent Events) from the snapshot the main thread makes every 5 ticks (and on the first, and after an
 action); actions (`/drain`, `/shutdown`, `/save` with `pause`, `/resume`, `/worlds/create`, `/worlds/load` (an
-import answered once its files are copied), `/worlds/unload`) are queued for the main thread and done at its next tick
-(`ServerControl::tick`, called by `ServerEvents::run_tick`), each logged with where it came from. Tests:
-`tests/control.rs` (TCP with a token, and a Unix socket).
+import answered once its files are copied), `/worlds/unload`, `/rooms/open`, `/rooms/close`) are queued for the main
+thread and done at its next tick (`ServerControl::tick`, called by `ServerEvents::run_tick`), each logged with where it
+came from. **Rooms** (kept rooms carried between servers, Kosmoi's owner worlds): `/rooms/open` reserves the key
+(`Instance::reserve_room`), puts `data.json`'s tables in the store under `<ns>#<key>` (`Store::kept_tables`/
+`forget_kept_tables`), imports each `worlds/<name>` map as `<name>__<suffix>` (`instance::world_suffix`) through the
+main room's `ManagedContext::import`, then (`poll_rooms`) gives the worlds to the room before `RoomRequest::Open`, so
+its scripts start with them; `/save {room}` runs `Session::save_room` (each world's `world_saving`, `room_saving`: the
+data service saves its tables) and answers each world's `save_files` paths and `kept_data`; `/rooms/close` asks
+`RoomRequest::Close` and with `delete` `forget_left` (`ManagedContext::delete_saved`). **A world's centities travel in
+its folder**: `/save {room}` and a kept room's close (after it stopped) write the store's records of each world's
+centities, with their `centity:data()`, into `data/netherforge/centities.json` there (`centity::saving::write_world_records`,
+`Store::world_records`), and every copy of a map (`nf.worlds.copy`, `import`, so each world `/rooms/open` brings in)
+reads them from the map into the store as the new world's (`ManagedContext::copy_in`: `read_map_records` before the
+file work, `Store::put_records` before the load), so they're restored as themselves, not removed as strays; a file it
+can't read refuses the copy (and the open). Read from the map as the copy starts because the server says where a world's
+files are only once it's loaded; the copy carries the file too, with the rest of the world's folder (plugin-world
+skill's managed worlds), stale until its next save writes it again, and nothing reads it there. A world deleted with its room (a match's, `forget_left`, a killed match's leftovers) takes its records
+(`Store::forget_world_records`), staged after the room stopped so no live centity stages them again. **Its tables too**: `/save {room}` and a kept room's
+close write its `kept_data` as `<plugin folder>/rooms/<key>/data.json` (`Instance::write_room_tables`, `Config::
+room_tables_dir`) and the answer names it (`data_file`, canonical: Kosmoi's agent sees the plugin folder as `/srv/data`);
+`forget_left` deletes it. A stopping server closes its rooms in place (worlds saved, records and tables written), so
+after SIGTERM a tool's last save, reading the same files again, has the room as it stopped. Sound because Paper disables
+the plugin (closing the rooms) before it exits, and Kosmoi's agent is a native sidecar that gets SIGTERM only after the
+server container has exited. `/state` has `rooms` (keyed,
+open), `/events` `room_open`/`room_close`; an open or close answered takes a snapshot at once, so the next `/state`
+has it. Tests: `tests/control.rs` (TCP with a token, and a Unix socket; a kept room's centity carried to another server
+in its world's folder), `tests/worlds.rs` (a kept room saved, closed
+and brought back through the endpoint), and on Paper `OwnerRoomsScenario` (two owners' rooms copied out as an agent
+copies them, deleted, and opened again from the copies, a placard in each back as itself).
 
 ## Config, policy and the hub (`crates/runtime/src/config.rs`, `session.rs`)
 
@@ -1554,6 +1583,10 @@ events weakly (so the adapter's events live as long as the plugin, as the test r
   tick) after `Session::save_data` stages every saved table and place; `show` saves the one table first.
 - `/nf shutdown` starts the network's shutdown (drain, wait for empty, fallback); its end sets `stop_server`, which
   `ServerEvents::tick` now hands the platform (`shutdown_server`): Kotlin's did, the Rust runtime only noted it before.
+- **`/nf room <room> <what…>`** runs `list`, `find`, `kill`, `tp`, `modules`, `schedules` or `scripts` (`IN_A_ROOM`) in
+  that room (`Instance::room_called`: its key, its number, or `main`); without it they're the main room's, except
+  `scripts`, which lists every room's, each labelled. The rest are the server's and refuse a room; `spawn` already
+  spawns in the room of the player's world.
 - `/nf requires` lists `http.allow-private`'s grants; Kotlin's `packages.provided` and `own-databases` lines wait for
   those features. The fake's `escape` is `<` as `\<`.
 

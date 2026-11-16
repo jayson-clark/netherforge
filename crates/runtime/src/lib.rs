@@ -47,6 +47,7 @@ pub mod files;
 pub mod http;
 pub mod huds;
 pub mod images;
+pub mod instance;
 pub mod interop;
 pub mod inventory;
 pub mod items;
@@ -71,6 +72,7 @@ pub mod project_items;
 pub mod recipes;
 pub mod reload;
 pub mod remote_db;
+pub mod rooms;
 pub mod schedule;
 pub mod screen;
 pub mod scripts;
@@ -327,6 +329,8 @@ struct Api {
     interop: Option<interop::InteropContext>,
     /// `nf.test`, in a script test run only.
     test: Option<testing::api::TestContext>,
+    /// `nf.rooms`, `Room`.
+    rooms: Option<rooms::RoomsContext>,
     /// `nf.bots`, `Bot`.
     bots: Option<bots::BotsContext>,
 }
@@ -878,6 +882,18 @@ impl LuaApi for Api {
             None => &Unported,
         }
     }
+    fn nf_rooms(&self) -> &dyn netherforge_api::api::NfRoomsApi {
+        match &self.rooms {
+            Some(r) => r,
+            None => &Unported,
+        }
+    }
+    fn room(&self) -> &dyn netherforge_api::api::RoomApi {
+        match &self.rooms {
+            Some(r) => r,
+            None => &Unported,
+        }
+    }
     fn nf_worlds(&self) -> &dyn netherforge_api::api::NfWorldsApi {
         match &self.worlds {
             Some(w) => w,
@@ -974,6 +990,9 @@ impl Room {
             shared: game.shared.clone(),
             scripts: scripts.clone(),
         });
+        let rooms = worlds.as_ref().map(|game| rooms::RoomsContext {
+            shared: game.shared.clone(),
+        });
         let nf = NfContext {
             scripts: scripts.clone(),
             shared: worlds.as_ref().map(|w| w.shared.clone()),
@@ -997,6 +1016,7 @@ impl Room {
             interop,
             test,
             bots,
+            rooms,
         };
         netherforge_api::install(&host, Rc::new(api))?;
         Ok(Room { host, scripts })

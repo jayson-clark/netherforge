@@ -64,12 +64,18 @@ pub struct OwnedWorld {
     pub dimension_type: Option<String>,
     /// Made with `keep_spawn_loaded`: the chunks around its spawn are held whenever it's loaded.
     pub keep_spawn_loaded: bool,
+    /// Made by a room that isn't kept (a match's): deleted as the room closes, and as the server next starts when it
+    /// went before the room closed (killed mid-match). A kept room's worlds, and the main room's, never are.
+    pub goes_with_room: bool,
 }
 
 /// A copy being made: its files on the lane, then its load at a tick.
 struct Copy {
     name: String,
     terrain: Option<String>,
+    /// Its centities' records, read from the folder it's copied from: put in the store once its files are in.
+    records: Vec<(crate::store::InstanceRecord, Option<serde_json::Value>)>,
+    /// What it's copied from, as the log names it.
     from: String,
     done: mpsc::Receiver<Result<(), String>>,
     outcome: Rc<RefCell<Option<Result<String, String>>>>,
@@ -117,8 +123,12 @@ impl ManagedWorlds {
             terrain,
             dimension_type,
             keep_spawn_loaded: false,
+            goes_with_room: false,
         };
-        shared.store.own_world(&self.namespace, name, &owned);
+        shared
+            .instance
+            .store
+            .own_world(&self.namespace, name, &owned);
         self.created.insert(name.to_owned(), owned);
     }
 }
@@ -197,18 +207,90 @@ impl ManagedContext {
         hold_spawn(&self.shared, name);
     }
 
-    fn own(&self, name: &str, owned: OwnedWorld) {
+    /// A world this room's scripts made or loaded is this room's (a room beside the main one): its events, blocks and
+    /// players there are the room's.
+    fn adopt(&self, name: &str) {
+        if self.shared.room != crate::instance::RoomId::MAIN {
+            self.shared
+                .instance
+                .routes
+                .borrow_mut()
+                .give_world(name, self.shared.room);
+        }
+    }
+
+    fn own(&self, name: &str, mut owned: OwnedWorld) {
+        self.adopt(name);
+        owned.goes_with_room =
+            self.shared.room != crate::instance::RoomId::MAIN && !self.shared.keeps_worlds();
         let mut managed = self.shared.managed_worlds.borrow_mut();
         self.shared
+            .instance
             .store
             .own_world(&managed.namespace, name, &owned);
         managed.created.insert(name.to_owned(), owned);
     }
 
+    /// The worlds the project has kept whose server names end `__<suffix>`: a room's, by its suffix
+    /// (`instance::world_suffix`), loaded or left on disk.
+    pub fn worlds_ending(&self, suffix: &str) -> Vec<String> {
+        let namespace = self.shared.managed_worlds.borrow().namespace.clone();
+        let end = format!("__{suffix}");
+        self.shared
+            .instance
+            .store
+            .worlds_of(&namespace)
+            .into_keys()
+            .filter(|name| name.ends_with(&end))
+            .collect()
+    }
+
+    /// Deletes world `name`'s files, unloaded (a kept room's world, its room closed): the project forgets it. False when
+    /// it's loaded, or isn't the project's.
+    pub fn delete_saved(&self, name: &str) -> bool {
+        let platform = self.platform();
+        if platform.worlds().exists(name.to_owned()) || !self.is_managed_anywhere(name) {
+            return false;
+        }
+        let ops = platform.world_manager();
+        if ops.is_saved(name.to_owned()) {
+            let work = ops.delete(name.to_owned());
+            let failures = self.shared.instance.managed_failures.clone();
+            let world = name.to_owned();
+            self.shared.instance.lane(FILES).submit(move || {
+                if let Err(e) =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work.run()))
+                {
+                    failures
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .push(format!(
+                            "Couldn't delete all of world \"{world}\"'s files: {}",
+                            panic_text(&e)
+                        ));
+                }
+            });
+        }
+        self.forget(name);
+        true
+    }
+
+    /// Whether the project keeps `name` in the store, whichever room made it.
+    fn is_managed_anywhere(&self, name: &str) -> bool {
+        let namespace = self.shared.managed_worlds.borrow().namespace.clone();
+        self.is_managed(name)
+            || self
+                .shared
+                .instance
+                .store
+                .worlds_of(&namespace)
+                .contains_key(name)
+    }
+
     /// `name` is gone (deleted, or its copy failed): nobody's any more.
     fn forget(&self, name: &str) {
         self.shared.managed_worlds.borrow_mut().created.remove(name);
-        self.shared.store.forget_world(name);
+        self.shared.instance.store.forget_world(name);
     }
 
     /// The server's name of the project terrain `reference` names: an error naming what there is when it names none.
@@ -330,6 +412,7 @@ impl ManagedContext {
                 terrain,
                 dimension_type,
                 keep_spawn_loaded,
+                goes_with_room: false,
             },
         );
         if keep_spawn_loaded {
@@ -379,6 +462,9 @@ impl ManagedContext {
         let keep_spawn_loaded = owned.as_ref().is_some_and(|o| o.keep_spawn_loaded);
         let terrain = owned.and_then(|o| o.terrain);
         let loaded = self.timed(name, || ops.load(name.to_owned(), environment, terrain));
+        if loaded {
+            self.adopt(name);
+        }
         if loaded && keep_spawn_loaded {
             self.hold_spawn(name);
         }
@@ -404,8 +490,8 @@ impl ManagedContext {
         let work = self
             .platform()
             .world_manager()
-            .copy(folder, name.to_owned());
-        Ok(self.copy_in(work, name, None, format!("map \"{map}\"")))
+            .copy(folder.clone(), name.to_owned());
+        self.copy_in(work, name, None, folder, format!("map \"{map}\""))
     }
 
     /// Imports the world in `folder` (under `worlds.import-root`) as a new world `name`, the project's from now on.
@@ -445,18 +531,23 @@ impl ManagedContext {
         let work = self
             .platform()
             .world_manager()
-            .copy(source, name.to_owned());
-        Ok(self.copy_in(work, name, terrain, format!("folder \"{folder}\"")))
+            .copy(source.clone(), name.to_owned());
+        self.copy_in(work, name, terrain, source, format!("folder \"{folder}\""))
     }
 
-    /// `work` puts `name`'s files in place, then it's loaded (with `terrain`) as the project's at a tick.
+    /// `work` puts `name`'s files in place (the map `source`'s world folder, all of it), then it's loaded (with
+    /// `terrain`) as the project's at a tick, the centities' records that folder carries put in the store first (as a
+    /// save wrote them, `centity::saving`). A records file it can't read refuses the copy.
     fn copy_in(
         &self,
         work: Box<dyn netherforge_platform::FileWork>,
         name: &str,
         terrain: Option<String>,
+        source: PathBuf,
         from: String,
-    ) -> Pending<handles::World> {
+    ) -> ApiResult<Pending<handles::World>> {
+        let records = crate::centity::saving::read_map_records(&source, name)
+            .map_err(|why| err(format!("couldn't copy {from} into world \"{name}\": {why}")))?;
         self.own(
             name,
             OwnedWorld {
@@ -464,10 +555,11 @@ impl ManagedContext {
                 terrain: terrain.clone(),
                 dimension_type: None,
                 keep_spawn_loaded: false,
+                goes_with_room: false,
             },
         );
         let (send, done) = mpsc::channel();
-        self.shared.lane(FILES).submit(move || {
+        self.shared.instance.lane(FILES).submit(move || {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work.run()))
                 .map_err(|e| panic_text(&e));
             let _ = send.send(result);
@@ -478,17 +570,18 @@ impl ManagedContext {
         managed.copies.push(Copy {
             name: name.to_owned(),
             terrain,
+            records,
             from,
             done,
             outcome: outcome.clone(),
         });
-        Box::pin(std::future::poll_fn(move |_| {
+        Ok(Box::pin(std::future::poll_fn(move |_| {
             match outcome.borrow_mut().take() {
                 Some(Ok(name)) => std::task::Poll::Ready(Ok(handles::World { name })),
                 Some(Err(why)) => std::task::Poll::Ready(Err(ApiError(why))),
                 None => std::task::Poll::Pending,
             }
-        }))
+        })))
     }
 
     /// The copies whose files are in place: each loaded now, or forgotten saying why it isn't.
@@ -518,6 +611,9 @@ impl ManagedContext {
             let why = match result {
                 Err(e) => Some(format!("couldn't copy its files ({e})")),
                 Ok(()) => {
+                    // Its centities in the store as the world's before its entities load, so they're restored as
+                    // themselves rather than taken for strays.
+                    self.shared.instance.store.put_records(copy.records);
                     let ops = self.platform().world_manager();
                     let loaded = self.timed(&copy.name, || {
                         ops.load(copy.name.clone(), NORMAL.into(), copy.terrain.clone())
@@ -529,6 +625,7 @@ impl ManagedContext {
                 None => Ok(copy.name.clone()),
                 Some(why) => {
                     self.forget(&copy.name);
+                    self.shared.instance.store.forget_world_records(&copy.name);
                     self.platform().log().warn(format!(
                         "Couldn't copy {} into world \"{}\": {why}",
                         copy.from, copy.name
@@ -598,9 +695,9 @@ impl ManagedContext {
         if delete {
             let work = ops.delete(name.to_owned());
             // Nobody waits for it, so a failure is the log's alone, said at a tick.
-            let failures = self.shared.managed_failures.clone();
+            let failures = self.shared.instance.managed_failures.clone();
             let world = name.to_owned();
-            self.shared.lane(FILES).submit(move || {
+            self.shared.instance.lane(FILES).submit(move || {
                 if let Err(e) =
                     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work.run()))
                 {
@@ -668,13 +765,18 @@ impl Service for ManagedWorldsService {
 
     fn start(&self, _room: &Room, project: &Define) {
         let namespace = project.project.namespace().to_owned();
-        let created = self.shared.store.worlds_of(&namespace);
+        let mut created = self.shared.instance.store.worlds_of(&namespace);
+        if self.shared.room == crate::instance::RoomId::MAIN {
+            self.delete_leftovers(&mut created);
+        }
         let mut managed = self.shared.managed_worlds.borrow_mut();
         // Worlds still loaded from a run before (a restart) hold their spawns again: stopping let go of them.
         let keep: Vec<String> = created
             .iter()
             .filter(|(name, w)| {
-                w.keep_spawn_loaded && self.shared.platform.worlds().exists((*name).clone())
+                w.keep_spawn_loaded
+                    && self.shared.owns_world(name)
+                    && self.shared.platform.worlds().exists((*name).clone())
             })
             .map(|(name, _)| name.clone())
             .collect();
@@ -700,6 +802,7 @@ impl Service for ManagedWorldsService {
         let failures = std::mem::take(
             &mut *self
                 .shared
+                .instance
                 .managed_failures
                 .lock()
                 .unwrap_or_else(|e| e.into_inner()),
@@ -716,6 +819,42 @@ impl Service for ManagedWorldsService {
         managed.copies.clear();
         managed.copying.clear();
         self.shared.chunk_holds.borrow_mut().release_all(platform);
+    }
+}
+
+impl ManagedWorldsService {
+    /// The worlds of rooms that weren't kept and never closed (the server killed mid-match, a deletion that didn't
+    /// finish) are deleted as the main room starts, before any room opens again and might want the name: on the main
+    /// thread, as nothing waits on the files lane yet. A loaded one is left (nothing at a start loads them), and so is
+    /// every kept room's world.
+    fn delete_leftovers(&self, created: &mut BTreeMap<String, OwnedWorld>) {
+        let platform = &*self.shared.platform;
+        let leftover: Vec<String> = created
+            .iter()
+            .filter(|(name, w)| w.goes_with_room && !platform.worlds().exists((*name).clone()))
+            .map(|(name, _)| name.clone())
+            .collect();
+        for name in leftover {
+            let ops = platform.world_manager();
+            if ops.is_saved(name.clone()) {
+                let work = ops.delete(name.clone());
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work.run())) {
+                    Ok(()) => platform.log().info(format!(
+                        "Deleted world \"{name}\", left by a room that didn't close (the server stopped before it did)"
+                    )),
+                    Err(e) => {
+                        platform.log().warn(format!(
+                            "Couldn't delete all of world \"{name}\"'s files, left by a room that didn't close: {}",
+                            panic_text(&e)
+                        ));
+                        continue;
+                    }
+                }
+            }
+            created.remove(&name);
+            self.shared.instance.store.forget_world(&name);
+            self.shared.instance.store.forget_world_records(&name);
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 //! The server's local control endpoint (Kotlin's `Control` and `LocalHttp`), for the tool that runs it (a container's
 //! sidecar, a host's agent): its state, a stream of what changes, and draining, shutting down, saving and pausing
-//! writes, making, loading and unloading worlds. Only on a Unix socket or on `127.0.0.1` with a token: never reachable
+//! writes, making, loading and unloading worlds, and opening, saving and closing rooms (a kept room's worlds and tables
+//! carried from one server to another). Only on a Unix socket or on `127.0.0.1` with a token: never reachable
 //! from elsewhere. Every action is logged with where it came from.
 //!
 //! What it reports is a snapshot the main thread makes every few ticks; actions are queued for the main thread, done
@@ -70,8 +71,18 @@ enum Action {
     },
     Save {
         world: Option<String>,
+        room: Option<String>,
         pause: bool,
         timeout: u64,
+    },
+    OpenRoom {
+        key: String,
+        keep: bool,
+        folder: Option<String>,
+    },
+    CloseRoom {
+        key: String,
+        delete: bool,
     },
     Create {
         name: String,
@@ -90,6 +101,7 @@ enum Action {
     },
     Resume {
         world: Option<String>,
+        room: Option<String>,
     },
 }
 
@@ -106,18 +118,22 @@ impl Action {
             ),
             Action::Save {
                 world,
+                room,
                 pause,
                 timeout,
             } => format!(
-                "save{}{}",
+                "save{}{}{}",
                 world
                     .as_ref()
                     .map(|w| format!(" world {w}"))
                     .unwrap_or_default(),
+                room.as_ref()
+                    .map(|r| format!(" room {r}"))
+                    .unwrap_or_default(),
                 if *pause {
                     format!(
                         ", pausing {} for up to {timeout} seconds",
-                        if world.is_none() {
+                        if world.is_none() && room.is_none() {
                             "writes"
                         } else {
                             "its writes"
@@ -136,8 +152,28 @@ impl Action {
                     .unwrap_or_default()
             ),
             Action::Unload { name, .. } => format!("unload world {name}"),
-            Action::Resume { world: None } => "resume writes".into(),
-            Action::Resume { world: Some(w) } => format!("resume world {w}'s writes"),
+            Action::Resume {
+                world: None,
+                room: None,
+            } => "resume writes".into(),
+            Action::Resume { room: Some(r), .. } => format!("resume room {r}'s writes"),
+            Action::Resume { world: Some(w), .. } => format!("resume world {w}'s writes"),
+            Action::OpenRoom { key, keep, folder } => format!(
+                "open room {key}{}{}",
+                if *keep { " (kept)" } else { "" },
+                folder
+                    .as_ref()
+                    .map(|f| format!(" from {f}"))
+                    .unwrap_or_default()
+            ),
+            Action::CloseRoom { key, delete } => format!(
+                "close room {key}{}",
+                if *delete {
+                    ", deleting what it keeps"
+                } else {
+                    ""
+                }
+            ),
         }
     }
 }
@@ -158,6 +194,8 @@ struct Snapshot {
     worlds: BTreeSet<String>,
     paused: bool,
     paused_worlds: BTreeSet<String>,
+    /// The keyed rooms beside the main one, by key.
+    rooms: BTreeMap<String, RoomView>,
 }
 
 /// The main thread's half.
@@ -172,6 +210,12 @@ struct Main {
     world_empty_since: HashMap<String, u64>,
     /// When the server last had players, by tick.
     empty_since: Option<u64>,
+    /// When each keyed room last had no players, by tick.
+    room_empty_since: HashMap<String, u64>,
+    /// Rooms being opened (their worlds copying in, then the room starting), and where their answers go.
+    opening: Vec<Opening>,
+    /// Rooms being closed (at the tick's end), and where their answers go.
+    closing: Vec<Closing>,
     /// Imports still copying a world's files, and where their answers go.
     loading: Vec<(
         String,
@@ -179,6 +223,38 @@ struct Main {
         mpsc::Sender<Answer>,
     )>,
     ticks: u64,
+}
+
+/// A room being opened through `POST /rooms/open`: its saved worlds' imports, then the room itself.
+struct Opening {
+    key: String,
+    id: crate::instance::RoomId,
+    /// Each world: its scripts' name, the server's, and its import while it's copying.
+    worlds: Vec<(
+        String,
+        String,
+        Option<Pending<netherforge_api::handles::World>>,
+    )>,
+    /// Asked of the session (`RoomRequest::Open`) once its worlds are in.
+    asked: bool,
+    reply: mpsc::Sender<Answer>,
+}
+
+/// A room being closed through `POST /rooms/close`.
+struct Closing {
+    key: String,
+    id: crate::instance::RoomId,
+    delete: bool,
+    reply: mpsc::Sender<Answer>,
+}
+
+/// A keyed room as the snapshot has it.
+#[derive(Clone, PartialEq)]
+struct RoomView {
+    keep: bool,
+    state: &'static str,
+    players: usize,
+    worlds: Vec<String>,
 }
 
 pub struct ServerControl {
@@ -381,8 +457,10 @@ impl ServerControl {
             }
         }
         self.poll_loading();
+        // A room answered as open or closed is in the next `/state` its tool reads.
+        let answered = self.poll_rooms(session, platform);
         let first = self.main.borrow().last.is_none();
-        if acted || first || tick.is_multiple_of(SNAPSHOT_TICKS) {
+        if acted || answered || first || tick.is_multiple_of(SNAPSHOT_TICKS) {
             self.snapshot(tick, session, platform, !acted);
         }
     }
@@ -448,9 +526,80 @@ impl ServerControl {
                 Some(Ok(state(Some(session))))
             }
             Action::Save {
+                room: Some(key),
+                pause,
+                timeout,
+                ..
+            } => {
+                let Some(session) = session else {
+                    return refused("the project isn't running");
+                };
+                Some(self.save_room(session, platform, &key, pause, timeout))
+            }
+            Action::Resume {
+                room: Some(key), ..
+            } => {
+                let Some(session) = session else {
+                    return refused("the project isn't running");
+                };
+                let instance = session.instance();
+                let Some(id) = instance.room_keyed(&key) else {
+                    return Some(Err((404, format!("no room keyed \"{key}\" is open"))));
+                };
+                let mut main = self.main.borrow_mut();
+                for world in instance.routes.borrow().worlds_of(id) {
+                    resume_world(&mut main, platform, &world, None);
+                }
+                Some(Ok(
+                    json!({ "room": key, "writes_paused": main.paused_until.is_some() }),
+                ))
+            }
+            Action::OpenRoom { key, keep, folder } => {
+                self.open_room(session, platform, key, keep, folder, reply)
+            }
+            Action::CloseRoom { key, delete } => {
+                let Some(session) = session else {
+                    return refused("the project isn't running");
+                };
+                let instance = session.instance();
+                match instance.room_keyed(&key) {
+                    Some(id) => {
+                        // Its worlds' own pauses end, so they're saved as they unload.
+                        let mut main = self.main.borrow_mut();
+                        for world in instance.routes.borrow().worlds_of(id) {
+                            if main.world_pauses.remove(&world).is_some()
+                                && main.paused_until.is_none()
+                            {
+                                platform.world_manager().set_saving(world, true);
+                            }
+                        }
+                        if let Some(info) = instance.rooms.borrow_mut().get_mut(&id) {
+                            info.state = crate::rooms::RoomState::Closing;
+                        }
+                        instance
+                            .room_requests
+                            .borrow_mut()
+                            .push(crate::rooms::RoomRequest::Close(id));
+                        main.closing.push(Closing {
+                            key,
+                            id,
+                            delete,
+                            reply: reply.clone(),
+                        });
+                        None
+                    }
+                    None if delete => {
+                        forget_left(session, &key);
+                        Some(Ok(json!({ "room": key, "closed": false })))
+                    }
+                    None => Some(Err((404, format!("no room keyed \"{key}\" is open")))),
+                }
+            }
+            Action::Save {
                 world,
                 pause,
                 timeout,
+                ..
             } => {
                 let loaded = platform.worlds().names();
                 if let Some(w) = &world
@@ -548,7 +697,7 @@ impl ServerControl {
                     Err(ApiError(why)) => refused(&why),
                 }
             }
-            Action::Resume { world } => {
+            Action::Resume { world, .. } => {
                 let mut main = self.main.borrow_mut();
                 // Whether writes are still paused where it asked: worlds paused on their own, or the whole server's.
                 let paused = match &world {
@@ -571,6 +720,240 @@ impl ServerControl {
                 Some(Ok(out))
             }
         }
+    }
+
+    /// `POST /save` of room `key`: an open room's worlds and `nf.data` tables saved now (and its worlds' writes paused
+    /// with `pause`), or what a kept room that closed left (its worlds on disk, its tables in the store). The answer
+    /// says what to read: each world's scripts' name, its server name, and (open) its files, and the tables.
+    fn save_room(
+        &self,
+        session: &Session,
+        platform: &dyn Platform,
+        key: &str,
+        pause: bool,
+        timeout: u64,
+    ) -> Answer {
+        let instance = session.instance();
+        let suffix = crate::instance::world_suffix(Some(key), crate::instance::RoomId::MAIN);
+        let script = |real: &str| {
+            real.strip_suffix(&format!("__{suffix}"))
+                .unwrap_or(real)
+                .to_owned()
+        };
+        let Some(id) = instance.room_keyed(key) else {
+            let left = managed(Some(session)).map_or_else(Vec::new, |c| c.worlds_ending(&suffix));
+            let data = instance.store.kept_data(key);
+            if left.is_empty() && data.is_empty() {
+                return Err((
+                    404,
+                    format!("no room keyed \"{key}\" is open or left anything"),
+                ));
+            }
+            let worlds: Vec<Value> = left
+                .iter()
+                .map(|real| json!({ "name": script(real), "world": real }))
+                .collect();
+            let mut answer = json!({ "room": key, "closed": true, "worlds": worlds, "data": data, "writes_paused": false });
+            tables_file(instance, key, &mut answer)?;
+            return Ok(answer);
+        };
+        session.save_room(id);
+        let names = instance.routes.borrow().worlds_of(id);
+        // Each world's files, its centities' records in them, before any world's writes pause.
+        let mut saved = Vec::new();
+        for real in &names {
+            let files = platform.world_manager().save_files(real.clone());
+            if let Some(files) = &files
+                && let Err(why) = crate::centity::saving::write_world_records(
+                    &instance.store,
+                    real,
+                    &files.dimension,
+                )
+            {
+                return Err((500, format!("room {key}'s world {real}: {why}")));
+            }
+            saved.push((real, files));
+        }
+        let mut worlds = Vec::new();
+        let mut main = self.main.borrow_mut();
+        for (real, files) in saved {
+            if pause {
+                platform.world_manager().set_saving(real.clone(), false);
+                let until = main.ticks + timeout * TICKS_PER_SECOND;
+                main.world_pauses.insert(real.clone(), until);
+            }
+            let mut world = json!({ "name": script(real), "world": real });
+            if let Some(files) = files {
+                world["level"] = json!(files.level.display().to_string());
+                world["folder"] = json!(files.dimension.display().to_string());
+            }
+            worlds.push(world);
+        }
+        let mut answer = json!({
+            "room": key,
+            "worlds": worlds,
+            "data": instance.store.kept_data(key),
+            "writes_paused": pause,
+        });
+        tables_file(instance, key, &mut answer)?;
+        Ok(answer)
+    }
+
+    /// `POST /rooms/open`: reserves room `key`, brings in what `folder` (under `worlds.import-root`) saved of it (its
+    /// worlds copied in as the room's, its tables put in the store under its key), then opens it. Answered once it's
+    /// open (`poll_rooms`), or now when it can't be.
+    fn open_room(
+        &self,
+        session: Option<&Session>,
+        platform: &dyn Platform,
+        key: String,
+        keep: bool,
+        folder: Option<String>,
+        reply: &mpsc::Sender<Answer>,
+    ) -> Option<Answer> {
+        let refused = |why: String| Some(Err((409, why)));
+        let (Some(session), Some(context)) = (session, managed(session)) else {
+            return refused("the project isn't running".into());
+        };
+        let instance = session.instance();
+        if instance.room_keyed(&key).is_some() {
+            return refused(format!("a room keyed \"{key}\" is open already"));
+        }
+        let (names, data) = match &folder {
+            None => (Vec::new(), None),
+            Some(f) => match read_room_folder(session, f) {
+                Ok(read) => read,
+                Err(why) => return refused(why),
+            },
+        };
+        if data.is_some() && !keep {
+            return refused("a room that isn't kept has no data to bring in (data.json)".into());
+        }
+        let suffix = crate::instance::world_suffix(Some(&key), crate::instance::RoomId::MAIN);
+        let reals: Vec<String> = names.iter().map(|n| format!("{n}__{suffix}")).collect();
+        let worlds = platform.world_manager();
+        if let Some(taken) = reals
+            .iter()
+            .find(|r| platform.worlds().exists((*r).clone()) || worlds.is_saved((*r).clone()))
+        {
+            return refused(format!(
+                "the server has a world named \"{taken}\" already (what room {key} left: close it with delete first)"
+            ));
+        }
+        let id = match instance.reserve_room(Some(key.clone()), keep) {
+            Ok(id) => id,
+            Err(why) => return refused(why),
+        };
+        if let Some(data) = data {
+            // The folder is what the room keeps: what this server had of it goes.
+            instance.store.forget_kept_tables(&key);
+            instance.store.flush();
+            for (namespace, tables) in data {
+                let Value::Object(tables) = tables else {
+                    continue;
+                };
+                for (name, value) in tables {
+                    instance.store.put_data(
+                        &crate::data::Owner::Named {
+                            namespace: format!("{namespace}#{key}"),
+                            name,
+                        },
+                        value.to_string(),
+                    );
+                }
+            }
+            instance.store.flush();
+        }
+        let mut imports = Vec::new();
+        for (name, real) in names.into_iter().zip(reals) {
+            let from = format!("{}/worlds/{name}", folder.as_deref().unwrap_or_default());
+            match context.import(&from, &real, None) {
+                Ok(pending) => imports.push((name, real, Some(pending))),
+                Err(ApiError(why)) => {
+                    instance.rooms.borrow_mut().remove(&id);
+                    return refused(why);
+                }
+            }
+        }
+        self.main.borrow_mut().opening.push(Opening {
+            key,
+            id,
+            worlds: imports,
+            asked: false,
+            reply: reply.clone(),
+        });
+        None
+    }
+
+    /// The rooms being opened and closed: each answered once it's open (its worlds in) or closed. Whether any was.
+    fn poll_rooms(&self, session: Option<&Session>, _platform: &dyn Platform) -> bool {
+        let Some(session) = session else {
+            return false;
+        };
+        let instance = session.instance();
+        let waker = std::task::Waker::noop();
+        let mut cx = std::task::Context::from_waker(waker);
+        let mut main = self.main.borrow_mut();
+        let waiting = main.opening.len() + main.closing.len();
+        main.opening.retain_mut(|o| {
+            let mut failed = None;
+            for (_, _, pending) in &mut o.worlds {
+                let Some(future) = pending else { continue };
+                match future.as_mut().poll(&mut cx) {
+                    std::task::Poll::Pending => {}
+                    std::task::Poll::Ready(Ok(_)) => *pending = None,
+                    std::task::Poll::Ready(Err(ApiError(why))) => {
+                        *pending = None;
+                        failed = Some(why);
+                    }
+                }
+            }
+            if let Some(why) = failed {
+                instance.rooms.borrow_mut().remove(&o.id);
+                let _ = o.reply.send(Err((
+                    409,
+                    format!("room {}'s worlds couldn't be brought in: {why}", o.key),
+                )));
+                return false;
+            }
+            if o.worlds.iter().any(|(_, _, p)| p.is_some()) {
+                return true;
+            }
+            if !o.asked {
+                for (_, real, _) in &o.worlds {
+                    instance.routes.borrow_mut().give_world(real, o.id);
+                }
+                instance
+                    .room_requests
+                    .borrow_mut()
+                    .push(crate::rooms::RoomRequest::Open(o.id));
+                o.asked = true;
+                return true;
+            }
+            if instance.open.borrow().contains(&o.id) {
+                let names: Vec<&String> = o.worlds.iter().map(|(n, _, _)| n).collect();
+                let _ = o.reply.send(Ok(json!({ "room": o.key, "worlds": names })));
+                return false;
+            }
+            if !instance.rooms.borrow().contains_key(&o.id) {
+                let _ = o
+                    .reply
+                    .send(Err((409, format!("room {} couldn't be opened", o.key))));
+                return false;
+            }
+            true
+        });
+        main.closing.retain(|c| {
+            if instance.rooms.borrow().contains_key(&c.id) {
+                return true;
+            }
+            if c.delete {
+                forget_left(session, &c.key);
+            }
+            let _ = c.reply.send(Ok(json!({ "room": c.key, "closed": true })));
+            false
+        });
+        main.opening.len() + main.closing.len() < waiting
     }
 
     fn snapshot(&self, tick: u64, session: Option<&Session>, platform: &dyn Platform, tell: bool) {
@@ -632,7 +1015,47 @@ impl ServerControl {
                 }
             }
         }
+        let rooms: BTreeMap<String, RoomView> = session.map_or_else(BTreeMap::new, |session| {
+            let instance = session.instance();
+            let routes = instance.routes.borrow();
+            let online = platform.players();
+            instance
+                .rooms
+                .borrow()
+                .iter()
+                .filter(|(id, _)| **id != crate::instance::RoomId::MAIN)
+                .filter_map(|(id, info)| {
+                    use crate::rooms::RoomState;
+                    if matches!(info.state, RoomState::Opening | RoomState::Closing) {
+                        return None;
+                    }
+                    let players = routes
+                        .players_of(*id)
+                        .into_iter()
+                        .filter(|p| online.get(*p).is_some())
+                        .count();
+                    Some((
+                        info.key.clone()?,
+                        RoomView {
+                            keep: info.keep,
+                            state: info.state.name(),
+                            players,
+                            worlds: routes.worlds_of(*id),
+                        },
+                    ))
+                })
+                .collect()
+        });
+        main.room_empty_since.retain(|k, _| rooms.contains_key(k));
+        for (key, room) in &rooms {
+            if room.players > 0 {
+                main.room_empty_since.remove(key);
+            } else {
+                main.room_empty_since.entry(key.clone()).or_insert(tick);
+            }
+        }
         let now = Snapshot {
+            rooms,
             state: lifecycle(session),
             running: session.is_some_and(Session::running),
             refused: session.and_then(|s| s.refusal()).map(|r| {
@@ -695,6 +1118,20 @@ impl ServerControl {
         for world in before.worlds.difference(&now.worlds) {
             told(shared, "world_unload", &json!({ "world": world }));
         }
+        for (key, room) in &now.rooms {
+            if !before.rooms.contains_key(key) {
+                told(
+                    shared,
+                    "room_open",
+                    &json!({ "room": key, "keep": room.keep }),
+                );
+            }
+        }
+        for key in before.rooms.keys() {
+            if !now.rooms.contains_key(key) {
+                told(shared, "room_close", &json!({ "room": key }));
+            }
+        }
         if before.paused != now.paused {
             told(shared, "writes", &json!({ "paused": now.paused }));
         }
@@ -718,6 +1155,97 @@ fn managed(session: Option<&Session>) -> Option<crate::managed_worlds::ManagedCo
         shared: session.shared().clone(),
         scripts: room.scripts().clone(),
     })
+}
+
+/// A room save's `data` written where the server keeps the room's tables (`Instance::write_room_tables`), named in the
+/// answer as `data_file`: kept as the room's tables are until it closes, its server's stop included.
+fn tables_file(
+    instance: &crate::instance::Instance,
+    key: &str,
+    answer: &mut Value,
+) -> Result<(), (u16, String)> {
+    match instance.write_room_tables(key) {
+        Ok(Some(file)) => answer["data_file"] = json!(file.display().to_string()),
+        Ok(None) => {}
+        Err(why) => return Err((500, format!("room {key}'s tables: {why}"))),
+    }
+    Ok(())
+}
+
+/// What a room's folder (`POST /rooms/open`'s, under `worlds.import-root`) holds: the worlds in its `worlds/` (each a
+/// map, named as its scripts call it) and its `data.json` (`{ "<namespace>": { "<table>": <value> } }`), if any.
+type RoomFolder = (Vec<String>, Option<serde_json::Map<String, Value>>);
+
+fn read_room_folder(session: &Session, folder: &str) -> Result<RoomFolder, String> {
+    let root = session
+        .shared()
+        .managed_worlds
+        .borrow()
+        .config
+        .import_root
+        .clone()
+        .ok_or("importing worlds is off on this server (worlds.import-root in config.yml)")?;
+    let dir = root.join(folder);
+    let inside = dir
+        .components()
+        .all(|c| !matches!(c, std::path::Component::ParentDir));
+    if !inside || dir == root || !dir.is_dir() {
+        return Err(format!(
+            "there's no folder \"{folder}\" in the import root ({})",
+            root.display()
+        ));
+    }
+    let mut names = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(dir.join("worlds")) {
+        for entry in entries.flatten() {
+            if !entry.path().is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !netherforge_format::names::is_id(&name) {
+                return Err(format!(
+                    "\"{name}\" in {folder}/worlds can't be a world's name ({})",
+                    netherforge_format::names::ID_RULE
+                ));
+            }
+            names.push(name);
+        }
+    }
+    names.sort();
+    let data = match std::fs::read_to_string(dir.join("data.json")) {
+        Err(_) => None,
+        Ok(text) => match serde_json::from_str::<Value>(&text) {
+            Ok(Value::Object(by_namespace)) => {
+                let mut out = serde_json::Map::new();
+                for (namespace, tables) in by_namespace {
+                    if !tables.is_object() {
+                        return Err(format!(
+                            "{folder}/data.json's \"{namespace}\" isn't an object of tables"
+                        ));
+                    }
+                    out.insert(namespace, tables);
+                }
+                Some(out)
+            }
+            _ => return Err(format!("{folder}/data.json isn't a JSON object")),
+        },
+    };
+    Ok((names, data))
+}
+
+/// What the kept room `key` left once closed goes: its worlds' files and its tables.
+fn forget_left(session: &Session, key: &str) {
+    if let Some(context) = managed(Some(session)) {
+        let suffix = crate::instance::world_suffix(Some(key), crate::instance::RoomId::MAIN);
+        for world in context.worlds_ending(&suffix) {
+            context.delete_saved(&world);
+            session.instance().store.forget_world_records(&world);
+        }
+    }
+    let store = &session.instance().store;
+    store.forget_kept_tables(key);
+    store.commit();
+    session.instance().forget_room_tables(key);
 }
 
 /// The server's state in its network: `ready` for a server in none.
@@ -834,6 +1362,23 @@ fn state_of(
                 world["writes_paused"] = json!(true);
             }
             world
+        })
+        .collect();
+    out["rooms"] = now
+        .rooms
+        .iter()
+        .map(|(key, room)| {
+            let mut out = json!({
+                "key": key,
+                "keep": room.keep,
+                "state": room.state,
+                "players": room.players,
+                "worlds": room.worlds,
+            });
+            if let Some(since) = main.room_empty_since.get(key) {
+                out["empty_seconds"] = json!(tick.saturating_sub(*since) / TICKS_PER_SECOND);
+            }
+            out
         })
         .collect();
     out["writes_paused"] = json!(now.paused || !now.paused_worlds.is_empty());
@@ -1137,15 +1682,46 @@ fn route(request: &Request, out: &mut dyn Write, shared: &Arc<Shared>) {
             },
             ACT_SECONDS,
         ),
+        ("POST", "/save") if text("world").is_some() && text("room").is_some() => {
+            Err((400, "a save names a world or a room, not both".into()))
+        }
         ("POST", "/save") => act(
             shared,
             Action::Save {
                 world: text("world"),
+                room: text("room"),
                 pause: flag("pause").unwrap_or(false),
                 timeout: seconds("timeout", DEFAULT_PAUSE_SECONDS),
             },
             ACT_SECONDS,
         ),
+        ("POST", "/rooms/open") => match text("key") {
+            Some(key) if crate::network::protocol::is_key(&key) => act(
+                shared,
+                Action::OpenRoom {
+                    key,
+                    keep: flag("keep").unwrap_or(false),
+                    folder: text("folder"),
+                },
+                LOAD_SECONDS,
+            ),
+            _ => Err((
+                400,
+                "an open names its room's key (1 to 64 characters, none a control character)"
+                    .into(),
+            )),
+        },
+        ("POST", "/rooms/close") => match text("key") {
+            None => Err((400, "a close names its room's key".into())),
+            Some(key) => act(
+                shared,
+                Action::CloseRoom {
+                    key,
+                    delete: flag("delete").unwrap_or(false),
+                },
+                ACT_SECONDS,
+            ),
+        },
         ("POST", "/worlds/create") => match (text("name"), create_options(&body)) {
             (None, _) => Err((400, "a create names its world".into())),
             (_, Err(why)) => Err((400, why)),
@@ -1180,6 +1756,7 @@ fn route(request: &Request, out: &mut dyn Write, shared: &Arc<Shared>) {
             shared,
             Action::Resume {
                 world: text("world"),
+                room: text("room"),
             },
             ACT_SECONDS,
         ),

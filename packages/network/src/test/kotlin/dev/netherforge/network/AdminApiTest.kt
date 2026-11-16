@@ -27,14 +27,20 @@ class AdminApiTest {
         val shown = ArrayList<String>()
         lateinit var hub: Hub
 
+        /** When set, every move waits for it (a proxy slow to move players). */
+        @Volatile var held: CompletableFuture<Unit>? = null
+
         override fun servers() = names
 
         override fun players() = emptyList<PlayerState>()
 
         override fun send(id: String, server: String): CompletionStage<String?> {
             synchronized(sends) { sends += id to server }
-            hub.playerMoved(id, id.uppercase(), server)
-            return CompletableFuture.completedFuture(null)
+            val wait = held ?: CompletableFuture.completedFuture(Unit)
+            return wait.thenApply {
+                hub.playerMoved(id, id.uppercase(), server)
+                null
+            }
         }
 
         override fun message(id: String, kind: String, text: String, subtitle: String?): String? {
@@ -145,6 +151,26 @@ class AdminApiTest {
     }
 
     @Test
+    fun `many slow sends at once leave the API answering everyone else`() {
+        // FR 43: a pool of 48 threads with nowhere to wait reset every connection past them, placements' answers too.
+        val players = (1..120).map { "p-$it" }
+        for (id in players) hub.playerMoved(id, id.uppercase(), "lobby")
+        val held = CompletableFuture<Unit>()
+        proxy.held = held
+        val sends = players.map { id ->
+            val request = HttpRequest.newBuilder(URI("http://127.0.0.1:${admin.port}/v1/players/$id/send"))
+                .header("Authorization", "Bearer ${all.token}")
+                .POST(HttpRequest.BodyPublishers.ofString("""{ "server": "arena-1" }""")).build()
+            http.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+        }
+        waitFor { synchronized(proxy.sends) { proxy.sends.size } == players.size }
+        assertEquals(200, call("GET", "/v1/players").first, "answered while 120 sends wait on the proxy")
+        held.complete(Unit)
+        val statuses = sends.map { it.get(10, TimeUnit.SECONDS).statusCode() }
+        assertEquals(List(players.size) { 200 }, statuses)
+    }
+
+    @Test
     fun `a client may do only what its scopes allow`() {
         assertEquals(401, call("GET", "/v1/players", client = all.copy(token = "wrong-token-long-enough-0123456")).first)
         assertEquals(200, call("GET", "/v1/players", client = reader).first)
@@ -185,6 +211,28 @@ class AdminApiTest {
         arena.stop()
         assertEquals("server_disconnected", events.next("server_disconnected").first)
         assertTrue(!call("GET", "/v1/servers").second.contains("connectedSince"))
+    }
+
+    @Test
+    fun `a server's keyed rooms starting, finishing and closing are heard by clients that read servers`() {
+        val events = stream()
+        val watching = stream(client = reader)
+        val (arena, recorder) = join("arena-1", group = "arena")
+        events.next("server_connected")
+        arena.send(ServerFrame.RoomState("m-7", RoomLife.STARTED))
+        arena.send(ServerFrame.RoomState("m-7", RoomLife.FINISHED))
+        arena.send(ServerFrame.RoomState("", RoomLife.CLOSED))
+        arena.send(ServerFrame.RoomState("m-7", RoomLife.CLOSED))
+        assertEquals("room_state" to """{"t":"room_state","server":"arena-1","room":"m-7","state":"started"}""", events.next("room_state"))
+        assertEquals("""{"t":"room_state","server":"arena-1","room":"m-7","state":"finished"}""", events.next("room_state").second)
+        // A key that isn't one is the server's mistake, told to it, and nobody else's.
+        assertEquals("""{"t":"room_state","server":"arena-1","room":"m-7","state":"closed"}""", events.next("room_state").second)
+        waitFor { recorder.of<HubFrame.Problem>().any { it.message.contains("a room's key") } }
+        // presence:read alone hears none of it.
+        hub.playerMoved("u-9", "Cy", "lobby")
+        assertEquals("hello", watching.next().first)
+        assertEquals("player_joined", watching.next().first)
+        assertTrue(watching.none { it.first == "room_state" })
     }
 
     @Test
@@ -244,7 +292,7 @@ class AdminApiTest {
     fun `a placing client decides where a group's players go, holds them, or turns them away`() {
         val (lobbyLink, lobby) = join("lobby")
         join("arena-1", "arena")
-        join("arena-2", "arena")
+        val (_, arena2) = join("arena-2", "arena")
         for (id in listOf("p", "q", "r")) hub.playerMoved(id, id.uppercase(), "lobby")
         val events = stream("?place=arena")
         Thread.sleep(200)
@@ -252,9 +300,11 @@ class AdminApiTest {
         lobbyLink.send(ServerFrame.Send(1, listOf("p"), group = "arena"))
         val ask = events.next("place")
         val first = Regex("\"id\":(\\d+)").find(ask.second)!!.groupValues[1]
-        assertEquals(200, call("POST", "/v1/placements/$first", """{ "server": "arena-2" }""").first)
+        val answer = """{ "server": "arena-2", "room": "party-1", "keep": true }"""
+        assertEquals(200, call("POST", "/v1/placements/$first", answer).first)
         waitFor { lobby.of<HubFrame.SendResult>().isNotEmpty() }
         assertEquals(HubFrame.SendResult(1, null, "arena-2"), lobby.of<HubFrame.SendResult>().single(), "not least: the client's pick")
+        assertEquals(listOf(HubFrame.Room("p", "party-1", keep = true)), arena2.of<HubFrame.Room>(), "the room, kept, as the answer said")
 
         lobbyLink.send(ServerFrame.Send(2, listOf("q"), group = "arena", waitMillis = 60_000))
         val held = Regex("\"id\":(\\d+)").find(events.next("place").second)!!.groupValues[1]
@@ -273,6 +323,26 @@ class AdminApiTest {
     }
 
     @Test
+    fun `a player sent back to their server's group is put in a room there when the placement names one`() {
+        val (arenaLink, arena) = join("arena-1", "arena")
+        hub.playerMoved("p", "P", "arena-1")
+        val events = stream("?place=arena")
+        Thread.sleep(200)
+        // The server sends them back to be placed again (their room closed there): the client places them in a new
+        // room on the same server, which is told the room though nobody moves.
+        arenaLink.send(ServerFrame.Send(1, listOf("p"), group = "arena"))
+        val id = Regex("\"id\":(\\d+)").find(events.next("place").second)!!.groupValues[1]
+        assertEquals(200, call("POST", "/v1/placements/$id", """{ "server": "arena-1", "room": "player_7f", "keep": true }""").first)
+        waitFor { arena.of<HubFrame.SendResult>().isNotEmpty() }
+        assertEquals(HubFrame.SendResult(1, null, "arena-1"), arena.of<HubFrame.SendResult>().single())
+        assertEquals(listOf(HubFrame.Room("p", "player_7f", keep = true)), arena.of<HubFrame.Room>())
+        // Naming no room, it's nothing to do.
+        arenaLink.send(ServerFrame.Send(2, listOf("p"), server = "arena-1"))
+        waitFor { arena.of<HubFrame.SendResult>().size == 2 }
+        assertEquals("they're already on arena-1", arena.of<HubFrame.SendResult>().last().error)
+    }
+
+    @Test
     fun `logins are placed by the client placing them, or by the proxy without one`() {
         assertEquals(LoginPlace(), hub.placeLogin("u-9", "Zed").get(1, TimeUnit.SECONDS))
         val events = stream("?place=${Hub.LOGINS}")
@@ -281,8 +351,12 @@ class AdminApiTest {
         val ask = events.next("place")
         assertTrue(ask.second.contains("\"login\":true"), ask.second)
         val id = Regex("\"id\":(\\d+)").find(ask.second)!!.groupValues[1]
-        call("POST", "/v1/placements/$id", """{ "server": "lobby" }""")
+        val (_, lobby) = join("lobby")
+        call("POST", "/v1/placements/$id", """{ "server": "lobby", "room": "m-1" }""")
         assertEquals(LoginPlace("lobby"), placed.get(5, TimeUnit.SECONDS))
+        // A match's room: not kept.
+        waitFor { lobby.of<HubFrame.Room>().isNotEmpty() }
+        assertEquals(listOf(HubFrame.Room("u-9", "m-1", keep = false)), lobby.of<HubFrame.Room>())
     }
 
     @Test

@@ -249,7 +249,9 @@ impl TestContext {
     /// Waits until what scripts started off the main thread is done, so a test sees it land at a known tick.
     pub(crate) fn settle(&self) -> ApiResult<()> {
         let started = Instant::now();
-        while !self.shared().wasm.borrow().quiet() || !self.shared().databases.borrow().quiet() {
+        while !self.shared().wasm.borrow().quiet()
+            || !self.shared().instance.databases.borrow().quiet()
+        {
             if started.elapsed() > SETTLE {
                 return err(format!(
                     "the runtime's workers or WebAssembly were still busy after {}ms",
@@ -472,10 +474,12 @@ impl NfTestApi for TestContext {
                     raisable.fields.join(", ")
                 ));
             }
-            (Some(read), given) => match read(&lua, given)? {
-                Value::Table(t) => t,
-                _ => return err(format!("event \"{event}\" needs a payload")),
-            },
+            (Some(read), given) => {
+                match read(&lua, with_recipients(&self.game, raisable.fields, given)?)? {
+                    Value::Table(t) => t,
+                    _ => return err(format!("event \"{event}\" needs a payload")),
+                }
+            }
             (None, Value::Nil) => lua.create_table().map_err(|e| ApiError(e.to_string()))?,
             (None, _) => return err(format!("event \"{event}\" has no payload")),
         };
@@ -1226,6 +1230,8 @@ impl NfTestApi for TestContext {
             group: None,
             balance: None,
             wait_millis: None,
+            room: None,
+            keep: false,
         });
         self.join_sent()?;
         let joined = self
@@ -1240,4 +1246,39 @@ impl NfTestApi for TestContext {
             id: crate::events::uuid_text(&joined.uuid),
         })
     }
+}
+
+/// A test's payload for an event with `recipients` (who sees a chat line), which the server fills in as everyone in
+/// the speaker's room: a payload that leaves it out gets the room's online players, as on a server.
+fn with_recipients(
+    game: &crate::world::GameContext,
+    fields: &[&str],
+    given: Value,
+) -> ApiResult<Value> {
+    let Value::Table(table) = &given else {
+        return Ok(given);
+    };
+    if !fields.contains(&"recipients")
+        || !matches!(table.raw_get::<Value>("recipients"), Ok(Value::Nil))
+    {
+        return Ok(given);
+    }
+    let lua = game.scripts.host().lua().clone();
+    let everyone = lua.create_table().map_err(|e| ApiError(e.to_string()))?;
+    for (i, player) in game.shared.online_players().iter().enumerate() {
+        let handle = netherforge_api::handle::push(
+            &lua,
+            &handles::Player {
+                id: crate::events::uuid_text(&player.uuid),
+            },
+        )
+        .map_err(|e| ApiError(e.to_string()))?;
+        everyone
+            .raw_set(i + 1, handle)
+            .map_err(|e| ApiError(e.to_string()))?;
+    }
+    table
+        .raw_set("recipients", everyone)
+        .map_err(|e| ApiError(e.to_string()))?;
+    Ok(given)
 }

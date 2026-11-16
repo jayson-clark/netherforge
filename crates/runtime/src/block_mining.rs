@@ -370,8 +370,13 @@ impl BlockMining {
 
     /// Slows everyone looking at one of the project's blocks before they hit it: the change takes a moment to reach
     /// their game, which could finish a soft block on the first hit meanwhile.
-    pub fn watch_looks(&mut self, platform: &dyn Platform, blocks: &dyn Mined) {
-        for player in platform.players().online() {
+    pub fn watch_looks(
+        &mut self,
+        platform: &dyn Platform,
+        online: &[netherforge_platform::PlayerRef],
+        blocks: &dyn Mined,
+    ) {
+        for player in online {
             let id = player.uuid;
             let mode = platform.players().game_mode(id);
             if matches!(mode.as_deref(), Some(CREATIVE) | Some(SPECTATOR)) {

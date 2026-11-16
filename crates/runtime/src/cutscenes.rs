@@ -363,7 +363,10 @@ impl CutscenesContext {
         };
         // Kept (a run of cutscenes keeps the first) until they're put back, in case the server goes down meanwhile.
         if previous.is_none() {
-            self.shared.store.put_cutscene_state(player, &saved);
+            self.shared
+                .instance
+                .store
+                .put_cutscene_state(player, &saved);
         }
         // The one it replaced is told only now, with the new one already playing: a handler that plays or stops
         // again finds things whole.
@@ -406,7 +409,7 @@ impl CutscenesContext {
     /// one still on would carry them with it.
     pub fn restore(&self, player: Uuid, state: &PlayerState) {
         // Whatever the server does next, nothing is left to put back.
-        self.shared.store.delete_cutscene_state(player);
+        self.shared.instance.store.delete_cutscene_state(player);
         let platform = self.platform();
         platform.player_views().set_camera(player, None);
         platform.players().teleport(player, state.location.clone());
@@ -937,7 +940,7 @@ impl Service for CutscenesService {
 
     fn start(&self, room: &Room, project: &Define) {
         *self.scripts.borrow_mut() = Some(room.scripts().clone());
-        let leftovers = self.shared.store.cutscene_states();
+        let leftovers = self.shared.instance.store.cutscene_states();
         let mut cutscenes = self.shared.cutscenes.borrow_mut();
         cutscenes.definitions = project
             .project
