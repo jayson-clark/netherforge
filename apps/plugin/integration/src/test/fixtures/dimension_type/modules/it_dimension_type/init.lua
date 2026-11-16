@@ -15,23 +15,34 @@ function steps.block(x, y, z)
 end
 
 -- mine: a world of the project's `deep` dimension type, its limits, blocks set at both ends of them, then deleted.
-function steps.mine()
+-- In a task, a wait after making the world: the game prepares its spawn as it's made, which on a loaded machine takes
+-- most of a call's time limit by itself (each wait gives the task a whole call again).
+-- Its chunk is held, not just loaded, so it's still there after the wait; deleting the world lets go of it.
+local function mine()
   local w = nf.worlds.create(
     "it_deep_mine",
     { dimension_type = "deep", generator = "void", structures = false }
   )
-  w:load_chunk(vec3(0, 0, 0))
+  nf.wait(1)
+  w:hold_chunk(vec3(0, 0, 0))
+  nf.wait(1)
   local low = w:set_block(vec3(0, w:min_height(), 0), "minecraft:gold_block")
   local high = w:set_block(vec3(0, w:max_height() - 1, 0), "minecraft:gold_block")
-  log(
-    "mine",
+  local found = {
     w:min_height(),
     w:max_height(),
     tostring(low),
     tostring(high),
-    w:block(vec3(0, w:min_height(), 0)):kind()
-  )
+    w:block(vec3(0, w:min_height(), 0)):kind(),
+  }
+  nf.wait(1)
+  -- Deleted before the log line the scenario waits for, so the next run can make it again.
   w:unload({ delete = true })
+  log("mine", table.unpack(found))
+end
+
+function steps.mine()
+  nf.task(mine)
 end
 
 nf.commands.register("it-dimension", {

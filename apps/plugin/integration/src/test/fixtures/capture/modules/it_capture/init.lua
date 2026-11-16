@@ -1,15 +1,20 @@
 local steps = {}
 
+-- In a task, a wait after making the world: the game prepares its spawn as it's made, which on a loaded machine takes
+-- most of a call's time limit by itself (each wait gives the task a whole call again).
 function steps.prepare()
   local world = nf.worlds.default()
   world:load_chunk(vec3(3, -60, 3))
   world:set_block(vec3(3, -60, 3), "minecraft:diamond_block")
   world:set_block(vec3(4, -59, 4), "minecraft:gold_block")
   world:set_block(vec3(4, -60, 3), "minecraft:oak_stairs[facing=east,half=top]")
-  local lobby = nf.worlds.create("it_lobby", { generator = "void", structures = false })
-  lobby:load_chunk(vec3(8, 70, 8))
-  lobby:set_block(vec3(8, 70, 8), "minecraft:emerald_block")
-  log("prepared", lobby:name(), lobby:block(vec3(8, 70, 8)):kind())
+  nf.task(function()
+    local lobby = nf.worlds.create("it_lobby", { generator = "void", structures = false })
+    nf.wait(1)
+    lobby:load_chunk(vec3(8, 70, 8))
+    lobby:set_block(vec3(8, 70, 8), "minecraft:emerald_block")
+    log("prepared", lobby:name(), lobby:block(vec3(8, 70, 8)):kind())
+  end)
 end
 
 function steps.place()
