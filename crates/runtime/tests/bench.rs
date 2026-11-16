@@ -142,6 +142,7 @@ fn the_entities_baseline_tick() {
 }
 
 /// This thread's CPU time so far.
+#[cfg(unix)]
 fn thread_cpu() -> std::time::Duration {
     #[repr(C)]
     struct Timespec {
@@ -157,6 +158,42 @@ fn thread_cpu() -> std::time::Duration {
     // SAFETY: `ts` is a valid timespec for the call to fill.
     assert_eq!(unsafe { clock_gettime(clock, &mut ts) }, 0);
     std::time::Duration::new(ts.sec as u64, ts.nsec as u32)
+}
+
+/// This thread's CPU time so far: its kernel and user times, in 100 ns units (Windows has no `clock_gettime`).
+#[cfg(windows)]
+fn thread_cpu() -> std::time::Duration {
+    #[repr(C)]
+    #[derive(Default)]
+    struct FileTime {
+        low: u32,
+        high: u32,
+    }
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetCurrentThread() -> *mut std::ffi::c_void;
+        fn GetThreadTimes(
+            thread: *mut std::ffi::c_void,
+            creation: *mut FileTime,
+            exit: *mut FileTime,
+            kernel: *mut FileTime,
+            user: *mut FileTime,
+        ) -> i32;
+    }
+    let [mut creation, mut exit, mut kernel, mut user] = Default::default();
+    // SAFETY: the current thread's pseudo-handle, and four valid FILETIMEs for the call to fill.
+    let ok = unsafe {
+        GetThreadTimes(
+            GetCurrentThread(),
+            &mut creation,
+            &mut exit,
+            &mut kernel,
+            &mut user,
+        )
+    };
+    assert_ne!(ok, 0);
+    let ticks = |t: &FileTime| (u64::from(t.high) << 32) | u64::from(t.low);
+    std::time::Duration::from_nanos((ticks(&kernel) + ticks(&user)) * 100)
 }
 
 /// The runtime's own cost on an instance with nothing to do: a project without scripts, nobody on (Kosmoi's
