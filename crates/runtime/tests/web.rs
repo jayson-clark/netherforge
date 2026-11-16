@@ -487,7 +487,13 @@ fn a_login_is_begun_confirmed_and_its_token_request_fails_saying_why() {
         })),
         own: Some(Arc::new(Vec::new)),
     };
-    let session = start(&files, &platform, enabled(), hooks);
+    // Long enough for the refusal: on Windows connecting to a closed port takes about two seconds, and the test's
+    // ticks run faster than the server's, so the default would answer 504 first.
+    let config = WebConfig {
+        handler_timeout_seconds: 600,
+        ..enabled()
+    };
+    let session = start(&files, &platform, config, hooks);
     let started = platform.take();
     let base = base(&started);
     let said: Vec<String> = started

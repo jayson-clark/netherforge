@@ -1045,6 +1045,15 @@ enum Wire {
     Tls(Box<rustls::StreamOwned<rustls::ClientConnection, Counted<TcpStream>>>),
 }
 
+impl Wire {
+    fn tcp(&self) -> &TcpStream {
+        match self {
+            Wire::Plain(s) => &s.inner,
+            Wire::Tls(s) => &s.sock.inner,
+        }
+    }
+}
+
 impl Read for Wire {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
@@ -1126,8 +1135,8 @@ fn run_websocket(
         .map_err(|e| failed(e.0))?;
     let tcp = connect(&addresses, timeout, &host, port).map_err(failed)?;
     let _ = tcp.set_nodelay(true);
-    let control = tcp.try_clone().map_err(|e| failed(e.to_string()))?;
-    let _ = control.set_read_timeout(Some(timeout));
+    // Timeouts are set on the stream the socket reads, never a clone: on Windows a clone keeps its own.
+    let _ = tcp.set_read_timeout(Some(timeout));
     let counted = Counted {
         inner: tcp,
         sink: sink.clone(),
@@ -1208,7 +1217,7 @@ fn run_websocket(
     };
     let protocol = headers.get("sec-websocket-protocol").cloned();
     sink.opened(response.status().as_u16(), headers, protocol);
-    let _ = control.set_read_timeout(Some(READ_SLICE));
+    let _ = socket.get_ref().tcp().set_read_timeout(Some(READ_SLICE));
     let mut pinged = Instant::now();
     let mut closing: Option<Instant> = None;
     loop {

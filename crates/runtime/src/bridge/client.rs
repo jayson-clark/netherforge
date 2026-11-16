@@ -354,7 +354,8 @@ fn session(inner: &Arc<Inner>, socket: TcpStream) -> std::io::Result<()> {
     let port = inner.settings.port;
     let token = &inner.settings.token;
     let mut writer = std::io::BufWriter::new(socket.try_clone()?);
-    let mut reader = FrameReader::new(socket.try_clone()?, MAX_FRAME_BEFORE_HELLO);
+    // Read through `socket` itself: on Windows a clone keeps its own read timeout, so the ones below wouldn't hold.
+    let mut reader = FrameReader::new(&socket, MAX_FRAME_BEFORE_HELLO);
     let nonce = auth::nonce();
     let hello = inner.events.hello(&nonce);
     let request = Message::request(
@@ -459,7 +460,7 @@ fn session(inner: &Arc<Inner>, socket: TcpStream) -> std::io::Result<()> {
 /// answered) or sent too much.
 fn await_answer(
     inner: &Inner,
-    reader: &mut FrameReader<TcpStream>,
+    reader: &mut FrameReader<&TcpStream>,
     id: i64,
 ) -> std::io::Result<Option<Result<Value, rpc::Error>>> {
     loop {

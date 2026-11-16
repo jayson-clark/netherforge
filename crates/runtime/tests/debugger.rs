@@ -19,6 +19,15 @@ use netherforge_runtime::debug::Debugger;
 use netherforge_runtime::server::ServerEvents;
 use serde_json::{Value, json};
 
+/// `path` on disk, absolute on every OS: on Windows a path without a drive isn't absolute, so it's given one.
+fn disk(path: &str) -> String {
+    if cfg!(windows) {
+        format!("C:{path}")
+    } else {
+        path.to_owned()
+    }
+}
+
 const SCRIPTED: &str = r#"{ "nodes": { "root": { "display": { "type": "block", "block": "minecraft:stone" }, "hitbox": {} } }, "script": { "file": "script.lua" } }"#;
 
 /// The editor's end: what the debugger sent, and requests answered by their `seq`.
@@ -169,7 +178,7 @@ fn server(files: &[(&str, &str)]) -> Server {
         Arc::new(move |m| {
             let _ = to.lock().unwrap().send(m);
         }),
-        Some(std::path::PathBuf::from("/projects/demo")),
+        Some(std::path::PathBuf::from(disk("/projects/demo"))),
         Duration::from_millis(50),
     );
     events.attach_debugger(debugger.clone());
@@ -527,7 +536,7 @@ fn a_breakpoint_in_a_project_file_binds_by_its_place_on_disk_too() {
     s.editor.attach(&[]);
     let answer = s.editor.request(
         "setBreakpoints",
-        json!({ "source": { "path": "/projects/demo/modules/m/init.lua" }, "breakpoints": [{ "line": 2 }] }),
+        json!({ "source": { "path": disk("/projects/demo/modules/m/init.lua") }, "breakpoints": [{ "line": 2 }] }),
     );
     // The answer names the chunk, as stacks do.
     assert_eq!(
@@ -549,30 +558,30 @@ fn a_breakpoint_in_a_project_file_binds_by_its_place_on_disk_too() {
 fn a_packages_file_named_by_its_place_on_disk_is_its_package_path() {
     let debugger = Debugger::new(
         Arc::new(|_: Value| {}),
-        Some(std::path::PathBuf::from("/projects/demo")),
+        Some(std::path::PathBuf::from(disk("/projects/demo"))),
     );
     // A path dependency inside the project's folder, and one from the package cache.
     debugger.set_packages(Arc::new(Mutex::new(vec![
         (
             "inner".to_owned(),
-            std::path::PathBuf::from("/projects/demo/packages/inner"),
+            std::path::PathBuf::from(disk("/projects/demo/packages/inner")),
         ),
         (
             "acme".to_owned(),
-            std::path::PathBuf::from("/cache/acme@1.2.0"),
+            std::path::PathBuf::from(disk("/cache/acme@1.2.0")),
         ),
     ])));
     assert_eq!(
-        debugger.source_path("/cache/acme@1.2.0/modules/api/init.lua"),
+        debugger.source_path(&disk("/cache/acme@1.2.0/modules/api/init.lua")),
         "acme:modules/api/init.lua"
     );
     // The package nested in the project's folder wins over the folder around it.
     assert_eq!(
-        debugger.source_path("/projects/demo/packages/inner/modules/x/init.lua"),
+        debugger.source_path(&disk("/projects/demo/packages/inner/modules/x/init.lua")),
         "inner:modules/x/init.lua"
     );
     assert_eq!(
-        debugger.source_path("/projects/demo/modules/m/init.lua"),
+        debugger.source_path(&disk("/projects/demo/modules/m/init.lua")),
         "modules/m/init.lua"
     );
     // Anywhere else stays as it was; a path already relative too.
