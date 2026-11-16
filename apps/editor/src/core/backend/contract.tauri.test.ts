@@ -39,7 +39,7 @@ const manifest = path.resolve(
 /** The contract host: requests by id, and the events it forwards. */
 class Host {
   private next = 1
-  private waiting = new Map<number, { resolve: (v: Json) => void; reject: (e: Json) => void }>()
+  private waiting = new Map<number, { resolve: (v: Json) => void; reject: (e: unknown) => void }>()
   onEvent: (event: string, payload: Json) => void = () => {}
 
   constructor(private readonly socket: Socket) {
@@ -57,9 +57,18 @@ class Host {
       if ('err' in message) waiter?.reject(message.err ?? null)
       else waiter?.resolve(message.ok ?? null)
     })
+    // The host gone (a panic ends its test, and the connection with it): what waits fails now, and so does
+    // every later request.
+    socket.once('close', () => {
+      this.stuck ??= new Error(
+        `the contract host went away; it printed last:\n${output.slice(-4000)}`,
+      )
+      for (const waiter of this.waiting.values()) waiter.reject(this.stuck)
+      this.waiting.clear()
+    })
   }
 
-  /** Set once a request went unanswered: the host is stuck, so every later request fails at once. */
+  /** Set once a request went unanswered or the host went away: every later request fails at once. */
   private stuck: Error | undefined
 
   /**
