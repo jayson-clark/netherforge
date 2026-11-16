@@ -49,7 +49,8 @@ const plans = {
     ['lua-language-server (pinned)', ['node', 'tools/luals.mjs']],
     ['TypeScript: unit tests', ['pnpm', '-r', '--if-present', 'test']],
     ['Rust: editor backend', ['cargo', 'test', '--manifest-path', cargoManifest], hasEditor],
-    ['Rust: runtime crates', ['cargo', 'test', '--workspace']],
+    // Every test binary runs even after one fails, so a slow CI run reports all of them at once.
+    ['Rust: runtime crates', ['cargo', 'test', '--workspace', '--no-fail-fast']],
   ],
   lint: [
     formatJs,

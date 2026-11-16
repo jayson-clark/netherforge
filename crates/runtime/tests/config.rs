@@ -2,7 +2,7 @@
 //! dev server's properties, the owner's policy beside it, and what can't be acted on.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use netherforge_runtime::config::{ServerAddress, read, read_yaml};
 
@@ -146,8 +146,10 @@ fn a_production_server_reads_its_project_and_every_section() {
 #[test]
 fn the_dev_server_takes_its_project_and_network_from_the_editor() {
     let dir = tempfile::tempdir().unwrap();
+    // Absolute on every OS: on Windows `/work/shop` has no drive and is made absolute on the current one.
+    let shop = dir.path().join("shop");
     let props: HashMap<&str, String> = HashMap::from([
-        ("netherforge.project", "/work/shop".to_owned()),
+        ("netherforge.project", shop.display().to_string()),
         ("netherforge.bridge.port", "4567".to_owned()),
         ("netherforge.network.hub", "127.0.0.1:7100".to_owned()),
         ("netherforge.network.server", "dev-1".to_owned()),
@@ -167,7 +169,7 @@ fn the_dev_server_takes_its_project_and_network_from_the_editor() {
     )
     .unwrap()
     .unwrap();
-    assert_eq!(config.project, PathBuf::from("/work/shop"));
+    assert_eq!(config.project, shop);
     assert_eq!(
         config.bridge.as_ref().map(|b| (b.port, b.token.as_str())),
         Some((4567, "t0k"))
