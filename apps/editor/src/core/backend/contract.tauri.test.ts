@@ -59,17 +59,49 @@ class Host {
     })
   }
 
+  /** Set once a request went unanswered: the host is stuck, so every later request fails at once. */
+  private stuck: Error | undefined
+
+  /**
+   * A request answered in [ANSWER_WITHIN], or an error naming it and what the host printed last. All 37
+   * cases take seconds together; without a limit a host that stopped answering cost every case its whole
+   * timeout, and CI ran out of time with nothing in its log.
+   */
   request(op: string, fields: Record<string, unknown> = {}): Promise<Json> {
+    if (this.stuck) return Promise.reject(this.stuck)
     const id = this.next++
     this.socket.write(`${JSON.stringify({ id, op, ...fields })}\n`)
-    return new Promise((resolve, reject) => this.waiting.set(id, { resolve, reject }))
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.waiting.delete(id)
+        const what = op === 'invoke' ? `invoke ${String(fields.cmd)}` : op
+        this.stuck = new Error(
+          `the contract host didn't answer ${what} within ${ANSWER_WITHIN / 1000} s; it printed last:\n` +
+            output.slice(-4000),
+        )
+        reject(this.stuck)
+      }, ANSWER_WITHIN)
+      this.waiting.set(id, {
+        resolve: (value) => (clearTimeout(timer), resolve(value)),
+        reject: (error) => (clearTimeout(timer), reject(error)),
+      })
+    })
   }
 }
+
+/** How long one request may take: the slowest is well under a second here. */
+const ANSWER_WITHIN = 60_000
 
 let server: Server
 let cargo: ChildProcess
 let host: Host
 let output = ''
+
+/** On CI the host's output (cargo's build, then the host's own) is also streamed as it comes. */
+function hear(chunk: Buffer) {
+  output += chunk.toString()
+  if (process.env.CI) process.stderr.write(`[contract host] ${chunk.toString()}`)
+}
 
 beforeAll(async () => {
   server = createServer()
@@ -90,8 +122,8 @@ beforeAll(async () => {
     ],
     { env: { ...process.env, NETHERFORGE_CONTRACT_HOST: `127.0.0.1:${port}` } },
   )
-  cargo.stdout?.on('data', (chunk: Buffer) => (output += chunk.toString()))
-  cargo.stderr?.on('data', (chunk: Buffer) => (output += chunk.toString()))
+  cargo.stdout?.on('data', hear)
+  cargo.stderr?.on('data', hear)
   const exited = new Promise<never>((_, reject) =>
     cargo.once('exit', (code) =>
       reject(new Error(`the contract host exited (${code}) before connecting:\n${output}`)),
