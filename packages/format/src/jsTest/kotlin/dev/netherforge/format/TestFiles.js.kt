@@ -1,5 +1,7 @@
 package dev.netherforge.format
 
+import org.khronos.webgl.Int8Array
+
 @JsModule("node:fs")
 @JsNonModule
 private external object Fs {
@@ -65,6 +67,9 @@ actual object TestFiles {
     actual fun sha256(relative: String): String = Crypto.createHash("sha256").update(Fs.readFileSync(abs(relative))).digest("hex") as String
 
     actual fun sha256OfText(text: String): String = Crypto.createHash("sha256").update(text, "utf8").digest("hex") as String
+
+    actual fun sha256OfBytes(bytes: ByteArray): String =
+        Crypto.createHash("sha256").update(js("Buffer").from(bytes.unsafeCast<Int8Array>())).digest("hex") as String
 
     actual val updateGolden: Boolean = process.env.UPDATE_GOLDEN == "1"
 }

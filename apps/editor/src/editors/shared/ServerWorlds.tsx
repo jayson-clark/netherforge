@@ -1,6 +1,6 @@
 /** The dev server's loaded worlds, for the screens that capture from it. */
 import { useCallback, useEffect, useState } from 'react'
-import type { LoadedWorld } from '@netherforge/format/types'
+import type { LoadedWorld } from '@/core/bridge/protocol'
 import { useApp } from '@/state/providers'
 import { Row } from '@/ui/fields'
 import { IconButton } from '@/ui/Button'

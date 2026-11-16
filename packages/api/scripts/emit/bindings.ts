@@ -18,7 +18,14 @@
 import { asyncValue } from '../../src/async.ts'
 import { acceptsNil, parseLuaType, withoutNil, type TypeNode } from '../../src/luaType.ts'
 import { requirementSentence } from '../../src/requirements.ts'
-import type { ApiSpec, CommandArgumentType, EventSpec, Fn, LuaClass } from '../../src/types.ts'
+import type {
+  ApiSpec,
+  CommandArgumentType,
+  EventSpec,
+  FeatureId,
+  Fn,
+  LuaClass,
+} from '../../src/types.ts'
 import { eventAlias, eventedClasses } from './common.ts'
 
 /** How one value crosses: one node per node of the type grammar. */
@@ -144,7 +151,8 @@ export interface ClassBinding {
 /** A shape some binding reads or pushes, which gets a data class. */
 export interface ShapeBinding {
   shape: LuaClass
-  fields: { name: string; codec: Codec; doc: string }[]
+  /** Each field, with the feature it needs (`since`) when the spec gates it. */
+  fields: { name: string; codec: Codec; doc: string; since?: FeatureId }[]
   /** Some binding reads it from Lua (a parameter, an option table's field, an event's writable field). */
   read: boolean
   /** Some binding pushes it to Lua (a return, an event's payload). */
@@ -292,7 +300,11 @@ const isVec3 = (codec: Codec) =>
   (codec.kind === 'runtime' && codec.name === 'Vec3') ||
   (codec.kind === 'optional' && codec.inner.kind === 'runtime' && codec.inner.name === 'Vec3')
 
-export function bindings(spec: ApiSpec): Bindings {
+/**
+ * [handwritten]: also bind the `impl: "lua"` functions. The Kotlin runtime writes those in the
+ * prelude; the Rust runtime implements every function in Rust, so its target binds them all.
+ */
+export function bindings(spec: ApiSpec, options: { handwritten?: boolean } = {}): Bindings {
   const handles = handleClasses(spec)
   for (const cls of spec.classes)
     if (!cls.methods && !isNamespace(cls.name))
@@ -331,6 +343,8 @@ export function bindings(spec: ApiSpec): Bindings {
         const handle = handles.get(node.name)
         if (handle) return { kind: 'handle', cls: handle }
         if (stringAliases.has(node.name)) return { kind: 'string' }
+        // `nf` itself, where a handle could be (`nf.wait_for(nf, ...)`): a scope's own table.
+        if (node.name === 'nf' && options.handwritten) return { kind: 'any', table: true }
         if (RUNTIME_TYPES[node.name]) return { kind: 'runtime', name: node.name }
         if (shapes.has(node.name)) return { kind: 'shape', name: node.name }
         throw new Error(`${where}: no binding for ${node.name}`)
@@ -341,6 +355,10 @@ export function bindings(spec: ApiSpec): Bindings {
         return { kind: 'list', item: codec(node.item, where) }
       case 'map': {
         const key = codec(node.key, where)
+        // A hand-written function may take a table keyed by anything (`Random:weighted`): its body
+        // reads the table itself.
+        if (options.handwritten && !['string', 'integer', 'choice'].includes(key.kind))
+          return { kind: 'any', table: true }
         if (!['string', 'integer', 'choice'].includes(key.kind))
           throw new Error(`${where}: a table's keys must be strings or whole numbers`)
         return { kind: 'map', key, value: codec(node.value, where) }
@@ -393,7 +411,7 @@ export function bindings(spec: ApiSpec): Bindings {
 
   const classes = spec.classes.map((cls): ClassBinding => {
     const functions = cls.functions
-      .filter((fn) => (fn.impl ?? 'kotlin') === 'kotlin')
+      .filter((fn) => options.handwritten || (fn.impl ?? 'kotlin') === 'kotlin')
       .map((fn): FnBinding => {
         const where = `${cls.name}.${fn.name}`
         // An async function's callback is the binding's own (the prelude's `async` core), not an argument Kotlin reads.
@@ -477,6 +495,7 @@ export function bindings(spec: ApiSpec): Bindings {
               name: field.name,
               codec: it.kind === 'any' ? { kind: 'optional' as const, inner: it } : it,
               doc: field.doc,
+              ...(field.since ? { since: field.since } : {}),
             }
           })
         }

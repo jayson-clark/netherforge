@@ -10,7 +10,7 @@
     "severity": "error",
     "file": "buffs/bad.json",
     "message": "\"Bad Name\" isn't a stat name: lowercase letters, digits and _",
-    "path": "$.stats",
+    "path": "$.stats[\"Bad Name\"]",
     "code": "buff.stat"
   },
   {

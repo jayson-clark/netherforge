@@ -1,5 +1,9 @@
 package dev.netherforge.plugin.paper.contract
 
+import dev.netherforge.format.datapack.DatapackEntry
+import dev.netherforge.format.datapack.GameDatapack
+import dev.netherforge.format.datapack.StartupDatapack
+import dev.netherforge.format.datapack.TextJson
 import dev.netherforge.format.dimensiontype.DimensionTypeJson
 import dev.netherforge.format.project.FormatVersion
 import dev.netherforge.format.project.MapProjectSource
@@ -10,6 +14,7 @@ import dev.netherforge.plugin.paper.PaperDatapacks
 import io.papermc.paper.plugin.bootstrap.BootstrapContext
 import io.papermc.paper.plugin.bootstrap.PluginBootstrap
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Gives the contract server the biomes and dimension types its terrain suites use ([ContractBiomes]), before the worlds load:
@@ -23,7 +28,10 @@ class ContractBootstrap : PluginBootstrap {
             val format = requireNotNull(PaperDatapacks().format) { "the server says which data pack format it reads" }
             val snapshot = Projects.load(MapProjectSource(ContractBiomes.project(format)), null)
             check(snapshot.problems.isEmpty()) { "the contract biomes are valid: ${snapshot.problems}" }
-            val files = StartupDatapackFiles.build(snapshot, format, { _, _ -> "\"\"" }, mainWorld = null, readBytes = { null })
+            val json = TextJson { _, _ -> JsonPrimitive("") }
+            val files = StartupDatapack.build(snapshot, format, json, null, true, GameDatapack.NONE) { false }
+                .mapNotNull { (path, entry) -> (entry as? DatapackEntry.Text)?.let { path to it.text.encodeToByteArray() } }
+                .toMap()
             val folder = context.dataDirectory.resolve("datapack")
             StartupDatapackFiles.write(folder, files)
             event.registrar().discoverPack(folder, "nf_contract") { it.autoEnableOnServerStart(true) }

@@ -1,6 +1,6 @@
 ---
 name: plugin-capabilities
-description: What a package must declare to use (requires) and everything behind those declarations - the one Requirements check, nf.http.request with its address guard and OkHttp, streams and WebSockets, inbound web routes and OAuth logins, WebAssembly (nf.wasm: Chicory, instances, programs, limits, the read-only WASI file system, test stand-ins), server networks (nf.network: the hub on the proxy, the link, channels, requests, shared maps, presence, sending players, the local network of dev servers and tests), Vault and PlaceholderAPI, server-owner settings, and the server's half of the threat model. Read before touching apps/plugin/runtime/.../session/Requirements, .../http, .../web, .../wasm, .../network, packages/network, apps/proxy, .../interop, .../settings, or adding any new power scripts can ask for.
+description: What a package must declare to use (requires) and everything behind those declarations - the one Requirements check, nf.http.request with its address guard and ureq, streams and WebSockets, inbound web routes and OAuth logins, WebAssembly (nf.wasm: wasmtime, its own WASI, instances, programs, limits, the read-only WASI file system, test stand-ins), server networks (nf.network: the hub on the proxy, the link, channels, requests, shared maps, presence, sending players, the local network of dev servers and tests), Vault and PlaceholderAPI, server-owner settings, and the server's half of the threat model. Read before touching format's requirements, crates/runtime/src's http/, web/, wasm/, network/, interop.rs or settings.rs, packages/network, apps/proxy, or adding any new power scripts can ask for.
 ---
 
 # Plugin capabilities
@@ -10,297 +10,208 @@ Powers a package has to ask for in its `netherforge.json`, and how each is held 
 ## Declared capabilities (`requires`)
 
 A package declares what its scripts need that a package must ask for in its
-`netherforge.json`'s `requires` (format's `ProjectRequires` and
-`Requirement`: `moderation`, `db`, `http` hosts, `plugins`), and
-`session/Requirements` (a `RuntimeService`, `session.requirements`) holds every
-call to it.
+`netherforge.json`'s `requires` (format's `Requires` and `Requirement`: `moderation`, `db`, `http` hosts, `plugins`,
+`web`, `wasm`, `network`, `bots`), and the room's `Grants` (`crates/runtime/src/lib.rs`) holds every call to it.
 
-- **One check: `session.requirements.check(requirement, what)`.** It takes a
-  format `Requirement` (`Requirement.Http("discord.com")`, `Requirement.Db`,
-  `Requirement.Plugin("vault")`) or the spec's spelling (`"plugin:vault"`),
-  and `what` as the call is named in errors (`nf.http.request`,
-  `Player:ban`). It holds the package whose code is running
-  (`names.calling()`), never the project that depends on it, and refuses
-  with a `LuaApiException` naming the call, the requirement, the package and
-  what to add (`Player:ban needs moderation, which package "chat" hasn't
-declared: add "requires": { "moderation": true } to its netherforge.json`).
-  A tail call that hid the caller is held to every package (see "Packages in
-  a session").
-- **Who calls it.** The generated primitive of every function whose spec has
-  `requires` calls `marshal.requires(...)` (→ `RuntimeApi.requires` → here)
-  before reading its arguments, so a spec flag is all most functions need.
-  A function that learns more once it has its arguments checks the narrower
-  requirement itself: `nf.http.request` (W2.1) checks
-  `Requirement.Http(host)` for its URL's host and each redirect's (the spec's
-  `requires: "http"` only says some host is declared; a redirect is followed on
-  a worker, so its check is `requirements.held(what)`, bound on the main thread
-  to the calling package); `nf.db` (W2.2) needs `requires: "db"` (the generated
-  check), and a named connection also the owner's `packages` list (W2.3,
-  `RemoteDatabases.problem`); a plugin's functions (W2.4) `requires:
-"plugin:vault"`. Whether the plugin is installed is the adapter's business
-  (a load problem, W2.4), not this check's.
-- **Whoever runs the server sees the sum.** `define` takes
-  `Requirement.combined(snapshot)` (the tree's requirements, each with the
-  namespaces that declare it), `start` logs it in one line ("Requires (by its
-  packages' netherforge.json): moderation (test); http:discord.com (test,
-  chat)"), and `/nf requires` lists it. A manifest change restarts the
-  session, so it's read once per session. `RequirementsTest` is the model.
+- **One check: `Grants::check(namespace, requirement, called)`.** It takes a format `Requirement` and `called` as
+  the call is named in errors (`nf.http.request`, `Player:ban`). It holds the package whose code is running (the
+  calling scope's namespace), never the project that depends on it, and refuses naming the call, the requirement,
+  the package and what to add (`Player:ban needs moderation, which package "chat" hasn't declared: add "requires": {
+"moderation": true } to its netherforge.json`). A call no package's code makes passes only when every package
+  declares it. The session's policy (the owner's and the network's) refuses first: "…needs db, which the server's
+  policy refuses (requires.deny lists "db")".
+- **Who calls it.** The generated binding of every function whose spec has `requires` calls `Runtime::requires`
+  (→ `Grants::check`) before reading its arguments, so a spec flag is all most functions need. A function that
+  learns more once it has its arguments checks the narrower requirement itself: `nf.http.request` checks the host of
+  its URL and of each redirect (the spec's `requires: "http"` only says some host is declared; a redirect is followed
+  on a worker, held to the calling package's declaration taken on the main thread); `nf.db` needs `requires: "db"`,
+  and a named connection also the owner's `packages` list (plugin-persistence); a plugin's functions `requires:
+"plugin:vault"`. Whether the plugin is installed is `interop.rs`'s business (a load problem), not this check's.
+- **Whoever runs the server sees the sum.** The session logs it as it starts, in one line ("Requires (by its
+  packages' netherforge.json): moderation (test); http:discord.com (test, chat)"), and `/nf requires` lists it. A
+  manifest change restarts the session, so it's read once per session.
 
 ## HTTP (`nf.http.request`)
 
-`api/NfHttpImpl` checks the call on the main thread (URL, method, headers,
-body size, the host requirement, the per-package rate: `http/RequestRate`) and
-hands `http/HttpFetcher` the work on a `Workers` thread. Mistakes in the call
-are errors at the script's line; the network, the owner's limits and a
-redirect's refusal are `nil, err` (`WorkFailed`).
+`crates/runtime/src/http/api.rs` checks the call on the main thread (URL, method, headers, body size, the host
+requirement, the per-package rate: `RequestRate`) and hands `fetch.rs`'s `Fetcher` the work on a `Workers` thread.
+Mistakes in the call are errors at the script's line; the network, the owner's limits and a redirect's refusal are
+`nil, err`. The value reaches the script at a tick boundary like every async value (`pending::deliver`).
 
-- **OkHttp is the client; the guard is its `Dns`.** `HttpFetcher` holds one
-  `OkHttpClient` per session (`http/HttpClient`, a `RuntimeService` that makes
-  it on the first request and closes it in `stop`: `dispatcher.cancelAll()`,
-  the dispatcher's executor `shutdown()`, `connectionPool.evictAll()`, so a
-  reload leaves no threads or sockets). Its `Dns` (`CheckedDns`) resolves a
-  name once through the injectable `resolve`, judges every address with
-  `AddressGuard` (a name leading anywhere non-public is refused whole), and
-  returns exactly those addresses: OkHttp connects to them and never looks the
-  name up again. OkHttp doesn't call `Dns` for what it takes to be an IP in the
-  URL (its own `[\d.]+` / colon test), so `checkLiteral` judges those first,
-  for the URL and each redirect; spellings the JDK would read loosely
-  (`2130706433`, `127.1`, `0177.0.0.1`) are refused unread, never guessed at.
-  The client is built with `Proxy.NO_PROXY` (proxy environment and properties
-  never read), `followRedirects(false)` / `followSslRedirects(false)`,
-  `retryOnConnectionFailure(false)` (a POST is never sent twice), no cache, no
-  cookie jar, and one `callTimeout` per hop equal to what's left of the
-  request's single deadline. Keep-alive is on in a small pool: a pooled
-  connection is one that was checked when it was made, so a later request to
-  the same host skips the lookup (a redirect to another name always has one).
-  TLS is OkHttp's: platform trust, hostname verification, HTTP/2 by ALPN, and
-  gzip handled by OkHttp, which is why the size limit counts the decoded body.
-  Don't write HTTP by hand again, and don't hand OkHttp a name to resolve
-  itself: any other `Dns` or an `InetAddress` it can look up is a hole.
-- **The body is read through `source()` in a bounded loop**, failing past
-  `http.max-response-bytes` however its length is told (`Content-Length`,
-  chunked, a gzip bomb). Headers a script sets must be printable ASCII
-  (OkHttp's rule; `NfHttpImpl` says so at the call).
-- **Dependencies ship like cron-utils**: `implementation(libs.okhttp)` in the
-  runtime, so the adapters' shadow jar carries okhttp, okio and the Kotlin
-  stdlib it needs (one stdlib, the build's; nothing is relocated anywhere in
-  the build).
-- **Redirects are followed by the fetcher, one OkHttp call per hop** (5 at most, one timeout for all):
-  each hop gets the host requirement, the address check and a new lookup;
-  https is never downgraded to http; `Authorization`, `Cookie` and
-  `Proxy-Authorization` stay with their host; 301/302 turn a POST into a GET,
-  303 always, 307/308 repeat it.
-- **`AddressGuard`** classifies bytes: loopback, private, link-local, CGNAT
-  `100.64/10`, benchmarking, reserved and documentation ranges, `fc00::/7`,
-  `fe80::/10`, site-local, 6to4/NAT64/Teredo and IPv4-mapped IPv6 (Java hands a
-  mapped address over as the `Inet4Address` it holds, so it's judged as that).
-  Multicast, broadcast and `0.0.0.0`/`::` are never reachable. The owner's
-  `http.allow-private-addresses` (`HttpConfig`, `config.yml`) allows the rest.
-- **A rate of its own per allowance**: an `allow-private` entry's `requests-per-minute` (`PrivateAllowance.requestsPerMinute`;
-  0 none) counts that package's requests to that host and port, as the URL writes them, in `NfHttpImpl.allowanceRates`
-  instead of the general `RequestRate`; redirects aren't counted again, as before.
-- **In a script test run** (`config.testing`) `nf.http.request` never reaches the network: `NfHttpImpl.answeredInTest`
-  holds it to the declaration, the rate and `checkLiteral` (a name isn't resolved; `localhost` is loopback), then
-  `ScriptTests.answer` calls the test's `nf.test.http` handler on `async.mainThread`. No answer (nil, no handler, a
-  handler that fails) is the script's `nil, err` and is kept: `nf.test.advance` raises it at the test's line, and `run`
-  fails a test that ended with one unraised. A test has no `config.yml`: `nf.test.allow_private` (`NfTestImpl.allowPrivate`,
-  checked as `RuntimeConfig` reads an `allow-private` entry) adds a `PrivateAllowance` to `ScriptTests.privateAllowances`,
-  which `NfHttpImpl.allowances()` adds to the owner's under `config.testing` (streams and WebSockets too), cleared when
-  the test ends (`ScriptTests.stop`).
-- **One package, one private host and port** (`http.allow-private`,
-  `PrivateAllowance`): `NfHttpImpl.allowances()` takes the owner's entries for
-  `requirements.callingPackage()` (the package the host requirement is held to;
-  none for a tail call) on the main thread, and they ride with the call
-  (`fetch(call, allowances, declared)`, `ConnectionRequest.allowances`). Each
-  hop's client gets the `CheckedDns` for the allowances on that hop's port
-  (`dnsFor`, cached by the sorted host list; `reaching` for the connection
-  clients), and `checkLiteral` takes them too: an address the allowed hosts
-  stand for (a literal as written, a name through `resolve` at that moment) is
-  let through though private or this machine's own, never a `NEVER` one. The
-  `CheckedDns` instances compare by their hosts on purpose: OkHttp's pool
-  matches connections by `Address`, which includes the `Dns`, so a connection
-  made under an allowance is never handed to a call without it.
-  `HttpFetcherTest` (ports, names, redirects, the pool) and `HttpRequestTest`
-  (from Lua: the package, another package and the project) cover it.
-- Tests: `AddressGuardTest` (the ranges), `HttpFetcherTest` (OkHttp's
-  `mockwebserver3` on loopback; the injectable `resolve` and a `SocketFactory`
-  that records the address each connection was asked for and connects to the
-  mock server instead, so "public" addresses work offline; redirects, limits,
-  timeouts, closing), `HttpRequestTest` (from Lua, with `TestServer(http =
-...)`). HTTPS against a real certificate isn't tested.
+- **ureq is the client; the guard is its resolver** (`fetch.rs`'s `Guard`). ureq asks the resolver for every
+  connection it makes, an address in the URL included, so the guard resolves a name once (through the injectable
+  `resolve`), judges every address with `guard.rs` (a name leading anywhere non-public is refused whole), and hands
+  ureq exactly those addresses: there's no second lookup to rebind. The agent has no proxy (the environment's is
+  never read), no cookies, no automatic redirects, and its own pool of kept-alive connections (a pooled connection
+  is one that was judged when it was made). HTTP/1.1, rustls with the platform's trust, gzip decoded by ureq, which
+  is why the size limit counts the decoded body. Don't write HTTP by hand, and don't let anything resolve a name
+  behind the guard's back: that's the hole.
+- **A URL is read by the WHATWG rules** (the `url` crate), as a browser reads it, so `http://127.1/` is 127.0.0.1 and
+  judged as loopback. (Kotlin refused such spellings unread, because the JDK and OkHttp could each read one
+  differently; here the address judged is the one connected to, whatever the spelling.)
+- **The body is read in a bounded loop**, failing past `http.max-response-bytes` however its length is told
+  (`Content-Length`, chunked, a gzip bomb). Headers a script sets must be printable ASCII (the API says so at the
+  call).
+- **Redirects are followed by the fetcher, one ureq call per hop** (`MAX_REDIRECTS`, one timeout for all): each hop
+  gets the host requirement as the calling package's, the address check and a new lookup; https is never downgraded
+  to http; `Authorization`, `Cookie` and `Proxy-Authorization` are dropped when the host changes; 301/302 turn a POST
+  into a GET, 303 always, 307/308 repeat it.
+- **The guard** (`guard.rs`) classifies an address by its bytes: loopback, private, link-local, CGNAT `100.64/10`,
+  benchmarking, reserved and documentation ranges, `fc00::/7`, `fe80::/10`, site-local, 6to4/NAT64/Teredo, and
+  IPv4-mapped IPv6 judged as the v4 address it holds. Multicast, broadcast and `0.0.0.0`/`::` are never reachable
+  (`Kind::Never`). The owner's `http.allow-private-addresses` (`HttpConfig`, `config.yml`) allows the rest.
+- **One package, one private host and port** (`http.allow-private`, `PrivateAllowance`): the API takes the owner's
+  entries for the package whose code made the call (`allowances(namespace)`), and they ride with it. Each hop goes
+  through an agent whose guard also lets through the addresses the allowances on that hop's port stand for (a
+  literal as written, a name through `resolve` at that moment), though private or this machine's own, never a
+  `Never` one: one agent (and pool) per set of allowed hosts, so a connection made under one package's allowance is
+  never handed to a call without it.
+- **A rate of its own per allowance**: an `allow-private` entry's `requests-per-minute` (0 none) counts that
+  package's requests to that host and port in `allowance_rates` instead of the general `RequestRate`; redirects
+  aren't counted again.
+- **In a script test run** `nf.http.request` never reaches the network: `answered_in_test` holds it to the
+  declaration, the rate and the guard's judgement of a literal (a name isn't resolved; `localhost` is loopback), then
+  calls the test's `nf.test.http` handler on the main thread. No answer (nil, no handler, a handler that fails) is the
+  script's `nil, err` and is kept: `nf.test.advance` raises it at the test's line, and the runner fails a test that
+  ended with one unraised. A test has no `config.yml`: `nf.test.allow_private` adds a `PrivateAllowance` to the test's
+  allowances, which `allowances()` adds to the owner's (streams and WebSockets too), cleared when the test ends.
+- `Fetcher::close` shuts every agent down when the session stops: what's in flight fails and no socket is left open.
+- Tests: `crates/runtime/tests/http.rs` (loopback servers of its own: requests, mistakes, the guard judging the address
+  connected to, redirects, the owner's limits, streams, WebSockets, images; `addresses_are_judged_by_their_bytes` is
+  the ranges). HTTPS against a real certificate isn't tested.
 
 ## Streams and WebSockets (`nf.http.stream`, `nf.http.websocket`)
 
-`api/NfHttpImpl` checks the call as for `request` (URL scheme, credentials, headers, body, the
-host requirement; `Sec-WebSocket-*` headers and bad subprotocol names refused) and hands it to
-`http/Connections` (a `RuntimeService`, `session.connections`, registered after `http` so it stops
-first), which numbers it, files it under the opening scope and makes the `HttpStream`/`WebSocket`
-handle (key: number and URL, so `url()` answers after the end).
+The API checks the call as for `request` (URL scheme, credentials, headers, body, the host requirement;
+`Sec-WebSocket-*` headers and bad subprotocol names refused) and hands it to `http/connections.rs`, which numbers it,
+files it under the opening scope and makes the `HttpStream`/`WebSocket` handle (key: number and URL, so `url()`
+answers after the end). The module's doc has the design; in short:
 
-- **The transport only queues.** `ConnectionTransport` is `http/OkHttpConnections` on a server and
-  `http/TestConnections` in a script test run (`HttpClient(testing)`). Either talks to the main
-  thread only through the `Connection.Sink`: `opened`, `message`, `ended` (heard once), all
-  queued on the connection's `inbound`. `Connections.tick(ASYNC)` hands them to scripts in order,
-  at most `messages-per-tick` messages per connection, then checks idle (`idle-seconds`, by ticks)
-  and the first answer (`timeout-seconds`). Nothing the transport does runs Lua.
-- **Backpressure, not dropping.** `Sink.message` takes a permit of the connection's `room`
-  (`max-queued-messages`) and waits for one; the main thread releases one per message delivered.
-  A stream's reader or OkHttp's WebSocket reader thread waiting there stops reading the socket,
-  so TCP slows the far end. The test transport's `tryMessage` doesn't wait: a full queue is an
-  error at the test's line. (This replaced "close on overflow": OkHttp calls `onMessage` on its
-  reader thread, so blocking there is real backpressure for WebSockets too.)
-- **Limits end, they don't error.** Too many open (`max-per-package`, `max-total`) or the request
-  rate (shared with `request`: opening counts) makes the connection anyway and queues
-  `ended(LIMIT)` for the next tick, so a script handles every limit in `end`. A script's own
-  mistake (a message over `max-message-bytes` sent, a bad close code) is an error at its line.
-- **Bytes are counted on the wire.** `bytes-per-minute` is a per-package `ByteRate` (thread-safe
-  sliding window). Received bytes are counted under TLS by `CountingSocketFactory`'s sockets
-  (each connection's client has its own socket factory and a pool that keeps nothing, so a
-  socket is one connection's), which throw `OverByteLimit` once over, after the sink ended it
-  `"limit"`: OkHttp has no WebSocket message limit, and this is what stops a far end making the
-  server buffer an endless frame. Sent bytes are counted in `Connections.send`.
-- **Threads.** A connection holds a thread while it's open, so `OkHttpConnections` has its own
-  cached pool (also its OkHttp `Dispatcher`'s), not the runtime's `Workers` (four held streams
-  would starve every script's work), bounded by `max-total`. Its `close` cancels every WebSocket
-  (an upgraded socket's call is finished, so `Dispatcher.cancelAll` misses it), the dispatcher's
-  calls, and the threads. The `HttpFetcher` guard is reused whole: `connectionClient` is
-  `client.newBuilder()` (the checked `Dns`, no proxy, no redirects), `checkLiteral` for the URL,
-  and a stream follows redirects hop by hop through `redirected` with the bound host check, as
-  `fetch` does. WebSockets don't follow redirects (a 3xx is `"failed"`, saying so).
-- **Splitting.** `StreamSplitter` turns bytes into lines (LF, CRLF or CR), Server-Sent Events
-  (`data:` joined, `event:` → `type`, `id:` kept across events, comments and `retry:` skipped,
-  a half event at the end dropped) or decoded chunks (a UTF-8 character split across reads held
-  for the next). The same splitter reads the test transport's `receive`.
-- **Ending** (`Connections.end`): mark ended, let the far end go (`Link.close`: a WebSocket close
-  frame with the script's code, `1001` for `"unloaded"`, `1008` for `"limit"`; a stream's call
-  cancelled), drop what's queued, emit `end` while the handle still answers, then remove it and
-  `dropTarget`. A script's `close()` hears its own `end` inside the call, as `Effect:stop` does.
-- Tests: `StreamSplitterTest`; `HttpConnectionsTest` (from Lua over OkHttp to MockWebServer on
-  loopback: a chunked `MockResponseBody` the test feeds, `webSocketUpgrade`; the far end's
-  listener must answer a close (`Polite`) or MockWebServer's shutdown gives up waiting); the
-  script test runner's `ScriptTestRunnerTest` for `nf.test.connections`/`accept`/`receive`/
-  `sent`/`disconnect`.
+- **The transport only queues.** A connection holds a thread of its own while it's open (not a worker's: four held
+  streams would starve every request), which talks to the main thread only through the connection's `Sink`:
+  `opened`, `message`, `ended` (heard once), queued in order. The connections' pass each tick hands them to scripts,
+  at most `messages-per-tick` per connection, then checks idle (`idle-seconds`) and the first answer
+  (`timeout-seconds`). Nothing a transport does runs Lua. In a script test run the far end is the test's
+  (`nf.test.connections`, `accept`, `receive`, `sent`, `disconnect`).
+- **Backpressure, not dropping.** `Sink::message` takes a permit of the connection's room (`max-queued-messages`) and
+  waits for one; the main thread gives one back per message delivered. A reader waiting there stops reading the
+  socket, so TCP slows the far end. A test's far end doesn't wait: a full queue is an error at the test's line.
+- **Limits end, they don't error.** Too many open (`max-per-package`, `max-total`) or the request rate (shared with
+  `request`) makes the connection anyway and queues `ended("limit")` for the next tick, so a script handles every
+  limit in `end`. A script's own mistake (a message over `max-message-bytes` sent, a bad close code) is an error at
+  its line.
+- **Bytes are counted** per package against `bytes-per-minute`: a WebSocket's on the wire (its socket is the
+  runtime's own, under TLS), a stream's as its body is read (after ureq decodes a gzipped one). A WebSocket's message
+  and frame are capped at `max-message-bytes` too, which is what stops a far end making the server buffer an endless
+  frame.
+- **Streams** are ureq on an agent of their own per hop (no pool: a socket is one connection's), following redirects
+  as requests do; closing one shuts its agent down, which ends a read in progress. **WebSockets** are tungstenite
+  over a socket the guard chose the address of (rustls for `wss`), read with a short timeout so the same thread
+  writes what scripts send; they don't follow redirects (a 3xx is `"failed"`, saying so).
+- **Splitting** (`split.rs`): lines (LF, CRLF or a lone CR), Server-Sent Events (`data:` joined, `event:` → `type`,
+  `id:` kept across events, comments and `retry:` skipped, a half event at the end dropped) or decoded chunks (UTF-8
+  decoded leniently, a character split between reads decoded whole). The test far end's `receive` is split the same
+  way.
+- **Ending**: mark ended, let the far end go (a WebSocket close frame with the script's code, `1001` for
+  `"unloaded"`, `1008` for `"limit"`; a stream's agent shut down), drop what's queued, emit `end` while the handle
+  still answers, then remove it. A script's `close()` hears its own `end` inside the call, as `Effect:stop` does.
+  A scope's release ends its connections `"unloaded"`, and so does the session's stop.
+- Tests: `crates/runtime/tests/http.rs` (`a_stream_…`, `a_websocket_…`, `a_body_is_split_into_lines_events_or_chunks`)
+  and the script test runner's for `nf.test.connections`.
 
 ## Web routes (`nf.web`)
 
-Inbound requests, off by default (`web.enabled`; `WebConfig`). Two halves:
+Inbound requests, off by default (`web.enabled`; `WebConfig`). `crates/runtime/src/web/`'s module doc has the
+design. Two halves:
 
-- **The listener's, for the plugin's life: `web/WebGate`** (`runtime.web`). It's served on the
-  resource pack's HTTP server (`PackServer`, now four threads; `Packs.listener()` starts it even
-  when packs aren't served): `/<sha1>.zip` is the pack's, anything else goes to `PackServer.web`,
-  set at `enable` when web routes are on. On the listener's thread the gate refuses what it can
-  without the main thread (path over 2048: `414`; `requests-per-minute-per-ip`: `429`,
-  `AddressRate`, swept now and then so it can't grow with every address; `Content-Length` or the
-  read body over `max-body-bytes`: `413`, reading no further than the limit), then queues a
-  `WebCall` in a bounded queue (`max-pending`, else `503`). A `WebCall` is answered once
-  (`AtomicBoolean`) and its answer written back on the listener's threads (`PackServer.execute`),
-  never the main thread, so a slow client holds up nobody. The client's address is the
-  connection's, or `X-Forwarded-For`'s first with `trust-proxy-headers`. No TLS and no slow-client
-  timeout of its own: the docs put a reverse proxy in front.
-- **The session's: `web/WebRoutes`** (`session.web`). `tick(ASYNC)` routes at most 32 queued
-  calls a tick: by the first segment (the namespace), then the most specific matching
-  `RoutePath` (literal > `:param` > `*rest`) of that method (`HEAD` → `GET`); `404`, or `405` with
-  `Allow`. A script's route is called with `callKept(..., "web")`: a plain `Map` for the request
-  (`WebRequest` isn't a crossing shape, only a callback's parameter) and a `WebResponse` handle,
-  keyed by the pending request's number. A failed handler is reported (`handlerFailed`) and
-  answered `500`; `Absent` is `503`. Pending requests time out to `504` by ticks. Routes are
-  scope-owned; `scopeReleased`, `Route:remove` and `stop` answer what waits on them `503`. A route
-  is a script's (a `LuaFunction`) or the runtime's (`internal`, a login flow's callback): one
-  table, so a script's route and a flow's can't take the same method and path. With web routes off
-  routes are still kept (tests reach them), and every package declaring `requires.web` has the
-  warning `runtime.web-disabled`.
-- **Answers** (`api/NfWebImpl`'s `WebResponseImpl`): status 100–599; headers held to tokens and
-  printable ASCII, none the server sets; `max-response-bytes`; every answer gets
-  `X-Content-Type-Options: nosniff` and `Cache-Control: no-store` unless set; `redirect` only to
-  `http(s)://` or a path starting with one `/`, no control characters.
-- **Logins: `web/OAuthFlows`** (`session.oauth`, after `web`). Each flow has an internal route
-  `GET /<ns>/oauth/<name>/callback`. `begin` makes a 32-byte state and verifier (`SecureRandom`),
-  keeps them by state with the player and an expiry (10 minutes, at most 1000 a flow), and gives
-  the authorize URL with `code_challenge` (S256). The callback takes the state out (single use):
-  unknown is `400` with no event (forged or replayed); otherwise the code goes to the token
-  endpoint on a worker through `HttpFetcher` (the flow's `requires.http` host checked when it's
-  made, each redirect held with `requirements.held` bound then), then `complete`/`fail` on the flow
-  and an escaped HTML page. In a test run the endpoint isn't called: `nf.test.oauth_token` (or a
-  default token) answers, synchronously.
-- `nf.web.verify_signature`: HMAC (`javax.crypto.Mac`), compared with `MessageDigest.isEqual`;
-  an unreadable signature is `false`.
-- **Tests**: `RoutePathTest`; `WebRoutesTest` (real HTTP to the listener with the JDK's client,
-  ticking while it waits); the runner's `ScriptTestRunnerTest` for `nf.test.request` (routes
-  through `WebRoutes.request`, the gate's refusals included, then advancing tick by tick while the
-  answer is pending) and a whole login. The real token exchange isn't tested (it needs HTTPS with
-  a trusted certificate), as HTTPS isn't for `nf.http.request`. The conformance harness gets a
-  `WebResponse` from a `/sample` route the test requests once before the calls.
+- **The listener's: `web/gate.rs`.** It's served on the resource pack's HTTP server (`packs.rs`' `PackServer`, which
+  runs even when packs aren't served): `/<sha1>.zip` is the pack's, anything else goes to the gate while web routes
+  are on. On the listener's thread the gate refuses what it can without the main thread (path over 2048: `414`;
+  `requests-per-minute-per-ip`: `429`, swept now and then so it can't grow with every address; `Content-Length` or
+  the read body over `max-body-bytes`: `413`, reading no further than the limit), then queues the call in a bounded
+  queue (`max-pending`, else `503`). A request's own thread waits for its answer and writes it, never the main
+  thread, so a slow client holds up nobody but itself. The client's address is the connection's, or
+  `X-Forwarded-For`'s first with `trust-proxy-headers`. No TLS and no slow-client timeout of its own: the docs put a
+  reverse proxy in front.
+- **The session's: `web/mod.rs`.** Each tick routes at most `PER_TICK` (32) queued calls: by the first segment (the
+  namespace), then the most specific matching route path (`path.rs`: literal > `:param` > `*rest`) of that method
+  (`HEAD` → `GET`); `404`, or `405` with `Allow`. A script's route is called with a plain table for the request and a
+  `WebResponse` handle to answer by, then or later. A failed handler is reported and answered `500`; one whose scope
+  has stopped `503`; pending requests time out to `504` by ticks. Routes are scope-owned; a scope's release,
+  `Route:remove` and the session's stop answer what waits on them `503`. A route is a script's or the runtime's (a
+  login flow's): one table, so a script's route and a flow's can't take the same method and path. With web routes off
+  routes are still kept (tests reach them), and every package declaring `requires.web` has the warning
+  `runtime.web-disabled`.
+- **Answers** (`web/api.rs`' `WebResponse`): status 100–599; headers held to tokens and printable ASCII, none the server
+  sets; `max-response-bytes`; every answer gets `X-Content-Type-Options: nosniff` and `Cache-Control: no-store` unless
+  set; `redirect` only to `http(s)://` or a path starting with one `/`, no control characters.
+- **Logins: `web/oauth.rs`.** A flow has two routes of its own, `GET /<ns>/oauth/<name>/callback` and `POST
+.../confirm`. `begin` makes a random state and code verifier tied to the player, kept here (never in the URL but the
+  state and the verifier's S256 challenge), used once and forgotten after ten minutes (at most 1000 a flow). The
+  callback finds the login by its state (unknown is `400` with no event: forged or replayed) and **asks the browser to
+  confirm which Minecraft player it signs in as**, since the login is tied to the player who began it, not to the
+  browser that finishes it. Only once they confirm (a single-use token from that page) is the code traded for a token
+  at the flow's token endpoint, on a worker through `nf.http`'s guarded fetcher (its host held to the package's
+  `requires.http`), then `complete`/`fail` on the flow and an escaped HTML page. In a test run the endpoint isn't
+  called: `nf.test.oauth_token` (or a default token) answers.
+- `nf.web.verify_signature`: HMAC (`encoding::hmac`), compared in constant time; an unreadable signature is `false`.
+- **Tests**: `crates/runtime/tests/web.rs` (real HTTP to the listener, ticking while it waits: routing, the gate's
+  refusals, a handler answered `504`, signatures, routes off, a whole login up to its token request); the script test
+  runner's for `nf.test.request` (routed as the gate would, then advancing tick by tick while the answer is pending).
+  The real token exchange isn't tested (it needs HTTPS with a trusted certificate).
 
 ## WebAssembly (`nf.wasm`)
 
-`wasm/WasmModules` (`session.wasm`, a `RuntimeService` reloading `WasmModuleKind`) runs the project's modules on
-[Chicory](https://chicory.dev) (pure JVM: `runtime`, `wasi`, `compiler`, shaded like okhttp; the compiler's ASM is
-the server's own where it bundles one, which Paper 1.21.11 and 26.x do at the same 9.9.1).
+`crates/runtime/src/wasm/` runs the project's modules (`wasm/<id>/`) on **wasmtime** (41: the newest on Rust 1.90),
+its module docs the design. In short:
 
-- **Compiling** (`CompiledModule.compile`, on `WasmThreads.calls`) as the session defines the project and again
-  when a module reloads: parsed with validation, its imports held to WASI preview 1's functions (format's
-  `WasmImports`, so `check` and the server agree), SIMD refused (neither Chicory's compiler nor its interpreter runs
-  it; the opcode names give it away), then `MachineFactoryCompiler` (interpreter fallback for a function too big
-  for one JVM method; a `LinkageError` from an old ASM leaves the module to the interpreter with a warning).
-  `wasm.compile: false` skips the compiler. A failure is `runtime.wasm` at `module.wasm` (`problems()`; the
-  completion calls `session.problemsChanged()`), and running it fails saying why. One compile per load, shared by
-  every instance.
-- **Instances** (`CompiledModule.instantiate`): Chicory's WASI (stdin, stdout, stderr, arguments with `argv[0]` the
-  module's name, environment, the system clock, `SecureRandom`; **no directories**), with `WasmFiles` put in place of
-  every WASI function that takes a descriptor or a path: fd 3 is the module's data at `/` (`WasmData`, its files'
-  disk paths worked out once), read by positional `FileChannel` reads as the module reads, never loaded whole;
-  writing, making and removing are `EROFS`, a path climbing out is `ENOTCAPABLE`, and no host path ever reaches
-  Chicory (whose WASI checks neither rights nor `..`). Memory is `ByteArrayMemory` (half again faster than the
-  default `ByteBufferMemory` on Stockfish) capped at `max-memory-mb` through `withMemoryFactory`; `withStart(false)`,
-  because Chicory otherwise runs a command's `_start` as the instance is built: the start section runs, `_start` is
-  ours to call inside a time limit. A reactor's `_initialize` runs once.
-- **Calls** (`WasmCalls`): arguments read from the script's `args` table on the main thread like `Database`'s
-  params (integers stay `Long`, so an `i64` is exact) and checked against the export's type there (a mistake is an
-  error at the line); strings copied in with the module's `alloc`/`malloc` and freed with `dealloc`/`free` once the
-  call returns (never after a trap or a timeout: the instance closes anyway, and running its code again could only
-  fail or hide why it failed); `call_text` reads `(ptr, len)` or an `i64` packing both, freed once read. Each
-  instance's calls run one at a time on its own `SerialExecutor` (`async/`, the workers' lanes' too) over
-  `WasmThreads.calls`; a trap or a timeout closes it (`WasmInstanceRecord.Live.close`: interrupt the running call,
-  then on the lane let go of its WASI state and memory reservation; the record stays, so `module()` answers, until
-  its scope goes).
-- **Time limits** (`WasmThreads.limited`): a watchdog interrupts the calling thread past `max-call-seconds`;
-  Chicory's compiled code and interpreter check for it and throw `ChicoryInterruptedException`; the interrupt is
-  always cleared after, so a pool thread is never left interrupted. A host function's exception comes out of
-  compiled code wrapped, so a WASI exit is found in the cause chain (`exitCode`).
-- **Programs** (`WasmProgram`, `nf.wasm.start`): a thread of its own from `WasmThreads.programs` (a program blocks
-  reading its input; the pools are bounded by `max-processes-total`, held to before starting). Input is a queue of
-  lines (`ProgramInput`, one of the sealed `ProgramInputs`; `finish()` is the end of the file); output is cut into
-  lines (`LineOutput`, pieces of `max-line-bytes`, at least 4, cut between UTF-8 characters by `Utf8.wholeCharacters`
-  so no piece holds half of one) and queued, each taking a permit of `room` (`max-queued-lines`) and waiting for one:
-  **backpressure, not dropping**, as for WebSockets. `tick(ASYNC)` hands out at most `lines-per-tick` per program,
-  releasing a permit each, and ends one from its queued `Ended`. Ending from the main thread (stop, unload, limit)
-  marks it, finishes its input, interrupts its thread, frees its room, drops what's queued, emits `end` while the
-  handle answers, then removes it and `dropTarget`s.
-- **Limits** (`WasmConfig`): memory through one `WasmMemoryBudget` (each instance or program reserves
-  `max-memory-mb` while it lives, so together they can't pass `max-memory-total-mb` whatever each grows to: Chicory's
-  `MemAllocStrategy` can't refuse a growth, so the cap is per instance and the budget an upper bound); instances
-  per package (held and in flight, main thread); programs per package and in all (a refused one ends `"limit"` at
-  the next tick, as connections do); queued calls per package (`submit`, from any thread). Threads run at
-  `MIN_PRIORITY`.
-- **Scope and reload**: everything is filed under its scope and ends in `scopeReleased` (instances closed,
-  programs `"unloaded"`, stand-ins released). `resolve` records each scope that names a module; reloading a module
-  `batch.add`s those scopes' resources (their kinds come after `WasmModuleKind` in `Kinds.all`), so they restart on
-  the new one. Don't call `batch.first` there: it marks the resource reloaded and the restart never happens.
-- **Test runs**: modules really run. `settle(millis)` is what a test's tick waits on (`NetherForgeRuntime.settled`,
-  beside the workers' `idle`): no call or compile pending, and every program `quiet` (done, waiting for room, or
-  reading with nothing queued; a line just sent it hasn't woken for doesn't count), a busy one at most a second a
-  tick. `nf.test.stub_wasm` stands a test's functions in for a module: `WasmStandIns` keeps them and answers in the
-  module's place (`WasmStubCalls`, on `session.async.mainThread`), so nothing of a stand-in is on Chicory's path.
-  `WasmModules` asks `standingIn(key)` first and hands the rest over: an instance is a `WasmInstanceRecord.StandIn`
-  (the sealed record's other case is `Live`), counted against the same limits; a started program's input is a
-  `StandInInput` (no thread runs it), whose lines the stand-in's `input` answers in `tick`, and its end once the
-  input closes.
-- Tests: `WasmModulesTest` (real modules from `WasmFixtures`, WAT built by wabt's wat2wasm in the test fixtures: a
-  library, an echo program, a data reader, an invalid module, SIMD, a free that fails after a trap),
-  `WasmProgramTest` (lines and UTF-8 cuts), `ScriptTestRunnerTest` for stand-ins and their limits, the
-  conformance harness (an instance made by a module started before the harness, so the ticks it takes leave the
-  harness's connections fresh), and `WasmBenchmark` (by hand: a loop compiled and interpreted, and Stockfish's
-  `bench` from `NETHERFORGE_STOCKFISH`).
+- **Compiling** (`compiled.rs`, off the main thread on the pool, as the session starts and again when a module's files
+  change): validated, its imports held to WASI preview 1's functions (format's list, so `check` and the server
+  agree), compiled by Cranelift; `wasm.compile: false` compiles to Pulley's bytecode for wasmtime's interpreter
+  instead, and a host Cranelift can't compile for falls back to Pulley with a warning. A failure is `runtime.wasm`
+  at `module.wasm`, and running the module fails saying why. One compile per load (a `Module` and its
+  `InstancePre`), shared by every instance.
+- **WASI is written here** (`wasi.rs`), not taken from `wasmtime-wasi`: what a module gets is exactly what the
+  runtime chose, and nothing of the host's (its directories, environment, sockets) is there to be forgotten.
+  Standard streams are the instance's (nothing for a library's, the given text and capped buffers for
+  `nf.wasm.run`, a program's line queues for `nf.wasm.start`); arguments (`argv[0]` the module's name) and the
+  environment are only what the script gave; clocks are the system's, `random_get` the OS's generator;
+  `proc_exit` ends the run with its code; a blocking read or a `poll_oneoff` sleep checks the store's guard, so a
+  stopped program doesn't hang there.
+- **Files** (`files.rs`): descriptor 3 is the module's data at `/`, read-only, looked up in the module's data or not
+  there, so no host path a module writes reaches the disk: writing, making, renaming and removing are `EROFS`, a path
+  climbing out is `ENOTCAPABLE`.
+- **Calls** (`calls.rs`): arguments read from the script's `args` table on the main thread and checked against the
+  export's type there (a mistake is an error at the line). Numbers under Luau are doubles: a whole number in the safe
+  range passes for an integer, and an `i64` result outside it comes back as a string of its digits, as a database's
+  does. Strings are copied in with the module's `alloc`/`malloc` and freed with `dealloc`/`free` once the call
+  returns (never after a trap or a timeout: the instance closes anyway); text comes back from a pointer and a length,
+  freed once read. Each instance's calls run one at a time on its own `Lane` over the pool (`threads.rs`); a trap or
+  a timeout closes the instance (its memory may be half-written), and its handle still answers `module()` until its
+  scope goes.
+- **Time** (`threads.rs`): one thread ticks the engine's epoch every `EPOCH`, and every store checks its `Guard` at
+  each tick (wasmtime's epoch deadline callback): closed, or past `max-call-seconds`, its code traps there. That stops
+  compiled code and Pulley alike, and replaces Kotlin's watchdog and `Thread.interrupt`.
+- **Programs** (`program.rs`, `nf.wasm.start`): a thread each while they run (they block reading their input), bounded
+  by `max-processes-total`, held to before starting. Input is a queue of lines until closed; output is cut at line
+  ends (long lines into pieces of `max-line-bytes`, cut between UTF-8 characters) and queued, each line taking a
+  permit of the program's room (`max-queued-lines`) and waiting for one: **backpressure, not dropping**, as for
+  WebSockets. Each tick hands out at most `lines-per-tick` a program and ends one that finished. Ending from the main
+  thread (stop, unload, limit) closes its input and guard, drops what's queued, and emits `end` while the handle
+  answers.
+- **Limits** (`WasmConfig`): memory through one `Budget` (each instance or program reserves the most it may grow to,
+  `max-memory-mb`, as it starts, and gives it back when it ends, so together they can't pass `max-memory-total-mb`);
+  each store's `ResourceLimiter` holds its memory to its cap. Instances per package; programs per package and in all
+  (a refused one ends `"limit"` at the next tick, as connections do); queued calls per package.
+- **Scope and reload**: everything is filed under its scope and goes when it's released (instances closed, programs
+  `"unloaded"`). A script that ran a module restarts when the module changes (`Service::restarts`).
+- **Test runs**: modules really run. `nf.test.stub_wasm` stands a test's functions in for a module (`api.rs`'
+  `standing_in`, answered on the main thread at its next turn), counted against the same limits; nothing of a
+  stand-in is on wasmtime's path.
+- Tests: `crates/runtime/tests/wasm.rs` (real modules built from WAT: every number type, strings through memory,
+  `nf.wasm.functions`, mistakes, traps, a call past its time, programs run and started, the read-only data folder,
+  the owner's limits, memory caps, the requirement, a module that won't compile, restarts on change, and Pulley
+  running what Cranelift does).
 
 ## Networks (`nf.network`)
 
@@ -319,8 +230,9 @@ Servers behind one Velocity proxy, talking through a **hub** the proxy runs. Thr
   sending only queues (`Peer.send`), so nothing waits on a socket or the proxy while holding it; the proxy is asked
   to move a player outside the lock (`handle` returns what runs after). `HubServer` is it on TCP (a reader and a
   writer thread a connection, a bounded queue that drops a server that stops reading, a read timeout servers' pings
-  keep alive); `HubClient` is a server's end (connects, answers the challenge, reconnects with backoff, pings when
-  idle, throws away what was queued when the connection drops); `LocalLink` is a server in the same JVM, everything
+  keep alive); `HubClient` is a client's end (connects, answers the challenge, reconnects with backoff, pings when
+  idle, throws away what was queued when the connection drops: the tests' and a remote proxy's; a Paper server's is
+  the Rust runtime's `network/client.rs`, which does the same); `LocalLink` is a server in the same JVM, everything
   on the calling thread. `SharedMaps` keeps values with expiries and holds each package (a map's namespace) to
   `maxKeysPerPackage`/`maxBytesPerPackage`; `FileMapStore` saves them whole (temp file, atomic move).
 - **`apps/proxy/velocity` (`:proxy:velocity`, Java 25 like Velocity 4)**: `NetherForgeProxy` runs the hub with
@@ -365,11 +277,12 @@ Servers behind one Velocity proxy, talking through a **hub** the proxy runs. Thr
 - **Registration** (`network.register.address`, `server-name: auto` numbering `<group>-<n>`; or `HubAdmin`'s
   `POST /v1/servers`): a server not in `velocity.toml` adds itself through `HubProxy.register`, and comes off as it
   stops or after `unregister-after-seconds`.
-- **Lifecycle** (`Lifecycle`: `starting`, `ready`, `draining`, `stopping`): `nf.network.hold_ready` (a `NetworkHold`, `NetworkHoldImpl`)
+- **Lifecycle** (`Lifecycle`: `starting`, `ready`, `draining`, `stopping`): `nf.network.hold_ready` (a `NetworkHold`)
   keeps a server `starting`; draining (`set_draining`, `/nf drain`, the admin API) stops sends to it; `/nf shutdown`
   drains, moves players and stops. `HubEvents` POSTs each change to the owner's webhook, signed. `network.wait-for-hub-
-seconds` (`NetworkLink.awaitWelcome`) and `require-hub` (`ProjectSession.waitsForHub`) hold the project until the hub
-  answers; `require-project` (`Network.life`, the session's `running`) keeps a server `starting` while its project is refused.
+seconds` (`network::wait_for_hub`, the link's `await_welcome`) and `require-hub` hold the project until the hub
+  answers (the session is refused, then restarted once it comes); `require-project` (the network service's `life`: a
+  session ticking is a project running) keeps a server `starting` while its project is refused.
 - **Admin messages** (`POST /v1/players/<p>/message`): the text is MiniMessage, held by the hub to `RichText`
   (clicks `run_command`, `suggest_command`, `copy_to_clipboard`, `open_url`; hovers `show_text`; the value limit:
   400 otherwise), found by a tag scan that also looks inside a hover's text; the Velocity proxy holds the component
@@ -383,58 +296,60 @@ seconds` (`NetworkLink.awaitWelcome`) and `require-hub` (`ProjectSession.waitsFo
   (`Hub.tick`, `AdminStream.closeLocked`) and passes its asks to the group's next stream, then to the group's balancing.
 - **Moderation** (`Moderation`: the hub's own maps `netherforge:bans`/`mutes`, outside every package's limits, saved
   with the rest; reports): `nf.network.ban`/`mute`/... need the credential's `moderation` (and `requires.moderation`);
-  the proxy refuses a banned login; `RuntimeGameEvents` holds back a muted player's chat; `/nfhub disable` takes a server
+  the proxy refuses a banned login; the runtime's chat event (`events.rs`) holds back a muted player's chat; `/nfhub disable` takes a server
   or group off. The proxy writes moderation, credential and admin changes to `AuditLog` (`audit.log`).
-- **Metrics** (`metrics/ServerMetrics`, `metrics:` in `config.yml`, and the hub's `metrics.port`, both through
-  `Prometheus`): Prometheus's text format at `/metrics`, off without a port. The proxy plugin's `ProxyMetrics`
+- **Metrics** (`crates/runtime/src/metrics.rs`, `metrics:` in `config.yml`, gathered on the main thread once a second
+  and served from a thread of its own; and the hub's `metrics.port`, through `Prometheus`): Prometheus's text format at `/metrics`, off without a port. The proxy plugin's `ProxyMetrics`
   (logins and refusals by reason, moves and failures, its link to a remote hub, labelled with `remote.name`) is served
   on the same port whether or not it runs the hub, the hub's appended when it does.
-- **The control endpoint's worlds** (`Control`): `/save` and `/resume` take a `world` (its own pause in `worldPauses`,
-  kept apart from the whole server's `pausedUntil`: a world saves again only when neither holds it; an unload ends it),
-  `/worlds/create` is `createWorld` (`Wrong` → 400 for a terrain or option that isn't one, `Refused` → 409, `Missing`
-  → 404), and the snapshot keeps players by UUID with their world (`player_world` when it changes) and each world's
-  players and `empty_seconds` (`worldEmptySince`).
-- **Outside the network but beside it**: `control/LocalHttp` (`Control`), a Unix socket or loopback port with a token
-  file, for whoever runs the server (`/state` with `running` and `refused` from `ProjectSession.refused`, `last_tick`/`tick_ms` kept every tick in volatiles and read off the
-  main thread, `/healthz` without a token, a watchdog thread's `stalled` after `stall-seconds`, `/events`, `/drain`, `/shutdown`, `/save` with pause, `/resume`,
-  `/worlds/load|unload`); `policy.json` (format's `Policy`, `runtime.policy`, also sent by the hub as `policy.<role>`)
-  allows and denies requirement kinds and lowers limits (`RuntimeConfig.under(policy)`); bundles are signed
-  (`BundleSignatures`, `bundles.require-signature`/`trusted-keys`) and fetched by URL and hash (`BundleFetch`); packs
-  can live in S3-compatible storage (`pack/PackStorage`) and aren't sent again to a player who has them
-  (`PackLoaded`, `keepsPacks`); a bundle may carry its pack, built (`BundleManifest.resourcePack`, `Packs.bundled`).
+- **The control endpoint's worlds** (`crates/runtime/src/control.rs`): `/save` and `/resume` take a `world` (its own
+  pause, kept apart from the whole server's: a world saves again only when neither holds it; an unload ends it),
+  `/worlds/create` makes a managed world (400 for a terrain or option that isn't one, 409 refused, 404 missing), and
+  the snapshot keeps players by UUID with their world (`player_world` when it changes) and each world's players and
+  `empty_seconds`.
+- **Outside the network but beside it**: the control endpoint (`control.rs`), a Unix socket or loopback port with a
+  token file, for whoever runs the server (`/state` with `running` and `refused`, `last_tick`/`tick_ms` kept every tick
+  and read off the main thread, `/healthz` without a token, a watchdog thread's `stalled` after `stall-seconds`,
+  `/events`, `/drain`, `/shutdown`, `/save` with pause, `/resume`, `/worlds/load|unload`); `policy.json` (format's
+  `Policy`, `runtime.policy`, also sent by the hub as `policy.<role>`) allows and denies requirement kinds and lowers
+  limits (`limits_under_policy`, `config.rs`); bundles are signed (`bundles.require-signature`/`trusted-keys`,
+  `project_files.rs`) and fetched by URL and hash (`bundle_fetch.rs`); packs can live in S3-compatible storage
+  (`pack_storage.rs`) and aren't sent again to a player who has them; a bundle may carry its pack, built.
 - **The editor's dev networks**: a dev server started with `-Dnetherforge.network.hub` (and `.server`, `.group`,
   `.capacity`, `.credential`, and the secret in `NETHERFORGE_NETWORK_SECRET`, never on the command line) is in that
-  network whatever `config.yml` says; the owner's limits stay (`RuntimeConfig.devNetwork`). A server whose dev role
+  network whatever `config.yml` says; the owner's limits stay (`config.rs`). A server whose dev role
   isn't `trusted` joins with a `dev-<name>` credential the editor writes to the proxy's `credentials.properties`. The editor runs the proxy and the servers (tauri-backend's "Dev
   networks"). A remote link's reader interrupted while it queues (the link stopping) drops what it was saying.
-- **The runtime's `network/`**: `NetworkLink` (`runtime.network`, the plugin's life: a reload doesn't reconnect) is
-  the link and what the hub said (presence, servers, arrivals), applied on the main thread as it's drained. Its
-  `mode`: `REMOTE` (`network.enabled`, a `HubClient`; its reader waits for room past `max-queued-messages`, which
-  stops it reading the socket: backpressure, not dropping), `LOCAL` (a dev server not in a network, named `dev`, and a
-  script test run, `test`: a `Hub` in the JVM behind a `LocalProxy` whose players are this server's own, joined and
-  quit through the session's hooks; a test's other servers are `TestPeer`s on the same hub), or `OFF` (a production
-  server not in one: the warning `runtime.network-disabled` on each declaring package). A local link connects as it
-  starts, so its state is there before the first tick. Ids for requests, writes and sends are one sequence for the
-  plugin's life, so an old session's answer never completes a new one's wait. `Network` (`session.network`) drains
-  in `ASYNC` (at most `messages-per-tick`), raises the events, answers requests (`event.reply`, read back as JSON by
-  `LuaCodecs.DATA`), keeps each map's copy (`Mirror`: a snapshot when it starts listening, then every change), times
-  out what waits, delivers arrivals the tick after the player joined, and tells the hub what it listens to whenever a
-  handler count changes (`Scripts.counting`) or a map is first got. A lost connection fails every wait.
-- **Names**: a channel's or map's full name is `namespace:name` (`Network.resolve`: bare is the caller's package,
+- **The runtime's `network/`** (`crates/runtime/src/network/`, its module doc the map): the link (`link.rs`, the
+  plugin's life: a reload doesn't reconnect) and what the hub said (presence, servers, arrivals), applied on the main
+  thread as it's drained. It's remote (`client.rs`: TCP to the proxy's hub on threads of its own, dialled again with
+  a backoff; what it hears queued for the main thread with backpressure past `max-queued-messages`), local
+  (`local.rs`: a dev server not in a network, named `dev`, and a script test run, `test`: the hub's rules for one
+  process, frame for frame and word for word where a script sees them, this server's players the proxy's; a test's
+  other servers on the same stand-in), or off (a production server not in one: the warning
+  `runtime.network-disabled` on each declaring package). **The hub stays Kotlin** (`packages/network`), so
+  `protocol.rs` writes its frames byte for byte as kotlinx would and `seal.rs` makes the proof and seals lines exactly
+  as `Auth` and `Channel` do (`packages/network/testdata/session.json` holds both sides to it). Ids for requests,
+  writes and sends are one sequence for the plugin's life, so an old session's answer never completes a new one's
+  wait. The session's side (`service.rs`) drains at most `messages-per-tick` a tick, raises the events, answers
+  requests (`event.reply`), keeps each map's copy (a snapshot when it starts listening, then every change), times out
+  what waits, delivers arrivals the tick after the player joined, and tells the hub what it listens to whenever that
+  changes. A lost connection fails every wait.
+- **Names**: a channel's or map's full name is `namespace:name` (bare is the caller's package,
   `ns:name` only for its own or a package it depends on), so packages never see each other's otherwise. Handles are
   keyed by the full name and spelled back bare for their own package.
-- **Limits**: the server's `network:` section (`NetworkConfig`: per-package `messages-per-minute` through the same
+- **Limits**: the server's `network:` section (`config.rs`: per-package `messages-per-minute` through the same
   `RequestRate` as HTTP; past it `publish`/`set` are `false` and waits fail) and the hub's `hub.properties`
   (`NetworkLimits`: value size, which a server checks too, at the script's line, from the welcome's
   `maxValueBytes`; maps per package; how long the hub routes a request; how far behind a server may fall).
 - **Tests**: `HubTest` (the hub through local links and once over TCP: handshake and refusals, relaying, requests and
   their failures, maps with expiry, limits and saving, presence and sending), `HubSettingsTest`, `CredentialsTest`,
   `GroupsTest`, `RegistrationTest`, `LifecycleTest`, `AdminApiTest`, `RemoteProxyTest`, `ModerationTest`, `ChannelTest`
-  (all `:network`); `NetworkTest` (a hub on loopback and two `TestServer`s with `network = NetworkConfig(...)`: every
-  part from scripts, a lost hub, mistakes, the requirement, `/nf network`), `WaitForHubTest`, `ModerationNetworkTest`,
-  `PackSharingTest`; and the runner's `ScriptTestRunnerTest` for `nf.test.network_*` (`network_server` with `state`
-  and `accepting`, `network_status`, `network_role`, `network_reports`). Velocity, S3 and PostgreSQL themselves aren't
-  run in tests.
+  (all `:network`, Kotlin); `crates/runtime/tests/network.rs` (the recorded sessions line for line, sealing, a dev
+  server's network, a test's other servers, presence and sends, holds and draining, mistakes, no network, the
+  requirement, maps and reloads, a hub over TCP sealed, refusals and a config that can't join, moderation, waiting
+  for the hub and its policy); and the script test runner's for `nf.test.network_*`. Velocity, S3 and PostgreSQL
+  themselves aren't run in tests.
 
 ## Plugin interop (Vault and PlaceholderAPI)
 
@@ -443,48 +358,33 @@ seconds` (`NetworkLink.awaitWelcome`) and `require-hub` (`ProjectSession.waitsFo
 `requires: "plugin:placeholderapi"`). There is no general "call another
 plugin": each plugin gets typed functions, and the runtime owns the types.
 
-- **Platform** (`platform/Interop.kt`): `plugins: PluginOps`
-  (`isEnabled(name)`, lowercase names as a package declares them),
-  `economy(): EconomyOps?` (null until Vault is enabled **and** an economy has
-  registered with it: looked up at every call, never kept) and
-  `placeholders: PlaceholderOps` (`parse`, `register(namespace, resolver)`,
-  `isRegistered`, `unregister`). Vault's and PlaceholderAPI's classes appear
-  only in paper-common's `PaperInterop.kt` (compile-only dependencies in
-  `libs.versions.toml`; each adapter's `paperCommon` source set gets them too).
-  Both are soft dependencies in `paper-plugin.yml` (`load: BEFORE`,
-  `required: false`, so they enable first when installed and a script's body
-  can register placeholders); nothing in the adapter names one's classes
-  unless `PaperPlugins.isEnabled` said so, so the JVM never loads a class of a
-  missing plugin (`PaperPlatform.placeholders` is `lazy` for that reason).
-- **Presence is never decided once.** `interop/Plugins` (a service,
-  `session.plugins`) keeps the declared plugins (from `Requirement.combined`)
-  and works out which are missing: at `start`, then again on the first tick
-  and on any tick after `PlatformEvents.pluginsChanged()` (the adapter calls it
-  for `PluginEnableEvent`, `PluginDisableEvent`, `ServiceRegisterEvent`,
-  `ServiceUnregisterEvent`; the state in the middle of an event isn't final, so
-  the service only sets a flag and looks in `TickPhase.UPKEEP`). A missing
-  plugin is the problem `runtime.plugin-missing` (error) on each declaring
-  package's manifest, at `$.requires.plugins`, cleared when it enables. A call
-  checks again (`Plugins.require`) and fails with `nf.economy.balance needs the
-plugin "vault", which isn't enabled on this server`, or, for Vault without
-  an economy, says no economy plugin has registered. The generated binding's
-  `Requirements.check` (declared?) runs first.
+- **Platform** (`:plugin:platform`'s `Interop.kt`, the spec's source; `netherforge_platform` in Rust): `plugins:
+PluginOps` (`is_enabled(name)`, lowercase names as a package declares them), `economy(): EconomyOps?` (none until
+  Vault is enabled **and** an economy has registered with it: looked up at every call, never kept) and
+  `placeholders: PlaceholderOps` (`parse`, `register(namespace, resolver)`, `is_registered`, `unregister`). Vault's
+  and PlaceholderAPI's classes appear only in paper-common's `PaperInterop.kt` (compile-only dependencies in
+  `libs.versions.toml`; each adapter's `paperCommon` source set gets them too). Both are soft dependencies in
+  `paper-plugin.yml` (`load: BEFORE`, `required: false`, so they enable first when installed and a script's body can
+  register placeholders); nothing in the adapter names one's classes unless `PaperPlugins.isEnabled` said so, so the
+  JVM never loads a class of a missing plugin (`PaperPlatform.placeholders` is `lazy` for that reason).
+- **Presence is never decided once.** `interop.rs`' `Plugins` (a session service) keeps the declared plugins and
+  works out which are missing: as the session starts, then again on the first tick and on any tick after
+  `PlatformEvents::plugins_changed` (the adapter calls it for `PluginEnableEvent`, `PluginDisableEvent`,
+  `ServiceRegisterEvent`, `ServiceUnregisterEvent`; the state in the middle of an event isn't final, so the service
+  only sets a flag and looks at the next tick). A missing plugin is the problem `runtime.plugin-missing` (error) on
+  each declaring package's manifest, at `$.requires.plugins`, cleared when it enables. A call checks again and fails
+  with `nf.economy.balance needs the plugin "vault", which isn't enabled on this server`, or, for Vault without an
+  economy, says no economy plugin has registered. The generated binding's requirement check (declared?) runs first.
 - **Economy**: `deposit`/`withdraw` return the new balance, `nil` when the
   economy refused (no account, not enough); an amount that isn't positive and
   finite is an error. Vault runs on the main thread, like every script.
-- **Placeholders** (`interop/Placeholders`, a service): one PlaceholderAPI
-  expansion per namespace (`[a-z][a-z0-9]{0,31}`: PlaceholderAPI ends it at the
-  first `_`), owned by the registering script's scope: `scopeReleased` and
-  `stop` unregister it and unref the callback. **Threads**: PlaceholderAPI asks
-  from any thread (async chat, scoreboard plugins) and the Lua state is the main
-  thread's alone, so the resolver runs the callback only on the main thread
-  (remembered from the first `register`, which is always a script's call) and
-  keeps its answer per player and key; off the main thread it returns that last
-  answer (null before there is one) and touches no Lua. A callback asked for
-  its own placeholder from inside itself (through `parse`) is answered null.
-  After a plugin change, expansions PlaceholderAPI forgot (it reloaded or
-  enabled again) are registered again. A callback's error is reported as any
-  handler's (rate limited, file and line) and answers null.
+- **Placeholders** (`interop.rs`' `Placeholders`, a service): one PlaceholderAPI expansion per namespace
+  (`[a-z][a-z0-9]{0,31}`: PlaceholderAPI ends it at the first `_`), owned by the registering script's scope: its
+  release and the session's stop unregister it. **Threads**: PlaceholderAPI asks from any thread (async chat,
+  scoreboard plugins) and Luau is the main thread's alone. The Platform takes the resolver as an `Rc`, so the runtime
+  only ever answers on the main thread; the adapter's glue answers other threads from what the resolver last gave
+  per player and key (none before there is one). A callback asked for its own placeholder from inside itself
+  (through `parse`) is answered none. After a plugin change, expansions PlaceholderAPI forgot are registered again.
 - **Tests**: `InteropTest` against `FakePlatform` (`plugins.enable/disable`,
   `vault.register()`, `placeholders.request(...)` which a test can call from
   another thread); each fake change calls `pluginsChanged()` like the adapter.
@@ -510,23 +410,21 @@ sends).
 
 **Boundaries, and what each enforces:**
 
-- **The Lua sandbox** (plugin-sandbox skill, "The sandbox"): no `io`, `os`, `debug`,
-  `package`, `load` of anything but the project's text, raw `java`; budget,
-  time and memory limits; the library's caps; no `__gc`. Scripts reach the
-  server only through the API, as handles (keys, never Java objects) and
-  primitives they can't see.
-- **Packages** (`PackageNames`, `Modules.checkExported`): a script names
+- **The Luau sandbox** (plugin-sandbox skill, "The sandbox"): no `io`, `os`,
+  `debug`, `package`, `load` of anything but the project's text; budget, time and memory limits; the library's caps.
+  Scripts reach the server only through the API, as handles (keys, never Rust or Java objects).
+- **Packages** (the session's package names, `Modules::check_exported`): a script names
   only its own package's resources and what its dependencies export;
   `require` across packages only to exports; `nf.data` and settings per
   namespace.
-- **Declared capabilities** (`Requirements`, above): what a package must ask
+- **Declared capabilities** (`Grants`, above): what a package must ask
   for, held to the package whose code runs; the owner sees the sum at load
   and in `/nf requires`. New powers over the server, the network, storage or
   other plugins go behind a requirement, checked here.
 - **Files**: `nf.files` is one sandboxed folder per server
-  (`ScriptFiles`); a production server runs a bundle whose packages are
+  (`files.rs`' `ScriptFiles`); a production server runs a bundle whose packages are
   hashed (`runtime.bundle-hash`) and never resolves dependencies itself. The
-  owner's own packages (`packages.provided`, `ProjectFiles`) replace any copy
+  owner's own packages (`packages.provided`, `project_files.rs`) replace any copy
   a project brings, and a bundle carrying one is refused
   (`runtime.provided-package`), so the code given an owner's allowance is the
   owner's.
@@ -545,7 +443,7 @@ sends).
   large a message and how long idle (`http.connections`); the owner's proxy settings never used.
 - **WebAssembly** (`nf.wasm`, see "WebAssembly" above): behind `requires.wasm`; a module imports WASI preview 1
   and nothing else (no host function reaches the server), its only files are its own data, read-only, through
-  `WasmFiles` (never a host path); off the main thread on bounded threads at the lowest priority, its memory capped
+  `wasm/files.rs` (never a host path); off the main thread on bounded threads, its memory capped
   per instance and in all, each call held to a time limit, counts per package; traps and timeouts close the
   instance.
 - **Networks** (`nf.network`, see "Networks" above): behind `requires.network`; a server joins only with the hub's
@@ -566,16 +464,12 @@ sends).
 
 ## Server-owner settings
 
-`settings/OwnerSettings` (a `RuntimeService`, `session.settings`) holds each
-package's declared settings and the owner's values from
-`<plugin folder>/settings/<namespace>.json` (format's `SettingValues`). A
-change (`set`, the bridge's `set_setting`, `/nf settings set|reset`, the dialog
-`SettingsDialog` that `/nf settings` opens for a player, or `/nf settings
-reload` after editing the file) is written to the file, then delivered:
-`Scripts.emitTo` gives `setting_changed` to the package's scripts that listen;
-every other scope of it that read a changed setting through `nf.config` (reads
-are remembered per scope) is restarted by reloading its resource; a full
-reload restarts everything anyway. Values that don't fit are a problem, never
-used, never written over; an unreadable file is left alone. Every change also
-fires `settings_changed` on the bridge. `SettingsTest` is the model (the
-fake's files); `SettingsScenario` runs it on real servers.
+`crates/runtime/src/settings.rs` holds each package's declared settings and the owner's values from `<plugin
+folder>/settings/<namespace>.json` (format's `read_values`/`write_values`). A change (`Session::set_setting`,
+`set_setting_text`, `reload_settings`: the bridge's `set_setting`, `/nf settings set|reset`, the dialog `/nf
+settings` opens for a player, or `/nf settings reload` after editing the file) is written to the file at once, then
+delivered: `setting_changed` to the package's scripts that listen (only that package's); every other scope of it that
+read a changed setting through `nf.config` (reads are remembered per scope) is restarted by reloading its resource; a
+full reload reads the files again. Values that don't fit are a problem, never used, never written over; an unreadable
+file is left alone. Every change also fires `settings_changed` on the bridge. `crates/runtime/tests/settings.rs` is
+the model; `SettingsScenario` runs it on real servers.

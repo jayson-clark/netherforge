@@ -38,6 +38,8 @@ dunce = "1"
 walkdir = "2.5"
 percent-encoding = "2.3"
 png = "0.18"
+# What a project file means, and map colours: one definition, shared with the runtime.
+netherforge-format = { path = "../../../crates/format", features = ["specta", "bridge-auth"] }
 getrandom = "0.4"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }

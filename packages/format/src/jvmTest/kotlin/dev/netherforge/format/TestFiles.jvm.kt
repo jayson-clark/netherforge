@@ -29,6 +29,8 @@ actual object TestFiles {
 
     actual fun sha256OfText(text: String): String = hex(text.encodeToByteArray())
 
+    actual fun sha256OfBytes(bytes: ByteArray): String = hex(bytes)
+
     private fun hex(bytes: ByteArray) = java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") {
         "%02x".format(it)
     }

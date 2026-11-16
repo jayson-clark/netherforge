@@ -213,11 +213,16 @@ data class GameDataBundle(
     val particles: Map<String, ParticleDataKind> = emptyMap(),
     /** Each map colour by its index, `0xAARRGGBB` (see [GameData.mapColors]). */
     override val mapColors: List<Int>? = null,
+    /** Each item that takes damage → how much it takes before it breaks (the live server's; empty in an older bundle). */
+    val durability: Map<String, Int> = emptyMap(),
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault
     val schema: Int = SCHEMA
 ) : GameData {
     override val minecraftVersion: String get() = minecraft
+
+    /** Unknown (null) in a bundle that says no item's durability; 0 for an item it doesn't list. */
+    override fun itemDurability(id: String): Int? = if (durability.isEmpty()) null else durability[id] ?: 0
 
     /** Each registry's ids as a set, made when first asked for. */
     private val registrySets = HashMap<String, Set<String>>()

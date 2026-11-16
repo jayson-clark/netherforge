@@ -1,0 +1,37 @@
+# The Rust runtime's crates (see the rust-runtime skill). The editor's backend
+# (apps/editor/src-tauri) is its own workspace for now.
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+exclude = ["apps/editor/src-tauri"]
+
+[workspace.package]
+edition = "2024"
+license = "Apache-2.0"
+rust-version = "1.90"
+
+[workspace.dependencies]
+mlua = { version = "0.12", features = ["luau"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde = { version = "1", features = ["derive"] }
+serde_path_to_error = "0.1"
+regex = "1"
+schemars = "1"
+sha2 = "0.10"
+indexmap = { version = "2", features = ["serde"] }
+getrandom = "0.4"
+# Pinned exactly, as tauri-specta (the editor) asks while specta 2 is a release candidate.
+specta = { version = "=2.0.0-rc.25", features = ["derive", "indexmap"] }
+specta-typescript = "0.0.12"
+
+# The library the release workflow ships in the plugin jar: whole-program optimized, its symbols stripped (macOS's
+# `strip` leaves a dylib that won't load, so the workflow turns this off there and runs `strip -x` after). Its links
+# take minutes, so a local jar's library is a plain release build.
+[profile.dist]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

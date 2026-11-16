@@ -383,7 +383,7 @@ export const FUNCTION_GROUPS: Record<string, Group[]> = {
       'time_of_day set_time_of_day is_day is_night day_count moon_phase weather set_weather sky set_sky clear_sky',
     ),
     group('Blocks', 'block blocks set_block fill_blocks fill_gradually flood highest_block'),
-    group('Chunks and biomes', 'is_chunk_loaded load_chunk locate_biome'),
+    group('Chunks and biomes', 'is_chunk_loaded load_chunk hold_chunk release_chunk locate_biome'),
     group('Entities', 'players centities entities spawn_entity spawn_item'),
     group('Particles, sounds and explosions', 'spawn_particle play_sound explode strike_lightning'),
     group('Raycasts and overlaps', 'raycast sweep overlap_box overlap_sphere overlap_cone nearest'),

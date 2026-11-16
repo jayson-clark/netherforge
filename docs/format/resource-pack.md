@@ -204,8 +204,8 @@ under `textures/`. A face naming a texture variable the model doesn't give
 `parent`, which may give it.
 
 **What the game takes**, checked as you save (`resource_pack.model`,
-`resource_pack.model-bounds`), the same on every supported version (1.21.11
-and every 26.x):
+`resource_pack.model-bounds`), the same on every supported version (every
+26.x):
 
 - An element's `from` and `to` are three numbers each, in sixteenths of a
   block, every one from **-16 to 32**: a model fits within a box three blocks
@@ -306,8 +306,8 @@ In the built resource pack, the look `ruby` of the resource pack `ui` is
 each layer's texture is copied to
 `assets/<namespace>/textures/entity/equipment/<layer>/ui/ruby.png`
 (`humanoid`, `humanoid_leggings`, `wings`, `horse_body`, `wolf_body`). The
-equipment asset format is the same on every supported Minecraft version (the
-last 1.21.x and 26.x).
+equipment asset format is the same on every supported Minecraft version (every
+26.x).
 
 ## Sounds
 

@@ -10,7 +10,9 @@ plugins {
 }
 
 dependencies {
-    api(project(":plugin:runtime"))
+    api(project(":plugin:platform"))
+    // The start-up datapack the fake server starts with is the Rust runtime's, as on Paper.
+    api(project(":plugin:ffi"))
     // A bot's dialog inputs arrive as JSON values (format's bridge types).
     implementation(libs.serialization.json)
 }

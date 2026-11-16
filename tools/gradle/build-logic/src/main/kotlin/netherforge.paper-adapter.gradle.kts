@@ -37,18 +37,6 @@ adapter.serverBuild.convention(
     }
 )
 
-/**
- * The Java this version's server needs: 21 up to 1.21.x, 25 from 26.1. The
- * adapter's own code targets it (its server's classes need it anyway); what
- * it shares with every version stays at 21 (netherforge.kotlin-jvm).
- */
-val java = if (minecraft.substringBefore('.').toInt() >= 26) 25 else 21
-kotlin.compilerOptions {
-    jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(java.toString()))
-    freeCompilerArgs.set(freeCompilerArgs.get().filterNot { it.startsWith("-Xjdk-release=") } + "-Xjdk-release=$java")
-}
-tasks.withType<JavaCompile>().configureEach { options.release.set(java) }
-
 /** The server code every adapter shares. */
 val internals = repoRoot.resolve("apps/plugin/paper-internals/src")
 
@@ -83,6 +71,7 @@ dependencies {
     "paperCommonCompileOnly"(rootProject.extensions.getByType<VersionCatalogsExtension>().named("libs").findLibrary("placeholderapi").get())
     // Paper's API and the server, Mojang-named; the server brings its own Kotlin-free libraries.
     addProvider("paperweightDevelopmentBundle", adapter.paper.map { "io.papermc.paper:dev-bundle:$it" })
+    // The adapter, and through it the Rust runtime (:plugin:ffi).
     "implementation"(project(":plugin:paper-common"))
     // The bots read and write the bridge's JSON; the plugin jar has kotlinx.serialization already (format's).
     "compileOnly"(rootProject.extensions.getByType<VersionCatalogsExtension>().named("libs").findLibrary("serialization-json").get())

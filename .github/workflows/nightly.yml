@@ -51,8 +51,6 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
-        with:
-          rust: 'false'
       - name: The pinned Paper build
         id: paper
         env:
@@ -142,7 +140,7 @@ jobs:
     permissions:
       contents: read
     # PostgreSQL, and PgBouncer in front of it in transaction mode: the pooler NetherForge's own databases
-    # (store/OwnDatabase.kt) must stay correct behind. PgBouncerOwnDatabaseTest is skipped without them.
+    # (crates/runtime/src/remote_db.rs) must stay correct behind. The server tests are skipped without them.
     services:
       postgres:
         image: postgres:17@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
@@ -170,19 +168,12 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
-        with:
-          rust: 'false'
       - name: Own databases through PgBouncer
         env:
-          NETHERFORGE_TEST_PGBOUNCER: jdbc:postgresql://localhost:6432/game?user=nf&password=secret
-          NETHERFORGE_TEST_POSTGRES: jdbc:postgresql://localhost:5432/game?user=nf&password=secret
-        run: node tools/gradle.mjs :plugin:runtime:test --tests 'dev.netherforge.plugin.store.PgBouncerOwnDatabaseTest'
-      - name: Test counts
-        if: success() || failure()
-        uses: ./.github/actions/junit-summary
-        with:
-          title: Own databases behind PgBouncer
-          path: apps/plugin/runtime/build/test-results/test
+          # host:port:user:database, the password apart.
+          NETHERFORGE_TEST_POSTGRES: localhost:6432:nf:game
+          NETHERFORGE_TEST_POSTGRES_PASSWORD: secret
+        run: cargo test -p netherforge-runtime --test databases -- --test-threads 1
 
   report:
     needs: [integration, editor, pgbouncer]

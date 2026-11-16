@@ -212,7 +212,7 @@ export const commandShapes: LuaClass[] = [
       {
         name: 'complete',
         type: '(fun(event: CommandEvent, partial: string): string[])?',
-        doc: "Tab completion of its own, instead of what its type offers. Gets the event so far (`event.arguments` holds the arguments before this one) and what has been typed of this argument; returns the suggestions. NetherForge keeps those starting with `partial`. Runs in the module's scope, within its instruction budget, every time a player's client asks, so keep it cheap.",
+        doc: "Tab completion of its own, instead of what its type offers. Gets the event so far (`event.arguments` holds the arguments before this one) and what has been typed of this argument; returns the suggestions. NetherForge keeps those starting with `partial`. Runs in the module's scope, within its budget, every time a player's client asks, so keep it cheap.",
       },
     ],
   ),

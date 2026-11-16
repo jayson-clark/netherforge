@@ -1,147 +1,103 @@
-//! The parts of the dev bridge protocol (`packages/format/.../bridge/Bridge.kt`,
-//! JSON-RPC 2.0 over NDJSON) the backend reads itself: the plugin's `hello`
-//! and `authenticate` requests, to prove the token both ways (format's
-//! `BridgeAuth` makes the same proofs) and check its protocol version, and the
-//! answers to the backend's own requests (ids `"backend:<n>"`, so they never
-//! meet the UI's numbers). Everything else passes through as text: the UI
-//! speaks JSON-RPC itself (vscode-jsonrpc), typed by format's generated
-//! `BridgeRequests` and `BridgeEvents`.
-//!
-//! Hand-written rather than a JSON-RPC crate: the backend relays frames and
-//! reads two shapes, which is a few serde structs, not a client or server.
+//! The parts of the dev bridge protocol the backend reads itself, on format's
+//! definition of it (`netherforge_format::bridge`): the plugin's `hello` and
+//! `authenticate` requests, to prove the token both ways (format's `auth`) and
+//! check its protocol version, and the answers to the backend's own requests
+//! (ids `"backend:<n>"`, so they never meet the UI's numbers). Everything else
+//! passes through as text: the UI speaks JSON-RPC itself (vscode-jsonrpc),
+//! typed by the bridge's generated `BridgeRequests` and `BridgeEvents`.
 
-use serde::Deserialize;
+use netherforge_format::bridge::rpc::{self, Frame, Message};
+use netherforge_format::bridge::{self, Authenticate, ExportGameData, Hello, HelloResult, Method};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
+
+pub use netherforge_format::bridge::HelloParams;
+pub use netherforge_format::bridge::auth::{editor_proof, is_nonce, nonce, plugin_proof};
 
 use crate::error::{Error, ErrorCode, Result};
 
-/// format's `Bridge.PROTOCOL`: the editor refuses a plugin of another.
-/// `session.ndjson`'s first hello is this version (tested on both sides).
-pub const PROTOCOL: u64 = 2;
+/// The protocol the editor speaks: it refuses a plugin of another.
+pub const PROTOCOL: i32 = bridge::PROTOCOL;
 
-/// format's `Bridge.PROTOCOL_MISMATCH`, what a refused hello is answered with.
-pub const PROTOCOL_MISMATCH: i64 = -32001;
+/// What a refused hello is answered with.
+pub const PROTOCOL_MISMATCH: i64 = bridge::PROTOCOL_MISMATCH;
 
-/// JSON-RPC's method-not-found: the plugin doesn't have the method (an
-/// extension it lacks).
-pub const METHOD_NOT_FOUND: i64 = -32601;
+/// JSON-RPC's method-not-found: the plugin doesn't have the method (an extension it lacks).
+pub const METHOD_NOT_FOUND: i64 = rpc::METHOD_NOT_FOUND;
 
 /// The request that exports the server's game data; the backend sends it
 /// itself after a hello, and gives it longer to answer.
-pub const EXPORT_GAME_DATA: &str = "export_game_data";
+pub const EXPORT_GAME_DATA: &str = ExportGameData::NAME;
 
 const BACKEND_ID: &str = "backend:";
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Hello {
-    /// The plugin's nonce for this connection: what the editor's proof covers.
-    /// The token itself never crosses.
-    #[serde(default)]
-    pub nonce: String,
-    /// Missing reads as 0, which no editor speaks.
-    #[serde(default)]
-    pub protocol: u64,
-    pub plugin_version: String,
-    pub minecraft: String,
-    pub project: String,
+/// The one request a line is, if it is one.
+fn request(line: &str, method: &str) -> Option<(Value, Option<Value>)> {
+    match rpc::decode(line) {
+        Frame::Single(Message::Request {
+            id,
+            method: m,
+            params,
+        }) if m == method => Some((id, params)),
+        _ => None,
+    }
 }
 
-#[derive(Deserialize)]
-struct HelloRequest {
-    jsonrpc: String,
-    id: Value,
-    method: String,
-    params: Hello,
-}
-
-/// A connection's first frame, when it's the hello request: its id and params.
-pub fn read_hello(line: &str) -> Option<(Value, Hello)> {
-    let request: HelloRequest = serde_json::from_str(line).ok()?;
-    (request.jsonrpc == "2.0" && request.method == "hello").then_some((request.id, request.params))
+/// A connection's first frame, when it's the hello request: its id and params. A hello whose params don't read
+/// (another protocol's: an old plugin sent a token, not a nonce) is still read as far as its `protocol` (0 when
+/// it has none), so the plugin is told it's of another version rather than cut off without a word.
+pub fn read_hello(line: &str) -> Option<(Value, HelloParams)> {
+    let (id, params) = request(line, Hello::NAME)?;
+    let hello = bridge::decode_params::<Hello>(params.as_ref()).unwrap_or_else(|_| {
+        let field = |name: &str| {
+            params
+                .as_ref()
+                .and_then(|p| p.get(name))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        HelloParams {
+            nonce: field("nonce"),
+            protocol: params
+                .as_ref()
+                .and_then(|p| p.get("protocol"))
+                .and_then(Value::as_i64)
+                .and_then(|p| i32::try_from(p).ok())
+                .unwrap_or(0),
+            plugin_version: field("pluginVersion"),
+            minecraft: field("minecraft"),
+            project: field("project"),
+        }
+    });
+    Some((id, hello))
 }
 
 /// The answer to a hello of our protocol: the editor's own [nonce] and its
 /// [proof] of the token over both nonces, which the plugin checks before it
 /// proves the token itself.
 pub fn hello_answer(id: &Value, nonce: &str, proof: &str) -> Value {
-    json!({"jsonrpc": "2.0", "id": id, "result": {"protocol": PROTOCOL, "nonce": nonce, "proof": proof}})
+    let result = HelloResult {
+        protocol: bridge::PROTOCOL,
+        nonce: Some(nonce.into()),
+        proof: Some(proof.into()),
+    };
+    Message::ok(id.clone(), bridge::encode_result::<Hello>(&result)).encode()
 }
 
-#[derive(Deserialize)]
-struct AuthenticateParams {
-    proof: String,
-}
-
-#[derive(Deserialize)]
-struct AuthenticateRequest {
-    jsonrpc: String,
-    id: Value,
-    method: String,
-    params: AuthenticateParams,
-}
-
-/// The plugin's second frame, when it's the authenticate request: its id and proof.
+/// The plugin's `authenticate` request, when a line is one: its id and the proof it gives.
 pub fn read_authenticate(line: &str) -> Option<(Value, String)> {
-    let request: AuthenticateRequest = serde_json::from_str(line).ok()?;
-    (request.jsonrpc == "2.0" && request.method == "authenticate")
-        .then_some((request.id, request.params.proof))
+    let (id, params) = request(line, Authenticate::NAME)?;
+    let proof = bridge::decode_params::<Authenticate>(params.as_ref()).ok()?;
+    Some((id, proof.proof))
 }
 
 /// The answer to an accepted proof: the connection is open.
 pub fn authenticated(id: &Value) -> Value {
-    json!({"jsonrpc": "2.0", "id": id, "result": null})
-}
-
-/// A new nonce: 24 random bytes, as hex.
-pub fn nonce() -> String {
-    let mut bytes = [0u8; 24];
-    getrandom::fill(&mut bytes).expect("the system has randomness");
-    hex::encode(bytes)
-}
-
-/// Whether [nonce] is one a plugin may send: hex, 32 to 64 digits.
-pub fn is_nonce(nonce: &str) -> bool {
-    (32..=64).contains(&nonce.len()) && nonce.bytes().all(|b| b.is_ascii_hexdigit())
-}
-
-/// The editor's proof of [token] for the plugin's nonce [plugin] and its own [editor].
-pub fn editor_proof(token: &str, plugin: &str, editor: &str) -> String {
-    hex::encode(hmac_sha256(
-        token.as_bytes(),
-        format!("editor\n{plugin}\n{editor}").as_bytes(),
-    ))
-}
-
-/// The plugin's proof of [token] for the editor's nonce [editor] and its own [plugin].
-pub fn plugin_proof(token: &str, editor: &str, plugin: &str) -> String {
-    hex::encode(hmac_sha256(
-        token.as_bytes(),
-        format!("plugin\n{editor}\n{plugin}").as_bytes(),
-    ))
-}
-
-/// HMAC-SHA256 (RFC 2104), over the `sha2` the backend already has.
-fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
-    const BLOCK: usize = 64;
-    let mut block = [0u8; BLOCK];
-    if key.len() > BLOCK {
-        block[..32].copy_from_slice(&Sha256::digest(key));
-    } else {
-        block[..key.len()].copy_from_slice(key);
-    }
-    let mut inner = Sha256::new();
-    inner.update(block.map(|b| b ^ 0x36));
-    inner.update(message);
-    let mut outer = Sha256::new();
-    outer.update(block.map(|b| b ^ 0x5c));
-    outer.update(inner.finalize());
-    outer.finalize().into()
+    Message::ok(id.clone(), bridge::encode_result::<Authenticate>(&())).encode()
 }
 
 /// Why a plugin speaking [theirs] is refused, as the console and the plugin say it.
-pub fn mismatch(theirs: u64) -> String {
+pub fn mismatch(theirs: i32) -> String {
     format!(
         "This server's NetherForge plugin speaks dev bridge protocol {theirs} and the editor speaks {PROTOCOL}, so the editor can't talk to it. Use the plugin that came with this editor."
     )
@@ -149,7 +105,7 @@ pub fn mismatch(theirs: u64) -> String {
 
 /// The answer to a hello of another protocol version.
 pub fn hello_refused(id: &Value, reason: &str) -> Value {
-    json!({"jsonrpc": "2.0", "id": id, "error": {"code": PROTOCOL_MISMATCH, "message": reason}})
+    Message::error(id.clone(), PROTOCOL_MISMATCH, reason).encode()
 }
 
 /// The backend's own request number [n].
@@ -277,23 +233,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(hello.protocol, 0);
-    }
-
-    #[test]
-    fn hmac_is_rfc_4231s() {
-        // RFC 4231, test case 2.
-        assert_eq!(
-            hex::encode(hmac_sha256(b"Jefe", b"what do ya want for nothing?")),
-            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
-        );
-        // Test case 6: a key longer than a block.
-        assert_eq!(
-            hex::encode(hmac_sha256(
-                &[0xaa; 131],
-                b"Test Using Larger Than Block-Size Key - Hash Key First"
-            )),
-            "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54"
-        );
     }
 
     #[test]

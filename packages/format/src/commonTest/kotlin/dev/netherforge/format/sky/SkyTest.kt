@@ -162,7 +162,7 @@ class SkyTest {
     }
 
     @Test
-    fun aSkyThatDoesntDarkenNeedsClocksAndSomethingToHold() {
+    fun aSkyThatDoesntDarkenNeedsSomethingToHold() {
         val snapshot = load(
             "skies/held.json" to """{ "sky": "#5a0a0a", "darkens": false }""",
             "skies/nothing.json" to """{ "water": "#8a1010", "darkens": false }""",
@@ -173,17 +173,6 @@ class SkyTest {
             listOf("skies/badlight.json sky.color $.light", "skies/nothing.json sky.night $.darkens"),
             snapshot.problems.map { "${it.file} ${it.code} ${it.path}" }.sorted()
         )
-        // Before 26.1 there are no world clocks to hold it with.
-        val old = Projects.load(
-            MapProjectSource(
-                mapOf(
-                    "netherforge.json" to testManifest().replace("\"26.3\"", "\"1.21.11\""),
-                    "skies/held.json" to """{ "sky": "#5a0a0a", "darkens": false }"""
-                )
-            ),
-            null
-        )
-        assertEquals(listOf("project.feature $.darkens"), old.problems.map { "${it.code} ${it.path}" })
     }
 
     @Test

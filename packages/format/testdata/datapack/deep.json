@@ -1,0 +1,28 @@
+{
+  "minY": -128,
+  "height": 512,
+  "logicalHeight": 256,
+  "skyLight": false,
+  "ceiling": true,
+  "ambientLight": 0.1,
+  "fixedTime": true,
+  "sky": "none",
+  "colors": {
+    "sky": "#102030",
+    "fog": "#405060",
+    "clouds": "#C0FFFFFF"
+  },
+  "cloudHeight": 300,
+  "bedWorks": false,
+  "respawnAnchorWorks": true,
+  "piglinSafe": true,
+  "raids": false,
+  "ultrawarm": true,
+  "monsterSpawnLight": {
+    "min": 7,
+    "max": 7
+  },
+  "monsterSpawnBlockLight": 15,
+  "infiniburn": "#minecraft:infiniburn_nether",
+  "coordinateScale": 8
+}

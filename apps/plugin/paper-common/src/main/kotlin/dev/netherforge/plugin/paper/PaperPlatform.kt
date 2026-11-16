@@ -66,7 +66,7 @@ class PaperPlatform(private val plugin: JavaPlugin, private val version: PaperVe
     override val particles = PaperParticles()
     override val sounds = PaperSounds()
 
-    override val entities = PaperEntities(plugin)
+    override val entities = PaperEntities(plugin, version::move)
     override val clientEntities = PaperClientEntities(plugin, version.clientEntities())
     override val screens = PaperScreens(entities, version)
     override val worldEntities = PaperWorldEntities(plugin, entities)

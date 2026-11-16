@@ -29,7 +29,7 @@ features:
   - title: Real Minecraft is the preview
     details: The editor runs a Paper server for your project's Minecraft version. Join it, and every save shows up in game in about a second, without a restart.
   - title: Lua scripting
-    details: Lua 5.4 with an API for players, worlds, entities, commands, schedules, saved data, databases and web services, with completions as you type, a debugger, a profiler and tests.
+    details: Luau with an API for players, worlds, entities, commands, schedules, saved data, databases and web services, with completions as you type, a debugger, a profiler and tests.
   - title: Packages and networks
     details: Share code between projects as packages from a folder or git, and run a network of servers behind a proxy, with channels, shared data and players sent between them.
   - title: Your project is a folder

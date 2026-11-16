@@ -6,7 +6,7 @@
  * function's and scope's totals since the last reset, for the Profiler panel.
  */
 import { createStore, type StoreApi } from 'zustand/vanilla'
-import type { ProfileSample, ProfileTick, SourceRef } from '@netherforge/format/types'
+import type { ProfileSample, ProfileTick, SourceRef } from '@/core/bridge/protocol'
 import { isBackendError, type Backend, type Unlisten } from '@/core/backend/types'
 
 /** One function's totals: a handler, a timer, a task, a command… */

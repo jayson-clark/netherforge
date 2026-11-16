@@ -7,8 +7,8 @@
     "11": {
       "item": {
         "kind": "minecraft:bread",
-        "count": 4,
-        "name": "<yellow>Bread"
+        "name": "<yellow>Bread",
+        "count": 4
       }
     },
     "13": {

@@ -5,15 +5,15 @@
  * instances and the plugin's own problem list.
  */
 import { createStore, type StoreApi } from 'zustand/vanilla'
+import type { Problem } from '@netherforge/format/types'
 import type {
   ConsoleEntry,
   InstanceInfo,
-  Problem,
   ReloadedResource,
   ReloadResult,
   ServerSettings,
   SourceRef,
-} from '@netherforge/format/types'
+} from '@/core/bridge/protocol'
 import type {
   Backend,
   EulaStatus,

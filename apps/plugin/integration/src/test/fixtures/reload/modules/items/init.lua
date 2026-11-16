@@ -2,7 +2,7 @@ local bank = nf.menus.shared("bank")
 bank:set_item(0, {
   kind = "minecraft:gold_nugget",
   name = "<gold>Coin",
-  data = { coin = true, worth = 3, tags = { "a", "b" }, minted = vec3(1, 2.5, 3), ["$odd"] = 1.0 },
+  data = { coin = true, worth = 3, tags = { "a", "b" }, minted = vec3(1, 2.5, 3), ["$odd"] = 1.5 },
 })
 local back = bank:item(0)
 log(

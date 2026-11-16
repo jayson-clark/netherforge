@@ -27,7 +27,7 @@ class BuiltinsScenario : Scenario("builtins") {
         // The slab's top is half a block up from the ground's.
         editor.logged("landed", "-61.500", "true")
         // Off the slabs' end and on to the wall at x = 215: flush against it, half its width (0.3) short.
-        editor.logged("walked", "214.700", "-62.000", "-1.0", "true", "true")
+        editor.logged("walked", "214.700", "-62.000", "-1.000", "true", "true")
     }
 
     @Test

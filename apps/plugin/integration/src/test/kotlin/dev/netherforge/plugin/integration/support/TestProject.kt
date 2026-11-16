@@ -1,9 +1,5 @@
 package dev.netherforge.plugin.integration.support
 
-import dev.netherforge.format.game.FeatureTable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
@@ -33,9 +29,6 @@ class TestProject(example: String, dependencies: List<String>, fixtures: List<St
         for (manifest in copies.map { it.resolve("netherforge.json") }) {
             manifest.writeText(manifest.readText().replace(Regex("\"minecraft\": \"[^\"]*\""), "\"minecraft\": \"${Adapter.minecraft}\""))
         }
-        // What a version doesn't have is left out of the copy for it, as a project written for that version would:
-        // a sky held through the night (`darkens: false`) needs world clocks, which arrived in 26.1.
-        if (!FeatureTable.CURRENT.has(Adapter.minecraft, "sky-night")) copies.forEach(::withoutSkyNight)
         fixtures.forEach(::add)
         // The showcase's main world is its expo's plaza, which the server generates only when bukkit.yml routes the main
         // world to NetherForge (as the editor's dev server does). A scenario that does names a terrain for it itself
@@ -102,15 +95,6 @@ class TestProject(example: String, dependencies: List<String>, fixtures: List<St
         for (pattern in ignored) {
             check(pattern.none { it in "*?[!" }) { "$example/.gitignore: \"$pattern\" isn't a plain path, which this copy can't follow" }
             to.resolve(pattern.trim('/')).toFile().deleteRecursively()
-        }
-    }
-
-    /** Takes `darkens` out of every sky of the project at [root]. */
-    private fun withoutSkyNight(root: Path) {
-        val skies = root.resolve("skies").toFile().listFiles { file -> file.extension == "json" }.orEmpty()
-        for (sky in skies) {
-            val json = Json.parseToJsonElement(sky.readText()).jsonObject
-            if ("darkens" in json) sky.writeText(Json.encodeToString(JsonObject.serializer(), JsonObject(json - "darkens")))
         }
     }
 

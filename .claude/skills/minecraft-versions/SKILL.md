@@ -1,12 +1,14 @@
 ---
 name: minecraft-versions
-description: How NetherForge supports multiple Minecraft versions - the project's target version, the supported range (the last 1.21.x and every 26.x), paper-common, paper-internals and one adapter per version, the build-logic convention plugin, the bots (in the plugin jar), the feature table and gating a feature by version, and what to do when a new Minecraft version ships. Read before bumping Paper, adding a version adapter, or using a game feature that older versions lack.
+description: How NetherForge supports multiple Minecraft versions - the project's target version, the supported range (every 26.x), paper-common, paper-internals and one adapter per version, the build-logic convention plugin, the bots (in the plugin jar), the feature table and gating a feature by version, and what to do when a new Minecraft version ships. Read before bumping Paper, adding a version adapter, or using a game feature that older versions lack.
 ---
 
 # Minecraft versions
 
-NetherForge supports **the last 1.21.x release (1.21.11) and every 26.x**:
-1.21.11, 26.1.2, 26.2 and 26.3 today.
+NetherForge supports **every 26.x**: 26.1.2, 26.2 and 26.3 today. 1.21.x was dropped with the Kotlin runtime: its
+servers run Java 21, which has no final foreign function API, and the runtime (Rust) is called through it. A
+mention of 1.21.11 below is of a game difference that still shapes the code (a datapack's overlays, a game fact
+older than the range), not of support for it.
 
 ## The pieces
 
@@ -56,7 +58,9 @@ NetherForge supports **the last 1.21.x release (1.21.11) and every 26.x**:
 ## The plugin, per version
 
 ```
-apps/plugin/runtime/          the runtime: no Paper types, ever (plugin-runtime skill)
+crates/                       the runtime (Rust): no Paper types, ever (plugin-runtime skill)
+apps/plugin/platform/         :plugin:platform  the Platform's Kotlin interfaces and their contract suites
+apps/plugin/ffi/              :plugin:ffi  the runtime's library loaded and called (Java 25's foreign functions)
 apps/plugin/paper-common/     :plugin:paper-common  the adapter on Paper's API, compiled against the
                               oldest supported API (paper-api in the version catalog): almost all of it
 apps/plugin/paper-internals/  not a project: Mojang-named server code every adapter compiles against its
@@ -104,8 +108,8 @@ tools/gradle/build-logic/     the convention plugins: netherforge.kotlin-jvm, ne
   Paper build: paper-api and its dev bundle for compiling, and the server
   build the integration test downloads (`.build.181`), which the plugin jar
   names in `META-INF/netherforge/paper.properties` so the editor's dev server
-  runs that build too, never a newer, untested one. Paper published 1.21.x
-  as snapshots, so `paper-1.21.11` also says `serverBuild = 132`.
+  runs that build too, never a newer, untested one. A snapshot build (as Paper
+  published 1.21.x) would say its `serverBuild` too.
   `sources = "26.3"` makes an adapter compile another's `src/` (its
   `Mojang`/`Protocol`), for a version whose server says everything as that
   one's does: then the folder is nothing but its build file. A new adapter
@@ -122,20 +126,23 @@ tools/gradle/build-logic/     the convention plugins: netherforge.kotlin-jvm, ne
   A cache problem fails the build and names the task.
 
 - **Jars, per version** (`:plugin:paper-<mc>:assemble`, in `build/libs/`):
-  `NetherForge-<v>-paper-<mc>.jar` (the plugin: runtime, format, Kotlin and
-  the adapter shaded in, the bots included: `PaperVersion.bots` makes them,
+  `NetherForge-<v>-paper-<mc>.jar` (the plugin: the runtime's library for each
+  OS under `META-INF/netherforge/native/<os>-<arch>/`, format, Kotlin and the
+  adapter shaded in, the bots included: `PaperVersion.bots` makes them,
   since they're paper-internals code). The editor installs it into its dev
   servers (the tauri-backend skill's plugin jars), and the release attaches it
   (release skill).
-- **Bytecode**: everything shared (format, runtime, paper-common) targets
-  Java 21, since a 1.21.11 server may run on it (`netherforge.kotlin-jvm`);
-  a 26.x adapter targets 25. The editor's dev servers always run Java 25.
+- **Bytecode**: every plugin module targets Java 25 (`netherforge.kotlin-jvm`
+  for `:plugin:*`); the proxy and the hub stay at 21, which Velocity runs on.
+  The editor's dev servers always run Java 25.
 
 ## Using a feature older versions lack
 
 1. Add it to `FeatureTable.CURRENT`: an id, the version it arrived in, and
    what it is in a problem's words. `FeaturesTest` checks nothing in it
-   predates `OLDEST_SUPPORTED`.
+   predates `OLDEST_SUPPORTED`. `UPDATE_GOLDEN=1 pnpm test` writes it into
+   `docs/format/features.md` (`FeatureCatalogue`), which is the table the Rust
+   port reads (`crates/format/build.rs`, `features::ALL`): one table.
 2. Validators report using it against a target that lacks it:
    `ctx.requireFeature("<id>", "$.path")` in a kind's `validate`
    (`project.feature`, an error). Tests hand `Projects.load` a table of their
@@ -145,10 +152,12 @@ tools/gradle/build-logic/     the convention plugins: netherforge.kotlin-jvm, ne
    `OLDEST_MINECRAFT` are in format's generated constants.
 4. In the Lua API, mark the function, event or option field `since: "<id>"`
    in the spec (`packages/api/src/spec/`): the generator looks the version up
-   in `FEATURES`, shows it in the docs and stubs, and lists it in
-   `VersionGates.kt`; on an older server the runtime hands the prelude that
-   gate, and calling the function, listening for the event or setting the
-   option is an error naming the version (`VersionGateTest`). An id that
+   in `FEATURES` and shows it in the docs and stubs. **The Rust runtime has no
+   gate yet** (the Kotlin runtime's `VersionGates.kt` went with it, and the
+   table is empty since 26.1 became the oldest version): the first feature to
+   need one adds it to the runtime's bindings (`crates/api`), so that calling
+   the function, listening for the event or setting the option on an older
+   server is an error naming the version. An id that
    isn't in the table fails `pnpm generate` and the spec test. The same gates go
    to the editor (`generated/luals/gates.json`): its per-project copy of `nf.lua` marks
    a function newer than the project's `minecraft` `---@deprecated`, so a script is

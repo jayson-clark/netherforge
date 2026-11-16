@@ -53,7 +53,11 @@ import org.bukkit.entity.TextDisplay as BukkitTextDisplay
  * never put in a world: [make] makes one, [entity] finds one, and [changed]
  * hears that something about one changed.
  */
-open class PaperEntities(protected val plugin: Plugin) : EntityOps {
+open class PaperEntities(
+    protected val plugin: Plugin,
+    /** [PaperVersion.move]: moves one of ours within its world without a teleport, when it can. */
+    private val move: (Entity, org.bukkit.Location) -> Boolean
+) : EntityOps {
     private val instanceKey = NamespacedKey(plugin, "instance")
     private val nodeKey = NamespacedKey(plugin, "node")
     private val roleKey = NamespacedKey(plugin, "role")
@@ -275,6 +279,8 @@ open class PaperEntities(protected val plugin: Plugin) : EntityOps {
         // A rider stays on: Paper would take it off its vehicle to move it.
         if (entity.vehicle != null) return
         val location = bukkit(to) ?: return
+        // Within its world it moves as entities move; a teleport only to another.
+        if (location.world == entity.world && move(entity, location)) return
         val riders = entity.passengers
         if (riders.isEmpty()) {
             entity.teleport(location)

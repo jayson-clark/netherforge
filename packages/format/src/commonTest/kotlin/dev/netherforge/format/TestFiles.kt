@@ -37,6 +37,9 @@ expect object TestFiles {
 
     fun sha256OfText(text: String): String
 
+    /** The hex SHA-256 of [bytes]: what a built pack's own pictures are compared by. */
+    fun sha256OfBytes(bytes: ByteArray): String
+
     val updateGolden: Boolean
 }
 

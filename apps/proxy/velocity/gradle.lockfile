@@ -33,7 +33,6 @@ com.pinterest.ktlint:ktlint-rule-engine-core:1.5.0=ktlint,ktlintBaselineReporter
 com.pinterest.ktlint:ktlint-rule-engine:1.5.0=ktlint
 com.pinterest.ktlint:ktlint-ruleset-standard:1.5.0=ktlint,ktlintRuleset
 com.velocitypowered:velocity-api:4.3.0=compileClasspath
-com.velocitypowered:velocity-brigadier:1.0.0-SNAPSHOT=compileClasspath
 dev.drewhamilton.poko:poko-annotations-jvm:0.18.0=ktlint,ktlintBaselineReporter,ktlintRuleset
 dev.drewhamilton.poko:poko-annotations:0.18.0=ktlint,ktlintBaselineReporter,ktlintRuleset
 io.github.detekt.sarif4k:sarif4k-jvm:0.6.0=ktlint,ktlintReporter

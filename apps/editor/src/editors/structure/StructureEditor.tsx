@@ -9,7 +9,7 @@
  * `structures/<id>.json` (`Generation`): where the game places it by itself.
  */
 import { useState } from 'react'
-import type { PlayerPosition } from '@netherforge/format/types'
+import type { PlayerPosition } from '@/core/bridge/protocol'
 import { base64ToBytes } from '@/core/backend/base64'
 import { readNbt } from '@netherforge/structures/nbt'
 import { companionOf, resourceOf } from '@/core/paths'

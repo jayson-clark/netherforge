@@ -6,8 +6,6 @@ main: dev.netherforge.plugin.paper.NetherForgePlugin
 load: STARTUP
 # Builds the start-up datapack (the project's advancements) before the worlds load.
 bootstrapper: dev.netherforge.plugin.paper.NetherForgeBootstrap
-# Puts SQLite's driver on the classpath when the server doesn't bundle it, and remote databases' pool and PostgreSQL's driver.
-loader: dev.netherforge.plugin.paper.NetherForgeLoader
 api-version: '${minecraft}'
 # Scripts run on the main thread in one Lua state; the plugin refuses to enable on Folia.
 folia-supported: false

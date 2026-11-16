@@ -259,16 +259,12 @@ class StructureGenerationTest {
         val pack = datapack(
             load(
                 "structures/village.nbt" to null,
-                "structures/village.json" to
-                    """{ "biomes": ["minecraft:plains", "minecraft:desert"], "spacing": 24, "separation": 6, "terrainAdaptation": "beard_thin",
-                       "pools": { "houses": { "elements": [{ "structure": "house" }, { "structure": "hut", "weight": 3 }] },
-                                  "roads": { "projection": "terrain_matching", "elements": [{ "structure": "road" }] } } }""",
+                "structures/village.json" to TestFiles.read("packages/format/testdata/datapack/village.json"),
                 "structures/house.nbt" to null,
                 "structures/hut.nbt" to null,
                 "structures/road.nbt" to null,
                 "structures/shrine.nbt" to null,
-                "structures/shrine.json" to
-                    """{ "biomes": ["#minecraft:is_forest"], "step": "underground_structures", "heightmap": "none", "startHeight": -20 }"""
+                "structures/shrine.json" to TestFiles.read("packages/format/testdata/datapack/shrine.json")
             )
         )
         val actual = CanonicalJson.print(

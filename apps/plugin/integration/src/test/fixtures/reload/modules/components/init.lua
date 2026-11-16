@@ -44,7 +44,12 @@ log(
   tostring(back.food.can_always_eat),
   back.food.eat_seconds
 )
-log("cooldown", back.cooldown.seconds, back.cooldown.group, tostring(back.raw))
+log(
+  "cooldown",
+  string.format("%.1f", back.cooldown.seconds),
+  back.cooldown.group,
+  tostring(back.raw)
+)
 funnel:set_item(3, { kind = "minecraft:stick", hold = true })
 funnel:set_item(
   2,
@@ -54,7 +59,7 @@ local held, bread = funnel:item(3), funnel:item(2)
 log("hold", tostring(held.hold), tostring(held.use_effects), tostring(held.raw))
 log(
   "use effects",
-  bread.use_effects.speed_multiplier,
+  string.format("%.1f", bread.use_effects.speed_multiplier),
   tostring(bread.use_effects.can_sprint),
   tostring(bread.use_effects.interact_vibrations),
   tostring(bread.raw)

@@ -145,9 +145,32 @@ object StartupDatapack {
  * key), and the [overworld]'s dimension type. The server hands it over as it starts (the start-up datapack is built
  * before anything else of the game is there); without one ([NONE]: the editor, a test) nothing is built on it.
  */
+@kotlinx.serialization.Serializable(with = GameDatapackSerializer::class)
 class GameDatapack(val biomes: Map<ResourceKey, JsonObject>, val overworld: JsonObject?) {
     companion object {
         val NONE = GameDatapack(emptyMap(), null)
+    }
+}
+
+/** A [GameDatapack] as JSON, `{"biomes": {"minecraft:plains": {...}}, "overworld": {...}}`, as it crosses to the Rust runtime. */
+object GameDatapackSerializer : kotlinx.serialization.KSerializer<GameDatapack> {
+    override val descriptor = JsonObject.serializer().descriptor
+
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: GameDatapack) {
+        val json = buildJsonObject {
+            put("biomes", JsonObject(value.biomes.entries.associate { (key, biome) -> key.toString() to biome }))
+            put("overworld", value.overworld ?: kotlinx.serialization.json.JsonNull)
+        }
+        encoder.encodeSerializableValue(JsonObject.serializer(), json)
+    }
+
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): GameDatapack {
+        val json = decoder.decodeSerializableValue(JsonObject.serializer())
+        val biomes = (json["biomes"] as? JsonObject).orEmpty().entries.mapNotNull { (key, biome) ->
+            val parsed = ResourceKey.parse(key) ?: return@mapNotNull null
+            (biome as? JsonObject)?.let { parsed to it }
+        }.toMap()
+        return GameDatapack(biomes, json["overworld"] as? JsonObject)
     }
 }
 

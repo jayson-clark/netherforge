@@ -21,23 +21,14 @@ pub mod tests;
 pub mod video;
 pub mod workspace;
 
-use serde::{Deserialize, Serialize};
-
 use crate::error::{Error, Result};
 
 /// JSON the backend passes through without reading it (bridge requests and
 /// answers, game data, MCP messages): `unknown` to the UI, which types it
-/// with format's generated contract. (specta's own `serde_json::Value` type
-/// is recursive and overflows the exporter's stack.)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct Json(pub serde_json::Value);
-
-impl specta::Type for Json {
-    fn definition(types: &mut specta::Types) -> specta::datatype::DataType {
-        specta_typescript::Unknown::<()>::definition(types)
-    }
-}
+/// with the bridge's generated maps. Format's (the bridge carries it too).
+/// (specta's own `serde_json::Value` type is recursive and overflows the
+/// exporter's stack.)
+pub use netherforge_format::bridge::Json;
 
 /// Runs filesystem-heavy work off the async workers.
 pub async fn blocking<T: Send + 'static>(

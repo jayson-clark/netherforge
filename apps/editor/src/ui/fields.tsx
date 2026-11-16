@@ -52,6 +52,7 @@ export function NumberInput({
   onGestureStart,
   onGestureEnd,
   min,
+  max,
 }: {
   value: number | undefined
   /** Undefined when cleared: the key goes back to its default. */
@@ -61,8 +62,11 @@ export function NumberInput({
   step?: number
   dataPath?: string
   id?: string
+  /** The least and most a value may be: anything outside is brought in, however it's entered. */
   min?: number
+  max?: number
 } & GestureHandlers) {
+  const clamp = (n: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n))
   const [text, setText] = useState(format(value))
   // Follow the value when it changes from outside (undo, a scrub, the arrow
   // keys) unless something uncommitted is typed.
@@ -83,7 +87,7 @@ export function NumberInput({
       setText(format(value))
       return
     }
-    const next = min !== undefined ? Math.max(min, parsed) : parsed
+    const next = clamp(parsed)
     if (next !== value) onChange(next)
     setText(format(next))
   }
@@ -113,13 +117,16 @@ export function NumberInput({
           const base =
             value ?? (placeholder && Number.isFinite(Number(placeholder)) ? Number(placeholder) : 0)
           const next = Math.round((base + delta) * 10000) / 10000
-          onChange(min !== undefined ? Math.max(min, next) : next)
+          onChange(clamp(next))
         }
       }}
       onPointerDown={(event) => {
         // Alt-drag on the input scrubs it, like dragging a label.
         if (!event.altKey) return
-        scrub(event, value ?? 0, step, onChange, { onGestureStart, onGestureEnd })
+        scrub(event, value ?? 0, step, (n) => onChange(n === undefined ? n : clamp(n)), {
+          onGestureStart,
+          onGestureEnd,
+        })
       }}
     />
   )

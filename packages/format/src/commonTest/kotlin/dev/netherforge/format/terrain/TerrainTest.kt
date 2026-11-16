@@ -118,17 +118,8 @@ class TerrainTest {
 
     // ---- the generator ----------------------------------------------------------------------
 
-    private val hills = """{
-        "terrain": { "base": 70, "seaLevel": 66, "noises": { "hills": { "noise": { "frequency": 0.01, "octaves": 3 }, "amplitude": 20 } } },
-        "layers": [{ "block": "minecraft:grass_block" }, { "block": "minecraft:dirt", "thickness": 3 }],
-        "underwater": [{ "block": "minecraft:sand", "thickness": 2 }],
-        "floor": { "block": "minecraft:bedrock", "thickness": 3 },
-        "caves": { "caverns": { "threshold": 0.2 } },
-        "ores": { "iron": { "block": "minecraft:iron_ore", "size": 10, "veins": 12, "minY": -30, "maxY": 40 },
-            "ruby": { "customBlock": "ruby_ore", "size": 6, "veins": 8, "minY": -40, "maxY": 20 } },
-        "biomes": { "cold": { "biome": "minecraft:snowy_plains", "temperature": { "max": -0.1 }, "layers": [{ "block": "minecraft:snow_block" }] },
-            "warm": { "biome": "minecraft:plains", "temperature": { "min": -0.1 } } }
-    }"""
+    /** Hills, two areas, caves, ores and a floor: `testdata/terrain/hills.json`, which the Rust port's generator reads too. */
+    private val hills = TestFiles.read("packages/format/testdata/terrain/hills.json")!!
 
     private fun label(w: CompiledTerrain, index: Int) = w.palette[index].label
 

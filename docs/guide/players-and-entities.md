@@ -167,7 +167,7 @@ Goal ids are in the project's namespace (`"guard_post"` is
 Goals aren't saved, the game's removals included: a mob that unloads comes
 back with its kind's goals, and the goals a script added come off when it
 stops (a reload), so set them up where the mob spawns, or in the script's
-body. A callback runs with its script's instruction budget; one that errors
+body. A callback runs with its script's budget; one that errors
 is reported with its line and its goal taken off the mob. Changing goals from
 inside a goal's own callbacks happens before the mob's next tick.
 

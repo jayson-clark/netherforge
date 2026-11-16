@@ -1,0 +1,350 @@
+{
+    "sessions": [
+        {
+            "server": "lobby",
+            "secret": "s3cret-shared-for-tests",
+            "credential": null,
+            "hubNonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f00112233445566778",
+            "serverNonce": "8877665544332211ffeeddccbbaa99887766554433221100",
+            "proof": "3aa5b1302aae30884dfbf900b327be9e149c8ef67d9b7c19f0db2386007102a1",
+            "lines": [
+                {
+                    "from": "hub",
+                    "line": "{\"t\":\"challenge\",\"version\":3,\"nonce\":\"0f1e2d3c4b5a69788796a5b4c3d2e1f00112233445566778\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "{\"t\":\"hello\",\"version\":3,\"server\":\"lobby\",\"proof\":\"3aa5b1302aae30884dfbf900b327be9e149c8ef67d9b7c19f0db2386007102a1\",\"nonce\":\"8877665544332211ffeeddccbbaa99887766554433221100\",\"instance\":\"9f8e7d6c5b4a39281706f5e4d3c2b1a0\",\"state\":\"starting\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~aFqFNVW0xJW05OdqF6n9wyexfkpjqEv76qfUyg6htgvKlixXbs/LA0AwlH0REosehOSYxoV6c+7nCmIuEa6elYufKQgKSUTNTFlFXD24RHEwYZFbuYk0HYM4iDRLrg3J13IBt2I0vcfcUvz4Lw3AnoQ+q+Hvmg+6gIjlS1nRDcsbVTmDPABhOQ/ra8eIKzPA1qYCDXpSrs0vtRH5DqkIrHqSh/pkoCTk3uFT5tojGcAlSejqvCOZsXSDr3wt/tBFONc7bazDLssM8pgvbbIwTk3g+c2LFDVq2gWBXJoA2hBv9iyH7BG/OFcOwH3BcCtEPHwo/fPUYEPB6X80oubtXHQl9hhVzpwGZR8JmGfGCcdmNzqC7Haz0gCPMFY63Nu7OIHsSWSSfBFSYeJSgcLzbOz3rIHZqhLRTYBBcPsr9Nc=",
+                    "frame": "{\"t\":\"welcome\",\"server\":\"lobby\",\"servers\":[{\"name\":\"lobby\",\"linked\":true,\"players\":1,\"state\":\"starting\"},{\"name\":\"survival\",\"linked\":false}],\"players\":[{\"id\":\"11111111-2222-3333-4444-555555555555\",\"name\":\"Steve\",\"server\":\"lobby\"}],\"maxValueBytes\":32768,\"policy\":\"{\\\"deny\\\":[\\\"wasm\\\"]}\",\"keepsPacks\":true}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~GkpIn8lmBzBGSMo6oGncoYSAmJBwy8jn+nRkoM9fGl0mZrzIxRiQghVW9hq2OP49HxPLEO4aXFQrOJIwQ8/1AKT2mCc/TiUfBRtyyxkUhzTMmlvdu07NY//VyO6BPb30kxAF8a/ArgsTDBC76g==",
+                    "frame": "{\"t\":\"message\",\"channel\":\"shop:sales\",\"from\":\"survival\",\"value\":{\"item\":\"apple\",\"price\":2.5}}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~LNb4U5dHa2HCua5Li25Pw9nC3/U4cB+V73sUWYWRyIrney+PwRrXymcQx1zO5F9/aWGB6OERUAQCHnRjlv9XQ4pVoYwxMmLIXgAFQyvIuUHbCcqwdUIvlNOD9+yMWNpOoU+BEbZWf012jw==",
+                    "frame": "{\"t\":\"requested\",\"id\":1,\"channel\":\"shop:price\",\"from\":\"survival\",\"value\":{\"item\":\"apple\"}}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~qAyCwVznUsJUY/BRfsqg+RcMLzIboMuQZ4m14+NwK/x7uqEN+H1x0ZlshNhpC/tM6rsDeTkOQu0=",
+                    "frame": "{\"t\":\"reply\",\"id\":7,\"value\":{\"price\":2}}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~iOxoAdCnGlgUQd71jUNEuQMZY5aNLONEcQDtohxXNj2WpblPKR9TGgj+RIp79PhJzb6BcyXKW6buZ/RAodPJgeUfaX6KY4W16cJqGBRKE7CYNaI9S1I=",
+                    "frame": "{\"t\":\"reply\",\"id\":8,\"error\":\"survival isn't connected to the network\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~u8TBF7f3emNKAeyuLK5pMxbvUg+UKzYXdXgyEm1U3dtG1VwP",
+                    "frame": "{\"t\":\"reply\",\"id\":9}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~C/xS3tAoqbRLsk4lB0vv7/DCDEyqNzXIWXG6QfU8RD15C3YX56HCMOkPGYATo+rF4/N1NBVQT/TdDmYMJF9BIBNgagnUgCN+QzPXEK+b0br2dLdXXVWBi1E2mh3t2zdF",
+                    "frame": "{\"t\":\"map_snapshot\",\"map\":\"shop:prices\",\"entries\":{\"apple\":2,\"pear\":{\"each\":3}}}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~/tVuzGEliXs2Q88hEVmUCgR2TymMNfZ23ODGWyub0iCFJPwfefMTdfiIpgeay0cFvKpOfdbH/1RzHPwTShRs3TatDNVTtMJe4FDPpUoR6J5JNRskJ1w2QKw9E29LySJ5b5UWF4B9joAiPTaHJFB8",
+                    "frame": "{\"t\":\"map_changed\",\"map\":\"shop:prices\",\"key\":\"apple\",\"value\":3,\"from\":\"survival\",\"cause\":\"set\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~Y1EnooVNEkLr16g7Mz1z3C0YpsDf7bevyMbvI10IE5bV2qbpN5n6dW/f9hOOAo2VSz1hGhw7B4HuniIpAQAc8eTx64Uo4QqL+UYohgzA1rDNZ8gAsW19",
+                    "frame": "{\"t\":\"map_changed\",\"map\":\"shop:prices\",\"key\":\"apple\",\"cause\":\"expired\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~qA7roWcG84KW60zJ6hBVvbTVZnz4bEub36wLFuh5JAGB4B/hG34NbeB1gZLV3z9QzT8yIw==",
+                    "frame": "{\"t\":\"map_result\",\"id\":12,\"value\":5}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~mnDnyHHkjoP1CiQu7sApaKJi/ZITlPT5MchXhHd300rAeUx9D28qY1JhUn5gbShuiv59x16oDeY=",
+                    "frame": "{\"t\":\"map_result\",\"id\":13,\"value\":false}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~P1oO1t7IpwQ6NBjrRrnqCgBIiCSiMrMfcEGyjGIy7STl4z/gxaZNOrIsnVyqEyRwoGppfNMV0aKS9U+tjiJOAyvA4qUVmm6AMuOx2Rddo9qavLqNDt5nMAiA0iMzdcJeP+gyMyyWZ9kwaj9C6JtEgGBgH0OAFUlpd5Ut4XVBIw==",
+                    "frame": "{\"t\":\"map_result\",\"id\":10,\"error\":\"package \\\"shop\\\" already keeps 10000 keys in its maps, the network's limit\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~/DSQXNGEXGCbFzDxDsNtV7zjkxwyLDfw86rV+bKlfhPjNxCFnY18mCnP0tNOsYK0mr/Bndjta8AD/CIW0bf9bafUX0K2xsL6jHbrCS9Oj1mtzmHY/IlS1YMhLRct19FQqJrc7rNCejq6QbwlRj47Jr8yxYZ2TYOwfjBwKQ==",
+                    "frame": "{\"t\":\"player_joined\",\"player\":{\"id\":\"11111111-2222-3333-4444-555555555555\",\"name\":\"Steve\",\"server\":\"lobby\"}}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~S5FPg5wQxMcCfOi7Tj7pkAzhZiYD373UJwNToSX7Ur4eUazm0lJA+J5pes9JQ1npxLbTOK7ydS7gnVFdXK/yhA7NwBzsplW6yuDeElajBXv6eI3MZq3ZYPNXVszHTe8VP1jdShGH1MOrG5OoWbL6VoWH2xdUHBp0Ii4gF9fuDL8E0YHqJw2WrOl14g2vKzevkjKsJBcI2HimM8OLE5xrG1dGg+9wsfX8E1/VsDpAmIqbqUowqbTcxB5VWGRATSjXkgng",
+                    "frame": "{\"t\":\"player_joined\",\"player\":{\"id\":\"66666666-7777-8888-9999-000000000000\",\"name\":\"Alex\",\"server\":\"survival\",\"proxy\":\"eu-proxy\",\"pack\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~El+UILDefB/qAEYNAWrSGEVQGHorULg9FFxgecOCe+fDVrIUEunAfbJNuIhqaqbP9UweU3a/5cv/dSFcfCLmq06o25Zpix9lXa6Exaup2+j4A+g4pb7Ri0hvanlYp8G+K9wSeYuGOxiKMrKFF0WFFLdy9xhJ+aM=",
+                    "frame": "{\"t\":\"player_moved\",\"id\":\"11111111-2222-3333-4444-555555555555\",\"server\":\"survival\",\"previous\":\"lobby\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~Lq1r3VgFnALY1jdYuYETNLKRyFFxSKkfa+Ii+1/UwRHxkQeMu7E9Jqfoh3fgSuRz94bnNLmXJYmsmAPo/EnxSnLCNwxMkmmELm41wJtfLmOLaywbT8PWbNqKJiuNSjDFIg==",
+                    "frame": "{\"t\":\"player_moved\",\"id\":\"11111111-2222-3333-4444-555555555555\",\"server\":\"lobby\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~1aFyskHKvoiLSkdPO/mCZz3kqdLNjYM6qqZGjGzoW8B0iNSidBpEp3QJ154gBwpWnMFR1WC4fBb8L6VOIVTM8IUaBHsFiNsL75q1rEpyxA==",
+                    "frame": "{\"t\":\"player_left\",\"id\":\"11111111-2222-3333-4444-555555555555\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~PFAvgEcxbPGAcjh5x4EuJorvS3mssD6yU53QbjkVq18cG8xdgv0p0dCwgaaVy+T/TNW906GicQc3klRReVJJor9gmu/k0MpNJASl/bntFfJBS1Es4ulm5PpqJ3e6zA1GXz3an8+vhE3WhGtiQbMWyJrz4kF4iD9mXW/gGXtSHpgZPwHLzbbp2FIybhhDXx9CX6jron9Rd7Bw0z1CqI7Jkz2IBSCCJp8hLAE=",
+                    "frame": "{\"t\":\"server\",\"server\":{\"name\":\"survival\",\"linked\":true,\"group\":\"worlds\",\"capacity\":50,\"players\":3,\"state\":\"ready\",\"startupMillis\":5100,\"tickMillis\":7.5}}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~HPJtENWjfRC83dJy9IVetQ3KiKJn1g6WFC+xH78JCUqe3Goh+t4aJb+fNdIBR64MAUeXrWM5oi911/rWTAFc6SA5YlOhs+3h/5w=",
+                    "frame": "{\"t\":\"server\",\"server\":{\"name\":\"survival\",\"linked\":false}}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~sqeH6Na/5JYFHcou4bcg1wzzRqL2L3zHymjUYp7k6Wb7IFiCbt3qbKNpjAilUsY0rc/a+1OchWH0ATrKaZaXSiQwdR2IDHfILcmtkMX04e9JGIGiMXI/VW1mbYZHVtlXNSz8KcEhhmG43WBoErRio4RvedsDZ5ncresfQ2PxX52Mx3YNFzJjZcwiBxTbA2X056wjvnmj7YOxdQw+rXdqSA5CPT37hg==",
+                    "frame": "{\"t\":\"servers\",\"servers\":[{\"name\":\"arena-1\",\"linked\":true,\"group\":\"arena\",\"capacity\":8,\"accepting\":false,\"players\":8,\"state\":\"starting\",\"idle\":true}]}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~FNJsKlzBWqQlo1EmFYRIWd/39/RrUWjHmBBFC90Xk8rQEOBEQnhn9fJ6O9DDmTyUBXdRALpHIHvVL9HrajxX12AkRndSdBjtfjSUY3Th27QgCBDV4jM5AgW4Nipuq0Cw0ES3ICkfafYw/lrStDeOHo6T4DIrw6S4v/yu",
+                    "frame": "{\"t\":\"arriving\",\"player\":\"11111111-2222-3333-4444-555555555555\",\"from\":\"survival\",\"data\":{\"kit\":\"starter\"}}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~D5YsDg8PejS+za5TzhXAmpfEKjI11POow1gksXN2KU6NphUTzoXzQlXrAHua6+0M0GoLP7Uc4uthIvEsII66oYCJq1XLLjxjwv1oWKKExNjATssKzzhk9DQ0buGRCppoX1w=",
+                    "frame": "{\"t\":\"arriving\",\"player\":\"11111111-2222-3333-4444-555555555555\",\"from\":\"survival\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~Jb44+3Yib7lt3Y6uC9pLJ8kVMh4Z3UqILlAbKsH2qFr59cnGheHRiy61KrwY8Mr3ahUAhtT5/668P+nucx7gzBuranuWoIyf170X3b4I/toalBNIOYPcDVA=",
+                    "frame": "{\"t\":\"arrival_cancelled\",\"player\":\"11111111-2222-3333-4444-555555555555\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~vKW2QavGzz3PucK2mHRRHiCtvo8z5HWrvOZg7lJhzkEpjnQugaBprv1KPaL2jNAtY8WyjSH+rlZqVFGd9Pgu",
+                    "frame": "{\"t\":\"send_result\",\"id\":14,\"server\":\"survival\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~I4hHNYu7QQWy+ryNQgkb0eyHpeKqhUAsDgVJS1ZCwK6B45YgpddOxQ0/0d1ccwSrlFUJQscQUR7T+D6xLkcE50KftN7q/1DVyjgq6o+ueVnzsu+P5VmDFIjm1xdtZxX9TA==",
+                    "frame": "{\"t\":\"send_result\",\"id\":15,\"error\":\"no instance of arena has room for 2 players\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~1Tej7pHC8OUx2e7rDVCbUIJKpcxlxciJrhPVj0PiAkw+EoFDJjPq5ECWpPTk1zAaxfyJQW6YHGS+",
+                    "frame": "{\"t\":\"send_waiting\",\"id\":15,\"position\":2}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~rosoGKh5gEwnNDHOgV+I+shgTQnovZHptm8Xi7ov0PpXORmF5CcLijh0T0KnBch0pfXcDmjw3awA1B/fnYFD/IKPrVxCah5wMJf7PYtMTlHru5Fn",
+                    "frame": "{\"t\":\"send_waiting\",\"id\":15,\"position\":0,\"status\":\"finding a match\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~Qx9XDed+TjGnIhDJmTu9d8au+vkVuW5om2IpweqMT+L1bfCKUyZ7N7s2252p",
+                    "frame": "{\"t\":\"drain\",\"draining\":true}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~YQUsiMmo8OM25Psolb5XJGW32YrfUVr/3e5GVHqhArHt/JdmeCAdR+bOGwG6bhol4q0LLMUVfyr63KBAUxLQPMgWU78=",
+                    "frame": "{\"t\":\"problem\",\"message\":\"\\\"shop\\\" isn't a channel\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~Pe88yxXp6DxTcyPaAweYmumI7ANKO30TjYT+ieHXZmMhfiH6eKIMA2YyD0nKCg8=",
+                    "frame": "{\"t\":\"moderate_result\",\"id\":16}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~JA7QMfdELCty2nbcQxdip0AMfVRGIT2ARE9if/Qsp1CFKlrgkSiakyCyRHxqVqTYttgPS5ZLf+lJrbUjMsZwcPXphNrqfw0aZ12z8w==",
+                    "frame": "{\"t\":\"moderate_result\",\"id\":17,\"error\":\"Steve wasn't muted\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~kC6KTKh8EaNaWC/zs6+JOeEsNE9B9aHild/ES4hvaCdctn9YAEOrZgqKGrY2t9fzfJHMtTDiqmQHXEMCsxWEW/DiESnmW5OQHUQF3vPU2frJAPpeVyqCsAM92DyxlMbjm3N3nmV935PK7dxX3oDMHUfo324Q1ZUp3Tv0z42K5whX",
+                    "frame": "{\"t\":\"player_pack\",\"id\":\"11111111-2222-3333-4444-555555555555\",\"pack\":\"cccccccccccccccccccccccccccccccccccccccc\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~iXPLEu0Ce8WCMvAYEWWeChWTcgcOir2LAr2tag==",
+                    "frame": "{\"t\":\"pong\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "~FCZhYybVditk61MirO+c8VICLPEaaPraheLh2QDi",
+                    "frame": "{\"t\":\"status\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "~MeDifu8+DqtDJiLllXq8Ae/F/I5vzqthffA3fAN/ggsm3/Pr4ciKjnNmuH+fe47XybhVw/O1MTWLAQ/yX7gmZLIYH6gv8/gs6rl9NWCM0iOZhzVghDmAOzFwQz1KV/W+uC/YjUAMq8ikij1u2sJRN1Ej1DEsCA==",
+                    "frame": "{\"t\":\"status\",\"accepting\":false,\"state\":\"draining\",\"idle\":true,\"startupMillis\":4200,\"tickMillis\":12.5}"
+                },
+                {
+                    "from": "server",
+                    "line": "~L/7jtz+ODnCeQFGQgeNWQvj8ghea4XhR8gROub29IWMHrcTJ2Vf68sFdcWPs6kiQaAuHHtZx0wc63Ow1YsDPNxVKrcJNYOsaSkzdHAkUgakjEYNjJBQFc1hTx9p69luPA22XBXsrmLk02CJpbAzQIn5e8w==",
+                    "frame": "{\"t\":\"listen\",\"channels\":[\"shop:sales\",\"lobby:queue/eu\"],\"maps\":[\"shop:prices\",\"netherforge:bans\"]}"
+                },
+                {
+                    "from": "server",
+                    "line": "~i1onuWdhvA049lPh7jdAtRU/VaCHjojNeBdNjN0DQnQvNxUFVCIp0CrxH6RkL+zG6ZjNpCGTyWaaGbEwIwPILU3LEgSsZCsgqY5BonyjZCG7iHkwyFavTRoa1jLK3pJ5zn3TA0IaW/5KbLrKmSeY72k0jQdD2g==",
+                    "frame": "{\"t\":\"publish\",\"channel\":\"shop:sales\",\"value\":{\"item\":\"apple\",\"price\":2.5,\"tags\":[\"red\",1,true,null]}}"
+                },
+                {
+                    "from": "server",
+                    "line": "~OJNYKF51ykHsNcr7GyfnDFQWtrroX20jDaU4eXc1kc4JwVak7ztZXQ5vDGBvIHSn2uRYuMy5W5NbX0K8Jk1D73yqo9ke7b/tNeqA74Oxwt8ObYFGfck=",
+                    "frame": "{\"t\":\"publish\",\"channel\":\"shop:sales\",\"value\":\"hello\",\"to\":\"survival\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "~DI+E7VKzDlGcvyRBOE8xxyt7O2wqhN3GYt6cepUEZOGnXwZZ0IGFYwKPCUxamEHYc+oog1iH8o05xmd1Ydy+/9Kc1iOjtHbDxabnPjrRhye7",
+                    "frame": "{\"t\":\"publish\",\"channel\":\"shop:sales\",\"value\":42,\"group\":\"arena\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "~OzOZ3/o66GYOdhFweooFvauwYYWEFL01jOV9dkPZm73Lj3GH9nKXdQQQVZUdKJzQOvfHm+CGP8K3eSVLRcZs6vAWaHHrzZHA+HSxbwvoO6DONtz0kM3deyKgICz3coPyk5AHX0f0",
+                    "frame": "{\"t\":\"request\",\"id\":7,\"channel\":\"shop:price\",\"to\":\"survival\",\"value\":{\"item\":\"apple\"}}"
+                },
+                {
+                    "from": "server",
+                    "line": "~dZAhD8ifS9fq3Js6CMpsZUKCCVCmvPctpAaTnvhPgDw2tJO/S1FHP4UttpEfLZ8OaR+9IXNAoOl7VPV6IgtqqulveKsEUG5Kebyj0gIuHhpDR9npv185",
+                    "frame": "{\"t\":\"request\",\"id\":8,\"channel\":\"shop:price\",\"value\":1,\"group\":\"arena\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "~AYKRf1w4bbbWVpXfbRmGThzRCa3T6G4rPbwNGOoZXMw557fOTPKJzWX/B1gsvGJ1o67iY+e9c179w0fMvuw0JDEDrMu0R3AWUgDw9SoO18NoXKQShvUa3PDtiOjZZ0A=",
+                    "frame": "{\"t\":\"request\",\"id\":9,\"channel\":\"shop:price\",\"value\":true,\"admin\":\"matchmaker\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "~XThzcJLXLswbW31OYv56FR3J+lqVPPXju1jnXuIThuoxKmm7xNhsQIEwm4H8M0ABZZLcfkLRIWE=",
+                    "frame": "{\"t\":\"reply\",\"id\":3,\"value\":{\"price\":2}}"
+                },
+                {
+                    "from": "server",
+                    "line": "~EEA9AHOWmTNU151tSuCqwbdb2n+TvRNrWFMc734rI7mR9yMF9N5pnd91DNJkuUKR/tH521MNVVM5TV9C+Dbs7j1ClUS34xE=",
+                    "frame": "{\"t\":\"reply\",\"id\":4,\"error\":\"nothing on lobby answers\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "~YY/iRQwrtyNvVGs7QLc2hLGEzeJhA8VhtTyT1pu+uisJMGTM",
+                    "frame": "{\"t\":\"reply\",\"id\":5}"
+                },
+                {
+                    "from": "server",
+                    "line": "~M0yBgogDg+YCAzcVLrdiqiwpSebux51K5mVYkeyjNnQYGGzcySvTxzSyKPeBmgM/qTTSOcZA8F/oc8agenMtvXfhagYovLVrHq0rEbmatBpzr9U2AmW8jHr5tOjVyiPGxB0mKfo3JEZ+o6GFN7NiUAviuq+Abg==",
+                    "frame": "{\"t\":\"map_write\",\"id\":10,\"map\":\"shop:prices\",\"key\":\"apple\",\"op\":\"set\",\"value\":2,\"expiresMillis\":60000}"
+                },
+                {
+                    "from": "server",
+                    "line": "~2heggQbahx3x0EErGEADWrLTimd+476WUnfwOBWEckEepjb9JwK1s2PmPW0vN7Nr+JJ/K58M/tya5ecVheQw4qr2rjVe/7SJc/GDFN7RkR/OE88pALhplGU=",
+                    "frame": "{\"t\":\"map_write\",\"id\":11,\"map\":\"shop:prices\",\"key\":\"apple\",\"op\":\"delete\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "~DmyqUgllvN1Ae31EKg/rZmasKta2fVl8en4ilC8oYyMk4yKZi+ODOyozaMsbkrGOdCCsdVwkkDoikOx0j5G8tyb4jhy7AfHv8518iUdJ0ZDNIqhZr+rJBn/xhWdkVRiJc+fL",
+                    "frame": "{\"t\":\"map_write\",\"id\":12,\"map\":\"shop:stock\",\"key\":\"apples\",\"op\":\"add\",\"amount\":5.0}"
+                },
+                {
+                    "from": "server",
+                    "line": "~vDDd/htMYi0pYRcB6us9irM293VzzcIePbtK6qDfthgyeTiPMCVXr1qMXK/G6J4rU4vH54IIi1pxFl1brqSrvKz1eIBBzAN6DhRpxNn1Uvw/32zWi6ieEcecHGkofR6vZaaMEkOyVf89XSq+vTjtNYdIcX9fBpJeW14vx/gVrQ==",
+                    "frame": "{\"t\":\"map_write\",\"id\":13,\"map\":\"shop:locks\",\"key\":\"chest-1\",\"op\":\"insert\",\"value\":\"lobby\",\"expiresMillis\":1000}"
+                },
+                {
+                    "from": "server",
+                    "line": "~VMc7fzxIBSvr+A94J8S1FgKXQsCiaS5GIrmtLBNEwPSxvoj/wJzpNILWFTq4HaVdOGBvr8ZMSqpmi1Oy3vd9jB6cQuj1BfBIce+6lHsmW0LOhgOj11Yqpq3kl7hH5f0uF8kJZDEQZXSJObqV6odbBR90kvaOaSL7sOfVllj0y5HvXNeC",
+                    "frame": "{\"t\":\"send\",\"id\":14,\"players\":[\"11111111-2222-3333-4444-555555555555\"],\"server\":\"survival\",\"data\":{\"kit\":\"starter\"}}"
+                },
+                {
+                    "from": "server",
+                    "line": "~Er8JWjDgHzmvtuVcwtJv7zO9CKia+wHLLSik07CF0KSeTiMU+X3zpxOYVJNT5B8wnpqOOCnUZ/TLLPpMQNEK8ln3blvjGpnsFnm64MCjNiZ6lBwL2tFwdGSDbWPe5qK3J9+4lE/l4+JMuJTQLdn9reqvGe/GMnG3x/yTCSKKE5ZM0iE4jY7n0u1dhD1A3rb0qFmb6OGFPeYoa+bRfaR1hR6JE+qmHpkGB6ywzDMONJ0sYQ==",
+                    "frame": "{\"t\":\"send\",\"id\":15,\"players\":[\"11111111-2222-3333-4444-555555555555\",\"66666666-7777-8888-9999-000000000000\"],\"group\":\"arena\",\"balance\":\"fill\",\"waitMillis\":30000}"
+                },
+                {
+                    "from": "server",
+                    "line": "~ae5JxJGMP6hIfk+RZxIsCSJGhOyX5o8vwN3jLqsAXT+Zp5B+isTNLB46EPK9KMggaDuD4l6P9mItkQLTp+fLGprY+BX1eBEZS1jaGaDmstP2T4hfHIdniGUj2jlgix2aHJl+K+syrNp2nH/hVhLto4CprB1A7AwiGqpSExT76rlie+m9Bf0I1hPPjVsieAppgy0ZZiQaB15oGxkEBQFtlHBhvooB3tk/UTUAAXjVSRKlWwcn",
+                    "frame": "{\"t\":\"moderate\",\"id\":16,\"action\":\"ban\",\"player\":\"11111111-2222-3333-4444-555555555555\",\"name\":\"Steve\",\"reason\":\"griefing\",\"by\":\"package shop\",\"until\":1900000000000}"
+                },
+                {
+                    "from": "server",
+                    "line": "~9i7XnGsb/yn5QFy9xWx+C7JpKVuhfAMmcMp2MAiGKY/CtS7wZB+YF9SpyNW+w1YZSrWgsffYJVlnO2jGY/ilaH5701ScmfF3BpMaQStOvPv+RR3xMR9WchXMzMQmKENVoa7m+X6PduFib+iPmGWLSxk6sra2PoDEZ8Pl1vtyhK9e+FvMMQrtCyne2Y4z",
+                    "frame": "{\"t\":\"moderate\",\"id\":17,\"action\":\"unmute\",\"player\":\"11111111-2222-3333-4444-555555555555\",\"name\":\"Steve\",\"by\":\"package shop\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "~2wI5QscFkwJtXrSK5AFcctBmbTi4r0MDK7uQfQS62bsaqfaiIGg7sKY80LCwV/pw86xsQXvx1XkSgJxbeQwQNekQTW0BkPhRw3c8GEuTFZ43TSC8vPzrQSzZo9rdEFKLY+NM8Ll2+d5/Ot5hTDoThUq/BHSCfCiAC8OAS7PRQIKNR5CNfMZv1BEuHxFklGc=",
+                    "frame": "{\"t\":\"report\",\"player\":\"11111111-2222-3333-4444-555555555555\",\"name\":\"Steve\",\"reason\":\"spam\",\"details\":{\"lines\":3},\"by\":\"Alex\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "~Ro/iv7eE2LQpAJRQTncNTv/4hHhO/EpNBYMAvFuLCBwubiQMoExp7tKQ7LYbmZl/fYM1nvgKdD5AUoJqhSQqKCM2PhPflzHaT1uZOr7TYt2YQJ8318yLlcgGnePYo9PpfIPtZqbZg7drGYaXVQ==",
+                    "frame": "{\"t\":\"report\",\"player\":\"11111111-2222-3333-4444-555555555555\",\"name\":\"Steve\",\"reason\":\"spam\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "~vCsQ6b9SxQ5qFfI0lLVVCUp9mVSNqNeWEKdfBb2SIpFVEPcrJWrO8gtINwpO484cnm8DNvzAGYhuJ9PR+P1Z5WjY9IcWj50cA1lCptMXUAkGVD5RulPvCYG66pYkZrM9Q1LPSNgi31rbhEbsXL76UObYQM2XRMhXAuIUw5bneBFkxCDrHg==",
+                    "frame": "{\"t\":\"pack_loaded\",\"player\":\"11111111-2222-3333-4444-555555555555\",\"sha1\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "~fARpI/pfqOP66ydrjQKDt0ATe/ra3VZKVKP5c1RgCwE=",
+                    "frame": "{\"t\":\"evacuate\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "~0iVZ4it90mc5uaRKI/eJpoMaPyPtQ2svvEtFhkq0tA==",
+                    "frame": "{\"t\":\"leaving\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "~PxM/uiUSquYTEL8eLMSsjcg4mYEQ2VUfKC+siA==",
+                    "frame": "{\"t\":\"ping\"}"
+                }
+            ]
+        },
+        {
+            "server": "lobby",
+            "secret": "s3cret-of-a-credential",
+            "credential": "dev-lobby",
+            "hubNonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f00112233445566778",
+            "serverNonce": "8877665544332211ffeeddccbbaa99887766554433221100",
+            "proof": "8a2d4b63cd4b593c3d976efa9674fdc8ccaf1ca0e658129f82c53673384914bf",
+            "lines": [
+                {
+                    "from": "hub",
+                    "line": "{\"t\":\"challenge\",\"version\":3,\"nonce\":\"0f1e2d3c4b5a69788796a5b4c3d2e1f00112233445566778\"}"
+                },
+                {
+                    "from": "server",
+                    "line": "{\"t\":\"hello\",\"version\":3,\"server\":\"lobby\",\"proof\":\"8a2d4b63cd4b593c3d976efa9674fdc8ccaf1ca0e658129f82c53673384914bf\",\"nonce\":\"8877665544332211ffeeddccbbaa99887766554433221100\",\"credential\":\"dev-lobby\",\"group\":\"lobbies\",\"capacity\":100,\"register\":{\"port\":25566},\"instance\":\"9f8e7d6c5b4a39281706f5e4d3c2b1a0\",\"state\":\"starting\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~rlPQbg3/WEr1o2k2lkkFeSlvxtBONcGHe3Sk7AqLJHkVnpNXT6nl9iu1rbTcqeWilPe4zkM/v6B1tIwr0lxwWvmW8xqPMN66TWUwrojs+ycufKAn2cOlj1RJFQcsIJtiaeq6c4RA+xaU48evSAJbB1WmQdTYiG9Lv0MAISxYAfsDNDpJhQw+IhtWgCYax+KcmIyvluill1WH+vOTFCNOPv3uN0jT0ylqWKdNfHSu3V0DP3QxOqvWcmKcKm9dRhiaVSP829Mnax66j8AukZbNeF0W+LKjqWUACU0ss2JrL1jmFAyi62dHrhIfsVYMx+FNbeEacCbQcJDcybMUOHAv2h8OThohrH2+7PgXaML0zrDAkzjI7g0awrSU0S7eoyytCmfKYMUL7eQOVxQSNNVdtF7Oa1iKq9QM6qBzqINhDtaMtAnB96iVweo1qdTlGs5zsc7NVEW2JDM68A6zM/HMu1YuaROlHz2doWpwxyHcblb5MfAWJqREiCbcpLgnxs5sSyRxcTcmyM6AgNAiJTJbJ27QLOCU3s1qmoTmjGfnjhbj7TU64H5AFADXq5lfH5h75FlUQnSjikO0M2LCT3V7CjbpsXR8cJtM+38DMbKwAmXvGeUKkeW7M3fjpVSmOvDd9ai4KXIt41ehCTTcbQ7aKqVCKIua8P3IaYFy10YuFqhklpYzm3qBOVcHcCO1It3isw==",
+                    "frame": "{\"t\":\"welcome\",\"server\":\"lobby\",\"servers\":[{\"name\":\"lobby\",\"linked\":true,\"players\":1,\"state\":\"starting\"},{\"name\":\"survival\",\"linked\":false}],\"players\":[{\"id\":\"11111111-2222-3333-4444-555555555555\",\"name\":\"Steve\",\"server\":\"lobby\"}],\"maxValueBytes\":32768,\"grants\":{\"role\":\"standard\",\"owns\":[\"lobby\"],\"shares\":[{\"name\":\"shop:*\",\"access\":[\"read\",\"request\"]},{\"name\":\"events:news\",\"access\":[\"write\"]}],\"presence\":false,\"sendTo\":[\"survival\",\"back\"],\"moderation\":true},\"policy\":\"{\\\"deny\\\":[\\\"wasm\\\"]}\",\"keepsPacks\":true}"
+                },
+                {
+                    "from": "server",
+                    "line": "~WR7+3W8NOXZtMs/fvasBoz01xozxyh/3cl2nVw==",
+                    "frame": "{\"t\":\"ping\"}"
+                },
+                {
+                    "from": "hub",
+                    "line": "~VMl8t7yDS0myemotYvluMaVFS8m0WMRJ+yz7uw==",
+                    "frame": "{\"t\":\"pong\"}"
+                }
+            ]
+        }
+    ]
+}

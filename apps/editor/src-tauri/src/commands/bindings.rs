@@ -3,7 +3,8 @@
 //!
 //! - the invoke handler (`lib.rs` hands [builder]'s to Tauri);
 //! - the UI's typed bindings, `apps/editor/src/core/backend/generated/bindings.ts`
-//!   (every command, event and payload type, with `Error`'s code);
+//!   (every command, event and payload type, with `Error`'s code, and the dev
+//!   bridge's `BridgeRequests` and `BridgeEvents`, from format's `bridge`);
 //! - the permission that lets the window call them,
 //!   `permissions/generated/commands.toml`, which `capabilities/default.json`
 //!   grants as `commands`.
@@ -116,9 +117,14 @@ macro_rules! builder {
             ])
             // Rejections are `{ code, message }`, the same for every command.
             .typ::<Error>()
+            // The dev bridge's messages, which the UI speaks itself (format's `bridge`): every request with
+            // its params and result, every notification with its params, and every shape they carry.
+            .types(&netherforge_format::bridge::typescript_types())
             // Sizes, timestamps and generations are u64 in Rust; JavaScript's
             // numbers hold them exactly up to 2^53, far past any value we send.
             .dangerously_cast_bigints_to_number()
+            // Floats are `number`: nothing sends NaN or the infinities (serde_json can't write them).
+            .semantic_types(specta_typescript::semantic::Configuration::empty().enable_lossless_floats())
             // A command throws its `Error` rather than returning a result union:
             // `TauriBackend` turns it into a `BackendError`.
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)

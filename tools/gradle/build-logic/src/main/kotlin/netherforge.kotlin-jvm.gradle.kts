@@ -1,27 +1,27 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 /*
- * Every Kotlin JVM project. Compiled with Java 25 for bytecode Java 21 runs,
- * and against Java 21's library only: the oldest supported Minecraft (1.21.x)
- * runs on Java 21, and the runtime, format and paper-common are in its jar.
- * An adapter for a version that needs a newer Java raises its own target
- * (netherforge.paper-adapter).
+ * Every Kotlin JVM project. Compiled with Java 25. The plugin's modules are for Java 25 (every supported Minecraft,
+ * 26.x, runs on it, and the Rust runtime needs its foreign function API); the rest (the proxy, the hub) for Java 21,
+ * which Velocity runs on.
  */
 
 plugins {
     id("org.jetbrains.kotlin.jvm")
 }
 
+val java = if (project.path.startsWith(":plugin")) 25 else 21
+
 kotlin {
     jvmToolchain(25)
     compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_21)
-        freeCompilerArgs.add("-Xjdk-release=21")
+        jvmTarget.set(JvmTarget.fromTarget(java.toString()))
+        freeCompilerArgs.add("-Xjdk-release=$java")
     }
 }
 
 tasks.withType<JavaCompile>().configureEach {
-    options.release.set(21)
+    options.release.set(java)
 }
 
 // A failed test prints its message and trace in the build's output: CI keeps no unit-test reports,

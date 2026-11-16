@@ -374,6 +374,9 @@ object CentityValidator {
         if (physics.friction != null && physics.friction < 0) {
             sink.report(ProblemCodes.CENTITY_PHYSICS_RANGE, "A negative friction is treated as zero", "$at.friction")
         }
+        if (physics.maxSpin != null && physics.maxSpin < 0) {
+            sink.report(ProblemCodes.CENTITY_PHYSICS_RANGE, "A negative maxSpin is treated as zero", "$at.maxSpin")
+        }
         if (physics.maxSpeed != null && physics.maxSpeed <= 0) {
             sink.report(
                 ProblemCodes.CENTITY_PHYSICS_STUCK,

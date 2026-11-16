@@ -347,7 +347,7 @@ function nf.after(ticks, callback) end
 ---@return Task
 function nf.every(ticks, callback) end
 
---- Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.worlds.import`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.ban`, `nf.network.unban`, `nf.network.mute`, `nf.network.unmute`, `nf.network.send_player`, `nf.network.send_players`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.
+--- Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.worlds.import`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.ban`, `nf.network.unban`, `nf.network.mute`, `nf.network.unmute`, `nf.network.send_player`, `nf.network.send_players`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.
 ---@param callback async fun(...: any) The task: plain Lua that may wait.
 ---@param ... any Passed to `callback`.
 ---@return Task # Call `:cancel()` on it to end it early.
@@ -657,7 +657,7 @@ function nf.db(name) end
 ---@return any
 function nf.config(name) end
 
---- Lua instructions this call may still run before it's stopped. A loop over a lot of work can check it and leave the rest for the next tick. In a call nested in another (a task started by a handler, a centity spawned by one) it's the least of its own budget and what its caller has left, since what it runs is charged to the caller when it returns. Coarse: it's updated every thousand instructions.
+--- Steps (function calls and turns of a loop) this call may still take before it's stopped. A loop over a lot of work can check it and leave the rest for the next tick. In a call nested in another (a task started by a handler, a centity spawned by one) it's the least of its own budget and what its caller has left, since what it runs is charged to the caller when it returns.
 ---@return integer
 function nf.instructions_left() end
 
@@ -4289,10 +4289,20 @@ function World:highest_block(position) end
 ---@return boolean
 function World:is_chunk_loaded(position) end
 
---- Loads the chunk a position is in, now, generating it if it's new: that can take a while, so do it rarely. The server unloads it again when nobody is near, as it does any chunk.
+--- Loads the chunk a position is in, now, generating it if it's new: that can take a while, so do it rarely. The server unloads it again when nobody is near, as it does any chunk (`world:hold_chunk` keeps it).
 ---@param position Vec3 Any point in the chunk.
 ---@return boolean # Whether it's loaded: `false` for a world that has gone.
 function World:load_chunk(position) end
+
+--- Keeps the chunk a position is in loaded, its entities ticking, with nobody near: loaded now (generated if it's new) if it isn't. Holds are counted: the chunk is held until this script has released it as many times as it held it, and every hold a script has goes when it stops (a module reloaded, a centity removed). For what runs with nobody watching: a farm that keeps working, an arena made ready before players arrive.
+---@param position Vec3 Any point in the chunk.
+---@return boolean # `false` for a world that has gone, and nothing is held then.
+function World:hold_chunk(position) end
+
+--- Lets go of one of this script's holds on the chunk a position is in (`world:hold_chunk`); the server unloads it as any other once nothing holds it.
+---@param position Vec3 Any point in the chunk.
+---@return boolean # `false` when this script held it no more.
+function World:release_chunk(position) end
 
 --- Finds the nearest place where the world's generator puts a biome, as `/locate biome` does: it asks the generator, so it finds places in chunks nobody has been to, and never loads or generates a chunk. It looks out from `options.near` in a square spiral, every 32 blocks across and 64 up and down, so the place it gives is in the biome but may be up to 32 blocks past its nearest edge, and a biome narrower than that can be missed. A biome the world's generator never places (a nether biome in the overworld) is found nowhere at once. An id that isn't a biome on this server (a bare id that isn't one of the project's is an error saying how to write the game's), or a `radius` out of range, is an error at once. Finding nothing within the radius, or a world that has gone, fails. It works off the main thread, so its position arrives later: give `callback`, which is called with `position, err` once it's done, or call it inside a task (`nf.task`) without one, and it waits and returns `position, err`. Without a callback outside a task, it's an error. When it fails, `position` is `nil` and `err` says why.
 ---@param id string The biome, named as a file names one: the project's own by its id (`"ruby_grove"`, `biomes/ruby_grove.json`), a package's `"acme:grove"` (if it exports it), the game's always written in full (`"minecraft:desert"`).
@@ -7755,7 +7765,7 @@ function Event:uncancel() end
 ---@field min number? The smallest value an `integer` or `number` argument takes.
 ---@field max number? The largest value an `integer` or `number` argument takes.
 ---@field choices string[]? What a `choice` argument takes: single words. Required for `choice`, and only for it.
----@field complete (fun(event: CommandEvent, partial: string): string[])? Tab completion of its own, instead of what its type offers. Gets the event so far (`event.arguments` holds the arguments before this one) and what has been typed of this argument; returns the suggestions. NetherForge keeps those starting with `partial`. Runs in the module's scope, within its instruction budget, every time a player's client asks, so keep it cheap.
+---@field complete (fun(event: CommandEvent, partial: string): string[])? Tab completion of its own, instead of what its type offers. Gets the event so far (`event.arguments` holds the arguments before this one) and what has been typed of this argument; returns the suggestions. NetherForge keeps those starting with `partial`. Runs in the module's scope, within its budget, every time a player's client asks, so keep it cheap.
 
 --- What a command handler, and an argument's `complete`, receives.
 ---@class CommandEvent
@@ -7774,7 +7784,7 @@ function Event:uncancel() end
 ---@field dimension_type string? One of the project's dimension types (`dimension_types/<id>.json`; `"acme:deep"` for a package's): the world's build limits, light, sky and rules (beds, respawn anchors, piglins, raids) are its. Kept with the world, so it loads the same again. The server learns dimension types only as it starts: one it didn't start with (added or fixed since) is an error until it restarts. Default: the environment's own (the game's overworld, nether or end).
 ---@field seed integer? Its seed: a project generator makes the same world for the same seed. Default: a random one.
 ---@field structures boolean? Whether villages, temples and the like generate. Default `true`.
----@field keep_spawn_loaded boolean? Whether the chunks around its spawn stay loaded with nobody near. Default `false`.
+---@field keep_spawn_loaded boolean? Whether the 3 by 3 chunks around its spawn stay loaded, their entities ticking, with nobody near (held as `world:hold_chunk` holds them, for as long as the world is loaded). Default `false`.
 
 --- How `nf.worlds.import` makes the world it imports. A key that isn't one of these is an error.
 ---@class WorldImportOptions

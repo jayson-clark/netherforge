@@ -1,18 +1,17 @@
 package dev.netherforge.plugin.testkit
 
-import dev.netherforge.format.advancement.AdvancementKind
 import dev.netherforge.format.datapack.GameDatapack
 import dev.netherforge.format.json.CanonicalJson
 import dev.netherforge.format.ref.ResourceKey
-import dev.netherforge.format.ref.ResourceRef
 import dev.netherforge.plugin.datapack.DatapackRefusal
-import dev.netherforge.plugin.datapack.StartupDatapackFiles
+import dev.netherforge.plugin.ffi.Native
+import dev.netherforge.plugin.ffi.NativeRuntime
+import dev.netherforge.plugin.ffi.RustRuntime
 import dev.netherforge.plugin.platform.DatapackOps
 import dev.netherforge.plugin.platform.PauseOps
 import dev.netherforge.plugin.platform.PerformanceOps
 import dev.netherforge.plugin.platform.PlatformLog
 import dev.netherforge.plugin.platform.TextOps
-import dev.netherforge.plugin.project.ProjectFiles
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
@@ -90,25 +89,64 @@ class FakeDatapacks : DatapackOps {
 
     /**
      * What the adapter does before the worlds load: builds the start-up
-     * datapack from the project's files (as the Paper adapter builds it, with [StartupDatapackFiles])
+     * datapack from the project's files (as the Paper adapter builds it: by the Rust runtime)
      * and loads its advancements. Call it before the runtime enables, as a
      * server starting would.
      */
     fun bootstrap(project: Path, resolvesPackages: Boolean = true) {
-        val source = ProjectFiles(project, resolvesPackages)
-        val snapshot = source.load(null).snapshot
         mainWorld = format?.let { level }
-        val start = format?.let { StartupDatapackFiles.forStart(snapshot, it, ::textJson, mainWorld, source::readBytes, refusal, game) }
-        started = start?.files.orEmpty()
-        refused = start?.refused
-        advancements = if (started.isEmpty()) {
-            emptyMap()
-        } else {
-            snapshot.running(AdvancementKind).entries.associate { (name, file) ->
-                val key = ResourceRef(name).resolve(snapshot.namespace).toString()
-                key to (file.criteria.keys.sorted() to (file.requirements ?: file.criteria.keys.sorted().map { listOf(it) }))
+        val folder = java.nio.file.Files.createTempDirectory("netherforge-fake-bootstrap")
+        val start = try {
+            if (format == null) {
+                null
+            } else {
+                if (!Native.isLoaded) {
+                    Native.load(
+                        Path.of(
+                            System.getProperty(RustRuntime.LIBRARY_PROPERTY) ?: error("-D${RustRuntime.LIBRARY_PROPERTY} names no library")
+                        )
+                    )
+                }
+                val datapacks = this
+                val bootstrap = object : DatapackOps by datapacks {
+                    override val refused: DatapackRefusal? get() = refusal
+                }
+                // A dev server resolves its packages (the project in a property), a production server names it in config.yml.
+                val properties = if (resolvesPackages) mapOf("netherforge.project" to project.toString()) else emptyMap()
+                val settings = if (resolvesPackages) emptyMap() else mapOf("project" to project.toString())
+                NativeRuntime(
+                    NativeRuntime.bootstrap(SilentLog, bootstrap)
+                ).startupDatapack(folder, folder, settings, properties, emptyMap())
             }
+        } finally {
+            folder.toFile().deleteRecursively()
         }
+        started = start?.files.orEmpty()
+        refused = refusal.takeIf { start?.leftOut == true }
+        advancements = advancementsOf(started)
+    }
+
+    /** The advancements in [files] (`data/<namespace>/advancement/<path>.json`), by key: their criteria, and their requirement groups. */
+    private fun advancementsOf(files: Map<String, ByteArray>): Map<String, Pair<List<String>, List<List<String>>>> {
+        val at = Regex("""^data/([^/]+)/advancement/(.+)\.json$""")
+        return files.mapNotNull { (path, bytes) ->
+            val match = at.matchEntire(path) ?: return@mapNotNull null
+            val json = kotlinx.serialization.json.Json.parseToJsonElement(bytes.decodeToString()) as? kotlinx.serialization.json.JsonObject
+                ?: return@mapNotNull null
+            val criteria = (json["criteria"] as? kotlinx.serialization.json.JsonObject)?.keys?.sorted().orEmpty()
+            val requirements = (json["requirements"] as? kotlinx.serialization.json.JsonArray)?.map { group ->
+                (group as kotlinx.serialization.json.JsonArray).map { (it as kotlinx.serialization.json.JsonPrimitive).content }
+            } ?: criteria.map { listOf(it) }
+            "${match.groupValues[1]}:${match.groupValues[2]}" to (criteria to requirements)
+        }.toMap()
+    }
+
+    private object SilentLog : PlatformLog {
+        override fun info(message: String) {}
+
+        override fun warn(message: String) {}
+
+        override fun error(message: String, cause: Throwable?) {}
     }
 
     override fun textJson(text: String, glyph: (reference: String) -> String?): String {

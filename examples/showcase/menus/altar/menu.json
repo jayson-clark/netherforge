@@ -17,9 +17,9 @@
     },
     "22": {
       "item": {
-        "item": "shard",
         "name": "<light_purple>Infuse",
-        "lore": ["<gray>Set something in the ring first"]
+        "lore": ["<gray>Set something in the ring first"],
+        "item": "shard"
       }
     }
   },

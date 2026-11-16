@@ -96,7 +96,7 @@ One argument of a command. Its `type` decides what may be typed, what tab comple
 | `min` | `number?` | The smallest value an `integer` or `number` argument takes. |
 | `max` | `number?` | The largest value an `integer` or `number` argument takes. |
 | `choices` | `string[]?` | What a `choice` argument takes: single words. Required for `choice`, and only for it. |
-| `complete` | `(fun(event: `[`CommandEvent`](types.md#commandevent)`, partial: string): string[])?` | Tab completion of its own, instead of what its type offers. Gets the event so far (`event.arguments` holds the arguments before this one) and what has been typed of this argument; returns the suggestions. NetherForge keeps those starting with `partial`. Runs in the module's scope, within its instruction budget, every time a player's client asks, so keep it cheap. |
+| `complete` | `(fun(event: `[`CommandEvent`](types.md#commandevent)`, partial: string): string[])?` | Tab completion of its own, instead of what its type offers. Gets the event so far (`event.arguments` holds the arguments before this one) and what has been typed of this argument; returns the suggestions. NetherForge keeps those starting with `partial`. Runs in the module's scope, within its budget, every time a player's client asks, so keep it cheap. |
 
 ### CommandEvent {#commandevent}
 
@@ -2203,7 +2203,7 @@ How `nf.worlds.create` makes a world. A key that isn't one of these is an error.
 | `dimension_type` | `string?` | One of the project's dimension types (`dimension_types/<id>.json`; `"acme:deep"` for a package's): the world's build limits, light, sky and rules (beds, respawn anchors, piglins, raids) are its. Kept with the world, so it loads the same again. The server learns dimension types only as it starts: one it didn't start with (added or fixed since) is an error until it restarts. Default: the environment's own (the game's overworld, nether or end). |
 | `seed` | `integer?` | Its seed: a project generator makes the same world for the same seed. Default: a random one. |
 | `structures` | `boolean?` | Whether villages, temples and the like generate. Default `true`. |
-| `keep_spawn_loaded` | `boolean?` | Whether the chunks around its spawn stay loaded with nobody near. Default `false`. |
+| `keep_spawn_loaded` | `boolean?` | Whether the 3 by 3 chunks around its spawn stay loaded, their entities ticking, with nobody near (held as `world:hold_chunk` holds them, for as long as the world is loaded). Default `false`. |
 
 ### WorldImportOptions {#worldimportoptions}
 

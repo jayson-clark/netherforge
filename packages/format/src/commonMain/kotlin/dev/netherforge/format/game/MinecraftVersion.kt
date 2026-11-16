@@ -36,9 +36,10 @@ class MinecraftVersion private constructor(val parts: List<Int>) : Comparable<Mi
 
         /**
          * The oldest Minecraft version a NetherForge project may target: the
-         * last 1.21.x release. What NetherForge uses that it lacks is in
-         * [FeatureTable] (see the minecraft-versions skill).
+         * first 26.x release (26.x runs on Java 25, whose foreign function API
+         * the Rust runtime is called through). What NetherForge uses that it
+         * lacks is in [FeatureTable] (see the minecraft-versions skill).
          */
-        const val OLDEST_SUPPORTED = "1.21.11"
+        const val OLDEST_SUPPORTED = "26.1"
     }
 }

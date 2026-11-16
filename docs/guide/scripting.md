@@ -1,8 +1,13 @@
 # Scripting basics
 
-NetherForge scripts are [Lua 5.4](https://www.lua.org/manual/5.4/), running
-inside the server. Any Lua tutorial applies, minus a few things the
-[sandbox](performance.md#the-sandbox) takes away. This page covers where
+NetherForge scripts are [Luau](https://luau.org), the fast, sandboxed
+descendant of Lua 5.1, running inside the server. Most Lua tutorials apply.
+Luau adds `continue`, compound assignment (`count += 1`), string
+interpolation (`` `hello {name}` ``) and optional type annotations, and leaves
+out `goto` and the bitwise operators (`bit32` has them). Every number is a
+double: a whole number is exact up to 2^53, and a value that must be exact
+past that (a world's seed, a big database id) is a string of digits. A few
+more things go with the [sandbox](performance.md#the-sandbox). This page covers where
 scripts live, when they run, and the everyday tools: events, handles, errors,
 time, saved data and `require`. The [Lua API reference](../reference/index.md)
 lists every function.
@@ -228,7 +233,7 @@ server stops. Saving a script you're working on doesn't reset its table.
 
 What a table can hold:
 
-- strings, numbers (an integer stays an integer), booleans, and tables of
+- strings, numbers, booleans, and tables of
   them, keyed by strings or numbered from 1;
 - `Vec3`s and `Location`s;
 - `Item` tables;

@@ -1,9 +1,7 @@
-//! A converted video's frames, `videos/<id>/video.nfv`, as the plugin reads
-//! them (`screen/Nfv.kt`; `docs/format/video.md` is the layout): a 72-byte
+//! Writing a converted video's frames, `videos/<id>/video.nfv`. The layout is
+//! format's (`netherforge_format::nfv`, which the server reads it with): a
 //! header, an index of where each frame starts, then the frames, each a key
-//! frame (every pixel) or the rectangles that changed since the one before,
-//! zlib-deflated. Rectangles are per map, so a change in one corner of a big
-//! screen sends one map's corner, not a rectangle across the whole screen.
+//! frame or the rectangles that changed since the one before, deflated.
 //!
 //! Frames go to a body file as they come (a long video needn't fit in memory);
 //! [Writer::finish] then writes the header, the index and the body into the
@@ -13,99 +11,17 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
-use flate2::Compression;
-use flate2::write::ZlibEncoder;
+pub use netherforge_format::nfv::{DELTA, HEADER_SIZE, Header, KEY, TILE, delta};
+use netherforge_format::nfv::{pack, record};
 
 use crate::error::{Context, Result};
 use crate::fs::atomic;
 
-pub const MAGIC: &[u8; 4] = b"NFV1";
-pub const VERSION: u16 = 1;
-pub const HEADER_SIZE: usize = 72;
-pub const KEY: u8 = 0;
-pub const DELTA: u8 = 1;
-/// A map's side in pixels.
-pub const TILE: usize = 128;
-
-/// What a converted video was made from and as, at the top of its file.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Header {
-    pub columns: u16,
-    pub rows: u16,
-    pub fps: u16,
-    pub frames: u32,
-    pub key_interval: u16,
-    pub dither: u8,
-    pub fit: u8,
-    pub start_ms: u32,
-    pub end_ms: u32,
-    pub audio: bool,
-    /// The source file's SHA-256: what tells a video whose source changed since.
-    pub source_sha256: [u8; 32],
-    /// Which palette its colours were matched against ([super::palette::Palette::hash]).
-    pub palette_hash: u32,
-}
-
-impl Header {
-    pub fn width(&self) -> usize {
-        self.columns as usize * TILE
-    }
-
-    pub fn height(&self) -> usize {
-        self.rows as usize * TILE
-    }
-
-    pub fn to_bytes(&self) -> [u8; HEADER_SIZE] {
-        let mut out = [0u8; HEADER_SIZE];
-        out[0..4].copy_from_slice(MAGIC);
-        out[4..6].copy_from_slice(&VERSION.to_be_bytes());
-        out[6..8].copy_from_slice(&self.columns.to_be_bytes());
-        out[8..10].copy_from_slice(&self.rows.to_be_bytes());
-        out[10..12].copy_from_slice(&self.fps.to_be_bytes());
-        out[12..16].copy_from_slice(&self.frames.to_be_bytes());
-        out[16..18].copy_from_slice(&self.key_interval.to_be_bytes());
-        out[18] = self.dither;
-        out[19] = self.fit;
-        out[20..24].copy_from_slice(&self.start_ms.to_be_bytes());
-        out[24..28].copy_from_slice(&self.end_ms.to_be_bytes());
-        out[28] = self.audio as u8;
-        out[32..64].copy_from_slice(&self.source_sha256);
-        out[64..68].copy_from_slice(&self.palette_hash.to_be_bytes());
-        out
-    }
-
-    /// A header read back, or None when [bytes] isn't one this writes.
-    pub fn parse(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < HEADER_SIZE || &bytes[0..4] != MAGIC {
-            return None;
-        }
-        let u16_at = |at: usize| u16::from_be_bytes([bytes[at], bytes[at + 1]]);
-        let u32_at = |at: usize| u32::from_be_bytes(bytes[at..at + 4].try_into().unwrap());
-        if u16_at(4) != VERSION {
-            return None;
-        }
-        Some(Self {
-            columns: u16_at(6),
-            rows: u16_at(8),
-            fps: u16_at(10),
-            frames: u32_at(12),
-            key_interval: u16_at(16),
-            dither: bytes[18],
-            fit: bytes[19],
-            start_ms: u32_at(20),
-            end_ms: u32_at(24),
-            audio: bytes[28] != 0,
-            source_sha256: bytes[32..64].try_into().unwrap(),
-            palette_hash: u32_at(64),
-        })
-    }
-
-    /// The header of the converted video at [path], or None when it isn't there or isn't one.
-    pub fn read(path: &Path) -> Option<Self> {
-        let mut bytes = [0u8; HEADER_SIZE];
-        File::open(path).ok()?.read_exact(&mut bytes).ok()?;
-        Self::parse(&bytes)
-    }
+/// The header of the converted video at [path], or None when it isn't there or isn't one.
+pub fn read_header(path: &Path) -> Option<Header> {
+    let mut bytes = [0u8; HEADER_SIZE];
+    File::open(path).ok()?.read_exact(&mut bytes).ok()?;
+    Header::parse(&bytes).ok()
 }
 
 /// Writes a video's frames as they come, then the whole file.
@@ -155,18 +71,14 @@ impl Writer {
             ),
             _ => (KEY, pixels.clone()),
         };
-        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(&payload)?;
-        let packed = encoder.finish()?;
+        let packed = record(kind, &pack(&payload));
         self.offsets.push(self.written);
         let body = self
             .body
             .as_mut()
             .expect("a writer is written to until it finishes");
-        body.write_all(&[kind])?;
-        body.write_all(&(packed.len() as u32).to_be_bytes())?;
         body.write_all(&packed)?;
-        self.written += 5 + packed.len() as u64;
+        self.written += packed.len() as u64;
         self.previous = Some(pixels);
         Ok(())
     }
@@ -216,43 +128,6 @@ impl Drop for Writer {
     }
 }
 
-/// The rectangles of [after] that differ from [before], one round each map's changes: `x, y, width, height`
-/// (screen pixels, big-endian u16s) then the rectangle's pixels row by row.
-pub fn delta(before: &[u8], after: &[u8], width: usize, rows: u16, columns: u16) -> Vec<u8> {
-    let mut out = Vec::new();
-    for row in 0..rows as usize {
-        for column in 0..columns as usize {
-            let (x0, y0) = (column * TILE, row * TILE);
-            let (mut left, mut top, mut right, mut bottom) =
-                (usize::MAX, usize::MAX, 0usize, 0usize);
-            let mut any = false;
-            for y in y0..y0 + TILE {
-                let line = y * width;
-                for x in x0..x0 + TILE {
-                    if before[line + x] != after[line + x] {
-                        any = true;
-                        left = left.min(x);
-                        right = right.max(x);
-                        top = top.min(y);
-                        bottom = bottom.max(y);
-                    }
-                }
-            }
-            if !any {
-                continue;
-            }
-            let (w, h) = (right - left + 1, bottom - top + 1);
-            for v in [left, top, w, h] {
-                out.extend_from_slice(&(v as u16).to_be_bytes());
-            }
-            for y in top..=bottom {
-                out.extend_from_slice(&after[y * width + left..y * width + left + w]);
-            }
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -278,10 +153,10 @@ mod tests {
     #[test]
     fn a_header_reads_back() {
         let h = header(4, 3);
-        assert_eq!(Header::parse(&h.to_bytes()), Some(h.clone()));
+        assert_eq!(Header::parse(&h.to_bytes()), Ok(h.clone()));
         let mut wrong = h.to_bytes();
         wrong[0] = b'X';
-        assert_eq!(Header::parse(&wrong), None);
+        assert!(Header::parse(&wrong).is_err());
     }
 
     #[test]

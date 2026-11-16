@@ -226,7 +226,7 @@
       "events": [
         {
           "name": "tick",
-          "doc": "Every server tick, twenty times a second. Keep handlers cheap, or listen less often with `{ every = n }`.",
+          "doc": "Every server tick, twenty times a second. Keep handlers cheap, or listen less often with `{ every = n }`. The event is the same table every tick, refreshed: read what you need of it in the handler rather than keeping it.",
           "payload": "TickEvent",
           "options": [
             "every"
@@ -1647,7 +1647,7 @@
         {
           "name": "task",
           "impl": "lua",
-          "doc": "Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.worlds.import`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.ban`, `nf.network.unban`, `nf.network.mute`, `nf.network.unmute`, `nf.network.send_player`, `nf.network.send_players`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole instruction budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.",
+          "doc": "Starts a task: `callback` runs now, with the extra arguments, until it first waits (`nf.wait`, `nf.wait_until`, `nf.wait_for`, `dialog:ask` or an asynchronous function like `nf.bots.join`, `nf.worlds.copy`, `nf.worlds.import`, `nf.images.download`, `nf.http.request`, `nf.wasm.instantiate`, `nf.wasm.run`, `nf.network.ban`, `nf.network.unban`, `nf.network.mute`, `nf.network.unmute`, `nf.network.send_player`, `nf.network.send_players`, `bot:walk_to`, `bot:break_block`, `world:fill_gradually`, `world:locate_biome`, `world:place_gradually`, `database:query`, `database:execute`, `database:transaction`, `wasminstance:call`, `wasminstance:call_text`, `networkchannel:request`, `networkmap:add` or `networkmap:insert` called without its callback), and carries on from there when the wait is over. Only a task can wait; event handlers can't, because whether an event is cancelled or stopped has to be known when it returns, so a handler that needs to wait starts a task. Each time a task carries on it gets the script's whole budget again. A task belongs to the script that started it and ends when that script unloads, when `cancel()` is called, or when the handle it waits on goes. One that errors is logged with its file and line and ends; the code that started it carries on either way.",
           "params": [
             {
               "name": "callback",
@@ -1797,7 +1797,7 @@
         {
           "name": "instructions_left",
           "impl": "lua",
-          "doc": "Lua instructions this call may still run before it's stopped. A loop over a lot of work can check it and leave the rest for the next tick. In a call nested in another (a task started by a handler, a centity spawned by one) it's the least of its own budget and what its caller has left, since what it runs is charged to the caller when it returns. Coarse: it's updated every thousand instructions.",
+          "doc": "Steps (function calls and turns of a loop) this call may still take before it's stopped. A loop over a lot of work can check it and leave the rest for the next tick. In a call nested in another (a task started by a handler, a centity spawned by one) it's the least of its own budget and what its caller has left, since what it runs is charged to the caller when it returns.",
           "params": [],
           "returns": [
             {
@@ -5681,7 +5681,7 @@
         },
         {
           "name": "tick",
-          "doc": "Every tick while the instance's chunk is loaded, or every `n` ticks with `{ every = n }`. Each instance falls on its own one of those `n` ticks, so a crowd of centities with `every = 4` spreads over four ticks rather than all running on one. A centity nobody listens to this on isn't ticked at all, and one whose handlers all have `every` is only called into on the ticks one is due.",
+          "doc": "Every tick while the instance's chunk is loaded, or every `n` ticks with `{ every = n }`. Each instance falls on its own one of those `n` ticks, so a crowd of centities with `every = 4` spreads over four ticks rather than all running on one. A centity nobody listens to this on isn't ticked at all, and one whose handlers all have `every` is only called into on the ticks one is due. The event is the same table every tick, refreshed: read what you need of it in the handler rather than keeping it.",
           "payload": "TickEvent",
           "options": [
             "every"
@@ -13475,7 +13475,7 @@
         },
         {
           "name": "load_chunk",
-          "doc": "Loads the chunk a position is in, now, generating it if it's new: that can take a while, so do it rarely. The server unloads it again when nobody is near, as it does any chunk.",
+          "doc": "Loads the chunk a position is in, now, generating it if it's new: that can take a while, so do it rarely. The server unloads it again when nobody is near, as it does any chunk (`world:hold_chunk` keeps it).",
           "params": [
             {
               "name": "position",
@@ -13487,6 +13487,40 @@
             {
               "type": "boolean",
               "doc": "Whether it's loaded: `false` for a world that has gone."
+            }
+          ]
+        },
+        {
+          "name": "hold_chunk",
+          "doc": "Keeps the chunk a position is in loaded, its entities ticking, with nobody near: loaded now (generated if it's new) if it isn't. Holds are counted: the chunk is held until this script has released it as many times as it held it, and every hold a script has goes when it stops (a module reloaded, a centity removed). For what runs with nobody watching: a farm that keeps working, an arena made ready before players arrive.",
+          "params": [
+            {
+              "name": "position",
+              "type": "Vec3",
+              "doc": "Any point in the chunk."
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean",
+              "doc": "`false` for a world that has gone, and nothing is held then."
+            }
+          ]
+        },
+        {
+          "name": "release_chunk",
+          "doc": "Lets go of one of this script's holds on the chunk a position is in (`world:hold_chunk`); the server unloads it as any other once nothing holds it.",
+          "params": [
+            {
+              "name": "position",
+              "type": "Vec3",
+              "doc": "Any point in the chunk."
+            }
+          ],
+          "returns": [
+            {
+              "type": "boolean",
+              "doc": "`false` when this script held it no more."
             }
           ]
         },
@@ -25949,7 +25983,7 @@
         {
           "name": "complete",
           "type": "(fun(event: CommandEvent, partial: string): string[])?",
-          "doc": "Tab completion of its own, instead of what its type offers. Gets the event so far (`event.arguments` holds the arguments before this one) and what has been typed of this argument; returns the suggestions. NetherForge keeps those starting with `partial`. Runs in the module's scope, within its instruction budget, every time a player's client asks, so keep it cheap."
+          "doc": "Tab completion of its own, instead of what its type offers. Gets the event so far (`event.arguments` holds the arguments before this one) and what has been typed of this argument; returns the suggestions. NetherForge keeps those starting with `partial`. Runs in the module's scope, within its budget, every time a player's client asks, so keep it cheap."
         }
       ]
     },
@@ -26030,7 +26064,7 @@
         {
           "name": "keep_spawn_loaded",
           "type": "boolean?",
-          "doc": "Whether the chunks around its spawn stay loaded with nobody near. Default `false`."
+          "doc": "Whether the 3 by 3 chunks around its spawn stay loaded, their entities ticking, with nobody near (held as `world:hold_chunk` holds them, for as long as the world is loaded). Default `false`."
         }
       ]
     },

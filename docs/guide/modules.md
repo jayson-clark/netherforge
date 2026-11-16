@@ -248,7 +248,7 @@ end)
 A task ends when it returns, when `task:cancel()` is called, when its script
 unloads, or when the handle it's waiting on goes (a removed centity, a closed
 menu window). An error in a task is reported like a handler's and ends the
-task. Each time a task carries on it gets the whole instruction budget again.
+task. Each time a task carries on it gets the whole budget again.
 
 Waits only work in the task's own code: in a function you pass to `nf.task`
 and anything it calls, `pcall` included. Not in an event handler (even one the

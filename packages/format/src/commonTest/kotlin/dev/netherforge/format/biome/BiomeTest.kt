@@ -48,21 +48,8 @@ class BiomeTest {
     private fun json(pack: Map<String, DatapackEntry>, path: String): JsonObject =
         CanonicalJson.json.parseToJsonElement((pack.getValue(path) as DatapackEntry.Text).text).jsonObject
 
-    private val grove = """
-        { "climate": { "temperature": 0.7, "downfall": 0.8, "temperatureModifier": "frozen" },
-          "colors": { "sky": "#F2A7C3", "fog": "#f7d3e0", "waterFog": "#5a1028", "grass": "#c2406a", "foliage": "#e0587f",
-                      "dryFoliage": "#8a4b2a", "grassModifier": "dark_forest" },
-          "particle": { "particle": "minecraft:cherry_leaves", "probability": 0.01 },
-          "sounds": { "ambient": "minecraft:ambient.cave",
-                      "mood": { "sound": "minecraft:ambient.cave" },
-                      "additions": { "sound": "minecraft:ambient.cave", "chance": 0.01 },
-                      "music": { "sound": "minecraft:music.overworld.cherry_grove", "minDelay": 600 } },
-          "spawns": { "animal": [{ "entity": "minecraft:sheep", "weight": 12, "group": { "min": 2, "max": 4 } }],
-                      "monster": [{ "entity": "zombie" }] },
-          "spawnCosts": { "minecraft:enderman": { "charge": 0.7, "energyBudget": 0.15 } },
-          "features": { "vegetal_decoration": ["minecraft:flower_cherry", "minecraft:trees_cherry"],
-                        "lakes": ["minecraft:lake_lava_surface"] } }
-    """.trimIndent()
+    /** A biome that says everything: `testdata/datapack/grove.json`, which the Rust port reads too. */
+    private val grove = TestFiles.read("packages/format/testdata/datapack/grove.json")!!
 
     @Test
     fun aBiomeReadsAndWritesBackCanonically() {

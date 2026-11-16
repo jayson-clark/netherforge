@@ -46,8 +46,8 @@
         {
           "type": "item",
           "item": {
-            "item": "library:gem",
-            "name": "<aqua>Lucky gem"
+            "name": "<aqua>Lucky gem",
+            "item": "library:gem"
           },
           "conditions": [
             {

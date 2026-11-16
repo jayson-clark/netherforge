@@ -1,0 +1,38 @@
+# Steps what scripts do all the time costs them (crates/runtime/tests/costs.rs). UPDATE_GOLDEN=1 rewrites it.
+6 × 6 × 6 blocks, each world:block():is_solid()	4146
+a tick handler, at its first line	2
+block:kind()	5
+centity:data().hp	5
+centity:emit, nobody listening	5
+centity:id()	5
+inventory:item(i)	5
+nf.after + cancel	10
+nf.emit, a handler reading three fields	6
+nf.emit, nobody listening	5
+nf.emit, one listening	6
+nf.emit, ten listening	15
+nf.json.decode(a small object)	5
+nf.json.encode(a small table)	5
+nf.json.encode(a typed value)	5
+nf.json.encode(floats)	5
+nf.math.clamp	5
+nf.on + cancel	10
+nf.on + cancel, among 100 others	10
+node:set_translation(v)	5
+node:translation()	5
+player:send_message(text)	5
+random:integer(1, 6)	5
+random:number()	5
+set_item(a rich item)	5
+set_item(a stack read back)	5
+set_item(an item with data)	5
+set_item({ kind, count })	5
+spawn a centity with no script	5
+spawn a scripted centity	8
+v * 2	0
+v + w	0
+v.x	0
+v:distance(w)	8
+v:length()	6
+vec3(x, y, z)	8
+world:block(v)	5

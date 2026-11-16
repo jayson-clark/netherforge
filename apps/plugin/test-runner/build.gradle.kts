@@ -1,7 +1,8 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
-// `netherforge test`'s JVM half: loads a project the way a server would, on the testkit's fake
-// platform, runs its `*_test.lua` files and reports each test, as text, JSON lines or JUnit XML.
+// `netherforge test`'s JVM half: the Rust runtime's test runner on the testkit's fake platform, a
+// fresh one per test, running the project's `*_test.lua` files and reporting each test, as text,
+// JSON lines or JUnit XML.
 // One runnable jar, `NetherForgeTest-<version>.jar`, which the editor bundles and the netherforge
 // command (apps/cli) launches with the Java the editor already provides.
 
@@ -12,16 +13,13 @@ plugins {
 }
 
 dependencies {
+    // The fake server, and through it the Rust runtime (:plugin:ffi), its library in the jar.
     implementation(project(":plugin:testkit"))
     implementation(libs.serialization.json)
-    // The runtime's store is SQLite: a server brings its driver, so the jar carries one.
-    runtimeOnly(libs.sqlite.jdbc)
-    // The cron library's SLF4J has no provider here; this one keeps it quiet.
-    runtimeOnly(libs.slf4j.nop)
 
     testImplementation(kotlin("test"))
     // @Quarantined, shared with the runtime's tests.
-    testImplementation(testFixtures(project(":plugin:runtime")))
+    testImplementation(testFixtures(project(":plugin:platform")))
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.launcher)
@@ -33,8 +31,17 @@ tasks.withType<Test>().configureEach {
     // RunnerJarTest runs the built jar the way `netherforge test` does.
     val built = files(tasks.named<ShadowJar>("shadowJar").flatMap { it.archiveFile })
     jvmArgumentProviders.add(SystemPropertyPath("netherforge.runner.jar", built))
-    // luajava loads Lua's native library; Java 25 warns unless that's allowed explicitly.
+    // The Rust runtime is called through the foreign function API; Java 25 warns unless that's allowed explicitly.
     jvmArgs("--enable-native-access=ALL-UNNAMED")
+    // The fake server's start-up datapack is built by the runtime too: the library the tests load.
+    val os = System.getProperty("os.name").lowercase()
+    val file = when {
+        os.contains("mac") -> "libnetherforge_ffi.dylib"
+        os.contains("win") -> "netherforge_ffi.dll"
+        else -> "libnetherforge_ffi.so"
+    }
+    dependsOn(":plugin:ffi:cargoBuild")
+    systemProperty("netherforge.ffi.library", repoRoot.resolve("target/debug/$file").absolutePath)
     // The tests run examples/showcase's own tests.
     environment("NETHERFORGE_REPO", repoRoot.absolutePath)
     inputs.dir(repoRoot.resolve("examples")).withPathSensitivity(PathSensitivity.RELATIVE)
@@ -60,7 +67,7 @@ tasks.named<Jar>("jar") {
     archiveClassifier.set("thin")
 }
 
-/** `NetherForgeTest-<version>.jar`: the runner with the runtime, the fake platform, format and Kotlin inside. */
+/** `NetherForgeTest-<version>.jar`: the runner with the Rust runtime's library, the fake platform, format and Kotlin inside. */
 val runnerJar = tasks.named<ShadowJar>("shadowJar") {
     archiveBaseName.set("NetherForgeTest")
     archiveClassifier.set("")
@@ -68,7 +75,7 @@ val runnerJar = tasks.named<ShadowJar>("shadowJar") {
     manifest {
         attributes(
             "Main-Class" to "dev.netherforge.plugin.testrunner.MainKt",
-            // luajava loads Lua's native library; this is `--enable-native-access` for a jar that is run with `-jar`.
+            // The Rust runtime's library is called through the foreign function API: `--enable-native-access` for `-jar`.
             "Enable-Native-Access" to "ALL-UNNAMED",
             "Implementation-Version" to project.version.toString()
         )

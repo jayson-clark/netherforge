@@ -197,7 +197,7 @@ refuses (an error in a JSON file) can't be tested; run `check` to see why.
 ### What it needs
 
 The command is the same JavaScript file as `check` and `format`; running tests
-also needs **Java 21 or newer** and the **test runner**, a jar the editor
+also needs **Java 25 or newer** and the **test runner**, a jar the editor
 carries, `NetherForgeTest-<version>.jar`. The command finds Java the way the
 editor does (`JAVA_HOME`, the Java the editor downloaded, `java` on your
 `PATH`, the usual install folders; `NETHERFORGE_JAVA` names one explicitly) and

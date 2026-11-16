@@ -1,0 +1,123 @@
+{
+  "terrain": {
+    "base": 64,
+    "seaLevel": 60,
+    "blend": 24,
+    "noises": {
+      "hills": {
+        "noise": {
+          "frequency": 0.008,
+          "octaves": 3
+        },
+        "amplitude": 14
+      }
+    }
+  },
+  "layers": [
+    {
+      "block": "minecraft:grass_block"
+    },
+    {
+      "customBlock": "loam",
+      "thickness": 2
+    }
+  ],
+  "underwater": [
+    {
+      "block": "minecraft:sand",
+      "thickness": 2
+    }
+  ],
+  "stone": {
+    "block": "minecraft:deepslate"
+  },
+  "floor": {
+    "customBlock": "core",
+    "thickness": 2
+  },
+  "caves": {
+    "caverns": {
+      "threshold": 0.3,
+      "biomes": [
+        "peaks"
+      ]
+    }
+  },
+  "ores": {
+    "gold": {
+      "block": "minecraft:gold_ore",
+      "veins": 14,
+      "replace": [
+        "minecraft:deepslate"
+      ],
+      "biomes": [
+        "meadow"
+      ]
+    }
+  },
+  "decorations": {
+    "trees": {
+      "structure": "tree",
+      "count": 3,
+      "biomes": [
+        "meadow"
+      ]
+    },
+    "flowers": {
+      "block": "minecraft:poppy",
+      "count": 10,
+      "noise": {
+        "frequency": 0.04
+      },
+      "threshold": -0.2,
+      "on": [
+        "minecraft:grass_block"
+      ]
+    },
+    "drips": {
+      "block": "minecraft:pointed_dripstone",
+      "placement": "caveCeiling",
+      "count": 30
+    }
+  },
+  "climate": {
+    "temperature": {
+      "frequency": 0.006
+    },
+    "jitter": {
+      "amplitude": 24
+    }
+  },
+  "biomes": {
+    "meadow": {
+      "biome": "minecraft:meadow",
+      "temperature": {
+        "max": 0.1
+      },
+      "terrain": {
+        "base": 66,
+        "scale": 0.6
+      }
+    },
+    "peaks": {
+      "biome": "minecraft:jagged_peaks",
+      "temperature": {
+        "min": 0.1
+      },
+      "terrain": {
+        "base": 100,
+        "scale": 1.5,
+        "noises": {
+          "crags": {
+            "noise": {
+              "frequency": 0.03,
+              "fractal": "ridged",
+              "octaves": 2
+            },
+            "amplitude": 12
+          }
+        }
+      }
+    }
+  }
+}

@@ -26,7 +26,10 @@ runs:
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       if: inputs.rust == 'true'
       with:
-        workspaces: apps/editor/src-tauri
+        # Both Cargo workspaces: the runtime crates (the plugin's native library) and the editor's backend.
+        workspaces: |
+          . -> target
+          apps/editor/src-tauri -> target
         # Saved from main only (Nightly), as setup-gradle does: a PR's own copies, ~2 GB each, push
         # the repo past its 10 GB and evict main's, so every OS would compile Rust from cold.
         save-if: ${{ github.ref == 'refs/heads/main' }}

@@ -1,6 +1,6 @@
 ---
 name: plugin-bots
-description: The plugin's fake players - the bridge's bots extension (bots/join, bots/act), scripts' nf.bots behind requires.bots, the Bot handle, and how a bot joins and acts on a real server (Mojang-named code in paper-internals: BotConnection, the client's half, movement, BotScreen, BotDialogs, BotProtocol per version, aiming and what it looks at), with the contract suites that hold the fake to it. Read before touching .../bots, BotsBridge, PaperBots, FakeBots, or adding a player action or event.
+description: The plugin's fake players - the bridge's bots extension (bots/join, bots/act), scripts' nf.bots behind requires.bots, the Bot handle, and how a bot joins and acts on a real server (Mojang-named code in paper-internals: BotConnection, the client's half, movement, BotScreen, BotDialogs, BotProtocol per version, aiming and what it looks at), with the contract suites that hold the fake to it. Read before touching crates/runtime/src/bots.rs, the bridge's bots extension, PaperBots, paper-internals' bots, FakeBots, or adding a player action or event.
 ---
 
 # Plugin bots
@@ -11,36 +11,31 @@ Bots are how tests, coding agents and scripts play the server as a player would.
 
 Fake players, driven two ways: tests and coding agents over the bridge's
 bots extension (`bots/…` requests, outside the core protocol; the protocol and
-what each action means are in format's `bridge/Bots.kt`), and scripts through
+what each action means are in format's `bridge/Bots.kt`, and the runtime's copy in `crates/format/src/bridge/bots.rs`), and scripts through
 `nf.bots` and the `Bot` class. The runtime sees them as `Platform.bots`
 (`BotOps`, a required group like any other).
 
-- **The bridge's** (`bridge/BotsBridge.kt`, always installed into
-  `BridgeService`): answers `bots/join` and `bots/act` when they finish, ticks
-  later (a deferred reply), and resolves an interact or attack naming a
-  centity's node to its interaction entity and the middle of its hitbox
-  (`Centities.aim`). A bridge bot is the same player every time (an
-  offline-mode UUID from its name, saved like anyone's), so a test can leave
-  and come back.
-- **Scripts'** (`bots/ScriptBots`, a session service, `session.bots`): a
-  package declares `requires.bots`, and the owner's `bots:` (`BotsConfig`: off
-  by default, `max` online at once; the dev server always on) decides whether
-  `nf.bots.join` may make one, else `nil, err` (and `runtime.bots-disabled` on
-  each declaring package while off). `join` is async: a `BotJoin` with a
-  `ScriptBot` (a fresh UUID, never saved: `Player.setPersistent(false)` keeps
-  `PlayerList.save` away; the `NPC` metadata Citizens sets; view distance
-  `ScriptBot.VIEW_DISTANCE`; the `Skin` as the profile's `textures`), the pack
-  answered `LOADED` without fetching it. On Paper, `PaperBots` sets these at
-  `PlayerJoinEvent` `LOWEST`, so other plugins hear an NPC join. Each belongs
-  to the scope that joined it: `scopeReleased` and `stop` make it leave.
-  `ScriptBots.act` is the one way the runtime drives any bot (a `BotAction`,
-  done now or later, failures as `WorkFailed`); `BotImpl` maps `Bot`'s methods
-  onto it (`walk_to`, `break_block` async; the rest `did`, answering whether
-  it was done), and a click on a `Node` aims as the bridge's does.
-- **Handles.** Every bot online is a `Bot` (extends `Player`):
-  `entityHandle(info)` asks `BotOps.isBot`, and a `Player` handle refines to
-  `Bot` when a `Bot` method is called on it. That gives `Player` the refining
-  `__index`, 4 instructions a call (the goldens say so).
+- **The bridge's** (the bots extension in `crates/runtime/src/bridge/requests.rs`, always there): answers
+  `bots/join` and `bots/act` when they finish, ticks later (a deferred reply: the request returns no answer and
+  the Platform's callback answers it), and resolves an interact or attack naming a centity's node to its
+  interaction entity and the middle of its hitbox (`BotsContext::bridge_aim`, through the centities' `aim`). A
+  bridge bot is the same player every time (an offline-mode UUID from its name, saved like anyone's), so a test
+  can leave and come back.
+- **Scripts'** (`crates/runtime/src/bots.rs`: `ScriptBots`, a session service, and `BotsContext`, the API): a
+  package declares `requires.bots`, and the owner's `bots:` (`BotsConfig`: off by default, `max` online at
+  once; the dev server always on) decides whether `nf.bots.join` may make one, else `nil, err` (and
+  `runtime.bots-disabled` on each declaring package while off). `join` is async: a `BotJoin` with a
+  `ScriptBot` (a fresh UUID, never saved; the adapter sets `Player.setPersistent(false)`, which keeps
+  `PlayerList.save` away, the `NPC` metadata Citizens sets, view distance `ScriptBot.VIEW_DISTANCE`, the
+  `Skin` as the profile's `textures`), the pack answered `LOADED` without fetching it. On Paper, `PaperBots`
+  sets these at `PlayerJoinEvent` `LOWEST`, so other plugins hear an NPC join. Each belongs to the scope that
+  joined it: its release and the session's stop make it leave. `BotsContext::act` is the one way the runtime
+  drives any bot (a `BotAction` through `BotOps.act`, done now or later, its `Answer` a future); the `Bot`
+  methods map onto it (`walk_to`, `break_block` async; the rest `did`, answering whether it was done), and a
+  click on a `Node` aims as the bridge's does (`aim_at`).
+- **Handles.** Every bot online is a `Bot` (extends `Player`): a `Player` handle refines to `Bot` when a `Bot`
+  method is called on it (the API crate's refining `__index`, asking `Shared::class_of_id`), so the server
+  isn't asked whether every player it hands out is a bot.
 
 Otherwise a bot is a player like any other: it's in `players.online()`, and
 its joins, clicks and chat come through `PlatformEvents`.
