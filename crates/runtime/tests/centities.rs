@@ -118,7 +118,8 @@ fn a_centitys_instances_share_one_memory_category_so_their_memory_is_counted_onc
         ("centities/lamp/centity.json", &scripted_lamp()),
         (
             "centities/lamp/script.lua",
-            "held = string.rep('x', 100000)",
+            // Each instance's own string: Luau interns strings, so three equal ones could be one.
+            "held = string.rep('x', 100000) .. tostring({})",
         ),
         (
             "modules/game/init.lua",
